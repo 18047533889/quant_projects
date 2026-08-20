@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_candidate_overnight_intraday_synergy_5b15fe70",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 209,
+  "factor_name": "factor_overnight_intraday_volregime_combo",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w01-20260805-102107-r17",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_overnight_intraday_volregime_combo(df):\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    short_signal = intraday_ret.rolling(5, min_periods=5).mean() + (-overnight_ret).rolling(5, min_periods=5).mean()\n    long_signal = intraday_ret.rolling(20, min_periods=20).mean() + (-overnight_ret).rolling(20, min_periods=20).mean()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    signal = np.where(vol_ratio > 1.0, short_signal, long_signal)\n    df_copy[\"factor_overnight_intraday_volregime_combo\"] = signal\n    return df_copy[\"factor_overnight_intraday_volregime_combo\"]",
+  "description": "Crossover between intraday/overnight combo (parent 1) and volume awareness (parent 2). Primary mechanism: intraday momentum plus overnight reversal, aggregated via rolling means. Lightweight modifier: dynamic window length controlled by volume ratio (relative to 20-day MA), switching between short (5-day) and long (20-day) windows based on current volume activity. This preserves parent 1's additive price pattern intuition while incorporating parent 2's volume-regime concept to adapt signal responsiveness, targeting improved ICIR and robustness across varying market conditions.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.06525360390557808,
+    "icir": 0.6466659326981395,
+    "mi": 0.026596956632772617,
+    "rank_ic": 0.041388293355057615,
+    "rank_icir": 0.4461334612685006
+  },
+  "raw_metrics": {
+    "ic": -0.06525360390557808,
+    "icir": -0.6466659326981395,
+    "mi": 0.026596956632772617,
+    "rank_ic": -0.041388293355057615,
+    "rank_icir": -0.4461334612685006
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.17766105903132545,
+    "top_quantile_excess_return": 1.5690700314293737,
+    "top_quantile_max_drawdown": -0.04428392731221986,
+    "top_quantile_turnover": 0.35647576685658694
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:43:35.528484+00:00"
+}

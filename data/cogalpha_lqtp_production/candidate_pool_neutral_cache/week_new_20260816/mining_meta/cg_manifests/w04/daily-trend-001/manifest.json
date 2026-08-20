@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "daily-trend-001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 266,
+  "factor_name": "factor_momentum_volume_persistence",
+  "domain_agent": "alpha-daily-trend",
+  "run_id": "fleet-w04-20260804-115909-r20",
+  "expression_type": "python",
+  "formula": "momentum * persistence * vol_ratio",
+  "code": "def factor_momentum_volume_persistence(df):\n    \"\"\"Momentum signal weighted by volume surge and directional persistence.\"\"\"\n    df_copy = df.copy()\n    momentum = df_copy[\"close\"] / df_copy[\"close\"].shift(20) - 1.0\n    up_days = (df_copy[\"close\"].diff() > 0).astype(float)\n    persistence = up_days.rolling(20, min_periods=20).mean()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    raw_signal = momentum * persistence * vol_ratio\n    df_copy[\"factor_momentum_volume_persistence\"] = raw_signal\n    return df_copy[\"factor_momentum_volume_persistence\"]",
+  "description": "Multi-day momentum (20-day return) is amplified by directional persistence (fraction of up days in the same window) and volume surge (vol_ratio from classify_volume_regime). The mechanism captures directional persistence: stocks with strong upward price moves, consistent up days, and elevated volume are likely to continue trending.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03454527324555928,
+    "icir": 0.3236426290536977,
+    "mi": 0.0377366730395039,
+    "rank_ic": 0.05551814052573933,
+    "rank_icir": 0.42319538717684796
+  },
+  "raw_metrics": {
+    "ic": -0.03454527324555928,
+    "icir": -0.3236426290536977,
+    "mi": 0.0377366730395039,
+    "rank_ic": -0.05551814052573933,
+    "rank_icir": -0.42319538717684796
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6,
+    "top_quantile_annualized_excess_return": 0.05212127773992892,
+    "top_quantile_excess_return": 0.03654023102394488,
+    "top_quantile_max_drawdown": -0.0455143628754886,
+    "top_quantile_turnover": 0.23799568686883346
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:23:58.618175+00:00"
+}

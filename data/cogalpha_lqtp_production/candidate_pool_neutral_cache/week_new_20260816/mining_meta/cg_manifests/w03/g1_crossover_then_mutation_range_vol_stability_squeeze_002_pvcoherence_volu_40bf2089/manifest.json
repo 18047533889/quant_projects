@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_then_mutation_range_vol_stability_squeeze_002_pvcoherence_volu_40bf2089",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 394,
+  "factor_name": "factor_range_compression_squeeze",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w03-20260814-081141-r8",
+  "expression_type": "python",
+  "formula": "-(std(high-low,20)/mean(high-low,20))",
+  "code": "def factor_range_compression_squeeze(df):\n    '''Range compression squeeze using negative coefficient of variation of high-low range.'''\n    df_copy = df.copy()\n    range_ = df_copy['high'] - df_copy['low']\n    mean_range = range_.rolling(20, min_periods=20).mean()\n    std_range = range_.rolling(20, min_periods=20).std(ddof=1)\n    cv = std_range / mean_range.replace(0.0, np.nan)\n    compression = -cv\n    factor = compression.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    df_copy['factor_range_compression_squeeze'] = factor\n    return df_copy['factor_range_compression_squeeze']",
+  "description": "Mutation of parent factor_volume_confirmed_range_compression by ablating the volume surprise modifier. The core mechanism is range compression: negative coefficient of variation of daily high-low range over 20 days identifies periods of low volatility squeeze that often precede expansion. Removing the volume amplification reduces sensitivity to volume outliers and simplifies the factor, preserving the squeeze mechanism while targeting stability. Raw signal is kept without cross-sectional normalization to preserve magnitude information within stock.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.017967294561273498,
+    "icir": 0.3706203716936961,
+    "mi": 0.015666751278111235,
+    "rank_ic": 0.02274435498152476,
+    "rank_icir": 0.5512238945537709
+  },
+  "raw_metrics": {
+    "ic": 0.017967294561273498,
+    "icir": 0.3706203716936961,
+    "mi": 0.015666751278111235,
+    "rank_ic": 0.02274435498152476,
+    "rank_icir": 0.5512238945537709
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 10.398786922227881,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.47053488365940743,
+    "top_quantile_excess_return": 8.057365477949878,
+    "top_quantile_max_drawdown": -0.08176572940964921,
+    "top_quantile_turnover": 0.1892819449660235
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:07:48.314759+00:00"
+}

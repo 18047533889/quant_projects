@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_alpha_drawdown_0_1_alpha_liquidity_f0417c2e",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 59,
+  "factor_name": "factor_drawdown_recovery_volregime",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w03-20260803-070139-r5",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_drawdown_recovery_volregime(df):\n    \"\"\"Drawdown recovery ratio scaled by volume regime conviction.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    # Core mechanism: drawdown recovery ratio\n    rolling_max_60 = close.rolling(60, min_periods=1).max()\n    drawdown = close / rolling_max_60 - 1\n    rolling_min_5 = close.rolling(5, min_periods=1).min()\n    recovery = close / rolling_min_5 - 1\n    denominator = -drawdown\n    denominator_safe = denominator.replace(0, np.nan)\n    recovery_ratio = recovery / denominator_safe\n    recovery_ratio = recovery_ratio.replace([np.inf, -np.inf], np.nan).fillna(0)\n    # Lightweight modifier: volume regime conviction\n    is_high_vol, is_low_vol, _ = alpha_tools.classify_volume_regime(volume, window=20)\n    weight = 1.0 + 0.2 * is_high_vol - 0.3 * is_low_vol\n    factor = recovery_ratio * weight\n    df_copy[\"factor_drawdown_recovery_volregime\"] = factor\n    return df_copy[\"factor_drawdown_recovery_volregime\"]",
+  "description": "This factor measures the ratio of short-term bounce to drawdown depth, scaled by volume regime conviction. The core mechanism captures resilience after a drawdown. Bounces during low-volume periods may be noisy or manipulative, while high-volume bounces signal stronger conviction. The volume regime weight enhances the signal during high-volume regimes and dampens it during low-volume regimes, improving the economic quality of the bounce signal without altering the core ratio.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0174207871508491,
+    "icir": 0.23286278369149008,
+    "mi": 0.055895675947386536,
+    "rank_ic": 0.023432639429168643,
+    "rank_icir": 0.2534346826407402
+  },
+  "raw_metrics": {
+    "ic": -0.0174207871508491,
+    "icir": -0.23286278369149008,
+    "mi": 0.055895675947386536,
+    "rank_ic": -0.023432639429168643,
+    "rank_icir": -0.2534346826407402
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.10725668692050294,
+    "top_quantile_excess_return": 0.8023224851811892,
+    "top_quantile_max_drawdown": -0.13451075278894853,
+    "top_quantile_turnover": 0.5520475467981979
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:46:28.274594+00:00"
+}

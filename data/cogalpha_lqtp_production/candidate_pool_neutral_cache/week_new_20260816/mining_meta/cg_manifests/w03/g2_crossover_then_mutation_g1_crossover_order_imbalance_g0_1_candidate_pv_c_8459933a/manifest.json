@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_order_imbalance_g0_1_candidate_pv_c_8459933a",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "elite",
+  "factor_id": 125,
+  "factor_name": "factor_intraday_pressure_simple",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w03-20260804-050637-r10",
+  "expression_type": "python",
+  "formula": "ewm_span10(intraday_return - overnight_return)",
+  "code": "def factor_intraday_pressure_simple(df):\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    pressure = intraday_ret - overnight_ret\n    pressure_ewm = pressure.ewm(span=10, adjust=False).mean()\n    factor = pressure_ewm\n    factor.name = \"factor_intraday_pressure_simple\"\n    return factor",
+  "description": "Simplification mutation: removes the volume ratio weight from the parent factor_intraday_pressure_vol_weight to reduce complexity and potential overfitting. The core economic mechanism\u2014exponentially smoothed directional pressure from intraday versus overnight returns\u2014is preserved, targeting stable IC/ICIR while aiming to improve RankIC by reducing noise from volume amplification. Parent strength: high IC/ICIR from smoothed directional pressure.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.10809479867529526,
+    "icir": 0.8679356382461277,
+    "mi": 0.029609723688874823,
+    "rank_ic": 0.04841500681382802,
+    "rank_icir": 0.4621936826319526
+  },
+  "raw_metrics": {
+    "ic": -0.10809479867529526,
+    "icir": -0.8679356382461277,
+    "mi": 0.029609723688874823,
+    "rank_ic": -0.04841500681382802,
+    "rank_icir": -0.4621936826319526
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.30565584474632534,
+    "top_quantile_excess_return": 3.67898727169076,
+    "top_quantile_max_drawdown": -0.04870321125946875,
+    "top_quantile_turnover": 0.29141852317629546
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:49:13.840788+00:00"
+}

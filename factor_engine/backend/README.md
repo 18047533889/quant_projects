@@ -82,3 +82,4 @@ flowchart TD
 
 - [`cleaned_operators/README.md`](../cleaned_operators/README.md)  
 - [`docs/operators_semantics.md`](../docs/operators_semantics.md)
+- [`docs/BACKEND_COVERAGE.md`](../docs/BACKEND_COVERAGE.md) — machine-generated coverage counts (authoritative; counts above are historical manual counts)

@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_then_mutation_alpha_daily_trend_g0_9340afda",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 187,
+  "factor_name": "factor_ema_momentum_regime_vol_amplified",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260803-210330-r14",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_ema_momentum_regime_vol_amplified(df):\n    df_copy = df.copy()\n    daily_ret = df_copy[\"close\"].pct_change()\n    ema_ret = daily_ret.ewm(span=10, adjust=False).mean()\n    is_high_vol, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    signal = ema_ret * vol_ratio\n    signal = np.where(is_high_vol > 0, signal * 1.2, signal)\n    signal = pd.Series(signal, index=df_copy.index).ffill().fillna(0)\n    df_copy[\"factor_ema_momentum_regime_vol_amplified\"] = signal\n    return df_copy[\"factor_ema_momentum_regime_vol_amplified\"]",
+  "description": "Mutation of factor_ema_momentum_regime_vol. Preserves parent strength: EMA momentum trend (span=10) multiplied by relative volume ratio (vol_ratio from classify_volume_regime). Bottleneck targeted: symmetrical volume modulation may not fully exploit high-volume conviction periods where momentum is more reliable. A lightweight amplification (1.2x) is applied when volume is classified as high (is_high_vol > 0), sharpening the signal during high-conviction breakouts while retaining continuous cross-sectional variation. No new features; uses the existing regime flag from the tool. This is a minimal, bounded modification that keeps the core mechanism intact.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.037881155073272735,
+    "icir": 0.3750702757493388,
+    "mi": 0.03947244272639949,
+    "rank_ic": 0.05555173174006834,
+    "rank_icir": 0.389179312557741
+  },
+  "raw_metrics": {
+    "ic": -0.037881155073272735,
+    "icir": -0.3750702757493388,
+    "mi": 0.03947244272639949,
+    "rank_ic": -0.05555173174006834,
+    "rank_icir": -0.389179312557741
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.06824982443162098,
+    "top_quantile_excess_return": 0.052967268046704374,
+    "top_quantile_max_drawdown": -0.05686864690132898,
+    "top_quantile_turnover": 0.35497514318614765
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:20:32.090012+00:00"
+}

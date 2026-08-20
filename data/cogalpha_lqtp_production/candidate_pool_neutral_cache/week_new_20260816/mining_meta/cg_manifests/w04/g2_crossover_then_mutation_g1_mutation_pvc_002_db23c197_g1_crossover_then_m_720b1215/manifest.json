@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_mutation_pvc_002_db23c197_g1_crossover_then_m_720b1215",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 460,
+  "factor_name": "factor_volume_smooth_reversal",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w04-20260805-204530-r33",
+  "expression_type": "python",
+  "formula": "-ret_5d * max(0, vol_ratio - 1) ^ 1.5",
+  "code": "def factor_volume_smooth_reversal(df):\n    \"\"\"Short-term reversal with smooth power-law volume scaling for increased nonlinear sensitivity.\"\"\"\n    df_copy = df.copy()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    ret_5d = df_copy[\"close\"].pct_change(5)\n    pos_vol_dev = np.maximum(0.0, vol_ratio - 1.0)\n    scaler = pos_vol_dev ** 1.5\n    factor = -ret_5d * scaler\n    df_copy[\"factor_volume_smooth_reversal\"] = factor\n    return df_copy[\"factor_volume_smooth_reversal\"]",
+  "description": "This mutation simplifies the volume scaler from a piecewise linear/squared function to a smooth power-law with exponent 1.5. The parent's core reversal mechanism is preserved: short-term negative returns are amplified when volume exceeds its 20-day EMA, indicating panic selling. The smooth power scaling provides a consistent nonlinear amplification that is expected to improve non-linear dependence (mutual information) without sacrificing stability (ICIR/RankICIR) by avoiding the abrupt threshold at vol_ratio=2.0.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.030314710588983138,
+    "icir": 0.43806044499661423,
+    "mi": 0.10433342640935095,
+    "rank_ic": 0.04561908096671026,
+    "rank_icir": 0.5535184812311768
+  },
+  "raw_metrics": {
+    "ic": 0.030314710588983138,
+    "icir": 0.43806044499661423,
+    "mi": 0.10433342640935095,
+    "rank_ic": 0.04561908096671026,
+    "rank_icir": 0.5535184812311768
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.09103114762324127,
+    "top_quantile_excess_return": 0.06900183742282806,
+    "top_quantile_max_drawdown": -0.027234920312939614,
+    "top_quantile_turnover": 0.422073210637307
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:38:58.188678+00:00"
+}

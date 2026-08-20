@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "range_vol_001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 89,
+  "factor_name": "factor_range_compression_atr",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260803-040422-r7",
+  "expression_type": "python",
+  "formula": "-(ATR(10)/ATR(50)-1)",
+  "code": "def factor_range_compression_atr(df):\n    \"\"\"Range-based volatility compression signal using ATR ratio.\"\"\"\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    # True Range\n    prev_close = close.shift(1)\n    tr = np.maximum(\n        high - low,\n        np.maximum(np.abs(high - prev_close), np.abs(low - prev_close))\n    )\n    # ATR using Wilder's smoothing (alpha = 1/period)\n    atr_short = tr.ewm(alpha=1/10, adjust=False).mean()\n    atr_long = tr.ewm(alpha=1/50, adjust=False).mean()\n    ratio = atr_short / atr_long.replace(0, np.nan)\n    factor = -(ratio - 1.0)\n    df_copy[\"factor_range_compression_atr\"] = factor\n    return df_copy[\"factor_range_compression_atr\"]",
+  "description": "Volatility compression often precedes expansion. This factor captures the compression state by comparing short-term (10-day) average true range to long-term (50-day) ATR. Higher values indicate lower short-term volatility relative to history, suggesting a buildup of energy for a potential breakout.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.027331081668754725,
+    "icir": 0.2413139158266392,
+    "mi": 0.02877509422606117,
+    "rank_ic": 0.06080338381945882,
+    "rank_icir": 0.5135947145826222
+  },
+  "raw_metrics": {
+    "ic": 0.027331081668754725,
+    "icir": 0.2413139158266392,
+    "mi": 0.02877509422606117,
+    "rank_ic": 0.06080338381945882,
+    "rank_icir": 0.5135947145826222
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.10598575387317966,
+    "top_quantile_excess_return": 0.08150221804604452,
+    "top_quantile_max_drawdown": -0.034986871450606305,
+    "top_quantile_turnover": 0.08592871720058246
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:16:52.719080+00:00"
+}

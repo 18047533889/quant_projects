@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_factor_trend_adaptive_intraday_overnight_blend_0_e75798e0",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 311,
+  "factor_name": "factor_trend_adaptive_smooth_efficiency_blend",
+  "domain_agent": "alpha-regime-gating",
+  "run_id": "fleet-w02-20260813-103714-r3",
+  "expression_type": "python",
+  "formula": "efficiency_ratio = |close - close.shift(20)| / sum(|close - close.shift(1)|, 20); efficiency_ratio_smoothed = ewm(efficiency_ratio, span=5); factor = efficiency_ratio_smoothed * rolling_mean(intraday_ret,5) + (1 - efficiency_ratio_smoothed) * rolling_mean(-overnight_ret,5)",
+  "code": "def factor_trend_adaptive_smooth_efficiency_blend(df):\n    '''Adaptive blend of intraday momentum and overnight reversal with smoothed trend-efficiency gate.'''\n    df_copy = df.copy()\n    close = df_copy['close']\n    open_ = df_copy['open']\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(close, open_)\n    window = 20\n    price_change = close.diff()\n    abs_sum = price_change.abs().rolling(window, min_periods=window).sum()\n    net_change = close - close.shift(window)\n    efficiency_ratio = net_change.abs() / abs_sum.replace(0.0, np.nan)\n    efficiency_ratio = efficiency_ratio.fillna(0.0).clip(0.0, 1.0)\n    efficiency_ratio_smoothed = efficiency_ratio.ewm(span=5, min_periods=1).mean()\n    intraday_signal = intraday_ret.rolling(5, min_periods=1).mean()\n    overnight_reversal = -overnight_ret.rolling(5, min_periods=1).mean()\n    factor = efficiency_ratio_smoothed * intraday_signal + (1.0 - efficiency_ratio_smoothed) * overnight_reversal\n    factor.name = 'factor_trend_adaptive_smooth_efficiency_blend'\n    return factor\n",
+  "description": "Parent strength preserved: the Kaufman efficiency ratio gates a blend of intraday momentum (high efficiency) and overnight gap reversal (low efficiency), delivering stable ICIR/RankICIR and balanced IC. Bottleneck targeted: the raw efficiency ratio can switch abruptly, introducing noise. Mutation applies an exponential moving average (span=5) to smooth the efficiency-ratio gate, reducing whipsaw between the two return components while preserving the core economic mechanism. This is a single-modifier smoothing change.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.05020118335651619,
+    "icir": 0.7705467334546471,
+    "mi": 0.02758303986535715,
+    "rank_ic": 0.03094524279707389,
+    "rank_icir": 0.6610609868295537
+  },
+  "raw_metrics": {
+    "ic": -0.05020118335651619,
+    "icir": -0.7705467334546471,
+    "mi": 0.02758303986535715,
+    "rank_ic": -0.03094524279707389,
+    "rank_icir": -0.6610609868295537
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 10.432441826113863,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.27908428320231304,
+    "top_quantile_excess_return": 3.154205840132277,
+    "top_quantile_max_drawdown": -0.26831936846473503,
+    "top_quantile_turnover": 0.3639669948914807
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:24:24.102037+00:00"
+}

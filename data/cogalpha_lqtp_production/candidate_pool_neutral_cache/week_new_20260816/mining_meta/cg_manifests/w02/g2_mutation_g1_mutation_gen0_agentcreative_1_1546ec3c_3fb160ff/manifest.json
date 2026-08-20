@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_gen0_agentcreative_1_1546ec3c_3fb160ff",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "elite",
+  "factor_id": 447,
+  "factor_name": "factor_overnight_intraday_dissonance_ewm",
+  "domain_agent": "alpha-creative",
+  "run_id": "fleet-w02-20260814-091505-r8",
+  "expression_type": "python",
+  "formula": "ewm_span_5(sign(overnight_return) * sqrt(abs(overnight_return)) - sign(intraday_return) * sqrt(abs(intraday_return))), where overnight_return and intraday_return are from alpha_tools.decompose_overnight_intraday(close, open)",
+  "code": "def factor_overnight_intraday_dissonance_ewm(df):\n    \"\"\"Exponentially smoothed signed square-root dissonance between overnight and intraday returns.\"\"\"\n    df_copy = df.copy()\n    overnight, intraday = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    overnight = overnight.replace([np.inf, -np.inf], np.nan)\n    intraday = intraday.replace([np.inf, -np.inf], np.nan)\n    signed_sqrt_overnight = np.sign(overnight) * np.sqrt(np.abs(overnight))\n    signed_sqrt_intraday = np.sign(intraday) * np.sqrt(np.abs(intraday))\n    raw_dissonance = signed_sqrt_overnight - signed_sqrt_intraday\n    factor = raw_dissonance.ewm(span=5, adjust=False, min_periods=1).mean()\n    df_copy[\"factor_overnight_intraday_dissonance_ewm\"] = factor.fillna(0.0)\n    return df_copy[\"factor_overnight_intraday_dissonance_ewm\"]",
+  "description": "Preserves the parent's overnight-intraday dissonance mechanism, which captures disagreement between overnight/global information and intraday/local trading. The parent's 5-day simple moving average treats all recent dissonance equally; this mutation switches to an exponentially weighted moving average (span=5) to give more weight to recent observations, improving responsiveness to regime changes while retaining the core signed-square-root economic signal. The ewm uses only past observations, and the factor remains continuous and interpretable without cross-sectional transformation.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.036809111016637176,
+    "icir": 0.5985853175119817,
+    "mi": 0.02015430202715507,
+    "rank_ic": 0.03632747435695675,
+    "rank_icir": 0.6070606873462008
+  },
+  "raw_metrics": {
+    "ic": 0.036809111016637176,
+    "icir": 0.5985853175119817,
+    "mi": 0.02015430202715507,
+    "rank_ic": 0.03632747435695675,
+    "rank_icir": 0.6070606873462008
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 11.562841919633554,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.2613279503762407,
+    "top_quantile_excess_return": 2.831440744139883,
+    "top_quantile_max_drawdown": -0.29630089312620567,
+    "top_quantile_turnover": 0.5104723152730037
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:42:30.183011+00:00"
+}

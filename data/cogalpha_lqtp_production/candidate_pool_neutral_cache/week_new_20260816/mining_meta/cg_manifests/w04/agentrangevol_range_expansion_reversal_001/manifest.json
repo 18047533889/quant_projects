@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "agentrangevol_range_expansion_reversal_001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 333,
+  "factor_name": "factor_range_expansion_reversal",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260804-234255-r25",
+  "expression_type": "python",
+  "formula": "expansion_reversal = -ret5 * zscore(range) smoothed by EMA(3)",
+  "code": "def factor_range_expansion_reversal(df):\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    lookback = 50\n    mean_range = range_.rolling(lookback, min_periods=lookback).mean()\n    std_range = range_.rolling(lookback, min_periods=lookback).std()\n    range_z = (range_ - mean_range) / std_range.replace(0, np.nan)\n    ret5 = df_copy[\"close\"].pct_change(5)\n    raw = -ret5 * range_z\n    ema_signal = raw.ewm(span=3, min_periods=3).mean()\n    df_copy[\"factor_range_expansion_reversal\"] = ema_signal\n    return df_copy[\"factor_range_expansion_reversal\"]",
+  "description": "This factor captures volatility expansion and subsequent mean-reversion. It measures current range (high\u2011low) relative to its historical distribution via a rolling z-score, then multiplies by the negative 5-day return. Thus, a large drop accompanied by a spike in daily range produces a high positive signal, anticipating a reversal. The final signal is smoothed with an EMA(3) to reduce noise while preserving responsiveness. This combines range-based volatility expansion with return-based reversal, consistent with the Price-Volatility Behavior layer.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0397935178940675,
+    "icir": 0.44842979909957575,
+    "mi": 0.03667845440181061,
+    "rank_ic": 0.05619131579810625,
+    "rank_icir": 0.7028103649385876
+  },
+  "raw_metrics": {
+    "ic": 0.0397935178940675,
+    "icir": 0.44842979909957575,
+    "mi": 0.03667845440181061,
+    "rank_ic": 0.05619131579810625,
+    "rank_icir": 0.7028103649385876
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.1046991218865736,
+    "top_quantile_excess_return": 0.05980428664637727,
+    "top_quantile_max_drawdown": -0.019677709494487772,
+    "top_quantile_turnover": 0.39037205064714775
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:27:34.531152+00:00"
+}

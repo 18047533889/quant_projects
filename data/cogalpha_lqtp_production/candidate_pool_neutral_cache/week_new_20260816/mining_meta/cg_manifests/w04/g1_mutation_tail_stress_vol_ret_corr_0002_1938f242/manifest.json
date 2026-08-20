@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_tail_stress_vol_ret_corr_0002_1938f242",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 696,
+  "factor_name": "factor_volume_spike_tail_corr",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w04-20260814-015906-r10",
+  "expression_type": "python",
+  "formula": "-corr(ret, volume_ema_ratio, 20d) * std(min(ret,0), 20d), smoothed 5d",
+  "code": "def factor_volume_spike_tail_corr(df):\n    \"\"\"Relative-volume return tail stress preserving negative correlation mechanism.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    vol_ratio = vol_ratio.replace([np.inf, -np.inf], np.nan)\n    corr = ret.rolling(20, min_periods=20).corr(vol_ratio)\n    downside = ret.clip(upper=0.0)\n    downside_std = downside.rolling(20, min_periods=20).std(ddof=1)\n    stress = (-corr) * downside_std\n    df_copy[\"factor_volume_spike_tail_corr\"] = stress.rolling(5, min_periods=5).mean()\n    return df_copy[\"factor_volume_spike_tail_corr\"]",
+  "description": "Mutation of tail_stress_vol_ret_corr_0002. Preserves the core tail-risk mechanism: negative rolling correlation between returns and volume signals distribution/accumulation under stress, amplified by downside severity. The bottleneck in the parent was use of raw volume, whose cross-sectional scale confounds the correlation and weakens signal after industry/size neutralization. This child replaces raw volume with the continuous volume/EMA ratio from alpha_tools.classify_volume_regime, which is a relative-volume surprise measure, removing level effects while keeping the same dynamic dependence. One lightweight modifier: 5-day smoothing of the stress score to reduce noise. The signal remains raw and single-stock; cross-sectional normalization is left to the engine gate.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.010253296099725882,
+    "icir": 0.16115389257979437,
+    "mi": 0.01769008489450119,
+    "rank_ic": 0.046238706766520164,
+    "rank_icir": 0.6372751850100328
+  },
+  "raw_metrics": {
+    "ic": 0.010253296099725882,
+    "icir": 0.16115389257979437,
+    "mi": 0.01769008489450119,
+    "rank_ic": 0.046238706766520164,
+    "rank_icir": 0.6372751850100328
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.666260133024045,
+    "quantile_monotonicity": 0.9272727272727272,
+    "top_quantile_annualized_excess_return": -0.009433588017468408,
+    "top_quantile_excess_return": -0.006523216985760749,
+    "top_quantile_max_drawdown": -0.030391689417065937,
+    "top_quantile_turnover": 0.11012774484182201
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:02:24.585717+00:00"
+}

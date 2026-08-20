@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_volasym_tail_jumps_002_adt_002_directional_movem_49cfee8f",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 417,
+  "factor_name": "factor_tail_asymmetry_smoothed",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w02-20260814-042827-r7",
+  "expression_type": "python",
+  "formula": "ewm(span=5) of -(down_jump_63 - up_jump_63)/(down_jump_63 + up_jump_63 + 1)",
+  "code": "def factor_tail_asymmetry_smoothed(df):\n    \"\"\"Smoothed downside vs upside jump frequency asymmetry, borrowing EWM stabilization from directional movement parent.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol = ret.rolling(63, min_periods=20).std(ddof=1).shift(1)\n    down_jump = ((ret < -1.5 * vol) & (vol > 0)).rolling(63, min_periods=20).sum()\n    up_jump = ((ret > 1.5 * vol) & (vol > 0)).rolling(63, min_periods=20).sum()\n    raw_asym = -(down_jump - up_jump) / (down_jump + up_jump + 1.0)\n    smoothed = raw_asym.ewm(span=5, min_periods=1).mean()\n    df_copy[\"factor_tail_asymmetry_smoothed\"] = smoothed\n    return df_copy[\"factor_tail_asymmetry_smoothed\"]",
+  "description": "Primary mechanism inherits the tail-jump asymmetry: count returns below -1.5 sigma vs above +1.5 sigma over 63 days using lagged realized volatility, then produce the bounded negative ratio to rank downside-jump-heavy names lower. Borrow one lightweight modifier from the directional movement parent: exponential smoothing with span=5 to stabilize the bounded ratio, reduce noise, and preserve the parent's strong payoff and low turnover. This targets the parent's weak IC/ICIR while keeping RankICIR and payoff evidence intact; cross-sectional transform remains none per strong raw payoff evidence.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.005290018432878077,
+    "icir": 0.0981124515668834,
+    "mi": 0.004541524301789224,
+    "rank_ic": 0.020957191549122425,
+    "rank_icir": 0.3491692673562976
+  },
+  "raw_metrics": {
+    "ic": -0.005290018432878077,
+    "icir": -0.0981124515668834,
+    "mi": 0.004541524301789224,
+    "rank_ic": -0.020957191549122425,
+    "rank_icir": -0.3491692673562976
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.145506028524899,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.060576506674643316,
+    "top_quantile_excess_return": 0.39878699680392793,
+    "top_quantile_max_drawdown": -0.05738433114050412,
+    "top_quantile_turnover": 0.05914892678381469
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:39:19.390727+00:00"
+}

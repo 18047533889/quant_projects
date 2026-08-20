@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_crash_tail_risk_volum_76e3e7d0",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 151,
+  "factor_name": "factor_crash_tail_risk_volume_15d",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w03-20260804-141833-r12",
+  "expression_type": "python",
+  "formula": "-min(return_15d) * clip(volume / mean_volume_30d, 0.5, 2.0)",
+  "code": "def factor_crash_tail_risk_volume_15d(df):\n    \"\"\"Crash precursor with shortened tail window and volume confirmation, no smoothing.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    tail_return = ret.rolling(15, min_periods=15).min()\n    vol_mean = df_copy[\"volume\"].rolling(30, min_periods=30).mean()\n    vol_ratio = df_copy[\"volume\"] / vol_mean.replace(0, np.nan)\n    vol_ratio = vol_ratio.clip(0.5, 2.0)\n    raw = -tail_return * vol_ratio\n    raw = raw.fillna(0)\n    df_copy[\"factor_crash_tail_risk_volume_15d\"] = raw\n    return df_copy[\"factor_crash_tail_risk_volume_15d\"]",
+  "description": "Mutates parent factor_crash_tail_risk_volume_smooth by shortening the tail return window from 20 to 15 days for more timely crash capture, shortening the average volume window from 50 to 30 days for a more adaptive volume baseline, and removing the 5-day smoothing to preserve extreme crash signals. This targets improved top-quantile payoff and IC magnitude while retaining the core economic mechanism: stocks with large recent negative returns and elevated volume are vulnerable to further declines. The parent_strength_target is RankIC, aiming to maintain strong rank-ordering of crash risk.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.028021025409992194,
+    "icir": 0.29279031240243614,
+    "mi": 0.029285812819258794,
+    "rank_ic": 0.04102001046455574,
+    "rank_icir": 0.3592553465172097
+  },
+  "raw_metrics": {
+    "ic": -0.028021025409992194,
+    "icir": -0.29279031240243614,
+    "mi": 0.029285812819258794,
+    "rank_ic": -0.04102001046455574,
+    "rank_icir": -0.3592553465172097
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.24723100450304814,
+    "top_quantile_excess_return": 2.5031648426239,
+    "top_quantile_max_drawdown": -0.07864247867432617,
+    "top_quantile_turnover": 0.30561036371251143
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:50:06.182472+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "vol_asym_corr_leverage_002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 694,
+  "factor_name": "factor_vol_asym_corr_leverage",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w04-20260814-015906-r10",
+  "expression_type": "python",
+  "formula": "- rolling_corr(return_lag1, volatility, window=60)",
+  "code": "def factor_vol_asym_corr_leverage(df):\n    \"\"\"Leverage-effect asymmetry via lagged return and current volatility correlation.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"]\n    lag_ret = ret.shift(1)\n    corr = lag_ret.rolling(60, min_periods=30).corr(vol)\n    factor = -corr\n    df_copy[\"factor_vol_asym_corr_leverage\"] = factor\n    return df_copy[\"factor_vol_asym_corr_leverage\"]\n",
+  "description": "Measures the classic leverage effect: negative returns tend to increase future volatility more than positive returns. By computing the rolling correlation between lagged returns and current high-low range volatility, the factor becomes positive when the correlation is negative, indicating strong asymmetric volatility response. This raw pathway is based on dynamic dependence rather than semivariance ratios, offering an uncovered mechanism for the Price-Volatility Behavior layer.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01594905458286946,
+    "icir": 0.3846673811630745,
+    "mi": 0.005182610713236002,
+    "rank_ic": 0.03427995691858784,
+    "rank_icir": 0.7481107051649565
+  },
+  "raw_metrics": {
+    "ic": 0.01594905458286946,
+    "icir": 0.3846673811630745,
+    "mi": 0.005182610713236002,
+    "rank_ic": 0.03427995691858784,
+    "rank_icir": 0.7481107051649565
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.489663734071632,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.08479575252441429,
+    "top_quantile_excess_return": 0.0554193387823434,
+    "top_quantile_max_drawdown": -0.02180306803598464,
+    "top_quantile_turnover": 0.1028414010479517
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:01:51.348829+00:00"
+}

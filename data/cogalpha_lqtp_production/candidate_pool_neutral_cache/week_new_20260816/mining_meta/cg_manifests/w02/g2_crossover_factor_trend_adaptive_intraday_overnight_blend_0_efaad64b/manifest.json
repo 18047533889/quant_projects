@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_factor_trend_adaptive_intraday_overnight_blend_0_efaad64b",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 317,
+  "factor_name": "factor_trend_adaptive_stress_filtered_reversal",
+  "domain_agent": "alpha-regime-gating",
+  "run_id": "fleet-w02-20260813-103714-r3",
+  "expression_type": "python",
+  "formula": "efficiency_ratio = abs(close - close.shift(20)) / sum(abs(close.diff()), 20); stress = ewm_mean(10, max(0, -(close/rolling_max(close,60)-1))); reversal_gate = 1/(1+stress); factor = efficiency_ratio * rolling_mean(intraday_ret,5) + (1-efficiency_ratio) * rolling_mean(-overnight_ret,5) * reversal_gate",
+  "code": "def factor_trend_adaptive_stress_filtered_reversal(df):\n    \"\"\"Trend-adaptive intraday/overnight blend with drawdown stress gate applied only to the overnight reversal leg.\"\"\"\n    df_copy = df.copy()\n    close = df_copy['close']\n    open_ = df_copy['open']\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(close, open_)\n    window = 20\n    price_change = close.diff()\n    abs_sum = price_change.abs().rolling(window, min_periods=window).sum()\n    net_change = close - close.shift(window)\n    efficiency_ratio = net_change.abs() / abs_sum.replace(0.0, np.nan)\n    efficiency_ratio = efficiency_ratio.fillna(0.0).clip(0.0, 1.0)\n    intraday_signal = intraday_ret.rolling(5, min_periods=1).mean()\n    overnight_reversal = -overnight_ret.rolling(5, min_periods=1).mean()\n    rolling_peak = close.rolling(60, min_periods=20).max()\n    drawdown = close / rolling_peak - 1.0\n    drawdown_depth = -drawdown.clip(upper=0.0)\n    stress = drawdown_depth.ewm(span=10, min_periods=5).mean().fillna(0.0)\n    reversal_gate = 1.0 / (1.0 + stress)\n    factor = efficiency_ratio * intraday_signal + (1.0 - efficiency_ratio) * overnight_reversal * reversal_gate\n    factor.name = 'factor_trend_adaptive_stress_filtered_reversal'\n    return factor\n",
+  "description": "Primary mechanism retained from parent factor_trend_adaptive_intraday_overnight_blend: Kaufman efficiency ratio blends trend-following intraday momentum (high efficiency) and contrarian overnight reversal (low efficiency), preserving balanced IC and stable ICIR/RankICIR. Borrowed secondary idea from g1_crossover_then_mutation_factor_trend_adaptive_intraday_overnight_blend_0_cb8271d3: drawdown-stress confidence gate from 60-day rolling peak, exponentially smoothed current drawdown depth (span 10), converted to bounded attenuation 1/(1+stress). Instead of multiplying the entire blended signal, the gate is applied only to the overnight reversal leg, reducing unreliable contrarian bets in stressed drawdown regimes while leaving intraday momentum untouched. This targets payoff thickness and drawdown risk without weakening trend persistence. Single-stock raw factor only; cross_sectional_transform none.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.051341341804201544,
+    "icir": 0.74721002442367,
+    "mi": 0.027827486425954895,
+    "rank_ic": 0.03245217081505326,
+    "rank_icir": 0.6640614920022683
+  },
+  "raw_metrics": {
+    "ic": -0.051341341804201544,
+    "icir": -0.74721002442367,
+    "mi": 0.027827486425954895,
+    "rank_ic": -0.03245217081505326,
+    "rank_icir": -0.6640614920022683
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 10.365079483411568,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.2836385318536061,
+    "top_quantile_excess_return": 3.2405163271141326,
+    "top_quantile_max_drawdown": -0.21939053301809142,
+    "top_quantile_turnover": 0.38048496537402304
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:25:36.152620+00:00"
+}

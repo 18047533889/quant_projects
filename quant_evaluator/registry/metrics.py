@@ -6,19 +6,26 @@ Central registry of available metrics with status and tier metadata.
 
 from dataclasses import dataclass
 from enum import Enum
+from types import MappingProxyType
 from typing import Dict, List, Optional, Callable, Any
 
 from quant_evaluator.metrics.ic import compute_ic_std, compute_mean_ic_value
-from quant_evaluator.metrics.quality import compute_coverage
 from quant_evaluator.metrics.registry_adapters import (
     compute_block_bootstrap_ci_value,
+    compute_coverage_value,
+    compute_hac_pvalue_value,
     compute_hac_tstat_value,
     compute_half_life_value,
     compute_factor_turnover_rate_value,
     compute_ic_autocorr_lag1_value,
     compute_ic_ir_value,
+    compute_ic_median_value,
+    compute_pearson_ic_series_value,
+    compute_pearson_ic_value,
     compute_quantile_returns_full_value,
     compute_quantile_spread_value,
+    compute_rank_ic_series_value,
+    compute_rank_ic_value,
     compute_rank_stability_value,
     compute_subsample_stability_value,
     compute_turnover_value,
@@ -53,6 +60,10 @@ class MetricSpec:
         compute_fn: Callable that computes the metric (optional)
         requires: List of required input types (e.g., ["ic_series", "factor_batch"])
         min_periods: Minimum time periods required (None if not applicable)
+        ic_method: Correlation method ("pearson" or "spearman") the metric's
+            ``ic_series`` input must be computed with. Only meaningful for
+            metrics with ``ic_series`` in ``requires``; the public facade
+            reads it to build the wrapper IC series. Defaults to "pearson".
     """
     name: str
     display_name: str
@@ -62,10 +73,16 @@ class MetricSpec:
     compute_fn: Optional[Callable] = None
     requires: Optional[List[str]] = None
     min_periods: Optional[int] = None
+    ic_method: str = "pearson"
 
     def __post_init__(self):
         if self.requires is None:
             object.__setattr__(self, 'requires', [])
+        if self.ic_method not in ("pearson", "spearman"):
+            raise ValueError(
+                f"Metric '{self.name}' declares invalid ic_method "
+                f"{self.ic_method!r}; must be 'pearson' or 'spearman'"
+            )
 
 
 # Central metric catalog
@@ -154,11 +171,55 @@ def list_metrics_by_tier(tier: MetricTier) -> List[str]:
     )
 
 
+def resolve_alias(metric_id: str) -> str:
+    """
+    Resolve a canonical dotted metric name to its registry name.
+
+    Canonical dotted names (e.g. ``"ic.pearson.mean"``) map onto registry
+    names (e.g. ``"mean_ic"``). Unknown names are returned unchanged so the
+    caller can surface the original identifier in its own error.
+
+    Args:
+        metric_id: Registry name or canonical dotted alias
+
+    Returns:
+        The registry metric name
+    """
+    return CANONICAL_METRIC_ALIASES.get(metric_id, metric_id)
+
+
+# QE-METRIC-P0-03: canonical dotted metric namespace. Frozen single source
+# of truth for dotted-name -> registry-name resolution. rank_ic has exactly
+# ONE meaning: the time-mean of daily Spearman IC (see its MetricSpec).
+CANONICAL_METRIC_ALIASES: Dict[str, str] = MappingProxyType({
+    "ic.rank.daily": "rank_ic_series",
+    "ic.rank.mean": "rank_ic",
+    "ic.rank.median": "ic_median",
+    "ic.rank.std": "ic_std",
+    "ic.rank.ir": "ic_ir",
+    "ic.rank.hac_t": "hac_tstat",
+    "ic.rank.hac_p": "hac_pvalue",
+    "ic.pearson.daily": "pearson_ic_series",
+    "ic.pearson.mean": "mean_ic",
+    "ic.pearson.std": "ic_std",
+    "ic.pearson.ir": "ic_ir",
+})
+
+
 # Register core metrics
 register_metric(MetricSpec(
     name="mean_ic",
     display_name="Mean IC",
-    description="Time-averaged information coefficient",
+    description=(
+        "Time-averaged Pearson information coefficient: the time-mean of "
+        "daily Pearson IC between factor values and labels (canonical alias "
+        "ic.pearson.mean). NOTE on observation_count: the public evaluate "
+        "facade reports the number of jointly valid (factor, label) panel "
+        "cells for this alias, whereas pearson_ic/ic.pearson.mean report "
+        "the number of finite daily IC days — same kernel, two documented "
+        "observation bases (kept for back-compat with the historical "
+        "facade behaviour)"
+    ),
     status=MetricStatus.STABLE,
     tier=MetricTier.CORE,
     compute_fn=compute_mean_ic_value,
@@ -191,12 +252,106 @@ register_metric(MetricSpec(
 register_metric(MetricSpec(
     name="coverage",
     display_name="Coverage Rate",
-    description="Fraction of universe with valid factor values",
+    description=(
+        "Per-factor fraction of the (T, N) panel with jointly valid factor "
+        "and label values (never averaged across factor columns; canonical "
+        "family: coverage)"
+    ),
     status=MetricStatus.STABLE,
     tier=MetricTier.CORE,
-    compute_fn=compute_coverage,
+    compute_fn=compute_coverage_value,
     requires=["factor_batch", "label_bundle"],
     min_periods=None,
+))
+
+register_metric(MetricSpec(
+    name="pearson_ic",
+    display_name="Mean Pearson IC",
+    description=(
+        "Time-mean of daily Pearson IC between factor values and labels "
+        "(canonical alias ic.pearson.mean; same kernel as mean_ic). "
+        "observation_count here is the number of finite daily IC days — "
+        "whereas the mean_ic alias reports jointly valid (factor, label) "
+        "panel cells; see the mean_ic spec note"
+    ),
+    status=MetricStatus.STABLE,
+    tier=MetricTier.CORE,
+    compute_fn=compute_pearson_ic_value,
+    requires=["factor_batch", "label_bundle"],
+    min_periods=None,
+))
+
+register_metric(MetricSpec(
+    name="rank_ic",
+    display_name="Mean Rank IC",
+    description=(
+        "rank_ic has exactly ONE meaning: the time-mean of daily Spearman "
+        "rank IC between factor values and labels (canonical alias "
+        "ic.rank.mean)"
+    ),
+    status=MetricStatus.STABLE,
+    tier=MetricTier.CORE,
+    compute_fn=compute_rank_ic_value,
+    requires=["factor_batch", "label_bundle"],
+    min_periods=None,
+))
+
+register_metric(MetricSpec(
+    name="pearson_ic_series",
+    display_name="Daily Pearson IC Series",
+    description=(
+        "Daily Pearson IC per factor over time, shape (T, F) (canonical "
+        "alias ic.pearson.daily)"
+    ),
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_pearson_ic_series_value,
+    requires=["factor_batch", "label_bundle"],
+    min_periods=None,
+))
+
+register_metric(MetricSpec(
+    name="rank_ic_series",
+    display_name="Daily Rank IC Series",
+    description=(
+        "Daily Spearman rank IC per factor over time, shape (T, F) "
+        "(canonical alias ic.rank.daily)"
+    ),
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_rank_ic_series_value,
+    requires=["factor_batch", "label_bundle"],
+    min_periods=None,
+))
+
+register_metric(MetricSpec(
+    name="ic_median",
+    display_name="Median IC",
+    description=(
+        "Time-median of the daily IC series per factor (canonical alias "
+        "ic.rank.median)"
+    ),
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_ic_median_value,
+    requires=["ic_series"],
+    min_periods=20,
+    ic_method="spearman",
+))
+
+register_metric(MetricSpec(
+    name="hac_pvalue",
+    display_name="HAC p-value",
+    description=(
+        "Two-sided HAC-robust p-value for mean(IC) != 0 per factor "
+        "(canonical alias ic.rank.hac_p)"
+    ),
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_hac_pvalue_value,
+    requires=["ic_series"],
+    min_periods=30,
+    ic_method="spearman",
 ))
 
 register_metric(MetricSpec(
@@ -231,6 +386,7 @@ register_metric(MetricSpec(
     compute_fn=compute_hac_tstat_value,
     requires=["ic_series"],
     min_periods=30,
+    ic_method="spearman",
 ))
 
 register_metric(MetricSpec(
@@ -303,7 +459,12 @@ register_metric(MetricSpec(
 register_metric(MetricSpec(
     name="quantile_returns_full",
     display_name="Full Quantile Returns",
-    description="Return distribution across all quantiles",
+    description=(
+        "Per-quantile time-averaged returns as a VECTOR per factor — shape "
+        "(n_quantiles, F), NOT a scalar; wrap with "
+        "metrics.registry_adapters.compute_quantile_returns_full_artifact "
+        "for the typed VectorMetricArtifact"
+    ),
     status=MetricStatus.STABLE,
     tier=MetricTier.RESEARCH,
     compute_fn=compute_quantile_returns_full_value,

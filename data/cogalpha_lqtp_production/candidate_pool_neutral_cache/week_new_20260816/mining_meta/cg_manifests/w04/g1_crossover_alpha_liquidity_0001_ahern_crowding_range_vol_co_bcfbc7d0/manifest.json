@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_alpha_liquidity_0001_ahern_crowding_range_vol_co_bcfbc7d0",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 796,
+  "factor_name": "factor_asymmetric_impact_crowding_adj",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w04-20260814-135044-r14",
+  "expression_type": "python",
+  "formula": "pos_impact_mean_20 - neg_impact_mean_20, then multiplied by (0.8 + 0.4 * rolling_corr_20(log(true_range), log(volume)))",
+  "code": "def factor_asymmetric_impact_crowding_adj(df):\n    \"\"\"Asymmetric price impact modulated by volume-range crowding.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    dollar_vol = (df_copy['close'] * df_copy['volume']).replace(0.0, np.nan)\n    pos_impact = (ret.where(ret > 0, np.nan).abs() / dollar_vol)\n    neg_impact = (ret.where(ret < 0, np.nan).abs() / dollar_vol)\n    pos_mean = pos_impact.rolling(20, min_periods=5).mean()\n    neg_mean = neg_impact.rolling(20, min_periods=5).mean()\n    raw_asym = pos_mean - neg_mean\n    prev_close = df_copy['close'].shift(1)\n    true_range = np.maximum(df_copy['high'] - df_copy['low'],\n                            np.maximum((df_copy['high'] - prev_close).abs(),\n                                       (df_copy['low'] - prev_close).abs()))\n    log_range = np.log(true_range.replace(0, np.nan).clip(lower=1e-12))\n    log_volume = np.log(df_copy['volume'].clip(lower=1e-12))\n    crowding_corr = log_range.rolling(20, min_periods=10).corr(log_volume)\n    weight = 0.8 + 0.4 * crowding_corr.fillna(0.0)\n    factor = raw_asym * weight\n    df_copy['factor_asymmetric_impact_crowding_adj'] = factor\n    return df_copy['factor_asymmetric_impact_crowding_adj']",
+  "description": "Primary mechanism from alpha-liquidity-0001: asymmetric price impact between up and down days captures liquidity supply imbalance. Borrowed lightweight idea from ahern_crowding_range_vol_corr_001: rolling correlation between log true range and log volume indicates crowding/volume concentration. A bounded weight based on this correlation amplifies the signal when volume concentrates on high-volatility bars (herding), while preserving continuous cross-sectional variation. This modulation targets improved IC and MI without disturbing the stable RankICIR and payoff profile.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0019474337420891015,
+    "icir": 0.06039563627830418,
+    "mi": 0.004374308430591611,
+    "rank_ic": 0.010520001048025075,
+    "rank_icir": 0.2637461929518362
+  },
+  "raw_metrics": {
+    "ic": -0.0019474337420891015,
+    "icir": -0.06039563627830418,
+    "mi": 0.004374308430591611,
+    "rank_ic": -0.010520001048025075,
+    "rank_icir": -0.2637461929518362
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.9584247233904493,
+    "quantile_monotonicity": 0.3575757575757576,
+    "top_quantile_annualized_excess_return": 0.0437079275078216,
+    "top_quantile_excess_return": 0.03242975008807436,
+    "top_quantile_max_drawdown": -0.04022310862702094,
+    "top_quantile_turnover": 0.1879059180871853
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:15:45.386078+00:00"
+}

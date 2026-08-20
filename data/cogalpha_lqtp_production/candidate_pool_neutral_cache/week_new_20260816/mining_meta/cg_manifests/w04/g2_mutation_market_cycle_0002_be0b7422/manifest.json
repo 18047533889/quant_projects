@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_market_cycle_0002_be0b7422",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 757,
+  "factor_name": "factor_cycle_range_pressure_full60",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w04-20260814-081422-r12",
+  "expression_type": "python",
+  "formula": "(sum(close-low, 60, min_periods=20) - sum(high-close, 60, min_periods=20)) / sum(high-low, 60, min_periods=20)",
+  "code": "def factor_cycle_range_pressure_full60(df):\n    \"\"\"Buyer/seller pressure within trailing 60-day range; partial windows allowed to control NaN fraction.\"\"\"\n    df_copy = df.copy()\n    buy_pressure = (df_copy[\"close\"] - df_copy[\"low\"]).rolling(60, min_periods=20).sum()\n    sell_pressure = (df_copy[\"high\"] - df_copy[\"close\"]).rolling(60, min_periods=20).sum()\n    total_range = (df_copy[\"high\"] - df_copy[\"low\"]).rolling(60, min_periods=20).sum()\n    df_copy[\"factor_cycle_range_pressure_full60\"] = (buy_pressure - sell_pressure) / total_range.replace(0.0, np.nan)\n    return df_copy[\"factor_cycle_range_pressure_full60\"]\n",
+  "description": "Preserves the parent's core accumulation/distribution mechanism: within a stock's own trailing 60-day high-low range, buy-side pressure and sell-side pressure are accumulated and their net difference normalized by total range. The min_periods is reduced from 60 to 20 to satisfy the NaN fraction guard; this retains most of the desired window stability while allowing earlier estimates only after 20 observations. The raw single-stock signal remains continuous and is returned without cross-sectional ranking, preserving the parent's payoff evidence.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.015457728501684464,
+    "icir": 0.3134099026810821,
+    "mi": 0.006328066113737485,
+    "rank_ic": 0.01639459068246483,
+    "rank_icir": 0.2847615546346722
+  },
+  "raw_metrics": {
+    "ic": -0.015457728501684464,
+    "icir": -0.3134099026810821,
+    "mi": 0.006328066113737485,
+    "rank_ic": -0.01639459068246483,
+    "rank_icir": -0.2847615546346722
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.09064606002681,
+    "quantile_monotonicity": 0.9393939393939394,
+    "top_quantile_annualized_excess_return": 0.01990193039799215,
+    "top_quantile_excess_return": 0.014096282673152771,
+    "top_quantile_max_drawdown": -0.016218467059808006,
+    "top_quantile_turnover": 0.13446605714235776
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:10:58.848289+00:00"
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_range_vol_001_g1_crossover_range_vol_001_lag_res_7ab33f8c",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 91,
+  "factor_name": "factor_range_compression_volume_smooth",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260803-040422-r7",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_range_compression_volume_smooth(df):\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    prev_close = close.shift(1)\n    tr = np.maximum(high - low, np.maximum(np.abs(high - prev_close), np.abs(low - prev_close)))\n    volume_ma = volume.rolling(20, min_periods=20).mean()\n    vol_ratio = volume / volume_ma.replace(0, np.nan)\n    vol_factor = np.clip(vol_ratio, 0.5, 2.0)\n    alpha_short = 0.1\n    alpha_long = 1.0 / 50\n    atr_short = tr.ewm(alpha=alpha_short, adjust=False).mean()\n    atr_long = tr.ewm(alpha=alpha_long, adjust=False).mean()\n    ratio = atr_short / atr_long.replace(0, np.nan)\n    compression = -(ratio * vol_factor - 1.0)\n    df_copy[\"factor_range_compression_volume_smooth\"] = compression\n    return df_copy[\"factor_range_compression_volume_smooth\"]",
+  "description": "Repair of volume-adaptive range compression factor. The original variable alpha EWMA is not supported; fixed alphas are used instead. Volume adaptation is now applied multiplicatively to the short/long ATR ratio, amplifying the compression signal during high volume and dampening it during low volume. This preserves the core economic intuition of faster volatility decay under high volume while avoiding scalar alpha constraints.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.029957997037683048,
+    "icir": 0.3234636177811369,
+    "mi": 0.027223620201054288,
+    "rank_ic": 0.05940665167416168,
+    "rank_icir": 0.6441414966903007
+  },
+  "raw_metrics": {
+    "ic": 0.029957997037683048,
+    "icir": 0.3234636177811369,
+    "mi": 0.027223620201054288,
+    "rank_ic": 0.05940665167416168,
+    "rank_icir": 0.6441414966903007
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6,
+    "top_quantile_annualized_excess_return": 0.05790399546514813,
+    "top_quantile_excess_return": 0.040793577062899766,
+    "top_quantile_max_drawdown": -0.027569189492079538,
+    "top_quantile_turnover": 0.36788991481312994
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:17:08.225078+00:00"
+}

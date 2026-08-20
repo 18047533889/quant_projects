@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_alpha_range_vol_gen0_001_avs_gen0_002_0a93015b",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 544,
+  "factor_name": "factor_vwap_sma_vol_persistence",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260813-044118-r2",
+  "expression_type": "python",
+  "formula": "vol_ratio = volume / rolling_median(volume,20); persistence = rolling_corr(vol_ratio, shift(vol_ratio,1), 30); weight = 0.5 + 0.5 * clip(persistence, -1, 1); vwap = rolling_sum(close*volume,20)/rolling_sum(volume,20); sma = rolling_mean(close,20); factor = (vwap - sma)/close * weight",
+  "code": "def factor_vwap_sma_vol_persistence(df):\n    df_copy = df.copy()\n    volume = df_copy['volume']\n    close = df_copy['close']\n    med_volume = volume.rolling(20, min_periods=20).median()\n    vol_ratio = volume / med_volume.replace(0, np.nan)\n    lag_vol_ratio = vol_ratio.shift(1)\n    persistence = vol_ratio.rolling(30, min_periods=30).corr(lag_vol_ratio).fillna(0.0)\n    weight = 0.5 + 0.5 * np.clip(persistence, -1.0, 1.0)\n    vwap = (close * volume).rolling(20).sum() / volume.rolling(20).sum().replace(0, np.nan)\n    sma = close.rolling(20).mean()\n    div = (vwap - sma) / close.replace(0, np.nan)\n    factor = div * weight\n    df_copy['factor_vwap_sma_vol_persistence'] = factor\n    return df_copy['factor_vwap_sma_vol_persistence']",
+  "description": "Crossover preserves parent1's price-volume coherence signal (VWAP20 - SMA20 relative to close) as the primary mechanism. From parent2 it borrows only the volume surprise persistence idea: a rolling correlation between volume/rolling_median volume and its one-day lag. This persistence is transformed into a bounded weight [0.5,1.0], so positive autocorrelation of volume surprises reinforces the VWAP-SMA divergence and negative/random persistence attenuates it. The child avoids parent1's volatility compression to keep one coherent interaction, single-stock, and interpretable.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.028840627934437674,
+    "icir": 0.42756991303644587,
+    "mi": 0.015858822712110587,
+    "rank_ic": 0.051586201310709456,
+    "rank_icir": 0.8145380283682145
+  },
+  "raw_metrics": {
+    "ic": -0.028840627934437674,
+    "icir": -0.42756991303644587,
+    "mi": 0.015858822712110587,
+    "rank_ic": -0.051586201310709456,
+    "rank_icir": -0.8145380283682145
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.198803321332648,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.08419847870208863,
+    "top_quantile_excess_return": 0.059103465452394754,
+    "top_quantile_max_drawdown": -0.01817037300110691,
+    "top_quantile_turnover": 0.15311618115265546
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:45:20.174784+00:00"
+}

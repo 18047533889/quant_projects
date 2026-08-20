@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_then_mutation_pvcoherence_continuous_corr_001_alpha_stability_37705ddd",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 309,
+  "factor_name": "factor_pv_corr_efficiency_logvol",
+  "domain_agent": "alpha-stability",
+  "run_id": "fleet-w03-20260813-113406-r3",
+  "expression_type": "python",
+  "formula": "rolling_corr(close.pct_change(), log1p(volume).diff(), 20) * clip(|close_t - close_{t-20}| / sum_{i=1}^{20}|close_{t-i+1} - close_{t-i}|, 0, 1)",
+  "code": "def factor_pv_corr_efficiency_logvol(df):\n    \"\"\"Volume-price correlation with log-differenced volume and path efficiency.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    ret = close.pct_change()\n    vol_change = np.log1p(volume).diff()\n    corr = ret.rolling(20, min_periods=10).corr(vol_change)\n    net_move = (close - close.shift(20)).abs()\n    path_length = close.diff().abs().rolling(20, min_periods=20).sum()\n    efficiency = (net_move / path_length.replace(0.0, np.nan)).clip(0.0, 1.0).fillna(0.5)\n    factor = corr * efficiency\n    df_copy[\"factor_pv_corr_efficiency_logvol\"] = factor\n    return df_copy[\"factor_pv_corr_efficiency_logvol\"]",
+  "description": "Mutation of g1_crossover_pvcoherence_continuous_corr_001_alpha_stability_7849304c. Preserves the core rolling correlation between daily price returns and volume changes as the liquidity response mechanism, and preserves the lightweight path-efficiency weight. The targeted change replaces volume.pct_change() with log1p(volume).diff() to reduce the impact of extreme volume spikes and make the volume-change distribution smoother, which should improve IC/RankIC stability without altering the economic mechanism. Cross-sectional transform remains none to preserve the raw continuous payoff profile.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01639445060909893,
+    "icir": 0.28887357231171285,
+    "mi": 0.00467749768324488,
+    "rank_ic": 0.033543445109656574,
+    "rank_icir": 0.6317949601151537
+  },
+  "raw_metrics": {
+    "ic": -0.01639445060909893,
+    "icir": -0.28887357231171285,
+    "mi": 0.00467749768324488,
+    "rank_ic": -0.033543445109656574,
+    "rank_icir": -0.6317949601151537
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.977167627210914,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.03145139485582482,
+    "top_quantile_excess_return": 0.194896841546651,
+    "top_quantile_max_drawdown": -0.15445995151275405,
+    "top_quantile_turnover": 0.2440152584118922
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:59:46.875984+00:00"
+}

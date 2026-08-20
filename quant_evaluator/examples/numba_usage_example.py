@@ -10,7 +10,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
-from kernels.numba_backend import (
+from quant_evaluator.kernels.numba_backend import (
     numba_pearson_ic_batch,
     numba_spearman_ic_batch,
     numba_quantile_binning,
@@ -90,7 +90,7 @@ def example_quantile_analysis():
     print("         ", "  ".join([f"Q{i+1:2d}" for i in range(10)]))
     for f in range(F):
         print(f"Factor {f+1}: ", end="")
-        print("  ".join([f"{mean_returns[f, q]:+.3f}" for q in range(10)]))
+        print("  ".join([f"{mean_returns[q, f]:+.3f}" for q in range(10)]))
 
     # Long-short spread (Q10 - Q1)
     spread = mean_returns[:, -1] - mean_returns[:, 0]
@@ -118,8 +118,8 @@ def example_rolling_statistics():
 
     # Compute 20-day rolling statistics
     window = 20
-    rolling_vol = numba_rolling_std(returns, window, min_obs=15)
-    rolling_mean = numba_rolling_mean(returns, window, min_obs=15)
+    rolling_vol = numba_rolling_std(returns, window, min_periods=15)
+    rolling_mean = numba_rolling_mean(returns, window, min_periods=15)
 
     # Show statistics for first stock
     print(f"\nStock 1 - Recent 20-day rolling statistics:")

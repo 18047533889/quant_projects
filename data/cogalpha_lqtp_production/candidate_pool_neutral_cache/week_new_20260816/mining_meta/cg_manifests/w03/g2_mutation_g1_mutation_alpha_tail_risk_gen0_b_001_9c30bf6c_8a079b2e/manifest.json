@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_alpha_tail_risk_gen0_b_001_9c30bf6c_8a079b2e",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 419,
+  "factor_name": "factor_tail_risk_intraday_down_share_total_abs",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w03-20260814-124837-r9",
+  "expression_type": "python",
+  "formula": "-rolling_mean_60(abs(min(intraday_ret,0))) / rolling_mean_60(abs(overnight_ret) + abs(intraday_ret))",
+  "code": "def factor_tail_risk_intraday_down_share_total_abs(df):\n    \"\"\"Downside tail asymmetry: negated share of intraday downside magnitude relative to total absolute overnight+intraday movement.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(\n        df_copy[\"close\"], df_copy[\"open\"]\n    )\n    intra_down = np.minimum(intraday_ret, 0.0).abs()\n    total_abs = overnight_ret.abs() + intraday_ret.abs()\n    intra_down_mean = intra_down.rolling(60, min_periods=30).mean()\n    total_abs_mean = total_abs.rolling(60, min_periods=30).mean()\n    intra_share = intra_down_mean / total_abs_mean.replace(0.0, np.nan)\n    factor = -intra_share\n    return pd.Series(factor, index=df_copy.index, name=\"factor_tail_risk_intraday_down_share_total_abs\")",
+  "description": "Preserves the parent's tail-risk asymmetry mechanism: decompose overnight vs intraday returns and measure the negative share of intraday downside magnitude. The mutation changes the denominator from total downside-only (intraday + overnight downside) to total absolute movement (upside + downside of both components). This makes the signal interpretable as the fraction of overall daily price movement that is intraday downside, capturing asymmetric selling pressure while reducing noise from days where both components are strongly negative. Raw single-stock signal; cross-sectional normalization not required.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.015478207664335336,
+    "icir": 0.19814136117466977,
+    "mi": 0.009417478146326985,
+    "rank_ic": 0.03330174926171254,
+    "rank_icir": 0.4172839630917305
+  },
+  "raw_metrics": {
+    "ic": -0.015478207664335336,
+    "icir": -0.19814136117466977,
+    "mi": 0.009417478146326985,
+    "rank_ic": -0.03330174926171254,
+    "rank_icir": -0.4172839630917305
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.368867489279046,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.06757367775657608,
+    "top_quantile_excess_return": 0.44888488174123875,
+    "top_quantile_max_drawdown": -0.09397786994606816,
+    "top_quantile_turnover": 0.125013856391169
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:11:56.058522+00:00"
+}

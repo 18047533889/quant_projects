@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_alpha_liq_0002_e9fb02d1",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 630,
+  "factor_name": "factor_volume_instability_logcv",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w04-20260813-161708-r6",
+  "expression_type": "python",
+  "formula": "std(log1p(volume), 20) / mean(log1p(volume), 20)",
+  "code": "def factor_volume_instability_logcv(df):\n    df_copy = df.copy()\n    log_vol = np.log1p(df_copy[\"volume\"])\n    vol_mean = log_vol.rolling(20, min_periods=20).mean()\n    vol_std = log_vol.rolling(20, min_periods=20).std(ddof=1)\n    cv = vol_std / vol_mean.replace(0.0, np.nan)\n    cv = cv.replace([np.inf, -np.inf], np.nan)\n    df_copy[\"factor_volume_instability_logcv\"] = cv\n    return df_copy[\"factor_volume_instability_logcv\"]",
+  "description": "Coefficient of variation of trailing 20-day log-transformed volume. Log transformation compresses large-volume spikes, focusing on proportional (multiplicative) volatility in liquidity provision rather than absolute dollar-volume swings. This reduces outlier distortion and may improve MI and payoff thickness while preserving the parent's stable ICIR/RankICIR and cross-sectional ordering of liquidity instability.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.020420848249870175,
+    "icir": 0.4312559895228827,
+    "mi": 0.0075450595196757675,
+    "rank_ic": 0.04280661382339278,
+    "rank_icir": 0.8683834297404036
+  },
+  "raw_metrics": {
+    "ic": -0.020420848249870175,
+    "icir": -0.4312559895228827,
+    "mi": 0.0075450595196757675,
+    "rank_ic": -0.04280661382339278,
+    "rank_icir": -0.8683834297404036
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.092455941101862,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.04015473626989996,
+    "top_quantile_excess_return": 0.028359520486440415,
+    "top_quantile_max_drawdown": -0.03743842121311347,
+    "top_quantile_turnover": 0.1534219597283904
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:56:25.078736+00:00"
+}

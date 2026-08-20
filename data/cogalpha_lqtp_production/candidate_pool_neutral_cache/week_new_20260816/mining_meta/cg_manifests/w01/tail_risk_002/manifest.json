@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "tail_risk_002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 296,
+  "factor_name": "factor_tail_intraday_excursion_volume",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w01-20260813-064101-r2",
+  "expression_type": "python",
+  "formula": "factor = rolling_sum_20( max(0, (prev_close - low) / prev_close) * volume / rolling_mean_60(volume) )",
+  "code": "def factor_tail_intraday_excursion_volume(df):\n    \"\"\"Accumulates downside intraday excursions weighted by volume surge; captures panic-selling stress.\"\"\"\n    df_copy = df.copy()\n    prev_close = df_copy[\"close\"].shift(1)\n    downside_excursion = ((prev_close - df_copy[\"low\"]) / prev_close.replace(0.0, np.nan)).clip(lower=0.0)\n    vol_ma = df_copy[\"volume\"].rolling(60, min_periods=20).mean()\n    vol_ratio = df_copy[\"volume\"] / vol_ma.replace(0.0, np.nan)\n    stress_component = downside_excursion * vol_ratio\n    factor = stress_component.rolling(20, min_periods=10).sum()\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    return pd.Series(factor, index=df_copy.index, name=\"factor_tail_intraday_excursion_volume\")",
+  "description": "Accumulates the severity of days where price trades below the previous close, weighted by volume surge, over 20 days. This captures panic-selling stress; elevated readings may indicate overreaction and potential reversal. The mechanism is distinct from prior drawdown/skewness attempts and uses intraday low vs prior close plus volume confirmation.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01456500974256334,
+    "icir": 0.18599257154786894,
+    "mi": 0.01938098032048785,
+    "rank_ic": 0.031353509313458684,
+    "rank_icir": 0.40049838437131524
+  },
+  "raw_metrics": {
+    "ic": -0.01456500974256334,
+    "icir": -0.18599257154786894,
+    "mi": 0.01938098032048785,
+    "rank_ic": -0.031353509313458684,
+    "rank_icir": -0.40049838437131524
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.966492275247589,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.4610460318668068,
+    "top_quantile_excess_return": 7.611042101590286,
+    "top_quantile_max_drawdown": -0.11938063721767844,
+    "top_quantile_turnover": 0.0957520282915927
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:47:57.671920+00:00"
+}

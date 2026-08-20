@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "cand_regime_002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 16,
+  "factor_name": "factor_volume_regime_reversal",
+  "domain_agent": "alpha-regime-gating",
+  "run_id": "fleet-w04-20260802-162129-r2",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_volume_regime_reversal(df):\n    \"\"\"Adaptive mean-reversion based on volume regime.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    rev_short = -ret.rolling(5, min_periods=5).sum()\n    rev_long = -ret.rolling(20, min_periods=20).sum()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(\n        df_copy[\"volume\"], window=20\n    )\n    factor = np.where(\n        is_high_vol > 0,\n        rev_short,\n        np.where(is_low_vol > 0, rev_long, 0.5 * rev_short + 0.5 * rev_long)\n    )\n    factor = pd.Series(factor, index=df_copy.index, name=\"factor_volume_regime_reversal\").fillna(0.0)\n    return factor",
+  "description": "In high-volume regimes, short-term overreactions are more likely, so the factor uses 5-day reversal. In low-volume regimes, slower mean-reversion dominates, using 20-day reversal. The regime is determined by the active 'classify_volume_regime' tool, which compares recent volume to its EMA. This provides a volume-state adaptive gate.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.025867765788191766,
+    "icir": 0.21954787210581825,
+    "mi": 0.038068312312987906,
+    "rank_ic": 0.05631823924148035,
+    "rank_icir": 0.44984311347881867
+  },
+  "raw_metrics": {
+    "ic": 0.025867765788191766,
+    "icir": 0.21954787210581825,
+    "mi": 0.038068312312987906,
+    "rank_ic": 0.05631823924148035,
+    "rank_icir": 0.44984311347881867
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.5,
+    "top_quantile_annualized_excess_return": 0.08964111147023135,
+    "top_quantile_excess_return": 0.06795858604097438,
+    "top_quantile_max_drawdown": -0.04935477106443398,
+    "top_quantile_turnover": 0.26963130826529236
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:13:18.681414+00:00"
+}

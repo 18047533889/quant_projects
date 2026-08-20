@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_vol_asym_corr_leverage_002_g1_crossover_vol_asym_2f00976d",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 711,
+  "factor_name": "factor_leverage_vol_volume_dryup_soft_30",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w04-20260814-015906-r10",
+  "expression_type": "python",
+  "formula": "-rolling_corr(lag1_return, volatility, 60) * exp(-1.5 * drawdown_volume_share(30))",
+  "code": "def factor_leverage_vol_volume_dryup_soft_30(df):\n    \"\"\"Leverage-effect asymmetry smoothly attenuated by 30-day volume dry-up share.\"\"\"\n    df_copy = df.copy()\n    # Primary mechanism: parent vol_asym_corr_leverage_002 leverage-effect correlation\n    ret = df_copy[\"close\"].pct_change()\n    vol = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"]\n    lag_ret = ret.shift(1)\n    corr = lag_ret.rolling(60, min_periods=30).corr(vol)\n    asym_signal = -corr\n\n    # Secondary lightweight modifier: drawdown volume share over 30 days,\n    # with softened exponential damping (floor ~0.223 instead of ~0.135)\n    df_copy[\"volume\"] = df_copy[\"volume\"].fillna(0.0)\n    peak_window = 30\n    vol_window = 30\n    rolling_peak = df_copy[\"close\"].rolling(peak_window, min_periods=1).max()\n    drawdown_state = (df_copy[\"close\"] < rolling_peak).astype(float)\n    drawdown_vol = (df_copy[\"volume\"] * drawdown_state).rolling(vol_window, min_periods=1).sum()\n    recovery_vol = (df_copy[\"volume\"] * (1.0 - drawdown_state)).rolling(vol_window, min_periods=1).sum()\n    total_vol = drawdown_vol + recovery_vol\n    drawdown_share = drawdown_vol / total_vol.replace(0.0, 1.0)\n    weight = np.exp(-1.5 * drawdown_share)\n    factor = asym_signal * weight\n    df_copy[\"factor_leverage_vol_volume_dryup_soft_30\"] = factor\n    return df_copy[\"factor_leverage_vol_volume_dryup_soft_30\"]\n",
+  "description": "Parent strength targeted: RankICIR stability and MI contribution from the leverage-effect core (negative rolling correlation between lagged returns and current high-low range volatility) combined with a volume dry-up modifier indicating selling exhaustion. Bottleneck addressed: the parent's 20-day dry-up window is noisy and its exponential damping exp(-2*share) floors near 0.135, which can over-attenuate the raw asymmetry signal during prolonged high drawdown volume share, dampening raw IC without rank benefit. This mutation extends the volume composition window to 30 days to reduce noise, consistent with the stronger annualized excess observed in g1_crossover_then_mutation, and softens the damping coefficient from 2.0 to 1.5, raising the attenuation floor to approximately 0.223. The signal remains continuous, single-stock, and economically interpretable; no cross-sectional transform is applied.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01875122173570526,
+    "icir": 0.3949401179206431,
+    "mi": 0.009061810962438521,
+    "rank_ic": 0.036175989092546317,
+    "rank_icir": 0.7652044220531482
+  },
+  "raw_metrics": {
+    "ic": 0.01875122173570526,
+    "icir": 0.3949401179206431,
+    "mi": 0.009061810962438521,
+    "rank_ic": 0.036175989092546317,
+    "rank_icir": 0.7652044220531482
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.051441983062364,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.06997595840474413,
+    "top_quantile_excess_return": 0.04584209009755624,
+    "top_quantile_max_drawdown": -0.021674738763929224,
+    "top_quantile_turnover": 0.10936672100149324
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:05:12.322112+00:00"
+}

@@ -10,6 +10,7 @@ EvidenceResult.secondary_metrics → make_decision.
 import numpy as np
 import pytest
 
+import factor_assets.adapters.residual_novelty as rn_module
 from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
 
@@ -262,6 +263,23 @@ class TestMapNoveltyScore:
     def test_absent_total_uses_residual_presence(self):
         assert ResidualICNoveltyProducer.map_novelty_score(0.03, None) == 1.0
         assert ResidualICNoveltyProducer.map_novelty_score(0.0, None) == 0.0
+
+    def test_near_zero_total_ic_does_not_blows_up_ratio(self):
+        # total_ic just above the old 1e-12 eps used to take the ratio
+        # branch: any residual noise produced a full-novelty score.  With
+        # the scaled floor, a degenerate denominator falls back to
+        # residual-presence semantics: a noise-level residual (1e-8) is
+        # NOT novel signal, while a real residual (0.05) with a degenerate
+        # denominator is fully novel — never a 10.0 ratio clamped to 1.0.
+        assert ResidualICNoveltyProducer.map_novelty_score(1e-8, 1e-9) == 0.0
+        assert ResidualICNoveltyProducer.map_novelty_score(0.05, 1e-9) == 1.0
+        # Just above the floor the ratio branch applies again.
+        assert ResidualICNoveltyProducer.map_novelty_score(0.05, 0.10) == pytest.approx(0.5)
+
+    def test_eps_guard_is_scaled_to_ic_magnitudes(self):
+        # The floor must sit far above float noise but far below real ICs.
+        assert rn_module._TOTAL_IC_EPS >= 1e-6
+        assert rn_module._TOTAL_IC_EPS <= 1e-2
 
 
 class TestEvidenceRoundTrip:

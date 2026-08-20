@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_alpha_price_volume_coherence_gen0_c_9a905000",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 507,
+  "factor_name": "factor_vwap_sma_compression_light",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260806-041141-r36",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_vwap_sma_compression_light(df):\n    df_copy = df.copy()\n    window_base = 20\n    window_short = 10\n\n    # VWAP and SMA for short window\n    vp_short = df_copy[\"close\"] * df_copy[\"volume\"]\n    vwap_short = vp_short.rolling(window_short, min_periods=window_short).sum() / df_copy[\"volume\"].rolling(window_short, min_periods=window_short).sum()\n    sma_short = df_copy[\"close\"].rolling(window_short, min_periods=window_short).mean()\n    div_short = (vwap_short - sma_short) / sma_short.replace(0, np.nan)\n\n    # VWAP and SMA for base window\n    vp_base = df_copy[\"close\"] * df_copy[\"volume\"]\n    vwap_base = vp_base.rolling(window_base, min_periods=window_base).sum() / df_copy[\"volume\"].rolling(window_base, min_periods=window_base).sum()\n    sma_base = df_copy[\"close\"].rolling(window_base, min_periods=window_base).mean()\n    div_base = (vwap_base - sma_base) / sma_base.replace(0, np.nan)\n\n    # Simplified compression regime: low volume (below 20-day MA) and low range\n    volume_ma = df_copy[\"volume\"].rolling(window_base, min_periods=window_base).mean()\n    is_low_vol = df_copy[\"volume\"] < volume_ma\n    true_range = df_copy[\"high\"] - df_copy[\"low\"]\n    range_ma = true_range.rolling(window_base, min_periods=window_base).mean()\n    range_low = true_range < range_ma\n    is_compressed = is_low_vol & range_low\n\n    factor = np.where(is_compressed, div_short, div_base)\n    df_copy[\"factor_vwap_sma_compression_light\"] = factor\n    return df_copy[\"factor_vwap_sma_compression_light\"]",
+  "description": "Mutation of factor_vwap_sma_compression_tool: preserves the core price-volume coherence mechanism (VWAP-SMA divergence) and the adaptive window switching under compression. The key change is replacing the alpha_tools.classify_volume_regime call with a simple moving-average volume threshold, removing external tool dependency and improving interpretability. Compression remains defined as low volume (below 20-day MA) AND low range (below 20-day average true range), triggering a shorter 10-day window for earlier breakout capture. This simplification targets improved robustness and code clarity without altering the economic logic.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.035080677104167415,
+    "icir": 0.37990450900859607,
+    "mi": 0.03090590061066667,
+    "rank_ic": 0.0687897358445649,
+    "rank_icir": 0.636720955839033
+  },
+  "raw_metrics": {
+    "ic": -0.035080677104167415,
+    "icir": -0.37990450900859607,
+    "mi": 0.03090590061066667,
+    "rank_ic": -0.0687897358445649,
+    "rank_icir": -0.636720955839033
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.15712850773195974,
+    "top_quantile_excess_return": 0.10922858364468069,
+    "top_quantile_max_drawdown": -0.01941984744114178,
+    "top_quantile_turnover": 0.3204698902577783
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:43:11.865021+00:00"
+}

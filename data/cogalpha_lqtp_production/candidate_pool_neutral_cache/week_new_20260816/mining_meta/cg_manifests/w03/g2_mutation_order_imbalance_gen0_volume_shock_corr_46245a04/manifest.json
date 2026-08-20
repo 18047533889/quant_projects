@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_order_imbalance_gen0_volume_shock_corr_46245a04",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 374,
+  "factor_name": "factor_volume_shock_price_corr_smoothed",
+  "domain_agent": "alpha-order-imbalance",
+  "run_id": "fleet-w03-20260814-035032-r7",
+  "expression_type": "python",
+  "formula": "rolling_mean(rolling_corr(close.pct_change(), volume / (rolling_mean(volume,20).shift(1)), 20), 5)",
+  "code": "def factor_volume_shock_price_corr_smoothed(df):\n    \"\"\"Smooth rolling volume-shock/return correlation to reduce noise.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_mean_prev = df_copy['volume'].rolling(20, min_periods=20).mean().shift(1)\n    vol_shock = df_copy['volume'] / vol_mean_prev.replace(0.0, np.nan)\n    window = 20\n    raw_corr = ret.rolling(window, min_periods=window).corr(vol_shock)\n    corr = raw_corr.rolling(5, min_periods=1).mean()\n    corr = corr.fillna(0.0)\n    df_copy['factor_volume_shock_price_corr_smoothed'] = corr\n    return df_copy['factor_volume_shock_price_corr_smoothed']",
+  "description": "Preserves the parent's core economic mechanism: rolling correlation between daily returns and volume shock relative to trailing average volume, capturing informed directional pressure. The mutation smooths the correlation with a 5-day rolling mean to suppress high-frequency noise and improve signal stability (ICIR/RankICIR), while retaining the bounded [-1,1] directional interpretation. This is a compact noise-reduction modification, not a new feature.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.006190543767223168,
+    "icir": 0.13656875092340306,
+    "mi": 0.008627984356930796,
+    "rank_ic": 0.019063307954637856,
+    "rank_icir": 0.3665431035407069
+  },
+  "raw_metrics": {
+    "ic": -0.006190543767223168,
+    "icir": -0.13656875092340306,
+    "mi": 0.008627984356930796,
+    "rank_ic": -0.019063307954637856,
+    "rank_icir": -0.3665431035407069
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.622009567672923,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.03500544312872744,
+    "top_quantile_excess_return": 0.21394931772286974,
+    "top_quantile_max_drawdown": -0.07742486077975363,
+    "top_quantile_turnover": 0.11339842509510599
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:05:02.194620+00:00"
+}

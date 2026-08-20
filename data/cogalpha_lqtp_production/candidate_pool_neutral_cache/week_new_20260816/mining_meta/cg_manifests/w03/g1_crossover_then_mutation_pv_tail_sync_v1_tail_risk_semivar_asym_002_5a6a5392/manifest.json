@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_then_mutation_pv_tail_sync_v1_tail_risk_semivar_asym_002_5a6a5392",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 287,
+  "factor_name": "factor_tail_semivar_volume_asymmetry_ewm",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w03-20260813-063501-r2",
+  "expression_type": "python",
+  "formula": "ewm_mean_span60((min(return,0)^2 * clip(vol_ratio,0.5,2.0)).fillna(0)) / ewm_mean_span60((max(return,0)^2 * clip(vol_ratio,0.5,2.0)).fillna(0))",
+  "code": "def factor_tail_semivar_volume_asymmetry_ewm(df):\n    \"\"\"Volume-confirmed downside/upside variance asymmetry with exponential time weighting.\n\n    Economic mechanism:\n        Stress accumulation is captured by the ratio of exponentially weighted\n        downside variance to upside variance. Volume expansion during extreme\n        moves confirms tail risk, so squared returns are weighted by a bounded\n        continuous volume-regime ratio before EWMA smoothing.\n    \"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(\n        df_copy[\"volume\"], window=20, high_threshold=1.5, low_threshold=0.6\n    )\n    vol_weight = vol_ratio.clip(lower=0.5, upper=2.0).fillna(1.0)\n    down_ret = ret.where(ret < 0)\n    up_ret = ret.where(ret > 0)\n    down_var = (down_ret ** 2 * vol_weight).fillna(0).ewm(span=60, min_periods=20).mean()\n    up_var = (up_ret ** 2 * vol_weight).fillna(0).ewm(span=60, min_periods=20).mean()\n    factor = down_var / up_var.replace(0, np.nan)\n    factor = factor.replace([np.inf, -np.inf], np.nan)\n    df_copy[\"factor_tail_semivar_volume_asymmetry_ewm\"] = factor\n    return df_copy[\"factor_tail_semivar_volume_asymmetry_ewm\"]\n",
+  "description": "Mutation of volume-confirmed tail semivariance asymmetry: replaces equal-weight rolling sum with exponential moving average (span 60) to give greater weight to recent stress events, targeting higher IC/ICIR while preserving the raw ratio interpretation and RankICIR stability. Volume weighting remains bounded at [0.5, 2.0] to confirm tail moves.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.006640031942229752,
+    "icir": 0.13889716108516673,
+    "mi": 0.007511975289101969,
+    "rank_ic": 0.03417050039038636,
+    "rank_icir": 0.5581625372199644
+  },
+  "raw_metrics": {
+    "ic": 0.006640031942229752,
+    "icir": 0.13889716108516673,
+    "mi": 0.007511975289101969,
+    "rank_ic": 0.03417050039038636,
+    "rank_icir": 0.5581625372199644
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.706229988235571,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.04921842539986088,
+    "top_quantile_excess_return": 0.31593295698462565,
+    "top_quantile_max_drawdown": -0.09354446746321354,
+    "top_quantile_turnover": 0.0855152669406038
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:56:39.530083+00:00"
+}

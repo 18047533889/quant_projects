@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_acp_gen0_b_tail_skew_volume_asymmetry_23a80a99",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 760,
+  "factor_name": "factor_tail_skew_conditional_downside_volume",
+  "domain_agent": "alpha-crash-predictor",
+  "run_id": "fleet-w04-20260814-081422-r12",
+  "expression_type": "python",
+  "formula": "-rolling_skew_60(ret) * (down_ratio * (0.7 if down_ratio > 1.2 * rolling_median_60(down_ratio) else 1.0))",
+  "code": "def factor_tail_skew_conditional_downside_volume(df):\n    \"\"\"Tail skew interacted with median-gated downside volume participation.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    ret = close.pct_change()\n    skew = ret.rolling(60, min_periods=30).skew()\n    down_vol = volume.where(ret < 0, 0.0).rolling(60, min_periods=30).sum()\n    total_vol = volume.rolling(60, min_periods=30).sum().replace(0.0, np.nan)\n    down_ratio = down_vol / total_vol\n    down_median = down_ratio.rolling(60, min_periods=30).median()\n    gate = np.where(down_ratio > down_median * 1.2, 0.7, 1.0)\n    factor = -skew * down_ratio * gate\n    factor = factor.clip(lower=-3, upper=3)\n    df_copy[\"factor_tail_skew_conditional_downside_volume\"] = factor\n    return df_copy[\"factor_tail_skew_conditional_downside_volume\"]",
+  "description": "Mutates factor_crash_tail_skew_volume_asymmetry by preserving the core crash-fragility mechanism: negative trailing return skew captures fat left-tail risk and is amplified by high downside volume participation. To reduce noise from brief extreme down-volume spikes that can over-amplify the parent's raw modifier and hurt IC/ICIR, this child introduces a lightweight conditional gate: when the 60-day downside-volume ratio exceeds 1.2 times its own trailing median, the ratio is scaled by 0.7. Thus the raw signal is unchanged most of the time, but the volume-confirmation modifier is attenuated in unusually downside-dominated regimes. This keeps one core mechanism and one modifier, returns a continuous raw signal, and retains cross_sectional_transform none to preserve the raw payoff structure.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.005819554803074135,
+    "icir": 0.1584929836990164,
+    "mi": 0.009367787090103441,
+    "rank_ic": 0.029676381509539083,
+    "rank_icir": 0.5754983205723117
+  },
+  "raw_metrics": {
+    "ic": 0.005819554803074135,
+    "icir": 0.1584929836990164,
+    "mi": 0.009367787090103441,
+    "rank_ic": 0.029676381509539083,
+    "rank_icir": 0.5754983205723117
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.6345140591319414,
+    "quantile_monotonicity": 0.8545454545454545,
+    "top_quantile_annualized_excess_return": 0.031375744556336294,
+    "top_quantile_excess_return": 0.020809279070650444,
+    "top_quantile_max_drawdown": -0.04568836050304792,
+    "top_quantile_turnover": 0.0922478678874081
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:11:41.213465+00:00"
+}

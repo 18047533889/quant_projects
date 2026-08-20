@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_tail_risk_stress_underwater_volume_v1_g1_mutatio_da9f9b77",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 341,
+  "factor_name": "factor_tail_stress_underwater_active_mean",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w01-20260813-152857-r4",
+  "expression_type": "python",
+  "formula": "rolling_sum_21d( max(0, -daily_return) * min(volume/rolling_mean_60d_volume, 3.0) * I(close < rolling_max_63d_close) ) / rolling_sum_21d( I(close < rolling_max_63d_close) )",
+  "code": "def factor_tail_stress_underwater_active_mean(df):\n    \"\"\"Volume-confirmed downside stress while underwater, averaged over active underwater days.\"\"\"\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    daily_ret = close.pct_change()\n    downside_move = (-daily_ret).clip(lower=0.0)\n    rolling_high = close.rolling(63, min_periods=10).max()\n    underwater = close < rolling_high\n    volume_ratio = volume / volume.rolling(60, min_periods=10).mean().replace(0.0, np.nan)\n    stress = downside_move * volume_ratio.clip(upper=3.0)\n    stress = stress.where(underwater, 0.0)\n    stress_sum = stress.rolling(21, min_periods=5).sum()\n    underwater_count = underwater.astype(float).rolling(21, min_periods=5).sum()\n    factor = stress_sum / underwater_count.replace(0.0, np.nan)\n    factor = factor.fillna(0.0)\n    return factor.rename('factor_tail_stress_underwater_active_mean')",
+  "description": "Primary mechanism from tail_risk_stress_underwater_volume_v1: volume-confirmed downside stress while underwater is summed over 21 days. Borrowed lightweight modifier from g1_mutation_tail_risk_stress_underwater_volume_v1_88ef65c5: normalization by count reduces amplitude differences. Child normalizes the rolling sum by the number of active underwater days, producing a conditional average stress per underwater day. This preserves the strong RankICIR and payoff-related monotonicity of the parent set while targeting low IC/ICIR by reducing noise from unequal underwater-day counts.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.00884530344459263,
+    "icir": 0.10916240436423348,
+    "mi": 0.017236101868533638,
+    "rank_ic": 0.02453855284961203,
+    "rank_icir": 0.3112168785010939
+  },
+  "raw_metrics": {
+    "ic": -0.00884530344459263,
+    "icir": -0.10916240436423348,
+    "mi": 0.017236101868533638,
+    "rank_ic": -0.02453855284961203,
+    "rank_icir": -0.3112168785010939
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.81342695711975,
+    "quantile_monotonicity": 0.6484848484848484,
+    "top_quantile_annualized_excess_return": 0.35974411012426777,
+    "top_quantile_excess_return": 4.860145690151321,
+    "top_quantile_max_drawdown": -0.17085839807371228,
+    "top_quantile_turnover": 0.1403098300429816
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:57:20.681813+00:00"
+}

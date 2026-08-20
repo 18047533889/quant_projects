@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_alpha_composite_confluence_001_d4251_d05f4546",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 321,
+  "factor_name": "factor_confluence_ema_volatility_adj",
+  "domain_agent": "alpha-composite",
+  "run_id": "fleet-w04-20260804-212951-r24",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_confluence_ema_volatility_adj(df):\n    \"\"\"Positive price-volume confluence normalized by Parkinson volatility for improved ICIR.\"\"\"\n    df_copy = df.copy()\n    # Price deviation: close above 20-day EMA\n    ema20_close = df_copy[\"close\"].ewm(span=20, adjust=False).mean()\n    ema20_close = np.maximum(ema20_close, 1e-8)\n    price_dev = df_copy[\"close\"] / ema20_close - 1\n    # Volume deviation: volume above 20-day EMA\n    ema20_vol = df_copy[\"volume\"].ewm(span=20, adjust=False).mean()\n    ema20_vol = np.maximum(ema20_vol, 1e-8)\n    vol_dev = df_copy[\"volume\"] / ema20_vol - 1\n    # Positive parts only -> bullish agreement\n    pos_price = np.maximum(0, price_dev)\n    pos_vol = np.maximum(0, vol_dev)\n    raw_confluence = pos_price * pos_vol\n    # Parkinson volatility normalization\n    parkinson = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"]\n    vol_scale = parkinson.rolling(20, min_periods=1).mean()\n    vol_scale = np.maximum(vol_scale, 1e-8)\n    df_copy[\"factor_confluence_ema_volatility_adj\"] = raw_confluence / vol_scale\n    return df_copy[\"factor_confluence_ema_volatility_adj\"]",
+  "description": "Mutation of the parent EMA volume confluence factor. Preserves the core mechanism of detecting bullish agreement (both price and volume above their 20-day EMAs) by multiplying positive deviations. Adds a lightweight modifier: the product is normalized by the trailing 20-day mean of the Parkinson ratio (high-low)/close, acting as a volatility proxy. This reduces signal magnitude during high volatility periods, aiming to improve ICIR by dampening noise while retaining the source of high RankIC and MI. The factor remains sparse and directionally consistent.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.022030510349691345,
+    "icir": 0.27190986017248026,
+    "mi": 0.1810791576889912,
+    "rank_ic": 0.05301657605444758,
+    "rank_icir": 0.6025389538936763
+  },
+  "raw_metrics": {
+    "ic": -0.022030510349691345,
+    "icir": -0.27190986017248026,
+    "mi": 0.1810791576889912,
+    "rank_ic": -0.05301657605444758,
+    "rank_icir": -0.6025389538936763
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.11092652446791051,
+    "top_quantile_excess_return": 0.08571123063181485,
+    "top_quantile_max_drawdown": -0.02620086335808458,
+    "top_quantile_turnover": 0.20589256095514422
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:27:02.475901+00:00"
+}

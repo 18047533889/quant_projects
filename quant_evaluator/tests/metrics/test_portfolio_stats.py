@@ -228,8 +228,10 @@ class TestMaximumDrawdown:
 
         # Max drawdown: (90 - 120) / 120 = -0.25
         assert np.isclose(max_dd, 0.25, atol=1e-6)
-        # Peak occurs at the trough (minimum drawdown point)
-        assert peak_idx == 1  # Trough at index 1 (after -0.25 return)
+        # Peak is the last index at/before the trough where wealth equals
+        # the running max: wealth = [1.2, 0.9, 1.1], trough at index 1,
+        # running max at trough = 1.2 attained at index 0.
+        assert peak_idx == 0  # Peak at index 0 (wealth 1.2)
 
     def test_drawdown_golden_reference(self):
         """Golden reference with known drawdown."""
@@ -261,7 +263,9 @@ class TestMaximumDrawdown:
         # At idx 3: (0.81450625 - 0.95) / 0.95 = -0.142625
         expected_dd = (0.95 - 0.95**4) / 0.95  # More accurate
         assert np.isclose(max_dd, expected_dd, atol=1e-4)
-        assert peak_idx == 3
+        # Peak is the last index where wealth equals the running max
+        # (0.95, attained at index 0); the trough is index 3.
+        assert peak_idx == 0
 
     def test_drawdown_multi_factor(self):
         """Multiple return series."""

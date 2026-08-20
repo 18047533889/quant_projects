@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_vol_regime_intraday_reversal_001_al_e5444da9",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 144,
+  "factor_name": "factor_overnight_reversal_volume_intensity",
+  "domain_agent": "alpha-volatility-regime",
+  "run_id": "fleet-w02-20260804-164806-r13",
+  "expression_type": "python",
+  "formula": "(-overnight_return) * (1 + clip(vol_ratio - 1, 0, 0.5))",
+  "code": "def factor_overnight_reversal_volume_intensity(df):\n    \"\"\"Overnight gap reversal scaled by volume intensity.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    base_signal = -overnight_ret\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    vol_intensity = 1.0 + np.clip(vol_ratio - 1.0, 0.0, 0.5)\n    signal = base_signal * vol_intensity\n    df_copy[\"factor_overnight_reversal_volume_intensity\"] = signal\n    return df_copy[\"factor_overnight_reversal_volume_intensity\"]",
+  "description": "Overnight gap reversal. The core idea is that large overnight moves tend to reverse, creating a signal proportional to the negative overnight return. Volume intensity from classify_volume_regime (vol_ratio) captures whether current volume is above normal; high volume strengthens the reversal signal, reflecting greater positioning pressure. The child simplifies the parent by removing the disagreement amplification and replacing the complex ATR-based volatility regime with a lightweight volume intensity gate, preserving the core overnight reversal mechanism while easing the parameter burden. This targets improved robustness and IC/ICIR stability while maintaining the economic intuition.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.08924127678532986,
+    "icir": 0.8066056666588746,
+    "mi": 0.0423865947767359,
+    "rank_ic": 0.025373341264838572,
+    "rank_icir": 0.3879264304480899
+  },
+  "raw_metrics": {
+    "ic": -0.08924127678532986,
+    "icir": -0.8066056666588746,
+    "mi": 0.0423865947767359,
+    "rank_ic": -0.025373341264838572,
+    "rank_icir": -0.3879264304480899
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.2626486285756615,
+    "top_quantile_excess_return": 2.8547096661147817,
+    "top_quantile_max_drawdown": -0.03598381007083118,
+    "top_quantile_turnover": 0.7517508231215454
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:13:35.788880+00:00"
+}

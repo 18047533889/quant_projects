@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_factor_trend_adaptive_intraday_over_06cc0555",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 321,
+  "factor_name": "factor_trend_adaptive_intraday_gate_drawdown_recent_pressure",
+  "domain_agent": "alpha-regime-gating",
+  "run_id": "fleet-w02-20260813-103714-r3",
+  "expression_type": "python",
+  "formula": "efficiency_ratio = |rolling_sum(close-open,20)| / rolling_sum(abs(close-open),20); base_blend = efficiency_ratio * rolling_mean(intraday_ret,5) + (1-efficiency_ratio) * rolling_mean(-overnight_ret,5); drawdown = close / rolling_max(close,60) - 1; pressure = rolling_mean(clip(-(drawdown - shift(drawdown,5)), 0), 10); factor = base_blend / (1 + pressure)",
+  "code": "def factor_trend_adaptive_intraday_gate_drawdown_recent_pressure(df):\n    \"\"\"Adaptive intraday/overnight blend gated by intraday efficiency ratio and attenuated by recent drawdown pressure.\"\"\"\n    df_copy = df.copy()\n    close = df_copy['close']\n    open_ = df_copy['open']\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(close, open_)\n    window = 20\n    daily_intraday_move = close - open_\n    net_intraday_move = daily_intraday_move.rolling(window, min_periods=window).sum()\n    abs_sum = daily_intraday_move.abs().rolling(window, min_periods=window).sum()\n    efficiency_ratio = net_intraday_move.abs() / abs_sum.replace(0.0, np.nan)\n    efficiency_ratio = efficiency_ratio.fillna(0.0).clip(0.0, 1.0)\n    intraday_signal = intraday_ret.rolling(5, min_periods=1).mean()\n    overnight_reversal = -overnight_ret.rolling(5, min_periods=1).mean()\n    base_blend = efficiency_ratio * intraday_signal + (1.0 - efficiency_ratio) * overnight_reversal\n    rolling_peak = close.rolling(60, min_periods=20).max()\n    drawdown = close / rolling_peak - 1.0\n    drawdown_change = drawdown - drawdown.shift(5)\n    recent_drawdown_pressure = (-drawdown_change).clip(lower=0.0).rolling(10, min_periods=5).mean()\n    confidence_weight = 1.0 / (1.0 + recent_drawdown_pressure.fillna(0.0))\n    factor = base_blend * confidence_weight\n    factor.name = 'factor_trend_adaptive_intraday_gate_drawdown_recent_pressure'\n    return factor\n",
+  "description": "Parent strength preserved: the Kaufman efficiency ratio gating of intraday momentum and overnight reversal, which delivers high ICIR/RankICIR consistency and balanced IC. Bottleneck targeted: the parent's ulcer-based drawdown attenuation averages squared drawdowns over 60 days, over-penalizing recovered stocks and muting rebound payoff. Mutation replaces the ulcer index with a short-horizon drawdown pressure measure: only recent deterioration in drawdown (5-bar change, clipped at 0 and smoothed over 10 bars) reduces confidence. Thus recovered drawdowns no longer attenuate the signal, allowing the trend-adaptive blend to express contrarian rebound edge. This is a single lightweight modifier that preserves the core economic mechanism.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.049260124641621016,
+    "icir": 0.7524471341706763,
+    "mi": 0.027920225822439804,
+    "rank_ic": 0.03097765771743436,
+    "rank_icir": 0.679821689767899
+  },
+  "raw_metrics": {
+    "ic": -0.049260124641621016,
+    "icir": -0.7524471341706763,
+    "mi": 0.027920225822439804,
+    "rank_ic": -0.03097765771743436,
+    "rank_icir": -0.679821689767899
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 10.422334757045903,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.2671497251210726,
+    "top_quantile_excess_return": 2.934894067090196,
+    "top_quantile_max_drawdown": -0.26893325677498936,
+    "top_quantile_turnover": 0.3712531621535186
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:26:27.089687+00:00"
+}

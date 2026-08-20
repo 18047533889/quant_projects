@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_comp_001_ea1084a4_g1_mutation_down_u_1bbbc450",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 41,
+  "factor_name": "factor_volume_confirmed_momentum_asymmetry_gate",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w02-20260803-020754-r4",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_volume_confirmed_momentum_asymmetry_gate(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    open_ = df_copy[\"open\"]\n    # primary: 10-day momentum\n    mom = close.pct_change(10)\n    # volume weight: log volume ratio\n    vol_mean = volume.rolling(20, min_periods=20).mean()\n    vol_ratio = volume / vol_mean.replace(0, np.nan)\n    weight = np.log(vol_ratio.clip(lower=0.5, upper=2.0)) + 1.0\n    \n    # lightweight modifier: down-up range asymmetry\n    range_ = high - low\n    down_mask = close < open_\n    up_mask = close > open_\n    down_range = range_.where(down_mask, 0.0)\n    up_range = range_.where(up_mask, 0.0)\n    sum_down = down_range.rolling(20, min_periods=20).sum()\n    count_down = down_mask.rolling(20, min_periods=20).sum()\n    sum_up = up_range.rolling(20, min_periods=20).sum()\n    count_up = up_mask.rolling(20, min_periods=20).sum()\n    avg_down = sum_down / count_down.replace(0, np.nan)\n    avg_up = sum_up / count_up.replace(0, np.nan)\n    asymmetry = np.log(avg_down.clip(lower=1e-12)) - np.log(avg_up.clip(lower=1e-12))\n    # dampen weight when asymmetry is high (absolute value)\n    weight = weight * (1.0 / (1.0 + np.abs(asymmetry)))\n    \n    factor = mom * weight\n    df_copy[\"factor_volume_confirmed_momentum_asymmetry_gate\"] = factor\n    return df_copy[\"factor_volume_confirmed_momentum_asymmetry_gate\"]",
+  "description": "Preserves the elite parent's momentum-volume synergy (high IC, RankIC, ICIR) while targeting improved robustness during periods of high intraday volatility asymmetry. The primary mechanism is 10-day momentum weighted by volume conviction (log of volume ratio to 20-day mean). The lightweight idea borrowed from the second parent dampens the weight when the down-up range asymmetry (log ratio of average down-day range to up-day range over 20 days) is large, as extreme asymmetry often signals reversal risk, reducing the reliability of momentum.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02876817697628296,
+    "icir": 0.24830904067214393,
+    "mi": 0.02123979561884326,
+    "rank_ic": 0.03416873051765816,
+    "rank_icir": 0.2651185937905745
+  },
+  "raw_metrics": {
+    "ic": -0.02876817697628296,
+    "icir": -0.24830904067214393,
+    "mi": 0.02123979561884326,
+    "rank_ic": -0.03416873051765816,
+    "rank_icir": -0.2651185937905745
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.1,
+    "top_quantile_annualized_excess_return": 0.0341443334417062,
+    "top_quantile_excess_return": 0.21149296009493646,
+    "top_quantile_max_drawdown": -0.06661631609229657,
+    "top_quantile_turnover": 0.3328912896129444
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:11:15.297007+00:00"
+}

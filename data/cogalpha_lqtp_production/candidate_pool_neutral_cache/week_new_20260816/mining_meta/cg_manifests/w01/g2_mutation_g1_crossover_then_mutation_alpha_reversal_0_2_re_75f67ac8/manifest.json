@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_alpha_reversal_0_2_re_75f67ac8",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 75,
+  "factor_name": "factor_overnight_reversal_simplified_vol_gated",
+  "domain_agent": "alpha-reversal",
+  "run_id": "fleet-w01-20260803-143527-r7",
+  "expression_type": "python",
+  "formula": "SMA( -overnight_return * IF(is_high_vol, 0.5, 1.0), 5)",
+  "code": "def factor_overnight_reversal_simplified_vol_gated(df):\n    \"\"\"Overnight reversal with volume regime attenuation, simplified by removing volume amplification.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, _ = alpha_tools.decompose_overnight_intraday(df_copy['close'], df_copy['open'])\n    is_high_vol, _, _ = alpha_tools.classify_volume_regime(df_copy['volume'], window=20)\n    raw_reversal = -overnight_ret\n    factor = raw_reversal * np.where(is_high_vol > 0, 0.5, 1.0)\n    factor = factor.rolling(5, min_periods=1).mean()\n    df_copy['factor_overnight_reversal_simplified_vol_gated'] = factor\n    return df_copy['factor_overnight_reversal_simplified_vol_gated']",
+  "description": "Mutation of parent factor_overnight_reversal_vol_gated: preserves core overnight reversal mechanism but removes vol_ratio amplification to reduce noise and target improved RankIC. Keeps the volume regime gate (attenuate reversal by 50% when high volume) as a lightweight modifier. Replaces the 20-day EMA smoothing with a short 5-day simple moving average to reduce lag and avoid over-smoothing, following evidence from successful mutation. This simplifies the factor while preserving the strong IC from reversal, aiming to improve rank stability.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.11470857717501745,
+    "icir": 0.9134186448169965,
+    "mi": 0.033175655793209025,
+    "rank_ic": 0.019775625588991347,
+    "rank_icir": 0.2812394311024815
+  },
+  "raw_metrics": {
+    "ic": -0.11470857717501745,
+    "icir": -0.9134186448169965,
+    "mi": 0.033175655793209025,
+    "rank_ic": -0.019775625588991347,
+    "rank_icir": -0.2812394311024815
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.21164641510619298,
+    "top_quantile_excess_return": 2.0366108926636985,
+    "top_quantile_max_drawdown": -0.04816770228479039,
+    "top_quantile_turnover": 0.30987655358271604
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:39:16.388416+00:00"
+}

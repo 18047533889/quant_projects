@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_alpha_price_volume_coherence_gen0_c_a3cd0f14",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 505,
+  "factor_name": "factor_vwap_sma_smooth_blend",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260806-041141-r36",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_vwap_sma_smooth_blend(df):\n    df_copy = df.copy()\n    window_base = 20\n    window_short = 10\n    # Compression score (same as parent)\n    true_range = df_copy[\"high\"] - df_copy[\"low\"]\n    range_mean = true_range.rolling(window_base, min_periods=window_base).mean()\n    range_std = true_range.rolling(window_base, min_periods=window_base).std(ddof=1)\n    range_zscore = (true_range - range_mean) / range_std.replace(0.0, np.nan)\n    vol_ma = df_copy[\"volume\"].rolling(window_base, min_periods=window_base).mean()\n    vol_ratio = df_copy[\"volume\"] / vol_ma.replace(0.0, np.nan)\n    vol_ratio_mean = vol_ratio.rolling(window_base, min_periods=window_base).mean()\n    vol_ratio_std = vol_ratio.rolling(window_base, min_periods=window_base).std(ddof=1)\n    vol_ratio_zscore = (vol_ratio - vol_ratio_mean) / vol_ratio_std.replace(0.0, np.nan)\n    compression = -range_zscore - vol_ratio_zscore\n    # Short-window VWAP-SMA divergence\n    vp_short = df_copy[\"close\"] * df_copy[\"volume\"]\n    vwap_short = vp_short.rolling(window_short, min_periods=window_short).sum() / df_copy[\"volume\"].rolling(window_short, min_periods=window_short).sum()\n    sma_short = df_copy[\"close\"].rolling(window_short, min_periods=window_short).mean()\n    div_short = (vwap_short - sma_short) / sma_short.replace(0, np.nan)\n    # Base-window VWAP-SMA divergence\n    vp_base = df_copy[\"close\"] * df_copy[\"volume\"]\n    vwap_base = vp_base.rolling(window_base, min_periods=window_base).sum() / df_copy[\"volume\"].rolling(window_base, min_periods=window_base).sum()\n    sma_base = df_copy[\"close\"].rolling(window_base, min_periods=window_base).mean()\n    div_base = (vwap_base - sma_base) / sma_base.replace(0, np.nan)\n    # Smooth blend using sigmoid of compression score\n    blend = 1.0 / (1.0 + np.exp(-compression))\n    factor = blend * div_short + (1.0 - blend) * div_base\n    df_copy[\"factor_vwap_sma_smooth_blend\"] = factor\n    return df_copy[\"factor_vwap_sma_smooth_blend\"]",
+  "description": "Smooths the parent's binary compression gate into a continuous blend of short and base window VWAP-SMA divergences, aiming to improve IC by reducing regime-switching noise while preserving the regime-adaptive RankIC stability.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.042567209292695404,
+    "icir": 0.5041797964691269,
+    "mi": 0.02974987284397912,
+    "rank_ic": 0.08007555087013467,
+    "rank_icir": 0.796578392561359
+  },
+  "raw_metrics": {
+    "ic": -0.042567209292695404,
+    "icir": -0.5041797964691269,
+    "mi": 0.02974987284397912,
+    "rank_ic": -0.08007555087013467,
+    "rank_icir": -0.796578392561359
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.22786101917675694,
+    "top_quantile_excess_return": 0.13920707724940784,
+    "top_quantile_max_drawdown": -0.020408106049261243,
+    "top_quantile_turnover": 0.21592544003755113
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:42:46.770319+00:00"
+}

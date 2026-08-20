@@ -90,7 +90,7 @@ def example_automatic_backend_selection():
     print("Example 2: Automatic Backend Selection")
     print("=" * 70)
 
-    selector = BackendSelector(prefer_gpu=True)
+    selector = BackendSelector()
 
     # Test different data sizes
     test_cases = [
@@ -102,10 +102,10 @@ def example_automatic_backend_selection():
 
     print("\nBackend selection based on data size:\n")
     for T, N, F, description in test_cases:
-        backend = selector.select_backend_for_ic_batch(
-            factor_shape=(T, N, F),
-            label_shape=(T, N),
-            method="pearson",
+        backend = selector.select_for_ic(
+            T=T,
+            N=N,
+            F=F,
         )
         total_elements = T * N * F
         print(f"{description:20s} ({T:3d}×{N:4d}×{F:4d}) -> {backend:10s} ({total_elements:,} elements)")
@@ -203,11 +203,13 @@ def example_benchmark_comparison():
 
     print("\nRunning benchmarks (this may take a minute)...\n")
 
-    # Benchmark different data sizes
+    # Benchmark different data sizes. Sized for a shared host: the largest
+    # config allocates ~T*N*F*8 bytes per backend run, so keep totals in the
+    # low hundreds of MiB, not GiB.
     test_configs = [
-        {"T": 100, "N": 1000, "F": 500, "label": "Small"},
-        {"T": 252, "N": 3000, "F": 1000, "label": "Medium"},
-        {"T": 500, "N": 5000, "F": 2000, "label": "Large"},
+        {"T": 50, "N": 200, "F": 20, "label": "Small"},
+        {"T": 100, "N": 300, "F": 50, "label": "Medium"},
+        {"T": 150, "N": 400, "F": 100, "label": "Large"},
     ]
 
     for config in test_configs:

@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "agent_pv_coherence_gen0_2",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "elite",
+  "factor_id": 31,
+  "factor_name": "factor_intraday_volume_confirmation",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w01-20260803-021022-r4",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_intraday_volume_confirmation(df):\n    \"\"\"Intraday return weighted by relative volume, smoothed to measure persistent price-volume coherence.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    vol_ma = df_copy[\"volume\"].rolling(20, min_periods=20).mean()\n    vol_ratio = df_copy[\"volume\"] / vol_ma.replace(0, np.nan)\n    confirmation = intraday_ret * vol_ratio\n    smooth_conf = confirmation.rolling(10, min_periods=10).mean()\n    factor = smooth_conf.ffill().fillna(0)\n    df_copy[\"factor_intraday_volume_confirmation\"] = factor\n    return df_copy[\"factor_intraday_volume_confirmation\"]",
+  "description": "This factor captures the alignment between intraday price movement and volume intensity. Intraday return (from alpha_tools.decompose_overnight_intraday) is multiplied by the ratio of current volume to its 20-day average. Large positive (negative) values indicate strong upward (downward) intraday moves accompanied by high relative volume, signaling conviction. A 10-day rolling mean smooths the signal and identifies persistent price-volume coherence. The raw factor retains magnitude information, which can capture nonlinear relationships with future returns, potentially improving MI.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.030417970104741655,
+    "icir": 0.3233429671461853,
+    "mi": 0.02835557968438085,
+    "rank_ic": 0.03961679729039061,
+    "rank_icir": 0.36195814795454134
+  },
+  "raw_metrics": {
+    "ic": -0.030417970104741655,
+    "icir": -0.3233429671461853,
+    "mi": 0.02835557968438085,
+    "rank_ic": -0.03961679729039061,
+    "rank_icir": -0.36195814795454134
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.054592241597610114,
+    "top_quantile_excess_return": 0.3523446616346979,
+    "top_quantile_max_drawdown": -0.07340261031928752,
+    "top_quantile_turnover": 0.24375480543404246
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:35:29.392833+00:00"
+}

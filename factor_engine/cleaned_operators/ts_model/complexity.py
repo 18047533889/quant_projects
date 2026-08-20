@@ -34,8 +34,7 @@ def _register(name: str, description: str, params: list[str], unit: str, fn, cos
     )
     class _ComplexityOp(SeriesOperator):
         metadata = metadata(name, description, params, unit=unit, cost=cost)
-        if param_specs:
-            metadata.param_specs = dict(param_specs)
+        # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
         def _calculate_series(self, *args, **kwargs):
             return fn(*args, **kwargs)

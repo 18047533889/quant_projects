@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_factor_cycle_accumulation_ratio_g0_b_g1_crossove_af473adc",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 293,
+  "factor_name": "factor_cycle_accumulation_tail_gated_smooth5",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w02-20260813-060516-r2",
+  "expression_type": "python",
+  "formula": "rolling_mean_5((sum_vol_up_60 - sum_vol_down_60) / sum_vol_60) * (1 - 0.3 * tanh(neg_var_60 / pos_var_60 - 1))",
+  "code": "def factor_cycle_accumulation_tail_gated_smooth5(df):\n    \"\"\"Net volume accumulation ratio smoothed by 5-day mean, gated by tail variance asymmetry.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    ret = close.pct_change()\n    up_vol = volume.where(ret > 0, 0.0)\n    down_vol = volume.where(ret < 0, 0.0)\n    net = up_vol.rolling(60, min_periods=20).sum() - down_vol.rolling(60, min_periods=20).sum()\n    total = volume.rolling(60, min_periods=20).sum()\n    accumulation = net / total.replace(0.0, np.nan)\n    accumulation = accumulation.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    accumulation_smooth = accumulation.rolling(5, min_periods=1).mean()\n    pos = np.maximum(ret, 0.0)\n    neg = np.maximum(-ret, 0.0)\n    pos_var = (pos ** 2).rolling(60, min_periods=20).sum()\n    neg_var = (neg ** 2).rolling(60, min_periods=20).sum()\n    tail_ratio = neg_var / pos_var.replace(0.0, np.nan)\n    tail_ratio = tail_ratio.replace([np.inf, -np.inf], np.nan).fillna(1.0)\n    weight = 1.0 - 0.3 * np.tanh(tail_ratio - 1.0)\n    factor = accumulation_smooth * weight\n    df_copy[\"factor_cycle_accumulation_tail_gated_smooth5\"] = factor\n    return df_copy[\"factor_cycle_accumulation_tail_gated_smooth5\"]\n",
+  "description": "Parent strengths: high long-short Sharpe (2.728) and perfect monotonicity (1.0), indicating a tradable directionally consistent signal. Bottleneck: low IC (0.0080), RankIC (0.0164), ICIR (0.1135), RankICIR (0.2247), and MI (0.0034), suggesting unstable cross-sectional rankings due to day-to-day noise in the raw accumulation ratio. Mutation: add a 5-day trailing mean to the accumulation ratio before applying the existing tail-risk gate. This lightweight smoothing attenuates short-term noise in the volume accumulation signal, targeting improved ICIR/RankICIR stability without altering the core net-volume-accumulation mechanism or the tail-risk modifier. Cross-sectional transform remains none to preserve raw payoff thickness and the parent's long-short payoff characteristics.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.009094898328287842,
+    "icir": 0.12471551695315376,
+    "mi": 0.008703038293136345,
+    "rank_ic": 0.0170361732967339,
+    "rank_icir": 0.22940873404787707
+  },
+  "raw_metrics": {
+    "ic": -0.009094898328287842,
+    "icir": -0.12471551695315376,
+    "mi": 0.008703038293136345,
+    "rank_ic": -0.0170361732967339,
+    "rank_icir": -0.22940873404787707
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.347557161861862,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.02040327275773879,
+    "top_quantile_excess_return": 0.12234096903692837,
+    "top_quantile_max_drawdown": -0.14578845839922683,
+    "top_quantile_turnover": 0.06824610711888025
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:22:10.800502+00:00"
+}

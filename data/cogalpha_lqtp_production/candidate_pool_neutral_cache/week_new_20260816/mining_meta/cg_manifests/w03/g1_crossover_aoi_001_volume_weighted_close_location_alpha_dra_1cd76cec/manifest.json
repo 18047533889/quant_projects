@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_aoi_001_volume_weighted_close_location_alpha_dra_1cd76cec",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 390,
+  "factor_name": "factor_volume_weighted_drawdown_location",
+  "domain_agent": "alpha-order-imbalance",
+  "run_id": "fleet-w03-20260814-081141-r8",
+  "expression_type": "python",
+  "formula": "sum(volume * ((close - rolling_min(close,60)) / (rolling_max(close,60) - rolling_min(close,60)))) over 20 days / sum(volume) over 20 days",
+  "code": "def factor_volume_weighted_drawdown_location(df):\n    \"\"\"Volume-weighted location of close within trailing drawdown range; high values indicate sustained buying pressure near range highs.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    peak = close.rolling(60, min_periods=20).max()\n    trough = close.rolling(60, min_periods=20).min()\n    drawdown_range = (peak - trough).replace(0.0, np.nan)\n    location = (close - trough) / drawdown_range\n    location = location.clip(0.0, 1.0)\n    weighted = (volume * location).rolling(20, min_periods=5).sum()\n    volume_sum = volume.rolling(20, min_periods=5).sum().replace(0.0, np.nan)\n    factor = weighted / volume_sum\n    factor = factor.fillna(0.0)\n    factor.name = \"factor_volume_weighted_drawdown_location\"\n    return factor",
+  "description": "Crossover preserves parent1's core volume-weighted close-location mechanism (IC=0.0238, ICIR=0.3594, payoff long_short_sharpe=9.74) while targeting parent1's weak RankIC=0.0132 / RankICIR=0.1931. From parent2 we borrow only the rolling 60-day peak-trough drawdown range as the location denominator, replacing the daily high-low range. This longer-horizon normalization reduces daily range noise and should improve cross-sectional rank stability without abandoning the volume-weighting economic intuition. Cross-sectional z-score is retained from parent1 to make the bounded location comparable across stocks.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.007615977580538081,
+    "icir": 0.08852659354584405,
+    "mi": 0.008621511354805378,
+    "rank_ic": 0.018832835876241877,
+    "rank_icir": 0.19455488970502868
+  },
+  "raw_metrics": {
+    "ic": -0.007615977580538081,
+    "icir": -0.08852659354584405,
+    "mi": 0.008621511354805378,
+    "rank_ic": -0.018832835876241877,
+    "rank_icir": -0.19455488970502868
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.804716699535936,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.35868421376824067,
+    "top_quantile_excess_return": 4.7354080124516456,
+    "top_quantile_max_drawdown": -0.0875621278496298,
+    "top_quantile_turnover": 0.053979568919749844
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:07:12.010631+00:00"
+}

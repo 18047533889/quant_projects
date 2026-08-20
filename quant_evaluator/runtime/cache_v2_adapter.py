@@ -78,7 +78,7 @@ class V2IntermediateCache:
         """Return whether ``key`` is present (without promoting it)."""
         if not self.enable:
             return False
-        return self._cache.get(self._physical_key(key)) is not None
+        return self._cache.contains(self._physical_key(key))
 
     def invalidate(self, key: CacheKey) -> bool:
         """Remove one entry; return True when something was removed."""
@@ -86,25 +86,13 @@ class V2IntermediateCache:
 
     def invalidate_metric(self, metric_id: str) -> int:
         """Remove every entry for ``metric_id``; return the count removed."""
-        removed = 0
-        for key in self._metric_keys(metric_id):
-            if self._cache.invalidate(key):
-                removed += 1
-        return removed
+        prefix = self._metric_prefix(metric_id)
+        return self._cache.invalidate_namespace(prefix)
 
-    def _metric_keys(self, metric_id: str) -> list:
-        """Enumerate physical keys currently held for ``metric_id``.
-
-        cache_v2 exposes no key-scan API, so the L1 entries are enumerated via
-        the coordinator statistics' backing store.  This is best-effort: keys
-        that already evicted from every layer simply count as removed.
-        """
-        l1 = getattr(self._cache, "l1", None)
-        if l1 is None:
-            return []
-        prefix = f"intermediates:v1|metric={metric_id}|"
-        with l1._lock:
-            return [key for key in l1._cache if key.startswith(prefix)]
+    @staticmethod
+    def _metric_prefix(metric_id: str) -> str:
+        """Physical key prefix covering every entry for ``metric_id``."""
+        return f"intermediates:v1|metric={metric_id}|"
 
     @property
     def num_entries(self) -> int:

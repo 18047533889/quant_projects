@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_volasym_tail_jumps_002_4b3f79bd",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 415,
+  "factor_name": "factor_tail_asymmetry_jump_severity",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w02-20260814-042827-r7",
+  "expression_type": "python",
+  "formula": "-(sum_63(down_tail_severity) - sum_63(up_tail_severity))/(sum_63(down_tail_severity)+sum_63(up_tail_severity)+1); severity = |excess return|/lagged_vol beyond 1.5*lagged_vol",
+  "code": "def factor_tail_asymmetry_jump_severity(df):\n    \"\"\"Downside vs upside tail jump severity asymmetry using lagged realized vol.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol = ret.rolling(63, min_periods=20).std(ddof=1).shift(1)\n    threshold = 1.5 * vol\n    vol_safe = vol.replace(0.0, np.nan)\n    valid = vol > 0\n    down_cond = (ret < -threshold) & valid\n    up_cond = (ret > threshold) & valid\n    down_sev = np.where(down_cond, (-(ret + threshold) / vol_safe).clip(lower=0.0), 0.0)\n    up_sev = np.where(up_cond, ((ret - threshold) / vol_safe).clip(lower=0.0), 0.0)\n    down_sum = pd.Series(down_sev, index=df_copy.index).rolling(63, min_periods=20).sum()\n    up_sum = pd.Series(up_sev, index=df_copy.index).rolling(63, min_periods=20).sum()\n    df_copy[\"factor_tail_asymmetry_jump_severity\"] = -(down_sum - up_sum) / (down_sum + up_sum + 1.0)\n    return df_copy[\"factor_tail_asymmetry_jump_severity\"]",
+  "description": "Mutation preserves the parent's asymmetric tail jump mechanism but replaces binary jump counts with continuous magnitude severity: each tail exceedance contributes its excess return normalized by lagged realized volatility. This retains the same downside vs upside risk-aversion ordering while providing more linear signal for IC/ICIR, without adding a new feature family or cross-sectional transform.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.007261256750177982,
+    "icir": 0.13816898349573006,
+    "mi": 0.005920628805277772,
+    "rank_ic": 0.025706368231099678,
+    "rank_icir": 0.45696364798705
+  },
+  "raw_metrics": {
+    "ic": -0.007261256750177982,
+    "icir": -0.13816898349573006,
+    "mi": 0.005920628805277772,
+    "rank_ic": -0.025706368231099678,
+    "rank_icir": -0.45696364798705
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.072803659146188,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.05899233545772775,
+    "top_quantile_excess_return": 0.3869062517631483,
+    "top_quantile_max_drawdown": -0.07017741495379115,
+    "top_quantile_turnover": 0.08250508350300191
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:38:57.787259+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "alpha-liq-0002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 621,
+  "factor_name": "factor_volume_instability",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w04-20260813-161708-r6",
+  "expression_type": "python",
+  "formula": "std(volume, 20) / mean(volume, 20)",
+  "code": "def factor_volume_instability(df):\n    df_copy = df.copy()\n    vol_mean = df_copy[\"volume\"].rolling(20, min_periods=20).mean()\n    vol_std = df_copy[\"volume\"].rolling(20, min_periods=20).std(ddof=1)\n    cv = vol_std / vol_mean.replace(0.0, np.nan)\n    cv = cv.replace([np.inf, -np.inf], np.nan)\n    df_copy[\"factor_volume_instability\"] = cv\n    return df_copy[\"factor_volume_instability\"]",
+  "description": "Coefficient of variation of trailing 20-day volume captures instability in liquidity provision. Erratic volume patterns signal fragile market participation and information asymmetry; stocks with high volume instability may earn a liquidity risk premium that survives neutralization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.021258194070099275,
+    "icir": 0.4779185002089263,
+    "mi": 0.006266194028034633,
+    "rank_ic": 0.04193503234169418,
+    "rank_icir": 0.9608746707326997
+  },
+  "raw_metrics": {
+    "ic": -0.021258194070099275,
+    "icir": -0.4779185002089263,
+    "mi": 0.006266194028034633,
+    "rank_ic": -0.04193503234169418,
+    "rank_icir": -0.9608746707326997
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.049863735994403,
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": 0.05949357498019148,
+    "top_quantile_excess_return": 0.04190417951186154,
+    "top_quantile_max_drawdown": -0.031093922775240257,
+    "top_quantile_turnover": 0.15987586840988824
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:54:52.468024+00:00"
+}

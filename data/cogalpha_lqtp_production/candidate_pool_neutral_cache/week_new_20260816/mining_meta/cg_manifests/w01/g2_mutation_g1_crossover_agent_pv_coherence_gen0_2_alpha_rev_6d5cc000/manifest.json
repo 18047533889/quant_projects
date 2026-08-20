@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_agent_pv_coherence_gen0_2_alpha_rev_6d5cc000",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 36,
+  "factor_name": "factor_intraday_volume_coherence_ema",
+  "domain_agent": "alpha-reversal",
+  "run_id": "fleet-w01-20260803-021022-r4",
+  "expression_type": "python",
+  "formula": "EMA10 of (intraday_return * volume_ratio)",
+  "code": "def factor_intraday_volume_coherence_ema(df):\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    raw = intraday_ret * vol_ratio\n    smoothed = raw.ewm(span=10, min_periods=10).mean()\n    df_copy[\"factor_intraday_volume_coherence_ema\"] = smoothed.ffill().fillna(0)\n    return df_copy[\"factor_intraday_volume_coherence_ema\"]",
+  "description": "Mutation of the volume-regime amplified signal. The elite evidence shows a simpler combination of intraday return and volume ratio smoothed by an EMA achieves higher IC and RankIC without regime amplification. This child abandons the rule-based amplification and replaces the 10-day rolling mean with an exponential moving average, increasing reactiveness and reducing noise. The core price-volume coherence mechanism is preserved: intraday returns weighted by volume intensity capture conviction. The EMA provides a smooth recent-biased signal. This mutation targets improved IC and MI while maintaining ICIR stability.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.035998614108586825,
+    "icir": 0.356874721508539,
+    "mi": 0.029848602999482665,
+    "rank_ic": 0.04853853830378996,
+    "rank_icir": 0.41686171997381183
+  },
+  "raw_metrics": {
+    "ic": -0.035998614108586825,
+    "icir": -0.356874721508539,
+    "mi": 0.029848602999482665,
+    "rank_ic": -0.04853853830378996,
+    "rank_icir": -0.41686171997381183
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.08223395612810025,
+    "top_quantile_excess_return": 0.5757337725532101,
+    "top_quantile_max_drawdown": -0.05610843145767597,
+    "top_quantile_turnover": 0.25768984423461017
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:36:46.156959+00:00"
+}

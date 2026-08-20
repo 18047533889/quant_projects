@@ -7,6 +7,11 @@ Fast copy-paste examples for common use cases.
 # ============================================================================
 # 1. BASIC PARALLEL EXECUTION
 # ============================================================================
+# NOTE: this file is a copy-paste reference. The snippets below use
+# placeholder objects (factor_batch_1, ic_series, ...) that only exist in the
+# caller's context; run it with `python -c "compile(open(...).read(), ...,
+# 'exec')"`-style syntax checking, or copy the FINAL section (10), which is
+# fully self-contained and executable.
 
 from quant_evaluator.runtime.parallel_executor import (
     ParallelBatchExecutor,
@@ -194,10 +199,11 @@ from quant_evaluator.contracts.factor_batch import FactorBatch, AxisRef
 from quant_evaluator.contracts.label_bundle import LabelBundle
 
 def create_batch(T, N, F, seed):
-    np.random.seed(seed)
+    # Local Generator — never mutate global RNG state from library code.
+    rng = np.random.default_rng(seed)
     time_axis = AxisRef(name="date", dtype="datetime64", size=T)
     asset_axis = AxisRef(name="ticker", dtype="int64", size=N)
-    values = np.random.randn(T, N, F) * 0.02
+    values = rng.standard_normal((T, N, F)) * 0.02
     return FactorBatch(
         factor_ids=tuple(f"factor_{i}" for i in range(F)),
         time_axis=time_axis,
@@ -206,8 +212,8 @@ def create_batch(T, N, F, seed):
     )
 
 def create_labels(T, N, seed):
-    np.random.seed(seed + 10000)
-    values = np.random.randn(T, N) * 0.015
+    rng = np.random.default_rng(seed + 10000)
+    values = rng.standard_normal((T, N)) * 0.015
     return LabelBundle(
         target_id="forward_return_1d",
         values=values,

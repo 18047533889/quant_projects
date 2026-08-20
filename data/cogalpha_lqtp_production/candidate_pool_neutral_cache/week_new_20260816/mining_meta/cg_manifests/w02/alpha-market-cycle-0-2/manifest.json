@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "alpha-market-cycle-0-2",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 366,
+  "factor_name": "factor_overnight_intraday_cycle_dominance",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w02-20260813-194428-r5",
+  "expression_type": "python",
+  "formula": "(sum(overnight_ret,120) - sum(intraday_ret,120)) / (sum(|overnight_ret|,120) + sum(|intraday_ret|,120))",
+  "code": "def factor_overnight_intraday_cycle_dominance(df):\n    \"\"\"Long-term cyclical phase inferred from cumulative overnight vs intraday return dominance.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    window = 120\n    overnight_cum = overnight_ret.rolling(window, min_periods=1).sum()\n    intraday_cum = intraday_ret.rolling(window, min_periods=1).sum()\n    total_abs = (overnight_ret.abs().rolling(window, min_periods=1).sum() + intraday_ret.abs().rolling(window, min_periods=1).sum()).replace(0.0, np.nan)\n    factor = ((overnight_cum - intraday_cum) / total_abs).fillna(0.0)\n    df_copy[\"factor_overnight_intraday_cycle_dominance\"] = factor\n    return df_copy[\"factor_overnight_intraday_cycle_dominance\"]",
+  "description": "Market regime shifts between accumulation and distribution often alter the split between overnight gap returns and intraday trading returns. In bullish cyclical phases, overnight gaps tend to be more positive and persistent; in bearish phases, intraday return can dominate. The factor cumulates overnight and intraday returns over a trailing 120-day window and normalizes by total absolute move to express the current cyclical phase. Uses alpha_tools.decompose_overnight_intraday for clean return decomposition.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01908981517432808,
+    "icir": 0.38096334076591487,
+    "mi": 0.00922051034596727,
+    "rank_ic": 0.021363946241961293,
+    "rank_icir": 0.4313307011480649
+  },
+  "raw_metrics": {
+    "ic": 0.01908981517432808,
+    "icir": 0.38096334076591487,
+    "mi": 0.00922051034596727,
+    "rank_ic": 0.021363946241961293,
+    "rank_icir": 0.4313307011480649
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 8.051500344297274,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.39256375676090904,
+    "top_quantile_excess_return": 5.793178222679207,
+    "top_quantile_max_drawdown": -0.038585875913449974,
+    "top_quantile_turnover": 0.07237338310512673
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:31:49.856386+00:00"
+}

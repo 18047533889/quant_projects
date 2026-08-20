@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_liq_volume_price_corr_002_1eec61f5_f1265143",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 341,
+  "factor_name": "factor_volume_price_corr_logret_logvol",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w02-20260813-150507-r4",
+  "expression_type": "python",
+  "formula": "rolling_corr(log(close).diff(), log1p(volume).pct_change(), 20)",
+  "code": "def factor_volume_price_corr_logret_logvol(df):\n    \"\"\"Rolling correlation between log price changes and log-volume changes.\"\"\"\n    df_copy = df.copy()\n    log_close = np.log(df_copy[\"close\"])\n    ret = log_close.diff()\n    vol_chg = np.log1p(df_copy[\"volume\"]).pct_change()\n    corr = ret.rolling(20, min_periods=5).corr(vol_chg)\n    corr = corr.fillna(0.0)\n    corr.name = \"factor_volume_price_corr_logret_logvol\"\n    return corr",
+  "description": "Preserves parent's core rolling price-volume correlation mechanism and RankICIR/RankIC stability. Bottleneck: low MI partially driven by raw price percentage-change outliers and asymmetry. Mutation replaces close.pct_change with log return (diff of log close), reducing right-tail price spike distortion while keeping direction and zero-lag. Volume side remains parent's bounded log1p pct_change. This single targeted logarithmic adjustment should improve nonlinear price-volume dependence without adding components or cross-sectional transform.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01263672867728681,
+    "icir": 0.2582727908561883,
+    "mi": 0.005140478783788538,
+    "rank_ic": 0.029751346946028528,
+    "rank_icir": 0.5329550735942068
+  },
+  "raw_metrics": {
+    "ic": -0.01263672867728681,
+    "icir": -0.2582727908561883,
+    "mi": 0.005140478783788538,
+    "rank_ic": -0.029751346946028528,
+    "rank_icir": -0.5329550735942068
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 8.161688642341616,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.16416380079703252,
+    "top_quantile_excess_return": 1.4037584632969877,
+    "top_quantile_max_drawdown": -0.08898940375740061,
+    "top_quantile_turnover": 0.17088844384415317
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:29:05.286677+00:00"
+}

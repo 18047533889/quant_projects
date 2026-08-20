@@ -326,19 +326,7 @@ class TsLaggedMutualInformation(SeriesOperator):
         ["x", "y", "window", "lag", "bins", "min_periods", "bias_correction"],
         unit="nats",
     )
-    metadata.param_specs = {
-        "bias_correction": ParamSpec(dtype=bool, choices=(True, False)),
-        # R11 #15: strict-integer lag — ``int(lag)`` used to truncate 1.9 -> 1,
-        # manufacturing false search-space duplicates.  Non-integer finite values
-        # raise; lag >= 1 (a 0-lag MI is the synchronous ts_mutual_information).
-        "lag": ParamSpec(dtype=int, min=1),
-        "window": ParamSpec(dtype=int, min=2),
-        "bins": ParamSpec(dtype=int, min=2, max=10),
-        # R11 #16: ``min_periods`` is a real lower bound, not a clamped minimum —
-        # values 2..10 used to be silently coerced to 10, manufacturing a fake
-        # parameter interval.  A value < 10 now raises at binding.
-        "min_periods": ParamSpec(dtype=int, min=10),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     # R11 #14/#15: ``window`` counts the ALIGNED PAIRS actually used in the
     # statistic, so the raw history requirement is ``window + lag`` bars and the
     # parameter means the same thing across lags (window=60,lag=1 and

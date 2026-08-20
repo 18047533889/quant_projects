@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "vol_regime_rev_001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 47,
+  "factor_name": "factor_volume_regime_reversal_cont",
+  "domain_agent": "alpha-regime-gating",
+  "run_id": "fleet-w04-20260802-212152-r4",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_volume_regime_reversal_cont(df):\n    \"\"\"Adaptive reversal signal that blends short-term (5-day) and long-term (20-day) reversals, gated by volume regime. Uses alpha_tools.classify_volume_regime to obtain volume state flags and vol_ratio.\"\"\"\n    df_copy = df.copy()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    short_rev = -(df_copy[\"close\"] / df_copy[\"close\"].shift(5) - 1)\n    long_rev = -(df_copy[\"close\"] / df_copy[\"close\"].shift(20) - 1)\n    w = np.clip(vol_ratio - 1.0, 0.0, 1.0)\n    high_mask = is_high_vol > 0\n    low_mask = is_low_vol > 0\n    blend_signal = w * short_rev + (1 - w) * long_rev\n    factor = np.where(high_mask, short_rev, np.where(low_mask, long_rev, blend_signal))\n    df_copy[\"factor_volume_regime_reversal_cont\"] = factor\n    return df_copy[\"factor_volume_regime_reversal_cont\"]",
+  "description": "Volume regimes capture liquidity-driven price pressure. In high-volume states, reversals tend to be short-lived, favoring a 5-day lookback; in low-volume states, reversals develop over longer horizons, favoring a 20-day lookback. Intermediate volumes blend the two signals continuously using the relative volume ratio. This adaptive gating preserves a single continuous reversal mechanism while adjusting its speed to market liquidity conditions.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02920835302316538,
+    "icir": 0.23250926048035958,
+    "mi": 0.03563205254251134,
+    "rank_ic": 0.05822026621586605,
+    "rank_icir": 0.4267217073127661
+  },
+  "raw_metrics": {
+    "ic": 0.02920835302316538,
+    "icir": 0.23250926048035958,
+    "mi": 0.03563205254251134,
+    "rank_ic": 0.05822026621586605,
+    "rank_icir": 0.4267217073127661
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.12646660075065164,
+    "top_quantile_excess_return": 0.09549314773995565,
+    "top_quantile_max_drawdown": -0.05634448317104612,
+    "top_quantile_turnover": 0.2814960474723696
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:14:44.947844+00:00"
+}

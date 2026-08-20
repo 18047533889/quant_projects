@@ -13,6 +13,20 @@ import numpy as np
 import pandas as pd
 import pytest
 
+
+def setup_module():
+    """Reset registry lifecycle to allow operator registration during test imports.
+
+    The registry gets finalized during normal operation, but test modules that
+    import operator classes trigger registration at import time. This hook ensures
+    the registry is writable before the imports happen.
+    """
+    from cleaned_operators.registry import OperatorRegistry
+    if OperatorRegistry._lifecycle != OperatorRegistry.Lifecycle.BUILDING:
+        # Safe to reset for test isolation
+        OperatorRegistry._lifecycle = OperatorRegistry.Lifecycle.BUILDING
+
+
 from cleaned_operators.intraday.smart_money import (
     IntraDynamicStockGraphFeatures,
     IntraCommonTradingIntensity,

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_alpha_creative_gen0_002_a2b7efb6_3c6bae35",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 418,
+  "factor_name": "factor_intraday_volume_price_coordination_rk",
+  "domain_agent": "alpha-creative",
+  "run_id": "fleet-w03-20260814-124837-r9",
+  "expression_type": "python",
+  "formula": "sign(roll_corr_20(intraday_ret, roll_rank_20(volume.pct_change()))) * abs(roll_corr_20(...))^1.5",
+  "code": "def factor_intraday_volume_price_coordination_rk(df):\n    \"\"\"Correlation between intraday return and rolling rank of volume change, with signed power.\"\"\"\n    df_copy = df.copy()\n    intraday_ret = df_copy['close'] / df_copy['open'] - 1.0\n    vol_chg = df_copy['volume'].pct_change()\n    vol_chg_rank = vol_chg.rolling(20, min_periods=10).rank(pct=True)\n    corr = intraday_ret.rolling(20, min_periods=10).corr(vol_chg_rank)\n    signal = np.sign(corr) * np.power(np.abs(corr), 1.5)\n    signal = signal.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    df_copy['factor_intraday_volume_price_coordination_rk'] = signal\n    return df_copy['factor_intraday_volume_price_coordination_rk']",
+  "description": "Preserves the parent's nonlinear price-volume coordination mechanism but replaces close-to-close return with intraday return (close/open - 1). Intraday return focuses on session price movement that is directly contemporaneous with trading volume, likely strengthening the linear IC and MI without disturbing the signed-power modifier. The rolling rank of volume change remains to dampen outlier volume spikes, and the signed power retains emphasis on strong correlations. This is a single targeted direction adjustment to the price variable, keeping one core mechanism and one lightweight modifier.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.008064362782368087,
+    "icir": 0.17336399718426249,
+    "mi": 0.005912571031135627,
+    "rank_ic": 0.023632599975649187,
+    "rank_icir": 0.4587783116999613
+  },
+  "raw_metrics": {
+    "ic": -0.008064362782368087,
+    "icir": -0.17336399718426249,
+    "mi": 0.005912571031135627,
+    "rank_ic": -0.023632599975649187,
+    "rank_icir": -0.4587783116999613
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.690777735574125,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.03013849891685605,
+    "top_quantile_excess_return": 0.1849205915245815,
+    "top_quantile_max_drawdown": -0.12449943699254007,
+    "top_quantile_turnover": 0.19582353232693278
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:11:34.246068+00:00"
+}

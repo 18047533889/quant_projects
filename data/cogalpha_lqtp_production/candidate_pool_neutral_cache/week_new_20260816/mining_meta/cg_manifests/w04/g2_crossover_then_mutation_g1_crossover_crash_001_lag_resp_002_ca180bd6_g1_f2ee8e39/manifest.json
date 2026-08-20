@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_crash_001_lag_resp_002_ca180bd6_g1_f2ee8e39",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 35,
+  "factor_name": "factor_crash_vol_volume_simple",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260802-185305-r3",
+  "expression_type": "python",
+  "formula": "(-5d_return * (ATR_5/ATR_20)) * (volume/MA_volume_20)",
+  "code": "def factor_crash_vol_volume_simple(df):\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    prev_close = close.shift(1)\n    tr = np.maximum(high - low, np.maximum(np.abs(high - prev_close), np.abs(low - prev_close)))\n    atr5 = tr.rolling(5, min_periods=5).mean()\n    atr20 = tr.rolling(20, min_periods=20).mean()\n    ret5 = close / close.shift(5) - 1.0\n    vol_ratio = atr5 / atr20.replace(0, np.nan)\n    crash_signal = -ret5 * vol_ratio\n    vol_ma20 = volume.rolling(20, min_periods=20).mean()\n    volume_ratio = volume / vol_ma20.replace(0, np.nan)\n    factor = crash_signal * volume_ratio\n    df_copy[\"factor_crash_vol_volume_simple\"] = factor\n    return df_copy[\"factor_crash_vol_volume_simple\"]",
+  "description": "Simplifies the qualified parent 'factor_crash_corr_scaled' by removing the volume-price correlation divergence multiplier. The core crash mechanism (negative return amplified by expanding volatility) remains intact, weighted by volume above/below average to capture conviction. This ablation reduces over-parameterization and targets improved RankICIR by removing a potentially noisy interaction term. The cross-sectional z-score transform is preserved to highlight relative crash risk on each date.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03291233804441167,
+    "icir": 0.3829821227557378,
+    "mi": 0.030320323184997555,
+    "rank_ic": 0.04042581401028836,
+    "rank_icir": 0.32113105233675954
+  },
+  "raw_metrics": {
+    "ic": 0.03291233804441167,
+    "icir": 0.3829821227557378,
+    "mi": 0.030320323184997555,
+    "rank_ic": 0.04042581401028836,
+    "rank_icir": 0.32113105233675954
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.3,
+    "top_quantile_annualized_excess_return": 0.024212969379622695,
+    "top_quantile_excess_return": 0.017042636019460433,
+    "top_quantile_max_drawdown": -0.05696617538205284,
+    "top_quantile_turnover": 0.40152233552162386
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:14:26.280552+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_mutation_amc_gen0_001_b43f15da_amc_gen0_001_3f074b77",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 376,
+  "factor_name": "factor_cycle_phase_duration_smooth_boost",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w03-20260814-035032-r7",
+  "expression_type": "python",
+  "formula": "distance = (close - EMA(120)) / ATR(20); raw_streak = signed consecutive trend days; streak_log = sign * log1p(|raw_streak|); abs_streak = |raw_streak|; boost = 0.5 + 0.3 * abs_streak/(abs_streak+5); factor = distance * (1 + boost * |streak_log|)",
+  "code": "def factor_cycle_phase_duration_smooth_boost(df):\n    \"\"\"Long-term trend strength with phase-duration amplification using smooth bounded boost.\"\"\"\n    df_copy = df.copy()\n    ema = df_copy[\"close\"].ewm(span=120, adjust=False).mean()\n    atr = talib.ATR(df_copy[\"high\"].values, df_copy[\"low\"].values, df_copy[\"close\"].values, timeperiod=20)\n    atr = pd.Series(atr, index=df_copy.index)\n    distance = (df_copy[\"close\"] - ema) / atr.replace(0.0, np.nan)\n    direction = np.sign(distance)\n    pos = direction > 0\n    neg = direction < 0\n    pos_cum = pos.cumsum()\n    pos_reset = pos_cum.where(~pos).ffill().fillna(0.0)\n    pos_streak = pos_cum - pos_reset\n    neg_cum = neg.cumsum()\n    neg_reset = neg_cum.where(~neg).ffill().fillna(0.0)\n    neg_streak = neg_cum - neg_reset\n    raw_streak = np.where(pos, pos_streak, -neg_streak)\n    streak_log = np.sign(raw_streak) * np.log1p(np.abs(raw_streak))\n    abs_streak = np.abs(raw_streak)\n    boost = 0.5 + 0.3 * (abs_streak / (abs_streak + 5.0))\n    factor = distance * (1.0 + boost * np.abs(streak_log))\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    df_copy[\"factor_cycle_phase_duration_smooth_boost\"] = factor\n    return df_copy[\"factor_cycle_phase_duration_smooth_boost\"]",
+  "description": "Mutation of parent g2_crossover_g1_mutation_amc_gen0_001_b43f15da_amc_gen0_001_2773a460. Preserves the core long-term trend phase mechanism (distance from 120-day EMA normalized by ATR, amplified by phase duration). The parent used a discontinuous boost of 1.0 for streaks >= 5 and 0.5 otherwise, which reintroduced overamplification of long streaks and distorted IC/ICIR relative to the qualified g1_mutation ancestor. This child replaces the hard step with a smooth bounded boost = 0.5 + 0.3 * abs_streak/(abs_streak+5), capping the amplification at 0.8 instead of 1.0. This reduces extreme values, improves linear association (IC/ICIR) while retaining monotonic rank ordering and MI character. No new features; one compact modifier adjustment.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.008699971309361346,
+    "icir": 0.09213920385550418,
+    "mi": 0.015250501992447596,
+    "rank_ic": 0.026683730019445354,
+    "rank_icir": 0.26838720676454325
+  },
+  "raw_metrics": {
+    "ic": -0.008699971309361346,
+    "icir": -0.09213920385550418,
+    "mi": 0.015250501992447596,
+    "rank_ic": -0.026683730019445354,
+    "rank_icir": -0.26838720676454325
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.1639312534302375,
+    "quantile_monotonicity": 0.9393939393939394,
+    "top_quantile_annualized_excess_return": 0.022023435310496886,
+    "top_quantile_excess_return": 0.13246420103767576,
+    "top_quantile_max_drawdown": -0.17927438165828935,
+    "top_quantile_turnover": 0.09225452108950982
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:05:40.264849+00:00"
+}

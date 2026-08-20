@@ -727,50 +727,62 @@ def _cs_row_map_groups(inner: pl.LazyFrame, apply_fn) -> pl.LazyFrame:
     )
 
 
-def _rolling_corr_centered_map_groups(
-    joined: pl.LazyFrame, window: int, min_periods: int
-) -> pl.LazyFrame:
-    """Numerically stable pairwise rolling correlation using centered windows.
+def _rolling_corr_centered_expr(
+    x: pl.Expr,
+    y: pl.Expr,
+    window: int,
+    min_periods: int,
+) -> pl.Expr:
+    """Native centered rolling correlation (pairwise-finite, direct window).
 
-    Polars' rolling correlation can form ``E[x*y] - E[x]E[y]`` internally,
-    which loses the signal when both series have a large common offset.  Compute
-    each trailing window's means first and then the centered dot products.  The
-    pairwise finite mask is applied per window, so a missing current row does
-    not suppress a result when the preceding valid pairs satisfy min_periods.
+    Route (a) of the R21-P1 static-audit fix: this replaces the former
+    ``_rolling_corr_centered_map_groups`` Python-group callback.  Semantics are
+    identical (centered two-pass windows to avoid catastrophic cancellation for
+    large-offset series; pairwise finite mask applied per window, so a missing
+    current row does not suppress a result when the preceding valid pairs
+    satisfy min_periods).  Implementation:
+
+    - ``pair_l``/``pair_r`` mask non-finite x/y to NULL *per pair*, matching
+      the pandas pairwise-finite contract (±Inf/NaN treated as missing).
+    - each trailing window of width ``w`` is materialized horizontally via
+      ``shift(k)`` (k = 0..w-1) with an implicit ``over(_INST, order_by=_TS)``
+      so instrument partitions never mix;
+    - the window anchor (first finite pair in the window) removes the large
+      common offset before any squaring, then a second re-centering around the
+      window mean keeps the low-order covariance signal (same trick as
+      ``cleaned_operators.common.polars_ts_rolling._pairwise_rolling_moments``,
+      the authoritative TSCorrNative oracle implementation).
     """
     w = max(int(window), 1)
     mp = max(int(min_periods), 1)
-    schema = joined.collect_schema()
-
-    def _apply(g: pl.DataFrame) -> pl.DataFrame:
-        g = g.sort(_TS)
-        xs = np.asarray(g[_VAL].to_numpy(), dtype=np.float64)
-        ys = np.asarray(g["_y"].to_numpy(), dtype=np.float64)
-        out = np.full(xs.shape[0], np.nan, dtype=np.float64)
-        for i in range(xs.size):
-            start = max(0, i + 1 - w)
-            xw = xs[start : i + 1]
-            yw = ys[start : i + 1]
-            valid = np.isfinite(xw) & np.isfinite(yw)
-            if int(valid.sum()) < mp:
-                continue
-            xv = xw[valid]
-            yv = yw[valid]
-            xc = xv - xv.mean()
-            yc = yv - yv.mean()
-            denom = float(np.sqrt(np.dot(xc, xc) * np.dot(yc, yc)))
-            if denom > 0.0 and np.isfinite(denom):
-                out[i] = float(np.dot(xc, yc) / denom)
-        return g.select(
-            pl.col(_TS),
-            pl.col(_INST),
-            pl.Series(_VAL, out),
-        )
-
-    return joined.group_by(_INST, maintain_order=True).map_groups(
-        _apply,
-        schema={_TS: schema[_TS], _INST: schema[_INST], _VAL: pl.Float64},
-    )
+    finite_pair = x.is_finite().fill_null(False) & y.is_finite().fill_null(False)
+    pair_l = pl.when(finite_pair).then(x).otherwise(None)
+    pair_r = pl.when(finite_pair).then(y).otherwise(None)
+    # Trailing window rows: shift(0) = current row, shift(w-1) = window head.
+    # (``.over`` is applied to the final expression below; shifts inside an
+    # ``over`` window expression are evaluated within each partition.)
+    xs = [pair_l.shift(k) for k in range(w)]
+    ys = [pair_r.shift(k) for k in range(w)]
+    count = pl.sum_horizontal([v.is_not_null().cast(pl.Float64) for v in xs])
+    x_anchor = pl.coalesce(xs)
+    y_anchor = pl.coalesce(ys)
+    xc = [v - x_anchor for v in xs]
+    yc = [v - y_anchor for v in ys]
+    sum_x = pl.sum_horizontal(xc)
+    sum_y = pl.sum_horizontal(yc)
+    mean_x = x_anchor + sum_x / count
+    mean_y = y_anchor + sum_y / count
+    ccx = [v - mean_x for v in xs]
+    ccy = [v - mean_y for v in ys]
+    ss_x = pl.sum_horizontal([v * v for v in ccx])
+    ss_y = pl.sum_horizontal([v * v for v in ccy])
+    cross = pl.sum_horizontal([a * b for a, b in zip(ccx, ccy)])
+    denom = (ss_x * ss_y).sqrt()
+    ready = (count >= mp) & count.is_not_null() & ss_x.is_not_null() & ss_y.is_not_null()
+    value = cross / denom
+    return pl.when(~ready | (ss_x <= 0) | (ss_y <= 0) | denom.is_null() | (denom <= 0)).then(
+        None
+    ).otherwise(value)
 
 
 def _ewm_binary_map_groups(joined: pl.LazyFrame, span: int, *, corr: bool) -> pl.LazyFrame:
@@ -1310,13 +1322,7 @@ def _try_ts_pair_from_base_columns(
     if op == "ts_corr":
         # Use centered two-pass windows to avoid catastrophic cancellation in
         # Polars' E[xy] - E[x]E[y] implementation for large-offset series.
-        pair_input = base.select(
-            pl.col(_TS),
-            pl.col(_INST),
-            lcol.alias(_VAL),
-            rcol.alias("_y"),
-        )
-        return _rolling_corr_centered_map_groups(pair_input, w, mp)
+        expr = _rolling_corr_centered_expr(lcol, rcol, w, mp).over(_INST, order_by=_TS)
     elif op == "ts_cov":
         raw = pl.rolling_cov(lcol, rcol, window_size=w, min_samples=mp, ddof=ddof).over(
             _INST, order_by=_TS
@@ -1872,7 +1878,10 @@ def _compile_polars_impl(
         )
         # Centered two-pass computation avoids catastrophic cancellation for
         # large-offset inputs while preserving pairwise/current-row semantics.
-        return _rolling_corr_centered_map_groups(joined, pspec.size, pspec.min_periods)
+        corr = _rolling_corr_centered_expr(lcol, rcol, pspec.size, pspec.min_periods).over(
+            _INST, order_by=_TS
+        )
+        return joined.with_columns(corr.alias(_VAL)).select(_TS, _INST, _VAL)
 
     if op == "ts_cov":
         if len(node.inputs) < 2:

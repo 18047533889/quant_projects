@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_tail_risk_semivar_drawdown_001_market_cycle_0001_5774cdc9",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 754,
+  "factor_name": "factor_tail_stress_persistence_filter",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w04-20260814-081422-r12",
+  "expression_type": "python",
+  "formula": "- (downside_semivariance / total_variance) * (1 + 3 * drawdown_from_120d_high) * (1 + proportion_below_slow_ma_60d)",
+  "code": "def factor_tail_stress_persistence_filter(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    downside = ret.clip(upper=0.0)\n    tot_var = ret.rolling(60, min_periods=20).var(ddof=1)\n    down_var = (downside ** 2).rolling(60, min_periods=20).mean()\n    semivar_ratio = down_var / tot_var.replace(0.0, np.nan)\n    roll_max = df_copy[\"close\"].rolling(120, min_periods=20).max()\n    drawdown = (roll_max - df_copy[\"close\"]) / roll_max.replace(0.0, np.nan)\n    tail_stress = -semivar_ratio * (1.0 + 3.0 * drawdown)\n    slow_ma = df_copy[\"close\"].rolling(120, min_periods=20).mean()\n    above = (df_copy[\"close\"] > slow_ma).rolling(60, min_periods=10).mean()\n    below = 1.0 - above\n    persistence_weight = 1.0 + below\n    factor = tail_stress * persistence_weight\n    df_copy[\"factor_tail_stress_persistence_filter\"] = factor\n    return df_copy[\"factor_tail_stress_persistence_filter\"]",
+  "description": "Primary mechanism from tail_risk_semivar_drawdown_001: tail fragility proxied by downside semivariance dominance amplified by drawdown depth; negative sign signals lower future returns for fragile assets. Borrowed lightweight modifier from market_cycle_0001: the proportion of recent days below a slow 120-day mean acts as a bounded persistence-weight, amplifying the tail-stress signal during persistent downtrends and attenuating it during sustained uptrends. This preserves the raw tail-risk payoff and adds cycle-phase conditioning without cross-sectional normalization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.005433688082278106,
+    "icir": 0.10161257452441573,
+    "mi": 0.011725613980531513,
+    "rank_ic": 0.03099479358068769,
+    "rank_icir": 0.4948497338618061
+  },
+  "raw_metrics": {
+    "ic": -0.005433688082278106,
+    "icir": -0.10161257452441573,
+    "mi": 0.011725613980531513,
+    "rank_ic": -0.03099479358068769,
+    "rank_icir": -0.4948497338618061
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 1.9857276065483787,
+    "quantile_monotonicity": 0.8424242424242424,
+    "top_quantile_annualized_excess_return": 0.02192490303461514,
+    "top_quantile_excess_return": 0.015437249810588138,
+    "top_quantile_max_drawdown": -0.027085108290430315,
+    "top_quantile_turnover": 0.08296189845157247
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:10:15.855798+00:00"
+}

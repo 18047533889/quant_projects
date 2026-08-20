@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "alpha-volatility-regime-001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "elite",
+  "factor_id": 30,
+  "factor_name": "factor_volatility_spread_reversal",
+  "domain_agent": "alpha-volatility-regime",
+  "run_id": "fleet-w01-20260803-021022-r4",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_volatility_spread_reversal(df):\n    \"\"\"Capture reversal tendency under high volatility regime spread.\n    Uses ratio of short-term to long-term historical volatility to scale\n    recent return reversal.\"\"\"\n    df_copy = df.copy()\n    # Compute daily returns\n    ret = df_copy[\"close\"].pct_change()\n    # Short-term and long-term realized volatility\n    short_vol = ret.rolling(5, min_periods=5).std()\n    long_vol = ret.rolling(20, min_periods=20).std()\n    # Volatility regime indicator: ratio of short to long vol\n    vol_ratio = short_vol / long_vol.replace(0, np.nan)\n    # Reversal signal: negative of recent 5-day return\n    recent_ret = df_copy[\"close\"] / df_copy[\"close\"].shift(5) - 1\n    reversal = -recent_ret\n    # Scale reversal by volatility ratio to amplify in high vol regimes\n    factor = reversal * vol_ratio\n    # Pasteurize: replace inf and fillna\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy[\"factor_volatility_spread_reversal\"] = factor\n    return df_copy[\"factor_volatility_spread_reversal\"]",
+  "description": "During high volatility regimes, when short-term volatility exceeds long-term volatility, recent price movements are more likely to reverse. This factor combines a short-term reversal signal scaled by the ratio of short-term to long-term realized volatility, emphasizing mean-reversion signals in elevated volatility states.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.024887005433344014,
+    "icir": 0.23921945186122287,
+    "mi": 0.028470644820832725,
+    "rank_ic": 0.036140673224220786,
+    "rank_icir": 0.29014279352045874
+  },
+  "raw_metrics": {
+    "ic": 0.024887005433344014,
+    "icir": 0.23921945186122287,
+    "mi": 0.028470644820832725,
+    "rank_ic": 0.036140673224220786,
+    "rank_icir": 0.29014279352045874
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.4,
+    "top_quantile_annualized_excess_return": 0.035765846404741675,
+    "top_quantile_excess_return": 0.22221751534394207,
+    "top_quantile_max_drawdown": -0.11144859277879637,
+    "top_quantile_turnover": 0.36444734424887715
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:35:12.962518+00:00"
+}

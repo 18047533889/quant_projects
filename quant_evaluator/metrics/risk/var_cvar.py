@@ -10,6 +10,18 @@ import numpy as np
 from scipy import stats
 
 
+def _validate_confidence_level(confidence_level: float) -> None:
+    """Fail closed: confidence_level must be strictly inside (0, 1).
+
+    confidence_level == 1.0 would divide by zero in parametric CVaR
+    (inf VaR), and <= 0 is meaningless. Raise ValueError otherwise.
+    """
+    if not (0.0 < confidence_level < 1.0):
+        raise ValueError(
+            f"confidence_level must be in (0, 1), got {confidence_level}"
+        )
+
+
 def compute_var(
     returns: np.ndarray,
     confidence_level: float = 0.95,
@@ -21,13 +33,14 @@ def compute_var(
 
     Args:
         returns: Return series (T,) or (T, F)
-        confidence_level: Confidence level (e.g., 0.95 for 95% VaR)
+        confidence_level: Confidence level (e.g., 0.95 for 95% VaR); must be in (0, 1)
         method: "historical", "parametric", or "cornish_fisher"
         min_periods: Minimum periods required
 
     Returns:
         VaR (positive value representing loss), scalar or shape (F,)
     """
+    _validate_confidence_level(confidence_level)
     if method == "historical":
         return compute_var_historical(returns, confidence_level, min_periods)
     elif method == "parametric":
@@ -54,6 +67,8 @@ def compute_var_historical(
     Returns:
         VaR (positive loss value), scalar or shape (F,)
     """
+    _validate_confidence_level(confidence_level)
+
     if returns.ndim == 1:
         returns = returns[:, np.newaxis]
         squeeze = True
@@ -101,6 +116,8 @@ def compute_var_parametric(
     Returns:
         VaR (positive loss value), scalar or shape (F,)
     """
+    _validate_confidence_level(confidence_level)
+
     if returns.ndim == 1:
         returns = returns[:, np.newaxis]
         squeeze = True
@@ -152,6 +169,8 @@ def compute_var_cornish_fisher(
     Returns:
         VaR (positive loss value), scalar or shape (F,)
     """
+    _validate_confidence_level(confidence_level)
+
     if returns.ndim == 1:
         returns = returns[:, np.newaxis]
         squeeze = True
@@ -220,6 +239,8 @@ def compute_cvar(
     Returns:
         CVaR (positive loss value), scalar or shape (F,)
     """
+    _validate_confidence_level(confidence_level)
+
     if returns.ndim == 1:
         returns = returns[:, np.newaxis]
         squeeze = True
@@ -302,6 +323,7 @@ def compute_var_cvar(
     Returns:
         (VaR, CVaR) both as positive loss values, scalar or shape (F,)
     """
+    _validate_confidence_level(confidence_level)
     var = compute_var(returns, confidence_level, method, min_periods)
 
     # CVaR not defined for cornish_fisher method, fall back to historical

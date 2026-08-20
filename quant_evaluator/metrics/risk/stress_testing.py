@@ -96,6 +96,10 @@ def apply_hypothetical_scenario(
         valid = np.isfinite(ret_f)
 
         if np.sum(valid) < 2:
+            # Fail closed: not enough finite data to shock this asset —
+            # mark the entire column as invalid instead of silently
+            # passing through an unshocked copy of the input.
+            shocked[:, f] = np.nan
             continue
 
         ret_valid = ret_f[valid]
@@ -166,6 +170,15 @@ def compute_scenario_impact(
 
     if metrics is None:
         metrics = ["mean", "sharpe", "max_drawdown"]
+
+    # Fail closed: reject unknown metric names instead of silently ignoring them.
+    known_metrics = {"mean", "sharpe", "max_drawdown", "var", "cvar"}
+    unknown = [m for m in metrics if m not in known_metrics]
+    if unknown:
+        raise ValueError(
+            f"Unknown metric(s) in scenario config: {sorted(unknown)}. "
+            f"Supported metrics: {sorted(known_metrics)}"
+        )
 
     result = {}
 
@@ -359,7 +372,12 @@ def compute_worst_case_scenarios(
             "returns": window_returns[:, 0] if squeeze else window_returns,
         })
 
-    # Sort by metric (ascending for cumulative, descending for volatility)
+    # Sort by metric (ascending for cumulative, descending for volatility).
+    # Fail closed on NaN: a window whose metric is NaN must never be ranked
+    # as a worst-case winner — exclude it from the ranking entirely.
+    valid_scenarios = [s for s in scenarios if np.isfinite(s["metric_value"])]
+    scenarios = valid_scenarios
+
     if metric == "cumulative":
         scenarios.sort(key=lambda x: x["metric_value"])
     else:

@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "alpha-reversal-002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "elite",
+  "factor_id": 32,
+  "factor_name": "factor_volume_amplified_mean_reversal",
+  "domain_agent": "alpha-reversal",
+  "run_id": "fleet-w01-20260803-021022-r4",
+  "expression_type": "python",
+  "formula": "((MA(close,20)-close)/close) * vol_ratio",
+  "code": "def factor_volume_amplified_mean_reversal(df):\n    df_copy = df.copy()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    ma20 = df_copy[\"close\"].rolling(20, min_periods=20).mean()\n    deviation = (ma20 - df_copy[\"close\"]) / df_copy[\"close\"]\n    factor_vals = deviation * vol_ratio\n    df_copy[\"factor_volume_amplified_mean_reversal\"] = factor_vals\n    return df_copy[\"factor_volume_amplified_mean_reversal\"]",
+  "description": "Mean reversion signal amplified by volume regime. When volume is above average, reversals from deviation tend to be stronger (e.g., exhaustion after high\u2011volume moves). Multiplying the normalized price gap by the continuous vol_ratio emphasizes signals in high\u2011volume regimes and dampens them in low\u2011volume conditions, adding nonlinear information beyond pure price deviation.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03144648865711822,
+    "icir": 0.27625647433338074,
+    "mi": 0.023353144639354895,
+    "rank_ic": 0.03904884943788449,
+    "rank_icir": 0.2781192934122797
+  },
+  "raw_metrics": {
+    "ic": 0.03144648865711822,
+    "icir": 0.27625647433338074,
+    "mi": 0.023353144639354895,
+    "rank_ic": 0.03904884943788449,
+    "rank_icir": 0.2781192934122797
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6,
+    "top_quantile_annualized_excess_return": 0.04896662498744009,
+    "top_quantile_excess_return": 0.31412935554964005,
+    "top_quantile_max_drawdown": -0.06507960144127545,
+    "top_quantile_turnover": 0.25685810131340364
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:35:47.514822+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "apvc-gen0-c2",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 266,
+  "factor_name": "factor_price_volume_rolling_beta",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w02-20260813-014015-r1",
+  "expression_type": "python",
+  "formula": "Cov(ret, dlog(volume)) / Var(dlog(volume))",
+  "code": "def factor_price_volume_rolling_beta(df):\n    \"\"\"Rolling beta of returns on volume changes.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    log_volume = np.log(df_copy['volume'].clip(lower=1e-12))\n    dlog_volume = log_volume.diff()\n    cov = ret.rolling(20, min_periods=20).cov(dlog_volume)\n    var_vol = dlog_volume.rolling(20, min_periods=20).var(ddof=1)\n    beta = cov / var_vol.replace(0.0, np.nan)\n    df_copy['factor_price_volume_rolling_beta'] = beta\n    return df_copy['factor_price_volume_rolling_beta']",
+  "description": "This factor measures the rolling sensitivity of daily returns to volume changes. A high positive beta means prices rise when volume expands, a hallmark of volume-confirmed accumulation or momentum. A negative beta indicates price declines on volume expansion, suggesting distribution. Unlike a simple correlation, beta is a structural elasticity that captures the coherence of price movement with volume behavior, providing a raw continuous signal likely to retain residual predictive power after neutralization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.015544846031908201,
+    "icir": 0.22377785798397928,
+    "mi": 0.01657236249208438,
+    "rank_ic": 0.04113409056753225,
+    "rank_icir": 0.6341234581294629
+  },
+  "raw_metrics": {
+    "ic": -0.015544846031908201,
+    "icir": -0.22377785798397928,
+    "mi": 0.01657236249208438,
+    "rank_ic": -0.04113409056753225,
+    "rank_icir": -0.6341234581294629
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.11312382352799,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.05750231297136388,
+    "top_quantile_excess_return": 0.37611294250925775,
+    "top_quantile_max_drawdown": -0.13256040822847637,
+    "top_quantile_turnover": 0.17078267140711573
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:18:37.512056+00:00"
+}

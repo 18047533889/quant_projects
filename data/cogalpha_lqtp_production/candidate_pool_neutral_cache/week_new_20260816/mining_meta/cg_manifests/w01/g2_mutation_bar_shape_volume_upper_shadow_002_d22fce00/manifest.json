@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_bar_shape_volume_upper_shadow_002_d22fce00",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 112,
+  "factor_name": "factor_volume_weighted_upper_shadow_15v",
+  "domain_agent": "alpha-bar-shape",
+  "run_id": "fleet-w01-20260804-031550-r10",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_volume_weighted_upper_shadow_15v(df):\n    \"\"\"\n    Volume\u2011weighted upper shadow with 15\u2011day volume normalization.\n    Upper shadow = high - max(open, close). Volume normalized by 15\u2011day rolling median.\n    Smoothed with 5\u2011day EMA. Captures selling pressure with conviction.\n    \"\"\"\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    open_ = df_copy[\"open\"]\n    close = df_copy[\"close\"]\n    vol = df_copy[\"volume\"]\n    upper_shadow = high - np.maximum(open_, close)\n    vol_med = vol.rolling(15, min_periods=1).median().replace(0.0, np.nan)\n    vol_norm = vol / vol_med\n    raw = upper_shadow * vol_norm\n    raw_filled = raw.fillna(0.0)\n    smoothed = raw_filled.ewm(span=5, adjust=False).mean()\n    df_copy[\"factor_volume_weighted_upper_shadow_15v\"] = smoothed\n    return df_copy[\"factor_volume_weighted_upper_shadow_15v\"]",
+  "description": "Upper shadows represent intraday selling pressure that pushed price below the high. Weighting by volume captures conviction: heavy volume alongside a long upper shadow suggests distribution rather than noise. This mutation shortens the volume normalization window from 20 to 15 days, making the relative volume measure more responsive to recent volume spikes. The core logic remains unchanged, preserving the parent's strong cross-sectional ranking property. The 5\u2011day EMA smoothing retains the signal persistence.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.028593720416076718,
+    "icir": 0.3032807166075996,
+    "mi": 0.02346092065119265,
+    "rank_ic": 0.039367592180499573,
+    "rank_icir": 0.3772897660648654
+  },
+  "raw_metrics": {
+    "ic": -0.028593720416076718,
+    "icir": -0.3032807166075996,
+    "mi": 0.02346092065119265,
+    "rank_ic": -0.039367592180499573,
+    "rank_icir": -0.3772897660648654
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.30721336556718404,
+    "top_quantile_excess_return": 3.716384264534793,
+    "top_quantile_max_drawdown": -0.0672263703205066,
+    "top_quantile_turnover": 0.16688777001542995
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:40:16.061144+00:00"
+}

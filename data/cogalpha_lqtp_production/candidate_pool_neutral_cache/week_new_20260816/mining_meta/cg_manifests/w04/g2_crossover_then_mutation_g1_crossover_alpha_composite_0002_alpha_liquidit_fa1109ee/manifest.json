@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_alpha_composite_0002_alpha_liquidit_fa1109ee",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 590,
+  "factor_name": "factor_volume_price_beta_logvol_liquidity",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w04-20260813-075113-r3",
+  "expression_type": "python",
+  "formula": "rolling_cov(close.pct_change(), log(volume).diff(), 20) / rolling_var(log(volume).diff(), 20) * (1 / (1 + rolling_mean((high-low)/(volume*close), 10)))",
+  "code": "def factor_volume_price_beta_logvol_liquidity(df):\n    \"\"\"Volume-price coupling beta with log volume change and illiquidity attenuation.\"\"\"\n    df_copy = df.copy()\n    ret_1 = df_copy[\"close\"].pct_change()\n    log_vol = np.log(df_copy[\"volume\"].replace(0.0, np.nan))\n    vol_chg = log_vol.diff()\n    cov = ret_1.rolling(20, min_periods=5).cov(vol_chg)\n    var = vol_chg.rolling(20, min_periods=5).var()\n    beta = cov / var.replace(0.0, np.nan)\n    beta = beta.replace([np.inf, -np.inf], np.nan)\n    dollar_volume = df_copy[\"volume\"] * df_copy[\"close\"]\n    illiquidity = (df_copy[\"high\"] - df_copy[\"low\"]) / dollar_volume.replace(0.0, np.nan)\n    avg_illiquidity = illiquidity.rolling(10, min_periods=5).mean()\n    weight = 1.0 / (1.0 + avg_illiquidity)\n    factor = beta * weight\n    df_copy[\"factor_volume_price_beta_logvol_liquidity\"] = factor\n    return df_copy[\"factor_volume_price_beta_logvol_liquidity\"]",
+  "description": "Mutation of the parent volume-price coupling beta mechanism. The parent's core economic idea is preserved: a rolling beta of returns on volume changes, where a positive beta indicates informed flow and a negative beta signals divergence. The bottleneck is raw volume pct_change's right-skew and instability from low-base volume spikes, which can distort the rolling covariance denominator and weaken IC/ICIR. This child replaces volume.pct_change() with log(volume).diff(), a compact normalization that reduces extreme outliers while retaining the same beta sign interpretation. The lightweight illiquidity attenuation modifier from the parent is kept unchanged: average Amihud-style illiquidity scales down the signal when liquidity is poor. Rolling window and min_periods remain at 20/5 for beta and 10/5 for illiquidity to preserve the parent's RankICIR and raw payoff profile. No cross-sectional transform is applied because the parent lineage exhibited strong RankICIR and payoff evidence from the raw mechanism.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01707433852959393,
+    "icir": 0.22933881160944403,
+    "mi": 0.024259468711757215,
+    "rank_ic": 0.053952423461422996,
+    "rank_icir": 0.780852726270471
+  },
+  "raw_metrics": {
+    "ic": -0.01707433852959393,
+    "icir": -0.22933881160944403,
+    "mi": 0.024259468711757215,
+    "rank_ic": -0.053952423461422996,
+    "rank_icir": -0.780852726270471
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.969376336556162,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.026628301376853125,
+    "top_quantile_excess_return": 0.020331011785624797,
+    "top_quantile_max_drawdown": -0.03209683632268567,
+    "top_quantile_turnover": 0.16477857200909432
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:53:31.383526+00:00"
+}

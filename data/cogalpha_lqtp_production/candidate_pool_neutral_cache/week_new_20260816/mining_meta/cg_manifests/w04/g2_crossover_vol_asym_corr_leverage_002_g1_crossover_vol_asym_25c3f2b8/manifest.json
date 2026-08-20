@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_vol_asym_corr_leverage_002_g1_crossover_vol_asym_25c3f2b8",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 709,
+  "factor_name": "factor_leverage_vol_volume_dryup_soft",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w04-20260814-015906-r10",
+  "expression_type": "python",
+  "formula": "-rolling_corr(lag1_return, volatility, 60) * exp(-2 * drawdown_volume_share(20))",
+  "code": "def factor_leverage_vol_volume_dryup_soft(df):\n    \"\"\"Leverage-effect asymmetry smoothly attenuated by volume dry-up share.\"\"\"\n    df_copy = df.copy()\n    # Primary mechanism: parent vol_asym_corr_leverage_002 leverage-effect correlation\n    ret = df_copy[\"close\"].pct_change()\n    vol = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"]\n    lag_ret = ret.shift(1)\n    corr = lag_ret.rolling(60, min_periods=30).corr(vol)\n    asym_signal = -corr\n\n    # Secondary lightweight modifier: parent g1_crossover drawdown volume share,\n    # but with smooth exponential damping instead of hard clipping\n    df_copy[\"volume\"] = df_copy[\"volume\"].fillna(0.0)\n    peak_window = 20\n    vol_window = 20\n    rolling_peak = df_copy[\"close\"].rolling(peak_window, min_periods=1).max()\n    drawdown_state = (df_copy[\"close\"] < rolling_peak).astype(float)\n    drawdown_vol = (df_copy[\"volume\"] * drawdown_state).rolling(vol_window, min_periods=1).sum()\n    recovery_vol = (df_copy[\"volume\"] * (1.0 - drawdown_state)).rolling(vol_window, min_periods=1).sum()\n    total_vol = drawdown_vol + recovery_vol\n    drawdown_share = drawdown_vol / total_vol.replace(0.0, 1.0)\n    weight = np.exp(-2.0 * drawdown_share)\n    factor = asym_signal * weight\n    df_copy[\"factor_leverage_vol_volume_dryup_soft\"] = factor\n    return df_copy[\"factor_leverage_vol_volume_dryup_soft\"]\n",
+  "description": "Parent strength targeted: raw ICIR/RankICIR stability and payoff thickness from vol_asym_corr_leverage_002's leverage-effect correlation. Primary mechanism is the negative rolling correlation between lagged returns and current high-low range volatility. The lightweight transferred idea from g1_crossover_vol_asym_corr_leverage_002_drawdown_volume_dryup_7325a8b2 is the volume dry-up share: the fraction of trailing 20-day volume occurring while the stock is below its 20-day peak. Low drawdown volume share indicates selling exhaustion and strengthens the leverage signal; high drawdown volume share attenuates it. Instead of the previous hard floor of 0.1, this child uses smooth exponential damping exp(-2*share), which remains bounded between exp(-2) and 1 and preserves continuity. This avoids over-attenuation during prolonged drawdowns and should improve MI and RankIC without destroying the raw asymmetry payoff. The signal remains single-stock and economically interpretable, so no cross-sectional transform is needed.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.020923587960376924,
+    "icir": 0.4316992297024054,
+    "mi": 0.008564245922303648,
+    "rank_ic": 0.036554114552858785,
+    "rank_icir": 0.7756366728560694
+  },
+  "raw_metrics": {
+    "ic": 0.020923587960376924,
+    "icir": 0.4316992297024054,
+    "mi": 0.008564245922303648,
+    "rank_ic": 0.036554114552858785,
+    "rank_icir": 0.7756366728560694
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.233396994115458,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.053746827601214964,
+    "top_quantile_excess_return": 0.03530258115019391,
+    "top_quantile_max_drawdown": -0.023063051981332516,
+    "top_quantile_turnover": 0.11970376526277228
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:04:50.269404+00:00"
+}

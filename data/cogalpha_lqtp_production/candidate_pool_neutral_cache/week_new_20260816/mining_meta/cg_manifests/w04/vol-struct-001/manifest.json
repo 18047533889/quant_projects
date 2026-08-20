@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "vol-struct-001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 235,
+  "factor_name": "factor_volume_breakout",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260804-063220-r18",
+  "expression_type": "python",
+  "formula": "vol_short_max(10) / vol_long_max(50)",
+  "code": "def factor_volume_breakout(df):\n    \"\"\"Volume breakout: ratio of recent max volume to wider max volume.\"\"\"\n    df_copy = df.copy()\n    vol_short_max = df_copy[\"volume\"].rolling(window=10, min_periods=10).max()\n    vol_long_max = df_copy[\"volume\"].rolling(window=50, min_periods=50).max()\n    ratio = vol_short_max / vol_long_max.replace(0, np.nan)\n    df_copy[\"factor_volume_breakout\"] = ratio\n    return df_copy[\"factor_volume_breakout\"]",
+  "description": "Captures volume abnormality by comparing recent maximum volume (10-day) to a longer-term maximum (50-day). A high ratio indicates that the recent volume surge is approaching or exceeding historical extremes, signaling heightened attention or potential breakout. This temporal structure contrasts short-term peaks against the stock's own volume history.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.017587427581977372,
+    "icir": 0.23480045865544108,
+    "mi": 0.027395657869049295,
+    "rank_ic": 0.045087748526886,
+    "rank_icir": 0.5010317790306165
+  },
+  "raw_metrics": {
+    "ic": -0.017587427581977372,
+    "icir": -0.23480045865544108,
+    "mi": 0.027395657869049295,
+    "rank_ic": -0.045087748526886,
+    "rank_icir": -0.5010317790306165
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.09890268921152634,
+    "top_quantile_excess_return": 0.05734803148035983,
+    "top_quantile_max_drawdown": -0.031706921053949344,
+    "top_quantile_turnover": 0.0944836421180097
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:22:18.473156+00:00"
+}

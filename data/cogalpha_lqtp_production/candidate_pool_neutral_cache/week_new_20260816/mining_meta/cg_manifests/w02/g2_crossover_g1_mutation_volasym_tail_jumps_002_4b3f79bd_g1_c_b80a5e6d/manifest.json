@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_volasym_tail_jumps_002_4b3f79bd_g1_c_b80a5e6d",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 425,
+  "factor_name": "factor_tail_asymmetry_intraday_jump_severity",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w02-20260814-042827-r7",
+  "expression_type": "python",
+  "formula": "-(sum_63(down_intraday_tail_severity) - sum_63(up_intraday_tail_severity))/(sum_63(down_intraday_tail_severity)+sum_63(up_intraday_tail_severity)+1); severity = |excess intraday return|/lagged_intraday_vol beyond 1.5*lagged_intraday_vol",
+  "code": "def factor_tail_asymmetry_intraday_jump_severity(df):\n    \"\"\"Downside vs upside intraday tail jump severity asymmetry using lagged intraday realized vol.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    vol = intraday_ret.rolling(63, min_periods=20).std(ddof=1).shift(1)\n    threshold = 1.5 * vol\n    vol_safe = vol.replace(0.0, np.nan)\n    valid = vol > 0\n    down_cond = (intraday_ret < -threshold) & valid\n    up_cond = (intraday_ret > threshold) & valid\n    down_sev = np.where(down_cond, (-(intraday_ret + threshold) / vol_safe).clip(lower=0.0), 0.0)\n    up_sev = np.where(up_cond, ((intraday_ret - threshold) / vol_safe).clip(lower=0.0), 0.0)\n    down_sum = pd.Series(down_sev, index=df_copy.index).rolling(63, min_periods=20).sum()\n    up_sum = pd.Series(up_sev, index=df_copy.index).rolling(63, min_periods=20).sum()\n    df_copy[\"factor_tail_asymmetry_intraday_jump_severity\"] = -(down_sum - up_sum) / (down_sum + up_sum + 1.0)\n    return df_copy[\"factor_tail_asymmetry_intraday_jump_severity\"]",
+  "description": "Primary mechanism inherited from qualified parent g1_mutation_volasym_tail_jumps_002_4b3f79bd: downside vs upside tail jump severity asymmetry using lagged realized volatility, continuous excess-return normalization, rolling sums, and a bounded ratio that preserves low turnover and monotonic payoff. Lightweight modifier borrowed from secondary parent g1_crossover_then_mutation_agentcomposite_gen0_gap_liquidity_synergy_amc_g0_0fff8bcf: use the active alpha_tools.decompose_overnight_intraday module to isolate intraday returns only for jump detection and volatility scaling, removing overnight gap noise. This targets the primary parent's weak IC/ICIR by focusing on more idiosyncratic intraday tail moves while retaining the same downside-heavy ordering. No cross-sectional transform added to preserve raw payoff evidence.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.009079969251274482,
+    "icir": 0.19243694179978194,
+    "mi": 0.004808684084101955,
+    "rank_ic": 0.026967104850655295,
+    "rank_icir": 0.539205351784092
+  },
+  "raw_metrics": {
+    "ic": -0.009079969251274482,
+    "icir": -0.19243694179978194,
+    "mi": 0.004808684084101955,
+    "rank_ic": -0.026967104850655295,
+    "rank_icir": -0.539205351784092
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.206438887844141,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.07846278339188206,
+    "top_quantile_excess_return": 0.5393163882599739,
+    "top_quantile_max_drawdown": -0.05860357194120813,
+    "top_quantile_turnover": 0.08538238077526862
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:40:38.140339+00:00"
+}

@@ -90,6 +90,7 @@ class TestTransformRegistry:
             "parameters": {},
             "tags": {"original"},
             "causal_safe": True,
+            "causal_verified": True,
             "admission": "PRODUCTION",
         }
         registry.register(**registration)
@@ -144,6 +145,7 @@ class TestTransformRegistry:
             TransformCategory.CROSS_SECTIONAL,
             tags={"original"},
             causal_safe=True,
+            causal_verified=True,
             admission="PRODUCTION",
         )
 
@@ -213,11 +215,13 @@ class TestTransformRegistry:
             dummy_transform,
             TransformCategory.CROSS_SECTIONAL,
             causal_safe=True,
+            causal_verified=True,
             admission="PRODUCTION",
         )
 
         metadata = registry.validate_production("dummy")
         assert metadata.name == "dummy"
+        assert metadata.causal_verified is True
 
     def test_invalid_admission_is_rejected(self):
         with pytest.raises(ValueError, match="admission must be"):

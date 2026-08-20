@@ -17,6 +17,8 @@ FE-P0-004: PhysicalImplementationSpec imported from unified authority.
 from __future__ import annotations
 
 import hashlib
+import dataclasses
+import enum
 import inspect
 from dataclasses import dataclass
 from typing import Any, Literal, Sequence
@@ -537,15 +539,71 @@ def _safe_payload_hash(payload: Any) -> str:
         ) from exc
 
 
+def _json_contract_value(value: Any) -> Any:
+    """R21-DEF5：typed serialization of a registry contract value to plain JSON.
+
+    The registry catalog entry is a *contract view* whose ``param_specs`` dict
+    carries live ``cleaned_operators.base.ParamSpec`` dataclass objects (and
+    ``dtype`` holds a live ``type``, ``param_role`` a live ``ParamRole`` enum).
+    Hashing the contract must serialize those declared fields explicitly — a
+    raw ``json.dumps`` of live objects raises TypeError, and a ``repr()``
+    fallback would manufacture pseudo-identity (#213 forbids that).
+
+    Everything else in a catalog entry is already JSON-native (str/int/float/
+    bool/None/list/tuple/dict with str keys — verified across the catalog);
+    those pass through unchanged. Any OTHER live object type still raises
+    ``CapabilityInfrastructureError`` (fail-closed, no silent coercion).
+    """
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(k): _json_contract_value(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_contract_value(v) for v in value]
+    if isinstance(value, enum.Enum):
+        return value.value
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        from cleaned_operators.base import MISSING, ParamSpec
+
+        if not isinstance(value, ParamSpec):
+            raise CapabilityInfrastructureError(
+                f"registry contract carries unsupported dataclass "
+                f"{type(value).__module__}.{type(value).__name__!r}"
+            )
+        out: dict[str, Any] = {}
+        for field in dataclasses.fields(ParamSpec):
+            raw = getattr(value, field.name)
+            if field.name == "dtype":
+                # live ``type`` object (int/float/str/bool) -> its __name__
+                out[field.name] = None if raw is None else raw.__name__
+            elif field.name == "default":
+                # MISSING sentinel = "no default declared"; None is a real default
+                out[field.name] = "__MISSING__" if raw is MISSING else _json_contract_value(raw)
+            else:
+                out[field.name] = _json_contract_value(raw)
+        return out
+    raise CapabilityInfrastructureError(
+        f"registry contract carries unsupported object type "
+        f"{type(value).__module__}.{type(value).__name__!r}"
+    )
+
+
 def _sql_contract(canon: str) -> dict:
     """读取 OperatorRegistry 中 canonical 的 logical contract（#363）。
 
     SQL 实现不拥有 parameter signature，capability 一律读 registry contract；
     SQL marker 元数据里的 ``param_names=[]`` 不做签名审计。
+
+    R21-DEF5：返回 plain-JSON 视图——live ``ParamSpec``/``dtype``/``ParamRole``
+    对象按声明的字段 typed-serialize（见 :func:`_json_contract_value`），使
+    hash/manifest 消费方拿到的是 deterministic、可直接 ``json.dumps`` 的
+    contract，而不是 registry 内部对象图。未知对象类型仍然 fail-closed。
     """
     from cleaned_operators.registry import OperatorRegistry
 
-    return dict(OperatorRegistry._catalog.get(canon, {}) or {})
+    return _json_contract_value(
+        dict(OperatorRegistry._catalog.get(canon, {}) or {})
+    )
 
 
 def _sql_bound_param_names(canon: str) -> frozenset[str]:

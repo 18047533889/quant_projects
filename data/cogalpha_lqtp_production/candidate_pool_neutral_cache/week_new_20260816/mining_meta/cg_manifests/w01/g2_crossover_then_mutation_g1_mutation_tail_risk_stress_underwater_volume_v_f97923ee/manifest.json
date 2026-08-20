@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_mutation_tail_risk_stress_underwater_volume_v_f97923ee",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 342,
+  "factor_name": "factor_tail_stress_underwater_active_mean_vol120",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w01-20260813-152857-r4",
+  "expression_type": "python",
+  "formula": "rolling_sum_21d( max(0, -daily_return) * min(volume/rolling_mean_120d_volume, 3.0) * I(close < rolling_max_63d_close) ) / rolling_sum_21d( I(close < rolling_max_63d_close) )",
+  "code": "def factor_tail_stress_underwater_active_mean_vol120(df):\n    \"\"\"Volume-confirmed downside stress while underwater, averaged over active underwater days, with longer volume baseline.\"\"\"\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    daily_ret = close.pct_change()\n    downside_move = (-daily_ret).clip(lower=0.0)\n    rolling_high = close.rolling(63, min_periods=10).max()\n    underwater = close < rolling_high\n    volume_ratio = volume / volume.rolling(120, min_periods=20).mean().replace(0.0, np.nan)\n    stress = downside_move * volume_ratio.clip(upper=3.0)\n    stress = stress.where(underwater, 0.0)\n    stress_sum = stress.rolling(21, min_periods=5).sum()\n    underwater_count = underwater.astype(float).rolling(21, min_periods=5).sum()\n    factor = stress_sum / underwater_count.replace(0.0, np.nan)\n    factor = factor.fillna(0.0)\n    return factor.rename('factor_tail_stress_underwater_active_mean_vol120')",
+  "description": "Preserves parent's volume-confirmed downside stress while underwater mechanism, which gave RankICIR and payoff monotonicity. Bottleneck is low linear IC/ICIR from noise in volume baseline. Mutation increases volume baseline window from 60 to 120 with min_periods 20 to reduce sampling variance, targeting higher ICIR and IC stability while keeping the economic mechanism unchanged. Only one lightweight modifier: volume_ratio clip at 3.0 retained.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.00788846013772399,
+    "icir": 0.09375692408291947,
+    "mi": 0.018265522708096782,
+    "rank_ic": 0.0231941395258134,
+    "rank_icir": 0.29771534831247864
+  },
+  "raw_metrics": {
+    "ic": -0.00788846013772399,
+    "icir": -0.09375692408291947,
+    "mi": 0.018265522708096782,
+    "rank_ic": -0.0231941395258134,
+    "rank_icir": -0.29771534831247864
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.7333983687123204,
+    "quantile_monotonicity": 0.8424242424242424,
+    "top_quantile_annualized_excess_return": 0.33527253900326914,
+    "top_quantile_excess_return": 4.218460319693795,
+    "top_quantile_max_drawdown": -0.15474164819959446,
+    "top_quantile_turnover": 0.11462658624494024
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:57:41.265453+00:00"
+}

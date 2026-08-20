@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_order_imb_002_g1_mutation_order_imb_002_e1f1c263_dfe929cc",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 83,
+  "factor_name": "factor_overnight_intraday_pressure_volregime",
+  "domain_agent": "alpha-order-imbalance",
+  "run_id": "fleet-w03-20260803-151033-r7",
+  "expression_type": "python",
+  "formula": "(intraday_return - overnight_return) * regime_weight, where regime_weight = 1.5 on high-volume days, 0.7 on low-volume days, else 1.0",
+  "code": "def factor_overnight_intraday_pressure_volregime(df):\n    \"\"\"Intraday-minus-overnight pressure with volume regime amplification for high conviction days.\"\"\"\n    df_copy = df.copy()\n    overnight, intraday = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    pressure = intraday - overnight\n    is_high_vol, is_low_vol, _ = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    factor = np.where(is_high_vol > 0, pressure * 1.5, np.where(is_low_vol > 0, pressure * 0.7, pressure))\n    df_copy[\"factor_overnight_intraday_pressure_volregime\"] = factor\n    return df_copy[\"factor_overnight_intraday_pressure_volregime\"]",
+  "description": "The base pressure (intraday - overnight) captures directional conviction. High-volume days carry stronger informational conviction, so the signal is amplified by 1.5. Low-volume days are noisy, so the signal is dampened by 0.7. This discrete regime adaptation preserves the core economic mechanism while emphasizing high-conviction periods, aiming to improve RankIC and ICIR without distorting the raw directional bet.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.06556681189193105,
+    "icir": 0.694122694038348,
+    "mi": 0.042413919483399454,
+    "rank_ic": 0.041383051392456655,
+    "rank_icir": 0.4214541716782194
+  },
+  "raw_metrics": {
+    "ic": -0.06556681189193105,
+    "icir": -0.694122694038348,
+    "mi": 0.042413919483399454,
+    "rank_ic": -0.041383051392456655,
+    "rank_icir": -0.4214541716782194
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.3443116890234652,
+    "top_quantile_excess_return": 4.5394180342647825,
+    "top_quantile_max_drawdown": -0.03610206965024221,
+    "top_quantile_turnover": 0.7723926007134481
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:47:06.680823+00:00"
+}

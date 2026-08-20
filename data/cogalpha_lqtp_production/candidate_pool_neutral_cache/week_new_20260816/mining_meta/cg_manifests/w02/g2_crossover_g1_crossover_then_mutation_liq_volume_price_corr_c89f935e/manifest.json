@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_crossover_then_mutation_liq_volume_price_corr_c89f935e",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 347,
+  "factor_name": "factor_volume_price_spearman_corr_ewm_vol_scaled",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w02-20260813-150507-r4",
+  "expression_type": "python",
+  "formula": "ewm_span_5(rolling_corr(rolling_rank(close.pct_change(),20), rolling_rank(volume.pct_change(),20))) / (1 + rolling_std(close.pct_change(),20))",
+  "code": "def factor_volume_price_spearman_corr_ewm_vol_scaled(df):\n    \"\"\"Rolling Spearman price-volume correlation smoothed by EWM and scaled by inverse return volatility.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_chg = df_copy[\"volume\"].pct_change()\n    ret_rank = ret.rolling(20, min_periods=5).rank(pct=True)\n    vol_rank = vol_chg.rolling(20, min_periods=5).rank(pct=True)\n    corr = ret_rank.rolling(20, min_periods=5).corr(vol_rank)\n    corr_smooth = corr.ewm(span=5, min_periods=5).mean()\n    ret_std = ret.rolling(20, min_periods=5).std()\n    scale = 1.0 / (1.0 + ret_std)\n    factor = corr_smooth * scale\n    factor = factor.fillna(0.0)\n    factor.name = \"factor_volume_price_spearman_corr_ewm_vol_scaled\"\n    return factor",
+  "description": "Crossover preserves parent1's primary mechanism: rolling Spearman rank correlation between price returns and volume changes, scaled by inverse return volatility, which provides stable rank-order predictive power. The bottleneck is noisy raw correlation estimates that weaken ICIR and MI. Parent2 contributes a single lightweight modifier: exponential moving average (EWM) smoothing (span=5) applied to the correlation series before scaling, borrowed from parent2's use of EWM to reduce lag and noise in variance asymmetry. This stabilizes the signal without altering economic direction or requiring cross-sectional normalization. Cross-sectional transform remains none because the raw mechanism retains monotonic payoff evidence and parent1 uses none.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.010362155597479255,
+    "icir": 0.1995304641888527,
+    "mi": 0.006120799015006284,
+    "rank_ic": 0.02506197060457704,
+    "rank_icir": 0.43216064858856834
+  },
+  "raw_metrics": {
+    "ic": -0.010362155597479255,
+    "icir": -0.1995304641888527,
+    "mi": 0.006120799015006284,
+    "rank_ic": -0.02506197060457704,
+    "rank_icir": -0.43216064858856834
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.882448534228509,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.20417750925968514,
+    "top_quantile_excess_return": 1.9040884521249648,
+    "top_quantile_max_drawdown": -0.09263447965738758,
+    "top_quantile_turnover": 0.10077969674896238
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:30:01.395279+00:00"
+}

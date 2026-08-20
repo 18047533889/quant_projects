@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "alpha-stability-gen0-0001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 546,
+  "factor_name": "factor_volume_stability_ratio",
+  "domain_agent": "alpha-stability",
+  "run_id": "fleet-w04-20260813-044118-r2",
+  "expression_type": "python",
+  "formula": "stability = -rolling_std(volume, 20) / rolling_mean(volume, 20)",
+  "code": "def factor_volume_stability_ratio(df):\n    \"\"\"Stable trading volume persistence: negative coefficient of variation of volume over a lookback.\"\"\"\n    df_copy = df.copy()\n    window = 20\n    vol_mean = df_copy['volume'].rolling(window, min_periods=window).mean()\n    vol_std = df_copy['volume'].rolling(window, min_periods=window).std(ddof=1)\n    stability = -(vol_std / vol_mean.replace(0.0, np.nan))\n    df_copy['factor_volume_stability_ratio'] = stability\n    return df_copy['factor_volume_stability_ratio']",
+  "description": "The factor captures persistence and smoothness of trading volume. A low coefficient of variation over the trailing window indicates consistent participation volumes, often associated with institutional accumulation or stable holder bases rather than erratic retail churn. This is a Stability & Regime-Gating mechanism because volume smoothness predicts continued informed trading and lower information leakage after industry and size neutralization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02125819407009927,
+    "icir": 0.47791850020892634,
+    "mi": 0.00573132625793793,
+    "rank_ic": 0.04193503234169418,
+    "rank_icir": 0.9608746707326997
+  },
+  "raw_metrics": {
+    "ic": 0.02125819407009927,
+    "icir": 0.47791850020892634,
+    "mi": 0.00573132625793793,
+    "rank_ic": 0.04193503234169418,
+    "rank_icir": 0.9608746707326997
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.049863735994403,
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": 0.05949357498019148,
+    "top_quantile_excess_return": 0.04190417951186154,
+    "top_quantile_max_drawdown": -0.031093922775240257,
+    "top_quantile_turnover": 0.15987586840988824
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:46:05.431709+00:00"
+}

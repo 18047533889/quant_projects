@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_amc_gen0_001_b43f15da_90f7f4e8",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 370,
+  "factor_name": "factor_cycle_phase_duration_linearized",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w03-20260814-035032-r7",
+  "expression_type": "python",
+  "formula": "distance = (close - EMA(120)) / ATR(20); raw_streak = signed consecutive trend days; multiplier = 1 + 0.5 * tanh(abs(raw_streak)/20); factor = distance * multiplier",
+  "code": "def factor_cycle_phase_duration_linearized(df):\n    \"\"\"Long-term trend strength with bounded phase duration, using EMA and ATR.\"\"\"\n    df_copy = df.copy()\n    ema = df_copy[\"close\"].ewm(span=120, adjust=False).mean()\n    atr = talib.ATR(df_copy[\"high\"].values, df_copy[\"low\"].values, df_copy[\"close\"].values, timeperiod=20)\n    atr = pd.Series(atr, index=df_copy.index)\n    distance = (df_copy[\"close\"] - ema) / atr.replace(0.0, np.nan)\n    direction = np.sign(distance)\n    pos = direction > 0\n    neg = direction < 0\n    pos_cum = pos.cumsum()\n    pos_reset = pos_cum.where(~pos).ffill().fillna(0.0)\n    pos_streak = pos_cum - pos_reset\n    neg_cum = neg.cumsum()\n    neg_reset = neg_cum.where(~neg).ffill().fillna(0.0)\n    neg_streak = neg_cum - neg_reset\n    streak_raw = np.where(pos, pos_streak, -neg_streak)\n    streak_compressed = np.tanh(np.abs(streak_raw) / 20.0)\n    multiplier = 1.0 + 0.5 * streak_compressed\n    factor = distance * multiplier\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    df_copy[\"factor_cycle_phase_duration_linearized\"] = factor\n    return df_copy[\"factor_cycle_phase_duration_linearized\"]",
+  "description": "Mutation of qualified parent g1_mutation_amc_gen0_001_b43f15da. Preserves core long-term trend phase mechanism (distance from 120-day EMA normalized by ATR, amplified by phase duration). Bottleneck: parent IC=0.0089 and ICIR=0.0932 remain below qualified thresholds, indicating nonlinear amplitude distortion from unbounded logarithmic streak amplification. Mutation replaces the log1p(abs(streak)) amplification with a bounded tanh compression: multiplier = 1 + 0.5 * tanh(abs(raw_streak)/20). This caps the amplification for long streaks, reducing extreme values and improving linear association (IC/ICIR) while preserving monotonic rank ordering and payoff thickness. No new features; one compact smoothing/parameter adjustment.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.009163471374914252,
+    "icir": 0.09512082406195643,
+    "mi": 0.016194137359532235,
+    "rank_ic": 0.028483332302477102,
+    "rank_icir": 0.2764159010211599
+  },
+  "raw_metrics": {
+    "ic": -0.009163471374914252,
+    "icir": -0.09512082406195643,
+    "mi": 0.016194137359532235,
+    "rank_ic": -0.028483332302477102,
+    "rank_icir": -0.2764159010211599
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.4323033977567574,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.017525720888867058,
+    "top_quantile_excess_return": 0.10429881712334899,
+    "top_quantile_max_drawdown": -0.1777118636545506,
+    "top_quantile_turnover": 0.09985991828047858
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:04:01.256501+00:00"
+}

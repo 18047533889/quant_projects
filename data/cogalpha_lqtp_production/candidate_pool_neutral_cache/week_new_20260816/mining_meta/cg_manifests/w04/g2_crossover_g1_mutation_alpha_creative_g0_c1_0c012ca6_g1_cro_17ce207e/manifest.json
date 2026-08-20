@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_alpha_creative_g0_c1_0c012ca6_g1_cro_17ce207e",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 130,
+  "factor_name": "factor_nonlinear_vp_vol_gated",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260803-111311-r10",
+  "expression_type": "python",
+  "formula": "EMA( (close - close_5) * (volume - volume_5), span=10 ) * clip( vol_ratio, 0.5, 2.0 )",
+  "code": "def factor_nonlinear_vp_vol_gated(df):\n    df_copy = df.copy()\n    price_chg = df_copy[\"close\"] - df_copy[\"close\"].shift(5)\n    volume_chg = df_copy[\"volume\"] - df_copy[\"volume\"].shift(5)\n    raw_interaction = price_chg * volume_chg\n    smoothed = raw_interaction.ewm(span=10, min_periods=10).mean()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    vol_gate = np.clip(vol_ratio, 0.5, 2.0)\n    factor = smoothed * vol_gate\n    df_copy[\"factor_nonlinear_vp_vol_gated\"] = factor\n    return df_copy[\"factor_nonlinear_vp_vol_gated\"]",
+  "description": "Crossover that preserves parent1's core mechanism of volume-confirmed price moves via product of short-term changes, smoothed with EMA. From parent2, borrows a lightweight volume regime gate using alpha_tools.classify_volume_regime to scale the signal: amplifies when volume is high (above EMA) and dampens when low, improving robustness and adding contextual risk-awareness without altering the primary economic intuition.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02551323627050735,
+    "icir": 0.2678227422310773,
+    "mi": 0.020856854546837944,
+    "rank_ic": 0.06690583899198045,
+    "rank_icir": 0.5910022250902419
+  },
+  "raw_metrics": {
+    "ic": -0.02551323627050735,
+    "icir": -0.2678227422310773,
+    "mi": 0.020856854546837944,
+    "rank_ic": -0.06690583899198045,
+    "rank_icir": -0.5910022250902419
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.11790795844591218,
+    "top_quantile_excess_return": 0.0847860670263918,
+    "top_quantile_max_drawdown": -0.0258386462138247,
+    "top_quantile_turnover": 0.14842233742936198
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:18:22.202742+00:00"
+}

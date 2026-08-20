@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "crash_pred_v1_002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "elite",
+  "factor_id": 258,
+  "factor_name": "factor_overnight_neg_volatility",
+  "domain_agent": "alpha-crash-predictor",
+  "run_id": "fleet-w03-20260806-061245-r21",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_overnight_neg_volatility(df):\n    \"\"\"\n    Crash precursor: worst overnight return (5-day minimum) multiplied by recent\n    intraday return volatility. Large negative overnight gaps combined with high\n    intraday volatility signal potential regime breakdown.\n    \"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(\n        df_copy[\"close\"], df_copy[\"open\"]\n    )\n    min_overnight = overnight_ret.rolling(5, min_periods=5).min()\n    intraday_vol = intraday_ret.rolling(20, min_periods=20).std(ddof=1)\n    factor = -min_overnight * intraday_vol\n    df_copy[\"factor_overnight_neg_volatility\"] = factor\n    return df_copy[\"factor_overnight_neg_volatility\"]",
+  "description": "Captures crash risk through the interaction of persistent negative overnight returns (using the minimum over 5 days) and heightened intraday volatility. This combination reflects dislocation and fragility ahead of potential breakdowns.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.024078002202482206,
+    "icir": 0.22375966905087386,
+    "mi": 0.025369066898899284,
+    "rank_ic": 0.041039141888052924,
+    "rank_icir": 0.3130873312547141
+  },
+  "raw_metrics": {
+    "ic": -0.024078002202482206,
+    "icir": -0.22375966905087386,
+    "mi": 0.025369066898899284,
+    "rank_ic": -0.041039141888052924,
+    "rank_icir": -0.3130873312547141
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.06305116612898387,
+    "top_quantile_excess_return": 0.41820203472621453,
+    "top_quantile_max_drawdown": -0.06707908065240298,
+    "top_quantile_turnover": 0.24410990858324347
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:54:27.672467+00:00"
+}

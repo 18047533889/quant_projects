@@ -39,15 +39,15 @@ def compute_subsample_ic(
     T, F = ic_series.shape
     subsample_size = max(1, int(T * subsample_fraction))
 
-    if random_seed is not None:
-        np.random.seed(random_seed)
+    # Local Generator: never touch the global numpy RNG state.
+    rng = np.random.default_rng(random_seed)
 
     subsample_means = np.full((num_subsamples, F), np.nan, dtype=np.float64)
     subsample_stds = np.full((num_subsamples, F), np.nan, dtype=np.float64)
 
     for b in range(num_subsamples):
-        # Random sample of time indices
-        sampled_indices = np.random.choice(T, size=subsample_size, replace=False)
+        # Random sample of time indices (local Generator)
+        sampled_indices = rng.choice(T, size=subsample_size, replace=False)
         ic_subsample = ic_series[sampled_indices, :]  # (subsample_size, F)
 
         # Compute mean and std for this subsample
@@ -242,8 +242,8 @@ def compute_block_bootstrap_ci(
     if confidence_level <= 0 or confidence_level >= 1:
         raise ValueError(f"confidence_level must be in (0, 1), got {confidence_level}")
 
-    if random_seed is not None:
-        np.random.seed(random_seed)
+    # Local Generator: never touch the global numpy RNG state.
+    rng = np.random.default_rng(random_seed)
 
     alpha = 1.0 - confidence_level
     lower_percentile = 100 * (alpha / 2)
@@ -265,8 +265,8 @@ def compute_block_bootstrap_ci(
         bootstrap_means = np.full(num_bootstrap, np.nan, dtype=np.float64)
 
         for b in range(num_bootstrap):
-            # Sample blocks with replacement
-            block_starts = np.random.choice(n - block_length + 1, size=num_blocks, replace=True)
+            # Sample blocks with replacement (local Generator)
+            block_starts = rng.choice(n - block_length + 1, size=num_blocks, replace=True)
 
             # Reconstruct bootstrap sample
             bootstrap_sample = []

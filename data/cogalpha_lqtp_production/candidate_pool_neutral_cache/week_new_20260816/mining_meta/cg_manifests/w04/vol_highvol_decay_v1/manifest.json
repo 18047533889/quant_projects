@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "vol_highvol_decay_v1",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 471,
+  "factor_name": "factor_highvol_decay",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260805-231604-r34",
+  "expression_type": "python",
+  "formula": "days_since(last_high_vol, cap=60)",
+  "code": "def factor_highvol_decay(df):\n    \"\"\"Days since last high-volume day, capturing temporal abnormality decay.\"\"\"\n    df_copy = df.copy()\n    high_vol = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)[0]  # is_high_vol\n    group = high_vol.cumsum()\n    days_since = high_vol.groupby(group).cumcount()  # 0 on high vol day, then increments\n    days_since = days_since.clip(upper=60)\n    df_copy[\"factor_highvol_decay\"] = days_since\n    return df_copy[\"factor_highvol_decay\"]",
+  "description": "A volume spike often marks a regime change or exhaustion. The time elapsed since the last high-volume day provides a temporal measure of abnormality decay: the longer the quiet period after a spike, the more likely the prior momentum has dissipated, increasing reversal potential.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.017772365506368834,
+    "icir": 0.2540998389032442,
+    "mi": 0.06393539329919573,
+    "rank_ic": 0.04962957851590099,
+    "rank_icir": 0.6189877574451487
+  },
+  "raw_metrics": {
+    "ic": 0.017772365506368834,
+    "icir": 0.2540998389032442,
+    "mi": 0.06393539329919573,
+    "rank_ic": 0.04962957851590099,
+    "rank_icir": 0.6189877574451487
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.10198642967824445,
+    "top_quantile_excess_return": 0.0776283672466418,
+    "top_quantile_max_drawdown": -0.02621240476572395,
+    "top_quantile_turnover": 0.07270965336925166
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:39:34.137157+00:00"
+}

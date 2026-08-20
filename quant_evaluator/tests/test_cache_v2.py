@@ -1180,6 +1180,9 @@ class FrozenClock:
     def time(self) -> float:
         return self.now
 
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
 
 class FakeRedisLayer:
     def __init__(self):
@@ -2828,8 +2831,160 @@ raise SystemExit(0 if removed == 1 else 2)
             assert cache.l1.get("key1") is None
             assert cache.l2.get("key1") is None
 
+    def test_contains_does_not_promote_from_l2(self):
+        """``contains`` reports membership across layers without promoting."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = MultiLevelCache(
+                memory_size_mb=10.0,
+                disk_root=Path(tmpdir),
+                compression="none",
+                enable_l1=True,
+                enable_l2=True,
+            )
+
+            cache.put("key1", "value", write_through=True)
+            # Simulate L1 eviction: the entry lives on in L2 only.
+            cache.l1.clear()
+            assert cache.l1.get("key1") is None
+            assert cache.l2.get("key1") is not None
+
+            assert cache.contains("key1") is True
+            # No promotion happened: L1 remains empty and no hit was recorded.
+            assert cache.l1.get("key1") is None
+            stats = cache.get_stats()
+            assert stats["l1_hits"] == 0
+            assert stats["l2_hits"] == 0
+
+            # Misses stay misses.
+            assert cache.contains("missing") is False
+
+    def test_contains_rejects_expired_l1_entry(self):
+        """An expired L1 entry must not satisfy ``contains``."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = MultiLevelCache(
+                memory_size_mb=10.0,
+                disk_root=Path(tmpdir),
+                compression="none",
+                enable_l1=True,
+                enable_l2=True,
+            )
+            clock = FrozenClock(1000.0)
+            monkeypatch = pytest.MonkeyPatch()
+            monkeypatch.setattr(cache_v2_module.time, "time", clock.time)
+            try:
+                cache.put("key1", "value", ttl_seconds=10.0, write_through=False)
+                clock.advance(20.0)
+                assert cache.contains("key1") is False
+            finally:
+                monkeypatch.undo()
+
+    def test_scan_namespace_spans_l1_and_l2(self):
+        """``scan_namespace`` reports live keys from every layer."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = MultiLevelCache(
+                memory_size_mb=10.0,
+                disk_root=Path(tmpdir),
+                compression="none",
+                enable_l1=True,
+                enable_l2=True,
+            )
+
+            cache.put("ns:a|1", "v1", write_through=True)
+            cache.put("ns:a|2", "v2", write_through=True)
+            cache.put("ns:b|1", "v3", write_through=True)
+
+            # Evict one namespace entry from L1; it must still be reported.
+            cache.l1.clear()
+            cache.put("ns:a|3", "v4", write_through=True)
+
+            found = cache.scan_namespace("ns:a|")
+            assert sorted(found) == ["ns:a|1", "ns:a|2", "ns:a|3"]
+            # Scanning must not promote the L2-only entries.
+            assert cache.l1.get("ns:a|1") is None
+
+    def test_invalidate_namespace_removes_l2_only_entries(self):
+        """Namespace invalidation reaches entries already evicted from L1."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = MultiLevelCache(
+                memory_size_mb=10.0,
+                disk_root=Path(tmpdir),
+                compression="none",
+                enable_l1=True,
+                enable_l2=True,
+            )
+
+            cache.put("ns:a|1", "v1", write_through=True)
+            cache.put("ns:a|2", "v2", write_through=True)
+            cache.put("ns:b|1", "v3", write_through=True)
+
+            # Evict everything from L1 so only L2 holds the entries.
+            cache.l1.clear()
+            assert cache.l1.get("ns:a|1") is None
+
+            removed = cache.invalidate_namespace("ns:a|")
+            assert removed == 2
+
+            # Gone from every layer — no later promotion can resurrect them.
+            assert cache.get("ns:a|1") is None
+            assert cache.get("ns:a|2") is None
+            assert cache.l2.get("ns:a|1") is None
+            assert cache.l2.get("ns:a|2") is None
+            # The non-matching namespace survives untouched.
+            assert cache.get("ns:b|1") == "v3"
+
+    def test_invalidate_namespace_counts_keys_not_layers(self):
+        """A key present in L1 and L2 is removed once and counted once."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = MultiLevelCache(
+                memory_size_mb=10.0,
+                disk_root=Path(tmpdir),
+                compression="none",
+                enable_l1=True,
+                enable_l2=True,
+            )
+
+            cache.put("ns:a|1", "v1", write_through=True)
+            cache.put("ns:a|2", "v2", write_through=True)
+
+            assert cache.invalidate_namespace("ns:a|") == 2
+            assert cache.contains("ns:a|1") is False
+            assert cache.contains("ns:a|2") is False
+            assert cache.invalidate_namespace("ns:a|") == 0
+
+    def test_invalidate_namespace_uses_epoch_fenced_per_key_removal(
+        self, monkeypatch, tmp_path
+    ):
+        """Each namespace removal goes through the fenced single-key path."""
+        cache = MultiLevelCache(
+            memory_size_mb=10.0,
+            disk_root=tmp_path,
+            compression="none",
+            enable_l1=True,
+            enable_l2=True,
+        )
+        cache.put("ns:a|1", "v1", write_through=True)
+        cache.put("ns:a|2", "v2", write_through=True)
+
+        fenced_calls = []
+        real_fenced = cache._invalidate_with_epoch_fence_unlocked
+
+        def recording_fenced(key):
+            result = real_fenced(key)
+            fenced_calls.append(key)
+            return result
+
+        monkeypatch.setattr(
+            cache, "_invalidate_with_epoch_fence_unlocked", recording_fenced
+        )
+
+        assert cache.invalidate_namespace("ns:a|") == 2
+        assert sorted(fenced_calls) == ["ns:a|1", "ns:a|2"]
+        assert cache.get("ns:a|1") is None
+        assert cache.get("ns:a|2") is None
+
     def test_cache_warming(self):
         """Test cache warming."""
+
         with tempfile.TemporaryDirectory() as tmpdir:
             cache = MultiLevelCache(
                 memory_size_mb=1.0,

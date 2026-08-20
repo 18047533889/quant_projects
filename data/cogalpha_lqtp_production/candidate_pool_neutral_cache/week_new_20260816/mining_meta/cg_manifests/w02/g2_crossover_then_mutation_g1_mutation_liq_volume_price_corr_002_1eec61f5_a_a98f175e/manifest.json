@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_mutation_liq_volume_price_corr_002_1eec61f5_a_a98f175e",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 354,
+  "factor_name": "factor_corr_smoothed_range_conditional",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w02-20260813-150507-r4",
+  "expression_type": "python",
+  "formula": "rolling_corr(close.pct_change(), log1p(volume).pct_change(), 20) * (0.5 + 0.5*tanh(ewm_mean((high-low)/close, span=5)*20))",
+  "code": "def factor_corr_smoothed_range_conditional(df):\n    \"\"\"Smoothed range-conditional price-volume correlation.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    log_vol_chg = np.log1p(df_copy[\"volume\"]).pct_change()\n    corr = ret.rolling(20, min_periods=5).corr(log_vol_chg)\n    corr = corr.fillna(0.0)\n    range_ratio = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"].replace(0, np.nan)\n    range_ratio = range_ratio.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    range_ratio_smooth = range_ratio.ewm(span=5, adjust=False).mean().fillna(0.0)\n    range_weight = 0.5 + 0.5 * np.tanh(range_ratio_smooth * 20.0)\n    factor = corr * range_weight\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    factor.name = \"factor_corr_smoothed_range_conditional\"\n    return factor",
+  "description": "Preserves parent's core rolling price-volume correlation mechanism, which provides stable RankIC/RankICIR and payoff monotonicity. The bottleneck is noise in the daily range_ratio used as the range-weight modifier; raw intraday range can spike erratically and introduce unstable scaling. This mutation applies light exponential smoothing (span=5) to the normalized range ratio before the bounded tanh scaling, reducing estimation noise while retaining the original wide-range amplification and narrow-range attenuation logic. This targets improved ICIR and MI without changing the sign interpretation, and keeps one core mechanism with one lightweight modifier.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01435852688423081,
+    "icir": 0.27008525484018825,
+    "mi": 0.0075702798697605544,
+    "rank_ic": 0.03650525534880695,
+    "rank_icir": 0.6174819977051711
+  },
+  "raw_metrics": {
+    "ic": -0.01435852688423081,
+    "icir": -0.27008525484018825,
+    "mi": 0.0075702798697605544,
+    "rank_ic": -0.03650525534880695,
+    "rank_icir": -0.6174819977051711
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.9604204421921,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.17623256309319602,
+    "top_quantile_excess_return": 1.5511416025037783,
+    "top_quantile_max_drawdown": -0.09169992076023514,
+    "top_quantile_turnover": 0.1719135790429653
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:31:09.990740+00:00"
+}

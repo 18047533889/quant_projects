@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_crash_tail_risk_volume_001_fba59750",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 149,
+  "factor_name": "factor_crash_tail_risk_volume_ema",
+  "domain_agent": "alpha-crash-predictor",
+  "run_id": "fleet-w03-20260804-141833-r12",
+  "expression_type": "python",
+  "formula": "-min(return_20d) * clip(volume / ema_volume_20d, 0.5, 3.0)",
+  "code": "def factor_crash_tail_risk_volume_ema(df):\n    \"\"\"Crash precursor using extreme negative returns with EMA volume normalization.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    tail_return = ret.rolling(20, min_periods=20).min()\n    vol_ema = df_copy[\"volume\"].ewm(span=20, min_periods=20).mean()\n    vol_ratio = df_copy[\"volume\"] / vol_ema.replace(0, np.nan)\n    vol_ratio = vol_ratio.clip(0.5, 3.0)\n    factor = -tail_return * vol_ratio\n    df_copy[\"factor_crash_tail_risk_volume_ema\"] = factor.fillna(0)\n    return df_copy[\"factor_crash_tail_risk_volume_ema\"]",
+  "description": "Stocks with the largest negative daily return over the past 20 days, accompanied by a surge in trading volume relative to its recent exponential moving average (20-day span), are likely to continue underperforming. The factor multiplies the worst negative daily return (sign flipped) by a volume ratio (capped between 0.5 and 3.0) to capture acute selling pressure. Higher values indicate higher crash vulnerability. Compared to the parent, using EMA for volume normalization provides a more responsive volume confirmation, emphasizing recent liquidity spikes.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.031130151444313123,
+    "icir": 0.32122013048499415,
+    "mi": 0.030707920062033267,
+    "rank_ic": 0.04104870694557595,
+    "rank_icir": 0.34365470357924466
+  },
+  "raw_metrics": {
+    "ic": -0.031130151444313123,
+    "icir": -0.32122013048499415,
+    "mi": 0.030707920062033267,
+    "rank_ic": -0.04104870694557595,
+    "rank_icir": -0.34365470357924466
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.25112525013683507,
+    "top_quantile_excess_return": 2.5943337002368505,
+    "top_quantile_max_drawdown": -0.07432216228474153,
+    "top_quantile_turnover": 0.33359148542633704
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:49:47.754942+00:00"
+}

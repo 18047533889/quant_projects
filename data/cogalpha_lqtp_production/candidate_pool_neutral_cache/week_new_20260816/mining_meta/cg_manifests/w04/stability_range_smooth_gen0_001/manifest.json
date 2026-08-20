@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "stability_range_smooth_gen0_001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 622,
+  "factor_name": "factor_range_stability",
+  "domain_agent": "alpha-stability",
+  "run_id": "fleet-w04-20260813-161708-r6",
+  "expression_type": "python",
+  "formula": "-std_20((high-low)/close)",
+  "code": "def factor_range_stability(df):\n    # range ratio stability\n    df_copy = df.copy()\n    range_ratio = (df_copy['high'] - df_copy['low']) / df_copy['close'].replace(0.0, np.nan)\n    stability = -range_ratio.rolling(20, min_periods=20).std(ddof=1)\n    df_copy['factor_range_stability'] = stability\n    return df_copy['factor_range_stability']",
+  "description": "Measures the temporal consistency and smoothness of the daily price range relative to close. Stocks with a persistently narrow and stable trading range exhibit low rolling volatility of the range ratio, capturing a calm, persistent price-discovery process that is not captured by simple return volatility. The negative sign makes higher values indicate more stable range behavior.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.019549753613263936,
+    "icir": 0.22334459387204253,
+    "mi": 0.03006356808239552,
+    "rank_ic": 0.05944392627374679,
+    "rank_icir": 0.6651634781184316
+  },
+  "raw_metrics": {
+    "ic": 0.019549753613263936,
+    "icir": 0.22334459387204253,
+    "mi": 0.03006356808239552,
+    "rank_ic": 0.05944392627374679,
+    "rank_icir": 0.6651634781184316
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.381895429611856,
+    "quantile_monotonicity": 0.8303030303030303,
+    "top_quantile_annualized_excess_return": -0.02825377963364395,
+    "top_quantile_excess_return": -0.020152296248567514,
+    "top_quantile_max_drawdown": -0.056255164869692065,
+    "top_quantile_turnover": 0.11930537010486868
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:55:06.679493+00:00"
+}

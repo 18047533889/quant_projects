@@ -34,6 +34,10 @@ def _register(name: str, description: str, params: list[str], fn):
     @register_operator(
         name=name, category="time_series_regression", business_category="time_series_regression",
         canonical=name, source="ts_model.polars_regression",
+        backend="polars",
+        replace=True,
+        expected_old_source="factor_dsl_np",
+        replacement_reason="Consolidating polars native operators into polars_regression"
     )
     class _TsPolars(SeriesOperator):
         metadata = _meta(name, description, params)

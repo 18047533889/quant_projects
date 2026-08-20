@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_gen0_agentcreative_1_1546ec3c_g1_cro_c18d15b4",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 450,
+  "factor_name": "factor_overnight_intraday_smoothed_normalized",
+  "domain_agent": "alpha-daily-trend",
+  "run_id": "fleet-w02-20260814-091505-r8",
+  "expression_type": "python",
+  "formula": "rolling_mean_5(sign(overnight)*sqrt(abs(overnight)) - sign(intraday)*sqrt(abs(intraday))) / rolling_mean_5(sqrt(abs(overnight)) + sqrt(abs(intraday)))",
+  "code": "def factor_overnight_intraday_smoothed_normalized(df):\n    \"\"\"Smoothed overnight-intraday dissonance normalized by average compressed session magnitude.\"\"\"\n    df_copy = df.copy()\n    overnight, intraday = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    overnight = overnight.replace([np.inf, -np.inf], np.nan)\n    intraday = intraday.replace([np.inf, -np.inf], np.nan)\n    signed_sqrt_overnight = np.sign(overnight) * np.sqrt(np.abs(overnight))\n    signed_sqrt_intraday = np.sign(intraday) * np.sqrt(np.abs(intraday))\n    raw_dissonance = signed_sqrt_overnight - signed_sqrt_intraday\n    smoothed = raw_dissonance.rolling(5, min_periods=1).mean()\n    total_magnitude = (np.sqrt(np.abs(overnight)) + np.sqrt(np.abs(intraday))).rolling(5, min_periods=1).mean()\n    factor = (smoothed / total_magnitude.replace(0.0, np.nan)).fillna(0.0)\n    df_copy[\"factor_overnight_intraday_smoothed_normalized\"] = factor\n    return df_copy[\"factor_overnight_intraday_smoothed_normalized\"]",
+  "description": "Primary mechanism from elite parent: 5-day smoothed signed square-root overnight-intraday dissonance captures persistent disagreement between overnight/global and intraday/local trading. Lightweight modifier from secondary parent: normalize by rolling mean of total compressed session magnitude (sum of square-root absolute returns) to reduce cross-stock scale sensitivity, improving comparability while preserving the raw economic signal. This normalization is bounded by the same trailing window and uses only past observations. Cross-sectional transform remains none because the raw smoothed dissonance already works well after industry+size neutralization in parent evidence.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.023939281303999808,
+    "icir": 0.475401388020222,
+    "mi": 0.009328390648304818,
+    "rank_ic": 0.027732603392870734,
+    "rank_icir": 0.4909083818082122
+  },
+  "raw_metrics": {
+    "ic": 0.023939281303999808,
+    "icir": 0.475401388020222,
+    "mi": 0.009328390648304818,
+    "rank_ic": 0.027732603392870734,
+    "rank_icir": 0.4909083818082122
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 11.211059848289503,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.2696836654544834,
+    "top_quantile_excess_return": 2.9806383542002735,
+    "top_quantile_max_drawdown": -0.1989883273814268,
+    "top_quantile_turnover": 0.4172758578749695
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:43:10.566201+00:00"
+}

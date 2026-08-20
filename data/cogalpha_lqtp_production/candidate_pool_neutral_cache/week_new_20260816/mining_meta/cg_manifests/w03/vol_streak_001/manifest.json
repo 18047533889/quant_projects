@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "vol_streak_001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "elite",
+  "factor_id": 105,
+  "factor_name": "factor_volume_streak_persistent",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w03-20260804-001218-r9",
+  "expression_type": "python",
+  "formula": "consecutive count of days where volume > 1.5 * SMA(volume,20)",
+  "code": "def factor_volume_streak_persistent(df):\n    \"\"\"Consecutive days of elevated volume \u2013 persistent institutional activity.\"\"\"\n    df_copy = df.copy()\n    volume_ma = df_copy[\"volume\"].rolling(20, min_periods=20).mean()\n    vol_cond = df_copy[\"volume\"] > 1.5 * volume_ma\n    group = (vol_cond != vol_cond.shift(1)).cumsum()\n    streak = vol_cond.groupby(group).cumcount() + 1\n    factor = streak * vol_cond\n    df_copy[\"factor_volume_streak_persistent\"] = factor\n    return df_copy[\"factor_volume_streak_persistent\"]\n",
+  "description": "Measures the persistence of abnormal volume. A prolonged streak of high-volume days signals strong and sustained institutional interest or a liquidity event, which can precede significant price movement. The streak length captures temporal clustering of volume spikes.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.024061447041218525,
+    "icir": 0.3392260462888854,
+    "mi": 0.12687772827125876,
+    "rank_ic": 0.038794507740809586,
+    "rank_icir": 0.5506253145244306
+  },
+  "raw_metrics": {
+    "ic": -0.024061447041218525,
+    "icir": -0.3392260462888854,
+    "mi": 0.12687772827125876,
+    "rank_ic": -0.038794507740809586,
+    "rank_icir": -0.5506253145244306
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.0814136176405269,
+    "top_quantile_excess_return": 0.5625516698185185,
+    "top_quantile_max_drawdown": -0.053983528355838195,
+    "top_quantile_turnover": 0.11139237906608411
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:48:02.953500+00:00"
+}

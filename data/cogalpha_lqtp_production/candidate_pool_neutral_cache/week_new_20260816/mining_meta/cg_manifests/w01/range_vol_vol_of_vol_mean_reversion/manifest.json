@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "range_vol_vol_of_vol_mean_reversion",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 277,
+  "factor_name": "factor_range_vol_of_vol_ratio",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w01-20260813-014015-r1",
+  "expression_type": "python",
+  "formula": "-(std_{20}(H-L) / mean_{60}(H-L))",
+  "code": "def factor_range_vol_of_vol_ratio(df):\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    mean_range = range_.rolling(60, min_periods=20).mean()\n    std_range = range_.rolling(20, min_periods=10).std(ddof=1)\n    cv = std_range / mean_range.replace(0.0, np.nan)\n    factor = -cv\n    df_copy[\"factor_range_vol_of_vol_ratio\"] = factor\n    return df_copy[\"factor_range_vol_of_vol_ratio\"]",
+  "description": "Captures volatility of range (vol-of-vol) as a mean-reversion signal. High volatility of daily range relative to its average level indicates unstable, erratic price formation; negative sign reflects expected subsequent compression and lower forward returns. This mechanism is distinct from level-based range compression and explores the dispersion of the range itself, an uncovered pathway in the Price-Volatility Behavior layer.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01629142614593522,
+    "icir": 0.25302303255661684,
+    "mi": 0.00418727144867681,
+    "rank_ic": 0.030461334869750067,
+    "rank_icir": 0.5300291293787539
+  },
+  "raw_metrics": {
+    "ic": 0.01629142614593522,
+    "icir": 0.25302303255661684,
+    "mi": 0.00418727144867681,
+    "rank_ic": 0.030461334869750067,
+    "rank_icir": 0.5300291293787539
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.156858138780601,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": -0.008071396871343173,
+    "top_quantile_excess_return": -0.045253492668758444,
+    "top_quantile_max_drawdown": -0.14239902091918855,
+    "top_quantile_turnover": 0.1653892413935224
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:46:04.960065+00:00"
+}

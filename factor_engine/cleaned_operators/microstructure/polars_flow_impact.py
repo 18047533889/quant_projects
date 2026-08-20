@@ -78,6 +78,9 @@ def _mk(canonical: str, description: str, params: list[str], fn):
         business_category="intraday_microstructure",
         canonical=canonical,
         source="microstructure.polars_flow_impact",
+        replace=True,
+        expected_old_source="factor_dsl_np",
+        replacement_reason="Consolidating polars native operators into microstructure.polars_flow_impact",
     )(cls)
     return cls
 

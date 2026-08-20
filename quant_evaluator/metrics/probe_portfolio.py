@@ -9,25 +9,89 @@ from typing import Tuple, Optional, Dict
 import numpy as np
 
 
+def _bucket_guard(
+    factor_valid: np.ndarray,
+    long_mask: np.ndarray,
+    short_mask: np.ndarray,
+    min_bucket_size: int,
+) -> Optional[str]:
+    """QE-METRIC P0-11: fail-closed guards for degenerate quantile cuts.
+
+    Returns None when the long/short construction is sound, otherwise a
+    diagnostic string describing the violation:
+      - quantile cutoffs collapse to the same value (e.g. a constant
+        factor: long and short cutoffs are identical, buckets overlap and
+        the long-short spread is a fake 0);
+      - long and short buckets are not disjoint;
+      - either bucket has fewer than ``min_bucket_size`` members.
+    """
+    if np.sum(long_mask & short_mask) > 0:
+        return (
+            f"long/short buckets overlap on {int(np.sum(long_mask & short_mask))} "
+            "assets (quantile cutoffs collapsed)"
+        )
+    if np.sum(long_mask) < min_bucket_size:
+        return (
+            f"long bucket has {int(np.sum(long_mask))} members, "
+            f"below floor {min_bucket_size}"
+        )
+    if np.sum(short_mask) < min_bucket_size:
+        return (
+            f"short bucket has {int(np.sum(short_mask))} members, "
+            f"below floor {min_bucket_size}"
+        )
+    return None
+
+
 def construct_long_short_portfolio(
     factor_values: np.ndarray,
     long_threshold: float = 0.8,
     short_threshold: float = 0.2,
     validity_mask: Optional[np.ndarray] = None,
+    min_bucket_size: int = 1,
+    strict: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Construct long/short portfolio positions based on factor quantiles.
+
+    QE-METRIC P0-11 degenerate-bucket guards: a constant (or
+    low-cardinality) factor makes the long and short cutoff quantiles
+    identical, so the "long" and "short" buckets select the same assets
+    and any long-short spread computed from them is a fake 0. Guards
+    applied per cross-section:
+
+    1. Disjointness: if the long and short buckets share any asset (which
+       also catches cutoff collapse on constant factors), or either bucket
+       is smaller than ``min_bucket_size``, the period is treated as
+       degenerate.
+    2. Low cardinality: if the valid factor values have fewer than 2
+       unique values, the quantile cut is meaningless and the period is
+       degenerate.
+
+    Degenerate periods leave the position masks empty (no positions). With
+    ``strict=True`` a ValueError is raised instead, naming the first
+    offending period — use this to fail closed in pipelines that would
+    otherwise silently consume a zero spread.
 
     Args:
         factor_values: Factor values (T, N) or (T, N, F)
         long_threshold: Quantile threshold for long positions (default 0.8 = top 20%)
         short_threshold: Quantile threshold for short positions (default 0.2 = bottom 20%)
         validity_mask: Optional boolean mask (T, N) or (T, N, F)
+        min_bucket_size: Minimum members required in each bucket
+            (default 1 = only disjointness/overlap enforcement; set higher,
+            e.g. 2-5, to require statistically meaningful buckets)
+        strict: If True, raise ValueError on the first degenerate
+            cross-section instead of returning empty positions for it
 
     Returns:
         (long_positions, short_positions)
         long_positions: Boolean mask for long positions, shape (T, N) or (T, N, F)
         short_positions: Boolean mask for short positions, shape (T, N) or (T, N, F)
+
+    Raises:
+        ValueError: In ``strict`` mode, when any cross-section fails the
+            bucket guards
     """
     # Handle 3D factor values
     if factor_values.ndim == 3:
@@ -39,7 +103,8 @@ def construct_long_short_portfolio(
             fv = factor_values[:, :, f]
             vm = validity_mask[:, :, f] if validity_mask is not None else None
             long_pos[:, :, f], short_pos[:, :, f] = construct_long_short_portfolio(
-                fv, long_threshold, short_threshold, vm
+                fv, long_threshold, short_threshold, vm,
+                min_bucket_size=min_bucket_size, strict=strict,
             )
         return long_pos, short_pos
 
@@ -63,6 +128,17 @@ def construct_long_short_portfolio(
 
         factor_valid = factor_t[finite_mask]
 
+        # P0-11 guard: low-cardinality cross-section — fewer than 2 unique
+        # factor values means the quantile cut is meaningless.
+        if np.unique(factor_valid).size < 2:
+            if strict:
+                raise ValueError(
+                    f"construct_long_short_portfolio: period {t} has "
+                    f"{np.unique(factor_valid).size} unique factor value(s); "
+                    "quantile cut is degenerate (constant factor?)"
+                )
+            continue
+
         # Compute quantiles
         long_cutoff = np.quantile(factor_valid, long_threshold)
         short_cutoff = np.quantile(factor_valid, short_threshold)
@@ -70,6 +146,19 @@ def construct_long_short_portfolio(
         # Select long/short positions
         long_mask = finite_mask & (factor_t >= long_cutoff)
         short_mask = finite_mask & (factor_t <= short_cutoff)
+
+        # P0-11 guards: disjointness + bucket-size floor.
+        diag = _bucket_guard(
+            factor_valid, long_mask[finite_mask], short_mask[finite_mask],
+            min_bucket_size,
+        )
+        if diag is not None:
+            if strict:
+                raise ValueError(
+                    f"construct_long_short_portfolio: period {t} failed "
+                    f"bucket guard: {diag}"
+                )
+            continue
 
         long_positions[t, :] = long_mask
         short_positions[t, :] = short_mask

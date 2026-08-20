@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "alpha-vol-asymmetry-TailRatio-0",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "elite",
+  "factor_id": 46,
+  "factor_name": "factor_vol_asym_tail_ratio",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w01-20260803-061037-r5",
+  "expression_type": "python",
+  "formula": "log(EWMA[d^2 * I(d < -1*sigma), hl=20] / EWMA[u^2 * I(u > 1*sigma), hl=20]) where d,u = intraday returns, sigma = 20-day rolling std",
+  "code": "def factor_vol_asym_tail_ratio(df):\n    \"\"\"Measures asymmetry in tail volatility by log ratio of EWMA of squared negative tail returns to positive tail returns. Tail defined as returns beyond 1 rolling standard deviation.\"\"\"\n    df_copy = df.copy()\n    intraday_ret = (df_copy[\"close\"] - df_copy[\"open\"]) / df_copy[\"open\"].replace(0, np.nan)\n    std_20 = intraday_ret.rolling(20, min_periods=20).std()\n    down_tail = np.where(intraday_ret < -1 * std_20, intraday_ret**2, 0)\n    up_tail = np.where(intraday_ret > 1 * std_20, intraday_ret**2, 0)\n    ewma_down = pd.Series(down_tail, index=df_copy.index).ewm(halflife=20).mean()\n    ewma_up = pd.Series(up_tail, index=df_copy.index).ewm(halflife=20).mean()\n    factor = np.where((ewma_up > 1e-8) & (ewma_down > 1e-8), \n                      np.log(ewma_down / ewma_up), \n                      0.0)\n    df_copy[\"factor_vol_asym_tail_ratio\"] = factor\n    return df_copy[\"factor_vol_asym_tail_ratio\"]",
+  "description": "Captures asymmetry in tail volatility: downside tail events (returns below -1 standard deviation) are compared to upside tail events (returns above +1 standard deviation) using exponentially weighted squared returns. The log ratio is positive when downside tail volatility dominates. Focusing on tails rather than all returns may amplify non-linear, regime-dependent features, potentially improving mutual information (MI) while maintaining the asymmetric volatility mechanism. Repaired to handle zero-denominator/infinite output by disabling signal (setting to 0) when either tail EWMA is negligible.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.026585003688818915,
+    "icir": 0.30879878382925885,
+    "mi": 0.024397622516593387,
+    "rank_ic": 0.04056882916628045,
+    "rank_icir": 0.41872376312358883
+  },
+  "raw_metrics": {
+    "ic": 0.026585003688818915,
+    "icir": 0.30879878382925885,
+    "mi": 0.024397622516593387,
+    "rank_ic": 0.04056882916628045,
+    "rank_icir": 0.41872376312358883
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.12769375362590818,
+    "top_quantile_excess_return": 0.9862237794239175,
+    "top_quantile_max_drawdown": -0.08378269718093023,
+    "top_quantile_turnover": 0.07848758494202521
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:37:08.541260+00:00"
+}

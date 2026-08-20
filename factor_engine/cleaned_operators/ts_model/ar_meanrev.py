@@ -312,10 +312,15 @@ class TsMeanReversionHalfLife(SeriesOperator):
         return frame_like(x, out)
 
 
-def _mean_reversion_ou_half_life(vals: np.ndarray, window: int, min_periods: int) -> float:
+def _mean_reversion_ou_half_life(vals: np.ndarray, window: int, min_periods: int, fit_lag: int = 0) -> float:
     n = len(vals)
-    start = max(0, n - window)
-    seg = vals[start:]
+    # fit_lag=0: use all rows up to and including current (in-sample)
+    # fit_lag=1: use rows strictly before current (prior/strict-prior)
+    fit_end = n - 1 - fit_lag
+    if fit_end < 0:
+        return np.nan
+    start = max(0, fit_end - window + 1)
+    seg = vals[start : fit_end + 1]
     xprev = seg[:-1]
     d = np.diff(seg)
     valid = np.isfinite(xprev) & np.isfinite(d)
@@ -371,7 +376,53 @@ class TsMeanReversionOuApproxHalfLife(SeriesOperator):
         for col in range(cols):
             for row in range(rows):
                 out[row, col] = _mean_reversion_ou_half_life(
-                    xv[: row + 1, col], int(window), int(min_periods)
+                    xv[: row + 1, col], int(window), int(min_periods), fit_lag=0
+                )
+        return frame_like(x, out)
+
+
+@register_operator(
+    name="ts_mean_reversion_ou_approx_half_life_prior",
+    category="time_series_regression",
+    business_category="time_series_regression",
+    canonical="ts_mean_reversion_ou_approx_half_life_prior",
+    source="ts_model.ar_meanrev",
+    backend="pandas_numpy",
+    status="experimental",
+)
+class TsMeanReversionOuApproxHalfLifePrior(SeriesOperator):
+    """均值回复半衰期 OU 连续近似 -log(2)/beta（beta<0 时定义），严格截至 t-1 训练（fit_lag=1，因果槽位）。
+
+    Each window trains strictly on rows before the current one (t-1) and
+    reports the half-life at the current row, so the output is the causal
+    out-of-sample statistic — the in-sample variant is
+    ``ts_mean_reversion_ou_approx_half_life``.
+
+    INPUT SEMANTIC (audit M-044): like the in-sample variant, the kernel
+    regresses ``d(seg)`` on ``seg[:-1]`` and is only meaningful for a
+    STATIONARY / SPREAD / RESIDUAL input.  A raw trending price yields a
+    meaningless half-life; a runtime warning is raised when the input looks
+    trending (research gate).
+    """
+
+    metadata = metadata(
+        "ts_mean_reversion_ou_approx_half_life_prior",
+        "均值回复半衰期（OU 连续近似 -ln2/beta，严格截至 t-1 训练）。输入必须为 spread/residual/stationary 序列；raw trending price 会给出无意义半衰期（研究 gate）。",
+        ["x", "window", "min_periods"],
+        unit="count",
+        cost=3,
+        input_units={"x": "spread_or_residual_or_stationary"},
+    )
+
+    def _calculate_series(self, x, window=120, min_periods=20, **_):
+        xv = x.to_numpy(dtype=float)
+        _warn_if_trending_input(xv, "ts_mean_reversion_ou_approx_half_life_prior")
+        rows, cols = xv.shape
+        out = np.full((rows, cols), np.nan, dtype=float)
+        for col in range(cols):
+            for row in range(rows):
+                out[row, col] = _mean_reversion_ou_half_life(
+                    xv[: row + 1, col], int(window), int(min_periods), fit_lag=1
                 )
         return frame_like(x, out)
 
@@ -466,6 +517,7 @@ _CANONICALS.extend(
         "ts_ar_innovation_z",
         "ts_mean_reversion_half_life",
         "ts_mean_reversion_ou_approx_half_life",
+        "ts_mean_reversion_ou_approx_half_life_prior",
         "ts_variance_ratio_slope",
         "ts_ar_prior_forecast",
         "ts_ar_prior_innovation",

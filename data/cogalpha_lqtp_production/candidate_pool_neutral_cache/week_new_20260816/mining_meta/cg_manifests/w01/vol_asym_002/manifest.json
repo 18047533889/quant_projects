@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "vol_asym_002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "elite",
+  "factor_id": 123,
+  "factor_name": "factor_down_up_vol_asym_ewm",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w01-20260804-074514-r11",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_down_up_vol_asym_ewm(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    down_ret = ret.clip(upper=0)\n    up_ret = ret.clip(lower=0)\n    down_var = (down_ret ** 2).ewm(span=20, min_periods=20).mean()\n    up_var = (up_ret ** 2).ewm(span=20, min_periods=20).mean()\n    down_vol = np.sqrt(down_var)\n    up_vol = np.sqrt(up_var)\n    asym = down_vol - up_vol\n    df_copy[\"factor_down_up_vol_asym_ewm\"] = asym\n    return df_copy[\"factor_down_up_vol_asym_ewm\"]",
+  "description": "Asymmetric volatility is measured as the difference between downside and upside volatilities. Daily returns are split by sign, and exponential weighted variance is computed separately for negative and positive returns over a 20-day span. When downside volatility dominates, it indicates bearish sentiment and potential negative future returns.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02762548425307702,
+    "icir": 0.23894751004320242,
+    "mi": 0.021551579225119966,
+    "rank_ic": 0.04953096258523361,
+    "rank_icir": 0.38578345185762336
+  },
+  "raw_metrics": {
+    "ic": 0.02762548425307702,
+    "icir": 0.23894751004320242,
+    "mi": 0.021551579225119966,
+    "rank_ic": 0.04953096258523361,
+    "rank_icir": 0.38578345185762336
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.08555930213352991,
+    "top_quantile_excess_return": 0.5980600957425564,
+    "top_quantile_max_drawdown": -0.07646352413396551,
+    "top_quantile_turnover": 0.15701584361320206
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:40:34.292384+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_tail_risk_002_g0_acreative_gen0_002_9a86976c",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 402,
+  "factor_name": "factor_calmness_stress_softened",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w02-20260814-001724-r6",
+  "expression_type": "python",
+  "formula": "rolling_mean(cos(arctan(intraday_ret*10)), 20) / (1 + 5 * rolling_sum(abs(min(overnight_return,0)), 20))",
+  "code": "def factor_calmness_stress_softened(df):\n    \"\"\"Intraday calmness with softened overnight downside stress attenuation.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    theta = np.arctan(intraday_ret * 10)\n    window = 20\n    calmness = np.cos(theta).rolling(window, min_periods=window).mean()\n    overnight_stress = overnight_ret.clip(upper=0.0).abs().rolling(window, min_periods=5).sum()\n    stress_weight = 1.0 / (1.0 + overnight_stress * 5.0)\n    factor = calmness * stress_weight\n    factor.name = \"factor_calmness_stress_softened\"\n    return factor",
+  "description": "Mutation of parent g2_crossover_g1_crossover_then_mutation_tail_risk_002_g0_acre_b7925e81: removes the resultant-length coherence confidence gate to simplify to one core mechanism (intraday calmness) with a single lightweight modifier (overnight downside stress attenuation). The stress attenuation coefficient is reduced from 10.0 to 5.0 to increase exposure in periods with some overnight downside stress, targeting the bottleneck top_quantile_annualized_excess_return while preserving the parent strength of RankICIR=0.474 and long_short_sharpe=3.54. Cross-sectional transform remains none because the raw low-risk quality mechanism retains strong payoff monotonicity.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.015058505737628358,
+    "icir": 0.17387543797749677,
+    "mi": 0.01824740007425163,
+    "rank_ic": 0.04249456705929493,
+    "rank_icir": 0.4742856523999176
+  },
+  "raw_metrics": {
+    "ic": 0.015058505737628358,
+    "icir": 0.17387543797749677,
+    "mi": 0.01824740007425163,
+    "rank_ic": 0.04249456705929493,
+    "rank_icir": 0.4742856523999176
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.5080708396635134,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.0034389262022835876,
+    "top_quantile_excess_return": 0.019810978528836065,
+    "top_quantile_max_drawdown": -0.1332595505389721,
+    "top_quantile_turnover": 0.13920337136351105
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:37:42.032176+00:00"
+}

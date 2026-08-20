@@ -42,8 +42,14 @@ NUM_VALID_PERIODS_KEY = "num_valid_periods"
 DEFAULT_MIN_PERIODS = 20
 
 # Below this |total_ic| the ratio is numerically meaningless; the score
-# then depends only on whether any residual signal exists at all.
-_TOTAL_IC_EPS = 1e-12
+# then depends only on whether any residual signal exists at all.  IC
+# magnitudes are O(1e-2); a denominator of 1e-12 would inflate noise into
+# a full-novelty score.  The floor is a fixed absolute threshold because
+# both numerator and denominator are already period-averaged ICs on the
+# same scale — a "sane floor relative to residual scale" would make the
+# score depend on the numerator, which is exactly what must not happen.
+# 1e-4 is far below any plausible real IC but far above float noise.
+_TOTAL_IC_EPS = 1e-4
 
 
 class ResidualICNoveltyProducer:

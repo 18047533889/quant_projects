@@ -39,7 +39,13 @@ from quant_evaluator.runtime.budgets import (
     BudgetTracker,
     ResourceUsage,
 )
-from quant_evaluator.registry.metrics import get_metric
+from quant_evaluator.registry.metrics import CANONICAL_METRIC_ALIASES, get_metric
+
+
+def _resolve_alias(metric_id: str) -> str:
+    """Resolve a canonical dotted metric name (e.g. "ic.pearson.mean") to
+    its registry name ("mean_ic"). Unknown names pass through unchanged."""
+    return CANONICAL_METRIC_ALIASES.get(metric_id, metric_id)
 
 
 @dataclass
@@ -474,7 +480,7 @@ class Evaluator:
         if metric_id in self._metric_functions:
             return
         try:
-            spec = get_metric(metric_id)
+            spec = get_metric(_resolve_alias(metric_id))
         except KeyError:
             return
 
@@ -500,7 +506,7 @@ class Evaluator:
         if metric_fn is not None:
             return metric_fn
         try:
-            metric_fn = get_metric(metric_id).compute_fn
+            metric_fn = get_metric(_resolve_alias(metric_id)).compute_fn
         except KeyError as exc:
             raise InvalidContractError(
                 f"Metric function not registered: {metric_id}"
@@ -775,6 +781,88 @@ class Evaluator:
         return self.budget_tracker.format_usage_report()
 
 
+def _to_per_factor_array(raw, metric_id: str, num_factors: int) -> np.ndarray:
+    """Adapt a registry compute_fn result into a per-factor (F,) array.
+
+    Accepted shapes: (F,) scalar-per-factor, or (T, F) series (reduced with
+    a NaN-aware time-mean so the facade still reports one value per factor).
+    """
+    import warnings
+
+    from quant_evaluator.contracts.errors import UnsupportedMetricError
+
+    if not isinstance(raw, np.ndarray):
+        raise UnsupportedMetricError(
+            f"Metric '{metric_id}' did not return per-factor values "
+            f"(got {type(raw).__name__})"
+        )
+    if raw.ndim == 1 and raw.shape[0] == num_factors:
+        return raw.astype(np.float64, copy=False)
+    if raw.ndim == 2 and raw.shape[1] == num_factors:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            with np.errstate(invalid="ignore"):
+                return np.nanmean(raw, axis=0)
+    raise UnsupportedMetricError(
+        f"Metric '{metric_id}' returned an unadaptable shape {raw.shape} "
+        f"for {num_factors} factors"
+    )
+
+
+def _per_factor_observation_counts(
+    metric_id: str,
+    factor_batch: FactorBatch,
+    label_bundle: LabelBundle,
+    values: np.ndarray,
+) -> np.ndarray:
+    """Best-effort per-factor observation counts for facade MetricValues.
+
+    - coverage: number of jointly valid (factor, label) cells.
+    - ic.pearson/rank families: number of finite daily IC observations.
+    - anything else: number of finite adapted values per factor — honest
+      for scalar adapters.
+    """
+    from quant_evaluator.metrics.ic import compute_daily_ic
+    from quant_evaluator.metrics.quality import compute_valid_pair_counts
+
+    registry_name = _resolve_alias(metric_id)
+    if registry_name == "coverage":
+        return compute_valid_pair_counts(factor_batch, label_bundle)
+    if registry_name == "mean_ic":
+        # Contract (test_public_api_repair): mean_ic counts jointly valid
+        # (factor, label) cells, matching the historical facade behaviour.
+        # pearson_ic (same kernel) reports finite daily IC days instead —
+        # the difference is documented in both registry descriptions.
+        return compute_valid_pair_counts(factor_batch, label_bundle)
+    if registry_name in {"pearson_ic", "rank_ic"}:
+        method = _ic_method_for_metric(registry_name)
+        series, _ = compute_daily_ic(
+            factor_batch, label_bundle, method=method
+        )
+        return np.sum(np.isfinite(series), axis=0)
+    if registry_name in {"pearson_ic_series", "rank_ic_series"}:
+        method = "pearson" if registry_name == "pearson_ic_series" else "spearman"
+        series, _ = compute_daily_ic(
+            factor_batch, label_bundle, method=method
+        )
+        return np.sum(np.isfinite(series), axis=0)
+    return (np.isfinite(values)).astype(np.int64)
+
+
+def _ic_method_for_metric(registry_name: str) -> str:
+    """IC correlation method for a registry metric (QE-P1-27).
+
+    Reads the spec-declared ``ic_method`` ("spearman" for rank-family
+    metrics, "pearson" by default) so the wrapper IC series and the
+    observation-count basis always match the metric's own semantics.
+    Falls back to "pearson" for unknown/unregistered names.
+    """
+    try:
+        return get_metric(registry_name).ic_method
+    except (KeyError, AttributeError):
+        return "pearson"
+
+
 def evaluate(
     factors,
     labels=None,
@@ -796,8 +884,6 @@ def evaluate(
 
     from quant_evaluator.api.requests import EvaluationBundle, MetricValue
     from quant_evaluator.diagnosis.factor import diagnose_all_factors
-    from quant_evaluator.metrics.ic import compute_daily_ic, compute_mean_ic
-    from quant_evaluator.metrics.label_panel import normalize_label_panel
 
     request_metadata = {}
     request_fields = {}
@@ -838,76 +924,92 @@ def evaluate(
     metric_ids = tuple(metric_ids)
     runtime = evaluator or Evaluator()
     metric_specs = []
+    # Wrapper functions injected into the runtime so that ic_series-consuming
+    # registry metrics can be computed from factor_batch + label_bundle
+    # without the caller needing to supply ic_series explicitly.  The
+    # wrapper only adapts inputs — the registry compute_fn remains the
+    # single source of truth for the metric value.
+    facade_ic_wrappers: Dict[str, Callable] = {}
 
-    def coverage_metric(factor_batch, label_bundle, **kwargs):
-        labels_array, label_validity = normalize_label_panel(
-            label_bundle, factor_batch.num_assets
-        )
-        valid = np.isfinite(factor_batch.values) & np.isfinite(labels_array)[:, :, np.newaxis]
-        if factor_batch.validity is not None:
-            valid &= factor_batch.validity
-        if label_validity is not None:
-            valid &= label_validity[:, :, np.newaxis]
-        counts = np.sum(valid, axis=(0, 1))
-        totals = np.full(factor_batch.num_factors, factor_batch.num_times * factor_batch.num_assets)
-        return {
-            factor_id: (float(count / total) if total else np.nan, int(count))
-            for factor_id, count, total in zip(factor_batch.factor_ids, counts, totals)
-        }
-
-    def ic_metric(method, min_periods=1):
-        def compute(factor_batch, label_bundle, **kwargs):
-            series, counts = compute_daily_ic(factor_batch, label_bundle, method=method)
-            mean, _ = compute_mean_ic(series, counts, min_periods=min_periods)
-            return {
-                factor_id: (float(mean[index]), int(np.sum(counts[:, index][np.isfinite(series[:, index])])))
-                for index, factor_id in enumerate(factor_batch.factor_ids)
-            }
-        return compute
-
-    supported = {
-        "coverage": coverage_metric,
-        "mean_ic": ic_metric("pearson", min_periods=20),
-        "pearson_ic": ic_metric("pearson"),
-        "rank_ic": ic_metric("spearman"),
-    }
+    # QE-METRIC-P0-02: the registry is the single truth. No local closures
+    # shadow it anymore — every requested metric must resolve through
+    # get_metric() (with canonical dotted-alias support); its compute_fn is
+    # executed by the runtime and the per-factor result is adapted below.
+    # Metrics requiring ic_series are wrapped with a thin input adapter so
+    # the public facade can satisfy them from factor_batch + label_bundle;
+    # the runtime still calls through to the registry compute_fn, which
+    # remains the single source of truth for the metric value.
     for metric_id in metric_ids:
-        if metric_id not in supported:
+        try:
+            spec = get_metric(_resolve_alias(metric_id))
+        except KeyError:
             raise UnsupportedMetricError(
                 f"Public evaluate does not support metric '{metric_id}'"
-            )
-        runtime.register_metric(metric_id, supported[metric_id])
+            ) from None
         metric_specs.append({"metric_id": metric_id, "metric_kind": "custom"})
+        if "ic_series" in (spec.requires or []):
+            compute_fn = spec.compute_fn
+            # QE-P1-27: the wrapper IC series must follow the metric —
+            # rank-family specs declare ic_method="spearman", everything
+            # else defaults to "pearson".
+            wrapper_ic_method = getattr(spec, "ic_method", "pearson")
+            def _make_ic_wrapper(cfn: Callable, ic_method: str) -> Callable:
+                def _ic_wrapper(factor_batch=None, label_bundle=None, **kwargs):
+                    from quant_evaluator.metrics.ic import compute_daily_ic
+
+                    try:
+                        fn_sig = inspect.signature(cfn)
+                    except (TypeError, ValueError):
+                        filtered = dict(kwargs)
+                    else:
+                        if any(
+                            p.kind == inspect.Parameter.VAR_KEYWORD
+                            for p in fn_sig.parameters.values()
+                        ):
+                            filtered = dict(kwargs)
+                        else:
+                            filtered = {
+                                k: v
+                                for k, v in kwargs.items()
+                                if k in fn_sig.parameters
+                            }
+                    ic_series, _ = compute_daily_ic(
+                        factor_batch, label_bundle, method=ic_method
+                    )
+                    return cfn(ic_series, **filtered)
+                return _ic_wrapper
+            facade_ic_wrappers[metric_id] = _make_ic_wrapper(
+                compute_fn, wrapper_ic_method
+            )
+            runtime.register_metric(metric_id, facade_ic_wrappers[metric_id])
 
     result = runtime.evaluate(factor_batch, label_bundle, metric_specs, use_chunking=False)
+
+    # Adapt registry compute_fn outputs (ndarray per factor, or (T, F)
+    # series) into the per-factor MetricValue contract the facade promises.
+    adapted_values: Dict[str, np.ndarray] = {}
+    observation_counts: Dict[str, np.ndarray] = {}
+    for metric_id in metric_ids:
+        raw = result.get_metric(metric_id)
+        values = _to_per_factor_array(
+            raw, metric_id, factor_batch.num_factors
+        )
+        adapted_values[metric_id] = values
+        observation_counts[metric_id] = _per_factor_observation_counts(
+            metric_id, factor_batch, label_bundle, values
+        )
+
     grouped_metrics = {factor_id: {} for factor_id in factor_batch.factor_ids}
     for metric_id in metric_ids:
-        values = result.get_metric(metric_id)
-        if not isinstance(values, dict) or set(values) != set(factor_batch.factor_ids):
-            raise UnsupportedMetricError(
-                f"Metric '{metric_id}' did not return per-factor scalar values"
-            )
-        for factor_id, payload in values.items():
-            if not isinstance(payload, tuple) or len(payload) != 2:
-                raise UnsupportedMetricError(
-                    f"Metric '{metric_id}' returned unsupported per-factor metadata"
-                )
-            value, observation_count = payload
-            if isinstance(value, bool):
-                raise UnsupportedMetricError(
-                    f"Metric '{metric_id}' returned a boolean for '{factor_id}' — "
-                    "use a numeric result instead of True/False"
-                )
-            if not isinstance(value, (int, float, np.number)):
-                raise UnsupportedMetricError(
-                    f"Metric '{metric_id}' returned a non-scalar value for '{factor_id}'"
-                )
-            numeric = float(value)
+        values = adapted_values[metric_id]
+        counts = observation_counts[metric_id]
+        for index, factor_id in enumerate(factor_batch.factor_ids):
+            numeric = float(values[index])
             grouped_metrics[factor_id][metric_id] = MetricValue(
                 metric_id=metric_id,
                 value=None if not np.isfinite(numeric) else numeric,
                 valid=bool(np.isfinite(numeric)),
-                observation_count=int(observation_count),
+                observation_count=int(counts[index]),
                 warnings=() if np.isfinite(numeric) else ("non-finite result",),
             )
 

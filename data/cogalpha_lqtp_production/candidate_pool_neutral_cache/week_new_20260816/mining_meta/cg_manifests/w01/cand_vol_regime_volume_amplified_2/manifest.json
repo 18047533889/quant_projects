@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "cand_vol_regime_volume_amplified_2",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "elite",
+  "factor_id": 268,
+  "factor_name": "factor_vol_regime_volume_amplified",
+  "domain_agent": "alpha-volatility-regime",
+  "run_id": "fleet-w01-20260806-080525-r22",
+  "expression_type": "python",
+  "formula": "daily_vol * vol_ratio",
+  "code": "def factor_vol_regime_volume_amplified(df):\n    df_copy = df.copy()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    daily_vol = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"].replace(0.0, np.nan)\n    df_copy[\"factor_vol_regime_volume_amplified\"] = daily_vol * vol_ratio\n    return df_copy[\"factor_vol_regime_volume_amplified\"]",
+  "description": "Volatility is more informative during high-volume regimes. This factor amplifies raw daily range volatility by a continuous volume ratio, capturing state-dependent market phases where volatility predicts future returns more strongly.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03290685501853469,
+    "icir": 0.34347243398192884,
+    "mi": 0.026531443960432277,
+    "rank_ic": 0.04265960277809691,
+    "rank_icir": 0.3965443482189619
+  },
+  "raw_metrics": {
+    "ic": -0.03290685501853469,
+    "icir": -0.34347243398192884,
+    "mi": 0.026531443960432277,
+    "rank_ic": -0.04265960277809691,
+    "rank_icir": -0.3965443482189619
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.18227981670423543,
+    "top_quantile_excess_return": 1.6364971721544945,
+    "top_quantile_max_drawdown": -0.07157493530107017,
+    "top_quantile_turnover": 0.5651364452734543
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:45:46.350328+00:00"
+}

@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 """Time-series rolling/correlation operators - Polars native implementations (Phase 2, Module 8).
 
-All operators use TRUE Polars expressions only - no pandas fallback, no NumPy.
+Most operators use TRUE Polars expressions only - no pandas fallback, no NumPy.
+EXCEPTION (R20-P0-EWM-PAIRWISE): ``TSEwmCorrNative``/``TSEwmCovNative`` delegate
+per column to the pandas ``ewm`` reference kernel and are declared
+``POLARS_PANDAS_DELEGATE`` (see the EWM block comment mid-file).
 """
 from __future__ import annotations
 
@@ -264,6 +267,72 @@ class TSCovNative(SeriesOperator):
         return x.lazy().with_columns(exprs).collect()
 
 
+# ---------------------------------------------------------------------------
+# EWM pairwise correlation / covariance (R20-P0-EWM-PAIRWISE)
+#
+# Reference semantics: pandas ``Series.ewm(span=window, adjust=False,
+# ignore_na=False).corr/cov(other)`` — the SAME reference the polars long
+# emitter pins (``backend/polars_expr_emitter._ewm_binary_map_groups``) and the
+# stateful runtime reproduces (``stateful_runtime._ewm_moment_segment``).
+#
+# Contract (documented, verified against pandas 2.3.3):
+#   * alpha = 2/(window+1) via ``span=window`` (span mapping).
+#   * adjust=False, ignore_na=False, min_periods=2 (pandas ewmcov is NaN below
+#     two valid pairs by construction: the bias correction denominator
+#     sum_wt^2 - sum_wt2 is zero at T=1).
+#   * cov bias: pandas ``.cov()`` default bias=False (unbiased);
+#     corr internally uses the biased streams — both are pandas built-ins, so
+#     delegation reproduces them exactly.
+#   * pairwise-finite: a row is valid only when BOTH operands are finite;
+#     Inf/-Inf is INVALID (pre-masked to NaN — pandas would otherwise
+#     propagate Inf as a valid observation). Invalid rows do not update the
+#     EWM state and the output carries the previous value (pandas behavior).
+#   * zero-variance stream -> corr is NaN (pandas; the null guard survives).
+#   * Polars has no ``ewm_cov``/``ewm_corr`` expression and the pandas
+#     recursion (gap-decayed sum_wt/sum_wt2 state machine) cannot be expressed
+#     faithfully as nested ``ewm_mean`` expressions — the pre-fix kernel tried
+#     exactly that (EWM means of same-row EWM-centered products) and diverged
+#     from pandas on cov from row 0 (e.g. 0.197 vs 0.674 at window=6) and at
+#     every NaN hole.  This kernel therefore delegates per column to the
+#     pandas reference and is declared POLARS_PANDAS_DELEGATE — it is NOT
+#     Polars-native (see ``_physical_spec``).
+# ---------------------------------------------------------------------------
+
+
+def _ewm_pairwise_columns(
+    x: pl.DataFrame, y: pl.DataFrame, *, window: int, corr: bool
+) -> dict[str, "pl.Series"]:
+    """Per-column pandas EWM corr/cov over pairwise-finite observations."""
+    import numpy as np
+    import pandas as pd
+
+    def _finite_pd(series: "pl.Series") -> pd.Series:
+        arr = np.asarray(series.to_numpy(), dtype=float)
+        # Nulls arrive as NaN; Inf is contract-invalid and pre-masked so the
+        # pandas kernel (which treats Inf as valid) never sees it.
+        arr = np.where(np.isfinite(arr), arr, np.nan)
+        return pd.Series(arr, dtype=float)
+
+    results: dict[str, pl.Series] = {}
+    for column in _numeric_cols(x):
+        xs = _finite_pd(x[column])
+        ys = _finite_pd(y[column])
+        # Pairwise-finite: a row with either operand invalid is dropped from
+        # BOTH streams (pandas ewmcov skips the pair; masking y into x keeps
+        # the marginal streams consistent with the pair stream).
+        pair = xs.notna() & ys.notna()
+        xs = xs.where(pair, np.nan)
+        ys = ys.where(pair, np.nan)
+        ewm = xs.ewm(span=window, adjust=False, ignore_na=False, min_periods=2)
+        out = ewm.corr(ys) if corr else ewm.cov(ys)
+        arr = out.to_numpy()
+        # pandas NaN (warmup / zero variance / invalid prefix) becomes a polars
+        # null — the null contract the rest of this module observes.
+        values = [None if not np.isfinite(value) else float(value) for value in arr]
+        results[column] = pl.Series(name=column, values=values, dtype=pl.Float64)
+    return results
+
+
 @_register_rolling_operator(
     name="ts_ewm_corr",
     category="time_series",
@@ -273,7 +342,25 @@ class TSCovNative(SeriesOperator):
     backend="polars",
 )
 class TSEwmCorrNative(SeriesOperator):
-    """Exponentially weighted correlation."""
+    """Exponentially weighted correlation (pandas ewm(span, adjust=False)).
+
+    Delegates per column to the pandas reference — see the EWM block comment
+    above for the full contract.  NOT Polars-native.
+    """
+
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_ewm_corr", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False, materializes_full_panel=True, requires_sorted=True,
+        stateful=True,
+        supports_nulls=True, supports_nan=False, supports_inf=False,
+        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSEwmCorrNative:v2",
+        emitter_identity="pandas.ewm.pairwise_corr:v1",
+        parameter_domain_hash="ts_ewm_corr.x:dataframe,y:dataframe,window:int:min=2:default=20",
+        semantic_contract_hash="ts_ewm_corr:pandas_ewm_span_adjustfalse_pairwise_finite:v2",
+        notes="Per-column pandas ewm(span=window, adjust=False, ignore_na=False, "
+              "min_periods=2) corr; Inf pre-masked to NaN (pairwise-finite).",
+    )
 
     metadata = OperatorMetadata(
         name="ts_ewm_corr",
@@ -281,7 +368,7 @@ class TSEwmCorrNative(SeriesOperator):
         description="指数加权相关系数",
         param_names=["x", "y", "window"],
         return_type="series",
-        tags=["time_series", "polars", "native"],
+        tags=["time_series", "polars", "pandas_delegate"],
         param_specs={"window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON)},
     )
 
@@ -289,33 +376,17 @@ class TSEwmCorrNative(SeriesOperator):
                          window: int = 20, **kwargs) -> pl.DataFrame:
         from cleaned_operators.parameter_validation import strict_integer
 
+        # ``span`` is the alias the pairwise EWM contract exposes on the pandas
+        # side; the registry validates it against the window ParamSpec but does
+        # not forward it, so honor it explicitly here.
+        if kwargs.get("span") is not None:
+            window = kwargs["span"]
         w = strict_integer(window, "window", minimum=2)
-        alpha = 2.0 / (w + 1)
 
-        cols = _require_pairwise_columns(x, y, operator="ts_ewm_corr")
+        _require_pairwise_columns(x, y, operator="ts_ewm_corr")
 
-        exprs = []
-        for c in cols:
-            x_raw = pl.col(c)
-            y_raw = y[c]
-            valid = x_raw.is_finite().fill_null(False) & y_raw.is_finite().fill_null(False)
-            x_col = pl.when(valid).then(x_raw).otherwise(None)
-            y_col = pl.when(valid).then(y_raw).otherwise(None)
-
-            x_mean = x_col.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
-            y_mean = y_col.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
-
-            x_var = ((x_col - x_mean) ** 2).ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
-            y_var = ((y_col - y_mean) ** 2).ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
-            cov = ((x_col - x_mean) * (y_col - y_mean)).ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
-
-            x_std = x_var.sqrt()
-            y_std = y_var.sqrt()
-
-            corr = pl.when((x_std == 0) | (y_std == 0) | x_std.is_null() | y_std.is_null()).then(None).otherwise(cov / (x_std * y_std))
-            exprs.append(corr.alias(c))
-
-        return x.lazy().with_columns(exprs).collect()
+        columns = _ewm_pairwise_columns(x, y, window=w, corr=True)
+        return x.with_columns([columns[c].alias(c) for c in _numeric_cols(x)])
 
 
 @_register_rolling_operator(
@@ -327,7 +398,26 @@ class TSEwmCorrNative(SeriesOperator):
     backend="polars",
 )
 class TSEwmCovNative(SeriesOperator):
-    """Exponentially weighted covariance."""
+    """Exponentially weighted covariance (pandas ewm(span, adjust=False)).
+
+    Delegates per column to the pandas reference — see the EWM block comment
+    above for the full contract.  NOT Polars-native.
+    """
+
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_ewm_cov", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False, materializes_full_panel=True, requires_sorted=True,
+        stateful=True,
+        supports_nulls=True, supports_nan=False, supports_inf=False,
+        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSEwmCovNative:v2",
+        emitter_identity="pandas.ewm.pairwise_cov:v1",
+        parameter_domain_hash="ts_ewm_cov.x:dataframe,y:dataframe,window:int:min=2:default=20",
+        semantic_contract_hash="ts_ewm_cov:pandas_ewm_span_adjustfalse_pairwise_finite:v2",
+        notes="Per-column pandas ewm(span=window, adjust=False, ignore_na=False, "
+              "min_periods=2) cov (bias=False, unbiased); Inf pre-masked to NaN "
+              "(pairwise-finite).",
+    )
 
     metadata = OperatorMetadata(
         name="ts_ewm_cov",
@@ -335,7 +425,7 @@ class TSEwmCovNative(SeriesOperator):
         description="指数加权协方差",
         param_names=["x", "y", "window"],
         return_type="series",
-        tags=["time_series", "polars", "native"],
+        tags=["time_series", "polars", "pandas_delegate"],
         param_specs={"window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON)},
     )
 
@@ -343,26 +433,14 @@ class TSEwmCovNative(SeriesOperator):
                          window: int = 20, **kwargs) -> pl.DataFrame:
         from cleaned_operators.parameter_validation import strict_integer
 
+        if kwargs.get("span") is not None:
+            window = kwargs["span"]
         w = strict_integer(window, "window", minimum=2)
-        alpha = 2.0 / (w + 1)
 
-        cols = _require_pairwise_columns(x, y, operator="ts_ewm_cov")
+        _require_pairwise_columns(x, y, operator="ts_ewm_cov")
 
-        exprs = []
-        for c in cols:
-            x_raw = pl.col(c)
-            y_raw = y[c]
-            valid = x_raw.is_finite().fill_null(False) & y_raw.is_finite().fill_null(False)
-            x_col = pl.when(valid).then(x_raw).otherwise(None)
-            y_col = pl.when(valid).then(y_raw).otherwise(None)
-
-            x_mean = x_col.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
-            y_mean = y_col.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
-
-            cov = ((x_col - x_mean) * (y_col - y_mean)).ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
-            exprs.append(cov.alias(c))
-
-        return x.lazy().with_columns(exprs).collect()
+        columns = _ewm_pairwise_columns(x, y, window=w, corr=False)
+        return x.with_columns([columns[c].alias(c) for c in _numeric_cols(x)])
 
 
 def _validate_regression_params(window: int, min_periods: int | None) -> tuple[int, int]:

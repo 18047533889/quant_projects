@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_alpha_herding_gen0_a_001_da74c44a",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 728,
+  "factor_name": "factor_herding_volume_position_dm_confirmation",
+  "domain_agent": "alpha-herding",
+  "run_id": "fleet-w04-20260814-050458-r11",
+  "expression_type": "python",
+  "formula": "(2 * rolling_sum(volume * (close - rolling_low_20) / (rolling_high_20 - rolling_low_20), 20) / rolling_sum(volume, 20) - 1) * (0.6 + 0.4 * (2 * rolling_sum(max(close_pct_change, 0), 20) / rolling_sum(abs(close_pct_change), 20) - 1))",
+  "code": "def factor_herding_volume_position_dm_confirmation(df):\n    \"\"\"Volume-weighted close position within 20-day high-low range, scaled by trailing directional movement confirmation.\"\"\"\n    df_copy = df.copy()\n    high_roll = df_copy[\"high\"].rolling(20, min_periods=20).max()\n    low_roll = df_copy[\"low\"].rolling(20, min_periods=20).min()\n    range_ = high_roll - low_roll\n    position = (df_copy[\"close\"] - low_roll) / range_.replace(0, np.nan)\n    volume = df_copy[\"volume\"]\n    vol_sum = volume.rolling(20, min_periods=20).sum()\n    weighted_pos = (volume * position).rolling(20, min_periods=20).sum() / vol_sum.replace(0, np.nan)\n    base = 2.0 * weighted_pos - 1.0\n\n    ret = df_copy[\"close\"].pct_change()\n    pos_ret = ret.clip(lower=0.0).rolling(20, min_periods=20).sum()\n    abs_ret = ret.abs().rolling(20, min_periods=20).sum()\n    dm = (2.0 * pos_ret / abs_ret.replace(0.0, np.nan) - 1.0).clip(-1.0, 1.0)\n    weight = 0.6 + 0.4 * dm\n    factor = base * weight\n    return factor.rename(\"factor_herding_volume_position_dm_confirmation\")",
+  "description": "Preserves the parent's core volume-weighted close position herding signal (volume-weighted average position of close within trailing 20-day high-low range, mapped to [-1,1]). Adds one lightweight bounded confirmation modifier: a 20-day directional movement imbalance computed from close-to-close returns, mapped to weight [0.2,1.0]. The weight is continuous and positive, attenuating the raw herding signal when price direction does not confirm the volume crowding and slightly amplifying it when confirmed. This avoids collapsing the factor to zero, preserves RankIC ordering largely while adding nonlinear directional information, targeting improved IC and MI without changing the raw mechanism or adding cross-sectional transforms.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.011803487568382964,
+    "icir": 0.1921066369098912,
+    "mi": 0.008912863096051105,
+    "rank_ic": 0.029312605663232755,
+    "rank_icir": 0.42589063725763154
+  },
+  "raw_metrics": {
+    "ic": -0.011803487568382964,
+    "icir": -0.1921066369098912,
+    "mi": 0.008912863096051105,
+    "rank_ic": -0.029312605663232755,
+    "rank_icir": -0.42589063725763154
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.53336741469532,
+    "quantile_monotonicity": 0.8787878787878788,
+    "top_quantile_annualized_excess_return": -0.019734765429832546,
+    "top_quantile_excess_return": -0.012575557749915145,
+    "top_quantile_max_drawdown": -0.05025783790955163,
+    "top_quantile_turnover": 0.10197125795309078
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:06:39.089103+00:00"
+}

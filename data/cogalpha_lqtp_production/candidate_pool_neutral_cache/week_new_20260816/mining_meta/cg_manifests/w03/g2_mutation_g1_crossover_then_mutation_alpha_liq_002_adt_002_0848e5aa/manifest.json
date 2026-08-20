@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_alpha_liq_002_adt_002_0848e5aa",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "elite",
+  "factor_id": 269,
+  "factor_name": "factor_overnight_intraday_vol_shock_robust",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w03-20260813-014015-r1",
+  "expression_type": "python",
+  "formula": "overnight_ret, intraday_ret = decompose_overnight_intraday(close, open); vol_ratio = classify_volume_regime(volume, 20)[2]; divergence = overnight_ret - intraday_ret; signal = divergence * clip(vol_ratio, 0.8, 1.6); factor = rolling_mean(signal, 10, min_periods=5)",
+  "code": "def factor_overnight_intraday_vol_shock_robust(df):\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    divergence = overnight_ret - intraday_ret\n    vol_weight = vol_ratio.clip(0.8, 1.6)\n    signal = divergence * vol_weight\n    factor = signal.rolling(10, min_periods=5).mean()\n    df_copy[\"factor_overnight_intraday_vol_shock_robust\"] = factor.fillna(0.0)\n    return df_copy[\"factor_overnight_intraday_vol_shock_robust\"]",
+  "description": "Mutation by threshold tightening and smoothing extension. The parent's core overnight-intraday liquidity divergence mechanism is preserved. To target robustness and reduce outlier sensitivity, the volume ratio is clipped to a narrower [0.8, 1.6] band so extreme volume spikes contribute less, and the smoothing window is extended from 5 to 10 days (min_periods=5) to lower turnover and improve stability. This keeps one core mechanism and one lightweight volume modifier; no new feature families are added. Cross-sectional z-score is retained because liquidity-shock magnitude is relative across assets.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.029993279695027155,
+    "icir": 0.4464220281236063,
+    "mi": 0.019646769588273827,
+    "rank_ic": 0.03629194700177664,
+    "rank_icir": 0.5983390570214028
+  },
+  "raw_metrics": {
+    "ic": 0.029993279695027155,
+    "icir": 0.4464220281236063,
+    "mi": 0.019646769588273827,
+    "rank_ic": 0.03629194700177664,
+    "rank_icir": 0.5983390570214028
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.93642620154467,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.1163324529724441,
+    "top_quantile_excess_return": 0.886953504731731,
+    "top_quantile_max_drawdown": -0.23050993062734004,
+    "top_quantile_turnover": 0.26896683467222293
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:54:45.267714+00:00"
+}

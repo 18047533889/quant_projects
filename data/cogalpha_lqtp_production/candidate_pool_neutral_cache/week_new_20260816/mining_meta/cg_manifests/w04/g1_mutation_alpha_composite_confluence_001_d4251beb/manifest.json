@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_alpha_composite_confluence_001_d4251beb",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 320,
+  "factor_name": "factor_confluence_ema_volume",
+  "domain_agent": "alpha-composite",
+  "run_id": "fleet-w04-20260804-212951-r24",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_confluence_ema_volume(df):\n    \"\"\"Captures days when both price and volume are above their recent EMAs, indicating bullish confluence.\"\"\"\n    df_copy = df.copy()\n    ema20_close = df_copy[\"close\"].ewm(span=20, adjust=False).mean()\n    ema20_close = np.maximum(ema20_close, 1e-8)\n    price_dev = df_copy[\"close\"] / ema20_close - 1\n    ema20_vol = df_copy[\"volume\"].ewm(span=20, adjust=False).mean()\n    ema20_vol = np.maximum(ema20_vol, 1e-8)\n    vol_dev = df_copy[\"volume\"] / ema20_vol - 1\n    pos_price = np.maximum(0, price_dev)\n    pos_vol = np.maximum(0, vol_dev)\n    df_copy[\"factor_confluence_ema_volume\"] = pos_price * pos_vol\n    return df_copy[\"factor_confluence_ema_volume\"]",
+  "description": "This factor is a mutation of the original positive confluence factor, aligning the volume normalization method with price by using an exponential moving average (EMA) for volume instead of a simple moving average. This ensures both components respond similarly to recent observations, potentially improving the synchronicity of the bullish agreement signals. The core mechanism of capturing strong bullish agreement through the product of positive price and volume deviations is preserved. Division-by-zero safeguards added for numerical stability.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.022352620879010895,
+    "icir": 0.27334940950981906,
+    "mi": 0.18670876587804663,
+    "rank_ic": 0.05439124527115407,
+    "rank_icir": 0.6203525948726325
+  },
+  "raw_metrics": {
+    "ic": -0.022352620879010895,
+    "icir": -0.27334940950981906,
+    "mi": 0.18670876587804663,
+    "rank_ic": -0.05439124527115407,
+    "rank_icir": -0.6203525948726325
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.11092652446791051,
+    "top_quantile_excess_return": 0.08571123063181485,
+    "top_quantile_max_drawdown": -0.02620086335808458,
+    "top_quantile_turnover": 0.20589256095514422
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:26:47.173183+00:00"
+}

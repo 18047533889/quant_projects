@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_pvcoherence_v2_3e483045_g1_crossover_e377f673",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 253,
+  "factor_name": "factor_volume_confirmed_reversal_vol_shock_boost",
+  "domain_agent": "alpha-volatility-regime",
+  "run_id": "fleet-w04-20260804-091108-r19",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_volume_confirmed_reversal_vol_shock_boost(df):\n    df_copy = df.copy()\n    ret5 = df_copy[\"close\"] / df_copy[\"close\"].shift(5) - 1\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    vol_anomaly = vol_ratio - 1\n    base_signal = -ret5 * vol_anomaly\n    atr_pct = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"]\n    short_mean = atr_pct.rolling(5, min_periods=5).mean()\n    long_mean = atr_pct.rolling(20, min_periods=20).mean()\n    anomaly_atr = short_mean / long_mean.replace(0.0, np.nan) - 1.0\n    factor_array = np.where(anomaly_atr > 0, base_signal * 1.2, base_signal * 0.8)\n    factor = pd.Series(factor_array, index=df_copy.index)\n    df_copy[\"factor_volume_confirmed_reversal_vol_shock_boost\"] = factor.replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_volume_confirmed_reversal_vol_shock_boost\"]",
+  "description": "Crossover taking primary parent's volume-confirmed reversal (using adaptive vol_ratio from alpha_tools) and borrowing the volatility-shock amplification idea from the secondary parent. When short-term normalized ATR is elevated relative to its long-term average (anomaly_atr > 0), the base reversal signal is amplified (multiplied by 1.2), otherwise it is slightly attenuated (0.8). This adds a market-state gate without breaking the core reversal-volume mechanism, aiming to improve timing when volatility spikes confirm capitulation. Parent strength target: RankICIR.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03387788353092728,
+    "icir": 0.4563122430284239,
+    "mi": 0.02322395787667375,
+    "rank_ic": 0.04034036267281456,
+    "rank_icir": 0.5389815836587523
+  },
+  "raw_metrics": {
+    "ic": 0.03387788353092728,
+    "icir": 0.4563122430284239,
+    "mi": 0.02322395787667375,
+    "rank_ic": 0.04034036267281456,
+    "rank_icir": 0.5389815836587523
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.09756929566143602,
+    "top_quantile_excess_return": 0.07390468957296004,
+    "top_quantile_max_drawdown": -0.011374398317333445,
+    "top_quantile_turnover": 0.6312878492468269
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:23:35.496714+00:00"
+}

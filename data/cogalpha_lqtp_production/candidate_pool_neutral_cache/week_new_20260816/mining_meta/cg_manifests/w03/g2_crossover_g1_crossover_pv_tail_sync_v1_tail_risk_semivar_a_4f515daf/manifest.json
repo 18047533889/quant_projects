@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_crossover_pv_tail_sync_v1_tail_risk_semivar_a_4f515daf",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 292,
+  "factor_name": "factor_tail_semivar_volume_asymmetry_hybrid",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w03-20260813-063501-r2",
+  "expression_type": "python",
+  "formula": "0.5*rolling_mean_60(down_sq) + 0.5*ewm_mean_span60(down_sq) / (0.5*rolling_mean_60(up_sq) + 0.5*ewm_mean_span60(up_sq)), where down_sq = min(ret,0)^2 * clip(vol_ratio,0.5,2.0).fillna(0), up_sq = max(ret,0)^2 * clip(vol_ratio,0.5,2.0).fillna(0)",
+  "code": "def factor_tail_semivar_volume_asymmetry_hybrid(df):\n    \"\"\"Volume-confirmed downside/upside variance asymmetry with hybrid smoothing.\n\n    Economic mechanism:\n        Stress accumulation is captured by the ratio of downside variance to\n        upside variance. Volume expansion during extreme moves confirms tail\n        risk, so squared returns are weighted by a bounded continuous\n        volume-regime ratio. The variance components are smoothed with a\n        50/50 blend of rolling mean and exponential moving average to balance\n        stable long-term accumulation with recent stress sensitivity.\n    \"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(\n        df_copy[\"volume\"], window=20, high_threshold=1.5, low_threshold=0.6\n    )\n    vol_weight = vol_ratio.clip(lower=0.5, upper=2.0).fillna(1.0)\n    down_ret = ret.where(ret < 0)\n    up_ret = ret.where(ret > 0)\n    down_sq = (down_ret ** 2 * vol_weight).fillna(0)\n    up_sq = (up_ret ** 2 * vol_weight).fillna(0)\n    down_roll = down_sq.rolling(60, min_periods=20).mean()\n    up_roll = up_sq.rolling(60, min_periods=20).mean()\n    down_ewm = down_sq.ewm(span=60, min_periods=20).mean()\n    up_ewm = up_sq.ewm(span=60, min_periods=20).mean()\n    down_var = 0.5 * down_roll + 0.5 * down_ewm\n    up_var = 0.5 * up_roll + 0.5 * up_ewm\n    factor = down_var / up_var.replace(0, np.nan)\n    factor = factor.replace([np.inf, -np.inf], np.nan)\n    df_copy[\"factor_tail_semivar_volume_asymmetry_hybrid\"] = factor\n    return df_copy[\"factor_tail_semivar_volume_asymmetry_hybrid\"]\n",
+  "description": "Primary mechanism inherits volume-confirmed tail semivariance asymmetry from the rolling-sum parent: downside/upside variance ratio measures lower-tail stress accumulation with volume confirmation. Borrows EWM smoothing from the EWM parent as a lightweight modifier, replacing pure rolling sum with a 50/50 blend of rolling mean and exponential moving average to balance stable long-term accumulation with recent stress sensitivity. This targets higher IC/ICIR by reducing rolling estimator noise while preserving the raw ratio interpretation, RankICIR stability, and MI thickness of the EWM variant. Volume weighting remains bounded at [0.5, 2.0].",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.006221487148977285,
+    "icir": 0.1370471967288085,
+    "mi": 0.006645164762322686,
+    "rank_ic": 0.030939193767984364,
+    "rank_icir": 0.5323693046800181
+  },
+  "raw_metrics": {
+    "ic": 0.006221487148977285,
+    "icir": 0.1370471967288085,
+    "mi": 0.006645164762322686,
+    "rank_ic": 0.030939193767984364,
+    "rank_icir": 0.5323693046800181
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.435214071534165,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.051074882929945664,
+    "top_quantile_excess_return": 0.32929356768820095,
+    "top_quantile_max_drawdown": -0.08958817817752118,
+    "top_quantile_turnover": 0.08852082168356372
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:57:51.676886+00:00"
+}

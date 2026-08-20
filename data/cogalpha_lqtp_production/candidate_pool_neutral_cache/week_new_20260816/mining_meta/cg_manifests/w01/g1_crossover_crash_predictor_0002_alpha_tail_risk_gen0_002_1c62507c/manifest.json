@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_crash_predictor_0002_alpha_tail_risk_gen0_002_1c62507c",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 321,
+  "factor_name": "factor_volume_beta_tail_gated",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w01-20260813-111511-r3",
+  "expression_type": "python",
+  "formula": "-beta(daily_ret, log_volume_change, 20) * (0.5 + 0.5 * downside_var_ratio(60))",
+  "code": "def factor_volume_beta_tail_gated(df):\n    \"\"\"Crash-predictor liquidity beta scaled by tail fragility intensity.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    log_vol = np.log(df_copy[\"volume\"].clip(lower=1.0))\n    vol_change = log_vol.diff()\n    window = 20\n    cov = ret.rolling(window, min_periods=window).cov(vol_change)\n    var_vol = vol_change.rolling(window, min_periods=window).var(ddof=1)\n    beta = cov / var_vol.replace(0.0, np.nan)\n    downside_ret = ret.clip(upper=0.0)\n    downside_var = downside_ret.pow(2).rolling(60, min_periods=60).sum()\n    total_var = ret.pow(2).rolling(60, min_periods=60).sum()\n    downside_ratio = downside_var / total_var.replace(0.0, np.nan)\n    downside_ratio = downside_ratio.replace([np.inf, -np.inf], np.nan).clip(0.0, 1.0)\n    weight = 0.5 + 0.5 * downside_ratio.fillna(0.5)\n    factor = -beta * weight\n    factor.name = \"factor_volume_beta_tail_gated\"\n    return factor",
+  "description": "Primary mechanism is the crash-predictor volume-return liquidity beta: negative beta indicates distributional selling pressure and is negated so higher values signal fragility. Secondary parent contributes a lightweight downside variance ratio, which measures the proportion of 60-day squared returns from negative days. We use this ratio as a bounded scaling weight (0.5 to 1.0) to amplify the liquidity-beta signal when recent downside concentration is high and attenuate it when the distribution is balanced. This preserves the raw single-stock mechanism without cross-sectional transformation, targeting IC improvement via tail-state conditioning while retaining the parent RankICIR and payoff strength.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.015019724621735526,
+    "icir": 0.22387138498376905,
+    "mi": 0.014232959846111726,
+    "rank_ic": 0.040147482757314765,
+    "rank_icir": 0.6275056344393176
+  },
+  "raw_metrics": {
+    "ic": 0.015019724621735526,
+    "icir": 0.22387138498376905,
+    "mi": 0.014232959846111726,
+    "rank_ic": 0.040147482757314765,
+    "rank_icir": 0.6275056344393176
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.019946823148124,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.06026728887726218,
+    "top_quantile_excess_return": 0.3967857325923714,
+    "top_quantile_max_drawdown": -0.11848030939414278,
+    "top_quantile_turnover": 0.1704696415297143
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:53:55.481323+00:00"
+}

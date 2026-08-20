@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "factor_trend_adaptive_intraday_overnight_blend_001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "elite",
+  "factor_id": 303,
+  "factor_name": "factor_trend_adaptive_intraday_overnight_blend",
+  "domain_agent": "alpha-regime-gating",
+  "run_id": "fleet-w02-20260813-103714-r3",
+  "expression_type": "python",
+  "formula": "efficiency_ratio = |close - close.shift(20)| / sum(|close - close.shift(1)|, 20); factor = efficiency_ratio * rolling_mean(intraday_ret,5) + (1 - efficiency_ratio) * rolling_mean(-overnight_ret,5)",
+  "code": "def factor_trend_adaptive_intraday_overnight_blend(df):\n    '''Adaptive blend of intraday momentum and overnight reversal based on trend efficiency.'''\n    df_copy = df.copy()\n    close = df_copy['close']\n    open_ = df_copy['open']\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(close, open_)\n    window = 20\n    price_change = close.diff()\n    abs_sum = price_change.abs().rolling(window, min_periods=window).sum()\n    net_change = close - close.shift(window)\n    efficiency_ratio = net_change.abs() / abs_sum.replace(0.0, np.nan)\n    efficiency_ratio = efficiency_ratio.fillna(0.0).clip(0.0, 1.0)\n    intraday_signal = intraday_ret.rolling(5, min_periods=1).mean()\n    overnight_reversal = -overnight_ret.rolling(5, min_periods=1).mean()\n    factor = efficiency_ratio * intraday_signal + (1.0 - efficiency_ratio) * overnight_reversal\n    factor.name = 'factor_trend_adaptive_intraday_overnight_blend'\n    return factor\n",
+  "description": "Stability & Regime-Gating mechanism: uses the Kaufman efficiency ratio (absolute net price change divided by the sum of absolute single-period price changes over the trailing window) as an adaptive gate to blend two distinct return components. Strong trending states emphasize intraday momentum persistence, while choppy (low efficiency) states emphasize overnight gap reversal. This is a trend-state gate on intraday and overnight return components, not a generic moving-average or stacked indicator.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.04958048751912514,
+    "icir": 0.7374002696097754,
+    "mi": 0.02870259031223732,
+    "rank_ic": 0.03164539060145368,
+    "rank_icir": 0.6593310395478789
+  },
+  "raw_metrics": {
+    "ic": -0.04958048751912514,
+    "icir": -0.7374002696097754,
+    "mi": 0.02870259031223732,
+    "rank_ic": -0.03164539060145368,
+    "rank_icir": -0.6593310395478789
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 10.254814860575234,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.2728420353605132,
+    "top_quantile_excess_return": 3.038270213626638,
+    "top_quantile_max_drawdown": -0.2517315151555348,
+    "top_quantile_turnover": 0.37785506644933997
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:22:34.372717+00:00"
+}

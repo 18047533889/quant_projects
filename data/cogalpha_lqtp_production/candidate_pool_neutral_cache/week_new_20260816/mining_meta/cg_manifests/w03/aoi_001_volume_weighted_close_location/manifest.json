@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "aoi_001_volume_weighted_close_location",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 385,
+  "factor_name": "factor_volume_weighted_close_location",
+  "domain_agent": "alpha-order-imbalance",
+  "run_id": "fleet-w03-20260814-081141-r8",
+  "expression_type": "python",
+  "formula": "rolling_20_sum(volume * close_location) / rolling_20_sum(volume), where close_location = (close - low) / (high - low)",
+  "code": "def factor_volume_weighted_close_location(df):\n    \"\"\"Volume-weighted close location captures where volume occurs within daily range; high values indicate buying pressure near highs.\"\"\"\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    range_ = (high - low).replace(0.0, np.nan)\n    close_location = (close - low) / range_\n    close_location = close_location.clip(0.0, 1.0)\n    weighted = (volume * close_location).rolling(20, min_periods=5).sum()\n    vol_sum = volume.rolling(20, min_periods=5).sum().replace(0.0, np.nan)\n    factor = weighted / vol_sum\n    factor = factor.fillna(0.0)\n    factor.name = \"factor_volume_weighted_close_location\"\n    return factor",
+  "description": "Expresses directional pressure as the volume-weighted average of where prices close within the day's range. High volume executed near the daily high signals persistent buying pressure, while high volume near the low signals distribution. The trailing 20-day window smooths short-term noise while preserving the mechanism. Cross-sectional z-score normalizes the bounded close-location measure for comparability across stocks after industry and size neutralization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.023756361147038368,
+    "icir": 0.359386616846149,
+    "mi": 0.013207394933688832,
+    "rank_ic": 0.013244772210671767,
+    "rank_icir": 0.19314656369144287
+  },
+  "raw_metrics": {
+    "ic": -0.023756361147038368,
+    "icir": -0.359386616846149,
+    "mi": 0.013207394933688832,
+    "rank_ic": -0.013244772210671767,
+    "rank_icir": -0.19314656369144287
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 9.739627383512408,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.4149943869866888,
+    "top_quantile_excess_return": 6.420429125077683,
+    "top_quantile_max_drawdown": -0.1066467458688155,
+    "top_quantile_turnover": 0.2294436349920893
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:06:00.884811+00:00"
+}

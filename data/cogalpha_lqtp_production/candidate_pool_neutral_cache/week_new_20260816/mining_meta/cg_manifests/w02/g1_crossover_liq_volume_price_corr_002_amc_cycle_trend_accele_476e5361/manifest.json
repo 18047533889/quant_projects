@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_liq_volume_price_corr_002_amc_cycle_trend_accele_476e5361",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 338,
+  "factor_name": "factor_volume_price_corr_vol_scaled",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w02-20260813-150507-r4",
+  "expression_type": "python",
+  "formula": "rolling_corr(close.pct_change(), volume.pct_change(), 20) / (1 + rolling_std(close.pct_change(), 20))",
+  "code": "def factor_volume_price_corr_vol_scaled(df):\n    \"\"\"Rolling price-volume correlation scaled by inverse return volatility.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_chg = df_copy[\"volume\"].pct_change()\n    corr = ret.rolling(20, min_periods=5).corr(vol_chg)\n    vol_std = ret.rolling(20, min_periods=5).std()\n    scale = 1.0 / (1.0 + vol_std)\n    factor = corr * scale\n    factor = factor.fillna(0.0)\n    factor.name = \"factor_volume_price_corr_vol_scaled\"\n    return factor",
+  "description": "Primary mechanism from liq_volume_price_corr_002: rolling 20-day correlation between daily price returns and volume changes captures co-movement, with positive values indicating trend confirmation by volume and negative values indicating liquidity absorption/reversal. Borrowed lightweight modifier from amc_cycle_trend_acceleration_slope_002: inverse trailing return volatility scales the correlation, reducing signal magnitude in high-volatility regimes where price-volume correlation estimates are less reliable. This preserves the raw non-cross-sectional mechanism of the qualified parent while adding a bounded, continuous attenuation that is economically grounded in volatility normalization. Cross-sectional transform remains none because the primary parent's raw payoff evidence is strong.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01117226437501341,
+    "icir": 0.24423845958520946,
+    "mi": 0.004335567467375512,
+    "rank_ic": 0.02686625164231771,
+    "rank_icir": 0.512775038582533
+  },
+  "raw_metrics": {
+    "ic": -0.01117226437501341,
+    "icir": -0.24423845958520946,
+    "mi": 0.004335567467375512,
+    "rank_ic": -0.02686625164231771,
+    "rank_icir": -0.512775038582533
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.644814533793602,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.13587170223904832,
+    "top_quantile_excess_return": 1.0856487247002677,
+    "top_quantile_max_drawdown": -0.10723401761652629,
+    "top_quantile_turnover": 0.15855993831541434
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:28:24.719246+00:00"
+}

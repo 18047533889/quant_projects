@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_apvc_gen0_c2_vol_asym_7ee3a37a",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 275,
+  "factor_name": "factor_volume_beta_ewm",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w02-20260813-014015-r1",
+  "expression_type": "python",
+  "formula": "beta_ewm = Cov_ewm(ret, dlog(volume), span=20) / Var_ewm(dlog(volume), span=20)",
+  "code": "def factor_volume_beta_ewm(df):\n    \"\"\"Exponentially weighted beta of returns on volume changes, emphasizing recent volume-price confirmation.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    log_volume = np.log(df_copy['volume'].clip(lower=1e-12))\n    dlog_volume = log_volume.diff()\n    cov = ret.ewm(span=20, min_periods=20).cov(dlog_volume)\n    var_vol = dlog_volume.ewm(span=20, min_periods=20).var()\n    beta = cov / var_vol.replace(0.0, np.nan)\n    df_copy['factor_volume_beta_ewm'] = beta\n    return df_copy['factor_volume_beta_ewm']",
+  "description": "Mutation of parent factor_volume_beta_pure: switch from equal-weight rolling beta to exponentially weighted moving beta to reduce estimation noise and better adapt to recent volume-price dynamics. This preserves the core mechanism of volume-confirmed price movement while smoothing the beta estimates, targeting improved IC and MI without sacrificing the parent's strong RankICIR. The raw continuous signal is kept unchanged (cross_sectional_transform none).",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.017804718093524918,
+    "icir": 0.2435161390047947,
+    "mi": 0.018705093555617225,
+    "rank_ic": 0.04640173565995061,
+    "rank_icir": 0.6951009208558249
+  },
+  "raw_metrics": {
+    "ic": -0.017804718093524918,
+    "icir": -0.2435161390047947,
+    "mi": 0.018705093555617225,
+    "rank_ic": -0.04640173565995061,
+    "rank_icir": -0.6951009208558249
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.587635057180429,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.06564962517774386,
+    "top_quantile_excess_return": 0.4377626555147378,
+    "top_quantile_max_drawdown": -0.13150634785900328,
+    "top_quantile_turnover": 0.1845049402214004
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:20:22.500108+00:00"
+}

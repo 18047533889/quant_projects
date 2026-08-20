@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_agent_drawdown_gen0_2_stab_gen0_002_b66aa8f8",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 204,
+  "factor_name": "factor_drawdown_ewm",
+  "domain_agent": "alpha-stability",
+  "run_id": "fleet-w02-20260805-141759-r18",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_drawdown_ewm(df):\n    \"\"\"Drawdown duration ratio using exponential weighting to emphasize recent drawdown observations. Stocks with fewer and more recently avoided drawdown days are favored.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    high = df_copy[\"high\"]\n    lookback_peak = 120\n    lookback_count = 20\n    peak_hist = high.rolling(lookback_peak, min_periods=lookback_peak).max().shift(1)\n    peak_hist = peak_hist.fillna(method=\"ffill\")\n    in_drawdown = (close < peak_hist).astype(int)\n    drawdown_ewm = in_drawdown.ewm(span=lookback_count, min_periods=lookback_count).mean()\n    drawdown_signal = -drawdown_ewm\n    df_copy[\"factor_drawdown_ewm\"] = drawdown_signal\n    return df_copy[\"factor_drawdown_ewm\"]",
+  "description": "Mutates parent drawdown duration factor by ablating the volume stability modifier and replacing simple rolling sum with exponential weighted mean (span=20) on the drawdown indicator. The ewm gives higher weight to recent observations, improving responsiveness. The core mechanism\u2014favoring stocks with fewer drawdown days\u2014is preserved. This simplification removes potential noise from volume modulation and targets improved IC and ICIR.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.006106969306248344,
+    "icir": 0.06260729686702977,
+    "mi": 0.029735269798647934,
+    "rank_ic": 0.017009389707234375,
+    "rank_icir": 0.1591624355701782
+  },
+  "raw_metrics": {
+    "ic": -0.006106969306248344,
+    "icir": -0.06260729686702977,
+    "mi": 0.029735269798647934,
+    "rank_ic": -0.017009389707234375,
+    "rank_icir": -0.1591624355701782
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.055836917623431015,
+    "top_quantile_excess_return": 0.3344060445708277,
+    "top_quantile_max_drawdown": -0.07028239589382057,
+    "top_quantile_turnover": 0.007812560465439353
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:15:57.336095+00:00"
+}

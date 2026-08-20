@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_then_mutation_market_cycle_0002_acp_3584f26c",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 768,
+  "factor_name": "factor_range_pressure_smoothed_tail_skew",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w04-20260814-081422-r12",
+  "expression_type": "python",
+  "formula": "((rolling_sum_60(close-low) - rolling_sum_60(high-close)) / rolling_sum_60(high-low)) * (1 - 0.3 * clip(-rolling_mean_10(rolling_skew_60(ret)), 0, 1))",
+  "code": "def factor_range_pressure_smoothed_tail_skew(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    # primary mechanism: 60-day cycle range pressure\n    buy_pressure = (close - low).rolling(60, min_periods=20).sum()\n    sell_pressure = (high - close).rolling(60, min_periods=20).sum()\n    total_range = (high - low).rolling(60, min_periods=20).sum()\n    range_pressure = (buy_pressure - sell_pressure) / total_range.replace(0.0, np.nan)\n    # mutate modifier: smooth the tail-skew fragility measure\n    ret = close.pct_change()\n    skew = ret.rolling(60, min_periods=30).skew()\n    skew_smooth = skew.rolling(10, min_periods=5).mean()\n    neg_skew = np.clip(-skew_smooth, 0.0, 1.0)\n    scale = 1.0 - 0.3 * neg_skew\n    factor = range_pressure * scale\n    df_copy[\"factor_range_pressure_smoothed_tail_skew\"] = factor\n    return df_copy[\"factor_range_pressure_smoothed_tail_skew\"]",
+  "description": "Preserves the parent's core 60-day cycle range-pressure mechanism, which identifies accumulation/distribution phase by close position within the trailing high-low range. Mutates the lightweight tail-skew attenuation modifier by smoothing the 60-day return skew with a 10-day moving average. This reduces day-to-day noise in the fragility scale, targeting improved IC and ICIR stability while retaining RankIC, RankICIR, MI, and the raw payoff structure with cross-sectional transform none.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.016241308627662602,
+    "icir": 0.3324077579745391,
+    "mi": 0.006837367182055409,
+    "rank_ic": 0.016069514292252035,
+    "rank_icir": 0.28725949757608243
+  },
+  "raw_metrics": {
+    "ic": -0.016241308627662602,
+    "icir": -0.3324077579745391,
+    "mi": 0.006837367182055409,
+    "rank_ic": -0.016069514292252035,
+    "rank_icir": -0.28725949757608243
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.3268576859471475,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": -0.006007001754357977,
+    "top_quantile_excess_return": -0.003913429974257809,
+    "top_quantile_max_drawdown": -0.02632132364102635,
+    "top_quantile_turnover": 0.13764125374052627
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:13:04.946515+00:00"
+}

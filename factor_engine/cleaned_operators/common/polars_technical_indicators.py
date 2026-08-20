@@ -1296,6 +1296,37 @@ class UltimateOscillatorNative(SeriesOperator):
 # Supertrend & PSAR
 # ---------------------------------------------------------------------------
 
+# R21-DEF1-SUPERTRND: honest ExecutionKind for the stateful Supertrend kernel.
+# The band ratchet/flip recursion is a per-row NumPy kernel over Polars column
+# arrays — it is NOT a pure native Polars expression and must never be
+# classified as one (no per-row Python loop is ever claimed native).
+try:  # pragma: no cover - import guard mirrors other backend-aware modules
+    from backend.contracts import ExecutionKind, PhysicalImplementationSpec
+
+    _SupertrendSpec = PhysicalImplementationSpec(
+        canonical="Supertrend",
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NUMPY_KERNEL,
+        supports_lazy=False,
+        supports_streaming=False,
+        stateful=True,
+        materializes_full_panel=True,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=False,
+        notes=("R21-DEF1 fix: true Supertrend ratchet state machine (Wilder ATR, "
+               "band ratchet, close-cross flip); semantics match the pandas "
+               "reference technical/indicators_v2.Supertrend. NumPy kernel over "
+               "polars column arrays, NOT a native polars expression."),
+        implementation_source_hash="cleaned_operators.common.polars_technical_indicators:SupertrendNative:v2-r21-def1",
+        kernel_identity="numpy:supertrend_ratchet_wilder_atr:v2-r21-def1",
+        parameter_domain_hash="Supertrend.high:panel,low:panel,close:panel,window:int:min=1:default=10,multiplier:float:min=0:default=3.0",
+        semantic_contract_hash="Supertrend:active_band_level:ratchet_flip:v2-r21-def1",
+    )
+except Exception:  # pragma: no cover - registry-only environments
+    _SupertrendSpec = None
+
 
 @register_operator(
     name="Supertrend",
@@ -1305,7 +1336,28 @@ class UltimateOscillatorNative(SeriesOperator):
     source=_SRC,
     backend="polars")
 class SupertrendNative(SeriesOperator):
-    """Supertrend indicator value."""
+    """Supertrend indicator value.
+
+    R21-DEF1-SUPERTRND (P1 fix): the pre-fix kernel returned exactly
+    (high+low)/2 on every row — the m*ATR bands cancelled algebraically in
+    (upper+lower)/2, so ``window`` and ``multiplier`` were dead parameters and
+    there was zero trend/ratchet state (also: simple rolling mean of TR, not
+    Wilder ATR).  This is now the true Supertrend ratchet state machine with
+    semantics identical to the audited pandas reference
+    (``cleaned_operators/technical/indicators_v2.py::Supertrend``):
+    basic bands = (h+l)/2 ± multiplier*WilderATR(window); final bands ratchet
+    (upper only falls, lower only rises, each gated by the prior close); the
+    trend flips when close crosses the active final band; the output is the
+    ACTIVE BAND LEVEL (lower band in an uptrend, upper band in a downtrend).
+
+    The ratchet/flip recursion is inherently per-row stateful and cannot be
+    expressed as a pure native Polars expression; it is implemented as a
+    NumPy kernel over Polars column arrays.  Classified honestly via
+    ``_physical_spec`` as ``ExecutionKind.POLARS_NUMPY_KERNEL`` (NOT
+    POLARS_NATIVE_EXPR; no per-row Python loop is ever claimed native).
+    """
+
+    _physical_spec = _SupertrendSpec
 
     metadata = OperatorMetadata(
         name="Supertrend",
@@ -1313,12 +1365,121 @@ class SupertrendNative(SeriesOperator):
         description="超级趋势指标",
         param_names=["high", "low", "close", "window", "multiplier"],
         return_type="series",
-        tags=["time_series", "polars", "native", "technical"],
+        tags=["time_series", "polars", "stateful", "full_replay", "technical"],
     )
+
+    @staticmethod
+    def _wilder_atr_1d(h, l, c, w: int):
+        """Wilder ATR (alpha=1/w, adjust=False, min_periods=w) on one column.
+
+        Matches the pandas reference ``_wilder(_tr(...), w)`` including TR NaN
+        propagation on any missing component (np.maximum.reduce semantics).
+        """
+        import numpy as np
+
+        n = len(c)
+        prev = np.full(n, np.nan, dtype=float)
+        prev[1:] = c[:-1]
+        with np.errstate(invalid="ignore"):
+            cand = np.vstack([
+                h - l,
+                np.abs(h - prev),
+                np.abs(l - prev),
+            ])
+            tr = np.where(np.all(np.isfinite(cand), axis=0), np.nanmax(cand, axis=0), np.nan)
+        alpha = 1.0 / float(w)
+        atr = np.full(n, np.nan, dtype=float)
+        state = np.nan   # ewm state (last blended value); NaN until seeded
+        seen = 0         # finite TR observations fed into the recursion
+        gap = 0          # consecutive NaN rows since the last finite observation
+        for t in range(n):
+            if not np.isfinite(tr[t]):
+                gap += 1
+                # pandas ewm ignore_nulls: NaN rows hold the previous state
+                # forward (NaN output only while min_periods is unmet).
+                if seen >= w:
+                    atr[t] = state
+                continue
+            if not np.isfinite(state):
+                state = tr[t]
+            elif gap == 0:
+                state = alpha * tr[t] + (1.0 - alpha) * state
+            else:
+                # pandas ewm(adjust=False) across gaps: the new observation
+                # re-blends with the held state at effective weight ratio
+                # (1-alpha)^(gap+1)/alpha (derived and verified against pandas
+                # ewm on hand series across alpha in {1/14, .25, .5, .75} and
+                # gap in {1,2,3}): state = (x + ratio*s)/(1+ratio).
+                decay = (1.0 - alpha) ** (gap + 1) / alpha
+                state = (tr[t] + decay * state) / (1.0 + decay)
+            gap = 0
+            seen += 1
+            if seen >= w:
+                atr[t] = state
+        return atr
+
+    @staticmethod
+    def _supertrend_1d(h, l, c, atr, m: float):
+        """Supertrend ratchet state machine on one column (pandas parity).
+
+        Mirrors ``indicators_v2.Supertrend``: post-gap re-seed enters UNKNOWN
+        (trend=0, NaN output) and the next valid bar re-asserts direction from
+        the close vs the band midline; final bands ratchet with prior-close
+        gates; output = active band level.
+        """
+        import numpy as np
+
+        n = len(c)
+        out = np.full(n, np.nan, dtype=float)
+        with np.errstate(invalid="ignore"):
+            mid = 0.5 * (h + l)
+        basic_u = mid + m * atr
+        basic_l = mid - m * atr
+        final_u = basic_u.copy()
+        final_l = basic_l.copy()
+        trend = np.ones(n, dtype=int)
+        post_gap = False
+        for t in range(1, n):
+            if not (np.isfinite(h[t]) and np.isfinite(l[t]) and np.isfinite(c[t])
+                    and np.isfinite(basic_u[t]) and np.isfinite(basic_l[t])):
+                trend[t] = 0  # sentinel: state broken, next valid bar re-seeds
+                post_gap = True
+                continue
+            if post_gap:
+                # First valid bar after a break publishes UNKNOWN (no
+                # manufactured direction); the next bar re-asserts below.
+                trend[t] = 0
+                final_u[t] = basic_u[t]
+                final_l[t] = basic_l[t]
+                post_gap = False
+                out[t] = np.nan
+                continue
+            if np.isfinite(final_u[t - 1]) and (basic_u[t] >= final_u[t - 1] and c[t - 1] <= final_u[t - 1]):
+                final_u[t] = final_u[t - 1]
+            if np.isfinite(final_l[t - 1]) and (basic_l[t] <= final_l[t - 1] and c[t - 1] >= final_l[t - 1]):
+                final_l[t] = final_l[t - 1]
+            if trend[t - 1] == 0:
+                mid_t = 0.5 * (basic_u[t] + basic_l[t])
+                trend[t] = 1 if c[t] >= mid_t else -1
+            elif trend[t - 1] > 0 and c[t] < final_l[t]:
+                trend[t] = -1
+            elif trend[t - 1] < 0 and c[t] > final_u[t]:
+                trend[t] = 1
+            else:
+                trend[t] = trend[t - 1]
+            if trend[t] > 0:
+                out[t] = final_l[t]
+            elif trend[t] < 0:
+                out[t] = final_u[t]
+            else:
+                out[t] = np.nan
+        return out
 
     def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame | None = None,
                          close: pl.DataFrame | None = None, window: int = 10,
                          multiplier: float = 3.0, **kwargs) -> pl.DataFrame:
+        import numpy as np
+
         from cleaned_operators.parameter_validation import strict_integer, strict_finite_scalar
 
         w = strict_integer(window, "window", minimum=1)
@@ -1328,29 +1489,16 @@ class SupertrendNative(SeriesOperator):
         if low is None or close is None:
             raise ValueError("Supertrend requires high, low, close")
 
-        exprs = []
+        out_cols: dict[str, "np.ndarray"] = {}  # np is numpy (imported below)
         for c in cols:
-            h = pl.col(c)
-            l_col = low[c] if c in low.columns else pl.lit(None)
-            c_col = close[c] if c in close.columns else pl.lit(None)
-            c_prev = c_col.shift(1)
+            h = high[c].to_numpy().astype(float, copy=False)
+            l = low[c].to_numpy().astype(float, copy=False) if c in low.columns else np.full(high.height, np.nan)
+            cl = close[c].to_numpy().astype(float, copy=False) if c in close.columns else np.full(high.height, np.nan)
+            atr = self._wilder_atr_1d(h, l, cl, w)
+            out_cols[c] = self._supertrend_1d(h, l, cl, atr, float(m))
 
-            # ATR
-            tr1 = h - l_col
-            tr2 = (h - c_prev).abs()
-            tr3 = (l_col - c_prev).abs()
-            tr = pl.max_horizontal(tr1, tr2, tr3)
-            atr = tr.rolling_mean(window_size=w, min_samples=1)
-
-            # Basic bands
-            hl_avg = (h + l_col) / 2.0
-            upper_band = hl_avg + m * atr
-            lower_band = hl_avg - m * atr
-
-            # Simplified: return the band midpoint (full stateful version would track trend direction)
-            exprs.append(((upper_band + lower_band) / 2.0).alias(c))
-
-        return high.with_columns(exprs)
+        result = pl.DataFrame({c: out_cols[c] for c in cols})
+        return _with_meta(result, high)
 
 
 @register_operator(

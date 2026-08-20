@@ -497,6 +497,31 @@ class MemoryCacheLayer:
                 logger.error(f"Failed to cache value for key {key}: {e}")
                 return False
 
+    def _entry_expired(self, key: str) -> bool:
+        """Return whether the L1 entry for ``key`` is missing or expired.
+
+        Expired entries are lazily removed so a later ``get`` observes the
+        same miss.  Callers must hold ``self._lock``.
+        """
+        entry = self._cache.get(key)
+        if entry is None:
+            return True
+        if entry.metadata.is_expired(time.time()):
+            self._remove_entry(key)
+            return True
+        return False
+
+    def scan_keys(self, prefix: str) -> List[str]:
+        """Return live (non-expired) keys beginning with ``prefix``."""
+        with self._lock:
+            expired = [
+                key for key, entry in self._cache.items()
+                if entry.metadata.is_expired(time.time())
+            ]
+            for key in expired:
+                self._remove_entry(key)
+            return [key for key in self._cache if key.startswith(prefix)]
+
     def invalidate(self, key: str) -> bool:
         """Remove entry from cache."""
         with self._lock:
@@ -905,6 +930,118 @@ class DiskCacheLayer:
             except (OSError, pickle.PicklingError, TypeError, ValueError) as e:
                 logger.error(f"Failed to write cache to disk for key {key}: {e}")
                 return False
+
+    def _read_record_unlocked(
+        self, cache_path: Path
+    ) -> Optional[Tuple[CacheMetadata, bytes]]:
+        """Read and decode a modern record without removing or promoting it.
+
+        Returns None when the path is absent, unreadable, malformed, or fails
+        verification; callers decide policy on top of that signal.
+        """
+        try:
+            return self._decode_record(cache_path.read_bytes())
+        except (OSError, ValueError, TypeError) as exc:
+            logger.debug("Failed to decode cache record %s: %s", cache_path, exc)
+            return None
+
+    def _contains_unlocked(self, key: str) -> bool:
+        """Return whether a live record exists for ``key`` without promoting."""
+        cache_path = self._key_path(key)
+        meta_path = self._meta_path(cache_path)
+
+        if cache_path.exists():
+            decoded = self._read_record_unlocked(cache_path)
+            if decoded is not None:
+                metadata, _ = decoded
+                if (
+                    metadata.key == key
+                    and _codec_compatible(
+                        metadata.compression_method, self.compressor
+                    )
+                    and not metadata.is_expired(time.time())
+                ):
+                    return True
+            # Fall through to the legacy sidecar check: a missing/unverifiable
+            # modern record paired with a valid sidecar is a live legacy entry.
+
+        if not meta_path.exists():
+            return False
+
+        try:
+            metadata = CacheMetadata.from_dict(
+                json.loads(meta_path.read_text(encoding="utf-8"))
+            )
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            return False
+        return (
+            metadata.key == key
+            and _codec_compatible(metadata.compression_method, self.compressor)
+            and not metadata.is_expired(time.time())
+        )
+
+    def contains(self, key: str) -> bool:
+        """Return whether a live entry exists without promoting it."""
+        cache_path = self._key_path(key)
+        with self._process_lock(), self._root_lock(), self._entry_lock(cache_path):
+            return self._contains_unlocked(key)
+
+    def _scan_namespace_unlocked(self, prefix: str) -> List[str]:
+        """Return live logical keys beginning with ``prefix`` from disk."""
+        found: Set[str] = set()
+        now = time.time()
+
+        for cache_path in self.root_dir.rglob("*.cache"):
+            if cache_path.name.startswith(".tmp."):
+                continue
+            decoded = self._read_record_unlocked(cache_path)
+            if decoded is not None:
+                metadata, _ = decoded
+                if (
+                    metadata.key.startswith(prefix)
+                    and not metadata.is_expired(now)
+                ):
+                    found.add(metadata.key)
+                continue
+            # Corrupt/absent record: a checksum-authentic sidecar can still
+            # identify a live legacy entry at this physical path.
+            sidecar_path = self._meta_path(cache_path)
+            try:
+                sidecar_text = sidecar_path.read_text(encoding="utf-8")
+                sidecar_data = json.loads(sidecar_text)
+                metadata = CacheMetadata.from_dict(sidecar_data)
+                if (
+                    metadata.key.startswith(prefix)
+                    and sidecar_data.get("checksum")
+                    == hashlib.sha256(cache_path.read_bytes()).hexdigest()
+                    and not metadata.is_expired(now)
+                ):
+                    found.add(metadata.key)
+            except (OSError, ValueError, TypeError, json.JSONDecodeError):
+                continue
+
+        # Orphan legacy sidecars whose value file is missing entirely.
+        for meta_path in self.root_dir.rglob("*.meta.json"):
+            value_path = meta_path.with_name(
+                meta_path.name[: -len(".meta.json")] + ".cache"
+            )
+            if value_path.exists():
+                continue
+            try:
+                metadata = CacheMetadata.from_dict(
+                    json.loads(meta_path.read_text(encoding="utf-8"))
+                )
+            except (OSError, ValueError, TypeError, json.JSONDecodeError):
+                continue
+            if metadata.key.startswith(prefix) and not metadata.is_expired(now):
+                found.add(metadata.key)
+
+        return sorted(found)
+
+    def scan_namespace(self, prefix: str) -> List[str]:
+        """Return live logical keys beginning with ``prefix`` without promoting."""
+        with self._process_lock(), self._root_lock():
+            return self._scan_namespace_unlocked(prefix)
 
     def invalidate(self, key: str) -> bool:
         """Remove entry from disk cache."""
@@ -1512,6 +1649,60 @@ class RedisCacheLayer:
         except (pickle.PicklingError, TypeError, ValueError, OSError) as e:
             logger.error(f"Failed to write to Redis cache for key {key}: {e}")
             return False
+
+    def contains(self, key: str) -> bool:
+        """Return whether a live value/metadata pair exists without promoting."""
+        prefixed = self._prefixed_key(key)
+        try:
+            pipe = self.client.pipeline()
+            pipe.get(prefixed)
+            pipe.hget(f"{prefixed}:meta", "data")
+            compressed_data, raw_meta = pipe.execute()
+            if not compressed_data or not raw_meta:
+                return False
+            if isinstance(raw_meta, bytes):
+                raw_meta = raw_meta.decode("utf-8")
+            metadata = CacheMetadata.from_dict(json.loads(raw_meta))
+            return (
+                metadata.key == key
+                and _codec_compatible(metadata.compression_method, self.compressor)
+                and not metadata.is_expired(time.time())
+            )
+        except (OSError, TypeError, ValueError, json.JSONDecodeError,
+                *_REDIS_ERRORS) as exc:
+            logger.warning("Failed to probe Redis cache for key %s: %s", key, exc)
+            return False
+
+    def scan_namespace(self, prefix: str) -> List[str]:
+        """Return live logical keys beginning with ``prefix`` without promoting."""
+        found: Set[str] = set()
+        now = time.time()
+        try:
+            cursor = 0
+            pattern = f"{self.key_prefix}*:meta"
+            while True:
+                cursor, meta_keys = self.client.scan(cursor, match=pattern, count=100)
+                for meta_key in meta_keys:
+                    try:
+                        raw_meta = self.client.hget(meta_key, "data")
+                        if raw_meta is None:
+                            continue
+                        if isinstance(raw_meta, bytes):
+                            raw_meta = raw_meta.decode("utf-8")
+                        metadata = CacheMetadata.from_dict(json.loads(raw_meta))
+                        if (
+                            metadata.key.startswith(prefix)
+                            and not metadata.is_expired(now)
+                            and self._value_key_for_meta(meta_key) is not None
+                        ):
+                            found.add(metadata.key)
+                    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+                        continue
+                if cursor == 0:
+                    break
+        except (OSError, TypeError, ValueError, *_REDIS_ERRORS) as exc:
+            logger.warning("Failed to scan Redis namespace %s: %s", prefix, exc)
+        return sorted(found)
 
     def invalidate(self, key: str) -> bool:
         """Remove entry from Redis cache."""
@@ -2124,6 +2315,88 @@ class MultiLevelCache:
             with self._stats_lock:
                 self.stats.invalidations += 1
 
+        return removed
+
+    # ==================================================================
+    # Layer-scanning and namespace invalidation primitives
+    # ==================================================================
+
+    def _contains_unlocked(self, key: str) -> bool:
+        """Return whether any layer holds a live entry for ``key``."""
+        if self.l1 and not self.l1._entry_expired(key):
+            return True
+        if self.l2 and self.l2._contains_unlocked(key):
+            return True
+        if self.l3:
+            contains = getattr(self.l3, "contains", None)
+            if callable(contains):
+                try:
+                    if contains(key):
+                        return True
+                except (OSError, TypeError, ValueError, *_REDIS_ERRORS) as exc:
+                    logger.warning("Failed to probe Redis cache for key %s: %s", key, exc)
+        return False
+
+    def contains(self, key: str) -> bool:
+        """Return whether ``key`` is live in any layer without promoting it."""
+        with self._coordination_lock:
+            if self.l2:
+                with self.l2._process_lock(), self.l2._root_lock():
+                    return self._contains_unlocked(key)
+            return self._contains_unlocked(key)
+
+    def _scan_namespace_unlocked(self, prefix: str) -> List[str]:
+        """Collect keys beginning with ``prefix`` from every layer."""
+        found: Set[str] = set()
+        if self.l1:
+            found.update(self.l1.scan_keys(prefix))
+        if self.l2:
+            found.update(self.l2._scan_namespace_unlocked(prefix))
+        if self.l3:
+            scan = getattr(self.l3, "scan_namespace", None)
+            if callable(scan):
+                try:
+                    found.update(scan(prefix))
+                except (OSError, TypeError, ValueError, *_REDIS_ERRORS) as exc:
+                    logger.warning(
+                        "Failed to scan Redis cache namespace %s: %s", prefix, exc
+                    )
+        return sorted(found)
+
+    def scan_namespace(self, prefix: str) -> List[str]:
+        """Return live keys beginning with ``prefix`` across all layers."""
+        with self._coordination_lock:
+            if self.l2:
+                with self.l2._process_lock(), self.l2._root_lock():
+                    return self._scan_namespace_unlocked(prefix)
+            return self._scan_namespace_unlocked(prefix)
+
+    def invalidate_namespace(self, prefix: str) -> int:
+        """Remove every live key beginning with ``prefix`` from all layers.
+
+        Each scanned key is removed through the same epoch-fenced single-key
+        path as :meth:`invalidate`, so namespace invalidation races with reads
+        and promotion exactly like an explicit per-key invalidation loop, and
+        sibling coordinators cannot retain the removed values in L1.
+        """
+        with self._coordination_lock:
+            if self.l2:
+                with self.l2._process_lock(), self.l2._root_lock():
+                    return self._invalidate_namespace_unlocked(prefix)
+            return self._invalidate_namespace_unlocked(prefix)
+
+    def _invalidate_namespace_unlocked(self, prefix: str) -> int:
+        """Namespace invalidation under the coordinator lock (and disk fence).
+
+        Delegates each removal to the epoch-fenced single-key path so that
+        removal of every scanned key is serialized against promotion and
+        dependency invalidation.
+        """
+        keys = self._scan_namespace_unlocked(prefix)
+        removed = 0
+        for key in keys:
+            if self._invalidate_with_epoch_fence_unlocked(key):
+                removed += 1
         return removed
 
     def invalidate_dependency(self, dependency: str) -> int:

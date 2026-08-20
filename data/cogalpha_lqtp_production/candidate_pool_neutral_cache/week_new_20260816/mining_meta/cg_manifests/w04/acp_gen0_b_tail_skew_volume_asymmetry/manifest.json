@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "acp_gen0_b_tail_skew_volume_asymmetry",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 748,
+  "factor_name": "factor_crash_tail_skew_volume_asymmetry",
+  "domain_agent": "alpha-crash-predictor",
+  "run_id": "fleet-w04-20260814-081422-r12",
+  "expression_type": "python",
+  "formula": "-rolling_skew_60(ret) * (rolling_sum_60(volume if ret<0 else 0) / rolling_sum_60(volume))",
+  "code": "def factor_crash_tail_skew_volume_asymmetry(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    ret = close.pct_change()\n    skew = ret.rolling(60, min_periods=30).skew()\n    down_vol = volume.where(ret < 0, 0.0).rolling(60, min_periods=30).sum()\n    total_vol = volume.rolling(60, min_periods=30).sum().replace(0.0, np.nan)\n    down_ratio = down_vol / total_vol\n    factor = -skew * down_ratio\n    factor = factor.clip(lower=-3, upper=3)\n    df_copy[\"factor_crash_tail_skew_volume_asymmetry\"] = factor\n    return df_copy[\"factor_crash_tail_skew_volume_asymmetry\"]",
+  "description": "Accumulating negative return skewness combined with increasing downside volume participation signals rising crash fragility. Negative skew indicates fat left tail; high downside volume ratio confirms distribution shift. This tail-distribution plus volume flow pathway is distinct from prior volatility asymmetry and drawdown factors.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.005816447680058268,
+    "icir": 0.15859804131884714,
+    "mi": 0.009481762034107,
+    "rank_ic": 0.029547258179962618,
+    "rank_icir": 0.5731204328927835
+  },
+  "raw_metrics": {
+    "ic": 0.005816447680058268,
+    "icir": 0.15859804131884714,
+    "mi": 0.009481762034107,
+    "rank_ic": 0.029547258179962618,
+    "rank_icir": 0.5731204328927835
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.579024083624724,
+    "quantile_monotonicity": 0.8424242424242424,
+    "top_quantile_annualized_excess_return": 0.031152907324149437,
+    "top_quantile_excess_return": 0.020662237601939415,
+    "top_quantile_max_drawdown": -0.04628131192648044,
+    "top_quantile_turnover": 0.08862269280549245
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:09:12.413016+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_liq_volume_price_corr_002_1eec61f5_a_ee4559a0",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 352,
+  "factor_name": "factor_corr_range_conditional",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w02-20260813-150507-r4",
+  "expression_type": "python",
+  "formula": "rolling_corr(close.pct_change(), log1p(volume).pct_change(), 20) * (0.5 + 0.5*tanh((high-low)/close*20))",
+  "code": "def factor_corr_range_conditional(df):\n    \"\"\"Range-conditional price-volume correlation.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    log_vol_chg = np.log1p(df_copy[\"volume\"]).pct_change()\n    corr = ret.rolling(20, min_periods=5).corr(log_vol_chg)\n    corr = corr.fillna(0.0)\n    range_ratio = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"]\n    range_ratio = range_ratio.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    range_weight = 0.5 + 0.5 * np.tanh(range_ratio * 20.0)\n    factor = corr * range_weight\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    factor.name = \"factor_corr_range_conditional\"\n    return factor",
+  "description": "Preserves parent1's rolling price-volume correlation as the primary mechanism, maintaining its rank stability and payoff monotonicity. Borrows parent2's bounded tanh normalized-range scaling as a lightweight regime modifier: price-volume correlation is amplified when intraday range is wide (information-intensive days) and attenuated when range is narrow, adding nonlinear responsiveness. This targets improved MI and ICIR while preserving RankIC/RankICIR strength.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.014157046481229115,
+    "icir": 0.2655990064030499,
+    "mi": 0.008421165258361896,
+    "rank_ic": 0.03671755429700718,
+    "rank_icir": 0.6206581751872838
+  },
+  "raw_metrics": {
+    "ic": -0.014157046481229115,
+    "icir": -0.2655990064030499,
+    "mi": 0.008421165258361896,
+    "rank_ic": -0.03671755429700718,
+    "rank_icir": -0.6206581751872838
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.745467304390923,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.1612606765288942,
+    "top_quantile_excess_return": 1.369377049505513,
+    "top_quantile_max_drawdown": -0.09858125058867073,
+    "top_quantile_turnover": 0.183756999126623
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:30:50.485217+00:00"
+}

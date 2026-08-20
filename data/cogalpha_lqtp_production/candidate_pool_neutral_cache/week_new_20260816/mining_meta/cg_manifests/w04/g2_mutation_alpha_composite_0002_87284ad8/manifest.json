@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_alpha_composite_0002_87284ad8",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 582,
+  "factor_name": "factor_volume_price_beta_tanh",
+  "domain_agent": "alpha-composite",
+  "run_id": "fleet-w04-20260813-075113-r3",
+  "expression_type": "python",
+  "formula": "tanh( rolling_cov(close.pct_change(), volume.pct_change(), 20) / rolling_var(volume.pct_change(), 20) )",
+  "code": "def factor_volume_price_beta_tanh(df):\n    \"\"\"Rolling beta of return on volume change, bounded by tanh to reduce outlier influence.\"\"\"\n    df_copy = df.copy()\n    ret_1 = df_copy[\"close\"].pct_change()\n    vol_1 = df_copy[\"volume\"].pct_change()\n    cov = ret_1.rolling(20, min_periods=5).cov(vol_1)\n    var = vol_1.rolling(20, min_periods=5).var()\n    beta = cov / var.replace(0.0, np.nan)\n    beta = beta.replace([np.inf, -np.inf], np.nan)\n    bounded_beta = np.tanh(beta)\n    df_copy[\"factor_volume_price_beta_tanh\"] = bounded_beta\n    return df_copy[\"factor_volume_price_beta_tanh\"]",
+  "description": "Preserves the parent's volume-price coupling beta mechanism: positive beta indicates informed flow backs price changes, negative beta signals divergence. Adds a single lightweight modifier: tanh bounding of the beta coefficient. This smooths extreme outlier beta values that can arise from near-zero volume variance, reducing their impact on Pearson IC while preserving the exact rank ordering (tanh is strictly monotonic), thereby aiming to improve ICIR without disturbing the parent's strong RankIC/RankICIR and monotonicity profile. The rolling window and min_periods remain unchanged.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.012664854706533116,
+    "icir": 0.17919709343545168,
+    "mi": 0.019836180131975745,
+    "rank_ic": 0.043724082352245036,
+    "rank_icir": 0.6548891265272857
+  },
+  "raw_metrics": {
+    "ic": -0.012664854706533116,
+    "icir": -0.17919709343545168,
+    "mi": 0.019836180131975745,
+    "rank_ic": -0.043724082352245036,
+    "rank_icir": -0.6548891265272857
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.1823538056943566,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.024041154622086003,
+    "top_quantile_excess_return": 0.018361158322934168,
+    "top_quantile_max_drawdown": -0.0364764819920218,
+    "top_quantile_turnover": 0.1595802212457848
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:52:18.550885+00:00"
+}

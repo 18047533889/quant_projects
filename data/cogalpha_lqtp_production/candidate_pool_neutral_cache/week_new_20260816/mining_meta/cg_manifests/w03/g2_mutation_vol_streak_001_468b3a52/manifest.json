@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_vol_streak_001_468b3a52",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 106,
+  "factor_name": "factor_volume_streak_regime",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w03-20260804-001218-r9",
+  "expression_type": "python",
+  "formula": "volume_streak * (1.5 if high_vol_regime else 0.7 if low_vol_regime else 1.0)",
+  "code": "def factor_volume_streak_regime(df):\n    \"\"\"Volume streak persistence amplified by volume regime.\"\"\"\n    df_copy = df.copy()\n    volume_ma = df_copy[\"volume\"].rolling(20, min_periods=20).mean()\n    vol_cond = df_copy[\"volume\"] > 1.5 * volume_ma\n    group = (vol_cond != vol_cond.shift(1)).cumsum()\n    streak = vol_cond.groupby(group).cumcount() + 1\n    is_high_vol, is_low_vol, _ = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    factor = streak * vol_cond\n    factor = np.where(is_high_vol > 0, factor * 1.5, factor)\n    factor = np.where(is_low_vol > 0, factor * 0.7, factor)\n    df_copy[\"factor_volume_streak_regime\"] = factor\n    return df_copy[\"factor_volume_streak_regime\"]\n",
+  "description": "Volume streak persistence captures sustained institutional interest by counting consecutive days where volume exceeds 1.5x its 20-day moving average. This mutation adds a volume regime modulation using alpha_tools.classify_volume_regime: during high-volume regimes the signal is amplified by 1.5x, during low-volume regimes it is attenuated by 0.7x. This targets improved robustness by weighting streaks according to the broader market volume environment, reducing noise from isolated spikes during quiet periods. The core persistence mechanism remains intact.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02417878517125149,
+    "icir": 0.3395697791907603,
+    "mi": 0.12587191015139254,
+    "rank_ic": 0.03899039540958697,
+    "rank_icir": 0.5516284274778831
+  },
+  "raw_metrics": {
+    "ic": -0.02417878517125149,
+    "icir": -0.3395697791907603,
+    "mi": 0.12587191015139254,
+    "rank_ic": -0.03899039540958697,
+    "rank_icir": -0.5516284274778831
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.08004200905890224,
+    "top_quantile_excess_return": 0.5522323000733986,
+    "top_quantile_max_drawdown": -0.05398352835583797,
+    "top_quantile_turnover": 0.11130960249968005
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:48:19.303805+00:00"
+}

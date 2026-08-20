@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_tail_risk_001_ee9dbb61_0e6db46a",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 301,
+  "factor_name": "factor_tail_asym_vol_ema_regime",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w01-20260813-064101-r2",
+  "expression_type": "python",
+  "formula": "factor = 1 / (1 + rolling_sum_60(downside_ret^2 * clip(volume_ema_ratio_20, 0.5, 2.0)) / rolling_sum_60(upside_ret^2 * clip(volume_ema_ratio_20, 0.5, 2.0)))",
+  "code": "def factor_tail_asym_vol_ema_regime(df):\n    \"\"\"Asymmetric volatility with volume regime confirmation using active EMA-based volume classifier.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    down_ret = np.minimum(ret, 0.0)\n    up_ret = np.maximum(ret, 0.0)\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    vol_weight = np.clip(vol_ratio.fillna(1.0), 0.5, 2.0)\n    down_var = (down_ret ** 2 * vol_weight).rolling(60, min_periods=20).sum()\n    up_var = (up_ret ** 2 * vol_weight).rolling(60, min_periods=20).sum()\n    ratio = down_var / up_var.replace(0.0, np.nan)\n    ratio = ratio.replace([np.inf, -np.inf], np.nan)\n    factor = 1.0 / (1.0 + ratio)\n    factor = factor.fillna(0.0)\n    return pd.Series(factor, index=df_copy.index, name=\"factor_tail_asym_vol_ema_regime\")",
+  "description": "Mutation preserves the parent's core asymmetric-volatility tail-risk resilience mechanism: downside return variance relative to upside return variance, both weighted by volume confirmation. The bottleneck improvement replaces the static 60-day simple moving average volume denominator with the active alpha_tools.classify_volume_regime module using a 20-day EMA-based continuous volume ratio. This makes the volume confirmation more responsive to recent volume surges, potentially improving MI and drawdown robustness without disrupting the existing RankIC/ICIR stability of the parent. Higher factor values indicate lower downside variance share, i.e., stronger tail-risk resilience.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.013160107303011065,
+    "icir": 0.20248188529191774,
+    "mi": 0.01888280846428181,
+    "rank_ic": 0.02816074643515149,
+    "rank_icir": 0.4161924144212298
+  },
+  "raw_metrics": {
+    "ic": -0.013160107303011065,
+    "icir": -0.20248188529191774,
+    "mi": 0.01888280846428181,
+    "rank_ic": -0.02816074643515149,
+    "rank_icir": -0.4161924144212298
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 8.63395571153419,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.5784168402547591,
+    "top_quantile_excess_return": 12.549050690753745,
+    "top_quantile_max_drawdown": -0.07868972163960597,
+    "top_quantile_turnover": 0.09735398436624741
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:49:49.872636+00:00"
+}

@@ -93,20 +93,94 @@ def compute_sector_exposure(
     factor_values: np.ndarray,
     sector_labels: np.ndarray,
     weights: Optional[np.ndarray] = None,
+    label_time: Optional[np.ndarray] = None,
+    factor_time: Optional[np.ndarray] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Compute weighted factor exposure by sector.
 
+    QE-METRIC P0-13 — point-in-time (PIT) sector labels:
+
+    This function needs sector/industry labels *as of each factor
+    observation date*. Static labels (a single (N,) vector applied to all
+    T periods) embed an assumption that sector membership never changed
+    over the sample — if a stock moved from Energy to Technology in 2023
+    and you use 2024 labels, the 2021 sector exposures are attributed
+    using look-ahead information.
+
+    Full PIT support (a (T, N) label panel) is out of scope for this
+    reference implementation; instead this function:
+
+    - accepts ``label_time`` (the as-of timestamp of the provided static
+      labels) and ``factor_time`` (the per-period timestamps of
+      ``factor_values``, length T);
+    - if both are provided, REJECTS the call (ValueError) whenever any
+      factor period predates the label as-of time — i.e. it fails closed
+      on detectable look-ahead rather than silently attributing exposures
+      with future labels;
+    - if they are not provided, the caller implicitly asserts labels are
+      valid PIT for the whole sample; that assumption is documented here
+      and is the caller's responsibility.
+
+    Timestamps may be numpy datetime64, pandas Timestamps, or any
+    totally-ordered 1D values; comparison is elementwise ``<``.
+
     Args:
         factor_values: Factor values (T, N)
-        sector_labels: Sector membership (N,) - integer sector codes
+        sector_labels: Sector membership (N,) - integer sector codes,
+            assumed point-in-time for the sample unless ``label_time`` is
+            given
         weights: Asset weights (T, N), defaults to equal-weight within sector
+        label_time: As-of timestamp of ``sector_labels`` (scalar or
+            length-1 array). Optional.
+        factor_time: Per-period timestamps of ``factor_values``, length T.
+            Optional; required for look-ahead validation.
 
     Returns:
         (sector_exposure, sector_counts)
         sector_exposure: shape (T, num_sectors) - mean factor value per sector
         sector_counts: shape (T, num_sectors) - valid asset count per sector
+
+    Raises:
+        ValueError: If ``factor_time`` is provided without ``label_time``
+            (cannot validate look-ahead), if shapes are inconsistent, or
+            if any factor period predates the label as-of time (detected
+            look-ahead)
     """
+    if factor_time is not None and label_time is None:
+        raise ValueError(
+            "compute_sector_exposure: factor_time provided without "
+            "label_time — cannot validate sector labels against "
+            "look-ahead. Pass label_time (the as-of date of "
+            "sector_labels) or omit both to accept the documented "
+            "static-label assumption."
+        )
+
+    if label_time is not None and factor_time is not None:
+        factor_time_arr = np.asarray(factor_time)
+        if factor_time_arr.shape != (factor_values.shape[0],):
+            raise ValueError(
+                f"factor_time must have shape ({factor_values.shape[0]},), "
+                f"got {factor_time_arr.shape}"
+            )
+        label_time_arr = np.asarray(label_time)
+        if label_time_arr.size != 1:
+            raise ValueError(
+                f"label_time must be a scalar as-of timestamp, got "
+                f"shape {label_time_arr.shape}"
+            )
+        look_ahead = factor_time_arr < label_time_arr.reshape(1)[0]
+        n_ahead = int(np.sum(look_ahead))
+        if n_ahead > 0:
+            first_idx = int(np.nonzero(look_ahead)[0][0])
+            raise ValueError(
+                f"compute_sector_exposure: {n_ahead} of "
+                f"{factor_values.shape[0]} factor periods (first at index "
+                f"{first_idx}) predate the sector-label as-of time — using "
+                "these labels for those periods is look-ahead. Provide "
+                "point-in-time labels or restrict the factor sample."
+            )
+
     T, N = factor_values.shape
 
     unique_sectors = np.unique(sector_labels[~np.isnan(sector_labels)])
@@ -189,17 +263,28 @@ def compute_concentration_hhi(
     """
     Compute Herfindahl-Hirschman Index (HHI) concentration metric.
 
-    HHI measures concentration of factor exposure across assets.
-    HHI = sum((weight_i * factor_i / sum(weight_j * factor_j))^2)
+    QE-METRIC P0-12: HHI is computed on GROSS (absolute) exposure. The
+    previous implementation normalized the signed weighted exposure
+    (weight_i * factor_i / sum_j(weight_j * factor_j)); when long and
+    short exposures nearly cancel, that signed denominator approaches 0
+    and the "shares" explode, producing arbitrary huge HHI values that
+    say nothing about concentration. Using gross exposure,
 
-    High HHI indicates concentrated exposure to few assets.
+        share_i = |weight_i * factor_i| / sum_j |weight_j * factor_j|
+        HHI_t = sum_i share_i^2
+
+    gives a well-defined concentration index in (0, 1]: 1/N when N assets
+    hold equal absolute exposure, 1.0 when a single asset holds all of it.
+    It is invariant to sign flips of any factor value (only the
+    distribution of absolute exposure matters).
 
     Args:
         factor_values: Factor values (T, N)
         weights: Asset weights (T, N), defaults to equal-weight
 
     Returns:
-        hhi: shape (T,) - concentration index per period
+        hhi: shape (T,) - concentration index per period, in (0, 1];
+            NaN where no valid (finite, positive-weight) assets exist
     """
     T, N = factor_values.shape
 
@@ -223,12 +308,14 @@ def compute_concentration_hhi(
         # Normalize weights
         weight_valid = weight_valid / np.sum(weight_valid)
 
-        # Weighted factor exposure
-        weighted_exposure = weight_valid * factor_valid
-        total_exposure = np.sum(weighted_exposure)
+        # Gross (absolute) exposure: the denominator is the total absolute
+        # exposure, strictly positive whenever at least one asset has
+        # non-zero |factor|, so no near-zero-division explosion.
+        gross_exposure = np.abs(weight_valid * factor_valid)
+        total_gross = np.sum(gross_exposure)
 
-        if total_exposure != 0:
-            exposure_shares = weighted_exposure / total_exposure
+        if total_gross > 0:
+            exposure_shares = gross_exposure / total_gross
             hhi[t] = np.sum(exposure_shares ** 2)
 
     return hhi

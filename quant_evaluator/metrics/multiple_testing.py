@@ -2,10 +2,66 @@
 Multiple testing corrections for factor analysis.
 
 Provides Bonferroni and Benjamini-Hochberg FDR corrections.
+
+QE-METRIC P0-14 — input validation:
+
+All correction functions fail closed (ValueError) on inputs that would
+otherwise produce silently wrong results:
+
+- empty ``p_values`` arrays;
+- finite p-values outside [0, 1] (e.g. 1.5 or -0.01 — these are not
+  p-values and would corrupt every downstream adjusted-p formula);
+- ``alpha`` that is non-finite or not strictly inside (0, 1).
+
+Non-finite p-values (NaN, +inf, -inf) are NOT rejected: they are treated
+as *missing* tests, excluded from the correction, and their output slots
+stay NaN with a False rejection bit. This documented missing-value
+convention is relied upon by the statsmodels-parity tests (invalid
+entries must be skipped while valid positions are preserved).
 """
 
 from typing import Tuple
 import numpy as np
+
+
+def _validate_p_values(p_values: np.ndarray) -> np.ndarray:
+    """QE-METRIC P0-14: fail-closed validation for p-value inputs.
+
+    Rejects empty arrays and finite p-values outside [0, 1]. Non-finite
+    entries (NaN, +-inf) are allowed and treated as missing downstream.
+
+    Returns the flattened array (a read view) for processing.
+    """
+    p = np.asarray(p_values, dtype=np.float64)
+    if p.size == 0:
+        raise ValueError(
+            "p_values must be non-empty; got an empty array "
+            f"(shape {p.shape})"
+        )
+    finite = np.isfinite(p)
+    out_of_range = finite & ((p < 0.0) | (p > 1.0))
+    n_bad = int(np.sum(out_of_range))
+    if n_bad > 0:
+        first_idx = int(np.nonzero(out_of_range.ravel())[0][0])
+        raise ValueError(
+            f"p_values contains {n_bad} finite value(s) outside [0, 1] "
+            f"(first at flat index {first_idx}: "
+            f"{p.ravel()[first_idx]!r}); these are not valid p-values"
+        )
+    return p
+
+
+def _validate_alpha(alpha: float) -> float:
+    """QE-METRIC P0-14: fail-closed validation for the alpha level."""
+    try:
+        alpha_val = float(alpha)
+    except (TypeError, ValueError):
+        raise ValueError(f"alpha must be a finite float in (0, 1), got {alpha!r}")
+    if not np.isfinite(alpha_val) or not (0.0 < alpha_val < 1.0):
+        raise ValueError(
+            f"alpha must be strictly inside (0, 1), got {alpha_val!r}"
+        )
+    return alpha_val
 
 
 def bonferroni_correction(
@@ -16,14 +72,23 @@ def bonferroni_correction(
     Apply Bonferroni correction for multiple testing.
 
     Args:
-        p_values: Array of p-values, any shape
-        alpha: Family-wise error rate (default 0.05)
+        p_values: Array of p-values, any shape. Non-finite entries are
+            treated as missing tests (see module docstring); finite
+            entries must lie in [0, 1].
+        alpha: Family-wise error rate, strictly inside (0, 1)
 
     Returns:
         (adjusted_p_values, reject_mask)
         adjusted_p_values: Bonferroni-adjusted p-values (min(p * n_tests, 1.0))
         reject_mask: Boolean mask where null hypothesis is rejected
+
+    Raises:
+        ValueError: If ``p_values`` is empty, contains finite values
+            outside [0, 1], or ``alpha`` is not strictly inside (0, 1)
     """
+    alpha = _validate_alpha(alpha)
+    p_values = _validate_p_values(p_values)
+
     # Flatten for processing
     original_shape = p_values.shape
     p_flat = p_values.ravel()
@@ -54,15 +119,24 @@ def benjamini_hochberg_correction(
     Apply Benjamini-Hochberg FDR correction for multiple testing.
 
     Args:
-        p_values: Array of p-values, any shape
-        alpha: False discovery rate (default 0.05)
+        p_values: Array of p-values, any shape. Non-finite entries are
+            treated as missing tests (see module docstring); finite
+            entries must lie in [0, 1].
+        alpha: False discovery rate, strictly inside (0, 1)
 
     Returns:
         (adjusted_p_values, reject_mask, n_discoveries)
         adjusted_p_values: BH-adjusted p-values
         reject_mask: Boolean mask where null hypothesis is rejected
         n_discoveries: Number of discoveries (rejections)
+
+    Raises:
+        ValueError: If ``p_values`` is empty, contains finite values
+            outside [0, 1], or ``alpha`` is not strictly inside (0, 1)
     """
+    alpha = _validate_alpha(alpha)
+    p_values = _validate_p_values(p_values)
+
     # Flatten for processing
     original_shape = p_values.shape
     p_flat = p_values.ravel()
@@ -128,15 +202,24 @@ def holm_bonferroni_correction(
     More powerful than Bonferroni, controls family-wise error rate.
 
     Args:
-        p_values: Array of p-values, any shape
-        alpha: Family-wise error rate (default 0.05)
+        p_values: Array of p-values, any shape. Non-finite entries are
+            treated as missing tests (see module docstring); finite
+            entries must lie in [0, 1].
+        alpha: Family-wise error rate, strictly inside (0, 1)
 
     Returns:
         (adjusted_p_values, reject_mask, n_discoveries)
         adjusted_p_values: Holm-adjusted p-values
         reject_mask: Boolean mask where null hypothesis is rejected
         n_discoveries: Number of discoveries (rejections)
+
+    Raises:
+        ValueError: If ``p_values`` is empty, contains finite values
+            outside [0, 1], or ``alpha`` is not strictly inside (0, 1)
     """
+    alpha = _validate_alpha(alpha)
+    p_values = _validate_p_values(p_values)
+
     # Flatten for processing
     original_shape = p_values.shape
     p_flat = p_values.ravel()
@@ -202,14 +285,23 @@ def sidak_correction(
     Assumes independence, slightly less conservative than Bonferroni.
 
     Args:
-        p_values: Array of p-values, any shape
-        alpha: Family-wise error rate (default 0.05)
+        p_values: Array of p-values, any shape. Non-finite entries are
+            treated as missing tests (see module docstring); finite
+            entries must lie in [0, 1].
+        alpha: Family-wise error rate, strictly inside (0, 1)
 
     Returns:
         (adjusted_p_values, reject_mask)
         adjusted_p_values: Šidák-adjusted p-values
         reject_mask: Boolean mask where null hypothesis is rejected
+
+    Raises:
+        ValueError: If ``p_values`` is empty, contains finite values
+            outside [0, 1], or ``alpha`` is not strictly inside (0, 1)
     """
+    alpha = _validate_alpha(alpha)
+    p_values = _validate_p_values(p_values)
+
     # Flatten for processing
     original_shape = p_values.shape
     p_flat = p_values.ravel()
@@ -243,13 +335,45 @@ def compute_fdr(
     """
     Compute empirical false discovery rate.
 
+    .. warning::
+        **EXPERIMENTAL** (QE-METRIC P0-14 demotion). This estimator uses
+        the mean p-value of the *rejected* tests as a plug-in alpha
+        ("conservative estimate"), which is a crude heuristic — it does
+        not correspond to any standard FDR estimator (BH, BY, Storey
+        q-values) and can be badly biased when rejections are few or the
+        p-value distribution is non-uniform. It is NOT registered in the
+        metric registry (``registry/metrics.py``) and should not be used
+        for reported results without independent validation. Prefer
+        ``benjamini_hochberg_correction`` for standard FDR control.
+
     Args:
-        p_values: Array of p-values
-        reject_mask: Boolean mask of rejections
+        p_values: Array of p-values. Non-finite entries are treated as
+            missing tests; finite entries must lie in [0, 1].
+        reject_mask: Boolean mask of rejections, same shape as
+            ``p_values``
 
     Returns:
         FDR estimate (expected proportion of false discoveries)
+
+    Raises:
+        ValueError: If ``p_values`` is empty, contains finite values
+            outside [0, 1], or ``reject_mask`` is not boolean with a
+            shape matching ``p_values``
     """
+    p_values = _validate_p_values(p_values)
+
+    reject_mask = np.asarray(reject_mask)
+    if reject_mask.dtype != np.bool_:
+        raise ValueError(
+            f"reject_mask must be a boolean array, got dtype "
+            f"{reject_mask.dtype}"
+        )
+    if reject_mask.shape != p_values.shape:
+        raise ValueError(
+            f"reject_mask shape {reject_mask.shape} does not match "
+            f"p_values shape {p_values.shape}"
+        )
+
     n_rejections = np.sum(reject_mask)
 
     if n_rejections == 0:

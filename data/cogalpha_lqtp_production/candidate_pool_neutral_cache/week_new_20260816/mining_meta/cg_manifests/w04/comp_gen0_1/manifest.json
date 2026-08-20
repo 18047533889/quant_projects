@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "comp_gen0_1",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 519,
+  "factor_name": "factor_regime_adaptive_momentum_reversal",
+  "domain_agent": "alpha-composite",
+  "run_id": "fleet-w04-20260806-071602-r37",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_regime_adaptive_momentum_reversal(df):\n    df_copy = df.copy()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    momentum = df_copy[\"close\"].pct_change(periods=5)\n    reversal = -df_copy[\"close\"].pct_change(periods=5)\n    factor = np.where(is_low_vol > 0, reversal, momentum)\n    df_copy[\"factor_regime_adaptive_momentum_reversal\"] = factor\n    return df_copy[\"factor_regime_adaptive_momentum_reversal\"]",
+  "description": "This factor expresses a regime-dependent fusion of short-term momentum and reversal strategies based on volume state. In low-volume regimes, markets tend to mean-revert, so the signal uses a reversal (negative of 5-day return). In normal or high-volume regimes, momentum persists, so the signal uses the raw 5-day return. The volume regime is determined by classify_volume_regime with a 20-day lookback, providing continuous signals. This captures orthogonal information from volume context to adapt the price signal, improving robustness across market states.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.031502830084003355,
+    "icir": 0.32079409180563645,
+    "mi": 0.03098797401163811,
+    "rank_ic": 0.04835067522540807,
+    "rank_icir": 0.45673177032313844
+  },
+  "raw_metrics": {
+    "ic": -0.031502830084003355,
+    "icir": -0.32079409180563645,
+    "mi": 0.03098797401163811,
+    "rank_ic": -0.04835067522540807,
+    "rank_icir": -0.45673177032313844
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.10543510193146699,
+    "top_quantile_excess_return": 0.07979408036457447,
+    "top_quantile_max_drawdown": -0.03995752761141591,
+    "top_quantile_turnover": 0.5023963802641093
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:43:31.948701+00:00"
+}

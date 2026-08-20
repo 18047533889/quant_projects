@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_agentcomposite_gen0_gap_liquidity_s_ccab36df",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 436,
+  "factor_name": "factor_intraday_tail_asymmetry_ewm",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w02-20260814-042827-r7",
+  "expression_type": "python",
+  "formula": "-(ewm_down_intraday_tail_mag_20 - ewm_up_intraday_tail_mag_20)/(ewm_down_intraday_tail_mag_20 + ewm_up_intraday_tail_mag_20 + 1)",
+  "code": "def factor_intraday_tail_asymmetry_ewm(df):\n    '''Downside vs upside intraday tail-return magnitude asymmetry using exponentially weighted aggregation instead of rolling sum.'''\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy['close'], df_copy['open'])\n    vol = intraday_ret.rolling(63, min_periods=20).std(ddof=1).shift(1)\n    down_tail = (intraday_ret < -1.5 * vol) & (vol > 0)\n    up_tail = (intraday_ret > 1.5 * vol) & (vol > 0)\n    down_ewm = (-intraday_ret).where(down_tail, 0.0).ewm(span=20, min_periods=1).mean()\n    up_ewm = intraday_ret.where(up_tail, 0.0).ewm(span=20, min_periods=1).mean()\n    raw_asym = -(down_ewm - up_ewm) / (down_ewm + up_ewm + 1.0)\n    df_copy['factor_intraday_tail_asymmetry_ewm'] = raw_asym\n    return df_copy['factor_intraday_tail_asymmetry_ewm']",
+  "description": "Mutation preserves the parent core mechanism: downside vs upside intraday tail-return magnitude asymmetry using lagged 63-day realized volatility and \u00b11.5 sigma thresholds. It replaces the 63-day rolling sum with an exponentially weighted moving average (span=20) and removes the final EWM smoothing layer. This simplifies the aggregation to one adaptive smoothing step, reducing lag and providing a more continuous, responsive signal that should improve IC/ICIR without adding new feature families. The raw transform remains none to preserve the parent's strong payoff monotonicity and low turnover.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02124645267004449,
+    "icir": 0.2766362991558994,
+    "mi": 0.022671236898114344,
+    "rank_ic": 0.03688107394234221,
+    "rank_icir": 0.6467083581867796
+  },
+  "raw_metrics": {
+    "ic": -0.02124645267004449,
+    "icir": -0.2766362991558994,
+    "mi": 0.022671236898114344,
+    "rank_ic": -0.03688107394234221,
+    "rank_icir": -0.6467083581867796
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.8844539978533135,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.011636678003684287,
+    "top_quantile_excess_return": 0.0682966620834724,
+    "top_quantile_max_drawdown": -0.13935284377729096,
+    "top_quantile_turnover": 0.18419834171642155
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:41:49.299236+00:00"
+}

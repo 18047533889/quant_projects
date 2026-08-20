@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_volstruct_herfindahl_concentration_0_0751c8de",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 333,
+  "factor_name": "factor_cycle_skewness_volsurprise_gate",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w03-20260813-155035-r4",
+  "expression_type": "python",
+  "formula": "skew_120_tanh = tanh(rolling_skewness(close.pct_change(), 120, min_periods=60)); vol_surprise = volume / rolling_median_60(volume); hhi_20 = sum(vol_surprise^2) / (sum(vol_surprise))^2; gate = 0.5 + hhi_20; factor = skew_120_tanh * gate",
+  "code": "def factor_cycle_skewness_volsurprise_gate(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    skew = ret.rolling(120, min_periods=60).skew()\n    skew_signal = np.tanh(skew)\n\n    vol = df_copy[\"volume\"].clip(lower=1e-8)\n    baseline = vol.rolling(60, min_periods=20).median()\n    vol_surprise = vol / baseline.replace(0.0, np.nan)\n    window = 20\n    total_surprise = vol_surprise.rolling(window, min_periods=window).sum()\n    sum_sq_surprise = (vol_surprise ** 2).rolling(window, min_periods=window).sum()\n    hhi_surprise = sum_sq_surprise / (total_surprise ** 2)\n\n    gate = 0.5 + hhi_surprise\n    factor = skew_signal * gate\n    df_copy[\"factor_cycle_skewness_volsurprise_gate\"] = factor\n    return df_copy[\"factor_cycle_skewness_volsurprise_gate\"]",
+  "description": "Preserves the primary slow-moving return distribution asymmetry mechanism from the qualified skewness parent: 120-day rolling skewness of daily returns, with tanh compression to bound extreme outliers. Borrows one lightweight volume context idea from the secondary parent: normalize volume by its trailing 60-day median before computing a 20-day temporal Herfindahl concentration, thereby removing cross-stock volume-scale distortion. The normalized concentration is converted into a bounded gate (0.5 + HHI) that modestly emphasizes the skewness signal when volume clustering indicates concentrated information arrival and de-emphasizes it during diffuse low-concentration periods. This keeps the raw skewness mechanism intact and does not introduce a second independent factor. parent_strength_target: preserve RankIC/RankICIR stability and payoff evidence from the skewness parent while targeting slight IC/ICIR improvement through context gating.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.004921742202826517,
+    "icir": 0.12905769033962616,
+    "mi": 0.004020177868479635,
+    "rank_ic": 0.019082094430844222,
+    "rank_icir": 0.4457606047955857
+  },
+  "raw_metrics": {
+    "ic": -0.004921742202826517,
+    "icir": -0.12905769033962616,
+    "mi": 0.004020177868479635,
+    "rank_ic": -0.019082094430844222,
+    "rank_icir": -0.4457606047955857
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.9776889223608354,
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": 0.013727121274621279,
+    "top_quantile_excess_return": 0.07862706528309915,
+    "top_quantile_max_drawdown": -0.12683398358184284,
+    "top_quantile_turnover": 0.05189483106922833
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:01:45.930488+00:00"
+}

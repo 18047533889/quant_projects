@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "liq_vol_regime_price_impact_002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 317,
+  "factor_name": "factor_vol_regime_price_impact",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w01-20260813-111511-r3",
+  "expression_type": "python",
+  "formula": "rolling_avg(|ret| on high-volume days, 20) - rolling_avg(|ret| on low-volume days, 20); missing category averages filled with 0",
+  "code": "def factor_vol_regime_price_impact(df):\n    \"\"\"Conditional illiquidity: difference in average absolute returns between high-volume and low-volume days.\"\"\"\n    df_copy = df.copy()\n    abs_ret = df_copy[\"close\"].pct_change().abs()\n    is_high_vol, is_low_vol, _ = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    high_sum = (abs_ret * is_high_vol).rolling(20, min_periods=1).sum()\n    high_cnt = is_high_vol.rolling(20, min_periods=1).sum()\n    low_sum = (abs_ret * is_low_vol).rolling(20, min_periods=1).sum()\n    low_cnt = is_low_vol.rolling(20, min_periods=1).sum()\n    avg_high = (high_sum / high_cnt.replace(0, np.nan)).fillna(0.0)\n    avg_low = (low_sum / low_cnt.replace(0, np.nan)).fillna(0.0)\n    factor = avg_high - avg_low\n    df_copy[\"factor_vol_regime_price_impact\"] = factor\n    return df_copy[\"factor_vol_regime_price_impact\"]\n",
+  "description": "Measures conditional price impact by contrasting absolute returns on high-volume vs low-volume days. A positive spread indicates high-volume days produce larger price moves relative to low-volume days, suggesting liquidity stress. A negative spread suggests volume efficiently absorbs order flow. This is a novel mechanism not captured by continuous Amihud ratios or asymmetric volatility. Windows with no high/low volume observations are treated as zero contribution.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01065775548514052,
+    "icir": 0.25274129028092146,
+    "mi": 0.013743214116381353,
+    "rank_ic": 0.023808314548832088,
+    "rank_icir": 0.5228040359378359
+  },
+  "raw_metrics": {
+    "ic": -0.01065775548514052,
+    "icir": -0.25274129028092146,
+    "mi": 0.013743214116381353,
+    "rank_ic": -0.023808314548832088,
+    "rank_icir": -0.5228040359378359
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.035422746085402,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.03664289032855339,
+    "top_quantile_excess_return": 0.23147594311447528,
+    "top_quantile_max_drawdown": -0.17914143736420463,
+    "top_quantile_turnover": 0.15710455334718065
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:52:51.643657+00:00"
+}

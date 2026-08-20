@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_alpha_range_vol_gen0_001_a41d05a1",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 547,
+  "factor_name": "factor_vwap_sma_range_std_regime",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260813-044118-r2",
+  "expression_type": "python",
+  "formula": "div = (VWAP20 - SMA20)/close; volatility_dispersion = rolling_std(normalized_true_range,20); compression = 1/(1 + volatility_dispersion); factor = div * compression",
+  "code": "def factor_vwap_sma_range_std_regime(df):\n    df_copy = df.copy()\n    prev_close = df_copy[\"close\"].shift(1)\n    tr = pd.concat([(df_copy[\"high\"] - df_copy[\"low\"]),\n                    (df_copy[\"high\"] - prev_close).abs(),\n                    (df_copy[\"low\"] - prev_close).abs()], axis=1).max(axis=1)\n    norm_tr = tr / df_copy[\"close\"]\n    std_tr = norm_tr.rolling(20).std(ddof=1)\n    compression = 1.0 / (1.0 + std_tr)\n    vwap = (df_copy[\"close\"] * df_copy[\"volume\"]).rolling(20).sum() / df_copy[\"volume\"].rolling(20).sum()\n    sma = df_copy[\"close\"].rolling(20).mean()\n    div = (vwap - sma) / df_copy[\"close\"]\n    factor = div * compression\n    df_copy[\"factor_vwap_sma_range_std_regime\"] = factor\n    return df_copy[\"factor_vwap_sma_range_std_regime\"]",
+  "description": "Mutation of parent alpha-range-vol-gen0-001. Preserves the core price-volume coherence mechanism: VWAP-SMA divergence weighted by a range-based volatility compression. The parent used coefficient of variation of normalized true range (std/mean) as the compression weight. This mutation ablates the mean normalization in the compression term and uses the rolling standard deviation of normalized true range directly. This avoids dividing by a small noisy rolling mean, which should reduce compression estimate variance and improve ICIR while retaining the RankIC and RankICIR strengths of the parent.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02851487056993962,
+    "icir": 0.4178166563841585,
+    "mi": 0.016438480693080848,
+    "rank_ic": 0.05212172879495728,
+    "rank_icir": 0.8231107517069352
+  },
+  "raw_metrics": {
+    "ic": -0.02851487056993962,
+    "icir": -0.4178166563841585,
+    "mi": 0.016438480693080848,
+    "rank_ic": -0.05212172879495728,
+    "rank_icir": -0.8231107517069352
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.826984794510545,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.07171103268574996,
+    "top_quantile_excess_return": 0.05042419510883778,
+    "top_quantile_max_drawdown": -0.017152737753854286,
+    "top_quantile_turnover": 0.1554274854165195
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:46:18.456331+00:00"
+}

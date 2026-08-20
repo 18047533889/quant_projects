@@ -283,7 +283,7 @@ def compute_partial_ic(
     Returns:
         partial_ic: shape (T,) - partial IC per period
     """
-    _, _, total_ic = compute_incremental_ic(
+    incremental_ic, _, _ = compute_incremental_ic(
         factor_batch,
         label_bundle,
         base_factor_indices=control_indices,
@@ -292,4 +292,4 @@ def compute_partial_ic(
         min_assets=min_assets,
     )
 
-    return total_ic
+    return incremental_ic

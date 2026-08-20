@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_crossover_then_mutation_vol_regime_atr_osc_v1_c0ab6886",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 249,
+  "factor_name": "factor_vol_anomaly_reversal_ema",
+  "domain_agent": "alpha-volatility-regime",
+  "run_id": "fleet-w04-20260804-091108-r19",
+  "expression_type": "python",
+  "formula": "-ret5 * (EMA_5(ATR_pct) / EMA_20(ATR_pct) - 1)",
+  "code": "def factor_vol_anomaly_reversal_ema(df):\n    df_copy = df.copy()\n    atr_pct = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"].replace(0.0, np.nan)\n    ema_short = atr_pct.ewm(span=5, min_periods=5).mean()\n    ema_long = atr_pct.ewm(span=20, min_periods=20).mean()\n    anomaly = (ema_short / ema_long.replace(0.0, np.nan)) - 1.0\n    ret5 = df_copy[\"close\"].pct_change(5)\n    factor = -ret5 * anomaly\n    df_copy[\"factor_vol_anomaly_reversal_ema\"] = factor.replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_vol_anomaly_reversal_ema\"]",
+  "description": "Preserves the core volatility shock reversal mechanism from the qualified parent: when short-term normalized ATR is elevated relative to its long-term average, recent price declines may reverse. The lightweight modifier from the secondary parent replaces simple rolling means with exponential moving averages (span 5 and 20) for computing the ATR ratio. EMA gives more weight to recent observations, providing a more responsive and stable volatility regime detector. Aims to preserve parent RankICIR strength while improving signal smoothness and MI.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.038972949168499714,
+    "icir": 0.472839457868134,
+    "mi": 0.029185672438818422,
+    "rank_ic": 0.04406224549083547,
+    "rank_icir": 0.5543809053448011
+  },
+  "raw_metrics": {
+    "ic": 0.038972949168499714,
+    "icir": 0.472839457868134,
+    "mi": 0.029185672438818422,
+    "rank_ic": 0.04406224549083547,
+    "rank_icir": 0.5543809053448011
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.09207136685672235,
+    "top_quantile_excess_return": 0.06456054863716809,
+    "top_quantile_max_drawdown": -0.031213037316873304,
+    "top_quantile_turnover": 0.5132662203003103
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:23:03.163305+00:00"
+}

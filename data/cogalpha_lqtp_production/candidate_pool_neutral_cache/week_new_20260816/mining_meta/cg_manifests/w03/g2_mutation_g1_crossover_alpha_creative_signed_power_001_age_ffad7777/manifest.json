@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_alpha_creative_signed_power_001_age_ffad7777",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 192,
+  "factor_name": "factor_tail_risk_perc_vregime",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w03-20260805-033417-r15",
+  "expression_type": "python",
+  "formula": "tail_risk = -5th percentile of daily returns over 60 days; factor = tail_risk * (1 + 0.5 * is_high_vol)",
+  "code": "def factor_tail_risk_perc_vregime(df):\n    \"\"\"Tail risk via 5th percentile with volume regime amplification.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    tail_risk = -ret.rolling(60, min_periods=60).quantile(0.05)\n    is_high_vol, _, _ = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    factor = tail_risk * (1.0 + 0.5 * is_high_vol)\n    df_copy[\"factor_tail_risk_perc_vregime\"] = factor\n    return df_copy[\"factor_tail_risk_perc_vregime\"]",
+  "description": "Simplifies the parent's shape risk (skew + kurtosis/5) to a more robust tail risk measure using the negative of the 5th percentile of daily returns over 60 days. This avoids higher-moment estimation noise while preserving the core idea of capturing extreme downside risk. Retains the volume regime amplification from classify_volume_regime as a lightweight modifier: tail risk is more actionable during high-volume sessions, when informed trading and liquidity events are more likely. The child keeps one core economic mechanism (tail risk via percentile) with one modifier (volume regime gating), aiming to improve IC and MI stability while maintaining the parent's economic intuition.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.007257662602732046,
+    "icir": 0.05289497206778724,
+    "mi": 0.029175936561706806,
+    "rank_ic": 0.03809405961728081,
+    "rank_icir": 0.22554002028745282
+  },
+  "raw_metrics": {
+    "ic": -0.007257662602732046,
+    "icir": -0.05289497206778724,
+    "mi": 0.029175936561706806,
+    "rank_ic": -0.03809405961728081,
+    "rank_icir": -0.22554002028745282
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.06768964528201082,
+    "top_quantile_excess_return": 0.4385172432002058,
+    "top_quantile_max_drawdown": -0.0930737728067178,
+    "top_quantile_turnover": 0.11773373886582918
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:52:52.468754+00:00"
+}

@@ -117,31 +117,33 @@ def _group_panel(rows=30, cols=9, seed=42):
 
 
 # ---------------------------------------------------------------------------
-# independent manual oracles (plain python, no shared code with the impl)
+# independent manual oracles (numpy.polyfit / plain python, no shared code
+# with the impl — the fit is an explicitly fitted OLS (polyfit deg=1), NOT a
+# re-derivation of the implementation's closed-form cov/var identity)
 # ---------------------------------------------------------------------------
 def _oracle_prior_beta(r_col: np.ndarray, m_col: np.ndarray, w: int, t: int):
-    """Hand-rolled strictly-prior OLS beta + residual std (dof = n-2,
-    intercept + slope consumed — review P1: label was wrongly "ddof=1").
+    """Strictly-prior OLS fit r ~ 1 + m via numpy.polyfit (deg=1) on rows
+    [t-w, t-1] ONLY — the signal row never enters the fit.
 
-    Fits on rows [t-w, t-1] ONLY.  Returns (beta, resid_std) or None."""
+    Returns (alpha, beta, resid_std) with resid_std at dof = n-2
+    (intercept + slope consumed), or None for a fail-closed/degenerate
+    window (non-finite inputs, zero market variance, dof < 1)."""
     if t < w:
         return None
-    r_fit = [float(r_col[k]) for k in range(t - w, t)]
-    m_fit = [float(m_col[k]) for k in range(t - w, t)]
-    if any(not np.isfinite(v) for v in r_fit + m_fit):
+    r_fit = np.asarray([float(r_col[k]) for k in range(t - w, t)])
+    m_fit = np.asarray([float(m_col[k]) for k in range(t - w, t)])
+    if not (np.isfinite(r_fit).all() and np.isfinite(m_fit).all()):
         return None
-    n = len(r_fit)
-    rm, mm = sum(r_fit) / n, sum(m_fit) / n
-    sxx = sum((mv - mm) ** 2 for mv in m_fit)
-    if sxx <= 1e-12:
+    if float(np.var(m_fit)) <= 0.0:  # degenerate market variance
         return None
-    beta = sum((m_fit[i] - mm) * (r_fit[i] - rm) for i in range(n)) / sxx
-    resid = [r_fit[i] - (rm + beta * (m_fit[i] - mm)) for i in range(n)]
-    ss = sum(e * e for e in resid)
+    beta, alpha = np.polyfit(m_fit, r_fit, deg=1)  # polyfit returns high->low
+    resid = r_fit - (alpha + beta * m_fit)
+    n = r_fit.size
     dof = n - 2
     if dof < 1:
         return None
-    return beta, (ss / dof) ** 0.5
+    ss = float(np.dot(resid, resid))
+    return float(alpha), float(beta), float((ss / dof) ** 0.5)
 
 
 def _oracle_beta_stat(ret: pd.DataFrame, mkt: pd.DataFrame, w: int, stat: str) -> pd.DataFrame:
@@ -156,8 +158,8 @@ def _oracle_beta_stat(ret: pd.DataFrame, mkt: pd.DataFrame, w: int, stat: str) -
             fit = _oracle_prior_beta(rv[:, c], mv[:, c], w, t)
             if fit is None:
                 continue
-            beta, rstd = fit
-            resid = float(r_t) - beta * float(m_t)
+            alpha, beta, rstd = fit
+            resid = float(r_t) - (alpha + beta * float(m_t))
             if stat == "z":
                 if not (np.isfinite(rstd) and rstd > 0.0):
                     continue
@@ -211,6 +213,93 @@ def test_matches_manual_oracle(name, stat):
     # warmup: rows t < window have no complete prior window -> all NaN
     assert np.isnan(out.to_numpy()[:15]).all()
     assert np.isfinite(out.to_numpy()[15:]).all()
+
+
+# ---------------------------------------------------------------------------
+# P0-02 intercept counterexample (R20-P0-BETA-INTERCEPT):
+# r = alpha + beta*m with a NONZERO alpha — pre-fix the signal-row residual
+# dropped the fitted intercept (resid = r_t - beta*m_t), leaving a constant
+# ~alpha bias (~0.01) in every signal row.  With the intercept included the
+# exact-relation residual must be ~0.
+# ---------------------------------------------------------------------------
+def _intercept_panel(rows=40, seed=201):
+    """r = 0.01 + 1.5*m EXACTLY (zero noise) — the prior-window OLS recovers
+    alpha=0.01, beta=1.5 exactly, so signal-row residuals must vanish."""
+    rng = np.random.default_rng(seed)
+    m = rng.normal(0.0, 0.01, size=rows)
+    mkt = pd.DataFrame(np.tile(m[:, None], (1, 2)), columns=list("ab"))
+    ret = pd.DataFrame(np.tile((0.01 + 1.5 * m)[:, None], (1, 2)), columns=list("ab"))
+    return ret, mkt
+
+
+def test_intercept_exact_fit_divergence_residual_zero():
+    # regression note: PRE-FIX this left resid ~= alpha ~= 0.01 at every
+    # signal row (divergence ~= 0.01/|m_t|, an O(1) spurious signal);
+    # post-fix the residual must be ~0 (|resid| < 1e-10).
+    ret, mkt = _intercept_panel(rows=40, seed=201)
+    w = 10
+    div = _op("beta_divergence_pct").calculate(ret, mkt, window=w).to_numpy()
+    arr = div[w:]
+    m_arr = mkt.to_numpy()[w:]
+    mask = np.abs(m_arr[:, 0]) > 1e-12  # flat-market rows are NaN by guard
+    assert mask.any()
+    resid = arr[:, 0][mask] * np.abs(m_arr[:, 0][mask])  # recover raw residual
+    assert np.isfinite(arr[:, 0][mask]).all()
+    np.testing.assert_allclose(resid, 0.0, atol=1e-10)  # pre-fix: ~= 0.01
+    np.testing.assert_allclose(arr[:, 0][mask], 0.0, atol=1e-6)
+    # warmup rows NaN (incomplete prior window)
+    assert np.isnan(div[:w]).all()
+
+
+def test_intercept_exact_fit_z_zero_resid_std_still_nan():
+    # zero-noise exact relation -> prior resid_std == 0 -> z NaN (fail-closed
+    # guard UNCHANGED by the intercept fix); the divergence stays finite.
+    ret, mkt = _intercept_panel(rows=40, seed=202)
+    z = _op("beta_residual_z").calculate(ret, mkt, window=10).to_numpy()
+    assert np.isnan(z).all()
+
+
+def test_intercept_counterexample_z_with_tiny_burnin_noise():
+    """z-counterexample: exact relation everywhere EXCEPT one burn-in row
+    carrying +1e-6 noise (so the prior-window resid_std > 0 and z is
+    finite).  At the signal row whose prior window contains that row, the
+    fitted (alpha, beta) deviate from (0.01, 1.5) by O(noise/n); the
+    residual must be O(noise) — NOT the ~0.01 constant intercept.
+    Regression note: pre-fix z ~= 0.01/resid_std ~= 30; post-fix |z| < 2."""
+    rng = np.random.default_rng(203)
+    rows, w = 40, 10
+    m = rng.normal(0.0, 0.01, size=rows)
+    r = 0.01 + 1.5 * m
+    r[15] += 1e-6  # single tiny noise bar (burn-in; also in [6,15]'s windows)
+    mkt = pd.DataFrame(np.tile(m[:, None], (1, 2)), columns=list("ab"))
+    ret = pd.DataFrame(np.tile(r[:, None], (1, 2)), columns=list("ab"))
+    z = _op("beta_residual_z").calculate(ret, mkt, window=w).to_numpy()
+    # warmup + pure prior windows (rows 0..15 fit on exact rows) -> resid_std
+    # == 0 -> NaN (fail-closed); ONLY rows whose prior window contains the
+    # noise bar 15 (rows 16..25) have resid_std ~ 3e-7 > 0 -> finite z.
+    assert np.isnan(z[:16, 0]).all()
+    assert np.isfinite(z[16:26, 0]).all()  # windows containing the noise bar
+    assert np.isnan(z[26, 0])  # window [16,25] pure -> resid_std == 0 -> NaN
+    # residual at signal rows must be ~O(1e-6), never the ~0.01 intercept
+    np.testing.assert_allclose(np.abs(z[16:26, 0]), 0.0, atol=2.0)  # pre-fix: ~30
+
+
+def test_intercept_sign_preserved():
+    # +delta / -delta shocks at a signal row give exactly antisymmetric
+    # outputs (the intercept cancels in the difference; sign preserved)
+    ret, mkt = _intercept_panel(rows=40, seed=204)
+    w, t, c = 10, 25, 0
+    up = ret.copy()
+    dn = ret.copy()
+    up.iloc[t, c] = ret.iloc[t, c] + 0.005
+    dn.iloc[t, c] = ret.iloc[t, c] - 0.005
+    for name in BETA_NAMES:
+        a = _op(name).calculate(up, mkt, window=w).to_numpy()[t, c]
+        b = _op(name).calculate(dn, mkt, window=w).to_numpy()[t, c]
+        base = _op(name).calculate(ret, mkt, window=w).to_numpy()[t, c]
+        if name == "beta_divergence_pct":  # z variant is NaN (resid_std==0)
+            np.testing.assert_allclose(a, -b, rtol=1e-9)
+            np.testing.assert_allclose(base, 0.0, atol=1e-10)
 
 
 def test_relative_strength_matches_manual_oracle():

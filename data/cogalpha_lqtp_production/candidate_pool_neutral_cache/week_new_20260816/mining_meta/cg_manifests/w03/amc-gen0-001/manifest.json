@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "amc-gen0-001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 368,
+  "factor_name": "factor_cycle_phase_duration",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w03-20260814-035032-r7",
+  "expression_type": "python",
+  "formula": "distance = (close - EMA(120)) / ATR(20); streak = signed consecutive trend days; factor = distance * (1 + abs(log(1+streak)))",
+  "code": "def factor_cycle_phase_duration(df):\n    \"\"\"Long-term trend strength amplified by phase duration, using EMA and ATR.\"\"\"\n    df_copy = df.copy()\n    ema = df_copy[\"close\"].ewm(span=120, adjust=False).mean()\n    atr = talib.ATR(df_copy[\"high\"].values, df_copy[\"low\"].values, df_copy[\"close\"].values, timeperiod=20)\n    atr = pd.Series(atr, index=df_copy.index)\n    distance = (df_copy[\"close\"] - ema) / atr.replace(0.0, np.nan)\n    direction = np.sign(distance)\n    pos = direction > 0\n    neg = direction < 0\n    pos_cum = pos.cumsum()\n    pos_reset = pos_cum.where(~pos).ffill().fillna(0.0)\n    pos_streak = pos_cum - pos_reset\n    neg_cum = neg.cumsum()\n    neg_reset = neg_cum.where(~neg).ffill().fillna(0.0)\n    neg_streak = neg_cum - neg_reset\n    streak = np.where(pos, pos_streak, -neg_streak)\n    streak = np.sign(streak) * np.log1p(np.abs(streak))\n    factor = distance * (1.0 + np.abs(streak))\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    df_copy[\"factor_cycle_phase_duration\"] = factor\n    return df_copy[\"factor_cycle_phase_duration\"]",
+  "description": "Long-term trends and cyclical phase durations: distance from a 120-day EMA normalized by ATR captures trend strength; consecutive days above/below the trend measure phase persistence. Amplifying distance by log phase duration expresses that longer-established trends have stronger cycle-state conviction. This is a Market Structure & Cycle mechanism designed to be informative after industry/size neutralization because it measures idiosyncratic trend phase rather than level.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.008734297938072373,
+    "icir": 0.0922959063350725,
+    "mi": 0.015252825526818725,
+    "rank_ic": 0.02685863434037976,
+    "rank_icir": 0.2690814300898712
+  },
+  "raw_metrics": {
+    "ic": -0.008734297938072373,
+    "icir": -0.0922959063350725,
+    "mi": 0.015252825526818725,
+    "rank_ic": -0.02685863434037976,
+    "rank_icir": -0.2690814300898712
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.1990845712909275,
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": 0.021260886780757104,
+    "top_quantile_excess_return": 0.12764773779109118,
+    "top_quantile_max_drawdown": -0.1775455062535931,
+    "top_quantile_turnover": 0.09262285573933292
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:03:20.472986+00:00"
+}

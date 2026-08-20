@@ -308,9 +308,15 @@ class LineageGraph:
             factor_id: Factor identifier
 
         Returns:
-            True if factor is its own ancestor (cycle detected)
+            True if the factor is reachable from its own parents (cycle)
         """
-        return factor_id in self.get_ancestors(factor_id)
+        # get_ancestors seeds its visited set with the start node, so
+        # ``factor_id in get_ancestors(factor_id)`` is trivially always False.
+        # A cycle exists iff factor_id is reachable FROM one of its parents.
+        for parent_id in self._parents.get(factor_id, set()):
+            if factor_id in self.get_ancestors(parent_id):
+                return True
+        return False
 
     def is_root(self, factor_id: str) -> bool:
         """Check if factor is a root (no parents)."""

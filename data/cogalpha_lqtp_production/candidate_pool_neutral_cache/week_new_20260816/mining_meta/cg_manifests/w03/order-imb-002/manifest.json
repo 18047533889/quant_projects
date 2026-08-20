@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "order-imb-002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "elite",
+  "factor_id": 82,
+  "factor_name": "factor_overnight_intraday_pressure_diff",
+  "domain_agent": "alpha-order-imbalance",
+  "run_id": "fleet-w03-20260803-151033-r7",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_overnight_intraday_pressure_diff(df):\n    \"\"\"Intraday return minus overnight return.\"\"\"\n    df_copy = df.copy()\n    overnight, intraday = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    df_copy[\"factor_overnight_intraday_pressure_diff\"] = intraday - overnight\n    return df_copy[\"factor_overnight_intraday_pressure_diff\"]",
+  "description": "Overnight return reflects information absorbed during the close, while intraday return captures the trading session's continuation. The difference indicates whether intraday flow reinforces or fades the overnight gap, revealing directional conviction.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0697029679001591,
+    "icir": 0.708745870391971,
+    "mi": 0.05110058826502595,
+    "rank_ic": 0.04157782479219035,
+    "rank_icir": 0.4196122128968801
+  },
+  "raw_metrics": {
+    "ic": -0.0697029679001591,
+    "icir": -0.708745870391971,
+    "mi": 0.05110058826502595,
+    "rank_ic": -0.04157782479219035,
+    "rank_icir": -0.4196122128968801
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.3383521263502063,
+    "top_quantile_excess_return": 4.398835966361595,
+    "top_quantile_max_drawdown": -0.03448252386242212,
+    "top_quantile_turnover": 0.7716303563847987
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:46:51.305764+00:00"
+}

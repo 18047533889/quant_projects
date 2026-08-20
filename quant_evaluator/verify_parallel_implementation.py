@@ -57,10 +57,11 @@ check("Metric registration", True)
 T, N, F = 10, 20, 2
 batches = []
 for i in range(10):
-    np.random.seed(i)
+    # Local Generator — no global RNG state mutation.
+    rng = np.random.default_rng(i)
     time_axis = AxisRef(name="date", dtype="datetime64", size=T)
     asset_axis = AxisRef(name="ticker", dtype="int64", size=N)
-    values = np.random.randn(T, N, F)
+    values = rng.standard_normal((T, N, F))
     batch = FactorBatch(
         factor_ids=("f1", "f2"),
         time_axis=time_axis,
@@ -69,7 +70,7 @@ for i in range(10):
     )
     labels = LabelBundle(
         target_id="return",
-        values=np.random.randn(T, N),
+        values=rng.standard_normal((T, N)),
         horizon=1,
         decision_time=tuple(range(T)),
         label_start_time=tuple(range(T)),

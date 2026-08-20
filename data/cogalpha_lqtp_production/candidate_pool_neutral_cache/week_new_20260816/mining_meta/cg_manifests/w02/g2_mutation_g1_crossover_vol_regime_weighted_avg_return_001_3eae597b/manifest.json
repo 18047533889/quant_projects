@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_vol_regime_weighted_avg_return_001_3eae597b",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 230,
+  "factor_name": "factor_volatility_compression_momentum",
+  "domain_agent": "alpha-volatility-regime",
+  "run_id": "fleet-w02-20260805-223734-r20",
+  "expression_type": "python",
+  "formula": "weight * momentum where weight = 1 - SMA(high-low,5)/SMA(high-low,60) and momentum = SUM(pct_change, 5)",
+  "code": "def factor_volatility_compression_momentum(df):\n    \"\"\"Mutation: remove volatility-weighting, keep compression-weighted momentum.\"\"\"\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    short_avg = range_.rolling(window=5, min_periods=1).mean()\n    long_avg = range_.rolling(window=60, min_periods=1).mean()\n    compression = short_avg / long_avg.replace(0, np.nan)\n    weight = 1.0 - compression\n    momentum = df_copy[\"close\"].pct_change().rolling(window=5, min_periods=1).sum()\n    factor = weight * momentum\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    df_copy[\"factor_volatility_compression_momentum\"] = factor\n    return df_copy[\"factor_volatility_compression_momentum\"]",
+  "description": "Simplified mutation of parent factor_volatility_compression_weighted_momentum: ablated the volatility-weighting (true_range/close) applied to daily returns inside the 5-day momentum. The core mechanism -- compression weight (1 - ratio of short-term to long-term average high-low range) multiplied by 5-day raw momentum -- is preserved. Removing the volatility-weighting may reduce noise and improve rank-order stability (RankIC) while maintaining the directional breakout signal after low-volatility consolidation. Parent strengths: strong IC and ICIR from the compression-weight timing. This child targets the RankIC bottleneck with a simpler, less overfitted construct.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0652058940836783,
+    "icir": 0.7057675047818432,
+    "mi": 0.028633381862454677,
+    "rank_ic": 0.020187346131770745,
+    "rank_icir": 0.2678271310220406
+  },
+  "raw_metrics": {
+    "ic": 0.0652058940836783,
+    "icir": 0.7057675047818432,
+    "mi": 0.028633381862454677,
+    "rank_ic": 0.020187346131770745,
+    "rank_icir": 0.2678271310220406
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.07354255958765865,
+    "top_quantile_excess_return": 0.5059906469740161,
+    "top_quantile_max_drawdown": -0.07207256473502588,
+    "top_quantile_turnover": 0.4175859544350109
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:17:04.404553+00:00"
+}

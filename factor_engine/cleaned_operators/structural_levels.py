@@ -113,6 +113,8 @@ def _metadata(
             f"unit:{unit}", f"cost:{cost}",
         ],
         param_specs=param_specs or {},
+        available_at="close_of_t",
+        same_session_usable=False,
     )
 
 

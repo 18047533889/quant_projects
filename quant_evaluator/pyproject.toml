@@ -27,11 +27,17 @@ fast = ["numba>=0.57.0"]
 polars = ["polars>=0.19.0"]
 arrow = ["pyarrow>=12.0.0"]
 stats = ["statsmodels>=0.14.0"]
+reporting = [
+    "matplotlib>=3.7",
+    "jinja2>=3.1",
+]
 full = [
     "numba>=0.57.0",
     "polars>=0.19.0",
     "pyarrow>=12.0.0",
     "statsmodels>=0.14.0",
+    "matplotlib>=3.7",
+    "jinja2>=3.1",
 ]
 
 [tool.setuptools]
@@ -49,6 +55,7 @@ packages = [
     "quant_evaluator.metrics.stats",
     "quant_evaluator.planner",
     "quant_evaluator.registry",
+    "quant_evaluator.reporting",
     "quant_evaluator.runtime",
 ]
 
@@ -66,6 +73,7 @@ packages = [
 "quant_evaluator.metrics.stats" = "metrics/stats"
 "quant_evaluator.planner" = "planner"
 "quant_evaluator.registry" = "registry"
+"quant_evaluator.reporting" = "reporting"
 "quant_evaluator.runtime" = "runtime"
 
 [tool.setuptools.package-data]

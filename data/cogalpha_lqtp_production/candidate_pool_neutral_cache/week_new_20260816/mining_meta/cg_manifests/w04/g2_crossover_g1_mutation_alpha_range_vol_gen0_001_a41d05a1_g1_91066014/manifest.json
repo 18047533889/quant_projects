@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_alpha_range_vol_gen0_001_a41d05a1_g1_91066014",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 561,
+  "factor_name": "factor_volume_stability_compression",
+  "domain_agent": "alpha-stability",
+  "run_id": "fleet-w04-20260813-044118-r2",
+  "expression_type": "python",
+  "formula": "stability = -rolling_std(log1p(volume),20) / rolling_mean(log1p(volume),20); compression = 1 / (1 + rolling_std(normalized_true_range,20)); factor = stability * compression",
+  "code": "def factor_volume_stability_compression(df):\n    \"\"\"Volume stability negative CV of log1p volume attenuated by true range volatility compression.\"\"\"\n    df_copy = df.copy()\n\n    # Primary mechanism: negative coefficient of variation of log1p volume over 20 bars\n    window = 20\n    log_volume = np.log1p(df_copy['volume'])\n    vol_mean = log_volume.rolling(window, min_periods=window).mean()\n    vol_std = log_volume.rolling(window, min_periods=window).std(ddof=1)\n    stability = -(vol_std / vol_mean.replace(0.0, np.nan))\n\n    # Lightweight modifier from secondary parent: compression weight based on normalized true range volatility\n    prev_close = df_copy['close'].shift(1)\n    tr = pd.concat([\n        df_copy['high'] - df_copy['low'],\n        (df_copy['high'] - prev_close).abs(),\n        (df_copy['low'] - prev_close).abs()\n    ], axis=1).max(axis=1)\n    norm_tr = tr / df_copy['close']\n    std_tr = norm_tr.rolling(20, min_periods=20).std(ddof=1)\n    compression = 1.0 / (1.0 + std_tr)\n\n    factor = stability * compression\n    df_copy['factor_volume_stability_compression'] = factor\n    return df_copy['factor_volume_stability_compression']",
+  "description": "Crossover preserving primary mechanism from parent2 (stable volume persistence as negative CV of log1p volume) and borrowing a lightweight volatility compression gate from parent1. The primary strength target is RankICIR/ICIR stability of volume smoothness; the bottleneck is sensitivity to high true-range volatility regimes where volume signals are noisy. The compression weight = 1/(1+rolling_std(normalized_true_range,20)) is bounded (0,1) and attenuates the stability signal when price range volatility is high, preserving the sign and continuous cross-sectional variation of the primary mechanism. This targets robustness without adding a second independent alpha.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.020115154197309134,
+    "icir": 0.4320421589504537,
+    "mi": 0.0063051980240995675,
+    "rank_ic": 0.04191841941600683,
+    "rank_icir": 0.8617476355610226
+  },
+  "raw_metrics": {
+    "ic": 0.020115154197309134,
+    "icir": 0.4320421589504537,
+    "mi": 0.0063051980240995675,
+    "rank_ic": 0.04191841941600683,
+    "rank_icir": 0.8617476355610226
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.099493078681215,
+    "quantile_monotonicity": 0.9393939393939394,
+    "top_quantile_annualized_excess_return": 0.03190064220588962,
+    "top_quantile_excess_return": 0.02255629403543269,
+    "top_quantile_max_drawdown": -0.03961554178708282,
+    "top_quantile_turnover": 0.15408450990485262
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:49:15.485505+00:00"
+}

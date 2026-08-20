@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_then_mutation_apvc_gen0_c2_vol_asym_f79e243a",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 279,
+  "factor_name": "factor_volume_beta_asymmetric_dampen",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w02-20260813-014015-r1",
+  "expression_type": "python",
+  "formula": "beta * (1 + 0.5 * min(clip(Corr(ret, pct_change(high-low), 20), -1, 1), 0))",
+  "code": "def factor_volume_beta_asymmetric_dampen(df):\n    '''Volume-confirmed price beta with asymmetric range-correlation dampening.'''\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    log_volume = np.log(df_copy['volume'].clip(lower=1e-12))\n    dlog_volume = log_volume.diff()\n    cov = ret.rolling(20, min_periods=20).cov(dlog_volume)\n    var_vol = dlog_volume.rolling(20, min_periods=20).var(ddof=1)\n    beta = cov / var_vol.replace(0.0, np.nan)\n    range_ = df_copy['high'] - df_copy['low']\n    range_chg = range_.pct_change()\n    corr = ret.rolling(20, min_periods=20).corr(range_chg)\n    corr_clipped = corr.clip(lower=-1.0, upper=1.0)\n    weight = 1.0 + 0.5 * np.minimum(corr_clipped, 0.0)\n    df_copy['factor_volume_beta_asymmetric_dampen'] = beta * weight\n    return df_copy['factor_volume_beta_asymmetric_dampen']",
+  "description": "Mutation of parent factor_volume_beta_range_weighted. Preserves the core mechanism: rolling beta of returns on changes in log volume, capturing volume-confirmed accumulation/distribution. The lightweight range-return correlation weight is modified from symmetric amplification/dampening to asymmetric dampening only: positive correlations no longer amplify beta (weight fixed at 1.0), while negative correlations still dampen beta linearly from 1.0 down to 0.5. This direction adjustment removes the aggressive positive reinforcement seen in the parent, potentially reducing variance and drawdown while maintaining the ability to suppress unreliable volume signals during leverage-effect regimes. Cross-sectional transform remains none to preserve the raw continuous single-stock signal.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01608630946291146,
+    "icir": 0.22058049080946665,
+    "mi": 0.017777894531251448,
+    "rank_ic": 0.04262183638368292,
+    "rank_icir": 0.6359751923344016
+  },
+  "raw_metrics": {
+    "ic": -0.01608630946291146,
+    "icir": -0.22058049080946665,
+    "mi": 0.017777894531251448,
+    "rank_ic": -0.04262183638368292,
+    "rank_icir": -0.6359751923344016
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.14106726131804,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.07012818634951135,
+    "top_quantile_excess_return": 0.4726101207606086,
+    "top_quantile_max_drawdown": -0.09758242345385137,
+    "top_quantile_turnover": 0.17283390366500645
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:21:05.098244+00:00"
+}

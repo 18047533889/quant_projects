@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_crossover_alpha_liq_0002_stability_range_smoo_02a37d9d",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 632,
+  "factor_name": "factor_volume_instability_smoothed_range_gate",
+  "domain_agent": "alpha-stability",
+  "run_id": "fleet-w04-20260813-161708-r6",
+  "expression_type": "python",
+  "formula": "cv_volume * (1 + 0.5*tanh(ewm5(-std_20((high-low)/close))))",
+  "code": "def factor_volume_instability_smoothed_range_gate(df):\n    df_copy = df.copy()\n    vol_mean = df_copy['volume'].rolling(20, min_periods=20).mean()\n    vol_std = df_copy['volume'].rolling(20, min_periods=20).std(ddof=1)\n    cv = vol_std / vol_mean.replace(0.0, np.nan)\n    cv = cv.replace([np.inf, -np.inf], np.nan)\n    range_ratio = (df_copy['high'] - df_copy['low']) / df_copy['close'].replace(0.0, np.nan)\n    range_stability = -range_ratio.rolling(20, min_periods=20).std(ddof=1)\n    range_stability_smooth = range_stability.ewm(span=5, adjust=False).mean()\n    weight = 1.0 + 0.5 * np.tanh(range_stability_smooth)\n    df_copy['factor_volume_instability_smoothed_range_gate'] = cv * weight\n    return df_copy['factor_volume_instability_smoothed_range_gate']",
+  "description": "Crossover of qualified primary parent (g1_crossover_alpha_liq_0002_stability_range_smooth_gen0_001_f07710b2) and rejected mutation parent (g1_crossover_then_mutation_alpha_liq_0002_stability_range_smooth_gen0_001_652ad3cf). Primary mechanism: coefficient of variation of trailing 20-day volume (liquidity instability). Secondary lightweight idea: smoothing (EWMA span=5) from the mutation parent, but applied to the range_stability gate weight rather than to cv, to reduce gate noise without smoothing away the primary volatility signal. This preserves the primary parent's ICIR/RankICIR and payoff evidence while targeting a modest improvement in IC and MI through a more stable regime gate. The child keeps bounded continuous weight (0.5 to 1.5 via tanh) and cs_zscore transform.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.021112790425461835,
+    "icir": 0.476501017373935,
+    "mi": 0.006259589940627919,
+    "rank_ic": 0.04148927033388206,
+    "rank_icir": 0.9579138237245143
+  },
+  "raw_metrics": {
+    "ic": -0.021112790425461835,
+    "icir": -0.476501017373935,
+    "mi": 0.006259589940627919,
+    "rank_ic": -0.04148927033388206,
+    "rank_icir": -0.9579138237245143
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.0806783900765105,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.059329044504285555,
+    "top_quantile_excess_return": 0.04178924827887465,
+    "top_quantile_max_drawdown": -0.0314500124131446,
+    "top_quantile_turnover": 0.16014509579303124
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:56:39.902349+00:00"
+}

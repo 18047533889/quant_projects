@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_g0_gen_alpha_1_9d4a7938_bc7bac21",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 193,
+  "factor_name": "factor_vol_adaptive_momentum_blend_v2",
+  "domain_agent": "alpha-regime-gating",
+  "run_id": "fleet-w02-20260805-094340-r17",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_vol_adaptive_momentum_blend_v2(df):\n    df_copy = df.copy()\n    returns = df_copy[\"close\"].pct_change()\n    vol_short = returns.rolling(5, min_periods=5).std()\n    vol_long = returns.rolling(20, min_periods=20).std()\n    vol_ratio = vol_short / vol_long.replace(0.0, np.nan)\n    vol_rank = vol_ratio.rolling(252, min_periods=20).rank(pct=True)\n    mom_short = df_copy[\"close\"] / df_copy[\"close\"].shift(5) - 1\n    mom_long = df_copy[\"close\"] / df_copy[\"close\"].shift(20) - 1\n    factor = vol_rank * mom_short + (1.0 - vol_rank) * mom_long\n    return pd.Series(factor, index=df_copy.index, name=\"factor_vol_adaptive_momentum_blend_v2\")\n",
+  "description": "Mutation of factor_vol_adaptive_momentum_blend: instead of blending based on historical percentile of absolute 20-day volatility, this variant uses the historical percentile of the ratio between short-term (5-day) and long-term (20-day) volatility. When short-term volatility spikes relative to long-term volatility, it indicates a turbulent period, and the factor shifts weight toward short-term momentum (5-day) to capture rapid re-pricing; when short-term volatility is low relative to long-term, it emphasizes longer-term momentum (20-day) for stability. This relative volatility regime measure may be more responsive to turning points while preserving the smooth, data-driven blending mechanism.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0266846641823152,
+    "icir": 0.22826062812343545,
+    "mi": 0.02554548013293889,
+    "rank_ic": 0.04244950903242084,
+    "rank_icir": 0.3184771511737884
+  },
+  "raw_metrics": {
+    "ic": -0.0266846641823152,
+    "icir": -0.22826062812343545,
+    "mi": 0.02554548013293889,
+    "rank_ic": -0.04244950903242084,
+    "rank_icir": -0.3184771511737884
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.057288898936262767,
+    "top_quantile_excess_return": 0.3687666764099602,
+    "top_quantile_max_drawdown": -0.08808473296037089,
+    "top_quantile_turnover": 0.25692801791863884
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:15:36.781396+00:00"
+}

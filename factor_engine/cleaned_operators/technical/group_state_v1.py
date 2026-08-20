@@ -149,14 +149,16 @@ def _as_panel(x: pd.DataFrame) -> np.ndarray:
     return np.asarray(x, dtype=float)
 
 
-def _prior_beta_stats(r: np.ndarray, m: np.ndarray) -> tuple[float, float] | None:
-    """OLS beta = cov(r, m)/var(m) on a STRICTLY PRIOR window plus the
+def _prior_beta_stats(r: np.ndarray, m: np.ndarray) -> tuple[float, float, float] | None:
+    """OLS fit r ~ 1 + m on a STRICTLY PRIOR window: returns
+    (alpha, beta, resid_std) where beta = cov(r, m)/var(m),
+    alpha = mean(r) - beta*mean(m) (the intercept), and resid_std is the
     residual std of the same fit (dof = n-2: intercept + slope consumed
     — the OLS residual SE, NOT ddof=1's n-1; review P1 wording fix).
 
     ``r`` / ``m`` are the prior-window slices (window rows ending at t-1).
-    Returns (beta, resid_std) or None for a fail-closed/degenerate window:
-    any NaN/±Inf in either series, or market variance <= eps.
+    Returns (alpha, beta, resid_std) or None for a fail-closed/degenerate
+    window: any NaN/±Inf in either series, or market variance <= eps.
     """
     n = r.size
     if n < 2 or not np.isfinite(r).all() or not np.isfinite(m).all():
@@ -167,13 +169,14 @@ def _prior_beta_stats(r: np.ndarray, m: np.ndarray) -> tuple[float, float] | Non
         return None  # degenerate market variance -> NaN, never 0
     rc = r - r.mean()
     beta = float(np.dot(mc, rc)) / sxx
+    alpha = float(r.mean()) - beta * float(m.mean())
     resid = r - (r.mean() + beta * mc)
     ss_res = float(np.dot(resid, resid))
     dof = n - 2  # intercept + slope consumed
     if dof < 1:
         return None
     resid_std = float(np.sqrt(ss_res / dof))
-    return beta, resid_std
+    return alpha, beta, resid_std
 
 
 def _prior_map(
@@ -205,15 +208,15 @@ def _prior_map(
 
 
 def beta_residual_z(ret: pd.DataFrame, market_ret: pd.DataFrame, window: int = 20) -> pd.DataFrame:
-    """(r_t - beta_prior * m_t) / resid_std_prior — market-model residual
-    z-score with a STRICTLY PRIOR beta.
+    """(r_t - (alpha_prior + beta_prior*m_t)) / resid_std_prior —
+    market-model residual z-score with a STRICTLY PRIOR fit.
 
-    beta and resid_std are estimated by OLS of r on m over the prior window
-    [t-window, t-1] (window rows ENDING at t-1; the signal row t NEVER enters
-    its own fit); the residual at t is r_t - beta*m_t (alpha term absorbed
-    into the prior-window mean: the fit is r ~ 1 + m).  Fail-closed: any
-    NaN/±Inf in the prior window OR at the signal row -> NaN; degenerate
-    prior market variance or zero prior residual std -> NaN, never 0.
+    alpha, beta and resid_std are estimated by OLS of r on m (intercept
+    included: r ~ 1 + m) over the prior window [t-window, t-1] (window rows
+    ENDING at t-1; the signal row t NEVER enters its own fit); the residual
+    at t is r_t - (alpha + beta*m_t).  Fail-closed: any NaN/±Inf in the
+    prior window OR at the signal row -> NaN; degenerate prior market
+    variance or zero prior residual std -> NaN, never 0.
     Dimensionless.  Window >= 5 (ParamSpec min == runtime guard)."""
     w = _pi(window, "window", 5)
 
@@ -223,23 +226,25 @@ def beta_residual_z(ret: pd.DataFrame, market_ret: pd.DataFrame, window: int = 2
         stats = _prior_beta_stats(pr, pm)
         if stats is None:
             return np.nan
-        beta, resid_std = stats
+        alpha, beta, resid_std = stats
         if not (np.isfinite(resid_std) and resid_std > _EPS):
             return np.nan
-        resid = float(r_t) - beta * float(m_t)
+        resid = float(r_t) - (alpha + beta * float(m_t))
         return resid / resid_std
 
     return _frame(ret, _prior_map(ret, market_ret, w, _z))
 
 
 def beta_divergence_pct(ret: pd.DataFrame, market_ret: pd.DataFrame, window: int = 20) -> pd.DataFrame:
-    """(r_t - beta_prior * m_t) / |m_t| — market-model divergence ratio.
+    """(r_t - (alpha_prior + beta_prior*m_t)) / |m_t| — market-model
+    divergence ratio.
 
-    Same STRICTLY PRIOR beta as ``beta_residual_z`` (OLS of r on m over
-    [t-window, t-1], signal row excluded from its own fit), but the residual
-    is normalized by the ABSOLUTE market return at t — "how many market-moves
-    worth of divergence" (dimensionless, sign preserved, |output| >= 1 means
-    the stock moved against/away from its beta-implied move by at least the
+    Same STRICTLY PRIOR fit as ``beta_residual_z`` (OLS of r on m with
+    intercept, r ~ 1 + m, over [t-window, t-1], signal row excluded from
+    its own fit); the residual r_t - (alpha + beta*m_t) is normalized by
+    the ABSOLUTE market return at t — "how many market-moves worth of
+    divergence" (dimensionless, sign preserved, |output| >= 1 means the
+    stock moved against/away from its beta-implied move by at least the
     market's own magnitude).  Fail-closed: any NaN/±Inf in the prior window
     or at the signal row -> NaN; degenerate prior market variance -> NaN;
     |m_t| <= eps (flat market — the ratio is undefined) -> NaN, never 0.
@@ -252,11 +257,11 @@ def beta_divergence_pct(ret: pd.DataFrame, market_ret: pd.DataFrame, window: int
         stats = _prior_beta_stats(pr, pm)
         if stats is None:
             return np.nan
-        beta, _resid_std = stats
+        alpha, beta, _resid_std = stats
         denom = abs(float(m_t))
         if denom <= _EPS:
             return np.nan  # flat market bar: ratio undefined, never 0
-        resid = float(r_t) - beta * float(m_t)
+        resid = float(r_t) - (alpha + beta * float(m_t))
         return resid / denom
 
     return _frame(ret, _prior_map(ret, market_ret, w, _div))

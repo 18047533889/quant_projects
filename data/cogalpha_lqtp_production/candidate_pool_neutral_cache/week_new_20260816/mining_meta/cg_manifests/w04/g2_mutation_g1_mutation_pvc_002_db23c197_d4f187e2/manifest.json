@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_pvc_002_db23c197_d4f187e2",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 454,
+  "factor_name": "factor_reversal_sublinear_volume",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w04-20260805-204530-r33",
+  "expression_type": "python",
+  "formula": "-ret_5d * sqrt(max(vol_ratio_20d - 1, 0))",
+  "code": "def factor_reversal_sublinear_volume(df):\n    \"\"\"Short-term reversal with sublinear volume scaling to dampen extreme volume spikes.\"\"\"\n    df_copy = df.copy()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    ret_5d = df_copy[\"close\"].pct_change(5)\n    volume_scaler = np.sqrt(np.maximum(vol_ratio - 1.0, 0.0))\n    factor = -ret_5d * volume_scaler\n    df_copy[\"factor_reversal_sublinear_volume\"] = factor\n    return df_copy[\"factor_reversal_sublinear_volume\"]",
+  "description": "Preserves the parent's core price-volume reversal mechanism: extreme price moves accompanied by abnormal volume tend to revert. The mutation replaces the linear volume scaling (vol_ratio - 1) with a square-root scaling, which dampens the impact of very high volume spikes. This reduces tail sensitivity and aims to improve the signal's stability (ICIR) while maintaining the mean-reversion edge. The square-root transform ensures that volume amplification is sub-linear, giving a smoother, more robust signal without sacrificing the core economic intuition. Parent strength target: ICIR and RankICIR stability.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03545164166034722,
+    "icir": 0.4013402446969735,
+    "mi": 0.12966268053963415,
+    "rank_ic": 0.047067731624735,
+    "rank_icir": 0.5603111995518534
+  },
+  "raw_metrics": {
+    "ic": 0.03545164166034722,
+    "icir": 0.4013402446969735,
+    "mi": 0.12966268053963415,
+    "rank_ic": 0.047067731624735,
+    "rank_icir": 0.5603111995518534
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.10774166496295323,
+    "top_quantile_excess_return": 0.08151921813380736,
+    "top_quantile_max_drawdown": -0.027234920312939503,
+    "top_quantile_turnover": 0.4203221187001099
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:37:58.252266+00:00"
+}

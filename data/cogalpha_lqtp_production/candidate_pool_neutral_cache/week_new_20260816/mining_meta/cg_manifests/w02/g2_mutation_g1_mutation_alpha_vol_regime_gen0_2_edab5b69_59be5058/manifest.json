@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_alpha_vol_regime_gen0_2_edab5b69_59be5058",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 129,
+  "factor_name": "factor_range_reversal_ewm_surprise",
+  "domain_agent": "alpha-volatility-regime",
+  "run_id": "fleet-w02-20260804-120501-r12",
+  "expression_type": "python",
+  "formula": "-ret_1d * max( (range_ratio - EWMA_mean(range_ratio, span=20)) / EWMA_std(range_ratio, span=20), 0 )",
+  "code": "def factor_range_reversal_ewm_surprise(df):\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    range_ratio = range_ / df_copy[\"close\"]\n    ewm_mean = range_ratio.ewm(span=20, adjust=False).mean()\n    ewm_std = range_ratio.ewm(span=20, adjust=False).std()\n    ewm_zscore = (range_ratio - ewm_mean) / ewm_std.replace(0, np.nan)\n    ret_1d = df_copy[\"close\"].pct_change(1)\n    signal = -ret_1d * np.maximum(ewm_zscore, 0)\n    df_copy[\"factor_range_reversal_ewm_surprise\"] = signal\n    return df_copy[\"factor_range_reversal_ewm_surprise\"]",
+  "description": "This factor captures reversal after extreme intraday range expansion, using exponentially weighted moving average (EWMA) to adapt the range normalization to recent volatility changes. The range surprise is the deviation of the current range-to-close ratio from its EWMA mean and standard deviation (span=20). Positive range surprises amplify the negative of the 1-day return, betting on mean reversion. EWMA improves responsiveness to shifting volatility regimes vs. simple rolling, potentially reducing noise and improving signal stability.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.018380095573705072,
+    "icir": 0.24950015416343127,
+    "mi": 0.10273848487422388,
+    "rank_ic": 0.027970652063709404,
+    "rank_icir": 0.32851309379657767
+  },
+  "raw_metrics": {
+    "ic": 0.018380095573705072,
+    "icir": 0.24950015416343127,
+    "mi": 0.10273848487422388,
+    "rank_ic": 0.027970652063709404,
+    "rank_icir": 0.32851309379657767
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.06702952457347977,
+    "top_quantile_excess_return": 0.4555288264542243,
+    "top_quantile_max_drawdown": -0.0429929686787377,
+    "top_quantile_turnover": 0.6381113633267276
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:12:54.431660+00:00"
+}

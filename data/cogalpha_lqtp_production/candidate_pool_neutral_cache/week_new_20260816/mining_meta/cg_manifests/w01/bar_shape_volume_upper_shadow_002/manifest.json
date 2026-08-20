@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "bar_shape_volume_upper_shadow_002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "elite",
+  "factor_id": 109,
+  "factor_name": "factor_volume_weighted_upper_shadow",
+  "domain_agent": "alpha-bar-shape",
+  "run_id": "fleet-w01-20260804-031550-r10",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_volume_weighted_upper_shadow(df):\n    \"\"\"\n    Volume\u2011weighted upper shadow: (high - max(open, close)) * volume / median volume.\n    Captures selling pressure with conviction. Smoothed with 5\u2011day EMA.\n    \"\"\"\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    open_ = df_copy[\"open\"]\n    close = df_copy[\"close\"]\n    vol = df_copy[\"volume\"]\n    # Upper shadow length\n    upper_shadow = high - np.maximum(open_, close)\n    # Volume normalized by 20\u2011day rolling median\n    vol_med = vol.rolling(20, min_periods=1).median().replace(0.0, np.nan)\n    vol_norm = vol / vol_med\n    # Combine; fill NaNs with 0 (range zero or missing volume implies zero signal)\n    raw = upper_shadow * vol_norm\n    raw_filled = raw.fillna(0.0)\n    smoothed = raw_filled.ewm(span=5, adjust=False).mean()\n    df_copy[\"factor_volume_weighted_upper_shadow\"] = smoothed\n    return df_copy[\"factor_volume_weighted_upper_shadow\"]",
+  "description": "Upper shadows represent intraday selling pressure that pushed price below the high. Weighting by volume captures conviction: heavy volume alongside a long upper shadow suggests distribution rather than noise. Cross\u2011sectional ranking identifies stocks with strongest bearish pressure. EMA smoothing ensures the signal persists.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02898000895332823,
+    "icir": 0.30618656042751097,
+    "mi": 0.024287868324158524,
+    "rank_ic": 0.0400723255580031,
+    "rank_icir": 0.3836886325593408
+  },
+  "raw_metrics": {
+    "ic": -0.02898000895332823,
+    "icir": -0.30618656042751097,
+    "mi": 0.024287868324158524,
+    "rank_ic": -0.0400723255580031,
+    "rank_icir": -0.3836886325593408
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.31187820131448407,
+    "top_quantile_excess_return": 3.8146644987446594,
+    "top_quantile_max_drawdown": -0.06829824689256292,
+    "top_quantile_turnover": 0.1654107775838275
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:39:38.730444+00:00"
+}

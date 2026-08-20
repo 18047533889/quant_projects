@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_then_mutation_lag_response_002_impr_2b235113",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "elite",
+  "factor_id": 3,
+  "factor_name": "factor_intraday_reversion_volume_scaled",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w02-20260802-140831-r1",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_intraday_reversion_volume_scaled(df):\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    past_intraday_ret = intraday_ret.rolling(5, min_periods=5).sum()\n    vol5 = intraday_ret.rolling(5, min_periods=5).std()\n    vol20 = intraday_ret.rolling(20, min_periods=20).std()\n    vol_ratio = vol5 / vol20.replace(0, np.nan)\n    vol_ratio = vol_ratio.replace([np.inf, -np.inf], np.nan)\n    raw_factor = -past_intraday_ret * vol_ratio\n    vol_ema = df_copy[\"volume\"].ewm(span=20, adjust=False).mean()\n    volume_ratio = df_copy[\"volume\"] / vol_ema.replace(0, np.nan)\n    volume_ratio = volume_ratio.replace([np.inf, -np.inf], np.nan).clip(0.2, 5.0)\n    factor = raw_factor * volume_ratio\n    factor = factor.fillna(0)\n    df_copy[\"factor_intraday_reversion_volume_scaled\"] = factor\n    return df_copy[\"factor_intraday_reversion_volume_scaled\"]",
+  "description": "Mutation of parent factor_volume_scaled_meanreversion_ema. The core mechanism is mean-reversion amplified by short-term volatility spike and scaled by continuous volume intensity. Preservation target: robust IC and RankIC from volume-scaled mean-reversion. Mutation: replace the close-to-close return in the reversion leg with intraday return from alpha_tools.decompose_overnight_intraday. Intraday returns isolate the speculative intraday component, which may exhibit sharper mean-reversion when realized volatility spikes. Volatility ratios are also computed on intraday returns for consistency. This aims to improve MI and signal stability without altering the economic structure.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03577928902402751,
+    "icir": 0.38405157327682155,
+    "mi": 0.02873725179761255,
+    "rank_ic": 0.04018851215659575,
+    "rank_icir": 0.352189128556378
+  },
+  "raw_metrics": {
+    "ic": 0.03577928902402751,
+    "icir": 0.38405157327682155,
+    "mi": 0.02873725179761255,
+    "rank_ic": 0.04018851215659575,
+    "rank_icir": 0.352189128556378
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.09040961828989968,
+    "top_quantile_excess_return": 0.6398273866404252,
+    "top_quantile_max_drawdown": -0.06947694259125048,
+    "top_quantile_turnover": 0.39293025462130393
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:09:27.639109+00:00"
+}

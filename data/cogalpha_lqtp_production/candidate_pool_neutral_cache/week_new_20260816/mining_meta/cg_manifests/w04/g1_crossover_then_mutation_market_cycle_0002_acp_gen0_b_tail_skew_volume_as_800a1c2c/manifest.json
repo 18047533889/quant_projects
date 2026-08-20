@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_then_mutation_market_cycle_0002_acp_gen0_b_tail_skew_volume_as_800a1c2c",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 752,
+  "factor_name": "factor_range_pressure_conditional_vol_asymmetry",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w04-20260814-081422-r12",
+  "expression_type": "python",
+  "formula": "((rolling_sum_60(close-low) - rolling_sum_60(high-close)) / rolling_sum_60(high-low)) * (1 - 0.3 * (rolling_sum_60(volume*1{ret<0}) / rolling_sum_60(volume) > 1.2 * rolling_median_60(rolling_sum_60(volume*1{ret<0}) / rolling_sum_60(volume))))",
+  "code": "def factor_range_pressure_conditional_vol_asymmetry(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    # primary mechanism: cycle range pressure over 60 days\n    buy_pressure = (close - df_copy[\"low\"]).rolling(60, min_periods=20).sum()\n    sell_pressure = (df_copy[\"high\"] - close).rolling(60, min_periods=20).sum()\n    total_range = (df_copy[\"high\"] - df_copy[\"low\"]).rolling(60, min_periods=20).sum()\n    range_pressure = (buy_pressure - sell_pressure) / total_range.replace(0.0, np.nan)\n    # lightweight modifier: downside volume participation, attenuated only when extreme\n    ret = close.pct_change()\n    down_vol = volume.where(ret < 0, 0.0).rolling(60, min_periods=30).sum()\n    total_vol = volume.rolling(60, min_periods=30).sum().replace(0.0, np.nan)\n    down_ratio = down_vol / total_vol\n    # dynamic threshold: 20% above trailing median down_ratio triggers mild attenuation\n    median_down_ratio = down_ratio.rolling(60, min_periods=20).median()\n    attenuate = (down_ratio > median_down_ratio * 1.2).astype(float)\n    scale = 1.0 - 0.3 * attenuate\n    factor = range_pressure * scale\n    df_copy[\"factor_range_pressure_conditional_vol_asymmetry\"] = factor\n    return df_copy[\"factor_range_pressure_conditional_vol_asymmetry\"]",
+  "description": "Preserves the parent crossover's primary cycle range-pressure mechanism from market_cycle_0002, which identifies accumulation/distribution phase by the position of closes within the trailing 60-day high-low range. The parent used a continuous multiplicative attenuation by down_ratio, which can over-attenuate the signal even during normal volume regimes, potentially weakening IC/ICIR. This mutation changes the lightweight downside-volume modifier to a conditional gate: only when downside volume participation is more than 20% above its own trailing median does the range-pressure signal get mildly scaled by 0.7. This preserves the raw range-pressure strength most of the time, targeting improved IC and ICIR while retaining the RankIC/RankICIR and payoff strengths from both parent candidates. Keeps exactly one core mechanism and one lightweight modifier, and retains cross_sectional_transform none to preserve raw payoff structure.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01571802420656598,
+    "icir": 0.3201938163102336,
+    "mi": 0.006064327437260708,
+    "rank_ic": 0.016570707272964544,
+    "rank_icir": 0.29130018402133123
+  },
+  "raw_metrics": {
+    "ic": -0.01571802420656598,
+    "icir": -0.3201938163102336,
+    "mi": 0.006064327437260708,
+    "rank_ic": -0.016570707272964544,
+    "rank_icir": -0.29130018402133123
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.138754663879962,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.016414548021164377,
+    "top_quantile_excess_return": 0.011632013252362627,
+    "top_quantile_max_drawdown": -0.015186137095514196,
+    "top_quantile_turnover": 0.13899324481981862
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:09:51.038329+00:00"
+}

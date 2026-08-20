@@ -1,0 +1,98 @@
+id: R21-P0-MATRIX-TRUTH
+slice: R21-P0 — machine-generated backend physical-implementation matrix (single truth for coverage counts)
+campaign: Operator Rehabilitation (R21; LOCAL ONLY, working tree is truth)
+git_sha: 724cf286c567512efeefb2e24622eb0bb665680d  # verified with `git log -1 --format=%H`; working tree has uncommitted modifications from other slices (TASK_QUEUE.md, group_state_v1.py, R20 evidence/test, .claude files) — working tree is truth
+timestamp: "2026-08-19"
+status: COMPLETED_LOCAL
+
+owned_files:
+  - scripts/generate_physical_implementation_matrix.py        # new generator
+  - docs/PHYSICAL_IMPLEMENTATION_MATRIX.md                   # new — generated
+  - docs/BACKEND_COVERAGE.md                                 # new — generated counts summary
+  - evidence/r2/R21-P0-MATRIX-TRUTH.yaml                     # this file
+  - tests/scripts/test_generate_physical_implementation_matrix.py  # new smoke
+  - backend/README.md                                        # pointer line appended at END only
+  - docs/sql_pushdown_coverage.md                            # pointer note appended at END only
+
+problem:
+  "Backend coverage counts were split-brained across three manual sources:
+  backend/README.md (Polars 325, SQL 58), docs/sql_pushdown_coverage.md
+  (SQL emitter 354, DuckDB parity 0, production-safe 0), and
+  evidence/r2/BACKEND_GAP_MATRIX.yaml (pandas 1362, polars 1361, sql 375,
+  backend_passed 0). Manual counts are no longer authoritative."
+
+fix:
+  "New generator scripts/generate_physical_implementation_matrix.py walks the
+  LIVE registry (cleaned_operators.load_all + backend.sql_pushdown.
+  sql_registry.register_sql_backends) and emits per-(canonical, physical
+  backend) rows via backend.operator_capability.enumerate_physical_inventory:
+  canonical | registry_slot | physical_backend | implementation_id (bound by
+  the spec itself per R21 §28; null when spec missing/invalid and then
+  spec_complete=false) | execution_kind | implemented | selectable(prod) |
+  spec_complete | oracle_passed (evidence/factor_operator_verified.json;
+  missing => NOT_RUN, never guessed) | edge_passed | parity_passed |
+  production_evidence_passed | production_admitted | source_hash |
+  semantic_hash | parameter_domain_hash | current_head_sha.  DuckDB
+  parity/production-safe read from backend.sql_tiers; Polars parity/safety
+  from cleaned_operators.operator_policy.  DIRECT_USE_MATRIX fields are
+  delegated to mining.direct_use.build_direct_use_operator (called, not
+  duplicated).  Counts in docs/BACKEND_COVERAGE.md derive ONLY from the
+  generated matrix rows."
+
+commands_run:
+  - "OPENBLAS/OMP/MKL/POLARS=1 python3 scripts/generate_physical_implementation_matrix.py -> 3977 rows / 1596 canonicals (2m8s)"
+  - "OPENBLAS/OMP/MKL/POLARS=1 pytest tests/scripts/test_generate_physical_implementation_matrix.py -q -> 4 passed (133s, serial, no xdist)"
+
+results:
+  total_canonicals: 1596
+  total_physical_backend_rows: 3977
+  backends:
+    pandas_numpy: {implemented: 1594, selectable: 1575, spec_complete: 2, impl_id_bound: 2, oracle_passed: 1297, oracle_NOT_RUN: 297, edge_passed: 0, parity_passed: 1594, prod_evidence: 0, prod_admitted: 0}
+    polars: {implemented: 1595, selectable: 1577, spec_complete: 8, impl_id_bound: 8, oracle_passed: 1299, oracle_NOT_RUN: 296, edge_passed: 0, parity_passed: 0, prod_evidence: 0, prod_admitted: 0}
+    duckdb_sql: {implemented: 394, selectable: 385, spec_complete: 394, impl_id_bound: 394, oracle_passed: 296, oracle_NOT_RUN: 98, edge_passed: 0, parity_passed: 0, prod_evidence: 0, prod_admitted: 0}
+    clickhouse_sql: {implemented: 394, selectable: 385, spec_complete: 394, impl_id_bound: 394, oracle_passed: 296, oracle_NOT_RUN: 98, edge_passed: 0, parity_passed: 0, prod_evidence: 0, prod_admitted: 0}
+  execution_kinds_observed:
+    pandas_numpy: {pandas_reference: 2, undeclared_spec: 1592}
+    polars: {polars_native_expr: 8, undeclared_spec: 1587}
+    duckdb_sql: {duckdb_native_sql: 394}
+    clickhouse_sql: {native_expr: 394}
+  direct_use_split:
+    total_canonicals: 1596
+    mining_visible: 1537
+    composition_usable: 1537
+    terminal_usable: 1364
+    production_admitted: 0
+    directly_usable: 0
+  notes:
+    - "DuckDB parity=0 / production-safe=0 is the honest fail-closed state: backend.sql_tiers.SQL_PARITY_VERIFIED_CANONICALS collapses to {column, literal} because backend.primitive_evidence._load_verified_set returns empty while evidence/primitive_verified.json provenance is stale (regeneration pipeline running separately). Not fabricated."
+    - "Polars parity=0 for the same reason: POLARS_PARITY_VERIFIED is derived from the same fail-closed primitive evidence."
+    - "spec_complete counts are tiny because PhysicalImplementationSpec declarations exist only on the SQL marker operators and 8 polars / 2 pandas operators; pandas_numpy parity_passed=yes means reference-backend semantics, not a measured parity test."
+    - "oracle counts differ from manual 1362 because canonicals are enumerated from the live registry (1596 incl. research/internal surfaces), not a stale manifest."
+
+known_limitations:
+  - "Manual counts in backend/README.md and docs/sql_pushdown_coverage.md not yet deleted — pointer lines appended at their END only; existing numbers/prose untouched."
+  - "DuckDB/Polars parity sets empty pending evidence/primitive_verified.json regeneration (separate pipeline); matrix reflects fail-closed truth."
+  - "production_admitted=0 across the board — no physical-ID-bound production evidence query is installed yet (enumerate_physical_inventory evidence_query=None fails closed)."
+  - "Generator runtime ~2 minutes (registry bootstrap dominates); run serially with threads pinned."
+
+not_run:
+  - item: "production certification gates"    status: NOT_RUN
+  - item: "evidence/primitive_verified.json regeneration (separate pipeline)"
+    status: NOT_RUN
+  - item: "deletion of manual counts in backend/README.md / docs/sql_pushdown_coverage.md (out of slice ownership)"
+    status: NOT_RUN
+
+production_certification: NOT_RUN
+independent_review:
+  reviewer: scoped-reviewer (background agent, 2026-08-20)
+  verdict: PASS
+  checks: "Counts independently recomputed and self-consistent: 1596 canonicals / 3977 rows; per-backend implemented 1594/1595/394/394; direct-use 1537/1537/1364/0/0; duckdb 394 impl / 385 selectable / 296 oracle / 98 NOT_RUN; polars spec_complete=8. Live-registry probes match generator output; DIRECT_USE fields delegated to mining.direct_use.build_direct_use_operator (called, not reimplemented); honesty checks pass (missing evidence => NOT_RUN, never guessed; DuckDB/Polars parity=0 reported as fail-closed stale-primitive-evidence truth, not fabricated). Gate reproduced: pytest tests/scripts/test_generate_physical_implementation_matrix.py -> 4 passed 130.97s serial threads=1."
+  findings:
+    - id: R21-MT-P2a
+      finding: "docs/PHYSICAL_IMPLEMENTATION_MATRIX.md line 3476 (ts_regression_slope polars row) has raw `|` chars inside parameter_domain_hash cell -> row renders with 23 cells instead of 22; escape cell values on next regen."
+      resolution: "NOTED — fold escaping fix into next matrix regen (after primitive_verified.json pipeline unblocks)."
+    - id: R21-MT-P2b
+      finding: "commands_run timing drift (recorded 133s vs reproduced 130.97s)."
+      resolution: "NOTED — no action required."
+  no_p0_p1: "No P0/P1 findings."
+independent_review_status: CLOSED_VERIFIED

@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_mutation_alpha_fractal_001_83d068d7_g1_crosso_fde9547e",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 5,
+  "factor_name": "factor_atr_ratio_fixed10",
+  "domain_agent": "alpha-fractal",
+  "run_id": "fleet-w03-20260802-140831-r1",
+  "expression_type": "python",
+  "formula": "- (ATR_10 / ATR_60)",
+  "code": "def factor_atr_ratio_fixed10(df):\n    \"\"\"Simplified volatility expansion: 10-day ATR / 60-day ATR, negative sign.\n    Removes volume regime adaptation to reduce complexity and potential noise.\"\"\"\n    df_copy = df.copy()\n    prev_close = df_copy[\"close\"].shift(1)\n    tr = pd.concat([\n        df_copy[\"high\"] - df_copy[\"low\"],\n        (df_copy[\"high\"] - prev_close).abs(),\n        (df_copy[\"low\"] - prev_close).abs()\n    ], axis=1).max(axis=1)\n    long_atr = tr.rolling(60, min_periods=60).mean()\n    short_atr = tr.rolling(10, min_periods=10).mean()\n    ratio = short_atr / long_atr.replace(0, np.nan)\n    df_copy[\"factor_atr_ratio_fixed10\"] = -ratio\n    df_copy[\"factor_atr_ratio_fixed10\"] = df_copy[\"factor_atr_ratio_fixed10\"].replace([np.inf, -np.inf], np.nan).fillna(0)\n    return df_copy[\"factor_atr_ratio_fixed10\"]",
+  "description": "Preserves the core parent mechanism: negative short-to-long ATR ratio captures volatility expansion that predicts underperformance. The bottleneck is potential ranking instability introduced by volume\u2011adaptive short window selection (5 vs 20) in the parent. Simplifying to a fixed 10\u2011day window maintains the economic signal while reducing complexity, aiming to improve RankIC and ICIR without sacrificing IC.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.04272625676901566,
+    "icir": 0.3928720105253144,
+    "mi": 0.02083502740172527,
+    "rank_ic": 0.030032585603281262,
+    "rank_icir": 0.2740511293383526
+  },
+  "raw_metrics": {
+    "ic": 0.04272625676901566,
+    "icir": 0.3928720105253144,
+    "mi": 0.02083502740172527,
+    "rank_ic": 0.030032585603281262,
+    "rank_icir": 0.2740511293383526
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.20030290954865726,
+    "top_quantile_excess_return": 1.7574317462534923,
+    "top_quantile_max_drawdown": -0.13133935420565057,
+    "top_quantile_turnover": 0.11765846883005408
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:44:51.740960+00:00"
+}

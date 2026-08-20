@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "order_imbalance_002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "elite",
+  "factor_id": 161,
+  "factor_name": "factor_volume_regime_pressure",
+  "domain_agent": "alpha-order-imbalance",
+  "run_id": "fleet-w03-20260804-184706-r13",
+  "expression_type": "python",
+  "formula": "ewm(span=10, intraday_ret - overnight_ret) * (1 + 0.2*is_high_vol - 0.3*is_low_vol)",
+  "code": "def factor_volume_regime_pressure(df):\n    \"\"\"\n    Directional pressure inferred from the intraday-minus-overnight return\n    spread, smoothed, and then scaled by a volume regime gate. High volume\n    days amplify the signal (conviction is validated by participation),\n    low volume days attenuate it (moves may be less meaningful).\n    \"\"\"\n    df_copy = df.copy()\n    # step 1: decompose returns using active tool\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(\n        df_copy[\"close\"], df_copy[\"open\"]\n    )\n    raw_pressure = intraday_ret - overnight_ret\n    # step 2: smooth with ewm to reduce noise, span=10\n    smoothed_pressure = raw_pressure.ewm(span=10, min_periods=10).mean()\n    # step 3: volume regime classification using active tool\n    is_high_vol, is_low_vol, _ = alpha_tools.classify_volume_regime(\n        df_copy[\"volume\"], window=20, high_threshold=1.5, low_threshold=0.6\n    )\n    # step 4: apply regime-based scaling\n    # high volume: factor * 1.2; low volume: factor * 0.7; else unchanged\n    scale = 1.0 + 0.2 * is_high_vol - 0.3 * is_low_vol\n    factor = smoothed_pressure * scale\n    df_copy[\"factor_volume_regime_pressure\"] = factor\n    return df_copy[\"factor_volume_regime_pressure\"]",
+  "description": "The core signal is the difference between the intraday return and the overnight return, smoothed with an EWMA (span=10). This captures the directional conviction of intraday traders relative to the overnight gap. The volume regime gate amplifies the signal on high-volume days, when large participation confirms the conviction, and dampens it on low-volume days, when moves may be noise. This simple scaling preserves the continuous nature of the signal and avoids extreme weighting.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.049846492261845954,
+    "icir": 0.5035989208375621,
+    "mi": 0.02125978605316803,
+    "rank_ic": 0.04409714346659013,
+    "rank_icir": 0.42015345191725145
+  },
+  "raw_metrics": {
+    "ic": -0.049846492261845954,
+    "icir": -0.5035989208375621,
+    "mi": 0.02125978605316803,
+    "rank_ic": -0.04409714346659013,
+    "rank_icir": -0.42015345191725145
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.1324139565774889,
+    "top_quantile_excess_return": 1.0442310293272201,
+    "top_quantile_max_drawdown": -0.05051315448494054,
+    "top_quantile_turnover": 0.31108817484611034
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:50:24.542194+00:00"
+}

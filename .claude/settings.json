@@ -1,0 +1,17 @@
+{
+  "env": {
+    "CLAUDE_CODE_STOP_HOOK_BLOCK_CAP": "500"
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/keep_loop_alive.py"
+          }
+        ]
+      }
+    ]
+  }
+}

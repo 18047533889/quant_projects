@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_alpha_order_imbalance_gen0_002_stab_42a6c65c",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 782,
+  "factor_name": "factor_vwap_deviation_inverted_confirmed_by_volume_price_alignment",
+  "domain_agent": "alpha-stability",
+  "run_id": "fleet-w04-20260814-111032-r13",
+  "expression_type": "python",
+  "formula": "- (close - cumsum(tp*volume)/cumsum(volume)) / (cumsum(tp*volume)/cumsum(volume)) * (0.5 + 0.5 * clip(rolling_corr(close.pct_change(), volume.pct_change(), 20), -1, 1))",
+  "code": "def factor_vwap_deviation_inverted_confirmed_by_volume_price_alignment(df):\n    df_copy = df.copy()\n    # Primary mechanism: cumulative volume-weighted average price (VWAP) deviation\n    typical_price = (df_copy['high'] + df_copy['low'] + df_copy['close']) / 3.0\n    cum_tp_vol = (typical_price * df_copy['volume']).cumsum()\n    cum_vol = df_copy['volume'].cumsum().replace(0.0, np.nan)\n    vwap = cum_tp_vol / cum_vol\n    deviation = (df_copy['close'] - vwap) / vwap\n    # Lightweight modifier: volume-price alignment confirmation\n    ret = df_copy['close'].pct_change().replace([np.inf, -np.inf], np.nan)\n    vol_chg = df_copy['volume'].pct_change().replace([np.inf, -np.inf], np.nan)\n    corr = ret.rolling(20, min_periods=10).corr(vol_chg)\n    weight = 0.5 + 0.5 * corr.clip(-1.0, 1.0).fillna(0.0)\n    # Direction inversion: positive when close is below VWAP (accumulation/discount),\n    # aligning with mean-reversion payoff evidence while preserving ranking stability.\n    factor = -deviation * weight\n    df_copy['factor_vwap_deviation_inverted_confirmed_by_volume_price_alignment'] = factor\n    return df_copy['factor_vwap_deviation_inverted_confirmed_by_volume_price_alignment']\n",
+  "description": "Parent strength: RankIC/RankICIR from cumulative VWAP deviation with volume-price alignment correlation gate. Bottleneck: top-quantile excess return and annualized excess return were negative despite strong long-short Sharpe, suggesting the raw sign of the deviation points against the profitable side after industry/size neutralization. Mutation mode: direction adjustment only, flipping the sign of the deviation to capture undervaluation relative to VWAP while preserving the bounded correlation confirmation weight. This targets payoff thickness without altering the mechanism, windows, or normalization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.016129583437179677,
+    "icir": 0.1812077224673537,
+    "mi": 0.027932115760204823,
+    "rank_ic": 0.0410913815347523,
+    "rank_icir": 0.5332462699586953
+  },
+  "raw_metrics": {
+    "ic": 0.016129583437179677,
+    "icir": 0.1812077224673537,
+    "mi": 0.027932115760204823,
+    "rank_ic": 0.0410913815347523,
+    "rank_icir": 0.5332462699586953
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.80425526839652,
+    "quantile_monotonicity": 0.8424242424242424,
+    "top_quantile_annualized_excess_return": -0.026417395318372394,
+    "top_quantile_excess_return": -0.020815912437018524,
+    "top_quantile_max_drawdown": -0.04452066797040499,
+    "top_quantile_turnover": 0.16008255150123368
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:14:18.514032+00:00"
+}

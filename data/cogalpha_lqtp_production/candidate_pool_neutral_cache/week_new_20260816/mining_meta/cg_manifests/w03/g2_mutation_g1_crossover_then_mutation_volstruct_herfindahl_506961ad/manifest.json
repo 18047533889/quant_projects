@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_volstruct_herfindahl_506961ad",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 329,
+  "factor_name": "factor_skewness_log_compress",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w03-20260813-155035-r4",
+  "expression_type": "python",
+  "formula": "factor = sign(skew_120) * log(1 + abs(skew_120)), where skew_120 = rolling_skew(close.pct_change(), 120)",
+  "code": "def factor_skewness_log_compress(df):\n    df_copy = df.copy()\n    returns = df_copy[\"close\"].pct_change()\n    skew = returns.rolling(120, min_periods=120).skew()\n    factor = np.sign(skew) * np.log1p(np.abs(skew))\n    df_copy[\"factor_skewness_log_compress\"] = factor\n    return df_copy[\"factor_skewness_log_compress\"]",
+  "description": "Preserves the parent's core 120-day rolling skewness of daily returns as the slow-moving return distribution asymmetry mechanism. Mutates the parent's tanh compression to sign*log1p(abs(skew)): this expands moderate skew deviations more gradually than tanh, preserving the monotonic rank ordering that underpins RankIC/RankICIR stability while reducing over-compression near zero and potentially improving raw IC/ICIR. A single lightweight modifier, no second independent factor.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.00449966700093431,
+    "icir": 0.11872076778023878,
+    "mi": 0.004319965495124478,
+    "rank_ic": 0.01946696470793507,
+    "rank_icir": 0.46131665027824653
+  },
+  "raw_metrics": {
+    "ic": -0.00449966700093431,
+    "icir": -0.11872076778023878,
+    "mi": 0.004319965495124478,
+    "rank_ic": -0.01946696470793507,
+    "rank_icir": -0.46131665027824653
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.986874234606406,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.013790036040435494,
+    "top_quantile_excess_return": 0.0754859692575025,
+    "top_quantile_max_drawdown": -0.1086468589483145,
+    "top_quantile_turnover": 0.05286545507056439
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:01:16.024742+00:00"
+}

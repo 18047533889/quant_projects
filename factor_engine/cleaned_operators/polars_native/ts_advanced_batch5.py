@@ -131,9 +131,7 @@ class TSFeatureSubspaceRotationPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "pca", "pit_safe", "research_only"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=4, param_role=ParamRole.HORIZON),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, window, **kwargs):
         # Placeholder: rolling variance change (NOT true subspace rotation)
@@ -156,9 +154,7 @@ class TSFIRLowpassCausalPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "filter", "causal", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=3, param_role=ParamRole.HORIZON),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, window, **kwargs):
         # Hamming window weights for FIR lowpass
@@ -250,9 +246,7 @@ class TSFisherInformationShiftPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "information", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper Fisher information
@@ -410,7 +404,7 @@ class TSGPDShapePWMPolarsNative(SeriesOperator):
         return feature.abs().rolling_quantile(threshold_quantile, window_size=window)
 
 
-@register_operator(name="ts_h_infinity_level_filter", canonical="ts_h_infinity_level_filter", backend="polars", status="research_only")
+@register_operator(name="ts_h_infinity_level_filter", canonical="ts_h_infinity_level_filter", backend="polars", status="research_only", replace=True, expected_old_source="pandas_bridge", replacement_reason="Consolidating polars native operators into ts_advanced_batch5")
 class TSHInfinityLevelFilterPolarsNative(SeriesOperator):
     """H-infinity robust level filter (min-max optimal)"""
 
@@ -422,9 +416,7 @@ class TSHInfinityLevelFilterPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "filter", "robust", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=5, param_role=ParamRole.HORIZON),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper H-infinity filter
@@ -769,10 +761,7 @@ class TSHysteresisAgePolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "hysteresis", "state", "pit_safe"],
     )
-    metadata.param_specs = {
-        "upper_threshold": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
-        "lower_threshold": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, upper_threshold, lower_threshold, **kwargs):
         # TODO: Implement proper hysteresis state machine
@@ -793,10 +782,7 @@ class TSHysteresisStatePolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "hysteresis", "state", "pit_safe"],
     )
-    metadata.param_specs = {
-        "upper_threshold": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
-        "lower_threshold": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, upper_threshold, lower_threshold, **kwargs):
         # TODO: Implement proper stateful hysteresis

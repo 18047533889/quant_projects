@@ -7,6 +7,46 @@ Provides Sharpe ratio, drawdown analysis, and portfolio return metrics.
 from typing import Tuple, Optional
 import numpy as np
 
+# QE-METRIC P0-10: canonical missing-return policy strings shared by the
+# return-computation paths. Semantics:
+#   "zero_fill" — NaN returns are treated as 0 (flat period). Back-compat
+#       default; documented, NOT silent.
+#   "drop"      — periods with any missing return are excluded (NaN output
+#       for that period) instead of being filled.
+#   "fail"      — raise ValueError on any non-finite return.
+_MISSING_RETURN_POLICIES = ("zero_fill", "drop", "fail")
+
+
+def _validate_missing_return_policy(policy: str) -> str:
+    if policy not in _MISSING_RETURN_POLICIES:
+        raise ValueError(
+            f"missing_return_policy must be one of "
+            f"{_MISSING_RETURN_POLICIES}, got {policy!r}"
+        )
+    return policy
+
+
+def _apply_missing_return_policy(
+    values: np.ndarray, policy: str, context: str
+) -> np.ndarray:
+    """Apply the missing-return policy to a (T,) or (T, F) return series.
+
+    Returns the series to use downstream. For "drop", non-finite entries
+    stay NaN (callers must propagate NaN); for "zero_fill" they become 0;
+    for "fail" a ValueError is raised.
+    """
+    _validate_missing_return_policy(policy)
+    non_finite = ~np.isfinite(values)
+    if policy == "fail" and np.any(non_finite):
+        n_missing = int(np.sum(non_finite))
+        raise ValueError(
+            f"{context} contains {n_missing} non-finite value(s) and "
+            "missing_return_policy='fail'"
+        )
+    if policy == "zero_fill":
+        return np.where(non_finite, 0.0, values)
+    return values  # "drop": keep NaN, callers propagate
+
 
 def compute_long_short_returns(
     factor_values: np.ndarray,
@@ -14,9 +54,22 @@ def compute_long_short_returns(
     long_threshold: float = 0.8,
     short_threshold: float = 0.2,
     validity_mask: Optional[np.ndarray] = None,
+    missing_return_policy: str = "zero_fill",
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute long/short portfolio returns based on factor quantiles.
+
+    Missing-return policy (QE-METRIC P0-10):
+
+    - ``"zero_fill"`` (default, back-compat): forward returns that are NaN
+      are treated as 0 for the assets selected into the long/short buckets.
+      This affects bucket means (a NaN-return asset contributes 0 instead
+      of being excluded) and is documented here precisely because it can
+      bias portfolio returns toward 0 in sparse universes.
+    - ``"drop"``: assets with non-finite forward returns are excluded from
+      the bucket means; if a bucket ends up empty, that period's return is
+      NaN (never 0).
+    - ``"fail"``: raise ValueError if any forward return is non-finite.
 
     Args:
         factor_values: Factor values (T, N) or (T, N, F)
@@ -24,11 +77,20 @@ def compute_long_short_returns(
         long_threshold: Quantile threshold for long positions (default 0.8 = top 20%)
         short_threshold: Quantile threshold for short positions (default 0.2 = bottom 20%)
         validity_mask: Optional boolean mask (T, N) or (T, N, F)
+        missing_return_policy: "zero_fill" | "drop" | "fail" (see above)
 
     Returns:
         (long_returns, short_returns, long_short_returns)
         Each shape (T,) or (T, F) for time series of portfolio returns
     """
+    _validate_missing_return_policy(missing_return_policy)
+    if missing_return_policy == "fail" and np.any(~np.isfinite(forward_returns)):
+        n_missing = int(np.sum(~np.isfinite(forward_returns)))
+        raise ValueError(
+            f"forward_returns contains {n_missing} non-finite value(s) and "
+            "missing_return_policy='fail'"
+        )
+
     # Handle 3D factor values
     if factor_values.ndim == 3:
         T, N, F = factor_values.shape
@@ -40,7 +102,8 @@ def compute_long_short_returns(
             fv = factor_values[:, :, f]
             vm = validity_mask[:, :, f] if validity_mask is not None else None
             long_rets[:, f], short_rets[:, f], ls_rets[:, f] = compute_long_short_returns(
-                fv, forward_returns, long_threshold, short_threshold, vm
+                fv, forward_returns, long_threshold, short_threshold, vm,
+                missing_return_policy=missing_return_policy,
             )
         return long_rets, short_rets, ls_rets
 
@@ -59,8 +122,16 @@ def compute_long_short_returns(
             valid = validity_mask[t, :]
             factor_t = np.where(valid, factor_t, np.nan)
 
-        # Filter finite values
-        finite_mask = np.isfinite(factor_t) & np.isfinite(ret_t)
+        # Filter finite factor values. Missing-return policy:
+        # - "zero_fill": buckets are formed on finite factors only; NaN
+        #   forward returns contribute 0 to the bucket mean (documented).
+        # - "drop": assets with non-finite returns are excluded entirely.
+        finite_mask = np.isfinite(factor_t)
+        if missing_return_policy == "drop":
+            finite_mask = finite_mask & np.isfinite(ret_t)
+        elif missing_return_policy == "zero_fill":
+            ret_t = np.where(np.isfinite(ret_t), ret_t, 0.0)
+
         if np.sum(finite_mask) < 2:
             continue
 
@@ -142,19 +213,40 @@ def compute_sharpe_ratio(
 
 def compute_maximum_drawdown(
     returns: np.ndarray,
+    missing_return_policy: str = "zero_fill",
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute maximum drawdown from return series.
 
+    This is the drawdown authority alongside
+    ``metrics/risk/drawdown_analysis.py``; both share the same wealth<=0
+    wipeout guard semantics.
+
+    CAVEAT (silent zero fill): by default (``missing_return_policy=
+    "zero_fill"``) NaN returns are treated as flat days (0 return) for the
+    wealth curve. Pass ``missing_return_policy="fail"`` to raise instead
+    when any NaN is present.
+
     Args:
         returns: Return series (T,) or (T, F)
+        missing_return_policy: "zero_fill" (default, back-compat) or "fail"
+            (raise ValueError on any NaN return)
 
     Returns:
         (max_drawdown, drawdown_series, peak_indices)
         max_drawdown: Maximum drawdown magnitude (positive), shape () or (F,)
-        drawdown_series: Drawdown at each time step, shape (T,) or (T, F)
-        peak_indices: Index of peak before maximum drawdown, shape () or (F,)
+        drawdown_series: Drawdown at each time step, shape (T,) or (T, F);
+            NaN from the first nonpositive wealth onward (wipeout guard)
+        peak_indices: Index of the PEAK (last index where the running
+            maximum is attained at or before the maximum-drawdown trough),
+            shape () or (F,)
     """
+    if missing_return_policy not in ("zero_fill", "fail"):
+        raise ValueError(
+            f"missing_return_policy must be 'zero_fill' or 'fail', "
+            f"got {missing_return_policy!r}"
+        )
+
     if returns.ndim == 1:
         returns = returns[:, np.newaxis]
         squeeze = True
@@ -163,7 +255,14 @@ def compute_maximum_drawdown(
 
     T, F = returns.shape
 
-    # Replace NaN with 0 for cumulative product
+    if missing_return_policy == "fail" and np.any(~np.isfinite(returns)):
+        n_missing = int(np.sum(~np.isfinite(returns)))
+        raise ValueError(
+            f"returns contains {n_missing} non-finite value(s) and "
+            "missing_return_policy='fail'"
+        )
+
+    # Replace NaN with 0 for cumulative product (documented caveat above).
     returns_filled = np.where(np.isfinite(returns), returns, 0.0)
 
     # Compute cumulative returns (wealth curve)
@@ -172,18 +271,62 @@ def compute_maximum_drawdown(
     # Compute running maximum
     running_max = np.maximum.accumulate(cum_returns, axis=0)
 
-    # Drawdown series
-    drawdown_series = (cum_returns - running_max) / running_max
+    # Drawdown series with total-wipeout guard: from the first nonpositive
+    # wealth onward, drawdown is NaN (forward-filled) — a negative wealth
+    # times (1 + r) can flip positive again and fabricate a fake recovery.
+    invalid = np.maximum.accumulate(cum_returns <= 0, axis=0)
+    drawdown_series = np.full(cum_returns.shape, np.nan)
+    np.divide(
+        cum_returns - running_max,
+        running_max,
+        out=drawdown_series,
+        where=~invalid,
+    )
 
-    # Maximum drawdown per factor
-    max_dd = np.min(drawdown_series, axis=0)  # Most negative
-    max_dd = -max_dd  # Convert to positive magnitude
+    # Maximum drawdown per factor (most negative, converted to positive).
+    with np.errstate(invalid="ignore"):
+        max_dd = -np.nanmin(drawdown_series, axis=0)
+    max_dd = np.where(np.isfinite(max_dd), max_dd, np.nan)
 
-    # Find peak indices
-    peak_indices = np.argmin(drawdown_series, axis=0)
+    # Trough index per factor: first occurrence of the minimum drawdown,
+    # NaN-safe (an all-NaN column — wipeout from the very start — has no
+    # defined trough; np.nanargmin would raise on it).
+    trough_indices = np.empty(F, dtype=np.int64)
+    for f in range(F):
+        col = drawdown_series[:, f]
+        finite_idx = np.nonzero(np.isfinite(col))[0]
+        if finite_idx.size == 0:
+            trough_indices[f] = 0
+            continue
+        vals = col[finite_idx]
+        min_val = np.min(vals)
+        trough_indices[f] = int(finite_idx[np.nonzero(vals == min_val)[0][0]])
+
+    # Peak index: last index at or before the trough where the wealth curve
+    # attains its running maximum (i.e. cum_returns == running_max). This is
+    # the true peak of the maximum drawdown episode, not the trough.
+    peak_indices = np.empty(F, dtype=np.int64)
+    for f in range(F):
+        trough = int(trough_indices[f])
+        col = drawdown_series[: trough + 1, f]
+        finite_idx = np.nonzero(np.isfinite(col))[0]
+        if finite_idx.size == 0:
+            # Entire prefix invalid (wipeout from the start): peak undefined,
+            # use index 0.
+            peak_indices[f] = 0
+            continue
+        trough_eff = int(finite_idx[-1])
+        at_max = np.isclose(
+            cum_returns[: trough_eff + 1, f], running_max[trough_eff, f]
+        )
+        if not np.any(at_max):
+            peak_indices[f] = 0
+            continue
+        # Last index where wealth equals the running max at the trough.
+        peak_indices[f] = int(np.nonzero(at_max)[0][-1])
 
     if squeeze:
-        return max_dd[0], drawdown_series[:, 0], peak_indices[0]
+        return max_dd[0], drawdown_series[:, 0], int(peak_indices[0])
     else:
         return max_dd, drawdown_series, peak_indices
 

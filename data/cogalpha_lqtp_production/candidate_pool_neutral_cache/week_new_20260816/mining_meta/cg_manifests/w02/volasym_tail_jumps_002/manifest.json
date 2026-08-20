@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "volasym_tail_jumps_002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 414,
+  "factor_name": "factor_tail_asymmetry_jump_frequency",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w02-20260814-042827-r7",
+  "expression_type": "python",
+  "formula": "-(#down_jumps_63 - #up_jumps_63)/(#down_jumps_63 + #up_jumps_63 + 1)",
+  "code": "def factor_tail_asymmetry_jump_frequency(df):\n    \"\"\"Downside vs upside return jump frequency, measured with lagged realized vol.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol = ret.rolling(63, min_periods=20).std(ddof=1).shift(1)\n    down_jump = ((ret < -1.5 * vol) & (vol > 0)).rolling(63, min_periods=20).sum()\n    up_jump = ((ret > 1.5 * vol) & (vol > 0)).rolling(63, min_periods=20).sum()\n    df_copy[\"factor_tail_asymmetry_jump_frequency\"] = -(down_jump - up_jump) / (down_jump + up_jump + 1.0)\n    return df_copy[\"factor_tail_asymmetry_jump_frequency\"]",
+  "description": "Measures asymmetric volatility by the frequency of tail jumps: returns below -1.5 sigma of prior realized volatility versus returns above +1.5 sigma over a 63-day window. Downside jump propensity is an uncovered Price-Volatility Behavior pathway distinct from continuous semivol, capturing discontinuous risk aversion. Negative sign ranks downside-jump-heavy names lower.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.006561381226995245,
+    "icir": 0.12230655313121296,
+    "mi": 0.004191563195869108,
+    "rank_ic": 0.022754986765203426,
+    "rank_icir": 0.38298239243369797
+  },
+  "raw_metrics": {
+    "ic": -0.006561381226995245,
+    "icir": -0.12230655313121296,
+    "mi": 0.004191563195869108,
+    "rank_ic": -0.022754986765203426,
+    "rank_icir": -0.38298239243369797
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.6056947785169604,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.052336836679378385,
+    "top_quantile_excess_return": 0.33789758949628435,
+    "top_quantile_max_drawdown": -0.056152177796329195,
+    "top_quantile_turnover": 0.09616120301258868
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:38:40.875642+00:00"
+}

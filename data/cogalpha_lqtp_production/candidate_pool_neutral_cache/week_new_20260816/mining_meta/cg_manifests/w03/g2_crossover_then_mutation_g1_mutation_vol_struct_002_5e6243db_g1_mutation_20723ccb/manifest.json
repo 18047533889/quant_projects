@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_mutation_vol_struct_002_5e6243db_g1_mutation_20723ccb",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 229,
+  "factor_name": "factor_price_volume_sign_coherence",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w03-20260805-165557-r18",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_price_volume_sign_coherence(df):\n    \"\"\"Price-volume sign coherence: rolling sum of daily price-volume direction alignment.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_diff = df_copy[\"volume\"].diff()\n    sign_product = np.sign(ret) * np.sign(vol_diff)\n    coherence = sign_product.rolling(20, min_periods=20).sum()\n    df_copy[\"factor_price_volume_sign_coherence\"] = coherence\n    return df_copy[\"factor_price_volume_sign_coherence\"]",
+  "description": "Simplified mutation of parent: removed volume concentration weight modifier, keeping only the core price-volume sign coherence mechanism. This reduces complexity and potential overfitting, while preserving the economic insight: stocks with persistent alignment between price direction and volume change direction exhibit conviction trends. The rolling sum over 20 days captures short-term directional consistency.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.013431524162215727,
+    "icir": 0.2300007735762841,
+    "mi": 0.028484548258356668,
+    "rank_ic": 0.029008048337520614,
+    "rank_icir": 0.45524157190013986
+  },
+  "raw_metrics": {
+    "ic": -0.013431524162215727,
+    "icir": -0.2300007735762841,
+    "mi": 0.028484548258356668,
+    "rank_ic": -0.029008048337520614,
+    "rank_icir": -0.45524157190013986
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.08391600479089778,
+    "top_quantile_excess_return": 0.5842953638432007,
+    "top_quantile_max_drawdown": -0.04871483265986298,
+    "top_quantile_turnover": 0.15752348816778408
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:54:13.097541+00:00"
+}

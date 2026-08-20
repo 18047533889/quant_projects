@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_daily_trend_gen0_001_g1_mutation_daily_trend_gen_a4968d2f",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 292,
+  "factor_name": "factor_momentum_persistence_volume_ema3",
+  "domain_agent": "alpha-daily-trend",
+  "run_id": "fleet-w04-20260804-164019-r22",
+  "expression_type": "python",
+  "formula": "EMA( (close 20-day return) * (fraction of up days over 20 days) * (volume/EMA(volume,20)), 3)",
+  "code": "def factor_momentum_persistence_volume_ema3(df):\n    df_copy = df.copy()\n    # 20-day return\n    ret_20 = df_copy[\"close\"] / df_copy[\"close\"].shift(20) - 1.0\n    # fraction of up days in past 20 days\n    up_days = (df_copy[\"close\"] > df_copy[\"close\"].shift(1)).rolling(20, min_periods=20).mean()\n    # volume regime: continuous vol_ratio\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    # combine momentum, persistence, and volume into raw signal\n    raw_signal = ret_20 * up_days * vol_ratio\n    # apply 3-day EMA smoothing to reduce noise and increase responsiveness\n    df_copy[\"factor_momentum_persistence_volume_ema3\"] = raw_signal.ewm(span=3, min_periods=3).mean()\n    return df_copy[\"factor_momentum_persistence_volume_ema3\"]",
+  "description": "Crossover of parent 'daily-trend-gen0-001' (primary mechanism: multi-day momentum amplified by directional persistence and volume surge) and parent 'g1_mutation_daily_trend_gen0_001_b37e5346' (lightweight modifier: EMA smoothing). The child preserves the core mechanism from the elite parent and borrows the smoothing idea from the qualified mutant but with a shorter 3-day EMA (versus 5-day) to reduce signal lag and increase responsiveness to recent momentum shifts, targeting improved IC stability while maintaining the trend-confirmation logic.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.035554801138331094,
+    "icir": 0.3211155630908086,
+    "mi": 0.03958444936035033,
+    "rank_ic": 0.05811846326745811,
+    "rank_icir": 0.4356013868052531
+  },
+  "raw_metrics": {
+    "ic": -0.035554801138331094,
+    "icir": -0.3211155630908086,
+    "mi": 0.03958444936035033,
+    "rank_ic": -0.05811846326745811,
+    "rank_icir": -0.4356013868052531
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6,
+    "top_quantile_annualized_excess_return": 0.05899481688135988,
+    "top_quantile_excess_return": 0.04084526325528004,
+    "top_quantile_max_drawdown": -0.04140066566074263,
+    "top_quantile_turnover": 0.13511240307799863
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:24:58.060783+00:00"
+}

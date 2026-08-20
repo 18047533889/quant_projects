@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_alpha_order_imbalance_gen0_002_stability_volume_1e8e2bf2",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 779,
+  "factor_name": "factor_vwap_deviation_confirmed_by_volume_price_alignment",
+  "domain_agent": "alpha-stability",
+  "run_id": "fleet-w04-20260814-111032-r13",
+  "expression_type": "python",
+  "formula": "(close - cumsum(tp*volume)/cumsum(volume)) / (cumsum(tp*volume)/cumsum(volume)) * (0.5 + 0.5 * clip(rolling_corr(close.pct_change(), volume.pct_change(), 20), -1, 1))",
+  "code": "def factor_vwap_deviation_confirmed_by_volume_price_alignment(df):\n    df_copy = df.copy()\n    # Primary mechanism: cumulative volume-weighted average price (VWAP) deviation\n    typical_price = (df_copy['high'] + df_copy['low'] + df_copy['close']) / 3.0\n    cum_tp_vol = (typical_price * df_copy['volume']).cumsum()\n    cum_vol = df_copy['volume'].cumsum().replace(0.0, np.nan)\n    vwap = cum_tp_vol / cum_vol\n    deviation = (df_copy['close'] - vwap) / vwap\n    # Lightweight modifier from secondary parent: volume-price alignment confirmation\n    ret = df_copy['close'].pct_change().replace([np.inf, -np.inf], np.nan)\n    vol_chg = df_copy['volume'].pct_change().replace([np.inf, -np.inf], np.nan)\n    corr = ret.rolling(20, min_periods=10).corr(vol_chg)\n    # Bounded attenuation weight in [0, 1]; neutral 0.5 when correlation unavailable\n    weight = 0.5 + 0.5 * corr.clip(-1.0, 1.0).fillna(0.0)\n    factor = deviation * weight\n    df_copy['factor_vwap_deviation_confirmed_by_volume_price_alignment'] = factor\n    return df_copy['factor_vwap_deviation_confirmed_by_volume_price_alignment']\n",
+  "description": "Primary mechanism from alpha-order-imbalance-gen0-002: deviation of close from cumulative volume-weighted average price captures directional order-flow pressure. Lightweight modifier from stability_volume_price_alignment_0001: rolling correlation between close return and volume change confirms whether volume and price move together; positive correlation amplifies the order-flow deviation while negative correlation attenuates it through a bounded [0,1] weight. This one confirmation gate preserves the original RankIC/RankICIR strength while targeting improved IC and payoff thickness by filtering false order-flow signals.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.016129583437179677,
+    "icir": 0.1812077224673537,
+    "mi": 0.02793212160590297,
+    "rank_ic": 0.0410913815347523,
+    "rank_icir": 0.5332462699586953
+  },
+  "raw_metrics": {
+    "ic": -0.016129583437179677,
+    "icir": -0.1812077224673537,
+    "mi": 0.02793212160590297,
+    "rank_ic": -0.0410913815347523,
+    "rank_icir": -0.5332462699586953
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.80425526839652,
+    "quantile_monotonicity": 0.8424242424242424,
+    "top_quantile_annualized_excess_return": -0.026417395318372394,
+    "top_quantile_excess_return": -0.020815912437018524,
+    "top_quantile_max_drawdown": -0.04452066797040499,
+    "top_quantile_turnover": 0.16008255150123368
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:13:39.803786+00:00"
+}

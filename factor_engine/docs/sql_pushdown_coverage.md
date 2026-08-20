@@ -363,3 +363,5 @@
 | yoy_by_period | yes | no | no |
 | zero_return_ratio | yes | no | no |
 | zscore | yes | no | no |
+
+> Counts note: backend coverage counts are machine-generated — see [`docs/BACKEND_COVERAGE.md`](../docs/BACKEND_COVERAGE.md) (from `scripts/generate_physical_implementation_matrix.py`). The numbers above are historical manual counts and not authoritative.

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_alpha_range_vol_gen0_001_g1_crossover_alpha_rang_755fad09",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 565,
+  "factor_name": "factor_vwap_sma_compression_volume_persistence",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260813-044118-r2",
+  "expression_type": "python",
+  "formula": "compression = 1/(1+CV(norm_true_range,20)); vwap_sma_div=(VWAP20-SMA20)/close; persistence=corr(vol_ratio, lag(vol_ratio),30); weight=0.5+0.5*clip(persistence,-1,1); factor=vwap_sma_div*compression*weight",
+  "code": "def factor_vwap_sma_compression_volume_persistence(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    volume = df_copy[\"volume\"]\n    prev_close = close.shift(1)\n    tr = pd.concat([(high - low),\n                    (high - prev_close).abs(),\n                    (low - prev_close).abs()], axis=1).max(axis=1)\n    norm_tr = tr / close.replace(0, np.nan)\n    mean_tr = norm_tr.rolling(20, min_periods=20).mean()\n    std_tr = norm_tr.rolling(20, min_periods=20).std(ddof=1)\n    cv_tr = std_tr / mean_tr.replace(0, np.nan)\n    compression = 1.0 / (1.0 + cv_tr)\n    vwap = (close * volume).rolling(20, min_periods=20).sum() / volume.rolling(20, min_periods=20).sum().replace(0, np.nan)\n    sma = close.rolling(20, min_periods=20).mean()\n    div = (vwap - sma) / close.replace(0, np.nan)\n    med_volume = volume.rolling(20, min_periods=20).median()\n    vol_ratio = volume / med_volume.replace(0, np.nan)\n    lag_vol_ratio = vol_ratio.shift(1)\n    persistence = vol_ratio.rolling(30, min_periods=30).corr(lag_vol_ratio).fillna(0.0)\n    weight = 0.5 + 0.5 * np.clip(persistence, -1.0, 1.0)\n    factor = div * compression * weight\n    df_copy[\"factor_vwap_sma_compression_volume_persistence\"] = factor\n    return df_copy[\"factor_vwap_sma_compression_volume_persistence\"]",
+  "description": "Primary mechanism from alpha-range-vol-gen0-001: VWAP-SMA divergence modulated by range-based volatility compression. The compression term shrinks the signal when normalized true range CV is high and amplifies it during compressed volatility regimes. Secondary lightweight idea from g1_crossover_alpha_range_vol_gen0_001_avs_gen0_002_0a93015b: volume surprise persistence as a bounded weight using rolling correlation of volume-to-median ratio with its lag. The weight is 0.5 + 0.5*clip(persistence,-1,1), which yields range [0,1]; it reinforces the compressed divergence when volume bursts are persistent (weight approaches 1) and attenuates it fully to zero on strongly anti-persistent days (weight approaches 0). This weight preserves the sign and continuity of the raw signal except at the extreme attenuation boundary. The child keeps a single coherent interaction, improving IC/MI robustness without sacrificing the parent's RankICIR/ICIR payoff thickness.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.028155601031768583,
+    "icir": 0.40903835557702733,
+    "mi": 0.01601843084129584,
+    "rank_ic": 0.05219290571055155,
+    "rank_icir": 0.8221056773885698
+  },
+  "raw_metrics": {
+    "ic": -0.028155601031768583,
+    "icir": -0.40903835557702733,
+    "mi": 0.01601843084129584,
+    "rank_ic": -0.05219290571055155,
+    "rank_icir": -0.8221056773885698
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.147524134534811,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.07641836529603974,
+    "top_quantile_excess_return": 0.05369940041002397,
+    "top_quantile_max_drawdown": -0.017039235491951743,
+    "top_quantile_turnover": 0.15425654030270447
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:49:56.066844+00:00"
+}

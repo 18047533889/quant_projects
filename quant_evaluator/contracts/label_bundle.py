@@ -21,6 +21,7 @@ class LabelBundle:
     execution_delay: int = 0
     decision_time: Tuple[Any, ...] = field(default_factory=tuple)
     execution_time: Tuple[Any, ...] = field(default_factory=tuple)
+    signal_available_time: Tuple[Any, ...] = field(default_factory=tuple)
     label_start_time: Tuple[Any, ...] = field(default_factory=tuple)
     label_end_time: Tuple[Any, ...] = field(default_factory=tuple)
     validity: Optional[np.ndarray] = None
@@ -58,6 +59,51 @@ class LabelBundle:
                 raise ValueError("decision_time must be strictly increasing")
         except TypeError as exc:
             raise ValueError("decision_time must be orderable") from exc
+
+        # Causal chain (elementwise, where supplied):
+        #   decision_time <= signal_available_time (default = decision_time)
+        #   signal_available_time <= execution_time (where execution_time supplied)
+        #   execution_time <= label_start_time (where supplied; else
+        #       signal_available_time <= label_start_time)
+        #   label_start_time < label_end_time (strict, positive label window)
+        if self.signal_available_time and len(self.signal_available_time) != n_times:
+            raise ValueError(
+                f"signal_available_time length {len(self.signal_available_time)} must match "
+                f"label time length {n_times}"
+            )
+        signal_available = (
+            self.signal_available_time if self.signal_available_time else self.decision_time
+        )
+        try:
+            for i in range(n_times):
+                decision_i = self.decision_time[i]
+                signal_i = signal_available[i]
+                if decision_i > signal_i:
+                    raise ValueError(
+                        f"decision_time must be <= signal_available_time at position {i} "
+                        f"(got {decision_i!r} > {signal_i!r})"
+                    )
+                if self.execution_time:
+                    execution_i = self.execution_time[i]
+                    if signal_i > execution_i:
+                        raise ValueError(
+                            f"signal_available_time must be <= execution_time at position {i} "
+                            f"(got {signal_i!r} > {execution_i!r})"
+                        )
+                else:
+                    execution_i = signal_i
+                if execution_i > self.label_start_time[i]:
+                    raise ValueError(
+                        f"execution_time must be <= label_start_time at position {i} "
+                        f"(got {execution_i!r} > {self.label_start_time[i]!r})"
+                    )
+                if self.label_start_time[i] >= self.label_end_time[i]:
+                    raise ValueError(
+                        f"label_start_time must be < label_end_time at position {i} "
+                        f"(got {self.label_start_time[i]!r} >= {self.label_end_time[i]!r})"
+                    )
+        except TypeError as exc:
+            raise ValueError("timing fields must be orderable") from exc
 
         if self.validity is not None and self.validity.shape != self.values.shape:
             raise ValueError(

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_tail_risk_semivar_asym_002_230fa382_f63bcea9",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 290,
+  "factor_name": "factor_tail_asymmetry_ewm_norm",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w03-20260813-063501-r2",
+  "expression_type": "python",
+  "formula": "(ewm(min(return,0)^2, span=60) - ewm(max(return,0)^2, span=60)) / (ewm(min(return,0)^2, span=60) + ewm(max(return,0)^2, span=60))",
+  "code": "def factor_tail_asymmetry_ewm_norm(df):\n    \"\"\"Exponentially weighted bounded normalized downside variance dominance.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    down_ret = ret.where(ret < 0, 0.0)\n    up_ret = ret.where(ret > 0, 0.0)\n    down_var = (down_ret ** 2).ewm(span=60, adjust=False, min_periods=20).mean()\n    up_var = (up_ret ** 2).ewm(span=60, adjust=False, min_periods=20).mean()\n    spread = down_var - up_var\n    total = down_var + up_var\n    factor = spread / total.replace(0.0, np.nan)\n    factor = factor.replace([np.inf, -np.inf], np.nan)\n    df_copy[\"factor_tail_asymmetry_ewm_norm\"] = factor\n    return df_copy[\"factor_tail_asymmetry_ewm_norm\"]",
+  "description": "Preserves the parent's core mechanism of measuring downside variance relative to upside variance as a tail-risk stress accumulation signal, and its bounded normalization to [-1,1]. The mutation replaces the equal-weight 60-day rolling sum with an exponential moving average (span=60) for both downside and upside squared returns. This gives greater weight to recent stress events, making the asymmetry estimate more responsive and potentially improving IC and ICIR without changing the raw ratio interpretation or the none cross-sectional transform. Only the variance aggregation window is modified; no new components are added. The repaired version ensures non-negative and non-positive returns are set to zero for their respective variance terms, avoiding NaN propagation and aligning with the stated min/max formula.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01237452222303512,
+    "icir": 0.15591435493660946,
+    "mi": 0.014087830108492128,
+    "rank_ic": 0.03877470339537396,
+    "rank_icir": 0.4732122330147609
+  },
+  "raw_metrics": {
+    "ic": 0.01237452222303512,
+    "icir": 0.15591435493660946,
+    "mi": 0.014087830108492128,
+    "rank_ic": 0.03877470339537396,
+    "rank_icir": 0.4732122330147609
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.7432515281252385,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.023029136794103344,
+    "top_quantile_excess_return": 0.13894531953134104,
+    "top_quantile_max_drawdown": -0.11560892717207061,
+    "top_quantile_turnover": 0.10543293397767298
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:57:33.929563+00:00"
+}

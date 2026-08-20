@@ -82,8 +82,13 @@ class TestICTStat:
     """Test IC t-statistic."""
 
     def test_tstat_positive_significant(self):
-        """Positive mean IC with low variance yields significant t-stat."""
-        ic_series = np.array([[0.05]] * 30)  # Constant positive IC
+        """Positive mean IC with low variance yields significant t-stat.
+
+        Series is intentionally non-constant: constant IC (std=0) is now
+        rejected as degenerate (see test_tstat_constant_ic_returns_nan)."""
+        ic_series = np.array(
+            [[0.05 + (0.001 if i % 2 == 0 else -0.001)] for i in range(30)]
+        )
         t_stat, p_value = compute_ic_tstat(ic_series, min_periods=20)
 
         # Should be highly significant
@@ -103,7 +108,9 @@ class TestICTStat:
 
     def test_tstat_negative_significant(self):
         """Negative mean IC yields negative t-stat."""
-        ic_series = np.array([[-0.08]] * 25)
+        ic_series = np.array(
+            [[-0.08 + (0.001 if i % 2 == 0 else -0.001)] for i in range(25)]
+        )
         t_stat, p_value = compute_ic_tstat(ic_series, min_periods=20)
 
         assert t_stat[0] < 0
@@ -127,6 +134,35 @@ class TestICTStat:
 
         assert np.isnan(t_stat[0])
         assert np.isnan(p_value[0])
+
+    def test_tstat_constant_ic_returns_nan(self):
+        """Constant IC series (std=0) must NOT produce fake significance.
+
+        Previously scipy returned t ~ 3.5e16, p = 0.0 for constant input —
+        ultra-significant nonsense. Now both must be NaN."""
+        ic_series = np.array([[0.05]] * 30)  # Constant, non-zero mean
+        t_stat, p_value = compute_ic_tstat(ic_series, min_periods=20)
+
+        assert np.isnan(t_stat[0])
+        assert np.isnan(p_value[0])
+
+    def test_tstat_normal_case_unchanged(self):
+        """Normal (varying) IC series still matches scipy exactly."""
+        np.random.seed(42)
+        ic_series = np.random.randn(60, 2) + 0.1
+        t_stat, p_value = compute_ic_tstat(ic_series, min_periods=20)
+
+        for f in range(2):
+            expected_t, expected_p = stats.ttest_1samp(ic_series[:, f], 0.0)
+            assert np.isclose(t_stat[f], expected_t, atol=1e-10)
+            assert np.isclose(p_value[f], expected_p, atol=1e-10)
+
+    def test_tstat_boolean_series_raises(self):
+        """Boolean IC series (e.g. a validity mask) must raise, not coerce."""
+        ic_series = np.array([[True], [False], [True]] * 10)  # 30 periods
+
+        with pytest.raises(ValueError, match="boolean"):
+            compute_ic_tstat(ic_series, min_periods=20)
 
 
 class TestICDecay:

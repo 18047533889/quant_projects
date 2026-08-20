@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "liq-002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "elite",
+  "factor_id": 29,
+  "factor_name": "factor_volume_synchronized_return",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w02-20260802-222648-r3",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_volume_synchronized_return(df):\n    \"\"\"Difference in average returns between high- and low-volume days, past 20 days, using classify_volume_regime.\"\"\"\n    df_copy = df.copy()\n    is_high_vol, is_low_vol, _ = alpha_tools.classify_volume_regime(\n        df_copy[\"volume\"], window=20\n    )\n    daily_ret = df_copy[\"close\"].pct_change().fillna(0)\n    high_ret = daily_ret * is_high_vol\n    low_ret = daily_ret * is_low_vol\n    roll_sum_high = high_ret.rolling(20, min_periods=1).sum()\n    roll_cnt_high = is_high_vol.rolling(20, min_periods=1).sum()\n    avg_high = (roll_sum_high / roll_cnt_high.replace(0, np.nan)).fillna(0)\n    roll_sum_low = low_ret.rolling(20, min_periods=1).sum()\n    roll_cnt_low = is_low_vol.rolling(20, min_periods=1).sum()\n    avg_low = (roll_sum_low / roll_cnt_low.replace(0, np.nan)).fillna(0)\n    factor = avg_high - avg_low\n    factor = factor.fillna(0)\n    df_copy[\"factor_volume_synchronized_return\"] = factor\n    return df_copy[\"factor_volume_synchronized_return\"]",
+  "description": "Captures whether the stock tends to perform better on high-volume days relative to low-volume days. High-volume moves are often driven by informed trading or liquidity shocks, so a positive spread indicates that buying pressure accompanies large volume. Uses alpha_tools.classify_volume_regime to identify high/low volume days (thresholds 1.5/0.6, 20-day window). Average returns are computed per regime; when a regime is absent, its contribution is filled with 0 to avoid NaN. The initial NaN from pct_change is also filled with 0.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01998374189093494,
+    "icir": 0.3440656768233571,
+    "mi": 0.02039633993230261,
+    "rank_ic": 0.030321823225949448,
+    "rank_icir": 0.4537269548265668
+  },
+  "raw_metrics": {
+    "ic": -0.01998374189093494,
+    "icir": -0.3440656768233571,
+    "mi": 0.02039633993230261,
+    "rank_ic": -0.030321823225949448,
+    "rank_icir": -0.4537269548265668
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.15406176176258746,
+    "top_quantile_excess_return": 1.2910760866952837,
+    "top_quantile_max_drawdown": -0.04836839902427059,
+    "top_quantile_turnover": 0.13202308847020897
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:10:33.611922+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_alpha_composite_gen0_b85ab9e5",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 380,
+  "factor_name": "factor_price_volume_ewm_confirmation",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w01-20260814-002201-r6",
+  "expression_type": "python",
+  "formula": "ewm_corr(pct_change(close), pct_change(volume), span=20)",
+  "code": "def factor_price_volume_ewm_confirmation(df):\n    \"\"\"Exponentially weighted price-volume demand confirmation via rolling correlation of price and volume changes.\"\"\"\n    df_copy = df.copy()\n    close_ret = df_copy[\"close\"].pct_change()\n    volume_safe = df_copy[\"volume\"].replace(0, np.nan)\n    vol_ret = volume_safe.pct_change()\n    cov = close_ret.ewm(span=20, min_periods=20).cov(vol_ret)\n    var_close = close_ret.ewm(span=20, min_periods=20).var()\n    var_vol = vol_ret.ewm(span=20, min_periods=20).var()\n    denom = (np.sqrt(var_close * var_vol)).replace(0.0, np.nan)\n    corr = cov / denom\n    corr = corr.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    df_copy[\"factor_price_volume_ewm_confirmation\"] = corr\n    return df_copy[\"factor_price_volume_ewm_confirmation\"]\n",
+  "description": "Mutation preserves the parent's core price-volume demand-confirmation mechanism: positive rolling correlation between price returns and volume changes indicates synchronized demand pressure that persists after industry and size neutralization. The change replaces equal-weight rolling correlation with exponentially weighted correlation (span=20), which emphasizes recent observations while retaining a single clear economic mechanism. This smoothing aims to improve responsiveness and top-quantile payoff without adding a new feature family.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.012057835860975571,
+    "icir": 0.24511897524768483,
+    "mi": 0.006931138204191001,
+    "rank_ic": 0.02878466987019131,
+    "rank_icir": 0.4957371618043092
+  },
+  "raw_metrics": {
+    "ic": -0.012057835860975571,
+    "icir": -0.24511897524768483,
+    "mi": 0.006931138204191001,
+    "rank_ic": -0.02878466987019131,
+    "rank_icir": -0.4957371618043092
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.420376785823276,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.1293772995745559,
+    "top_quantile_excess_return": 1.0032159696330578,
+    "top_quantile_max_drawdown": -0.11399379266656373,
+    "top_quantile_turnover": 0.15710400709954558
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:03:18.746751+00:00"
+}

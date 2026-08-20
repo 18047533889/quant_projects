@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "factor_fusion_flow_regime_beta_001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "elite",
+  "factor_id": 257,
+  "factor_name": "factor_fusion_flow_regime_beta",
+  "domain_agent": "alpha-composite",
+  "run_id": "fleet-w02-20260806-070522-r22",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_fusion_flow_regime_beta(df):\n    \"\"\"Fusion of price impact beta and momentum magnitude scaled by volume ratio.\"\"\"\n    df_copy = df.copy()\n    returns = df_copy[\"close\"].pct_change()\n    vol_chg = df_copy[\"volume\"].pct_change()\n    beta = returns.rolling(20, min_periods=10).cov(vol_chg) / vol_chg.rolling(20, min_periods=10).var().replace(0, np.nan)\n    momentum = df_copy[\"close\"].pct_change(10)\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    weight = np.abs(momentum) * np.clip(vol_ratio, 0.5, 5.0)\n    signal = beta * weight\n    df_copy[\"factor_fusion_flow_regime_beta\"] = signal.fillna(0)\n    return df_copy[\"factor_fusion_flow_regime_beta\"]",
+  "description": "Combines price impact beta (sensitivity of returns to volume changes) with absolute momentum strength, scaled by volume ratio, to capture amplified trend-following effects during high-volume periods. The multiplicative fusion introduces nonlinearity, potentially improving MI and IC while staying within the Geometric & Fusion layer.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.029540097416796838,
+    "icir": 0.34939145586380554,
+    "mi": 0.021190412655460733,
+    "rank_ic": 0.04880573808259468,
+    "rank_icir": 0.5256327556037462
+  },
+  "raw_metrics": {
+    "ic": -0.029540097416796838,
+    "icir": -0.34939145586380554,
+    "mi": 0.021190412655460733,
+    "rank_ic": -0.04880573808259468,
+    "rank_icir": -0.5256327556037462
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.211579679395143,
+    "top_quantile_excess_return": 2.0149067856540084,
+    "top_quantile_max_drawdown": -0.05093235823772846,
+    "top_quantile_turnover": 0.2266681759739058
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:18:08.635035+00:00"
+}

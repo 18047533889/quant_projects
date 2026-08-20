@@ -156,6 +156,29 @@ def compute_daily_ic(
     return ic_series, valid_counts
 
 
+def _reject_boolean_ic_series(ic_series: np.ndarray) -> None:
+    """
+    Reject boolean IC series.
+
+    True/False silently coerces to 1.0/0.0 (e.g. a validity mask), which
+    would yield a plausible-looking mean IC that carries no information.
+
+    Raises:
+        ValueError: If ic_series has boolean dtype or contains Python bools.
+    """
+    if ic_series.dtype == bool:
+        raise ValueError(
+            "ic_series must be numeric, got boolean dtype "
+            "(True/False would silently coerce to 1.0/0.0)"
+        )
+    if ic_series.dtype == object:
+        if any(isinstance(v, (bool, np.bool_)) for v in ic_series.ravel()):
+            raise ValueError(
+                "ic_series must be numeric, got Python bools "
+                "(True/False would silently coerce to 1.0/0.0)"
+            )
+
+
 def compute_mean_ic(
     ic_series: np.ndarray,
     valid_counts: Optional[np.ndarray] = None,
@@ -171,7 +194,12 @@ def compute_mean_ic(
 
     Returns:
         (mean_ic, ic_std) arrays of shape (F,)
+
+    Raises:
+        ValueError: If ic_series is boolean (or contains Python bools)
     """
+    _reject_boolean_ic_series(np.asarray(ic_series))
+
     # Count non-NaN periods per factor
     valid_periods = np.sum(~np.isnan(ic_series), axis=0)  # (F,)
 
@@ -184,6 +212,11 @@ def compute_mean_ic(
     insufficient = valid_periods < min_periods
     mean_ic = np.where(insufficient, np.nan, mean_ic)
     ic_std = np.where(insufficient, np.nan, ic_std)
+
+    # Mask non-finite results: inf in the series propagates through nanmean
+    # into an infinite (invalid) mean/std — report NaN instead.
+    mean_ic = np.where(np.isfinite(mean_ic), mean_ic, np.nan)
+    ic_std = np.where(np.isfinite(ic_std), ic_std, np.nan)
 
     return mean_ic, ic_std
 

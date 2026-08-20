@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_then_mutation_alpha_herding_gen0_a_e1f9d44c",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 738,
+  "factor_name": "factor_herding_dm_floor30",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w04-20260814-050458-r11",
+  "expression_type": "python",
+  "formula": "(2 * VW_close_position_20 - 1) * (0.3 + 0.7 * (0.5 + 0.5 * DM_imbalance_60))",
+  "code": "def factor_herding_dm_floor30(df):\n    \"\"\"Volume-weighted 20-day close position with a bounded directional-movement confirmation floor of 0.3.\"\"\"\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n\n    high_roll = high.rolling(20, min_periods=20).max()\n    low_roll = low.rolling(20, min_periods=20).min()\n    range_ = high_roll - low_roll\n    position = (close - low_roll) / range_.replace(0, np.nan)\n    vol_sum = volume.rolling(20, min_periods=20).sum()\n    weighted_pos = (volume * position).rolling(20, min_periods=20).sum() / vol_sum.replace(0, np.nan)\n    herding = 2 * weighted_pos - 1\n\n    up_move = high.diff()\n    down_move = -low.diff()\n    plus_dm = pd.Series(np.where((up_move > down_move) & (up_move > 0), up_move, 0.0), index=df_copy.index)\n    minus_dm = pd.Series(np.where((down_move > up_move) & (down_move > 0), down_move, 0.0), index=df_copy.index)\n    plus_sum = plus_dm.rolling(60, min_periods=1).sum()\n    minus_sum = minus_dm.rolling(60, min_periods=1).sum()\n    dm_total = plus_sum + minus_sum\n    dm_imbalance = (plus_sum - minus_sum) / dm_total.replace(0, np.nan)\n    dm_imbalance = dm_imbalance.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    dm_weight = 0.3 + 0.7 * (0.5 + 0.5 * dm_imbalance.clip(-1, 1))\n\n    factor = herding * dm_weight\n    return factor.rename(\"factor_herding_dm_floor30\")",
+  "description": "Simplification mutation of the crossover parent. The parent preserves the core herding mechanism: volume-weighted close position within a 20-day high-low range. This raw crowding signal has strong rank stability and payoff monotonicity. The parent also carries two modifiers: a bounded directional-movement (DM) confirmation weight and a volatility-asymmetry gate. The mutation removes the secondary volatility-asymmetry gate, which was an auxiliary crossover addition and does not materially support the parent's RankICIR strength. At the same time, the DM confirmation floor is raised from 0.2 to 0.3. This floor change retains a strictly positive, monotonic confirmation weight but reduces over-attenuation when DM is strongly negative, thereby preserving continuous raw herding amplitude and targeting improved linear IC and MI while rank ordering remains intact.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01142286995719818,
+    "icir": 0.1849815213633387,
+    "mi": 0.008975709793353381,
+    "rank_ic": 0.030268254657475874,
+    "rank_icir": 0.43076684121969866
+  },
+  "raw_metrics": {
+    "ic": -0.01142286995719818,
+    "icir": -0.1849815213633387,
+    "mi": 0.008975709793353381,
+    "rank_ic": -0.030268254657475874,
+    "rank_icir": -0.43076684121969866
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.6372572791600795,
+    "quantile_monotonicity": 0.8666666666666667,
+    "top_quantile_annualized_excess_return": -0.005595003198957116,
+    "top_quantile_excess_return": -0.0035560203354323416,
+    "top_quantile_max_drawdown": -0.05478699915470564,
+    "top_quantile_turnover": 0.09384564038212051
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:08:32.902527+00:00"
+}

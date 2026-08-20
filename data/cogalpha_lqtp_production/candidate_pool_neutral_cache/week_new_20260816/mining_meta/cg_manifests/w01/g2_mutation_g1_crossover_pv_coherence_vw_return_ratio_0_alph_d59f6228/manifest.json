@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_pv_coherence_vw_return_ratio_0_alph_d59f6228",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 21,
+  "factor_name": "factor_close_loc_align_ewm",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w01-20260802-221651-r3",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_close_loc_align_ewm(df):\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    close_loc = (df_copy[\"close\"] - df_copy[\"low\"]) / range_.replace(0, np.nan)\n    close_loc = close_loc - 0.5\n    ret = df_copy[\"close\"].pct_change()\n    vol = df_copy[\"volume\"]\n    vwap_ret_num = (vol * ret).ewm(span=10, min_periods=1).mean()\n    vwap_ret_den = vol.ewm(span=10, min_periods=1).mean().replace(0, np.nan)\n    vwap_ret = vwap_ret_num / vwap_ret_den\n    ewma_ret = ret.ewm(span=10, min_periods=1).mean()\n    ratio = (1 + vwap_ret) / (1 + ewma_ret).replace(0, np.nan) - 1\n    factor = close_loc * (1 + ratio)\n    factor = factor.fillna(0)\n    df_copy[\"factor_close_loc_align_ewm\"] = factor\n    return df_copy[\"factor_close_loc_align_ewm\"]",
+  "description": "Mutation of parent price-volume coherence factor. Replaces rolling window (20-day) volume-weighted and equal-weighted returns with exponential moving averages (span=10) to increase responsiveness to recent volume flows. The core economic mechanism remains: intraday close location is amplified when volume confirms price direction, captured via ratio of volume-weighted to equal-weighted returns. The shorter adaptive lookback may improve rank stability and density.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02444583043454914,
+    "icir": 0.3111235601210372,
+    "mi": 0.023603811835850586,
+    "rank_ic": 0.023722208313887064,
+    "rank_icir": 0.25957578257345854
+  },
+  "raw_metrics": {
+    "ic": -0.02444583043454914,
+    "icir": -0.3111235601210372,
+    "mi": 0.023603811835850586,
+    "rank_ic": -0.023722208313887064,
+    "rank_icir": -0.25957578257345854
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.3,
+    "top_quantile_annualized_excess_return": 0.04058733582624341,
+    "top_quantile_excess_return": 0.2588346059038553,
+    "top_quantile_max_drawdown": -0.060816606104757476,
+    "top_quantile_turnover": 0.7971930595466219
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:34:54.368583+00:00"
+}

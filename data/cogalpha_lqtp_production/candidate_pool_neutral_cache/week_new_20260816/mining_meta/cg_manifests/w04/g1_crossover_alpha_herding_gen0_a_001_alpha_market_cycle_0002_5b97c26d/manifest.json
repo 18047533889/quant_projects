@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_alpha_herding_gen0_a_001_alpha_market_cycle_0002_5b97c26d",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 725,
+  "factor_name": "factor_herding_dm_confirmed",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w04-20260814-050458-r11",
+  "expression_type": "python",
+  "formula": "herding_position_20 * (0.5 + 0.5 * directional_movement_imbalance_60)",
+  "code": "def factor_herding_dm_confirmed(df):\n    \"\"\"Volume-weighted close position within 20-day range, attenuated by trailing directional-movement imbalance.\"\"\"\n    df_copy = df.copy()\n    high = df_copy['high']\n    low = df_copy['low']\n    close = df_copy['close']\n    volume = df_copy['volume']\n\n    high_roll = high.rolling(20, min_periods=20).max()\n    low_roll = low.rolling(20, min_periods=20).min()\n    range_ = high_roll - low_roll\n    position = (close - low_roll) / range_.replace(0, np.nan)\n    vol_sum = volume.rolling(20, min_periods=20).sum()\n    weighted_pos = (volume * position).rolling(20, min_periods=20).sum() / vol_sum.replace(0, np.nan)\n    herding = 2 * weighted_pos - 1\n\n    up_move = high.diff()\n    down_move = -low.diff()\n    plus_dm = pd.Series(np.where((up_move > down_move) & (up_move > 0), up_move, 0.0), index=df_copy.index)\n    minus_dm = pd.Series(np.where((down_move > up_move) & (down_move > 0), down_move, 0.0), index=df_copy.index)\n    plus_sum = plus_dm.rolling(60, min_periods=1).sum()\n    minus_sum = minus_dm.rolling(60, min_periods=1).sum()\n    dm_total = plus_sum + minus_sum\n    dm_imbalance = (plus_sum - minus_sum) / dm_total.replace(0, np.nan)\n    dm_imbalance = dm_imbalance.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n\n    weight = 0.5 + 0.5 * dm_imbalance.clip(-1, 1)\n    factor = herding * weight\n    return factor.rename('factor_herding_dm_confirmed')",
+  "description": "Crossover preserves parent1's volume-weighted close-position herding signal, which has strong RankICIR and payoff monotonicity, and borrows parent2's directional-movement imbalance as a single bounded confirmation weight. When trailing plus/minus directional movement confirms upward crowding, the signal is retained; when directional movement is negative or absent, the signal is attenuated toward zero. This avoids full formula fusion and keeps one primary mechanism with one regime-dependent modifier. Bottleneck target: improve IC and MI while preserving RankIC/RankICIR and payoff thickness.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.012175797462909838,
+    "icir": 0.1923483259808849,
+    "mi": 0.012815375776069615,
+    "rank_ic": 0.031196556214979063,
+    "rank_icir": 0.44456308513675885
+  },
+  "raw_metrics": {
+    "ic": -0.012175797462909838,
+    "icir": -0.1923483259808849,
+    "mi": 0.012815375776069615,
+    "rank_ic": -0.031196556214979063,
+    "rank_icir": -0.44456308513675885
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.820654626429784,
+    "quantile_monotonicity": 0.8787878787878788,
+    "top_quantile_annualized_excess_return": -0.0064877295651575295,
+    "top_quantile_excess_return": -0.004124086060444343,
+    "top_quantile_max_drawdown": -0.055137974602084916,
+    "top_quantile_turnover": 0.0960951074596706
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:05:49.794211+00:00"
+}

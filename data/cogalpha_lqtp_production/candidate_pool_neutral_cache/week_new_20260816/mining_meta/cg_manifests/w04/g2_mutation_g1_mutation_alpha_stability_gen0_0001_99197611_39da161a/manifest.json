@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_alpha_stability_gen0_0001_99197611_39da161a",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 559,
+  "factor_name": "factor_log_volume_stability_bounded",
+  "domain_agent": "alpha-stability",
+  "run_id": "fleet-w04-20260813-044118-r2",
+  "expression_type": "python",
+  "formula": "stability = -rolling_std(log1p(volume), 20) / (rolling_mean(log1p(volume), 20) + rolling_std(log1p(volume), 20))",
+  "code": "def factor_log_volume_stability_bounded(df):\n    \"\"\"Bounded volume persistence on log1p volume: negative ratio of rolling std to rolling mean plus rolling std.\"\"\"\n    df_copy = df.copy()\n    window = 20\n    log_volume = np.log1p(df_copy['volume'])\n    vol_mean = log_volume.rolling(window, min_periods=window).mean()\n    vol_std = log_volume.rolling(window, min_periods=window).std(ddof=1)\n    stability = -(vol_std / (vol_mean + vol_std).replace(0.0, np.nan))\n    df_copy['factor_log_volume_stability_bounded'] = stability\n    return df_copy['factor_log_volume_stability_bounded']",
+  "description": "Parent captures smooth volume participation as negative coefficient of variation of log1p volume. This mutation replaces the denominator from rolling mean alone to rolling mean plus rolling std, bounding the stability ratio between -1 and 0. This reduces outlier distortion when average volume is very low, yielding a smoother and more robust raw signal while retaining the parent's core negative volume stability mechanism and steady RankICIR/ICIR strength. The change is a lightweight normalization adjustment, not an additional feature.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02025375535540973,
+    "icir": 0.4304857666383642,
+    "mi": 0.006722599408462315,
+    "rank_ic": 0.04282022227752441,
+    "rank_icir": 0.8711732091762723
+  },
+  "raw_metrics": {
+    "ic": 0.02025375535540973,
+    "icir": 0.4304857666383642,
+    "mi": 0.006722599408462315,
+    "rank_ic": 0.04282022227752441,
+    "rank_icir": 0.8711732091762723
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.150090579566342,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.03868958710723858,
+    "top_quantile_excess_return": 0.027330391042704294,
+    "top_quantile_max_drawdown": -0.03743239337786608,
+    "top_quantile_turnover": 0.15381565362896396
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:49:01.600264+00:00"
+}

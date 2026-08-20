@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_alpha_vol_asymmetry_tailratio_0_cand_order_imbal_a73456b1",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "elite",
+  "factor_id": 48,
+  "factor_name": "factor_vol_asym_tail_volume",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w01-20260803-061037-r5",
+  "expression_type": "python",
+  "formula": "log(EWMA[d^2 * I(d < -1*sigma), hl=20] / EWMA[u^2 * I(u > 1*sigma), hl=20]) * vol_ratio, where d,u = intraday returns, sigma = 20-day rolling std, vol_ratio = volume / 20-day EMA volume",
+  "code": "def factor_vol_asym_tail_volume(df):\n    \"\"\"Tail volatility asymmetry filtered by volume: log ratio of EWMA of downside tail squared returns to upside tail squared returns, multiplied by volume ratio to confirm conviction.\"\"\"\n    df_copy = df.copy()\n    intraday_ret = (df_copy[\"close\"] - df_copy[\"open\"]) / df_copy[\"open\"].replace(0, np.nan)\n    std_20 = intraday_ret.rolling(20, min_periods=20).std()\n    down_tail = np.where(intraday_ret < -1 * std_20, intraday_ret**2, 0)\n    up_tail = np.where(intraday_ret > 1 * std_20, intraday_ret**2, 0)\n    ewma_down = pd.Series(down_tail, index=df_copy.index).ewm(halflife=20).mean()\n    ewma_up = pd.Series(up_tail, index=df_copy.index).ewm(halflife=20).mean()\n    tail_ratio = np.where((ewma_up > 1e-8) & (ewma_down > 1e-8),\n                          np.log(ewma_down / ewma_up),\n                          0.0)\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    factor = tail_ratio * vol_ratio\n    df_copy[\"factor_vol_asym_tail_volume\"] = factor\n    return df_copy[\"factor_vol_asym_tail_volume\"]",
+  "description": "Combines the elite tail volatility asymmetry mechanism with volume confirmation from the overnight breakout parent. The tail ratio captures asymmetry in tail volatility; multiplying by relative volume emphasizes signals on high-activity days, increasing signal conviction. This crossover preserves the RankICIR strength of the tail ratio parent while potentially improving IC through volume filtering.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03249085992643658,
+    "icir": 0.3573525148375228,
+    "mi": 0.02521459128246839,
+    "rank_ic": 0.04341226033229432,
+    "rank_icir": 0.4336984631368536
+  },
+  "raw_metrics": {
+    "ic": 0.03249085992643658,
+    "icir": 0.3573525148375228,
+    "mi": 0.02521459128246839,
+    "rank_ic": 0.04341226033229432,
+    "rank_icir": 0.4336984631368536
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.13519722577901527,
+    "top_quantile_excess_return": 1.062883615614036,
+    "top_quantile_max_drawdown": -0.08473182198757334,
+    "top_quantile_turnover": 0.1320762841592953
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:37:25.541197+00:00"
+}

@@ -5,6 +5,9 @@ Tests for batch planning.
 import pytest
 import numpy as np
 
+# Seeded local Generator — no global RNG state dependence.
+rng = np.random.default_rng(20260820)
+
 from quant_evaluator.contracts.factor_batch import FactorBatch, AxisRef
 from quant_evaluator.planner.batch_plan import (
     ChunkDescriptor,
@@ -119,7 +122,7 @@ class TestCreateBatchPlan:
         """Helper to create test factor batch."""
         time_axis = AxisRef(name="time", dtype="datetime64", size=T)
         asset_axis = AxisRef(name="asset", dtype="int64", size=N)
-        values = np.random.randn(T, N, F)
+        values = rng.standard_normal((T, N, F))
 
         return FactorBatch(
             factor_ids=tuple(f"factor_{i}" for i in range(F)),

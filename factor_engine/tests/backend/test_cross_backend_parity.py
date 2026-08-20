@@ -468,8 +468,10 @@ def test_pandas_polars_parity(panel_source, op_name):
         is_match, msg = _compare_results(pandas_result, polars_result, "polars", op_name)
         assert is_match, f"{op_name}: Pandas vs Polars - {msg}"
 
-    except Exception as e:
+    except (ImportError, ModuleNotFoundError, ValueError) as e:
         pytest.skip(f"{op_name}: {type(e).__name__}: {e}")
+    except Exception as e:
+        pytest.fail(f"{op_name}: Unexpected error - {type(e).__name__}: {e}")
 
 
 @pytest.mark.parametrize("op_name", sorted(OPERATOR_SPECS.keys()))
@@ -487,8 +489,10 @@ def test_pandas_duckdb_parity(panel_source, duckdb_source, op_name):
         is_match, msg = _compare_results(pandas_result, duckdb_result, "duckdb", op_name)
         assert is_match, f"{op_name}: Pandas vs DuckDB - {msg}"
 
-    except Exception as e:
+    except (ImportError, ModuleNotFoundError, ValueError) as e:
         pytest.skip(f"{op_name}: {type(e).__name__}: {e}")
+    except Exception as e:
+        pytest.fail(f"{op_name}: Unexpected error - {type(e).__name__}: {e}")
 
 
 def test_generate_parity_report(panel_source, duckdb_source, tmp_path):
@@ -563,6 +567,17 @@ def test_generate_parity_report(panel_source, duckdb_source, tmp_path):
     logger.info(f"Polars match: {polars_match}/{total} ({100*polars_match/total:.1f}%)")
     logger.info(f"DuckDB match: {duckdb_match}/{total} ({100*duckdb_match/total:.1f}%)")
     logger.info(f"q match: {q_match}/{total} ({100*q_match/total:.1f}%)")
+
+    # Verify no parity failures
+    failures = []
+    for r in results:
+        if r.get("polars", "").startswith(("MISMATCH", "FAIL")):
+            failures.append(f"polars:{r['operator']}")
+        if r.get("duckdb", "").startswith(("MISMATCH", "FAIL")):
+            failures.append(f"duckdb:{r['operator']}")
+        if r.get("q", "").startswith(("MISMATCH", "FAIL")):
+            failures.append(f"q:{r['operator']}")
+    assert len(failures) == 0, f"Backend parity failures detected: {failures}"
 
 
 def _write_report(results: list[dict[str, Any]], path: Path) -> None:

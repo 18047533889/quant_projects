@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_vol_regime_rev_001_g1_crossover_vol_gated_mom_00_738d4df2",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 49,
+  "factor_name": "factor_vol_regime_gated_momentum_volume_confirm_v2",
+  "domain_agent": "alpha-regime-gating",
+  "run_id": "fleet-w04-20260802-212152-r4",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_vol_regime_gated_momentum_volume_confirm_v2(df):\n    \"\"\"Adaptive momentum signal gated by volume regime from classify_volume_regime, confirmed by volume ratio.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(volume, window=20)\n    mom_short = close / close.shift(5) - 1\n    mom_long = close / close.shift(20) - 1\n    w = np.clip(vol_ratio - 1.0, 0.0, 1.0)\n    blend_signal = w * mom_short + (1 - w) * mom_long\n    high_mask = is_high_vol > 0\n    low_mask = is_low_vol > 0\n    signal = np.where(high_mask, mom_short, np.where(low_mask, mom_long, blend_signal))\n    factor = signal * vol_ratio\n    df_copy[\"factor_vol_regime_gated_momentum_volume_confirm_v2\"] = factor\n    return df_copy[\"factor_vol_regime_gated_momentum_volume_confirm_v2\"]",
+  "description": "Combines the momentum computation and volume confirmation of parent g1_crossover_vol_gated_mom_001_pvcoherence_keltner_001_736dea61 with the volume regime classification from parent vol_regime_rev_001. This replaces the ATR-based volatility regime detection with the standardized alpha_tools.classify_volume_regime, using its high/low volume flags for directional gating and its continuous volume ratio for blending and confirmation. Targets improved stability of regime detection while preserving the adaptive momentum core.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.04112036114759533,
+    "icir": 0.34743139972530773,
+    "mi": 0.04122802161957129,
+    "rank_ic": 0.06304427941750865,
+    "rank_icir": 0.47958402106475395
+  },
+  "raw_metrics": {
+    "ic": -0.04112036114759533,
+    "icir": -0.34743139972530773,
+    "mi": 0.04122802161957129,
+    "rank_ic": -0.06304427941750865,
+    "rank_icir": -0.47958402106475395
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.11258887419971764,
+    "top_quantile_excess_return": 0.08514183299550893,
+    "top_quantile_max_drawdown": -0.04993707457156227,
+    "top_quantile_turnover": 0.30888560122732905
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:15:08.472754+00:00"
+}

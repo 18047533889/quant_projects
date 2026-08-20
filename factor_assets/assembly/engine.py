@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
-from typing import Iterable, Optional
+from typing import Iterable, Mapping, Optional
 
 from factor_assets.contracts.asset import FactorAsset
 from factor_assets.contracts.factor_set import (
@@ -13,6 +13,7 @@ from factor_assets.contracts.factor_set import (
     FactorSetSpec,
 )
 from factor_assets.contracts.lifecycle import LifecycleState
+from factor_assets.optimizer.pareto import ParetoPoint
 from factor_assets.selection.policy import SelectionDecision
 
 
@@ -153,7 +154,10 @@ class FactorSetAssembler:
             memberships=memberships,
             assembly_hash=assembly_hash,
             policy_hash=policy_hash,
-            snapshot_ref=spec.universe_ref,
+            # Snapshot provenance: an explicit data_snapshot_ref wins; the
+            # universe_ref fallback preserves legacy specs (documented in
+            # FactorSetSpec.data_snapshot_ref).
+            snapshot_ref=spec.data_snapshot_ref or spec.universe_ref,
             split_ref=spec.split_ref,
             description=spec.description,
         )
@@ -167,12 +171,20 @@ class FactorSetAssembler:
         """Order candidates by policy-appropriate, evidence-based ranking.
 
         ``manual`` keeps the legacy deterministic ``factor_id`` ordering.
-        ``pareto_front``/``family_robust``/``diverse`` rank by admission
-        decision recency (most recent evidence first) with ``factor_id`` as
-        the deterministic tiebreak; family-aware policies additionally
-        round-robin across families so no family monopolises the head of the
-        ordering.  Ranking never *admits* anyone — it only orders the set
-        already admitted by the selection decisions.
+        ``pareto_front`` ranks by true Pareto dominance over the objective
+        metrics carried on the admission decisions' metadata
+        (``objectives`` mapping, higher-is-better; wired through
+        :class:`factor_assets.optimizer.pareto.ParetoPoint` dominance) with
+        decision recency as tiebreak, then ``factor_id``.  When no decision
+        carries objectives (metadata-only assembly), all points are
+        mutually non-dominated and the ordering falls back to
+        recency-then-id, preserving the previous behaviour.
+        ``family_robust``/``diverse`` rank by admission decision recency
+        (most recent evidence first) with ``factor_id`` as the deterministic
+        tiebreak and additionally round-robin across families so no family
+        monopolises the head of the ordering.  Ranking never *admits*
+        anyone — it only orders the set already admitted by the selection
+        decisions.
         """
         if spec.selection_policy == "manual":
             return sorted(assets, key=lambda asset: asset.factor_id)
@@ -185,7 +197,12 @@ class FactorSetAssembler:
         # tiebreak.  Two stable passes implement (timestamp desc, id asc).
         ranked = sorted(assets, key=lambda asset: asset.factor_id)
         ranked.sort(key=lambda asset: decision_key(asset)[0], reverse=True)
-        if spec.selection_policy in ("family_robust", "diverse"):
+
+        if spec.selection_policy == "pareto_front":
+            objectives = _pareto_objectives(ranked, decisions)
+            if objectives:
+                ranked = _pareto_rank(ranked, decisions, objectives)
+        elif spec.selection_policy in ("family_robust", "diverse"):
             # Round-robin across families (missing family = own bucket) so no
             # family monopolises the head of the ordering.
             buckets: dict[Optional[str], list[FactorAsset]] = {}
@@ -351,5 +368,91 @@ _LIFECYCLE_RANK = {
     LifecycleState.DEPRECATED: -1,
     LifecycleState.RETIRED: -1,
 }
+
+
+def _decision_objectives(
+    decision: Optional[SelectionDecision],
+) -> Optional[dict[str, float]]:
+    """Extract higher-is-better objectives from a decision's metadata.
+
+    ``pareto_front`` selection carries the per-factor objective metrics on
+    the admission decision's ``metadata`` under the ``objectives`` key
+    (a mapping of objective name to finite float).  Returns None when the
+    decision or the objectives are absent or malformed — a factor without
+    measurable objectives is never silently scored.
+    """
+    if decision is None:
+        return None
+    raw = decision.metadata.get("objectives") if decision.metadata else None
+    if not isinstance(raw, Mapping):
+        return None
+    objectives: dict[str, float] = {}
+    for name, value in raw.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        value = float(value)
+        if value != value or value in (float("inf"), float("-inf")):
+            return None
+        objectives[str(name)] = value
+    return objectives or None
+
+
+def _pareto_objectives(
+    assets: list[FactorAsset],
+    decisions: dict[str, SelectionDecision],
+) -> list[str]:
+    """Objective names shared by every ranked asset's decision.
+
+    Fail-closed on the union: any objective missing from one decision would
+    make that factor's dominance comparisons undefined (missing objectives
+    default to -inf in ParetoPoint, silently demoting it), so only the
+    intersection — and only when every decision carries objectives — is a
+    valid objective space.
+    """
+    common: Optional[set[str]] = None
+    for asset in assets:
+        objectives = _decision_objectives(decisions.get(asset.factor_id))
+        if objectives is None:
+            return []
+        keys = set(objectives)
+        common = keys if common is None else (common & keys)
+    if not common:
+        return []
+    return sorted(common)
+
+
+def _pareto_rank(
+    assets: list[FactorAsset],
+    decisions: dict[str, SelectionDecision],
+    objectives: list[str],
+) -> list[FactorAsset]:
+    """Rank assets by Pareto dominance (non-dominated first).
+
+    Uses :class:`factor_assets.optimizer.pareto.ParetoPoint` dominance —
+    a point is dominated when another is at least as good on every
+    objective and strictly better on at least one.  Non-dominated assets
+    rank ahead of dominated ones; within each group the input order
+    (recency desc, factor_id asc) is preserved, keeping the ordering
+    deterministic and the previous behaviour intact when nothing is
+    dominated.
+    """
+    points = {
+        asset.factor_id: ParetoPoint(
+            point_id=asset.factor_id,
+            objectives=_decision_objectives(decisions.get(asset.factor_id)) or {},
+        )
+        for asset in assets
+    }
+    non_dominated: list[FactorAsset] = []
+    dominated: list[FactorAsset] = []
+    for asset in assets:
+        point = points[asset.factor_id]
+        is_dominated = any(
+            points[other.factor_id].dominates(point, objectives)
+            for other in assets
+            if other.factor_id != asset.factor_id
+        )
+        (dominated if is_dominated else non_dominated).append(asset)
+    return non_dominated + dominated
 
 __all__ = ["FactorSetAssembler"]

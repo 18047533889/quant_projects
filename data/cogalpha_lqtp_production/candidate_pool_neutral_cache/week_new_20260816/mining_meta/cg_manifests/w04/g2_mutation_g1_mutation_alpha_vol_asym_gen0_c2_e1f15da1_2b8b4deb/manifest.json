@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_alpha_vol_asym_gen0_c2_e1f15da1_2b8b4deb",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 609,
+  "factor_name": "factor_vol_asym_persistence_ewm_span120",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w04-20260813-133626-r5",
+  "expression_type": "python",
+  "formula": "EWMA-persistence asymmetry: (neg_persist - pos_persist) / (neg_persist + pos_persist), where sign_persist = ewm(sign_ret^2 * sign_ret_lag1^2, span=120, min_periods=40)",
+  "code": "def factor_vol_asym_persistence_ewm_span120(df):\n    \"\"\"Asymmetry in volatility clustering persistence between down and up moves, smoothed with slower EWMA span=120.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    pos_ret = ret.clip(lower=0.0)\n    neg_ret = ret.clip(upper=0.0)\n    pos_persist = (pos_ret**2 * pos_ret.shift(1)**2).ewm(span=120, min_periods=40).mean()\n    neg_persist = (neg_ret**2 * neg_ret.shift(1)**2).ewm(span=120, min_periods=40).mean()\n    total_persist = pos_persist + neg_persist\n    factor = (neg_persist - pos_persist) / total_persist.replace(0.0, np.nan)\n    df_copy[\"factor_vol_asym_persistence_ewm_span120\"] = factor\n    return df_copy[\"factor_vol_asym_persistence_ewm_span120\"]",
+  "description": "Preserves the parent's core asymmetric volatility clustering persistence mechanism and its bounded [-1,1] output. Parent strength is RankIC=0.0349 and RankICIR=0.6505 with stable cross-sectional ranking; the bottleneck is lower ICIR=0.2718 and low MI=0.0075, suggesting residual short-term noise in the span=60 EWMA. This mutation increases the EWMA span to 120 (with min_periods=40) to produce a smoother, longer-horizon estimate of negative-versus-positive volatility clustering persistence, targeting improved ICIR and MI without adding new features or changing the economic interpretation.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.016137526107223507,
+    "icir": 0.3457162945331045,
+    "mi": 0.009043638372598473,
+    "rank_ic": 0.03653142067622448,
+    "rank_icir": 0.7150536309816906
+  },
+  "raw_metrics": {
+    "ic": 0.016137526107223507,
+    "icir": 0.3457162945331045,
+    "mi": 0.009043638372598473,
+    "rank_ic": 0.03653142067622448,
+    "rank_icir": 0.7150536309816906
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.4755131630874585,
+    "quantile_monotonicity": 0.9272727272727272,
+    "top_quantile_annualized_excess_return": 0.11933829112115024,
+    "top_quantile_excess_return": 0.07276279927728213,
+    "top_quantile_max_drawdown": -0.013110667299035206,
+    "top_quantile_turnover": 0.039564653561515624
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:54:11.069360+00:00"
+}

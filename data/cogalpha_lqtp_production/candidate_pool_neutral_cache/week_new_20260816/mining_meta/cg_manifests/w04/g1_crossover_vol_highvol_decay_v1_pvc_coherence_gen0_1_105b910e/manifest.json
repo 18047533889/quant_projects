@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_vol_highvol_decay_v1_pvc_coherence_gen0_1_105b910e",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 473,
+  "factor_name": "factor_volume_regime_adaptive_momentum",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260805-231604-r34",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_volume_regime_adaptive_momentum(df):\n    df_copy = df.copy()\n    is_high_vol, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    ret = df_copy[\"close\"].pct_change()\n    weighted_ret = ret * vol_ratio\n    sum_wt_ret_5 = weighted_ret.rolling(5, min_periods=5).sum()\n    sum_vol_5 = vol_ratio.rolling(5, min_periods=5).sum()\n    factor_5 = sum_wt_ret_5 / sum_vol_5.replace(0, np.nan)\n    sum_wt_ret_20 = weighted_ret.rolling(20, min_periods=20).sum()\n    sum_vol_20 = vol_ratio.rolling(20, min_periods=20).sum()\n    factor_20 = sum_wt_ret_20 / sum_vol_20.replace(0, np.nan)\n    factor = factor_5.where(is_high_vol > 0, factor_20)\n    df_copy[\"factor_volume_regime_adaptive_momentum\"] = factor.fillna(0)\n    return df_copy[\"factor_volume_regime_adaptive_momentum\"]",
+  "description": "Combines volume-weighted price momentum with a regime-adaptive window. When volume is classified as high by classify_volume_regime, a shorter 5-day window captures immediate trend signals; otherwise, a longer 20-day window smooths the signal. This leverages the idea that high-volume days indicate regime shifts where short-term trends are more informative. The volume-weighted average filters out low-volume noise, and cross-sectional z-scoring identifies extreme momentum leaders.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0274368293583117,
+    "icir": 0.2732392784661985,
+    "mi": 0.05453810199422815,
+    "rank_ic": 0.0629835060068002,
+    "rank_icir": 0.5805174178005464
+  },
+  "raw_metrics": {
+    "ic": -0.0274368293583117,
+    "icir": -0.2732392784661985,
+    "mi": 0.05453810199422815,
+    "rank_ic": -0.0629835060068002,
+    "rank_icir": -0.5805174178005464
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.09632020923079976,
+    "top_quantile_excess_return": 0.0729685492980654,
+    "top_quantile_max_drawdown": -0.025153925560049917,
+    "top_quantile_turnover": 0.20824702772800688
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:39:55.542739+00:00"
+}

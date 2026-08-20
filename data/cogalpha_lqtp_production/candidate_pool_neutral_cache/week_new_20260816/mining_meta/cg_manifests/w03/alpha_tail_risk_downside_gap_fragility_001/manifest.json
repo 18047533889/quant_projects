@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "alpha_tail_risk_downside_gap_fragility_001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 355,
+  "factor_name": "factor_downside_gap_fragility",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w03-20260813-234152-r6",
+  "expression_type": "python",
+  "formula": "20d mean of negative overnight gap magnitude * (0.5 + 20d mean of close-near-low indicator)",
+  "code": "def factor_downside_gap_fragility(df):\n    \"\"\"Fragility from repeated overnight downside gaps and weak close location within daily range.\"\"\"\n    df_copy = df.copy()\n    overnight_ret = df_copy[\"open\"] / df_copy[\"close\"].shift(1) - 1.0\n    gap_down = -overnight_ret.clip(upper=0.0)\n    range_ = (df_copy[\"high\"] - df_copy[\"low\"]).replace(0.0, np.nan)\n    close_loc = (df_copy[\"close\"] - df_copy[\"low\"]) / range_\n    low_loc = (1.0 - close_loc).clip(lower=0.0, upper=1.0)\n    gap_stress = gap_down.rolling(window=20, min_periods=10).mean()\n    loc_stress = low_loc.rolling(window=20, min_periods=10).mean()\n    factor = gap_stress * (0.5 + loc_stress)\n    df_copy[\"factor_downside_gap_fragility\"] = factor\n    return df_copy[\"factor_downside_gap_fragility\"]",
+  "description": "This factor expresses tail-risk exposure through two stress accumulation components not previously covered: (1) repeated overnight downside gaps, which signal persistent negative shocks after market close, and (2) the daily close location near the low of the range, indicating sustained selling pressure into the close. Combining them gives a fragility score that rises when stocks experience both gap-down openings and weak closes over a 20-day window. The mechanism is distinct from percentile or semivariance approaches and captures path-dependent downside stress.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01420577868734943,
+    "icir": 0.18096662579690367,
+    "mi": 0.014308936358947477,
+    "rank_ic": 0.03758653857843569,
+    "rank_icir": 0.4734745543815381
+  },
+  "raw_metrics": {
+    "ic": -0.01420577868734943,
+    "icir": -0.18096662579690367,
+    "mi": 0.014308936358947477,
+    "rank_ic": -0.03758653857843569,
+    "rank_icir": -0.4734745543815381
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.2879274246914436,
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": -0.01522091661391145,
+    "top_quantile_excess_return": -0.08441600994536802,
+    "top_quantile_max_drawdown": -0.18374443302292365,
+    "top_quantile_turnover": 0.14178720908715486
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:02:39.522619+00:00"
+}

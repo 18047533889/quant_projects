@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_alpha_range_vol_gen0_001_a41d05a1_c15c68c5",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 545,
+  "factor_name": "factor_vwap_sma_range_std_regime_compact",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260813-044118-r2",
+  "expression_type": "python",
+  "formula": "div = (VWAP20 - SMA20)/close; volatility_dispersion = rolling_std(normalized_true_range,10); compression = 1/(1 + volatility_dispersion); factor = div * compression",
+  "code": "def factor_vwap_sma_range_std_regime_compact(df):\n    df_copy = df.copy()\n    prev_close = df_copy[\"close\"].shift(1)\n    tr = pd.concat([(df_copy[\"high\"] - df_copy[\"low\"]),\n                    (df_copy[\"high\"] - prev_close).abs(),\n                    (df_copy[\"low\"] - prev_close).abs()], axis=1).max(axis=1)\n    norm_tr = tr / df_copy[\"close\"]\n    std_tr = norm_tr.rolling(10).std(ddof=1)\n    compression = 1.0 / (1.0 + std_tr)\n    vwap = (df_copy[\"close\"] * df_copy[\"volume\"]).rolling(20).sum() / df_copy[\"volume\"].rolling(20).sum()\n    sma = df_copy[\"close\"].rolling(20).mean()\n    div = (vwap - sma) / df_copy[\"close\"]\n    factor = div * compression\n    df_copy[\"factor_vwap_sma_range_std_regime_compact\"] = factor\n    return df_copy[\"factor_vwap_sma_range_std_regime_compact\"]",
+  "description": "Mutation of parent g1_mutation_alpha_range_vol_gen0_001_a41d05a1. Preserves the core VWAP-SMA divergence and volatility compression mechanism. The target bottleneck is level IC/RankIC responsiveness: the parent's 20-day std for normalized true range may adapt too slowly to regime changes, limiting signal amplitude. Shortening the compression window to 10 days makes the volatility adjustment more responsive while retaining the bounded 1/(1+std) form that stabilizes the raw factor. This should improve level predictive power without sacrificing the parent's RankICIR/ICIR strength.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.028433275914957166,
+    "icir": 0.41706258281516734,
+    "mi": 0.018719241048995805,
+    "rank_ic": 0.052072925948494345,
+    "rank_icir": 0.8230850596870628
+  },
+  "raw_metrics": {
+    "ic": -0.028433275914957166,
+    "icir": -0.41706258281516734,
+    "mi": 0.018719241048995805,
+    "rank_ic": -0.052072925948494345,
+    "rank_icir": -0.8230850596870628
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.837751618027239,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.07188167878160567,
+    "top_quantile_excess_return": 0.05054299768179549,
+    "top_quantile_max_drawdown": -0.017770562928959066,
+    "top_quantile_turnover": 0.1553597238175724
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:45:45.541124+00:00"
+}

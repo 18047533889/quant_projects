@@ -514,23 +514,8 @@ class TsHurstDfa(SeriesOperator):
         ["x", "window", "min_scale", "max_scale", "n_scales"],
         unit="level",
         cost=7,
-        param_specs={
-            "window": ParamSpec(dtype=int, min=2, max=512),
-            "min_scale": ParamSpec(
-                dtype=int, min=2,
-                param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False,
-            ),
-            "max_scale": ParamSpec(
-                dtype=int, min=2,
-                param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False,
-                default=None,
-            ),
-            "n_scales": ParamSpec(
-                dtype=int, min=3,
-                param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False,
-            ),
-        },
     )
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 120, min_scale: int = 4, max_scale: Any = None, n_scales: int = 6, **_: Any) -> pd.DataFrame:
         # M-10xx: strict integer validation (no silent max(2, int(...)) clamp).
@@ -593,14 +578,8 @@ class TsHiguchiFractalDimension(SeriesOperator):
         ["x", "window", "k_max"],
         unit="level",
         cost=7,
-        param_specs={
-            "window": ParamSpec(dtype=int, min=2, max=512),
-            "k_max": ParamSpec(
-                dtype=int, min=1, max=32,
-                param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False,
-            ),
-        },
     )
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 120, k_max: int = 8, **_: Any) -> pd.DataFrame:
         # M-10xx: strict integer validation (no int() truncation).
@@ -720,22 +699,8 @@ class TsAutocorrDecayHalfLife(SeriesOperator):
         ["x", "window", "max_lag", "use_abs", "min_periods"],
         unit="count",
         cost=2,
-        param_specs={
-            "window": ParamSpec(dtype=int, min=2),
-            "max_lag": ParamSpec(
-                dtype=int, min=1, max=30,
-                param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False,
-            ),
-            "use_abs": ParamSpec(
-                dtype=bool, choices=(True, False),
-                param_role=ParamRole.POLICY, searchable=False,
-            ),
-            "min_periods": ParamSpec(
-                dtype=int, min=2,
-                param_role=ParamRole.SUPPORT_POLICY, searchable=False,
-            ),
-        },
     )
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, max_lag: int = 10, use_abs: bool = False, min_periods: int = 2, **_: Any) -> pd.DataFrame:
         w = check_window(window)

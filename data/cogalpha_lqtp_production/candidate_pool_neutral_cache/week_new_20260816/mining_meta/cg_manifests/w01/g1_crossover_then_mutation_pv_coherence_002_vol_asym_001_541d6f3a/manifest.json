@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_then_mutation_pv_coherence_002_vol_asym_001_541d6f3a",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 398,
+  "factor_name": "factor_volume_return_dir_corr_rankvoldev",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w01-20260814-043935-r7",
+  "expression_type": "python",
+  "formula": "rolling_corr(close.pct_change(), rolling_rank_pct(volume / rolling_mean(volume,20) - 1, window=30), window=30)",
+  "code": "def factor_volume_return_dir_corr_rankvoldev(df):\n    \"\"\"Rolling correlation between daily return and time-series ranked volume deviation.\"\"\"\n    df_copy = df.copy()\n    daily_ret = df_copy[\"close\"].pct_change()\n    vol_mean = df_copy[\"volume\"].rolling(20, min_periods=5).mean()\n    vol_dev_raw = df_copy[\"volume\"] / vol_mean - 1.0\n    vol_dev_rank = vol_dev_raw.rolling(30, min_periods=20).rank(pct=True)\n    corr = daily_ret.rolling(30, min_periods=20).corr(vol_dev_rank)\n    factor = corr.fillna(0.0)\n    df_copy[\"factor_volume_return_dir_corr_rankvoldev\"] = factor\n    return df_copy[\"factor_volume_return_dir_corr_rankvoldev\"]",
+  "description": "Mutates parent by replacing hard clipping of volume deviation with rolling percentile rank, providing robust outlier handling without arbitrary thresholds. Preserves parent's core mechanism of rolling correlation between signed daily returns and volume deviation to capture directional volume coherence. Target strength: RankICIR=0.424, RankIC=0.0219, payoff LS Sharpe=5.55 from pv_coherence_002. Bottleneck targeted: improve IC and MI slightly while maintaining rank stability. No cross-sectional transform, preserving parent's raw payoff evidence.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.009041132972439511,
+    "icir": 0.17096454012256507,
+    "mi": 0.009253990776954879,
+    "rank_ic": 0.024448260417762626,
+    "rank_icir": 0.41120070067070846
+  },
+  "raw_metrics": {
+    "ic": -0.009041132972439511,
+    "icir": -0.17096454012256507,
+    "mi": 0.009253990776954879,
+    "rank_ic": -0.024448260417762626,
+    "rank_icir": -0.41120070067070846
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.1252008215778755,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.048824183859668135,
+    "top_quantile_excess_return": 0.30740930077916784,
+    "top_quantile_max_drawdown": -0.08163838284848968,
+    "top_quantile_turnover": 0.1741565838043583
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:04:58.939891+00:00"
+}

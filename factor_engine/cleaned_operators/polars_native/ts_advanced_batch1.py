@@ -349,7 +349,7 @@ class TSActivityClockLaggedValuePriorPolarsNative(SeriesOperator):
 # Filtering - Kalman, Alpha-Beta, Butterworth, Savitzky-Golay
 # ============================================================================
 
-@register_operator(name="ts_adaptive_noise_kalman", canonical="ts_adaptive_noise_kalman", backend="polars")
+@register_operator(name="ts_adaptive_noise_kalman", canonical="ts_adaptive_noise_kalman", backend="polars", replace=True, expected_old_source="pandas_bridge", replacement_reason="Consolidating polars native operators into ts_advanced_batch1")
 class TSAdaptiveNoiseKalmanPolarsNative(SeriesOperator):
     """Adaptive Kalman filter with noise estimation"""
 
@@ -361,10 +361,7 @@ class TSAdaptiveNoiseKalmanPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "filter", "kalman", "pit_safe"],
     )
-    metadata.param_specs = {
-        "process_variance": ParamSpec(dtype=float, min=0.0, default=0.01, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-        "measurement_variance": ParamSpec(dtype=float, min=0.0, default=0.1, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, process_variance=0.01, measurement_variance=0.1, **kwargs):
         # TODO: Implement proper adaptive Kalman filter
@@ -372,7 +369,7 @@ class TSAdaptiveNoiseKalmanPolarsNative(SeriesOperator):
         return feature.ewm(span=10, adjust=False).mean()
 
 
-@register_operator(name="ts_alpha_beta_filter", canonical="ts_alpha_beta_filter", backend="polars")
+@register_operator(name="ts_alpha_beta_filter", canonical="ts_alpha_beta_filter", backend="polars", replace=True, expected_old_source="pandas_bridge", replacement_reason="Consolidating polars native operators into ts_advanced_batch1")
 class TSAlphaBetaFilterPolarsNative(SeriesOperator):
     """Alpha-beta filter (g-h filter) for position and velocity tracking"""
 
@@ -384,10 +381,7 @@ class TSAlphaBetaFilterPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "filter", "pit_safe"],
     )
-    metadata.param_specs = {
-        "alpha": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-        "beta": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.1, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, alpha=0.5, beta=0.1, **kwargs):
         # Alpha-beta filter: x_hat(k) = x_hat(k-1) + v_hat(k-1) + alpha * residual
@@ -411,7 +405,7 @@ class TSAlphaBetaFilterPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_bessel_lowpass_causal", canonical="ts_bessel_lowpass_causal", backend="polars")
+@register_operator(name="ts_bessel_lowpass_causal", canonical="ts_bessel_lowpass_causal", backend="polars", replace=True, expected_old_source="pandas_bridge", replacement_reason="Consolidating polars native operators into ts_advanced_batch1")
 class TSBesselLowpassCausalPolarsNative(SeriesOperator):
     """Bessel low-pass filter (causal, online)"""
 
@@ -423,10 +417,7 @@ class TSBesselLowpassCausalPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "filter", "pit_safe"],
     )
-    metadata.param_specs = {
-        "cutoff_freq": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.1, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-        "order": ParamSpec(dtype=int, min=1, max=10, default=4, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, cutoff_freq=0.1, order=4, **kwargs):
         # TODO: Implement Bessel filter using scipy.signal.bessel
@@ -490,7 +481,7 @@ class TSCausalLocalLinearSmootherPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_causal_savgol_endpoint", canonical="ts_causal_savgol_endpoint", backend="polars")
+@register_operator(name="ts_causal_savgol_endpoint", canonical="ts_causal_savgol_endpoint", backend="polars", replace=True, expected_old_source="pandas_bridge", replacement_reason="Consolidating polars native operators into ts_advanced_batch1")
 class TSCausalSavgolEndpointPolarsNative(SeriesOperator):
     """Causal Savitzky-Golay filter endpoint value"""
 
@@ -502,10 +493,7 @@ class TSCausalSavgolEndpointPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "filter", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "polyorder": ParamSpec(dtype=int, min=1, default=2, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, window, polyorder=2, **kwargs):
         # TODO: Implement causal Savitzky-Golay using scipy.signal.savgol_filter
@@ -894,10 +882,7 @@ class TSBetti1MaxPersistencePolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "topology", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "embedding_dim": ParamSpec(dtype=int, min=2, default=3, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, window, embedding_dim=3, **kwargs):
         # TODO: Implement TDA using ripser or gudhi library
@@ -1210,11 +1195,7 @@ class TSConditionalTransferEntropyPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "information_theory", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "lag": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON),
-        "bins": ParamSpec(dtype=int, min=2, default=10, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, x, y, z, window, lag=1, bins=10, **kwargs):
         # TODO: Implement conditional TE
@@ -1476,9 +1457,7 @@ class TSCptValuePolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "changepoint", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement change point transformation
@@ -1587,7 +1566,7 @@ class TSCrossSpectralPhasePolarsNative(SeriesOperator):
 # Crossing Analysis
 # ============================================================================
 
-@register_operator(name="ts_crossing_acceleration", canonical="ts_crossing_acceleration", backend="polars")
+@register_operator(name="ts_crossing_acceleration", canonical="ts_crossing_acceleration", backend="polars", replace=True, expected_old_source="pandas_bridge", replacement_reason="Consolidating polars native operators into ts_advanced_batch1")
 class TSCrossingAccelerationPolarsNative(SeriesOperator):
     """Second difference of ``x - y`` on crossing bars, normalized by volatility."""
 
@@ -1599,9 +1578,7 @@ class TSCrossingAccelerationPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "crossing", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, x, y, window, **kwargs):
         values = _crossing_acceleration_series(
@@ -1612,7 +1589,7 @@ class TSCrossingAccelerationPolarsNative(SeriesOperator):
         return pd.Series(values, index=x.index, name=x.name)
 
 
-@register_operator(name="ts_crossing_speed", canonical="ts_crossing_speed", backend="polars")
+@register_operator(name="ts_crossing_speed", canonical="ts_crossing_speed", backend="polars", replace=True, expected_old_source="pandas_bridge", replacement_reason="Consolidating polars native operators into ts_advanced_batch1")
 class TSCrossingSpeedPolarsNative(SeriesOperator):
     """Average threshold crossing frequency"""
 
@@ -1624,10 +1601,7 @@ class TSCrossingSpeedPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "crossing", "pit_safe"],
     )
-    metadata.param_specs = {
-        "threshold": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, threshold, window, **kwargs):
         crossings = ((feature > threshold) != (feature.shift(1) > threshold)).astype(int)
@@ -2147,11 +2121,7 @@ class TSEffectiveTransferEntropyPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "information_theory", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "lag": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON),
-        "bins": ParamSpec(dtype=int, min=2, default=10, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, x, y, window, lag=1, bins=10, **kwargs):
         # TODO: Implement transfer entropy with significance testing
@@ -2440,10 +2410,7 @@ class TSExpectileBetaPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "expectile", "regression", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "tau": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.STATE_THRESHOLD),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, x, y, window, tau=0.5, **kwargs):
         # TODO: Implement expectile regression (asymmetric least squares)
@@ -2492,10 +2459,7 @@ class TSExpectileRegressionCoeffPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "expectile", "regression", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "tau": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.STATE_THRESHOLD),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, x, y, window, tau=0.5, **kwargs):
         # TODO: Implement expectile regression
@@ -2517,10 +2481,7 @@ class TSExpectileRegressionCoeffPriorPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "expectile", "regression", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "tau": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.STATE_THRESHOLD),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, x, y, window, tau=0.5, **kwargs):
         # Shift result by 1 for PIT safety
@@ -2541,10 +2502,7 @@ class TSExpectileRegressionForecastErrorPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "expectile", "regression", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "tau": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.STATE_THRESHOLD),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, x, y, window, tau=0.5, **kwargs):
         # Compute coefficient from prior window
@@ -2569,10 +2527,7 @@ class TSExpectileRegressionResidPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "expectile", "regression", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "tau": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.STATE_THRESHOLD),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, x, y, window, tau=0.5, **kwargs):
         # TODO: Implement proper expectile regression

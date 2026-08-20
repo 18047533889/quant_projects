@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_pvcoherence_volume_lead_coherence_gen0_002_bfc4d8aa",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 388,
+  "factor_name": "factor_volume_lead_coherence_smoothed",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w03-20260814-081141-r8",
+  "expression_type": "python",
+  "formula": "ewm(span=5).mean(rolling(20).corr(close.pct_change(), volume_surprise.shift(1)) - rolling(20).corr(close.pct_change(), volume_surprise))",
+  "code": "def factor_volume_lead_coherence_smoothed(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_mean = df_copy['volume'].rolling(20, min_periods=10).mean()\n    vol_surprise = df_copy['volume'] / vol_mean.replace(0.0, np.nan) - 1.0\n    vol_lag1 = vol_surprise.shift(1)\n    lead_corr = ret.rolling(20, min_periods=10).corr(vol_lag1)\n    contemp_corr = ret.rolling(20, min_periods=10).corr(vol_surprise)\n    raw_diff = lead_corr - contemp_corr\n    factor = raw_diff.ewm(span=5, min_periods=1).mean()\n    factor = factor.fillna(0.0)\n    factor.name = 'factor_volume_lead_coherence_smoothed'\n    return factor",
+  "description": "Preserves the parent's volume lead-lag coherence mechanism: volume surprises that lead returns more strongly than contemporaneous surprises indicate informed order flow and future continuation. The mutation widens the correlation window from 10 to 20 days and applies a 5-day EMA smoothing to the lead-vs-contemporaneous correlation difference, reducing short-horizon noise that likely caused the parent's weak RankIC/ICIR. The raw mechanism remains isolate lead-lag timing after industry/size neutralization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.009427695251596303,
+    "icir": 0.22311223506819203,
+    "mi": 0.0059332584155740165,
+    "rank_ic": 0.020808408985587033,
+    "rank_icir": 0.43122401965169793
+  },
+  "raw_metrics": {
+    "ic": 0.009427695251596303,
+    "icir": 0.22311223506819203,
+    "mi": 0.0059332584155740165,
+    "rank_ic": 0.020808408985587033,
+    "rank_icir": 0.43122401965169793
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.085063931963435,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.1675988883743944,
+    "top_quantile_excess_return": 1.4240148349369344,
+    "top_quantile_max_drawdown": -0.08136558860635945,
+    "top_quantile_turnover": 0.09895243024874044
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:06:52.621315+00:00"
+}

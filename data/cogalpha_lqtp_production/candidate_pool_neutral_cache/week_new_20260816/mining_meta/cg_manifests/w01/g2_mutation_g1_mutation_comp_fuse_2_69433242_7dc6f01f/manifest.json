@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_comp_fuse_2_69433242_7dc6f01f",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 193,
+  "factor_name": "factor_overnight_intraday_ewm_reversal",
+  "domain_agent": "alpha-composite",
+  "run_id": "fleet-w01-20260805-054614-r16",
+  "expression_type": "python",
+  "formula": "-(ewm_smoothed_overnight_return) + ewm_smoothed_intraday_return",
+  "code": "def factor_overnight_intraday_ewm_reversal(df):\n    \"\"\"Linear combination of EWMA-smoothed overnight and intraday returns for reversal and momentum.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    open_price = df_copy[\"open\"]\n    \n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(close, open_price)\n    \n    span = 20\n    smooth_overnight = overnight_ret.ewm(span=span, min_periods=10).mean()\n    smooth_intraday = intraday_ret.ewm(span=span, min_periods=10).mean()\n    \n    signal = -smooth_overnight + smooth_intraday\n    df_copy[\"factor_overnight_intraday_ewm_reversal\"] = signal\n    return df_copy[\"factor_overnight_intraday_ewm_reversal\"]",
+  "description": "EWMA smoothing replaces simple rolling mean to give more weight to recent observations, improving timeliness of the reversal/momentum signals while preserving the parent's decomposition-based linear combination.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.047360029625691524,
+    "icir": 0.4721429925176902,
+    "mi": 0.025442793897266114,
+    "rank_ic": 0.042480212299229776,
+    "rank_icir": 0.40549464572354654
+  },
+  "raw_metrics": {
+    "ic": -0.047360029625691524,
+    "icir": -0.4721429925176902,
+    "mi": 0.025442793897266114,
+    "rank_ic": -0.042480212299229776,
+    "rank_icir": -0.40549464572354654
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.11862856021454671,
+    "top_quantile_excess_return": 0.9052147889352662,
+    "top_quantile_max_drawdown": -0.060045807300377896,
+    "top_quantile_turnover": 0.2017492127348646
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:42:43.570197+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_then_mutation_alpha_herding_gen0_a_001_alpha_market_cycle_0002_e9ad243e",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 727,
+  "factor_name": "factor_herding_dm_bounded",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w04-20260814-050458-r11",
+  "expression_type": "python",
+  "formula": "herding_position_20 * (0.6 + 0.4 * directional_movement_imbalance_60)",
+  "code": "def factor_herding_dm_bounded(df):\n    \"\"\"Volume-weighted close position within 20-day range, attenuated by bounded directional-movement confirmation with a non-zero floor.\"\"\"\n    df_copy = df.copy()\n    high = df_copy['high']\n    low = df_copy['low']\n    close = df_copy['close']\n    volume = df_copy['volume']\n\n    high_roll = high.rolling(20, min_periods=20).max()\n    low_roll = low.rolling(20, min_periods=20).min()\n    range_ = high_roll - low_roll\n    position = (close - low_roll) / range_.replace(0, np.nan)\n    vol_sum = volume.rolling(20, min_periods=20).sum()\n    weighted_pos = (volume * position).rolling(20, min_periods=20).sum() / vol_sum.replace(0, np.nan)\n    herding = 2 * weighted_pos - 1\n\n    up_move = high.diff()\n    down_move = -low.diff()\n    plus_dm = pd.Series(np.where((up_move > down_move) & (up_move > 0), up_move, 0.0), index=df_copy.index)\n    minus_dm = pd.Series(np.where((down_move > up_move) & (down_move > 0), down_move, 0.0), index=df_copy.index)\n    plus_sum = plus_dm.rolling(60, min_periods=1).sum()\n    minus_sum = minus_dm.rolling(60, min_periods=1).sum()\n    dm_total = plus_sum + minus_sum\n    dm_imbalance = (plus_sum - minus_sum) / dm_total.replace(0, np.nan)\n    dm_imbalance = dm_imbalance.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n\n    weight = 0.2 + 0.8 * (0.5 + 0.5 * dm_imbalance.clip(-1, 1))\n    factor = herding * weight\n    return factor.rename('factor_herding_dm_bounded')",
+  "description": "Mutation of parent volume-weighted herding signal. The core mechanism remains the volume-weighted close position within a 20-day high-low range (herding). The accelerator is the 60-day directional-movement imbalance. The mutation changes the confirmation weight from 0.5+0.5*dm to 0.2+0.8*(0.5+0.5*dm), which maps dm=-1..1 to weight 0.2..1.0 instead of 0..1.0. This bounded floor prevents the factor from collapsing to zero when directional movement is strongly negative, preserving more continuous raw herding signal and improving linear IC/ICIR while the rank ordering of herding remains intact. Parent strength RankICIR 0.4082 and payoff monotonicity are expected to be preserved because the weight remains strictly positive and monotonic.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.011648349473882469,
+    "icir": 0.18717151321625766,
+    "mi": 0.009583186987669023,
+    "rank_ic": 0.030575748067654982,
+    "rank_icir": 0.4349974636528643
+  },
+  "raw_metrics": {
+    "ic": -0.011648349473882469,
+    "icir": -0.18717151321625766,
+    "mi": 0.009583186987669023,
+    "rank_ic": -0.030575748067654982,
+    "rank_icir": -0.4349974636528643
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.7066672057328134,
+    "quantile_monotonicity": 0.8787878787878788,
+    "top_quantile_annualized_excess_return": -0.0057839616750376965,
+    "top_quantile_excess_return": -0.003676244141957996,
+    "top_quantile_max_drawdown": -0.055949418153317665,
+    "top_quantile_turnover": 0.0940349193719706
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:06:14.196409+00:00"
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_alpha_range_vol_0_0_ef99d628_g1_cros_e1ecc615",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 431,
+  "factor_name": "factor_range_compression_balanced_adx",
+  "domain_agent": "alpha-regime-gating",
+  "run_id": "fleet-w04-20260805-154006-r31",
+  "expression_type": "python",
+  "formula": "(-range_zscore(20) - vol_ratio_zscore(20)) * close_pct_change(5) * sigmoid(0.5*(adx(14)-20))",
+  "code": "def factor_range_compression_balanced_adx(df):\n    \"\"\"\n    Crossover: primary balanced z-score compression from Parent 1,\n    lightweight ADX trend regime weight from Parent 2.\n    \"\"\"\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    range_mean = range_.rolling(20, min_periods=20).mean()\n    range_std = range_.rolling(20, min_periods=20).std(ddof=1)\n    range_z = (range_ - range_mean) / range_std.replace(0, np.nan)\n    vol_ratio = df_copy[\"volume\"] / df_copy[\"volume\"].rolling(20, min_periods=20).mean()\n    vol_ratio_mean = vol_ratio.rolling(20, min_periods=20).mean()\n    vol_ratio_std = vol_ratio.rolling(20, min_periods=20).std(ddof=1)\n    vol_z = (vol_ratio - vol_ratio_mean) / vol_ratio_std.replace(0, np.nan)\n    compression = -range_z - vol_z\n    momentum = df_copy[\"close\"].pct_change(5)\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    tr1 = high - low\n    tr2 = (high - close.shift(1)).abs()\n    tr3 = (low - close.shift(1)).abs()\n    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)\n    atr = tr.rolling(window=14, min_periods=1).mean()\n    up_move = high - high.shift(1)\n    down_move = low.shift(1) - low\n    plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)\n    minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)\n    plus_di = 100.0 * (pd.Series(plus_dm, index=high.index).rolling(window=14, min_periods=1).mean() / atr.replace(0.0, np.nan))\n    minus_di = 100.0 * (pd.Series(minus_dm, index=high.index).rolling(window=14, min_periods=1).mean() / atr.replace(0.0, np.nan))\n    dx = 100.0 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0.0, np.nan)\n    adx = dx.rolling(window=14, min_periods=1).mean()\n    weight = 1.0 / (1.0 + np.exp(-0.5 * (adx - 20.0)))\n    factor = compression * momentum * weight\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy[\"factor_range_compression_balanced_adx\"] = factor\n    return df_copy[\"factor_range_compression_balanced_adx\"]\n",
+  "description": "Crossover: primary mechanism is the balanced z-score compression from Parent 1, which ensures range tightness and volume contraction are equally weighted. Lightweight ADX trend regime weight from Parent 2 enhances signal in trending markets, targeting improved IC/RankIC while preserving stability (ICIR/RankICIR) of the balanced approach.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03137403723287843,
+    "icir": 0.4282933916147127,
+    "mi": 0.024281381509846156,
+    "rank_ic": 0.04121607505081017,
+    "rank_icir": 0.5947760251010136
+  },
+  "raw_metrics": {
+    "ic": 0.03137403723287843,
+    "icir": 0.4282933916147127,
+    "mi": 0.024281381509846156,
+    "rank_ic": 0.04121607505081017,
+    "rank_icir": 0.5947760251010136
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.10656574598079072,
+    "top_quantile_excess_return": 0.06640468888399909,
+    "top_quantile_max_drawdown": -0.007423564725607901,
+    "top_quantile_turnover": 0.6343669741945679
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:36:16.134275+00:00"
+}

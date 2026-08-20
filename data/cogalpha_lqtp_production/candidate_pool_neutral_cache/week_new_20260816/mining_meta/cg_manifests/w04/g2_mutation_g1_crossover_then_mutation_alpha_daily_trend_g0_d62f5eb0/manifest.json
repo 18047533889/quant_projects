@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_alpha_daily_trend_g0_d62f5eb0",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 179,
+  "factor_name": "factor_vol_regime_momentum",
+  "domain_agent": "alpha-regime-gating",
+  "run_id": "fleet-w04-20260803-210330-r14",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_vol_regime_momentum(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    daily_ret = close.pct_change()\n    ema_ret = daily_ret.ewm(span=10, adjust=False).mean()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(volume, window=20)\n    signal = ema_ret * vol_ratio\n    signal = signal.ffill().fillna(0)\n    df_copy[\"factor_vol_regime_momentum\"] = signal\n    return df_copy[\"factor_vol_regime_momentum\"]",
+  "description": "Mutation of qualified parent to replace manual fast/slow volume ratio with the reusable classify_volume_regime tool for volume intensity modulation. The tool provides a continuous volume/EMA ratio that measures trading intensity relative to recent average, reducing noise from dual-EMA ratio and improving stability. Core momentum trending via ewm span=10 is preserved. Parent strength target: momentum with volume confirmation; bottleneck: volume ratio noise.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03797801686934353,
+    "icir": 0.36596481532534697,
+    "mi": 0.04037317993615819,
+    "rank_ic": 0.05565214814914335,
+    "rank_icir": 0.3885738515955669
+  },
+  "raw_metrics": {
+    "ic": -0.03797801686934353,
+    "icir": -0.36596481532534697,
+    "mi": 0.04037317993615819,
+    "rank_ic": -0.05565214814914335,
+    "rank_icir": -0.3885738515955669
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.06789142482497668,
+    "top_quantile_excess_return": 0.05269108872849704,
+    "top_quantile_max_drawdown": -0.057265745477455665,
+    "top_quantile_turnover": 0.35424207353454684
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:19:52.695479+00:00"
+}

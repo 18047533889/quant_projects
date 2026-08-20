@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "volume_structure_high_vol_streak",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 303,
+  "factor_name": "factor_volume_streak",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260804-191240-r23",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_volume_streak(df):\n    \"\"\"\n    Measures the current consecutive streak of high-volume days.\n    High volume is defined as volume > 1.5 * 50-day rolling mean volume.\n    A long streak suggests sustained attention and potential trend continuation or exhaustion.\n    \"\"\"\n    df_copy = df.copy()\n    # 50-day rolling mean volume\n    vol_ma = df_copy[\"volume\"].rolling(50, min_periods=1).mean()\n    # High volume flag\n    high_vol = df_copy[\"volume\"] > (1.5 * vol_ma)\n    # Compute consecutive streak: groupby consecutive true flags\n    # Group by the cumulative sum of where high_vol changes\n    group = (high_vol != high_vol.shift(1)).cumsum()\n    streak = high_vol.groupby(group).cumcount() + 1\n    # Set streak to 0 where volume is not high\n    streak = streak.where(high_vol, 0)\n    df_copy[\"factor_volume_streak\"] = streak\n    return df_copy[\"factor_volume_streak\"]",
+  "description": "Measures the temporal structure of volume abnormalities by counting consecutive days of elevated volume. Sustained high volume often accompanies institutional accumulation or distribution and can indicate a regime shift. Cross-sectional ranking highlights stocks with the longest ongoing volume streaks.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.021891825898582747,
+    "icir": 0.2993795811597963,
+    "mi": 0.1910925872790381,
+    "rank_ic": 0.05355150453371988,
+    "rank_icir": 0.7322698377197127
+  },
+  "raw_metrics": {
+    "ic": -0.021891825898582747,
+    "icir": -0.2993795811597963,
+    "mi": 0.1910925872790381,
+    "rank_ic": -0.05355150453371988,
+    "rank_icir": -0.7322698377197127
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.11916520838419697,
+    "top_quantile_excess_return": 0.08956394724476957,
+    "top_quantile_max_drawdown": -0.03134297819904386,
+    "top_quantile_turnover": 0.11302071884617576
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:25:18.048497+00:00"
+}

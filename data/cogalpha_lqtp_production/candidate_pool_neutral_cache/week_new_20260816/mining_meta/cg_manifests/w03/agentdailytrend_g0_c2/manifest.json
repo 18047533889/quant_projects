@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "agentdailytrend_g0_c2",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "elite",
+  "factor_id": 162,
+  "factor_name": "factor_smooth_dual_momentum_volume",
+  "domain_agent": "alpha-daily-trend",
+  "run_id": "fleet-w03-20260804-184706-r13",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_smooth_dual_momentum_volume(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    fast_mom = close.pct_change(5)\n    slow_mom = close.pct_change(20)\n    slow_weight = 0.5 + 0.5 * np.tanh(slow_mom * 2)\n    combined = fast_mom * (0.5 + slow_weight)\n    vol_ma20 = volume.rolling(20).mean()\n    vol_ratio = volume / vol_ma20.replace(0, np.nan)\n    vol_weight = np.clip(vol_ratio, 0.5, 2.0)\n    df_copy[\"factor_smooth_dual_momentum_volume\"] = combined * vol_weight\n    return df_copy[\"factor_smooth_dual_momentum_volume\"]",
+  "description": "Combines fast and slow momentum using a smooth nonlinear gating (tanh) to capture directional persistence and multi-day momentum strength. When the 20-day trend is positive, the 5-day momentum is amplified; when negative, it is dampened. The smooth transition avoids sharp regime switches, preserving cross-sectional variation while allowing nonlinear interaction. Volume confirmation ensures participation.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.030882390588750416,
+    "icir": 0.28791443940209727,
+    "mi": 0.021700621307790158,
+    "rank_ic": 0.03775383298092372,
+    "rank_icir": 0.3015059297322355
+  },
+  "raw_metrics": {
+    "ic": -0.030882390588750416,
+    "icir": -0.28791443940209727,
+    "mi": 0.021700621307790158,
+    "rank_ic": -0.03775383298092372,
+    "rank_icir": -0.3015059297322355
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.0477534758172351,
+    "top_quantile_excess_return": 0.3052267050689128,
+    "top_quantile_max_drawdown": -0.13912687122629563,
+    "top_quantile_turnover": 0.39738129067375044
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:50:48.025697+00:00"
+}

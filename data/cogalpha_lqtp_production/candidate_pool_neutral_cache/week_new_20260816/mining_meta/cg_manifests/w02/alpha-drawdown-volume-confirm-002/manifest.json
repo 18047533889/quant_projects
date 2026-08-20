@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "alpha-drawdown-volume-confirm-002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 367,
+  "factor_name": "factor_drawdown_recovery_volume_confirmation",
+  "domain_agent": "alpha-drawdown",
+  "run_id": "fleet-w02-20260813-194428-r5",
+  "expression_type": "python",
+  "formula": "ratio * recovery_progress",
+  "code": "def factor_drawdown_recovery_volume_confirmation(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    window = 60\n    rolling_peak = close.rolling(window, min_periods=1).max()\n    underwater = close < rolling_peak\n    up_day = close > close.shift(1)\n    recovery_volume = (volume * underwater * up_day).rolling(window, min_periods=1).sum()\n    underwater_volume = (volume * underwater).rolling(window, min_periods=1).sum()\n    ratio = recovery_volume / underwater_volume.replace(0, np.nan)\n    rolling_trough = close.rolling(window, min_periods=1).min()\n    recovery_progress = (close - rolling_trough) / (rolling_peak - rolling_trough).replace(0, np.nan)\n    recovery_progress = recovery_progress.fillna(1.0)\n    factor = ratio * recovery_progress\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    return pd.Series(factor, index=df_copy.index, name=\"factor_drawdown_recovery_volume_confirmation\")",
+  "description": "Drawdown recovery volume confirmation rewards stocks whose underwater period shows increasing volume on up days, combined with progress from the rolling trough toward the rolling peak. This captures the quality of recovery: a stock that repairs its drawdown with strong buying interest is likely to continue its idiosyncratic improvement. It is a distinct volume-path mechanism not previously tested in this domain.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.010053786811907169,
+    "icir": 0.12336935137668101,
+    "mi": 0.008739251143101257,
+    "rank_ic": 0.02641845165062514,
+    "rank_icir": 0.2720901741506317
+  },
+  "raw_metrics": {
+    "ic": -0.010053786811907169,
+    "icir": -0.12336935137668101,
+    "mi": 0.008739251143101257,
+    "rank_ic": -0.02641845165062514,
+    "rank_icir": -0.2720901741506317
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.005811806806285,
+    "quantile_monotonicity": 0.9393939393939394,
+    "top_quantile_annualized_excess_return": 0.16016576565763851,
+    "top_quantile_excess_return": 1.3606876090465136,
+    "top_quantile_max_drawdown": -0.2653085337427178,
+    "top_quantile_turnover": 0.2656376420769607
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:32:08.804829+00:00"
+}

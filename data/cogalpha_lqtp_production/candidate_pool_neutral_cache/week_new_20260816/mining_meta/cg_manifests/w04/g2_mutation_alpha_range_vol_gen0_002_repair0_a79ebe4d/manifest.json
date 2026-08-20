@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_alpha_range_vol_gen0_002_repair0_a79ebe4d",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 412,
+  "factor_name": "factor_intraday_exhaustion_pct_vol",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260805-131056-r30",
+  "expression_type": "python",
+  "formula": "-intraday_ret \u00d7 range_percentile_rank(20) \u00d7 vol_ratio(20,EMA) \u2192 EMA(3)",
+  "code": "def factor_intraday_exhaustion_pct_vol(df):\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    range_pct = range_.rolling(20, min_periods=1).rank(pct=True)\n    is_high, is_low, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    signal = -intraday_ret * range_pct * vol_ratio\n    signal_ema = signal.ewm(span=3, min_periods=1).mean()\n    df_copy[\"factor_intraday_exhaustion_pct_vol\"] = signal_ema.fillna(0)\n    return df_copy[\"factor_intraday_exhaustion_pct_vol\"]",
+  "description": "Panic selling exhaustion signal. A negative intraday return indicates intraday decline. Range percentile (rolling 20-day rank) captures extreme daily ranges relative to recent history, bounded for robustness. The volume ratio from alpha_tools.classify_volume_regime (EMA-based) identifies elevated volume conditions. Multiplying these three components amplifies exhaustion signals. A 3-day EMA smooths noise. This mutation replaces manual z-score and volume ratio with more robust and reusable modules, targeting improved mutual information while preserving rank stability.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.022339978442736923,
+    "icir": 0.2624535412589342,
+    "mi": 0.02397301339469049,
+    "rank_ic": 0.047803087133392576,
+    "rank_icir": 0.3981363670676522
+  },
+  "raw_metrics": {
+    "ic": 0.022339978442736923,
+    "icir": 0.2624535412589342,
+    "mi": 0.02397301339469049,
+    "rank_ic": 0.047803087133392576,
+    "rank_icir": 0.3981363670676522
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.05962837089723161,
+    "top_quantile_excess_return": 0.046558538667847094,
+    "top_quantile_max_drawdown": -0.06509978183138865,
+    "top_quantile_turnover": 0.44532525581024657
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:34:00.196774+00:00"
+}

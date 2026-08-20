@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_alpha_fractal_001_83d068d7_g1_crosso_b6b6e79a",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "elite",
+  "factor_id": 2,
+  "factor_name": "factor_atr_ratio_vol_adaptive",
+  "domain_agent": "alpha-fractal",
+  "run_id": "fleet-w03-20260802-140831-r1",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_atr_ratio_vol_adaptive(df):\n    \"\"\"ATR ratio with adaptive short-term window based on volume regime.\n    Core idea: volatility expansion (short-term ATR / long-term ATR) signals\n    stress; more responsive during high-volume regimes.\"\"\"\n    df_copy = df.copy()\n    prev_close = df_copy[\"close\"].shift(1)\n    tr = pd.concat([\n        df_copy[\"high\"] - df_copy[\"low\"],\n        (df_copy[\"high\"] - prev_close).abs(),\n        (df_copy[\"low\"] - prev_close).abs()\n    ], axis=1).max(axis=1)\n    long_atr = tr.rolling(60, min_periods=60).mean()\n    is_high_vol, is_low_vol, _ = alpha_tools.classify_volume_regime(\n        df_copy[\"volume\"], window=60\n    )\n    short_atr_5 = tr.rolling(5, min_periods=5).mean()\n    short_atr_20 = tr.rolling(20, min_periods=20).mean()\n    high_vol_condition = is_high_vol > 0\n    short_atr = np.where(high_vol_condition, short_atr_5, short_atr_20)\n    ratio = short_atr / long_atr.replace(0, np.nan)\n    factor = -ratio\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    factor.name = \"factor_atr_ratio_vol_adaptive\"\n    return factor",
+  "description": "Primary mechanism from parent 1 (g1_mutation_alpha_fractal_001_83d068d7): negative short-to-long ATR ratio captures volatility expansion that predicts underperformance. Lightweight modifier from parent 2 (g1_crossover_crash_prec_001_creative_g0_1_400627de): volume regime awareness, implemented via alpha_tools.classify_volume_regime. Instead of a multiplicative weight, the volume regime adapts the short-term ATR window (5 days during high volume, 20 days otherwise), making the signal more responsive when trading activity confirms the expansion. The child preserves the core economic intuition while adding conditional sensitivity.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.04979869290390711,
+    "icir": 0.46155036456478643,
+    "mi": 0.0216123630111138,
+    "rank_ic": 0.03312853196060823,
+    "rank_icir": 0.3119103541003333
+  },
+  "raw_metrics": {
+    "ic": 0.04979869290390711,
+    "icir": 0.46155036456478643,
+    "mi": 0.0216123630111138,
+    "rank_ic": 0.03312853196060823,
+    "rank_icir": 0.3119103541003333
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.22359747367082217,
+    "top_quantile_excess_return": 2.0681808399381363,
+    "top_quantile_max_drawdown": -0.10941081020441912,
+    "top_quantile_turnover": 0.11204864134522134
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:44:26.415728+00:00"
+}

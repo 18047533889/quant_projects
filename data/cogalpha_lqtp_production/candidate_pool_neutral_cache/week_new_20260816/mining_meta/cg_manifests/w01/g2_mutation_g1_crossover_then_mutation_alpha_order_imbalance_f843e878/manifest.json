@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_alpha_order_imbalance_f843e878",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 255,
+  "factor_name": "factor_vol_asymmetry_vol_regime",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w01-20260806-031819-r21",
+  "expression_type": "python",
+  "formula": "(EWM20(up_squared_intraday_ret) - EWM20(down_squared_intraday_ret)) * volume_regime_ratio(window=20)",
+  "code": "def factor_vol_asymmetry_vol_regime(df):\n    \"\"\"Volatility asymmetry of intraday returns amplified by volume regime ratio.\"\"\"\n    df_copy = df.copy()\n    intraday_ret = df_copy[\"close\"] / df_copy[\"open\"] - 1.0\n    up_vol = np.power(intraday_ret.clip(lower=0), 2)\n    down_vol = np.power(intraday_ret.clip(upper=0), 2)\n    asym = up_vol.ewm(span=20, min_periods=20).mean() - down_vol.ewm(span=20, min_periods=20).mean()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    df_copy[\"factor_vol_asymmetry_vol_regime\"] = asym * vol_ratio\n    return df_copy[\"factor_vol_asymmetry_vol_regime\"]",
+  "description": "Mutation of volatility asymmetry \u00d7 volume ratio. Preserves the core directional pressure mechanism: the difference between exponentially weighted squared upside and downside intraday returns. Replaces the ad-hoc volume ratio (volume/rolling20mean smoothed by EWM3) with the standardized CogAlpha volume regime module vol_ratio, which measures short-term volume intensity against EMA20. This simplifies the volume scaling, reduces overfitting, and leverages a reusable module for consistent volume amplification, aiming to improve RankICIR while preserving the raw volatility asymmetry signal.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03969259193246503,
+    "icir": 0.3779660485524653,
+    "mi": 0.02607669617231423,
+    "rank_ic": 0.05205641396048418,
+    "rank_icir": 0.439116247333548
+  },
+  "raw_metrics": {
+    "ic": -0.03969259193246503,
+    "icir": -0.3779660485524653,
+    "mi": 0.02607669617231423,
+    "rank_ic": -0.05205641396048418,
+    "rank_icir": -0.439116247333548
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.12582045566376854,
+    "top_quantile_excess_return": 0.9683818179444994,
+    "top_quantile_max_drawdown": -0.0527631071255098,
+    "top_quantile_turnover": 0.20376374703300099
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:44:57.836430+00:00"
+}

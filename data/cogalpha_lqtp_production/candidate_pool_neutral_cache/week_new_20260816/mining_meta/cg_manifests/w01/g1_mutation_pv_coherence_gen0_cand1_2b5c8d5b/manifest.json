@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_pv_coherence_gen0_cand1_2b5c8d5b",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 353,
+  "factor_name": "factor_volume_confirmed_conditional_mean_diff",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w01-20260813-195334-r5",
+  "expression_type": "python",
+  "formula": "rolling_mean(return | volume_change>0) - rolling_mean(return | volume_change<0) over 20 days",
+  "code": "def factor_volume_confirmed_conditional_mean_diff(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_change = df_copy[\"volume\"].pct_change().replace([np.inf, -np.inf], np.nan)\n    up_mask = vol_change > 0\n    down_mask = vol_change < 0\n    up_ret_sum = (ret * up_mask).rolling(20, min_periods=10).sum()\n    up_count = up_mask.rolling(20, min_periods=10).sum()\n    down_ret_sum = (ret * down_mask).rolling(20, min_periods=10).sum()\n    down_count = down_mask.rolling(20, min_periods=10).sum()\n    up_mean = up_ret_sum / up_count.replace(0, np.nan)\n    down_mean = down_ret_sum / down_count.replace(0, np.nan)\n    factor = up_mean - down_mean\n    df_copy[\"factor_volume_confirmed_conditional_mean_diff\"] = factor\n    return df_copy[\"factor_volume_confirmed_conditional_mean_diff\"]\n",
+  "description": "This mutation preserves the parent's economic intuition of price-volume coherence but replaces the rolling correlation (dimensionless and direction-agnostic) with a directional conditional mean difference. By computing the average return on volume-expansion days minus average return on volume-contraction days over a trailing 20-day window, the factor captures whether positive price moves are systematically associated with rising volume. A positive value indicates volume-confirmed upward pressure; negative indicates volume-confirmed downward pressure. This is more robust to noise and directly tradable than a correlation, while remaining a single economic mechanism.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01687574938632777,
+    "icir": 0.24206182489211325,
+    "mi": 0.016988242550210586,
+    "rank_ic": 0.0426861560065479,
+    "rank_icir": 0.6733368827962695
+  },
+  "raw_metrics": {
+    "ic": -0.01687574938632777,
+    "icir": -0.24206182489211325,
+    "mi": 0.016988242550210586,
+    "rank_ic": -0.0426861560065479,
+    "rank_icir": -0.6733368827962695
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.811854757840709,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.061133891623656345,
+    "top_quantile_excess_return": 0.40662576432504616,
+    "top_quantile_max_drawdown": -0.10943969065641457,
+    "top_quantile_turnover": 0.19703752372444786
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:58:49.014825+00:00"
+}

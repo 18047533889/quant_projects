@@ -1,5 +1,6 @@
 """Durable SQLite lifecycle repository (schema v1)."""
 from __future__ import annotations
+import contextlib
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -8,7 +9,7 @@ from dataclasses import replace
 from factor_assets.contracts.asset import AssetMetadata, FactorAsset
 from factor_assets.contracts.evidence_ref import EvidenceBundleRef, evidence_bundle_event_id
 from factor_assets.contracts.lineage import LineageRef
-from factor_assets.contracts.lifecycle import LifecycleState, StateEvent, validate_transition
+from factor_assets.contracts.lifecycle import HealthState, LifecycleState, StateEvent, validate_transition
 from factor_assets.errors import (
     CapabilityError,
     DuplicateIdentityError,
@@ -31,14 +32,21 @@ class SQLiteLifecycleRepository:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connection() as conn: migrate(conn)
 
+    @contextlib.contextmanager
     def _connection(self):
+        # isolation_level=None puts the connection in autocommit mode, so
+        # ``with conn`` alone never closes it; yield within a guaranteed
+        # close so per-call connections cannot leak.
         conn = sqlite3.connect(str(self.db_path), timeout=30, isolation_level=None)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.execute("PRAGMA busy_timeout=30000")
-        conn.execute("PRAGMA synchronous=FULL")
-        return conn
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.execute("PRAGMA busy_timeout=30000")
+            conn.execute("PRAGMA synchronous=FULL")
+            yield conn
+        finally:
+            conn.close()
 
     def register(self, metadata: AssetMetadata, lineage: LineageRef, tags: tuple[str, ...] = ()) -> FactorAsset:
         if metadata.factor_id != lineage.factor_id: raise ValueError("metadata and lineage factor_id must match")
@@ -125,6 +133,27 @@ class SQLiteLifecycleRepository:
                 conn.rollback(); raise
 
     def transition(self, *args, **kwargs): return self.commit_transition(*args, **kwargs).asset
+
+    def update_asset_health(self, factor_id: str, health: HealthState, *, reason: str = "", actor: Optional[str] = None) -> None:
+        """Append a health-change event and persist the orthogonal health dimension."""
+        if not isinstance(health, HealthState): raise TypeError("health must be a HealthState")
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                row = conn.execute("SELECT payload,revision FROM assets WHERE factor_id=?", (factor_id,)).fetchone()
+                if row is None: raise AssetNotFoundError(f"Factor {factor_id} not found")
+                asset, revision = asset_from_json(row[0]), row[1]
+                now = datetime.now(timezone.utc).isoformat()
+                updated = replace(asset, health_state=health)
+                note = f"Health change {asset.health_state.value} -> {health.value}" + (f": {reason}" if reason else "")
+                event = StateEvent(factor_id, asset.lifecycle_state, asset.lifecycle_state, now, (), None, None, actor, note)
+                new_revision = revision + 1
+                conn.execute("UPDATE assets SET payload=?,revision=? WHERE factor_id=?", (asset_to_json(updated), new_revision, factor_id))
+                conn.execute("INSERT INTO lifecycle_events(factor_id,revision,decision_id,payload) VALUES (?,?,?,?)", (factor_id,new_revision,None,event_to_json(event)))
+                conn.commit()
+            except (sqlite3.Error, OSError, ValueError, TypeError,
+                    FactorAssetsError, AssetNotFoundError):
+                conn.rollback(); raise
     def get_events(self, factor_id=None):
         with self._connection() as conn:
             rows = conn.execute("SELECT payload FROM lifecycle_events" + (" WHERE factor_id=? ORDER BY id" if factor_id else " ORDER BY id"), ((factor_id,) if factor_id else ())).fetchall()

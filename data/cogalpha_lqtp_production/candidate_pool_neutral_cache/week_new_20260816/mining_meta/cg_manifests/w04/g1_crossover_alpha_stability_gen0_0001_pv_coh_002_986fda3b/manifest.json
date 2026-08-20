@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_alpha_stability_gen0_0001_pv_coh_002_986fda3b",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 553,
+  "factor_name": "factor_volume_stability_corr_gate",
+  "domain_agent": "alpha-stability",
+  "run_id": "fleet-w04-20260813-044118-r2",
+  "expression_type": "python",
+  "formula": "stability = -rolling_std(volume, 20) / rolling_mean(volume, 20); corr = corr(close.pct_change(), volume.pct_change(), 20); factor = stability * (0.8 + 0.4 * corr)",
+  "code": "def factor_volume_stability_corr_gate(df):\n    \"\"\"Volume smoothness modulated by price-volume confirmation.\"\"\"\n    df_copy = df.copy()\n    window = 20\n    vol_mean = df_copy['volume'].rolling(window, min_periods=window).mean()\n    vol_std = df_copy['volume'].rolling(window, min_periods=window).std(ddof=1)\n    stability = -(vol_std / vol_mean.replace(0.0, np.nan))\n    ret = df_copy['close'].pct_change()\n    vol_change = df_copy['volume'].pct_change()\n    corr = ret.rolling(window, min_periods=window).corr(vol_change)\n    weight = 0.8 + 0.4 * corr\n    df_copy['factor_volume_stability_corr_gate'] = stability * weight\n    return df_copy['factor_volume_stability_corr_gate']",
+  "description": "Primary mechanism from alpha-stability-gen0-0001: negative coefficient of variation of volume over 20 bars captures smooth, persistent participation. The lightweight modifier from pv_coh_002 is rolling correlation between price returns and volume changes: positive return-volume correlation suggests volume movements confirm price continuation, so the stability signal is modestly amplified; negative or noisy correlation attenuates it. The weight is bounded between 0.4 and 1.2 and never flips the sign, preserving the original volume-stability payoff while adding a price-volume coherence gate to improve IC and MI without sacrificing RankICIR.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02120700349015462,
+    "icir": 0.4799328814715758,
+    "mi": 0.006229403823247992,
+    "rank_ic": 0.048638857281541215,
+    "rank_icir": 1.0319447353622933
+  },
+  "raw_metrics": {
+    "ic": 0.02120700349015462,
+    "icir": 0.4799328814715758,
+    "mi": 0.006229403823247992,
+    "rank_ic": 0.048638857281541215,
+    "rank_icir": 1.0319447353622933
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.215843704704617,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.06978944180151325,
+    "top_quantile_excess_return": 0.04880521017282047,
+    "top_quantile_max_drawdown": -0.023209608880343957,
+    "top_quantile_turnover": 0.15644696581465595
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:47:35.901668+00:00"
+}

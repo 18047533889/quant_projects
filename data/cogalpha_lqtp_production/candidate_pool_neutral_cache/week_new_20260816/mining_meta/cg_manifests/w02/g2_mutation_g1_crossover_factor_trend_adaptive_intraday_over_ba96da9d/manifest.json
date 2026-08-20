@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_factor_trend_adaptive_intraday_over_ba96da9d",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 315,
+  "factor_name": "factor_trend_adaptive_drawdown_gated_fast",
+  "domain_agent": "alpha-regime-gating",
+  "run_id": "fleet-w02-20260813-103714-r3",
+  "expression_type": "python",
+  "formula": "efficiency_ratio = abs(close - close.shift(20)) / sum(abs(close.diff()), 20); base_blend = efficiency_ratio * rolling_mean(intraday_ret,5) + (1-efficiency_ratio) * rolling_mean(-overnight_ret,5); ulcer = sqrt(rolling_mean((close / rolling_max(close,30) - 1)^2, 30)); factor = base_blend / (1 + ulcer)",
+  "code": "def factor_trend_adaptive_drawdown_gated_fast(df):\n    '''Trend-adaptive intraday/overnight blend with faster drawdown stress confidence.'''\n    df_copy = df.copy()\n    close = df_copy['close']\n    open_ = df_copy['open']\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(close, open_)\n    window = 20\n    price_change = close.diff()\n    abs_sum = price_change.abs().rolling(window, min_periods=window).sum()\n    net_change = close - close.shift(window)\n    efficiency_ratio = net_change.abs() / abs_sum.replace(0.0, np.nan)\n    efficiency_ratio = efficiency_ratio.fillna(0.0).clip(0.0, 1.0)\n    intraday_signal = intraday_ret.rolling(5, min_periods=1).mean()\n    overnight_reversal = -overnight_ret.rolling(5, min_periods=1).mean()\n    base_blend = efficiency_ratio * intraday_signal + (1.0 - efficiency_ratio) * overnight_reversal\n    rolling_peak = close.rolling(30, min_periods=15).max()\n    drawdown = close / rolling_peak - 1.0\n    mean_sq_dd = (drawdown ** 2).rolling(30, min_periods=15).mean()\n    ulcer = mean_sq_dd.pow(0.5).fillna(0.0)\n    confidence_weight = 1.0 / (1.0 + ulcer)\n    factor = base_blend * confidence_weight\n    factor.name = 'factor_trend_adaptive_drawdown_gated_fast'\n    return factor",
+  "description": "Preserves parent core: Kaufman efficiency ratio over 20 days gates a blend of 5-day mean intraday momentum and 5-day mean overnight reversal. Parent strength retained: consistent ICIR/RankICIR and balanced IC. Bottleneck targeted: the parent's ulcer-index drawdown attenuation averages squared drawdowns over 60 days, reacting slowly and over-penalizing recovered stocks. Mutation shortens the drawdown stress window to 30 days and min_periods to 15, keeping the same bounded confidence weight but letting the gate release faster after drawdowns recover. One core mechanism plus one lightweight drawdown confidence gate.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.05091472597111738,
+    "icir": 0.7495693951737207,
+    "mi": 0.027165399498318088,
+    "rank_ic": 0.03145671707308557,
+    "rank_icir": 0.660593872638795
+  },
+  "raw_metrics": {
+    "ic": -0.05091472597111738,
+    "icir": -0.7495693951737207,
+    "mi": 0.027165399498318088,
+    "rank_ic": -0.03145671707308557,
+    "rank_icir": -0.660593872638795
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 10.263984647521326,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.26887986864031266,
+    "top_quantile_excess_return": 2.9660803247343077,
+    "top_quantile_max_drawdown": -0.26087766713860905,
+    "top_quantile_turnover": 0.37786852422656586
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:25:11.609522+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_then_mutation_alpha_market_cycle_0_2_alpha_drawdown_volume_con_3fc92f96",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 373,
+  "factor_name": "factor_cycle_dominance_smoothed",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w02-20260813-194428-r5",
+  "expression_type": "python",
+  "formula": "rolling_sum(overnight_ret - intraday_ret, 120) / (rolling_std(overnight_ret - intraday_ret, 120) * sqrt(120))",
+  "code": "def factor_cycle_dominance_smoothed(df):\n    \"\"\"Smoothed overnight-vs-intraday cycle dominance without volume modifier.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    window = 120\n    spread = overnight_ret - intraday_ret\n    rolling_sum_spread = spread.rolling(window, min_periods=1).sum()\n    rolling_std_spread = spread.rolling(window, min_periods=1).std(ddof=1)\n    factor = rolling_sum_spread / (rolling_std_spread.replace(0.0, np.nan) * np.sqrt(window))\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    df_copy[\"factor_cycle_dominance_smoothed\"] = factor\n    return df_copy[\"factor_cycle_dominance_smoothed\"]",
+  "description": "Mutation preserves the core overnight-vs-intraday cycle dominance mechanism from the parent crossover factor and its qualified ancestor alpha-market-cycle-0-2. The parent strength target is ICIR/RankICIR stability of the cycle signal. The bottleneck is the noisy volume-confidence modifier inherited from alpha-drawdown-volume-confirm-002, which can distort cross-sectional ranking. The modifier is removed. Normalization is changed from total absolute returns to a rolling t-stat of the overnight-minus-intraday spread, smoothing volatility scale and reducing amplitude sensitivity to target RankIC without harming ICIR. Cross-sectional transform remains none because the raw payoff mechanism is preserved.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.04489872236079545,
+    "icir": 0.7454144385400961,
+    "mi": 0.004127085384879603,
+    "rank_ic": 0.019829772269296914,
+    "rank_icir": 0.3234079660366894
+  },
+  "raw_metrics": {
+    "ic": 0.04489872236079545,
+    "icir": 0.7454144385400961,
+    "mi": 0.004127085384879603,
+    "rank_ic": 0.019829772269296914,
+    "rank_icir": 0.3234079660366894
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.9897673561274045,
+    "quantile_monotonicity": 0.9151515151515152,
+    "top_quantile_annualized_excess_return": 0.42306490777142436,
+    "top_quantile_excess_return": 6.689646133950854,
+    "top_quantile_max_drawdown": -0.04785699380700548,
+    "top_quantile_turnover": 0.1355146035292181
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:33:32.345637+00:00"
+}

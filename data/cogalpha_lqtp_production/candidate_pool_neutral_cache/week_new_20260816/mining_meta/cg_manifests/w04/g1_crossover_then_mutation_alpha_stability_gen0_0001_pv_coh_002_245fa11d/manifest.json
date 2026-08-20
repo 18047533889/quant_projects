@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_then_mutation_alpha_stability_gen0_0001_pv_coh_002_245fa11d",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 555,
+  "factor_name": "factor_volume_stability_corr_gate_robust",
+  "domain_agent": "alpha-stability",
+  "run_id": "fleet-w04-20260813-044118-r2",
+  "expression_type": "python",
+  "formula": "stability = -rolling_std(volume, 20) / (rolling_mean(volume, 20) + rolling_std(volume, 20)); corr = corr(close.pct_change(), volume.pct_change(), 20); weight = 0.8 + 0.4 * corr; factor = stability * weight",
+  "code": "def factor_volume_stability_corr_gate_robust(df):\n    \"\"\"Robust volume stability modulated by price-volume confirmation.\"\"\"\n    df_copy = df.copy()\n    window = 20\n    vol_mean = df_copy['volume'].rolling(window, min_periods=window).mean()\n    vol_std = df_copy['volume'].rolling(window, min_periods=window).std(ddof=1)\n    denom = (vol_mean + vol_std).replace(0.0, np.nan)\n    stability = -(vol_std / denom)\n    ret = df_copy['close'].pct_change()\n    vol_change = df_copy['volume'].pct_change()\n    corr = ret.rolling(window, min_periods=window).corr(vol_change)\n    weight = 0.8 + 0.4 * corr\n    df_copy['factor_volume_stability_corr_gate_robust'] = stability * weight\n    return df_copy['factor_volume_stability_corr_gate_robust']",
+  "description": "Preserves the parent's core volume-smoothness mechanism from alpha-stability-gen0-0001 and the lightweight price-volume correlation modifier from pv_coh_002. The mutation changes the coefficient-of-variation denominator from rolling mean to rolling mean plus rolling std, making the stability score a bounded proportion between -1 and 0. This reduces outlier distortion when average volume is very low, yielding a smoother and more robust raw signal while retaining the parent's RankICIR/ICIR strength. The correlation gate remains bounded between 0.4 and 1.2, amplifying stability when volume changes confirm returns and attenuating otherwise.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.018603104038871797,
+    "icir": 0.45640441413237376,
+    "mi": 0.008088671667015213,
+    "rank_ic": 0.049320756547019624,
+    "rank_icir": 1.0617605130593792
+  },
+  "raw_metrics": {
+    "ic": 0.018603104038871797,
+    "icir": 0.45640441413237376,
+    "mi": 0.008088671667015213,
+    "rank_ic": 0.049320756547019624,
+    "rank_icir": 1.0617605130593792
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.949691060338718,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.07738366338097658,
+    "top_quantile_excess_return": 0.05405869814191,
+    "top_quantile_max_drawdown": -0.021494604831986175,
+    "top_quantile_turnover": 0.15780676125914958
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:47:54.760662+00:00"
+}

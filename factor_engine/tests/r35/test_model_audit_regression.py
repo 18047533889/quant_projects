@@ -98,7 +98,7 @@ def test_m043_ts_ar_innovation_z_documented_in_sample():
 
 @pytest.mark.parametrize(
     "name",
-    ["ts_mean_reversion_half_life", "ts_mean_reversion_ou_approx_half_life"],
+    ["ts_mean_reversion_half_life", "ts_mean_reversion_ou_approx_half_life", "ts_mean_reversion_ou_approx_half_life_prior"],
 )
 def test_m044_half_life_input_units_declared(name):
     op = _get(name)
@@ -111,7 +111,7 @@ def test_m044_half_life_input_units_declared(name):
 
 @pytest.mark.parametrize(
     "name",
-    ["ts_mean_reversion_half_life", "ts_mean_reversion_ou_approx_half_life"],
+    ["ts_mean_reversion_half_life", "ts_mean_reversion_ou_approx_half_life", "ts_mean_reversion_ou_approx_half_life_prior"],
 )
 def test_m044_half_life_warns_on_trending_input(name):
     op = _get(name)
@@ -212,6 +212,7 @@ _PRIOR_VARIANTS = [
     "ts_expectile_regression_coeff_prior",
     "ts_expectile_regression_forecast_error",
     "ts_quantile_regression_coeff_prior",
+    "ts_mean_reversion_ou_approx_half_life_prior",
 ]
 
 
@@ -219,6 +220,34 @@ _PRIOR_VARIANTS = [
 def test_m051_prior_variants_not_diagnostic(name):
     op = _get(name)
     assert "diagnostic_only" not in op.metadata.tags, name
+
+
+def test_m051_ou_approx_half_life_prior_is_causal():
+    """Perturbing rows AFTER the decision row must not change outputs at or
+    before that row (strict prior fit_lag=1)."""
+    n = 220
+    split = 160
+    # stationary OU path (mean-reverting)
+    rng = np.random.default_rng(16)
+    phi = 0.9
+    x = np.zeros(n)
+    for t in range(1, n):
+        x[t] = phi * x[t - 1] + rng.standard_normal() * 0.1
+    x_df = pd.DataFrame(x, index=pd.date_range("2024-01-01", periods=n, freq="B"), columns=["A"])
+    base = _get("ts_mean_reversion_ou_approx_half_life_prior").calculate(
+        x_df, window=120, min_periods=20
+    )
+    # poison rows after split
+    xm = x_df.copy()
+    xm.iloc[split + 1 :, 0] = 1e100
+    poisoned = _get("ts_mean_reversion_ou_approx_half_life_prior").calculate(
+        xm, window=120, min_periods=20
+    )
+    # outputs at rows <= split-1 (windows that never touch poisoned rows) match
+    a = base.to_numpy(dtype=float)[: split - 1]
+    b = poisoned.to_numpy(dtype=float)[: split - 1]
+    mask = np.isfinite(a) & np.isfinite(b)
+    np.testing.assert_allclose(a[mask], b[mask], rtol=1e-12)
 
 
 # ---------------------------------------------------------------------------

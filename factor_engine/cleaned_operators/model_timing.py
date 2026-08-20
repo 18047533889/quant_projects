@@ -353,6 +353,7 @@ MODEL_TIMING_CONTRACTS: dict[str, ModelTimingContract] = {
     "ts_poly2_forecast_error_z": ModelTimingContract("regression", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
     "ts_mean_reversion_half_life": ModelTimingContract("ar", fit_cutoff_offset=0, state_filtering="none"),
     "ts_mean_reversion_ou_approx_half_life": ModelTimingContract("ar", fit_cutoff_offset=0, state_filtering="none"),
+    "ts_mean_reversion_ou_approx_half_life_prior": ModelTimingContract("ar", fit_cutoff_offset=1, state_filtering="none"),
     # --- Kalman: causal one-pass filter; missing obs are predict-only ---
     "ts_kalman_level": ModelTimingContract("kalman", fit_cutoff_offset=0, state_filtering="filter"),
     "ts_kalman_trend": ModelTimingContract("kalman", fit_cutoff_offset=0, state_filtering="filter"),

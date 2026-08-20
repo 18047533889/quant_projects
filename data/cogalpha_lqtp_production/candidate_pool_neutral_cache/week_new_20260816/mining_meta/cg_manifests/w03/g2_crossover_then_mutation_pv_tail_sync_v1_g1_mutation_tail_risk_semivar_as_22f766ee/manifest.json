@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_pv_tail_sync_v1_g1_mutation_tail_risk_semivar_as_22f766ee",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 298,
+  "factor_name": "factor_tail_semivar_volsync_ema60_v1",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w03-20260813-063501-r2",
+  "expression_type": "python",
+  "formula": "ewm60(vol_weight_clipped * min(return,0)^2 - vol_weight_clipped * max(return,0)^2) / ewm60(vol_weight_clipped * min(return,0)^2 + vol_weight_clipped * max(return,0)^2)",
+  "code": "def factor_tail_semivar_volsync_ema60_v1(df):\n    \"\"\"Volume-confirmed tail semivariance asymmetry with recent stress weighting.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    vol_weight = vol_ratio.clip(0.5, 2.0)\n    down_ret = ret.where(ret < 0)\n    up_ret = ret.where(ret > 0)\n    down_var = (down_ret ** 2 * vol_weight).ewm(span=60, min_periods=20, ignore_na=True).mean()\n    up_var = (up_ret ** 2 * vol_weight).ewm(span=60, min_periods=20, ignore_na=True).mean()\n    spread = down_var - up_var\n    total = down_var + up_var\n    factor = spread / total.replace(0, np.nan)\n    factor = factor.replace([np.inf, -np.inf], np.nan)\n    df_copy[\"factor_tail_semivar_volsync_ema60_v1\"] = factor\n    return df_copy[\"factor_tail_semivar_volsync_ema60_v1\"]",
+  "description": "Parent strength target is the bounded [-1,1] downside/upside tail semivariance ratio with bounded volume confirmation and RankICIR stability. The parent bottleneck is the equal-weight 60-day rolling sum, which dilutes recent stress events and may weaken IC/ICIR. This mutation replaces the rolling sum with an exponential moving average (span 60, min periods 20) to give greater weight to recent tail stress while preserving volume weighting [0.5, 2.0] and raw ratio interpretation. No new components are added.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0075931424910738185,
+    "icir": 0.14574704373297495,
+    "mi": 0.0062624297050195565,
+    "rank_ic": 0.028967357167160666,
+    "rank_icir": 0.5534632398848687
+  },
+  "raw_metrics": {
+    "ic": 0.0075931424910738185,
+    "icir": 0.14574704373297495,
+    "mi": 0.0062624297050195565,
+    "rank_ic": 0.028967357167160666,
+    "rank_icir": 0.5534632398848687
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.558779145781767,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.04004789549515464,
+    "top_quantile_excess_return": 0.2474597535292975,
+    "top_quantile_max_drawdown": -0.07942154998937023,
+    "top_quantile_turnover": 0.07220116853030478
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:59:20.305355+00:00"
+}

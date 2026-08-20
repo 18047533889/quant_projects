@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "alpha_creative_gen0_002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 411,
+  "factor_name": "factor_nonlinear_volume_price_coordination",
+  "domain_agent": "alpha-creative",
+  "run_id": "fleet-w03-20260814-124837-r9",
+  "expression_type": "python",
+  "formula": "sign(roll_corr_20(close.pct_change(), volume.pct_change())) * abs(roll_corr_20(...))^1.5",
+  "code": "def factor_nonlinear_volume_price_coordination(df):\n    \"\"\"Nonlinear signed power of rolling correlation between return and volume change.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_chg = df_copy['volume'].pct_change()\n    corr = ret.rolling(20, min_periods=10).corr(vol_chg)\n    signal = np.sign(corr) * np.power(np.abs(corr), 1.5)\n    signal = signal.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    df_copy['factor_nonlinear_volume_price_coordination'] = signal\n    return df_copy['factor_nonlinear_volume_price_coordination']",
+  "description": "Geometric & Fusion layer: nonlinear price-volume coordination curvature. Applies signed power 1.5 to the rolling correlation between daily return and volume change, amplifying strong coordinated moves. This curvature emphasizes assets with persistent volume-confirmed trends, a nonlinear representation of order flow agreement not captured by linear correlation. The mechanism is idiosyncratic and likely robust after industry/size neutralization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.011570347552741804,
+    "icir": 0.2554471197061386,
+    "mi": 0.004827262962567858,
+    "rank_ic": 0.02756218167647098,
+    "rank_icir": 0.5190442285416805
+  },
+  "raw_metrics": {
+    "ic": -0.011570347552741804,
+    "icir": -0.2554471197061386,
+    "mi": 0.004827262962567858,
+    "rank_ic": -0.02756218167647098,
+    "rank_icir": -0.5190442285416805
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.352094022106124,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.11142222427447668,
+    "top_quantile_excess_return": 0.8357126115548099,
+    "top_quantile_max_drawdown": -0.10656382666766284,
+    "top_quantile_turnover": 0.160900593504734
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:09:43.148646+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_alpha_market_cycle_0_2_b30755cb",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 369,
+  "factor_name": "factor_market_cycle_ewm_overnight_intraday",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w02-20260813-194428-r5",
+  "expression_type": "python",
+  "formula": "factor = (ewm_sum(overnight_ret, 60) - ewm_sum(intraday_ret, 60)) / (ewm_sum(|overnight_ret|, 60) + ewm_sum(|intraday_ret|, 60))",
+  "code": "def factor_market_cycle_ewm_overnight_intraday(df):\n    \"\"\"Market cycle phase from exponentially weighted overnight-intraday return split.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    span = 60\n    overnight_ewm_sum = overnight_ret.ewm(span=span, adjust=True).sum()\n    intraday_ewm_sum = intraday_ret.ewm(span=span, adjust=True).sum()\n    overnight_abs_ewm_sum = overnight_ret.abs().ewm(span=span, adjust=True).sum()\n    intraday_abs_ewm_sum = intraday_ret.abs().ewm(span=span, adjust=True).sum()\n    numerator = overnight_ewm_sum - intraday_ewm_sum\n    denominator = (overnight_abs_ewm_sum + intraday_abs_ewm_sum).replace(0.0, np.nan)\n    cycle = (numerator / denominator).replace([np.inf, -np.inf], np.nan)\n    df_copy[\"factor_market_cycle_ewm_overnight_intraday\"] = cycle\n    return df_copy[\"factor_market_cycle_ewm_overnight_intraday\"]\n",
+  "description": "Mutation of parent alpha-market-cycle-0-2. Preserves the overnight-intraday split mechanism and total absolute normalization, but replaces the trailing 120-day equal-weight cumulative sum with an exponentially weighted moving sum (span 60) to better capture recent market cycle shifts. This is a small smoothing/window change targeting improved responsiveness while preserving parent payoff-thickness and stability strengths. Parent strength target: high long_short_sharpe, monotonicity, and ICIR/RankICIR stability. Repaired to use adjust=True in ewm sum calls.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.023624897870157632,
+    "icir": 0.3848364172850745,
+    "mi": 0.011360587982760961,
+    "rank_ic": 0.032597910247563894,
+    "rank_icir": 0.5243249113617069
+  },
+  "raw_metrics": {
+    "ic": 0.023624897870157632,
+    "icir": 0.3848364172850745,
+    "mi": 0.011360587982760961,
+    "rank_ic": 0.032597910247563894,
+    "rank_icir": 0.5243249113617069
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 8.782509290922805,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.3902492309677583,
+    "top_quantile_excess_return": 5.728112853764085,
+    "top_quantile_max_drawdown": -0.04794250545650236,
+    "top_quantile_turnover": 0.13226120154456542
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:32:45.809946+00:00"
+}

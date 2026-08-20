@@ -10,10 +10,10 @@ Pre-model factor stack only: `DataAccess → FactorEngine → QuantEvaluator →
 4. New metrics → `quant_evaluator`; mutations → `factor_optimizer`; identity/lifecycle → `factor_assets`; pre-model transforms → `factor_preprocess`.
 
 ## Before editing
-- Skim this file + repo-root `../CLAUDE.md` (or `/home/shw/quant_projects/CLAUDE.md`).
-- Load skill `quant-factor-platform-development` only for blueprint package work.
-- Read **only** the `AI_GUIDE/*.md` chapter for the package you touch — never dump the whole guide into the prompt.
-- `git status` / `git diff --stat` / search existing DA/FE/legacy before adding modules.
+- Skim this file + repo-root `../CLAUDE.md` + `../loop/care.md`.
+- **Loop:** [`loop/orchestration.md`](../loop/orchestration.md) — Coordinator spawns Finder/Dispatcher/Writers/Tester/Reviewer.
+- Read **only** the `AI_GUIDE/*.md` chapter for the package you touch.
+- `git status` / search existing DA/FE/legacy before adding modules.
 
 ## Do not rebuild
 Second Data lake / PIT / calendar / universe / DSL / materializer / cache platform / generic DAG / large backtest-execution-optimizer.

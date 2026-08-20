@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "alpha-liquidity-0001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 793,
+  "factor_name": "factor_asymmetric_price_impact",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w04-20260814-135044-r14",
+  "expression_type": "python",
+  "formula": "pos_impact_mean_20 - neg_impact_mean_20, where impact = |return| / (close * volume) for up/down days",
+  "code": "def factor_asymmetric_price_impact(df):\n    '''Price impact asymmetry between up and down days.'''\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    dollar_vol = (df_copy['close'] * df_copy['volume']).replace(0.0, np.nan)\n    pos_impact = (ret.where(ret > 0, np.nan).abs() / dollar_vol)\n    neg_impact = (ret.where(ret < 0, np.nan).abs() / dollar_vol)\n    pos_mean = pos_impact.rolling(20, min_periods=5).mean()\n    neg_mean = neg_impact.rolling(20, min_periods=5).mean()\n    df_copy['factor_asymmetric_price_impact'] = pos_mean - neg_mean\n    return df_copy['factor_asymmetric_price_impact']",
+  "description": "Measures asymmetry in price impact between positive and negative daily returns. Equal absolute returns per dollar volume on up and down days capture how liquidity supply differs for buying vs selling pressure. The rolling difference isolates residual liquidity asymmetry likely to predict drift or reversal after industry/size neutralization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0004514348012839476,
+    "icir": 0.01303936757499207,
+    "mi": 0.004218627219023219,
+    "rank_ic": 0.010282662244829356,
+    "rank_icir": 0.25652707020161775
+  },
+  "raw_metrics": {
+    "ic": -0.0004514348012839476,
+    "icir": -0.01303936757499207,
+    "mi": 0.004218627219023219,
+    "rank_ic": -0.010282662244829356,
+    "rank_icir": -0.25652707020161775
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.8389846087847452,
+    "quantile_monotonicity": 0.3696969696969697,
+    "top_quantile_annualized_excess_return": 0.037374655205229645,
+    "top_quantile_excess_return": 0.027752373214074977,
+    "top_quantile_max_drawdown": -0.04233534461806199,
+    "top_quantile_turnover": 0.1880394178990703
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:15:06.853878+00:00"
+}

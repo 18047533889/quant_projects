@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_alpha_order_imbalance_gen0_002_b5cd520b",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 780,
+  "factor_name": "factor_ewm_vwap_deviation_order_flow",
+  "domain_agent": "alpha-order-imbalance",
+  "run_id": "fleet-w04-20260814-111032-r13",
+  "expression_type": "python",
+  "formula": "(close - ewm_vwap_60) / ewm_vwap_60, where ewm_vwap_60 = ewm(typical_price * volume, span=60, adjust=False) / ewm(volume, span=60, adjust=False)",
+  "code": "def factor_ewm_vwap_deviation_order_flow(df):\n    df_copy = df.copy()\n    typical_price = (df_copy['high'] + df_copy['low'] + df_copy['close']) / 3.0\n    ew_tp_vol = (typical_price * df_copy['volume']).ewm(span=60, adjust=False).mean()\n    ew_vol = df_copy['volume'].ewm(span=60, adjust=False).mean()\n    ewm_vwap = ew_tp_vol / ew_vol.replace(0.0, np.nan)\n    signal = (df_copy['close'] - ewm_vwap) / ewm_vwap.replace(0.0, np.nan)\n    df_copy['factor_ewm_vwap_deviation_order_flow'] = signal\n    return df_copy['factor_ewm_vwap_deviation_order_flow']\n",
+  "description": "Mutation of parent alpha-order-imbalance-gen0-002. Parent strength target: RankIC and RankICIR (stable cross-sectional ordering). Bottleneck: top-quantile excess return remains negative because cumulative VWAP includes very old history, making the signal stale and nonstationary. This child replaces the cumulative volume-weighted average with an exponentially weighted VWAP using span=60 (adjust=False), giving recent trading more weight while preserving the core deviation-of-close-from-VWAP order-flow mechanism. Single lightweight modification: EWM smoothing; no additional features. Cross-sectional transform remains none per parent.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.017303644032625354,
+    "icir": 0.20047108151269208,
+    "mi": 0.027554790444884958,
+    "rank_ic": 0.041956990340294785,
+    "rank_icir": 0.5400955844773284
+  },
+  "raw_metrics": {
+    "ic": -0.017303644032625354,
+    "icir": -0.20047108151269208,
+    "mi": 0.027554790444884958,
+    "rank_ic": -0.041956990340294785,
+    "rank_icir": -0.5400955844773284
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.239190261512616,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": -0.005830613619294267,
+    "top_quantile_excess_return": -0.004584065103993895,
+    "top_quantile_max_drawdown": -0.04931663168311906,
+    "top_quantile_turnover": 0.1716744315561136
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:14:03.911314+00:00"
+}

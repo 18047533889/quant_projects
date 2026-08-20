@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_areg_vam_001_alpha_range_vol_1_1ea8_a0edf231",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 64,
+  "factor_name": "factor_atr_ratio_sigmoid_momentum",
+  "domain_agent": "alpha-regime-gating",
+  "run_id": "fleet-w01-20260803-101120-r6",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_atr_ratio_sigmoid_momentum(df):\n    \"\"\"Adaptive momentum blending with sigmoid gating on short-to-long ATR ratio.\"\"\"\n    df_copy = df.copy()\n    short_mom = df_copy[\"close\"].pct_change(5)\n    long_mom = df_copy[\"close\"].pct_change(20)\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    prev_close = close.shift(1)\n    tr1 = high - low\n    tr2 = (high - prev_close).abs()\n    tr3 = (low - prev_close).abs()\n    true_range = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)\n    atr_short = true_range.rolling(window=5, min_periods=5).mean()\n    atr_long = true_range.rolling(window=20, min_periods=20).mean()\n    atr_ratio = atr_short / atr_long.replace(0, np.nan)\n    # Sigmoid gating: sharp transition near 1\n    weight = 1.0 / (1.0 + np.exp(-5.0 * (atr_ratio - 1.0)))\n    factor_val = (1 - weight) * long_mom + weight * short_mom\n    df_copy[\"factor_atr_ratio_sigmoid_momentum\"] = factor_val\n    return df_copy[\"factor_atr_ratio_sigmoid_momentum\"]",
+  "description": "Adaptive momentum blending with sigmoid gating on short-to-long ATR ratio. The ratio measures volatility regime: when high (expanding volatility), sigmoid weight increases towards 1, giving more emphasis to short-term momentum (reversal tendency); when low (compressing volatility), weight decreases towards 0, emphasizing long-term momentum (trend continuation). Using a smooth logistic function instead of a rolling percentile provides more stable and responsive gating, reducing the influence of historical ratio distribution shifts. This targets improved RankIC robustness and linear information while preserving the core adaptive blending mechanism.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02584534320982347,
+    "icir": 0.22421977113804553,
+    "mi": 0.025330221155888566,
+    "rank_ic": 0.042267676287402765,
+    "rank_icir": 0.3095518640616432
+  },
+  "raw_metrics": {
+    "ic": -0.02584534320982347,
+    "icir": -0.22421977113804553,
+    "mi": 0.025330221155888566,
+    "rank_ic": -0.042267676287402765,
+    "rank_icir": -0.3095518640616432
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.056111364626127314,
+    "top_quantile_excess_return": 0.36580911054475873,
+    "top_quantile_max_drawdown": -0.08998311090053823,
+    "top_quantile_turnover": 0.23457062539145682
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:38:38.521985+00:00"
+}

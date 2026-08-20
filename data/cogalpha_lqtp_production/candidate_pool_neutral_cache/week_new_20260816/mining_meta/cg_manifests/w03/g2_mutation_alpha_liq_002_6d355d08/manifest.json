@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_alpha_liq_002_6d355d08",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 270,
+  "factor_name": "factor_liquidity_overnight_intraday_flow_smooth10",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w03-20260813-014015-r1",
+  "expression_type": "python",
+  "formula": "divergence = overnight_return - intraday_return; signal = divergence * clip(volume_ratio, 0.5, 2.0); factor = rolling_mean(signal, 10)",
+  "code": "def factor_liquidity_overnight_intraday_flow_smooth10(df):\n    \"\"\"Overnight-intraday divergence amplified by relative volume, smoothed over a longer 10-day window to reduce single-day noise and drawdown spikes.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    divergence = overnight_ret - intraday_ret\n    signal = divergence * vol_ratio.clip(0.5, 2.0)\n    factor = signal.rolling(10, min_periods=5).mean()\n    df_copy[\"factor_liquidity_overnight_intraday_flow_smooth10\"] = factor\n    return df_copy[\"factor_liquidity_overnight_intraday_flow_smooth10\"]",
+  "description": "Preserves the parent's overnight-intraday liquidity divergence mechanism. The mutation increases the smoothing window from 5 to 10 days to reduce the influence of transient liquidity shocks and lower turnover/drawdown, targeting robustness (ICIR/RankICIR) while preserving the core direction and relative volume confirmation. Cross-sectional z-score is kept because overnight-intraday divergence magnitude varies across assets and relative comparison is economically meaningful.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02817389482830034,
+    "icir": 0.42039212221233047,
+    "mi": 0.019856066530572036,
+    "rank_ic": 0.035853158919425164,
+    "rank_icir": 0.6021621341181127
+  },
+  "raw_metrics": {
+    "ic": 0.02817389482830034,
+    "icir": 0.42039212221233047,
+    "mi": 0.019856066530572036,
+    "rank_ic": 0.035853158919425164,
+    "rank_icir": 0.6021621341181127
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.549412627448165,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.1013353957912726,
+    "top_quantile_excess_return": 0.745297321190119,
+    "top_quantile_max_drawdown": -0.2768267209040536,
+    "top_quantile_turnover": 0.2626470140905716
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:55:11.347137+00:00"
+}

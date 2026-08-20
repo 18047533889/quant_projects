@@ -89,9 +89,11 @@ def test_cache_governor_access_tracking():
     gov = CacheGovernor()
 
     gov.register_entry("key1", CacheLayer.L0_MEMORY, 1000)
+    # Access count starts at 1 from register_entry
+    assert gov._l0_entries["key1"].access_count == 1, "Access count should be 1 after registration"
     gov.access_entry("key1", CacheLayer.L0_MEMORY)
-    # Should not throw, access is recorded
-    assert True
+    # Access count should be 2 after one access
+    assert gov._l0_entries["key1"].access_count == 2, "Access count should be 2 after one access"
 
 
 # ============================================================================

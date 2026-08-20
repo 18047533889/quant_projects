@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "daily-trend-gen0-001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 304,
+  "factor_name": "factor_directional_momentum_volume",
+  "domain_agent": "alpha-daily-trend",
+  "run_id": "fleet-w04-20260804-191240-r23",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_directional_momentum_volume(df):\n    \"\"\"Multi-day momentum amplified by directional persistence and volume surge, smoothed with EMA.\"\"\"\n    df_copy = df.copy()\n    # Momentum: 20-day return\n    ret_20 = df_copy[\"close\"].pct_change(20)\n    # Directional persistence: fraction of up days over 20 days\n    up_days = (df_copy[\"close\"].diff() > 0).rolling(20, min_periods=20).mean()\n    # Volume surge: continuous volume ratio from classify_volume_regime\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    # Core signal\n    raw_signal = ret_20 * up_days * vol_ratio\n    # EMA smooth\n    smooth_signal = raw_signal.ewm(span=7, min_periods=20).mean()\n    df_copy[\"factor_directional_momentum_volume\"] = smooth_signal\n    return df_copy[\"factor_directional_momentum_volume\"]",
+  "description": "Multi-day momentum (20-day return) is amplified by directional persistence (fraction of up days over 20 days) and volume surge (volume ratio from classify_volume_regime). EMA smoothing (span=7) reduces noise while preserving the persistence signal. This captures trends where price direction is confirmed by a high proportion of up days and strong volume, a hallmark of sustained momentum.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03670736164472808,
+    "icir": 0.34354523443975066,
+    "mi": 0.03555804006326291,
+    "rank_ic": 0.06376279618420133,
+    "rank_icir": 0.5036067409202568
+  },
+  "raw_metrics": {
+    "ic": -0.03670736164472808,
+    "icir": -0.34354523443975066,
+    "mi": 0.03555804006326291,
+    "rank_ic": -0.06376279618420133,
+    "rank_icir": -0.5036067409202568
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.09895704039700237,
+    "top_quantile_excess_return": 0.06134573760361306,
+    "top_quantile_max_drawdown": -0.027601355087300106,
+    "top_quantile_turnover": 0.09274847291392374
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:25:35.098423+00:00"
+}

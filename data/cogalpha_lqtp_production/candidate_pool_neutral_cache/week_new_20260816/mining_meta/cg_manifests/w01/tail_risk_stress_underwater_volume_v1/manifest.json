@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "tail_risk_stress_underwater_volume_v1",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 334,
+  "factor_name": "factor_tail_stress_underwater_volume",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w01-20260813-152857-r4",
+  "expression_type": "python",
+  "formula": "rolling_sum_21d( max(0, -daily_return) * min(volume / rolling_mean_60d_volume, 3.0) * I(close < rolling_max_63d_close) )",
+  "code": "def factor_tail_stress_underwater_volume(df):\n    '''Tail-risk stress: volume-confirmed downside persistence while underwater.'''\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    daily_ret = close.pct_change()\n    downside_move = (-daily_ret).clip(lower=0.0)\n    rolling_high = close.rolling(63, min_periods=10).max()\n    underwater = close < rolling_high\n    volume_ratio = volume / volume.rolling(60, min_periods=10).mean().replace(0.0, np.nan)\n    stress = downside_move * volume_ratio.clip(upper=3.0)\n    stress = stress.where(underwater, 0.0)\n    factor = stress.rolling(21, min_periods=5).sum()\n    return factor.rename('factor_tail_stress_underwater_volume')",
+  "description": "Measures persistent downside stress during drawdowns: when a stock remains below its recent high (underwater), high-volume down moves indicate forced liquidation and accumulating fragility. Higher values signal elevated tail-risk exposure and lower expected returns.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0053962120029737186,
+    "icir": 0.07119957868066605,
+    "mi": 0.012626681704874798,
+    "rank_ic": 0.02348915975482387,
+    "rank_icir": 0.29736642134903685
+  },
+  "raw_metrics": {
+    "ic": -0.0053962120029737186,
+    "icir": -0.07119957868066605,
+    "mi": 0.012626681704874798,
+    "rank_ic": -0.02348915975482387,
+    "rank_icir": -0.29736642134903685
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.9507857644821907,
+    "quantile_monotonicity": 0.6606060606060606,
+    "top_quantile_annualized_excess_return": 0.12502826659862687,
+    "top_quantile_excess_return": 0.9696668556430117,
+    "top_quantile_max_drawdown": -0.26501987618279454,
+    "top_quantile_turnover": 0.13620398431397762
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:55:11.037390+00:00"
+}

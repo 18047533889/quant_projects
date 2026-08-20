@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_tail_risk_002_tail_ri_062ddffc",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 300,
+  "factor_name": "factor_panic_excursion_resilience_ema_vol10",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w01-20260813-064101-r2",
+  "expression_type": "python",
+  "formula": "factor = rolling_sum_20( max(0, (prev_close - low) / prev_close) * classify_volume_regime(volume, window=10)[2] ) / (1 + rolling_sum_60(min(ret,0)^2) / rolling_sum_60(max(ret,0)^2) )",
+  "code": "def factor_panic_excursion_resilience_ema_vol10(df):\n    df_copy = df.copy()\n    prev_close = df_copy[\"close\"].shift(1)\n    downside_excursion = ((prev_close - df_copy[\"low\"]) / prev_close.replace(0.0, np.nan)).clip(lower=0.0)\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=10)\n    stress_component = downside_excursion * vol_ratio\n    stress_sum = stress_component.rolling(20, min_periods=10).sum()\n    ret = df_copy[\"close\"].pct_change()\n    down_ret = np.minimum(ret, 0.0)\n    up_ret = np.maximum(ret, 0.0)\n    down_var = (down_ret ** 2).rolling(60, min_periods=20).sum()\n    up_var = (up_ret ** 2).rolling(60, min_periods=20).sum()\n    down_ratio = down_var / up_var.replace(0.0, np.nan)\n    down_ratio = down_ratio.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    factor = stress_sum / (1.0 + down_ratio)\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    return pd.Series(factor, index=df_copy.index, name=\"factor_panic_excursion_resilience_ema_vol10\")",
+  "description": "Mutation of g1_crossover_then_mutation_tail_risk_002_tail_risk_001_a1834954. Preserves the parent's core panic-selling stress accumulation (downside excursion weighted by volume surge) and asymmetric-volatility resilience attenuation. The single mutation reduces the EMA volume regime window from 20 to 10, making volume confirmation more responsive to immediate volume surges. This targets the parent's relatively lower MI by capturing sharper panic episodes, while the unchanged stress accumulation and variance windows retain the RankIC/ICIR stability.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.016340936226367703,
+    "icir": 0.16543971119874806,
+    "mi": 0.030889856330627907,
+    "rank_ic": 0.04199619102151801,
+    "rank_icir": 0.42591865952625213
+  },
+  "raw_metrics": {
+    "ic": -0.016340936226367703,
+    "icir": -0.16543971119874806,
+    "mi": 0.030889856330627907,
+    "rank_ic": -0.04199619102151801,
+    "rank_icir": -0.42591865952625213
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.721780526255188,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.509945982128666,
+    "top_quantile_excess_return": 9.691240821244387,
+    "top_quantile_max_drawdown": -0.0890784760620903,
+    "top_quantile_turnover": 0.11514136252253424
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:49:23.318346+00:00"
+}

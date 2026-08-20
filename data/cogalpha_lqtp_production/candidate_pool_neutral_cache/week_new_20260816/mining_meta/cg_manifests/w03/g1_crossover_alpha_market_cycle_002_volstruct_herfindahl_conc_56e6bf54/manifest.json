@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_alpha_market_cycle_002_volstruct_herfindahl_conc_56e6bf54",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 325,
+  "factor_name": "factor_cycle_skewness_volconcentration_gated",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w03-20260813-155035-r4",
+  "expression_type": "python",
+  "formula": "skew_120 = rolling_skewness(close.pct_change(), 120, min_periods=60); HHI_20 = sum(V_i^2)/(sum(V_i))^2 over trailing 20 days; factor = skew_120 * (0.5 + HHI_20)",
+  "code": "def factor_cycle_skewness_volconcentration_gated(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    skew = ret.rolling(120, min_periods=60).skew()\n    vol = df_copy[\"volume\"].clip(lower=1e-8)\n    hhi_window = 20\n    total_vol = vol.rolling(hhi_window, min_periods=hhi_window).sum()\n    sum_vol_sq = (vol ** 2).rolling(hhi_window, min_periods=hhi_window).sum()\n    hhi = sum_vol_sq / (total_vol ** 2)\n    weight = 0.5 + hhi\n    factor = skew * weight\n    df_copy[\"factor_cycle_skewness_volconcentration_gated\"] = factor\n    return df_copy[\"factor_cycle_skewness_volconcentration_gated\"]",
+  "description": "Primary mechanism inherited from alpha_market_cycle_002: 120-day rolling skewness of daily returns captures slow-moving return distribution asymmetry, with negative skew indicating downside tail risk. Lightweight modifier borrowed from volstruct_herfindahl_concentration_001: 20-day volume concentration HHI. The HHI is transformed into a bounded attenuation weight (0.5 + HHI), emphasizing the skewness signal when volume clustering indicates concentrated information arrival and de-emphasizing it during diffuse low-concentration periods. This preserves the cycle-phase signal while adding a volume-regime interaction without introducing a second independent factor. parent_strength_target: preserve RankIC/RankICIR stability and payoff evidence from the skewness parent; target slight IC/ICIR improvement via context gating.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.004283492745099737,
+    "icir": 0.11541269325838975,
+    "mi": 0.004877173254246969,
+    "rank_ic": 0.01941836117319867,
+    "rank_icir": 0.4712467275613879
+  },
+  "raw_metrics": {
+    "ic": -0.004283492745099737,
+    "icir": -0.11541269325838975,
+    "mi": 0.004877173254246969,
+    "rank_ic": -0.01941836117319867,
+    "rank_icir": -0.4712467275613879
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.728496777682857,
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": 0.0110632343393402,
+    "top_quantile_excess_return": 0.0629852811537277,
+    "top_quantile_max_drawdown": -0.11243884111148583,
+    "top_quantile_turnover": 0.050901399429178734
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:00:45.769202+00:00"
+}

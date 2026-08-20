@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_alpha_composite_confluence_001_ee35b302",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 322,
+  "factor_name": "factor_positive_confluence_vol_ema10",
+  "domain_agent": "alpha-composite",
+  "run_id": "fleet-w04-20260804-212951-r24",
+  "expression_type": "python",
+  "formula": "max(0, close/EMA(20)-1) * max(0, volume/EMA(10)-1)",
+  "code": "def factor_positive_confluence_vol_ema10(df):\n    \"\"\"Captures bullish confluence: price above EMA20 and volume above EMA10.\"\"\"\n    df_copy = df.copy()\n    ema20_price = df_copy[\"close\"].ewm(span=20, adjust=False).mean()\n    price_dev = df_copy[\"close\"] / ema20_price - 1\n    ema10_vol = df_copy[\"volume\"].ewm(span=10, adjust=False).mean()\n    vol_dev = df_copy[\"volume\"] / ema10_vol - 1\n    pos_price = np.maximum(0, price_dev)\n    pos_vol = np.maximum(0, vol_dev)\n    df_copy[\"factor_positive_confluence_vol_ema10\"] = pos_price * pos_vol\n    return df_copy[\"factor_positive_confluence_vol_ema10\"]",
+  "description": "This mutation preserves the core mechanism of capturing bullish agreement via the product of positive price and volume deviations. To improve responsiveness and reduce noise in weaker signals, the volume normalization is shifted from a 20-day SMA to a 10-day EMA, making the volume signal more adaptive to recent surges while keeping the price component on a 20-day EMA. The shorter EMA reflects faster changes in trading activity, potentially sharpening the timing of confluence signals and improving the lower IC/ICIR observed in the parent, without sacrificing the strong rank-based stability (RankIC, RankICIR) and high nonlinear payoff (MI) from the sparse positive-only product.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.021658441933417528,
+    "icir": 0.2782031230321415,
+    "mi": 0.1787294311048928,
+    "rank_ic": 0.04939281479758626,
+    "rank_icir": 0.5799845380336041
+  },
+  "raw_metrics": {
+    "ic": -0.021658441933417528,
+    "icir": -0.2782031230321415,
+    "mi": 0.1787294311048928,
+    "rank_ic": -0.04939281479758626,
+    "rank_icir": -0.5799845380336041
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.11816101491940922,
+    "top_quantile_excess_return": 0.09123448062485218,
+    "top_quantile_max_drawdown": -0.026488764514258856,
+    "top_quantile_turnover": 0.22414031667277168
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:27:19.694358+00:00"
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_alpha_volatility_regime_gen0_002_b47_fe6a16f5",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 217,
+  "factor_name": "factor_volume_regime_weighted_avg_return",
+  "domain_agent": "alpha-volatility-regime",
+  "run_id": "fleet-w02-20260805-182137-r19",
+  "expression_type": "python",
+  "formula": "avg_ret_20 * vol_ratio",
+  "code": "def factor_volume_regime_weighted_avg_return(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    ret_daily = close.pct_change()\n    avg_ret_20 = ret_daily.rolling(20, min_periods=20).mean()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(volume, window=20)\n    signal = avg_ret_20 * vol_ratio\n    df_copy[\"factor_volume_regime_weighted_avg_return\"] = signal\n    return df_copy[\"factor_volume_regime_weighted_avg_return\"]",
+  "description": "Replaces the point-to-point 20-day return with the average daily return over a 20-day window, preserving the parent's volume-weighted trend-following mechanism but reducing sensitivity to endpoint prices. The volume intensity from classify_volume_regime still amplifies the trend signal in high-volume regimes. This mutation aims to improve IC by smoothing the trend component while retaining the RankIC stability of the parent.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.030806445804197762,
+    "icir": 0.2626916603647244,
+    "mi": 0.026126841422484226,
+    "rank_ic": 0.03772280866862155,
+    "rank_icir": 0.2825778613859873
+  },
+  "raw_metrics": {
+    "ic": -0.030806445804197762,
+    "icir": -0.2626916603647244,
+    "mi": 0.026126841422484226,
+    "rank_ic": -0.03772280866862155,
+    "rank_icir": -0.2825778613859873
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6,
+    "top_quantile_annualized_excess_return": 0.0597296862542438,
+    "top_quantile_excess_return": 0.3927463270807532,
+    "top_quantile_max_drawdown": -0.09854248222270412,
+    "top_quantile_turnover": 0.2497709182129438
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:16:27.113400+00:00"
+}

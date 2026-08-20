@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "alpha-herding-0002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 352,
+  "factor_name": "factor_session_sign_consensus",
+  "domain_agent": "alpha-herding",
+  "run_id": "fleet-w01-20260813-195334-r5",
+  "expression_type": "python",
+  "formula": "rolling_mean(same_sign(overnight_ret, intraday_ret), 20) - 0.5",
+  "code": "def factor_session_sign_consensus(df):\n    \"\"\"Fraction of recent days where overnight and intraday returns have the same sign, minus 0.5.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    valid = overnight_ret.notna() & intraday_ret.notna()\n    same_sign = np.where(valid, np.sign(overnight_ret) == np.sign(intraday_ret), np.nan)\n    rolling_agreement = pd.Series(same_sign, index=df_copy.index).rolling(20, min_periods=5).mean()\n    factor = rolling_agreement - 0.5\n    df_copy[\"factor_session_sign_consensus\"] = factor\n    return df_copy[\"factor_session_sign_consensus\"]",
+  "description": "Measures directional consensus between overnight and intraday sessions. A high fraction of same-sign returns indicates that overnight and intraday investors agree on direction, reflecting coordinated herding. Low agreement means conflicting flows and weaker consensus. The rolling window of 20 days captures persistent alignment rather than one-day coincidence. This is a raw mechanism distinct from volume weighting or breakout signals.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.003764267686696862,
+    "icir": 0.09667461009042395,
+    "mi": 0.005984901176134372,
+    "rank_ic": 0.01214092360282577,
+    "rank_icir": 0.25736034160409865
+  },
+  "raw_metrics": {
+    "ic": -0.003764267686696862,
+    "icir": -0.09667461009042395,
+    "mi": 0.005984901176134372,
+    "rank_ic": -0.01214092360282577,
+    "rank_icir": -0.25736034160409865
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.044503991918056,
+    "quantile_monotonicity": 0.696969696969697,
+    "top_quantile_annualized_excess_return": 0.0847957170508098,
+    "top_quantile_excess_return": 0.5993817243299107,
+    "top_quantile_max_drawdown": -0.25300197290384463,
+    "top_quantile_turnover": 0.19457527348074996
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:58:30.862495+00:00"
+}

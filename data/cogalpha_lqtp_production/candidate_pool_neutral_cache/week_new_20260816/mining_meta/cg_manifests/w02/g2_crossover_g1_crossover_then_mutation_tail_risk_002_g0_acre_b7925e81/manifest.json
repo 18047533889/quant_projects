@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_crossover_then_mutation_tail_risk_002_g0_acre_b7925e81",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 400,
+  "factor_name": "factor_coherence_gated_calmness",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w02-20260814-001724-r6",
+  "expression_type": "python",
+  "formula": "calmness * resultant_length / (1 + 10 * rolling_sum(abs(min(overnight_return, 0)), 20))",
+  "code": "def factor_coherence_gated_calmness(df):\n    \"\"\"Intraday calmness gated by angular coherence confidence and overnight stress attenuation.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    theta = np.arctan(intraday_ret * 10)\n    window = 20\n    cos_mean = np.cos(theta).rolling(window, min_periods=window).mean()\n    sin_mean = np.sin(theta).rolling(window, min_periods=window).mean()\n    calmness = cos_mean\n    resultant = np.sqrt(cos_mean**2 + sin_mean**2)\n    overnight_stress = overnight_ret.clip(upper=0.0).abs().rolling(window, min_periods=5).sum()\n    stress_weight = 1.0 / (1.0 + overnight_stress * 10.0)\n    factor = calmness * resultant * stress_weight\n    factor.name = \"factor_coherence_gated_calmness\"\n    return factor",
+  "description": "Primary mechanism from parent g1_crossover_then_mutation_tail_risk_002_g0_acreative_gen0_002_be868606: intraday calmness via rolling mean of cos(arctan(intraday_ret*10)), which equals 1/sqrt(1+100*intraday_ret^2) and penalizes large intraday moves. Secondary lightweight idea borrowed from parent g1_crossover_tail_risk_002_g0_acreative_gen0_002_5e5f3571: resultant length of the mean angular vector as a coherence confidence gate. When intraday direction angles are inconsistent, the calmness signal is less reliable, so the factor is attenuated. This preserves the low-risk/quality style evidence and targets improved top-quantile annualized excess return by suppressing noisy low-coherence periods while retaining RankIC/ICIR stability.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.013816503975265262,
+    "icir": 0.16148442237077146,
+    "mi": 0.018973371172727127,
+    "rank_ic": 0.043259876238612466,
+    "rank_icir": 0.47009570846807186
+  },
+  "raw_metrics": {
+    "ic": 0.013816503975265262,
+    "icir": 0.16148442237077146,
+    "mi": 0.018973371172727127,
+    "rank_ic": 0.043259876238612466,
+    "rank_icir": 0.47009570846807186
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.4477620016488353,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.0029533534160470776,
+    "top_quantile_excess_return": 0.016994219672739286,
+    "top_quantile_max_drawdown": -0.13764492538748874,
+    "top_quantile_turnover": 0.13998712260143598
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:37:21.017961+00:00"
+}

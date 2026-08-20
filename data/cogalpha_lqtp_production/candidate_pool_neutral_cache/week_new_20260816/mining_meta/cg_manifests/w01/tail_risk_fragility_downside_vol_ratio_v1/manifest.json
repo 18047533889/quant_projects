@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "tail_risk_fragility_downside_vol_ratio_v1",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 335,
+  "factor_name": "factor_tail_fragility_downside_vol_ratio",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w01-20260813-152857-r4",
+  "expression_type": "python",
+  "formula": "( rolling_std_60d(negative returns) - rolling_std_60d(positive returns) ) / ( rolling_std_60d(negative returns) + rolling_std_60d(positive returns) )",
+  "code": "def factor_tail_fragility_downside_vol_ratio(df):\n    '''Tail-risk fragility: ratio of downside volatility to upside volatility.'''\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    down_ret = ret.clip(upper=0.0)\n    up_ret = ret.clip(lower=0.0)\n    window = 60\n    minp = 20\n    down_vol = down_ret.rolling(window, min_periods=minp).std(ddof=1)\n    up_vol = up_ret.rolling(window, min_periods=minp).std(ddof=1)\n    total_vol = down_vol + up_vol\n    factor = (down_vol - up_vol) / total_vol.replace(0.0, np.nan)\n    return factor.rename('factor_tail_fragility_downside_vol_ratio')",
+  "description": "Captures return asymmetry (left-tail fragility) by comparing downside volatility to upside volatility. A rising ratio indicates accumulating stress and higher tail-risk exposure. This is a raw per-stock fragility measure, not a generic momentum factor.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.00819710437533234,
+    "icir": 0.1329874948642886,
+    "mi": 0.008244226467061466,
+    "rank_ic": 0.029447563953890265,
+    "rank_icir": 0.4532298168627376
+  },
+  "raw_metrics": {
+    "ic": 0.00819710437533234,
+    "icir": 0.1329874948642886,
+    "mi": 0.008244226467061466,
+    "rank_ic": 0.029447563953890265,
+    "rank_icir": 0.4532298168627376
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.2026900310620374,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.025359679496617327,
+    "top_quantile_excess_return": 0.15373683332614863,
+    "top_quantile_max_drawdown": -0.0908168123097135,
+    "top_quantile_turnover": 0.09950181846386326
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:55:29.718189+00:00"
+}

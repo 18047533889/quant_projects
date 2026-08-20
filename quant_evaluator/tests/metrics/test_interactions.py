@@ -78,7 +78,7 @@ def simple_label_bundle(simple_factor_batch):
         decision_time=decision_time,
         execution_time=decision_time,
         label_start_time=decision_time,
-        label_end_time=decision_time,
+        label_end_time=tuple(t + 1 for t in decision_time),
     )
 
 
@@ -210,6 +210,74 @@ class TestConditionalIC:
 
         assert partial_ic.shape == (simple_factor_batch.num_times,)
         assert not np.all(np.isnan(partial_ic))
+
+    def test_partial_ic_matches_closed_form_partial_correlation(self):
+        """Non-degenerate oracle: partial IC equals the closed-form partial correlation.
+
+        label = a*control + b*test + noise with control/test independent of
+        each other and of the noise.  The theoretical partial correlation
+        between test and label given control reduces to
+        corr(b*test, noise) / 1 = 1/sqrt(1 + var(noise)/b^2) > 0, while the
+        raw (total) IC equals corr(test, label) which is strictly smaller.
+        """
+        rng = np.random.default_rng(7)
+        T, N = 6, 500
+
+        a, b, noise_sd = 2.0, 1.0, 1.0
+        control = rng.standard_normal((T, N))
+        test = rng.standard_normal((T, N))
+        noise = rng.standard_normal((T, N)) * noise_sd
+        label = a * control + b * test + noise
+
+        # Theoretical partial correlation of test vs label given control.
+        var_signal = b * b
+        theoretical = np.sqrt(var_signal / (var_signal + noise_sd**2))
+
+        values = np.stack([control, test], axis=2)
+        factor_batch = FactorBatch(
+            factor_ids=("control", "test"),
+            time_axis=AxisRef(name="time", dtype="int64", size=T),
+            asset_axis=AxisRef(name="asset", dtype="int64", size=N),
+            values=values,
+        )
+        decision_time = tuple(range(T))
+        label_bundle = LabelBundle(
+            target_id="returns",
+            values=label,
+            horizon=1,
+            execution_delay=0,
+            decision_time=decision_time,
+            execution_time=decision_time,
+            label_start_time=decision_time,
+            label_end_time=tuple(t + 1 for t in decision_time),
+        )
+
+        partial_ic = compute_partial_ic(
+            factor_batch,
+            label_bundle,
+            factor_idx=1,
+            control_indices=(0,),
+            method="pearson",
+            min_assets=30,
+        )
+        _, _, total_ic = compute_incremental_ic(
+            factor_batch,
+            label_bundle,
+            base_factor_indices=(0,),
+            test_factor_idx=1,
+            method="pearson",
+            min_assets=30,
+        )
+
+        assert np.all(np.isfinite(partial_ic))
+        # Closed-form partial correlation within sampling tolerance.
+        np.testing.assert_allclose(partial_ic, theoretical, atol=0.08)
+        # Partial IC must differ from the raw total IC (which the buggy
+        # implementation returned): the control factor dilutes the raw IC.
+        raw_expected = np.sqrt(b * b / (b * b + a * a + noise_sd**2))
+        assert np.all(np.abs(total_ic - partial_ic) > 0.05)
+        np.testing.assert_allclose(total_ic, raw_expected, atol=0.08)
+
 
     def test_conditional_ic_insufficient_assets(self, simple_factor_batch, simple_label_bundle):
         # Set min_assets very high
@@ -497,7 +565,7 @@ class TestEdgeCases:
             decision_time=decision_time,
             execution_time=decision_time,
             label_start_time=decision_time,
-            label_end_time=decision_time,
+            label_end_time=tuple(t + 1 for t in decision_time),
         )
 
         # Should handle sparse data gracefully

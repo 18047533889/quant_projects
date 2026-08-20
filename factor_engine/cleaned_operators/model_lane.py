@@ -133,6 +133,8 @@ MODEL_LANE_EXPLICIT: dict[str, str] = {
     "ts_multi_regression_coeff_prior": "FAST_NATIVE_ALPHA",
     "ts_multi_regression_r2_prior": "FAST_NATIVE_ALPHA",
     "ts_regression_slope": "FAST_NATIVE_ALPHA",
+    "ts_mean_reversion_ou_approx_half_life_prior": "FAST_NATIVE_ALPHA",
+    "ts_quantile_regression_coeff_prior": "FAST_NATIVE_ALPHA",
     # --- STATE_CONDITION_EVENT (live Markov/state dynamics canonicals) ---
     "ts_markov_committor": "STATE_CONDITION_EVENT",
     "ts_markov_entropy_production": "STATE_CONDITION_EVENT",

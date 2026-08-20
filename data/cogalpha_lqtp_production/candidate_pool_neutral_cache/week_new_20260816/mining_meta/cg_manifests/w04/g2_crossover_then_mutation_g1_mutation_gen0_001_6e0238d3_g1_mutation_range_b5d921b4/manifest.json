@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_mutation_gen0_001_6e0238d3_g1_mutation_range_b5d921b4",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 370,
+  "factor_name": "factor_range_exhaustion_vol_attenuate",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260805-044444-r27",
+  "expression_type": "python",
+  "formula": "((open - close) / close) * zscore(high-low, 20) * np.where(is_low_vol, 0.5, 1.0), smoothed over 5 days",
+  "code": "def factor_range_exhaustion_vol_attenuate(df):\n    \"\"\"Preserve core panic-selling exhaustion mechanism but attenuate signal in low-volume regimes to reduce noise.\"\"\"\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    range_z = (range_ - range_.rolling(20, min_periods=20).mean()) / range_.rolling(20, min_periods=20).std(ddof=1).replace(0, np.nan)\n    pct_drop = (df_copy[\"open\"] - df_copy[\"close\"]) / df_copy[\"close\"].replace(0.0, np.nan)\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20, high_threshold=1.5, low_threshold=0.6)\n    # Replace continuous clipped volume weight with low-volume attenuation to improve signal stability.\n    vol_weight = np.where(is_low_vol > 0, 0.5, 1.0)\n    raw = pct_drop * range_z * vol_weight\n    df_copy[\"factor_range_exhaustion_vol_attenuate\"] = raw.rolling(5, min_periods=5).mean()\n    return df_copy[\"factor_range_exhaustion_vol_attenuate\"]",
+  "description": "Mutation of parent g2_crossover_g1_mutation_gen0_001_6e0238d3_g1_mutation_range_a9c5ad0b. Preserves core economic mechanism: large daily range + sharp intraday price drop + elevated volume = panic selling exhaustion predicting a bounce. Targeted change: replace continuous clipped volume weight (vol_ratio.clip(0,2)/2) with a binary low-volume attenuation (0.5 weight in low-volume regimes, otherwise 1.0). This reduces noise from unfounded signals during low-activity periods while keeping full sensitivity in normal/high volume. Aim to improve RankIC stability and robustness. Post-transform cs_zscore remains suitable for identifying extreme relative exhaustion episodes across the universe.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.025213265546207057,
+    "icir": 0.3007181988022848,
+    "mi": 0.026578882662636083,
+    "rank_ic": 0.04803769256879264,
+    "rank_icir": 0.6015084123560914
+  },
+  "raw_metrics": {
+    "ic": 0.025213265546207057,
+    "icir": 0.3007181988022848,
+    "mi": 0.026578882662636083,
+    "rank_ic": 0.04803769256879264,
+    "rank_icir": 0.6015084123560914
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.10997638807372478,
+    "top_quantile_excess_return": 0.07514706887795186,
+    "top_quantile_max_drawdown": -0.03131878628803475,
+    "top_quantile_turnover": 0.3403045546343834
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:30:53.203603+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_alpha_range_vol_gen0_001_avs_gen0_0_b911ce73",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 558,
+  "factor_name": "factor_vwap_sma_vol_persistence_volnorm",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260813-044118-r2",
+  "expression_type": "python",
+  "formula": "vol_ratio = volume / rolling_median(volume,20); persistence = rolling_corr(vol_ratio, shift(vol_ratio,1), 30); weight = 0.5 + 0.5 * clip(persistence,-1,1); vwap = rolling_sum(close*volume,20)/rolling_sum(volume,20); sma = rolling_mean(close,20); price_vol = rolling_std(close,20); factor = ((vwap - sma)/price_vol) * weight",
+  "code": "def factor_vwap_sma_vol_persistence_volnorm(df):\n    df_copy = df.copy()\n    volume = df_copy['volume']\n    close = df_copy['close']\n    med_volume = volume.rolling(20, min_periods=20).median()\n    vol_ratio = volume / med_volume.replace(0, np.nan)\n    lag_vol_ratio = vol_ratio.shift(1)\n    persistence = vol_ratio.rolling(30, min_periods=30).corr(lag_vol_ratio).fillna(0.0)\n    weight = 0.5 + 0.5 * np.clip(persistence, -1.0, 1.0)\n    vwap = (close * volume).rolling(20).sum() / volume.rolling(20).sum().replace(0, np.nan)\n    sma = close.rolling(20).mean()\n    price_vol = close.rolling(20, min_periods=20).std(ddof=1)\n    div = (vwap - sma) / price_vol.replace(0, np.nan)\n    factor = div * weight\n    df_copy['factor_vwap_sma_vol_persistence_volnorm'] = factor\n    return df_copy['factor_vwap_sma_vol_persistence_volnorm']",
+  "description": "Mutation of elite parent g1_crossover_alpha_range_vol_gen0_001_avs_gen0_002_0a93015b. Preserves parent's core VWAP20-SMA20 price-volume divergence and the volume surprise persistence weight (bounded 0.5-1.0). Changes the normalization denominator of the primary signal from close price to trailing 20-bar close volatility, scaling the divergence by recent volatility instead of price level. This reduces amplitude distortion from low-priced stocks and improves cross-stock comparability of the raw signal without adding new components. Parent strength preserved: RankICIR stability from the bounded persistence gate. Target bottleneck: IC and MI through cleaner amplitude scaling. Cross-sectional transform remains none because the signal remains a raw single-stock price-volume coherence measure.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02632277725287282,
+    "icir": 0.5333931985440776,
+    "mi": 0.006319427647134113,
+    "rank_ic": 0.04905155975230109,
+    "rank_icir": 0.9120408389973022
+  },
+  "raw_metrics": {
+    "ic": -0.02632277725287282,
+    "icir": -0.5333931985440776,
+    "mi": 0.006319427647134113,
+    "rank_ic": -0.04905155975230109,
+    "rank_icir": -0.9120408389973022
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.115526651220762,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.04400989382496823,
+    "top_quantile_excess_return": 0.031065402215977755,
+    "top_quantile_max_drawdown": -0.015095027419165241,
+    "top_quantile_turnover": 0.17371169644886142
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:48:35.326908+00:00"
+}

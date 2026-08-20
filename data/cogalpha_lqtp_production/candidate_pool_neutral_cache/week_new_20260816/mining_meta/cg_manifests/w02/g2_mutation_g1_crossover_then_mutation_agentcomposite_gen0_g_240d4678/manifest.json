@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_agentcomposite_gen0_g_240d4678",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "elite",
+  "factor_id": 412,
+  "factor_name": "factor_gap_intraday_persistence_ewm20",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w02-20260814-042827-r7",
+  "expression_type": "python",
+  "formula": "ewm(overnight_ret,20) - ewm(intraday_ret,20)",
+  "code": "def factor_gap_intraday_persistence_ewm20(df):\n    \"\"\"Overnight-intraday persistence spread with faster EWM smoothing.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    overnight_trend = overnight_ret.ewm(span=20, adjust=False, min_periods=10).mean()\n    intraday_trend = intraday_ret.ewm(span=20, adjust=False, min_periods=10).mean()\n    factor = overnight_trend - intraday_trend\n    factor = factor.replace([np.inf, -np.inf], np.nan)\n    factor.name = \"factor_gap_intraday_persistence_ewm20\"\n    return factor",
+  "description": "Parent mechanism preserved: overnight gap continuation minus intraday mean reversion, representing persistent accumulation/distribution. Mutation replaces 60-day simple moving averages with 20-day exponentially weighted moving averages to reduce lag and improve raw signal responsiveness for IC/ICIR while retaining the same economic orientation. The prior cs_rank transform is removed to keep raw return magnitudes for better payoff thickness; cross-sectional comparability is still provided by the engine neutralization gate. One core mechanism only, no auxiliary feature.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02774975142391145,
+    "icir": 0.40792300186952035,
+    "mi": 0.021226147006917273,
+    "rank_ic": 0.04038984545488475,
+    "rank_icir": 0.6120501715124642
+  },
+  "raw_metrics": {
+    "ic": 0.02774975142391145,
+    "icir": 0.40792300186952035,
+    "mi": 0.021226147006917273,
+    "rank_ic": 0.04038984545488475,
+    "rank_icir": 0.6120501715124642
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.071293998204746,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.036149347386180475,
+    "top_quantile_excess_return": 0.22653107920704763,
+    "top_quantile_max_drawdown": -0.18379466885378193,
+    "top_quantile_turnover": 0.24280983727735217
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:38:01.161228+00:00"
+}

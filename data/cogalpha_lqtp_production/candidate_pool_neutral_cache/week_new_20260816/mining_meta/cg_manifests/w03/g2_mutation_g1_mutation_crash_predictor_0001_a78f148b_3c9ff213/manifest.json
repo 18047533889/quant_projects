@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_crash_predictor_0001_a78f148b_3c9ff213",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 356,
+  "factor_name": "factor_overnight_gap_pressure_vol",
+  "domain_agent": "alpha-crash-predictor",
+  "run_id": "fleet-w03-20260813-234152-r6",
+  "expression_type": "python",
+  "formula": "-rolling_mean_{20}(min(0, log(open/prev_close))) * clip(volume / EMA_{20}(volume), 0.7, 1.3)",
+  "code": "def factor_overnight_gap_pressure_vol(df):\n    \"\"\"Overnight downside gap persistence amplified when gap occurs on elevated volume.\"\"\"\n    df_copy = df.copy()\n    prev_close = df_copy[\"close\"].shift(1)\n    overnight_log_ret = np.log(df_copy[\"open\"] / prev_close.replace(0, np.nan))\n    downside_gap = np.minimum(overnight_log_ret, 0.0)\n    overnight_pressure = -downside_gap.rolling(20, min_periods=5).mean()\n    _high_vol, _low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    volume_confirmation = np.clip(vol_ratio, 0.7, 1.3)\n    fragility = overnight_pressure * volume_confirmation\n    fragility.name = \"factor_overnight_gap_pressure_vol\"\n    return fragility\n",
+  "description": "Preserves the parent's core economic mechanism: persistent overnight downside gaps indicate idiosyncratic fragility after industry/size neutralization. This mutation replaces the close-location modifier with a volume-regime bounded attenuation. The active classify_volume_regime tool gives vol_ratio = volume / EMA(volume, 20); clipping vol_ratio to [0.7, 1.3] amplifies the raw overnight-gap pressure when gaps occur on elevated volume and dampens it on quiet volume. The modifier is continuous and bounded, so the returned signal remains cross-sectionally rankable. The target is to sharpen top-quantile crash fragility while retaining the parent's downside-gap persistence mechanism.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.023186193268457313,
+    "icir": 0.28853074641621385,
+    "mi": 0.020266244762623842,
+    "rank_ic": 0.045585651977956776,
+    "rank_icir": 0.6465823961343042
+  },
+  "raw_metrics": {
+    "ic": -0.023186193268457313,
+    "icir": -0.28853074641621385,
+    "mi": 0.020266244762623842,
+    "rank_ic": -0.045585651977956776,
+    "rank_icir": -0.6465823961343042
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.449825387422263,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.1605988158973184,
+    "top_quantile_excess_return": 1.3615958855918309,
+    "top_quantile_max_drawdown": -0.09969575838591627,
+    "top_quantile_turnover": 0.2764479465323742
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:02:58.748292+00:00"
+}

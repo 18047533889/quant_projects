@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_pv_coherence_gen0_cand1_2b5c8d5b_b4ef16dc",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 361,
+  "factor_name": "factor_volume_confirmed_return_ewm_diff",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w01-20260813-195334-r5",
+  "expression_type": "python",
+  "formula": "ewm_mean(return | volume_pct_change > 0, halflife=10) - ewm_mean(return | volume_pct_change < 0, halflife=10)",
+  "code": "def factor_volume_confirmed_return_ewm_diff(df):\n    \"\"\"Average return on volume-expansion days minus average return on volume-contraction days, using exponentially weighted means to emphasize recent observations.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_change = df_copy['volume'].pct_change().replace([np.inf, -np.inf], np.nan)\n    up_mask = vol_change > 0\n    down_mask = vol_change < 0\n    up_num = ret.where(up_mask, 0.0).ewm(halflife=10, min_periods=5).mean()\n    up_den = up_mask.astype(float).ewm(halflife=10, min_periods=5).mean()\n    down_num = ret.where(down_mask, 0.0).ewm(halflife=10, min_periods=5).mean()\n    down_den = down_mask.astype(float).ewm(halflife=10, min_periods=5).mean()\n    up_mean = up_num / up_den.replace(0.0, np.nan)\n    down_mean = down_num / down_den.replace(0.0, np.nan)\n    factor = up_mean - down_mean\n    df_copy['factor_volume_confirmed_return_ewm_diff'] = factor\n    return df_copy['factor_volume_confirmed_return_ewm_diff']\n",
+  "description": "Preserves the parent's economic mechanism of directional price-volume coherence: average return on days when volume expands minus average return on days when volume contracts. The mutation replaces the trailing 20-day simple moving averages with exponentially weighted moving averages (halflife=10). This gives more weight to recent volume-confirmed price moves, reducing lag and potentially improving IC/ICIR while retaining the core rank-order stability captured by the parent. No additional features are added; the mechanism remains a single conditional mean difference.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02098303194011315,
+    "icir": 0.2808976474453201,
+    "mi": 0.021141035802287433,
+    "rank_ic": 0.049831773158588444,
+    "rank_icir": 0.7434767117634825
+  },
+  "raw_metrics": {
+    "ic": -0.02098303194011315,
+    "icir": -0.2808976474453201,
+    "mi": 0.021141035802287433,
+    "rank_ic": -0.049831773158588444,
+    "rank_icir": -0.7434767117634825
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.12414997836339,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.18404671437287146,
+    "top_quantile_excess_return": 1.6522697367695223,
+    "top_quantile_max_drawdown": -0.0612663858402801,
+    "top_quantile_turnover": 0.20246384277734275
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:01:23.165672+00:00"
+}

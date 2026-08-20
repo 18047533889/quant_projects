@@ -9,7 +9,37 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Mapping, Optional
 from datetime import datetime, timezone
+import hashlib
 import math
+
+
+def _gate_result_digest(ev) -> str:
+    """Content hash of a gate evaluation's inputs and parameters.
+
+    Covers everything that distinguishes two evaluations of the same gate
+    on the same day: metric name/value, threshold, result, gate version,
+    evidence reference, factor, and message.  Returns the first 12 hex
+    chars — enough to avoid collisions in practice while keeping the
+    gate-result ID readable.
+    """
+    digest = hashlib.sha256()
+    for field in (
+        getattr(ev, "gate_name", "") or "",
+        getattr(ev, "factor_id", "") or "",
+        str(getattr(ev, "result", None)),
+        getattr(ev, "timestamp", "") or "",
+        getattr(ev, "evidence_id", None) or "",
+        getattr(ev, "metric_name", None) or "",
+        repr(getattr(ev, "metric_value", None)),
+        repr(getattr(ev, "threshold", None)),
+        getattr(ev, "gate_version", None) or "",
+        getattr(ev, "message", None) or "",
+    ):
+        encoded = str(field).encode("utf-8")
+        digest.update(str(len(encoded)).encode("ascii"))
+        digest.update(b":")
+        digest.update(encoded)
+    return digest.hexdigest()[:12]
 
 
 class SelectionReason(Enum):
@@ -183,8 +213,12 @@ class SelectionPolicy:
             suffix += 1
         decision_id = candidate_id
 
+        # Gate-result IDs combine gate identity, timestamp, and a content
+        # hash over the gate inputs/params (metric, threshold, result,
+        # version, evidence ref, message).  name+date alone collides for
+        # distinct evaluations of the same gate on the same day.
         gate_result_ids = tuple(
-            f"{ev.gate_name}_{ev.timestamp[:10]}"
+            f"{ev.gate_name}_{ev.timestamp[:10]}_{_gate_result_digest(ev)}"
             for ev in gate_evaluations
         )
 

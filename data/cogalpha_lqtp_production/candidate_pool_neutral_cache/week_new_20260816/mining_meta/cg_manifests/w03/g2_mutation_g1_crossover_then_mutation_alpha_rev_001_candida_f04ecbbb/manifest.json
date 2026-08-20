@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_alpha_rev_001_candida_f04ecbbb",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 32,
+  "factor_name": "factor_overnight_intraday_reversal_10d",
+  "domain_agent": "alpha-stability",
+  "run_id": "fleet-w03-20260802-221237-r3",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_overnight_intraday_reversal_10d(df):\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy['close'], df_copy['open'])\n    diff = intraday_ret - overnight_ret\n    lagged_diff = diff.shift(1)\n    reversal_rank = -lagged_diff.rolling(10, min_periods=10).rank(pct=True)\n    df_copy['factor_overnight_intraday_reversal_10d'] = reversal_rank\n    return df_copy['factor_overnight_intraday_reversal_10d']",
+  "description": "Mutation of factor_overnight_intraday_reversal: reduces rolling rank window from 20 to 10. The core reversal mechanism is unchanged: yesterday's overnight-intraday return differential signals reversal, ranked negatively. A shorter window makes the time-series normalization more responsive to recent dynamics, potentially enhancing IC and ICIR while preserving the cross-sectional ranking advantage. This minimal intervention avoids adding new components.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.006029477584626951,
+    "icir": 0.09790853512872696,
+    "mi": 0.05282364302135889,
+    "rank_ic": 0.008595003006840697,
+    "rank_icir": 0.12004724967158356
+  },
+  "raw_metrics": {
+    "ic": 0.006029477584626951,
+    "icir": 0.09790853512872696,
+    "mi": 0.05282364302135889,
+    "rank_ic": 0.008595003006840697,
+    "rank_icir": 0.12004724967158356
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.4,
+    "top_quantile_annualized_excess_return": 0.012351304416602149,
+    "top_quantile_excess_return": 0.07308349056828156,
+    "top_quantile_max_drawdown": -0.07530029874463617,
+    "top_quantile_turnover": 0.7775169479743856
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:45:46.744224+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "alpha-drawdown-0001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 386,
+  "factor_name": "factor_drawdown_recovery_volume_thrust",
+  "domain_agent": "alpha-drawdown",
+  "run_id": "fleet-w03-20260814-081141-r8",
+  "expression_type": "python",
+  "formula": "recovery_loc = (close - rolling_min(close,60)) / (rolling_max(close,60) - rolling_min(close,60)); factor = recovery_loc * (1 + clip(volume/rolling_mean(volume,20)-1, -0.5, 0.5))",
+  "code": "def factor_drawdown_recovery_volume_thrust(df):\n    df_copy = df.copy()\n    L = 60\n    peak = df_copy[\"close\"].rolling(L, min_periods=20).max()\n    trough = df_copy[\"close\"].rolling(L, min_periods=20).min()\n    rng = (peak - trough).replace(0.0, np.nan)\n    recovery_loc = (df_copy[\"close\"] - trough) / rng\n    vol_mean = df_copy[\"volume\"].rolling(20, min_periods=5).mean().replace(0.0, np.nan)\n    vol_ratio = df_copy[\"volume\"] / vol_mean\n    vol_boost = (vol_ratio - 1.0).clip(-0.5, 0.5)\n    factor = recovery_loc * (1.0 + vol_boost)\n    factor = factor.fillna(0.0)\n    df_copy[\"factor_drawdown_recovery_volume_thrust\"] = factor\n    return df_copy[\"factor_drawdown_recovery_volume_thrust\"]",
+  "description": "Measures how far price has recovered within its recent drawdown range and scales the recovery location by volume expansion. A stock that has climbed back to a high fraction of its rolling peak-trough range while volume is above average is interpreted as having strong demand-driven recovery geometry, which may persist or reverse. The raw mechanism is specifically drawdown recovery positioning combined with volume confirmation, not a simple moving average or stacked indicator.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.014374851908431484,
+    "icir": 0.17114955239988552,
+    "mi": 0.014673526768618217,
+    "rank_ic": 0.029164184090206473,
+    "rank_icir": 0.3294197162401715
+  },
+  "raw_metrics": {
+    "ic": -0.014374851908431484,
+    "icir": -0.17114955239988552,
+    "mi": 0.014673526768618217,
+    "rank_ic": -0.029164184090206473,
+    "rank_icir": -0.3294197162401715
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.660779225564472,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.12485884836111727,
+    "top_quantile_excess_return": 0.9587938719104387,
+    "top_quantile_max_drawdown": -0.21521489025576557,
+    "top_quantile_turnover": 0.27773648227816267
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:06:17.671463+00:00"
+}

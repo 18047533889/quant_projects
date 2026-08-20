@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_factor_trend_adaptive_intraday_overnight_blend_0_69020f45",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 319,
+  "factor_name": "factor_trend_adaptive_drawdown_attenuated_blend",
+  "domain_agent": "alpha-regime-gating",
+  "run_id": "fleet-w02-20260813-103714-r3",
+  "expression_type": "python",
+  "formula": "efficiency_ratio = abs(close - close.shift(20)) / sum(abs(close.diff()), 20); stress = ewm_mean(10, max(0, -(close/rolling_max(close,60)-1))); confidence_gate = 1/(1+stress); blend = efficiency_ratio * rolling_mean(intraday_ret,5) + (1-efficiency_ratio) * rolling_mean(-overnight_ret,5); factor = blend * confidence_gate",
+  "code": "def factor_trend_adaptive_drawdown_attenuated_blend(df):\n    \"\"\"Trend-adaptive intraday/overnight blend with globally applied drawdown stress attenuation.\"\"\"\n    df_copy = df.copy()\n    close = df_copy['close']\n    open_ = df_copy['open']\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(close, open_)\n    window = 20\n    price_change = close.diff()\n    abs_sum = price_change.abs().rolling(window, min_periods=window).sum()\n    net_change = close - close.shift(window)\n    efficiency_ratio = net_change.abs() / abs_sum.replace(0.0, np.nan)\n    efficiency_ratio = efficiency_ratio.fillna(0.0).clip(0.0, 1.0)\n    intraday_signal = intraday_ret.rolling(5, min_periods=1).mean()\n    overnight_reversal = -overnight_ret.rolling(5, min_periods=1).mean()\n    rolling_peak = close.rolling(60, min_periods=20).max()\n    drawdown = close / rolling_peak - 1.0\n    drawdown_depth = -drawdown.clip(upper=0.0)\n    stress = drawdown_depth.ewm(span=10, min_periods=5).mean().fillna(0.0)\n    confidence_gate = 1.0 / (1.0 + stress)\n    blend = efficiency_ratio * intraday_signal + (1.0 - efficiency_ratio) * overnight_reversal\n    factor = blend * confidence_gate\n    factor.name = 'factor_trend_adaptive_drawdown_attenuated_blend'\n    return factor\n",
+  "description": "Parent strength preserved: Kaufman efficiency ratio gates a blend of intraday momentum and overnight reversal, preserving consistent ICIR/RankICIR and balanced IC/RankIC. Bottleneck targeted: the parent's drawdown-stress gate was applied only to the overnight reversal leg, leaving intraday momentum unattenuated during deep drawdowns, which can create tail risk or overconfidence in stressed regimes. Mutation direction adjustment: the exponential drawdown-depth confidence gate is now applied to the entire blended signal, so both trend and contrarian components are dampened when the stock is in a sustained drawdown. This keeps one core mechanism and one lightweight drawdown modifier, targeting payoff thickness and drawdown risk without adding new features.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.05104834236296421,
+    "icir": 0.7472221414273837,
+    "mi": 0.027506696051567303,
+    "rank_ic": 0.03140305708079403,
+    "rank_icir": 0.6630762827252737
+  },
+  "raw_metrics": {
+    "ic": -0.05104834236296421,
+    "icir": -0.7472221414273837,
+    "mi": 0.027506696051567303,
+    "rank_ic": -0.03140305708079403,
+    "rank_icir": -0.6630762827252737
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 10.251212105296805,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.27000102357557276,
+    "top_quantile_excess_return": 2.9863983682699513,
+    "top_quantile_max_drawdown": -0.2602011402960024,
+    "top_quantile_turnover": 0.3783276849634935
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:26:01.680298+00:00"
+}

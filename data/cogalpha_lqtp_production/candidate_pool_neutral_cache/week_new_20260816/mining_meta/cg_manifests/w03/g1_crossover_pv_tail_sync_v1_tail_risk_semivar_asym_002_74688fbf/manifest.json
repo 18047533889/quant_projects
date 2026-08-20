@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_pv_tail_sync_v1_tail_risk_semivar_asym_002_74688fbf",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 285,
+  "factor_name": "factor_tail_semivar_volume_asymmetry",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w03-20260813-063501-r2",
+  "expression_type": "python",
+  "formula": "sum(min(return,0)^2 * clip(vol_ratio,0.5,2.0), 60) / sum(max(return,0)^2 * clip(vol_ratio,0.5,2.0), 60)",
+  "code": "def factor_tail_semivar_volume_asymmetry(df):\n    \"\"\"Volume-confirmed downside/upside variance asymmetry.\n\n    Economic mechanism:\n        Stress accumulation is captured by the ratio of rolling downside\n        variance to upside variance. Volume expansion during extreme moves\n        confirms tail risk, so squared returns are weighted by a bounded\n        continuous volume-regime ratio before aggregation.\n    \"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(\n        df_copy[\"volume\"], window=20, high_threshold=1.5, low_threshold=0.6\n    )\n    vol_weight = vol_ratio.clip(lower=0.5, upper=2.0).fillna(1.0)\n    down_ret = ret.where(ret < 0)\n    up_ret = ret.where(ret > 0)\n    down_var = (down_ret ** 2 * vol_weight).rolling(60, min_periods=20).sum()\n    up_var = (up_ret ** 2 * vol_weight).rolling(60, min_periods=20).sum()\n    factor = down_var / up_var.replace(0, np.nan)\n    factor = factor.replace([np.inf, -np.inf], np.nan)\n    df_copy[\"factor_tail_semivar_volume_asymmetry\"] = factor\n    return df_copy[\"factor_tail_semivar_volume_asymmetry\"]\n",
+  "description": "Primary mechanism inherits tail_risk_semivar_asym_002: downside/upside variance ratio measures lower-tail stress accumulation. Borrows volume-price synchronization from pv_tail_sync_v1 as a lightweight volume-confirmation gate: squared daily returns are weighted by a bounded continuous volume-regime ratio from classify_volume_regime, amplifying downside variance only when volume expansion confirms large moves. Preserves raw none transform and ratio interpretation, targeting better MI and payoff thickness via volume-confirmed tail risk.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0072734433490748455,
+    "icir": 0.15848860512261162,
+    "mi": 0.00504523657922995,
+    "rank_ic": 0.027296240491734697,
+    "rank_icir": 0.511519899992869
+  },
+  "raw_metrics": {
+    "ic": 0.0072734433490748455,
+    "icir": 0.15848860512261162,
+    "mi": 0.00504523657922995,
+    "rank_ic": 0.027296240491734697,
+    "rank_icir": 0.511519899992869
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.449098354336036,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.04169010982342369,
+    "top_quantile_excess_return": 0.2585917445043553,
+    "top_quantile_max_drawdown": -0.08661475004735053,
+    "top_quantile_turnover": 0.10420158016302764
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:56:12.744704+00:00"
+}

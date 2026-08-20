@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_then_mutation_alpha_range_vol_gen0_001_avs_gen0_002_5e75a470",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 551,
+  "factor_name": "factor_vwap_sma_volume_stability",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260813-044118-r2",
+  "expression_type": "python",
+  "formula": "vol_mean = rolling_mean(volume,20); vol_std = rolling_std(volume,20); cv = vol_std / vol_mean; stability = clip(1 - cv, 0, 1); weight = 0.5 + 0.5 * stability; vwap = rolling_sum(close*volume,20)/rolling_sum(volume,20); sma = rolling_mean(close,20); factor = (vwap - sma)/close * weight",
+  "code": "def factor_vwap_sma_volume_stability(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    vol_mean = volume.rolling(20, min_periods=20).mean()\n    vol_std = volume.rolling(20, min_periods=20).std(ddof=1)\n    cv = vol_std / vol_mean.replace(0, np.nan)\n    stability = np.clip(1 - cv, 0, 1)\n    weight = (0.5 + 0.5 * stability).fillna(0.5)\n    vwap = (close * volume).rolling(20, min_periods=20).sum() / volume.rolling(20, min_periods=20).sum().replace(0, np.nan)\n    sma = close.rolling(20, min_periods=20).mean()\n    div = (vwap - sma) / close.replace(0, np.nan)\n    factor = div * weight\n    df_copy['factor_vwap_sma_volume_stability'] = factor\n    return df_copy['factor_vwap_sma_volume_stability']",
+  "description": "Mutation preserves parent's core VWAP20-SMA20 price-volume coherence as the primary signal (raw divergence scaled by close). The parent's volume persistence weight used a 30-day lagged autocorrelation of volume ratio, which can be noisy and requires zero-filling. This mutation smooths that gating modifier: it replaces autocorrelation with inverse coefficient of variation of trailing 20-day volume, a more robust measure of consistent participation volume. Low coefficient of variation yields weight near 1.0; high variation attenuates the raw VWAP-SMA signal toward 0.5. This retains one core mechanism plus one lightweight modifier, keeps single-stock raw output, and preserves the parent's cross_sectional_transform='none' because the raw payoff mechanism is already strong.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.026789803071030877,
+    "icir": 0.37804870565907284,
+    "mi": 0.020806856212090885,
+    "rank_ic": 0.053458757218275414,
+    "rank_icir": 0.8211594657611946
+  },
+  "raw_metrics": {
+    "ic": -0.026789803071030877,
+    "icir": -0.37804870565907284,
+    "mi": 0.020806856212090885,
+    "rank_ic": -0.053458757218275414,
+    "rank_icir": -0.8211594657611946
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.605049791717673,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.08274732108450555,
+    "top_quantile_excess_return": 0.05809634618133486,
+    "top_quantile_max_drawdown": -0.016164845766398317,
+    "top_quantile_turnover": 0.15937194875079883
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:47:15.568079+00:00"
+}

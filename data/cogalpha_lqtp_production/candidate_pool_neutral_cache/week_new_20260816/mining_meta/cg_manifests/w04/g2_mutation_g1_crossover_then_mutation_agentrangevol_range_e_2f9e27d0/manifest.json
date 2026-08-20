@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_agentrangevol_range_e_2f9e27d0",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 337,
+  "factor_name": "factor_range_expansion_reversal_ema",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260804-234255-r25",
+  "expression_type": "python",
+  "formula": "reversal_signal = -ret5 * zscore(range), smoothed EMA(3)",
+  "code": "def factor_range_expansion_reversal_ema(df):\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    lookback = 50\n    mean_range = range_.rolling(lookback, min_periods=lookback).mean()\n    std_range = range_.rolling(lookback, min_periods=lookback).std()\n    range_z = (range_ - mean_range) / std_range.replace(0, np.nan)\n    ret5 = df_copy[\"close\"].pct_change(5)\n    raw = -ret5 * range_z\n    signal = raw.ewm(span=3, min_periods=3).mean()\n    df_copy[\"factor_range_expansion_reversal_ema\"] = signal\n    return df_copy[\"factor_range_expansion_reversal_ema\"]",
+  "description": "This mutation ablates the directional consistency filter from the parent, reverting to the pure range-expansion reversal core. Sharp daily drops with elevated range imply oversold bounces, captured by -ret5 * zscore(range). EMA(3) is retained for noise reduction. The ablation targets improved IC and ICIR by removing a possibly overfitted regime-weight component, while aiming to preserve the elite ancestor's RankICIR stability brought by the core reversal mechanism.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0397935178940675,
+    "icir": 0.44842979909957575,
+    "mi": 0.03667845440181061,
+    "rank_ic": 0.05619131579810625,
+    "rank_icir": 0.7028103649385876
+  },
+  "raw_metrics": {
+    "ic": 0.0397935178940675,
+    "icir": 0.44842979909957575,
+    "mi": 0.03667845440181061,
+    "rank_ic": 0.05619131579810625,
+    "rank_icir": 0.7028103649385876
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.1046991218865736,
+    "top_quantile_excess_return": 0.05980428664637727,
+    "top_quantile_max_drawdown": -0.019677709494487772,
+    "top_quantile_turnover": 0.39037205064714775
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:28:16.214368+00:00"
+}

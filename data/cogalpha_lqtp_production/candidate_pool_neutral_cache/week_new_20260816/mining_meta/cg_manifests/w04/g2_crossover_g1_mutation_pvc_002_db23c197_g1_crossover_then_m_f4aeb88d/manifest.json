@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_pvc_002_db23c197_g1_crossover_then_m_f4aeb88d",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 458,
+  "factor_name": "factor_volume_adaptive_reversal",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w04-20260805-204530-r33",
+  "expression_type": "python",
+  "formula": "-ret_5d * where(pos_vol_dev <= 1, pos_vol_dev, pos_vol_dev^2)",
+  "code": "def factor_volume_adaptive_reversal(df):\n    \"\"\"Short-term reversal with adaptive volume scaling: linear for moderate volume, squared for extreme panic volume.\"\"\"\n    df_copy = df.copy()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    ret_5d = df_copy[\"close\"].pct_change(5)\n    pos_vol_dev = np.maximum(0.0, vol_ratio - 1.0)\n    scaler = np.where(pos_vol_dev > 1.0, pos_vol_dev ** 2, pos_vol_dev)\n    factor = -ret_5d * scaler\n    df_copy[\"factor_volume_adaptive_reversal\"] = factor\n    return df_copy[\"factor_volume_adaptive_reversal\"]",
+  "description": "This crossover combines the primary mechanism of parent g1_mutation_pvc_002_db23c197 (linear volume scaling for short-term reversal) with the non-linear amplification idea from g1_crossover_then_mutation_pvc_002_alpha_composite_1_9a08cd10 (squaring) to create a hybrid where moderate volume deviations (vol_ratio up to 2) are scaled linearly, preserving robustness, while extreme volume deviations (vol_ratio > 2) are squared to strongly emphasize panic selling reversals. This targets improvement in mutual information by capturing non-linear panic effects without sacrificing ICIR stability.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.028493511156661062,
+    "icir": 0.4429510113135059,
+    "mi": 0.10121803241324834,
+    "rank_ic": 0.04618613721593483,
+    "rank_icir": 0.5567718051528421
+  },
+  "raw_metrics": {
+    "ic": 0.028493511156661062,
+    "icir": 0.4429510113135059,
+    "mi": 0.10121803241324834,
+    "rank_ic": 0.04618613721593483,
+    "rank_icir": 0.5567718051528421
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.09734111902407361,
+    "top_quantile_excess_return": 0.07373369894644255,
+    "top_quantile_max_drawdown": -0.02723492031293895,
+    "top_quantile_turnover": 0.4213566389616911
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:38:37.925751+00:00"
+}

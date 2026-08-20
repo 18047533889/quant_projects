@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_alpha_market_cycle_0_2_ddee50ad_alph_ebbd77bb",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 381,
+  "factor_name": "factor_overnight_intraday_cycle_smoothed_cumulative",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w02-20260813-194428-r5",
+  "expression_type": "python",
+  "formula": "EMA((sum(overnight_ret,120) - sum(intraday_ret,120)) / (sum(|overnight_ret|,120) + sum(|intraday_ret|,120)), span=30)",
+  "code": "def factor_overnight_intraday_cycle_smoothed_cumulative(df):\n    \"\"\"Cumulative overnight-intraday cycle dominance with EMA smoothing of the normalized ratio.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    window = 120\n    overnight_cum = overnight_ret.rolling(window, min_periods=1).sum()\n    intraday_cum = intraday_ret.rolling(window, min_periods=1).sum()\n    total_abs = (overnight_ret.abs().rolling(window, min_periods=1).sum() + intraday_ret.abs().rolling(window, min_periods=1).sum()).replace(0.0, np.nan)\n    raw_ratio = ((overnight_cum - intraday_cum) / total_abs).fillna(0.0)\n    smooth_ratio = raw_ratio.ewm(span=30, min_periods=1).mean()\n    df_copy[\"factor_overnight_intraday_cycle_smoothed_cumulative\"] = smooth_ratio\n    return df_copy[\"factor_overnight_intraday_cycle_smoothed_cumulative\"]",
+  "description": "Crossover preserves the cumulative overnight-minus-intraday cycle dominance mechanism from parent alpha-market-cycle-0-2 as the primary signal. The lightweight modifier borrowed from g1_mutation_alpha_market_cycle_0_2_ddee50ad is post-normalization EMA smoothing (span=30). This smoothing reduces day-to-day noise in the normalized ratio while retaining the longer-horizon cyclical phase estimate, aiming to improve level IC/RankIC without sacrificing the stable ICIR/RankICIR core. The economic interpretation remains a smoothed measure of whether overnight or intraday returns dominate the trailing 120-day window. Cross-sectional transform remains none because the raw payoff mechanism is preserved and the signal is already continuous and comparable within a stock\u2019s own history.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0114602976725686,
+    "icir": 0.24981584139563354,
+    "mi": 0.006315086006114967,
+    "rank_ic": 0.014346721370402942,
+    "rank_icir": 0.30059953247246535
+  },
+  "raw_metrics": {
+    "ic": 0.0114602976725686,
+    "icir": 0.24981584139563354,
+    "mi": 0.006315086006114967,
+    "rank_ic": 0.014346721370402942,
+    "rank_icir": 0.30059953247246535
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.977427117016914,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.27959698381077747,
+    "top_quantile_excess_return": 3.1638491522846497,
+    "top_quantile_max_drawdown": -0.06712877388179572,
+    "top_quantile_turnover": 0.02085200998324973
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:35:23.656076+00:00"
+}

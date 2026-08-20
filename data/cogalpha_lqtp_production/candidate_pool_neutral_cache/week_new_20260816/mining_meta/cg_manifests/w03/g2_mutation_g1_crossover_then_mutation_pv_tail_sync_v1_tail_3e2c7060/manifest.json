@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_pv_tail_sync_v1_tail_3e2c7060",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 289,
+  "factor_name": "factor_tail_semidev_volume_asymmetry_ewm",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w03-20260813-063501-r2",
+  "expression_type": "python",
+  "formula": "ewm_mean_span60((abs(min(return,0)) * clip(vol_ratio,0.5,2.0)).fillna(0)) / ewm_mean_span60((max(return,0) * clip(vol_ratio,0.5,2.0)).fillna(0))",
+  "code": "def factor_tail_semidev_volume_asymmetry_ewm(df):\n    \"\"\"Volume-confirmed downside/upside semideviation asymmetry with exponential time weighting.\n\n    Economic mechanism:\n        Stress accumulation is captured by the ratio of exponentially weighted\n        downside absolute deviation to upside absolute deviation. Volume expansion\n        during extreme moves confirms tail risk, so absolute returns are weighted\n        by a bounded continuous volume-regime ratio before EWMA smoothing.\n    \"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(\n        df_copy[\"volume\"], window=20, high_threshold=1.5, low_threshold=0.6\n    )\n    vol_weight = vol_ratio.clip(lower=0.5, upper=2.0).fillna(1.0)\n    down_ret = ret.where(ret < 0)\n    up_ret = ret.where(ret > 0)\n    down_dev = (down_ret.abs() * vol_weight).fillna(0).ewm(span=60, min_periods=20).mean()\n    up_dev = (up_ret.abs() * vol_weight).fillna(0).ewm(span=60, min_periods=20).mean()\n    factor = down_dev / up_dev.replace(0, np.nan)\n    factor = factor.replace([np.inf, -np.inf], np.nan)\n    df_copy[\"factor_tail_semidev_volume_asymmetry_ewm\"] = factor\n    return df_copy[\"factor_tail_semidev_volume_asymmetry_ewm\"]\n",
+  "description": "Mutation of volume-confirmed tail semivariance asymmetry: replaces squared returns with absolute returns (semideviation) to reduce outlier sensitivity, targeting improved IC/ICIR and MI while preserving the raw ratio interpretation, RankICIR stability, and payoff monotonicity. Volume weighting remains bounded at [0.5, 2.0] to confirm tail moves.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01160883247571047,
+    "icir": 0.15440957570771688,
+    "mi": 0.010820650081191374,
+    "rank_ic": 0.03919060608348601,
+    "rank_icir": 0.45573150470043383
+  },
+  "raw_metrics": {
+    "ic": 0.01160883247571047,
+    "icir": 0.15440957570771688,
+    "mi": 0.010820650081191374,
+    "rank_ic": 0.03919060608348601,
+    "rank_icir": 0.45573150470043383
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.136073189268827,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.03623616914700212,
+    "top_quantile_excess_return": 0.2255631579963906,
+    "top_quantile_max_drawdown": -0.11581647858629951,
+    "top_quantile_turnover": 0.12998139590071078
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:57:06.816941+00:00"
+}

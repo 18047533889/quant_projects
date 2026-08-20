@@ -204,7 +204,10 @@ class CashFlowLifecycleStage(SeriesOperator):
     category="fundamental",
     canonical="quarter_from_cumulative",
     source="polars_native_misc_final",
-    backend="polars")
+    backend="polars",
+    replace=True,
+    expected_old_source="operator_overhaul_native_polars",
+    replacement_reason="Consolidating polars native operators into misc_final")
 class QuarterFromCumulative(SeriesOperator):
     """Extract quarterly value from cumulative year-to-date financial data.
 

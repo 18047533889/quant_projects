@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "pv_coh_gen0_002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 650,
+  "factor_name": "factor_price_volume_rank_correlation",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w04-20260813-184426-r7",
+  "expression_type": "python",
+  "formula": "r_s = corr( rolling_rank(close,20), rolling_rank(volume,20) )",
+  "code": "def factor_price_volume_rank_correlation(df):\n    \"\"\"Rolling Spearman rank correlation between close and volume, capturing price-volume coherence.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    window = 20\n    close_rank = close.rolling(window, min_periods=window).rank(pct=True)\n    volume_rank = volume.rolling(window, min_periods=window).rank(pct=True)\n    factor = close_rank.rolling(window, min_periods=window).corr(volume_rank)\n    df_copy[\"factor_price_volume_rank_correlation\"] = factor\n    return df_copy[\"factor_price_volume_rank_correlation\"]",
+  "description": "This factor measures the monotonic coherence between price level and volume level over the trailing 20 days using rolling percentile ranks and their correlation (Spearman). A high positive correlation indicates that higher volume days align with higher prices, a sign of sustained directional demand; negative correlation suggests volume expansion on down days, distribution. Using ranks makes the signal robust to outliers and scale differences, capturing an uncovered raw pathway of price-volume coherence distinct from return-volume correlation or VWAP divergence.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.016613019609736494,
+    "icir": 0.40013881490137887,
+    "mi": 0.004365057778576542,
+    "rank_ic": 0.04183898485123934,
+    "rank_icir": 0.7874134427043586
+  },
+  "raw_metrics": {
+    "ic": -0.016613019609736494,
+    "icir": -0.40013881490137887,
+    "mi": 0.004365057778576542,
+    "rank_ic": -0.04183898485123934,
+    "rank_icir": -0.7874134427043586
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.409673788805631,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.0807153639231386,
+    "top_quantile_excess_return": 0.050519253216248616,
+    "top_quantile_max_drawdown": -0.02077895737426172,
+    "top_quantile_turnover": 0.17484314295312622
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:58:17.034700+00:00"
+}

@@ -2,6 +2,29 @@
 Turnover metrics for factor portfolios.
 
 Measures stability and trading cost implications.
+
+Canonical turnover definition
+-----------------------------
+Turnover between two consecutive periods is defined as
+
+    turnover_t = 0.5 * sum_n |w_t,n - w_{t-1},n|
+
+on weights that each sum to 1 (per period, over finite assets). All three
+entry points conform to this single authority:
+
+- ``compute_turnover_series`` — the canonical implementation on explicit
+  weight matrices (T, N).
+- ``estimate_turnover_from_ranks`` — derives per-period proxy weights from
+  cross-sectional average-tie ranks (``scipy.stats.rankdata`` with
+  method="average"), normalized to sum 1 over finite assets, then applies
+  the canonical ``compute_turnover_series``.
+- ``registry_adapters.compute_turnover_value`` — the same rank-weight
+  construction, exposed as a per-factor scalar for the metric registry.
+
+Because weights are sum-1 normalized, turnover values are invariant to
+universe size N (doubling the universe with duplicated assets leaves
+turnover unchanged) and a complete rank inversion (Spearman rho = -1)
+yields high turnover (~1.0), not zero.
 """
 
 from typing import Optional
@@ -153,6 +176,42 @@ def compute_turnover_series(
     return turnover_series
 
 
+def _rank_weights_matrix(values: np.ndarray, min_obs: int = 10) -> np.ndarray:
+    """Compute per-period, per-factor rank-based proxy weights.
+
+    For each (t, f) cross-section, assets are ranked with average-tie ranks
+    (``scipy.stats.rankdata(method="average")``) and the ranks are normalized
+    to sum 1 over the finite assets of that cross-section. Positions that are
+    NaN stay NaN so downstream turnover only measures jointly finite
+    neighbours.
+
+    Args:
+        values: Factor values (T, N, F)
+        min_obs: Minimum finite assets required in a cross-section
+
+    Returns:
+        Rank-weight matrix (T, N, F), NaN where insufficient data
+    """
+    from scipy.stats import rankdata
+
+    shape = values.shape
+    T = shape[0]; N = shape[1]; F = shape[2]
+    weights = np.full((T, N, F), np.nan, dtype=np.float64)
+
+    for f in range(F):
+        for t in range(T):
+            row = values[t, :, f]
+            finite = np.isfinite(row)
+            n_finite = int(np.sum(finite))
+            if n_finite < min_obs or n_finite < 2:
+                continue
+            ranks = rankdata(row[finite], method="average")
+            # Sum-1 normalization: universe-size invariant proxy weights.
+            weights[t, finite, f] = ranks / np.sum(ranks)
+
+    return weights
+
+
 def estimate_turnover_from_ranks(
     factor_batch: FactorBatch,
     window: int = 1,
@@ -161,7 +220,13 @@ def estimate_turnover_from_ranks(
     Estimate turnover from factor rank changes (proxy, not actual portfolio).
 
     This is a diagnostic approximation when actual weights are unavailable.
-    Vectorized implementation for efficiency.
+    Per period, cross-sectional average-tie ranks (normalized to sum 1 over
+    finite assets) act as proxy weights; turnover is then the canonical
+    0.5 * sum(|delta weights|) between t-window and t, computed via
+    ``compute_turnover_series``.
+
+    A full rank inversion (Spearman rho = -1) therefore yields turnover
+    close to 1.0 (the maximum for sum-1 non-negative weights), NOT zero.
 
     Args:
         factor_batch: Factor values (T, N, F)
@@ -170,39 +235,30 @@ def estimate_turnover_from_ranks(
     Returns:
         Estimated turnover series (T, F)
     """
-    values = factor_batch.values  # (T, N, F)
+    if window < 1:
+        raise ValueError(f"window must be >= 1, got {window}")
+
+    values = np.asarray(factor_batch.values, dtype=np.float64)
     T, N, F = values.shape
+
+    if T <= window:
+        return np.full((T, F), np.nan, dtype=np.float64)
+
+    # Rank-based proxy weights (average-tie ranks, sum-1 per cross-section).
+    weights = _rank_weights_matrix(values, min_obs=10)  # (T, N, F)
 
     turnover_est = np.full((T, F), np.nan, dtype=np.float64)
 
-    # Import once outside loop
-    from scipy.stats import spearmanr
-
-    # Process each time period (vectorize across factors within each period)
-    for t in range(window, T):
-        v_t0 = values[t - window, :, :]  # (N, F)
-        v_t1 = values[t, :, :]           # (N, F)
-
-        # Compute finite mask per factor
-        mask = np.isfinite(v_t0) & np.isfinite(v_t1)  # (N, F)
-        n_valid = np.sum(mask, axis=0)  # (F,)
-
-        # Process each factor with sufficient observations
-        for f in range(F):
-            if n_valid[f] < 10:
+    # Canonical turnover between t-window and t for each factor: 0.5 * sum
+    # of absolute weight changes over jointly finite assets.
+    for f in range(F):
+        for t in range(window, T):
+            w0 = weights[t - window, :, f]
+            w1 = weights[t, :, f]
+            mask = np.isfinite(w0) & np.isfinite(w1)
+            if np.sum(mask) < 2:
                 continue
-
-            m = mask[:, f]
-            x = v_t0[m, f]
-            y = v_t1[m, f]
-
-            # Rank correlation as turnover proxy
-            corr, _ = spearmanr(x, y)
-
-            if np.isfinite(corr):
-                # Turnover proxy: 1 - abs(rank_corr)
-                # High correlation -> low turnover
-                turnover_est[t, f] = 1.0 - abs(corr)
+            turnover_est[t, f] = 0.5 * np.sum(np.abs(w1[mask] - w0[mask]))
 
     return turnover_est
 

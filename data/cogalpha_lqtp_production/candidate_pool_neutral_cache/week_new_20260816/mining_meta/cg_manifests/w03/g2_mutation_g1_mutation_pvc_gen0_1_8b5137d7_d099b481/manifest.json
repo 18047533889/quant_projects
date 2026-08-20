@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_pvc_gen0_1_8b5137d7_d099b481",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 227,
+  "factor_name": "factor_price_volume_sign_coherence_simple",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w03-20260805-165557-r18",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_price_volume_sign_coherence_simple(df):\n    \"\"\"Simple roll sum of sign coherence between daily returns and volume changes.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_diff = df_copy[\"volume\"].diff()\n    sign_product = np.sign(ret) * np.sign(vol_diff)\n    coherence = sign_product.rolling(window=20, min_periods=20).sum()\n    df_copy[\"factor_price_volume_sign_coherence_simple\"] = coherence\n    return df_copy[\"factor_price_volume_sign_coherence_simple\"]",
+  "description": "Ablates the volume-ratio weighting from the parent to test whether the bare price-volume sign coherence over 20 days retains signal strength. The sign product of daily return and volume change captures conviction (same sign) vs divergence (opposite sign). Rolling sum without volume amplification reduces complexity and potential overfitting.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.013431524162215727,
+    "icir": 0.2300007735762841,
+    "mi": 0.028484548258356668,
+    "rank_ic": 0.029008048337520614,
+    "rank_icir": 0.45524157190013986
+  },
+  "raw_metrics": {
+    "ic": -0.013431524162215727,
+    "icir": -0.2300007735762841,
+    "mi": 0.028484548258356668,
+    "rank_ic": -0.029008048337520614,
+    "rank_icir": -0.45524157190013986
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.08391600479089778,
+    "top_quantile_excess_return": 0.5842953638432007,
+    "top_quantile_max_drawdown": -0.04871483265986298,
+    "top_quantile_turnover": 0.15752348816778408
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:53:58.580683+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_crossover_alpha_market_cycle_0_2_alpha_drawdo_96a60181",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "elite",
+  "factor_id": 365,
+  "factor_name": "factor_cycle_ewm_overnight_intraday_norm120",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w02-20260813-194428-r5",
+  "expression_type": "python",
+  "formula": "factor = (ewm_sum(overnight_ret,60) - ewm_sum(intraday_ret,60)) / (sum(|overnight_ret|,120)+sum(|intraday_ret|,120))",
+  "code": "def factor_cycle_ewm_overnight_intraday_norm120(df):\n    \"\"\"Cycle phase from exponentially weighted overnight-intraday split, normalized by 120-day total absolute move.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    span = 60\n    window_norm = 120\n    overnight_ewm_sum = overnight_ret.ewm(span=span, adjust=True).sum()\n    intraday_ewm_sum = intraday_ret.ewm(span=span, adjust=True).sum()\n    numerator = overnight_ewm_sum - intraday_ewm_sum\n    denom = (overnight_ret.abs().rolling(window_norm, min_periods=1).sum() + intraday_ret.abs().rolling(window_norm, min_periods=1).sum()).replace(0.0, np.nan)\n    factor = (numerator / denom).replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    df_copy[\"factor_cycle_ewm_overnight_intraday_norm120\"] = factor\n    return df_copy[\"factor_cycle_ewm_overnight_intraday_norm120\"]",
+  "description": "Primary mechanism from parent g1_mutation_alpha_market_cycle_0_2_b30755cb uses exponentially weighted overnight-minus-intraday return split to capture current market cycle phase. The lightweight modifier from parent g1_crossover_alpha_market_cycle_0_2_alpha_drawdown_volume_con_ecd53c80 replaces the ewm normalization denominator with a 120-day rolling total absolute return sum, providing a stable comparable scale that reduces short-term denominator noise. This preserves the primary cycle mechanism and raw payoff evidence while targeting improved RankIC stability. No volume confidence weight is inherited because prior feedback indicates it can distort cross-sectional ranking.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02989600190927748,
+    "icir": 0.4610742435898917,
+    "mi": 0.016876365671704363,
+    "rank_ic": 0.03388276417915422,
+    "rank_icir": 0.5516733424731963
+  },
+  "raw_metrics": {
+    "ic": 0.02989600190927748,
+    "icir": 0.4610742435898917,
+    "mi": 0.016876365671704363,
+    "rank_ic": 0.03388276417915422,
+    "rank_icir": 0.5516733424731963
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 8.83686105135144,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.39720127689349716,
+    "top_quantile_excess_return": 5.9251138906700485,
+    "top_quantile_max_drawdown": -0.04878668265919295,
+    "top_quantile_turnover": 0.13287821639639902
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:31:30.551266+00:00"
+}

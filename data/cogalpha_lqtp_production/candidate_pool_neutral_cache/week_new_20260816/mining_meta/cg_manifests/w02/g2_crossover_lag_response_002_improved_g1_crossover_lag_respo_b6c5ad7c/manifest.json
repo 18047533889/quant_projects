@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_lag_response_002_improved_g1_crossover_lag_respo_b6c5ad7c",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 5,
+  "factor_name": "factor_retvol_volume_scale",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w02-20260802-140831-r1",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_retvol_volume_scale(df):\n    df_copy = df.copy()\n    past_ret = df_copy[\"close\"].pct_change(5)\n    ret = df_copy[\"close\"].pct_change()\n    vol5 = ret.rolling(5, min_periods=5).std()\n    vol20 = ret.rolling(20, min_periods=20).std()\n    vol_ratio = vol5 / vol20.replace(0, np.nan)\n    vol_ratio = vol_ratio.replace([np.inf, -np.inf], np.nan)\n    raw_factor = -past_ret * vol_ratio\n    avg_vol = df_copy[\"volume\"].rolling(20, min_periods=20).mean()\n    vol_scale = df_copy[\"volume\"] / avg_vol.replace(0, np.nan)\n    vol_scale = vol_scale.clip(lower=0.2, upper=5.0)\n    factor = raw_factor * vol_scale\n    factor = factor.fillna(0)\n    df_copy[\"factor_retvol_volume_scale\"] = factor\n    return df_copy[\"factor_retvol_volume_scale\"]",
+  "description": "Primary mechanism from parent lag-response-002-improved: mean-reversion signal amplified by short-term volatility spike (negative 5-day past return times ratio of 5-day to 20-day volatility). Lightweight idea from parent g1_crossover_lag_response_002_improved_pvc_coherence_confirme_d75acaba: volume confirmation scaling. Instead of a binary volume gate, the raw signal is multiplied by current volume divided by its 20-day average, clipped between 0.2 and 5.0. This provides a continuous conviction adjustment: higher volume intensifies the reversal signal, lower volume attenuates it, smoothing the transition and potentially improving rank stability and MI while preserving the core mean-reversion effectiveness.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03302412440698814,
+    "icir": 0.3567937451405405,
+    "mi": 0.026320463888871437,
+    "rank_ic": 0.036071486177849325,
+    "rank_icir": 0.3017252930407231
+  },
+  "raw_metrics": {
+    "ic": 0.03302412440698814,
+    "icir": 0.3567937451405405,
+    "mi": 0.026320463888871437,
+    "rank_ic": 0.036071486177849325,
+    "rank_icir": 0.3017252930407231
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.04936086254998773,
+    "top_quantile_excess_return": 0.31670234120970764,
+    "top_quantile_max_drawdown": -0.11389381252442576,
+    "top_quantile_turnover": 0.398019585708455
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:09:51.850211+00:00"
+}

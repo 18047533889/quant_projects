@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_agentrangevol_range_expansion_reversal_001_daily_08f4e885",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 335,
+  "factor_name": "factor_regime_aware_reversal",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260804-234255-r25",
+  "expression_type": "python",
+  "formula": "reversal_signal = -ret5 * zscore(range) * (1 - direction_ratio_20), smoothed EMA(3)",
+  "code": "def factor_regime_aware_reversal(df):\n    df_copy = df.copy()\n    # Reversal component from parent 1: range expansion reversal\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    lookback = 50\n    mean_range = range_.rolling(lookback, min_periods=lookback).mean()\n    std_range = range_.rolling(lookback, min_periods=lookback).std()\n    range_z = (range_ - mean_range) / std_range.replace(0, np.nan)\n    ret5 = df_copy[\"close\"].pct_change(5)\n    raw_reversal = -ret5 * range_z\n    # Directional consistency filter from parent 2: momentum direction ratio\n    ret = df_copy[\"close\"].pct_change()\n    up_sum = ret.clip(lower=0).rolling(20, min_periods=20).sum()\n    down_sum = (-ret.clip(upper=0)).rolling(20, min_periods=20).sum()\n    total_abs = up_sum + down_sum\n    direction_ratio = up_sum / total_abs.replace(0, np.nan)\n    direction_ratio = direction_ratio.clip(0, 1).fillna(0.5)\n    # Attenuate reversal when trend is persistent (high direction ratio)\n    regime_weight = 1.0 - direction_ratio\n    raw = raw_reversal * regime_weight\n    # Smooth with EMA(3)\n    signal = raw.ewm(span=3, min_periods=3).mean()\n    df_copy[\"factor_regime_aware_reversal\"] = signal\n    return df_copy[\"factor_regime_aware_reversal\"]",
+  "description": "This crossover factor enhances the elite range-expansion reversal alpha (parent 1) by incorporating a directional persistence filter from a qualified momentum factor (parent 2). The core idea remains: sharp drops with elevated daily range (volatility spike) suggest an oversold bounce, captured by -ret5 * zscore(range). The child adds a regime-aware weight: when directional consistency (up-day return ratio over 20 days) is high, indicating a strong persistent trend, reversal signals are dampened; when low (choppy, mean-reverting conditions), reversal signals are amplified. This lightweight modulation aims to improve signal reliability across market regimes, targeting higher ICIR and MI while preserving the parent's strong RankICIR.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.035872055813359005,
+    "icir": 0.4384474124080405,
+    "mi": 0.03409539332065936,
+    "rank_ic": 0.053291506923946984,
+    "rank_icir": 0.6754263322920173
+  },
+  "raw_metrics": {
+    "ic": 0.035872055813359005,
+    "icir": 0.4384474124080405,
+    "mi": 0.03409539332065936,
+    "rank_ic": 0.053291506923946984,
+    "rank_icir": 0.6754263322920173
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.09196482508034354,
+    "top_quantile_excess_return": 0.05266062537641236,
+    "top_quantile_max_drawdown": -0.021300711935058447,
+    "top_quantile_turnover": 0.39100765559633477
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:27:50.281112+00:00"
+}

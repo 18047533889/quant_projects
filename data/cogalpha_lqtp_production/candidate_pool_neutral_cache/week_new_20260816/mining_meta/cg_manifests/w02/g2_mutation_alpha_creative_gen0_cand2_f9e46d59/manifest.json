@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_alpha_creative_gen0_cand2_f9e46d59",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 344,
+  "factor_name": "factor_smoothed_volume_skew_range_tension",
+  "domain_agent": "alpha-creative",
+  "run_id": "fleet-w02-20260813-150507-r4",
+  "expression_type": "python",
+  "formula": "tanh((high-low)/close * 20) * ewm_mean(rolling_skew(volume,20), span=3)",
+  "code": "def factor_smoothed_volume_skew_range_tension(df):\n    \"\"\"Smoothed volume skewness multiplied by bounded intraday range tension.\"\"\"\n    df_copy = df.copy()\n    range_ratio = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"]\n    range_ratio = range_ratio.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    vol_skew = df_copy[\"volume\"].rolling(20, min_periods=5).skew()\n    vol_skew = vol_skew.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    vol_skew = vol_skew.ewm(span=3, adjust=False).mean()\n    vol_skew = vol_skew.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    range_nl = np.tanh(range_ratio * 20.0)\n    factor = range_nl * vol_skew\n    df_copy[\"factor_smoothed_volume_skew_range_tension\"] = factor\n    return df_copy[\"factor_smoothed_volume_skew_range_tension\"]",
+  "description": "The parent's rolling volume skew captures asymmetric trading activity and provides strong RankICIR and RankIC stability. However raw skew estimates are volatile, limiting ICIR and MI. This mutation applies lightweight exponential smoothing (span=3) to the rolling skew before interacting with the bounded tanh intraday range tension. Smoothing reduces noise while preserving the asymmetric-volume core and the range-based attenuation modifier. The raw signal remains economically meaningful without cross-sectional normalization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.010501542542230064,
+    "icir": 0.26746032197240066,
+    "mi": 0.012235909829286129,
+    "rank_ic": 0.02640163742673353,
+    "rank_icir": 0.7544563817847758
+  },
+  "raw_metrics": {
+    "ic": -0.010501542542230064,
+    "icir": -0.26746032197240066,
+    "mi": 0.012235909829286129,
+    "rank_ic": -0.02640163742673353,
+    "rank_icir": -0.7544563817847758
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 10.479300080188738,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.3354452440896627,
+    "top_quantile_excess_return": 4.31301559344788,
+    "top_quantile_max_drawdown": -0.18364441643026974,
+    "top_quantile_turnover": 0.28560962857996947
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:29:45.059816+00:00"
+}

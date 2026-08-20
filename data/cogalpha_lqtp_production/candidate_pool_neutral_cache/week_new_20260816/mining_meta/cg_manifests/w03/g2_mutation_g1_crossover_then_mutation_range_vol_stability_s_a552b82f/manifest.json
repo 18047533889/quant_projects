@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_range_vol_stability_s_a552b82f",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 396,
+  "factor_name": "factor_ewm_range_compression_squeeze",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w03-20260814-081141-r8",
+  "expression_type": "python",
+  "formula": "-(ewm_std(high-low,20)/ewm_mean(high-low,20))",
+  "code": "def factor_ewm_range_compression_squeeze(df):\n    '''Range compression squeeze using exponentially weighted negative coefficient of variation.'''\n    df_copy = df.copy()\n    range_ = df_copy['high'] - df_copy['low']\n    mean_range = range_.ewm(span=20, min_periods=20).mean()\n    var_range = range_.ewm(span=20, min_periods=20).var()\n    std_range = np.sqrt(var_range)\n    cv = std_range / mean_range.replace(0.0, np.nan)\n    compression = -cv\n    factor = compression.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    df_copy['factor_ewm_range_compression_squeeze'] = factor\n    return df_copy['factor_ewm_range_compression_squeeze']",
+  "description": "Mutation of parent factor_range_compression_squeeze. The core mechanism remains range compression: negative coefficient of variation of daily high-low range identifies low volatility squeeze periods that often precede expansion. The targeted change replaces the 20-day rolling mean and standard deviation with exponentially weighted versions (span=20) to give more weight to recent range behavior, improving responsiveness and targeting the parent's IC/RankIC bottleneck while preserving the high RankICIR, ICIR, MI, and payoff stability. Raw signal is kept without cross-sectional normalization to preserve within-stock magnitude information.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01818703653257541,
+    "icir": 0.36459365928981646,
+    "mi": 0.015065000320356958,
+    "rank_ic": 0.020600541905578647,
+    "rank_icir": 0.46161239881095034
+  },
+  "raw_metrics": {
+    "ic": 0.01818703653257541,
+    "icir": 0.36459365928981646,
+    "mi": 0.015065000320356958,
+    "rank_ic": 0.020600541905578647,
+    "rank_icir": 0.46161239881095034
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 10.546369767660327,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.48423380971096774,
+    "top_quantile_excess_return": 8.550217415716604,
+    "top_quantile_max_drawdown": -0.1007577865579683,
+    "top_quantile_turnover": 0.19306092392599217
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:08:02.785011+00:00"
+}

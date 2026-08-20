@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_mutation_alpha_composite_0002_9905268f_g1_mut_b40a0ea3",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 586,
+  "factor_name": "factor_volume_price_beta_centered",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w04-20260813-075113-r3",
+  "expression_type": "python",
+  "formula": "cov_{20}(ret_1d, delta_log_volume) / var_{20}(delta_log_volume) using pandas trailing rolling covariance and variance",
+  "code": "def factor_volume_price_beta_centered(df):\n    \"\"\"Centered rolling beta of return on log volume change using rolling covariance and variance.\"\"\"\n    df_copy = df.copy()\n    ret_1 = df_copy[\"close\"].pct_change()\n    vol_log = np.log(df_copy[\"volume\"].replace(0, np.nan))\n    vol_diff = vol_log.diff()\n    cov = ret_1.rolling(20, min_periods=5).cov(vol_diff)\n    var = vol_diff.rolling(20, min_periods=5).var()\n    beta = cov / var.replace(0.0, np.nan)\n    beta = beta.replace([np.inf, -np.inf], np.nan)\n    df_copy[\"factor_volume_price_beta_centered\"] = beta\n    return df_copy[\"factor_volume_price_beta_centered\"]",
+  "description": "Mutation of parent volume-price beta. The parent uses ratio of rolling means without centering, which can be biased when log volume changes have a nonzero rolling mean (trend). This child uses pandas trailing rolling covariance and rolling variance to compute a standard centered OLS beta, isolating unexpected volume change. Preserves the core economic mechanism: positive beta indicates informed flow backing price changes, negative beta signals divergence. Same 20-day window and min_periods=5 to preserve RankIC/RankICIR and payoff profile. No cross-sectional transform because parent evidence supports the raw mechanism.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.017074338469520958,
+    "icir": 0.22933881087334293,
+    "mi": 0.02425954219289661,
+    "rank_ic": 0.05395242405790194,
+    "rank_icir": 0.7808527432404104
+  },
+  "raw_metrics": {
+    "ic": -0.017074338469520958,
+    "icir": -0.22933881087334293,
+    "mi": 0.02425954219289661,
+    "rank_ic": -0.05395242405790194,
+    "rank_icir": -0.7808527432404104
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.969376336556162,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.026628301376853125,
+    "top_quantile_excess_return": 0.020331011785624797,
+    "top_quantile_max_drawdown": -0.03209683632268567,
+    "top_quantile_turnover": 0.16477857200909432
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:52:53.223144+00:00"
+}

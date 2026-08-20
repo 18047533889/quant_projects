@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_g0_range_exp_rev_decomp_001_31108d67_82fb5937",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 397,
+  "factor_name": "factor_range_exp_rev_ewm_smooth",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260805-102842-r29",
+  "expression_type": "python",
+  "formula": "max(0, -overnight_ret) * max(0, (range - mean)/std) * min(vol_ratio, 2)/2, smoothed ewm(10)",
+  "code": "def factor_range_exp_rev_ewm_smooth(df):\n    \"\"\"Positive when large range with gap down and high volume predicts reversal, with EWM smoothing for stability.\"\"\"\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    open_ = df_copy[\"open\"]\n    volume = df_copy[\"volume\"]\n    range_ = high - low\n    range_mean = range_.rolling(20, min_periods=20).mean()\n    range_std = range_.rolling(20, min_periods=20).std(ddof=1)\n    range_z = (range_ - range_mean) / range_std.replace(0, np.nan)\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(close, open_)\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(volume, window=60)\n    overnight_neg = np.clip(-overnight_ret, 0, None)\n    range_z_clipped = np.maximum(range_z, 0)\n    vol_weight = np.clip(vol_ratio, 0, 2) / 2\n    raw_factor = overnight_neg * range_z_clipped * vol_weight\n    # EWM smoothing to reduce noise\n    smoothed_factor = raw_factor.ewm(span=10, min_periods=10).mean()\n    smoothed_factor = smoothed_factor.fillna(0)\n    df_copy[\"factor_range_exp_rev_ewm_smooth\"] = smoothed_factor\n    return df_copy[\"factor_range_exp_rev_ewm_smooth\"]",
+  "description": "Crossover: Retains Parent 1's reversal core (range expansion, gap down, high volume) and borrowing EWM smoothing from Parent 2 to reduce noise and improve signal stability. The longer volume window (60) identifies sustained elevated volume, while smoothing attenuates short-term fluctuations.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03414483823783571,
+    "icir": 0.4404959346129941,
+    "mi": 0.02149010102035742,
+    "rank_ic": 0.04959135625610241,
+    "rank_icir": 0.5381785234327685
+  },
+  "raw_metrics": {
+    "ic": -0.03414483823783571,
+    "icir": -0.4404959346129941,
+    "mi": 0.02149010102035742,
+    "rank_ic": -0.04959135625610241,
+    "rank_icir": -0.5381785234327685
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.06680610450174052,
+    "top_quantile_excess_return": 0.04459167936676889,
+    "top_quantile_max_drawdown": -0.02903564031796302,
+    "top_quantile_turnover": 0.11719546720264515
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:32:34.985537+00:00"
+}

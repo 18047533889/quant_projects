@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_mutation_tail_risk_001_ee9dbb61_g1_crossover_ba7cd6dc",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 305,
+  "factor_name": "factor_panic_excursion_ema_volume_resilience",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w01-20260813-064101-r2",
+  "expression_type": "python",
+  "formula": "factor = rolling_sum_20( max(0, (prev_close - low) / prev_close) * clip(classify_volume_regime(volume, window=20).vol_ratio, 0.5, 2.0) ) / (1 + rolling_sum_60(min(ret,0)^2) / rolling_sum_60(max(ret,0)^2) )",
+  "code": "def factor_panic_excursion_ema_volume_resilience(df):\n    \"\"\"Accumulates volume-confirmed downside excursions using EMA-based volume ratio and asymmetric volatility resilience.\"\"\"\n    df_copy = df.copy()\n    prev_close = df_copy[\"close\"].shift(1)\n    downside_excursion = ((prev_close - df_copy[\"low\"]) / prev_close.replace(0.0, np.nan)).clip(lower=0.0)\n\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    vol_weight = np.clip(vol_ratio.fillna(1.0), 0.5, 2.0)\n    stress_component = downside_excursion * vol_weight\n    stress_sum = stress_component.rolling(20, min_periods=10).sum()\n\n    ret = df_copy[\"close\"].pct_change()\n    down_ret = np.minimum(ret, 0.0)\n    up_ret = np.maximum(ret, 0.0)\n    down_var = (down_ret ** 2).rolling(60, min_periods=20).sum()\n    up_var = (up_ret ** 2).rolling(60, min_periods=20).sum()\n    down_ratio = down_var / up_var.replace(0.0, np.nan)\n    down_ratio = down_ratio.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    factor = stress_sum / (1.0 + down_ratio)\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    return pd.Series(factor, index=df_copy.index, name=\"factor_panic_excursion_ema_volume_resilience\")",
+  "description": "Preserves the parent's core panic-selling stress accumulation: downside intraday excursions are weighted by volume surge and then divided by (1 + downside/upside variance ratio) to emphasize panic episodes in otherwise low-tail-risk stocks. The lightweight modifier remains a bounded volume weight [0.5, 2.0]. The mutation replaces the slow 60-day simple moving average volume ratio with the active alpha_tools.classify_volume_regime module using window=20, which produces a continuous EMA-based volume ratio. This makes volume confirmation more responsive to sharp shocks, targeting MI and drawdown robustness while retaining the RankIC/ICIR stability and payoff monotonicity of the parent.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.016204244618064127,
+    "icir": 0.16366224686787995,
+    "mi": 0.029990843687642155,
+    "rank_ic": 0.04140827111296896,
+    "rank_icir": 0.4314508169006066
+  },
+  "raw_metrics": {
+    "ic": -0.016204244618064127,
+    "icir": -0.16366224686787995,
+    "mi": 0.029990843687642155,
+    "rank_ic": -0.04140827111296896,
+    "rank_icir": -0.4314508169006066
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.886022751858282,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.5125070859868128,
+    "top_quantile_excess_return": 9.795932320626267,
+    "top_quantile_max_drawdown": -0.09430748683294143,
+    "top_quantile_turnover": 0.11384918766921175
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:51:28.151088+00:00"
+}

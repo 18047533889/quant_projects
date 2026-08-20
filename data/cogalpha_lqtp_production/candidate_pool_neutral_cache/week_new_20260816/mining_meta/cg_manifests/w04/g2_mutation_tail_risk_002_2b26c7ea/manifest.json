@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_tail_risk_002_2b26c7ea",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 658,
+  "factor_name": "factor_tail_range_vol_of_vol_mad",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w04-20260813-184426-r7",
+  "expression_type": "python",
+  "formula": "-(mad(true_range,30) / mean(true_range,60))",
+  "code": "def factor_tail_range_vol_of_vol_mad(df):\n    \"\"\"Vol-of-vol stress ratio with robust MAD volatility estimator.\"\"\"\n    df_copy = df.copy()\n    tr = pd.Series(talib.TRANGE(df_copy[\"high\"], df_copy[\"low\"], df_copy[\"close\"]), index=df_copy.index)\n    tr_mean = tr.rolling(30, min_periods=15).mean()\n    mad = (tr - tr_mean).abs().rolling(30, min_periods=15).mean()\n    avg_range = tr.rolling(60, min_periods=30).mean()\n    stress = mad / avg_range.replace(0.0, np.nan)\n    factor = -stress.fillna(0.0)\n    df_copy[\"factor_tail_range_vol_of_vol_mad\"] = factor\n    return df_copy[\"factor_tail_range_vol_of_vol_mad\"]",
+  "description": "Mutation of tail-risk-002 preserves the negative volatility-of-volatility stress ratio mechanism. The core economic idea is that instability of true range (daily price span) signals fragile regime and future underperformance. We replace the rolling standard deviation of true range with a rolling mean absolute deviation (MAD) to reduce sensitivity to outlier spikes and produce a smoother vol-of-vol estimate, targeting improved IC and ICIR while retaining the RankICIR strength and negative sign. The normalization by average true range remains unchanged. Single-stock raw signal; no cross-sectional transform.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01774821656948311,
+    "icir": 0.3080327558120131,
+    "mi": 0.007861999205424297,
+    "rank_ic": 0.03921729300838,
+    "rank_icir": 0.6986519904739017
+  },
+  "raw_metrics": {
+    "ic": 0.01774821656948311,
+    "icir": 0.3080327558120131,
+    "mi": 0.007861999205424297,
+    "rank_ic": 0.03921729300838,
+    "rank_icir": 0.6986519904739017
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.102878967269321,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.01199882066998681,
+    "top_quantile_excess_return": 0.007983301640530183,
+    "top_quantile_max_drawdown": -0.020683700396058158,
+    "top_quantile_turnover": 0.1307331402862223
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:59:57.698976+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_market_cycle_0002_g1_crossover_market_cycle_0002_fef7d1b2",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 762,
+  "factor_name": "factor_range_pressure_downvol_sq",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w04-20260814-081422-r12",
+  "expression_type": "python",
+  "formula": "((rolling_sum_60(close-low) - rolling_sum_60(high-close)) / rolling_sum_60(high-low)) * (1 - (rolling_sum_60(volume*1{ret<0}) / rolling_sum_60(volume))**2)",
+  "code": "def factor_range_pressure_downvol_sq(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    # Primary: cycle range pressure over 60 days (from market_cycle_0002)\n    buy_pressure = (close - df_copy[\"low\"]).rolling(60, min_periods=20).sum()\n    sell_pressure = (df_copy[\"high\"] - close).rolling(60, min_periods=20).sum()\n    total_range = (df_copy[\"high\"] - df_copy[\"low\"]).rolling(60, min_periods=20).sum()\n    range_pressure = (buy_pressure - sell_pressure) / total_range.replace(0.0, np.nan)\n    # Lightweight modifier: downside volume participation (from parent1), squared to preserve signal in normal regimes\n    ret = close.pct_change()\n    down_vol = volume.where(ret < 0, 0.0).rolling(60, min_periods=30).sum()\n    total_vol = volume.rolling(60, min_periods=30).sum().replace(0.0, np.nan)\n    down_ratio = down_vol / total_vol\n    attenuation = 1.0 - down_ratio ** 2\n    factor = range_pressure * attenuation\n    df_copy[\"factor_range_pressure_downvol_sq\"] = factor\n    return df_copy[\"factor_range_pressure_downvol_sq\"]",
+  "description": "Preserves the primary cycle range-pressure mechanism from market_cycle_0002, which identifies accumulation/distribution phase by the position of closes within the trailing 60-day high-low range. Borrows the lightweight downside-volume-participation concept from g1_crossover_market_cycle_0002_acp_gen0_b_tail_skew_volume_as_7ac47edd but applies a squared attenuation (1 - down_ratio^2) instead of linear (1 - down_ratio). This preserves more raw range-pressure signal when downside volume participation is moderate (near 0.5), reducing over-attenuation in normal volume regimes, while still strongly dampening when downside volume dominates. Targets improved IC and ICIR while retaining RankIC and MI from the parent crossover. Cross-sectional transform remains none to preserve raw payoff structure.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.017435898471345534,
+    "icir": 0.3511249840961013,
+    "mi": 0.004411620026535168,
+    "rank_ic": 0.01714255900448162,
+    "rank_icir": 0.30201340545266037
+  },
+  "raw_metrics": {
+    "ic": -0.017435898471345534,
+    "icir": -0.3511249840961013,
+    "mi": 0.004411620026535168,
+    "rank_ic": -0.01714255900448162,
+    "rank_icir": -0.30201340545266037
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.9030445385099055,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.033178883575324836,
+    "top_quantile_excess_return": 0.02213109301200511,
+    "top_quantile_max_drawdown": -0.01717244498400905,
+    "top_quantile_turnover": 0.1326437200393471
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:12:05.430573+00:00"
+}

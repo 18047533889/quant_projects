@@ -182,6 +182,14 @@ def register_polars_bridge(canonical: str) -> None:
             out = pandas_op.calculate(*pdfs, **params)
             return _pl_rebuild(frames[0], out)
 
+    # Check if there's already a polars backend registered
+    existing = OperatorRegistry.get(canonical, "polars")
+    if existing is not None:
+        # If there's already a polars backend, we need to find its source
+        # For now, let's skip registration if there's already a polars backend
+        # This avoids the replace issue
+        return
+
     OperatorRegistry.register(
         _PolarsBridge(),
         canonical=canonical,
@@ -260,6 +268,14 @@ def register_polars_udf(canonical: str) -> None:
                     param_names=[],
                     param_specs=_filtered,
                 )
+
+    # Check if there's already a polars backend registered
+    existing = OperatorRegistry.get(canonical, "polars")
+    if existing is not None:
+        # If there's already a polars backend, we need to find its source
+        # For now, let's skip registration if there's already a polars backend
+        # This avoids the replace issue
+        return
 
     OperatorRegistry.register(
         _PolarsUdf(),

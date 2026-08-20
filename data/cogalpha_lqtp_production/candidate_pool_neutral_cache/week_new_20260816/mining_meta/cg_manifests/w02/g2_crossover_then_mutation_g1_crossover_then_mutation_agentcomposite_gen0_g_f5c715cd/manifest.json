@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_then_mutation_agentcomposite_gen0_g_f5c715cd",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 428,
+  "factor_name": "factor_tail_asymmetry_intraday_jump_severity_ewm",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w02-20260814-042827-r7",
+  "expression_type": "python",
+  "formula": "-(ewm_21(down_intraday_tail_severity) - ewm_21(up_intraday_tail_severity))/(ewm_21(down_intraday_tail_severity)+ewm_21(up_intraday_tail_severity)+1); severity = |excess intraday return|/lagged_intraday_vol beyond 1.5*lagged_intraday_vol",
+  "code": "def factor_tail_asymmetry_intraday_jump_severity_ewm(df):\n    \"\"\"Downside vs upside intraday tail jump severity asymmetry with EWM aggregation for faster adaptation.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    vol = intraday_ret.rolling(63, min_periods=20).std(ddof=1).shift(1)\n    threshold = 1.5 * vol\n    vol_safe = vol.replace(0.0, np.nan)\n    valid = vol > 0\n    down_cond = (intraday_ret < -threshold) & valid\n    up_cond = (intraday_ret > threshold) & valid\n    down_sev = np.where(down_cond, (-(intraday_ret + threshold) / vol_safe).clip(lower=0.0), 0.0)\n    up_sev = np.where(up_cond, ((intraday_ret - threshold) / vol_safe).clip(lower=0.0), 0.0)\n    down_ewm = pd.Series(down_sev, index=df_copy.index).ewm(span=21, min_periods=10).mean()\n    up_ewm = pd.Series(up_sev, index=df_copy.index).ewm(span=21, min_periods=10).mean()\n    df_copy[\"factor_tail_asymmetry_intraday_jump_severity_ewm\"] = -(down_ewm - up_ewm) / (down_ewm + up_ewm + 1.0)\n    return df_copy[\"factor_tail_asymmetry_intraday_jump_severity_ewm\"]",
+  "description": "Mutation preserves the parent's core downside vs upside intraday tail jump severity asymmetry and uses the same active overnight/intraday decomposition tool. The bottleneck targeted is weak IC/ICIR caused by slow 63-day rolling-sum aggregation accumulating stale tail severity. The mutation replaces the 63-day rolling sum with exponentially weighted moving averages (span=21, min_periods=10) for both down and up severity before computing the bounded ratio. This reduces lag, downweights older tail events, and should produce a more responsive, linearly informative signal while retaining the downside-heavy ordering, bounded [-1,1] ratio, raw payoff stability, and RankICIR/payoff strength from the parent. Cross-sectional transform remains none because raw point-in-time asymmetry and monotonic payoff are the parent strengths to preserve.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.015691036944484177,
+    "icir": 0.23749564381279778,
+    "mi": 0.010395031961760282,
+    "rank_ic": 0.03305072647639682,
+    "rank_icir": 0.616242166284351
+  },
+  "raw_metrics": {
+    "ic": -0.015691036944484177,
+    "icir": -0.23749564381279778,
+    "mi": 0.010395031961760282,
+    "rank_ic": -0.03305072647639682,
+    "rank_icir": -0.616242166284351
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.1418699583321485,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.00392065062786684,
+    "top_quantile_excess_return": 0.022595891582922523,
+    "top_quantile_max_drawdown": -0.08072879705256397,
+    "top_quantile_turnover": 0.14578575958927223
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:41:02.800638+00:00"
+}

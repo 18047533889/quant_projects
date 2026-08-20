@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_vol_regime_001_e57cd4fe_7381d05d",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 182,
+  "factor_name": "factor_volatility_dampened_momentum_ewm_returns",
+  "domain_agent": "alpha-volatility-regime",
+  "run_id": "fleet-w02-20260805-050119-r16",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_volatility_dampened_momentum_ewm_returns(df):\n    \"\"\"Volatility-dampened momentum using EWMA return volatility ratio.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    r = close.pct_change()\n    var_short = (r ** 2).ewm(halflife=10, min_periods=10).mean()\n    var_long = (r ** 2).ewm(halflife=60, min_periods=60).mean()\n    vol_ratio = np.sqrt(var_short / var_long.replace(0, np.nan))\n    momentum = close.pct_change(10)\n    signal = momentum * (1.0 / (1.0 + vol_ratio))\n    df_copy[\"factor_volatility_dampened_momentum_ewm_returns\"] = signal\n    return df_copy[\"factor_volatility_dampened_momentum_ewm_returns\"]",
+  "description": "Mutation of parent g1_mutation_vol_regime_001_e57cd4fe: replaces ATR-based volatility ratio with return-based volatility ratio, preserving the EWMA smoothing mechanism. The core economic hypothesis remains that trend-following momentum is more reliable in low-volatility regimes, but now the regime indicator uses return volatility (annualized variance estimate) instead of true range. Return volatility directly measures risk and may better capture nonlinear relationships, potentially improving MI while preserving IC and rank-based stability. The dampening function remains 1/(1+vol_ratio) to maintain the original scaling logic.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02154325802052795,
+    "icir": 0.17798684166609624,
+    "mi": 0.021635357260475274,
+    "rank_ic": 0.03459034928123064,
+    "rank_icir": 0.2594393030683881
+  },
+  "raw_metrics": {
+    "ic": -0.02154325802052795,
+    "icir": -0.17798684166609624,
+    "mi": 0.021635357260475274,
+    "rank_ic": -0.03459034928123064,
+    "rank_icir": -0.2594393030683881
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.3,
+    "top_quantile_annualized_excess_return": 0.018500032929088972,
+    "top_quantile_excess_return": 0.10712446935226416,
+    "top_quantile_max_drawdown": -0.10066109929968559,
+    "top_quantile_turnover": 0.2602427765576352
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:15:20.487076+00:00"
+}

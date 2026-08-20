@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "aoi_pressure_ewm_01",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "elite",
+  "factor_id": 94,
+  "factor_name": "factor_pressure_ewm_smooth",
+  "domain_agent": "alpha-order-imbalance",
+  "run_id": "fleet-w03-20260803-194523-r8",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_pressure_ewm_smooth(df):\n    df_copy = df.copy()\n    overnight_ret = df_copy['open'] / df_copy['close'].shift(1) - 1.0\n    intraday_ret = df_copy['close'] / df_copy['open'] - 1.0\n    pressure = intraday_ret - overnight_ret\n    smoothed = pressure.ewm(span=5, adjust=False).mean()\n    df_copy['factor_pressure_ewm_smooth'] = smoothed\n    return df_copy['factor_pressure_ewm_smooth']",
+  "description": "Intraday return minus overnight return measures directional conviction; exponential smoothing reduces noise while preserving the core pressure signal.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.10141687319221379,
+    "icir": 0.8518193592484226,
+    "mi": 0.02865423292999658,
+    "rank_ic": 0.04945160300002503,
+    "rank_icir": 0.47840135193864425
+  },
+  "raw_metrics": {
+    "ic": -0.10141687319221379,
+    "icir": -0.8518193592484226,
+    "mi": 0.02865423292999658,
+    "rank_ic": -0.04945160300002503,
+    "rank_icir": -0.47840135193864425
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.3335116804694769,
+    "top_quantile_excess_return": 4.286836880067218,
+    "top_quantile_max_drawdown": -0.037736298127246326,
+    "top_quantile_turnover": 0.41560484322498065
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:47:29.371310+00:00"
+}

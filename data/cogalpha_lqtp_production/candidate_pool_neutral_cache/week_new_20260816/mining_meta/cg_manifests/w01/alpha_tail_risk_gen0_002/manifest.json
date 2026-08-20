@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "alpha_tail_risk_gen0_002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 315,
+  "factor_name": "factor_tail_downside_var_ratio",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w01-20260813-111511-r3",
+  "expression_type": "python",
+  "formula": "rolling_sum(square(min(close_pct_change,0)), 60) / rolling_sum(square(close_pct_change), 60)",
+  "code": "def factor_tail_downside_var_ratio(df):\n    df_copy = df.copy()\n    returns = df_copy[\"close\"].pct_change()\n    downside_returns = returns.clip(upper=0.0)\n    downside_var = downside_returns.pow(2).rolling(60, min_periods=60).sum()\n    total_var = returns.pow(2).rolling(60, min_periods=60).sum()\n    ratio = downside_var / total_var.replace(0.0, np.nan)\n    ratio = ratio.replace([np.inf, -np.inf], np.nan)\n    ratio.name = \"factor_tail_downside_var_ratio\"\n    return ratio",
+  "description": "Extreme Risk & Fragility mechanism: stress accumulation manifests as a shift in the realized return distribution toward the left tail. Instead of measuring level volatility, this factor computes the proportion of trailing 60-day squared returns coming from negative daily returns. A high downside variance ratio indicates persistent negative asymmetry and rising fragility, orthogonal to common industry/size effects.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.010067837585788275,
+    "icir": 0.13653844710230006,
+    "mi": 0.009147543742018982,
+    "rank_ic": 0.032014168815615425,
+    "rank_icir": 0.4112220946960034
+  },
+  "raw_metrics": {
+    "ic": 0.010067837585788275,
+    "icir": 0.13653844710230006,
+    "mi": 0.009147543742018982,
+    "rank_ic": 0.032014168815615425,
+    "rank_icir": 0.4112220946960034
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.124891029150802,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.010874069058894875,
+    "top_quantile_excess_return": 0.06188165338800933,
+    "top_quantile_max_drawdown": -0.0949899596160777,
+    "top_quantile_turnover": 0.11545641451716837
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:52:18.698797+00:00"
+}

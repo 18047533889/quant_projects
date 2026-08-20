@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_volasym_tail_jumps_002_4b3f79bd_f0c57b15",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 420,
+  "factor_name": "factor_tail_asymmetry_jump_severity_smoothed",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w02-20260814-042827-r7",
+  "expression_type": "python",
+  "formula": "EWM span=5 of -(sum_63(down_tail_severity) - sum_63(up_tail_severity))/(sum_63(down_tail_severity)+sum_63(up_tail_severity)+1); severity = |excess return|/lagged_vol beyond 1.5*lagged_vol",
+  "code": "def factor_tail_asymmetry_jump_severity_smoothed(df):\n    '''Smoothed downside vs upside tail jump severity asymmetry.'''\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol = ret.rolling(63, min_periods=20).std(ddof=1).shift(1)\n    threshold = 1.5 * vol\n    vol_safe = vol.replace(0.0, np.nan)\n    valid = vol > 0\n    down_cond = (ret < -threshold) & valid\n    up_cond = (ret > threshold) & valid\n    down_sev = np.where(down_cond, (-(ret + threshold) / vol_safe).clip(lower=0.0), 0.0)\n    up_sev = np.where(up_cond, ((ret - threshold) / vol_safe).clip(lower=0.0), 0.0)\n    down_sum = pd.Series(down_sev, index=df_copy.index).rolling(63, min_periods=20).sum()\n    up_sum = pd.Series(up_sev, index=df_copy.index).rolling(63, min_periods=20).sum()\n    raw = -(down_sum - up_sum) / (down_sum + up_sum + 1.0)\n    df_copy['factor_tail_asymmetry_jump_severity_smoothed'] = raw.ewm(span=5, min_periods=1).mean()\n    return df_copy['factor_tail_asymmetry_jump_severity_smoothed']",
+  "description": "Preserves the parent's asymmetric tail jump severity mechanism: each tail exceedance contributes its excess return normalized by lagged realized volatility, and the rolling 63-day sums are aggregated into a downside-minus-upside asymmetry ratio. The single lightweight mutation adds an exponential moving average (span=5) to the final ratio to smooth daily jump-severity noise while retaining the same tail-risk-aversion ordering and avoiding any cross-sectional transform. This targets the parent's weak IC/ICIR (0.0073/0.1382) while preserving the strong RankICIR (0.4570) and payoff stability (long_short_sharpe=4.073, monotonicity=1.0).",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.005859490759797216,
+    "icir": 0.11166557344574259,
+    "mi": 0.005110961571677564,
+    "rank_ic": 0.023190975755598066,
+    "rank_icir": 0.4088919227358136
+  },
+  "raw_metrics": {
+    "ic": -0.005859490759797216,
+    "icir": -0.11166557344574259,
+    "mi": 0.005110961571677564,
+    "rank_ic": -0.023190975755598066,
+    "rank_icir": -0.4088919227358136
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.8315434163073556,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.08014363620625309,
+    "top_quantile_excess_return": 0.552591468415695,
+    "top_quantile_max_drawdown": -0.05097930134024309,
+    "top_quantile_turnover": 0.05318398430880933
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:39:56.130538+00:00"
+}

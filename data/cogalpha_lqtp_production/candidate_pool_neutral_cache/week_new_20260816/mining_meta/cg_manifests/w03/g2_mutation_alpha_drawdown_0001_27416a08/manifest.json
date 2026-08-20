@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_alpha_drawdown_0001_27416a08",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 398,
+  "factor_name": "factor_drawdown_recovery_volume_confirm",
+  "domain_agent": "alpha-drawdown",
+  "run_id": "fleet-w03-20260814-081141-r8",
+  "expression_type": "python",
+  "formula": "recovery_loc = (close - rolling_min(close,60)) / (rolling_max(close,60) - rolling_min(close,60)); vol_boost = 0.5*tanh(volume/rolling_mean(volume,20)-1) if volume>rolling_mean else 0; factor = recovery_loc * (1 + vol_boost)",
+  "code": "def factor_drawdown_recovery_volume_confirm(df):\n    df_copy = df.copy()\n    L = 60\n    peak = df_copy[\"close\"].rolling(L, min_periods=20).max()\n    trough = df_copy[\"close\"].rolling(L, min_periods=20).min()\n    rng = (peak - trough).replace(0.0, np.nan)\n    recovery_loc = (df_copy[\"close\"] - trough) / rng\n    vol_mean = df_copy[\"volume\"].rolling(20, min_periods=5).mean().replace(0.0, np.nan)\n    vol_ratio = df_copy[\"volume\"] / vol_mean\n    vol_boost = np.where(vol_ratio > 1.0, 0.5 * np.tanh(vol_ratio - 1.0), 0.0)\n    factor = recovery_loc * (1.0 + vol_boost)\n    factor = factor.fillna(0.0)\n    df_copy[\"factor_drawdown_recovery_volume_confirm\"] = factor\n    return df_copy[\"factor_drawdown_recovery_volume_confirm\"]",
+  "description": "Preserves the parent's core drawdown recovery geometry: close position within the 60-day rolling peak-trough range identifies how far price has recovered from recent lows. The volume modifier is refined to act only as positive confirmation: above-average volume amplifies the recovery signal with a bounded tanh transformation, while below-average volume does not penalize the signal. This asymmetric volume weighting reduces noise from low-liquidity periods and stabilizes the factor's ICIR/RankICIR without altering the recovery mechanism. Raw signal kept continuous and uninormalized to retain within-stock magnitude information.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.013388410625512806,
+    "icir": 0.1538172343781246,
+    "mi": 0.01585290680160867,
+    "rank_ic": 0.02989848562901687,
+    "rank_icir": 0.3132135088837953
+  },
+  "raw_metrics": {
+    "ic": -0.013388410625512806,
+    "icir": -0.1538172343781246,
+    "mi": 0.01585290680160867,
+    "rank_ic": -0.02989848562901687,
+    "rank_icir": -0.3132135088837953
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.681362144773903,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.18274274052226946,
+    "top_quantile_excess_return": 1.6092515441403346,
+    "top_quantile_max_drawdown": -0.1633865178436401,
+    "top_quantile_turnover": 0.2158853560533768
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:08:43.626217+00:00"
+}

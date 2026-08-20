@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_apvc_gen0_c2_vol_asymmetry_ret_rang_96aeb7bd",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 273,
+  "factor_name": "factor_volume_beta_range_asymmetry_smooth_weight",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w02-20260813-014015-r1",
+  "expression_type": "python",
+  "formula": "beta = Cov(ret, dlog(volume), 20) / Var(dlog(volume), 20); smoothed_corr = SMA(Corr(ret, pct_change(high-low), 20), 5); weight = 1 + 0.5 * smoothed_corr; factor = beta * weight",
+  "code": "def factor_volume_beta_range_asymmetry_smooth_weight(df):\n    \"\"\"Volume-confirmed return beta gated by smoothed range asymmetry correlation.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    log_volume = np.log(df_copy['volume'].clip(lower=1e-12))\n    dlog_volume = log_volume.diff()\n    cov = ret.rolling(20, min_periods=20).cov(dlog_volume)\n    var_vol = dlog_volume.rolling(20, min_periods=20).var(ddof=1)\n    beta = cov / var_vol.replace(0.0, np.nan)\n    range_ = df_copy['high'] - df_copy['low']\n    range_chg = range_.pct_change()\n    range_chg = range_chg.replace([np.inf, -np.inf], np.nan)\n    corr_range = ret.rolling(20, min_periods=20).corr(range_chg)\n    smoothed_corr = corr_range.rolling(5, min_periods=1).mean()\n    weight = 1.0 + 0.5 * smoothed_corr\n    factor = beta * weight\n    df_copy['factor_volume_beta_range_asymmetry_smooth_weight'] = factor\n    return df_copy['factor_volume_beta_range_asymmetry_smooth_weight']",
+  "description": "Mutation preserves the qualified parent's core mechanism: rolling sensitivity of daily returns to volume changes (volume-confirmed beta). The parent's range asymmetry weight (1 + 0.5 * rolling corr between returns and high-low range changes) is smoothed by taking a trailing 5-day mean of the correlation before scaling. This reduces high-frequency noise in the weight while retaining the economic intuition: positive correlation reinforces volume-confirmed moves, negative correlation dampens them due to leverage effect. The smoothing targets improved robustness and MI without altering the continuous bounded nature of the weight, preserving the parent's strong RankICIR and volume-confirmed beta lineage.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.016003846220944265,
+    "icir": 0.22413532137834413,
+    "mi": 0.0165622545209807,
+    "rank_ic": 0.041811211339818966,
+    "rank_icir": 0.6482918344143347
+  },
+  "raw_metrics": {
+    "ic": -0.016003846220944265,
+    "icir": -0.22413532137834413,
+    "mi": 0.0165622545209807,
+    "rank_ic": -0.041811211339818966,
+    "rank_icir": -0.6482918344143347
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.522126342865804,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.0789220145280336,
+    "top_quantile_excess_return": 0.543063096392463,
+    "top_quantile_max_drawdown": -0.08380024993142232,
+    "top_quantile_turnover": 0.1761545650724686
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:19:58.442069+00:00"
+}

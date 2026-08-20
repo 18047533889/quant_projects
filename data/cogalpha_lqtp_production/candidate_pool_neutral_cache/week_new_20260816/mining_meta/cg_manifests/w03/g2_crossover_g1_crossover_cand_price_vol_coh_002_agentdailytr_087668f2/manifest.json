@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_crossover_cand_price_vol_coh_002_agentdailytr_087668f2",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 21,
+  "factor_name": "factor_vwap_sma_vol_regime",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w03-20260802-181255-r2",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_vwap_sma_vol_regime(df):\n    df_copy = df.copy()\n    d = 20\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    vwap = (close * volume).rolling(window=d, min_periods=d).sum() / volume.rolling(window=d, min_periods=d).sum()\n    sma = close.rolling(window=d, min_periods=d).mean()\n    raw_signal = (vwap - sma) / close\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(volume, window=20, high_threshold=1.5, low_threshold=0.6)\n    clipped_vol_ratio = vol_ratio.clip(0.5, 2.0)\n    factor = raw_signal * clipped_vol_ratio\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    factor.name = \"factor_vwap_sma_vol_regime\"\n    return factor",
+  "description": "Crossover combining VWAP-SMA divergence (primary mechanism from parent 1, cand_price_vol_coh_002 / agentdailytrend_g0_c2 lineage) with an EMA-based volume regime filter (lightweight modifier borrowed from parent 2's volume ratio concept, enhanced via alpha_tools.classify_volume_regime for faster adaptation). The raw VWAP-SMA signal normalized by close is scaled by the clipped vol_ratio to de-emphasize low-volume signals, aiming to preserve strong RankIC and RankICIR while improving IC through more responsive volume filtration.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.026693144533959698,
+    "icir": 0.29139499003979685,
+    "mi": 0.03129118544615128,
+    "rank_ic": 0.04549724976479374,
+    "rank_icir": 0.4573297861870776
+  },
+  "raw_metrics": {
+    "ic": -0.026693144533959698,
+    "icir": -0.29139499003979685,
+    "mi": 0.03129118544615128,
+    "rank_ic": -0.04549724976479374,
+    "rank_icir": -0.4573297861870776
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.28177771883085634,
+    "top_quantile_excess_return": 3.1311662641844418,
+    "top_quantile_max_drawdown": -0.0748899237188958,
+    "top_quantile_turnover": 0.15523734521839141
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:45:24.298608+00:00"
+}

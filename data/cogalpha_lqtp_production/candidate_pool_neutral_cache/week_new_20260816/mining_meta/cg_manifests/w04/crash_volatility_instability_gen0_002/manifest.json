@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "crash_volatility_instability_gen0_002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 649,
+  "factor_name": "factor_volatility_instability",
+  "domain_agent": "alpha-crash-predictor",
+  "run_id": "fleet-w04-20260813-184426-r7",
+  "expression_type": "python",
+  "formula": "std(std(close.pct_change(), 10), 20)",
+  "code": "def factor_volatility_instability(df):\n    \"\"\"Volatility instability: rolling standard deviation of short-horizon realized volatility, capturing regime breakdown precursors.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_short = ret.rolling(10, min_periods=5).std()\n    vol_change = vol_short.rolling(20, min_periods=10).std()\n    df_copy[\"factor_volatility_instability\"] = vol_change\n    return df_copy[\"factor_volatility_instability\"]",
+  "description": "Volatility of volatility (vol-of-vol) surges when market conditions transition from calm to turbulent, often preceding crashes or regime breakdowns. This factor computes the standard deviation of short-horizon realized volatility over a longer window, isolating instability in risk itself. Unlike simple volatility, it picks up on the acceleration or deceleration of risk, a hallmark of fragility. The mechanism uses only past daily close returns and explores an uncovered raw pathway in this domain.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.013833793831894396,
+    "icir": 0.21607453652629963,
+    "mi": 0.014115743644623535,
+    "rank_ic": 0.04258920461115696,
+    "rank_icir": 0.6312871079652128
+  },
+  "raw_metrics": {
+    "ic": -0.013833793831894396,
+    "icir": -0.21607453652629963,
+    "mi": 0.014115743644623535,
+    "rank_ic": -0.04258920461115696,
+    "rank_icir": -0.6312871079652128
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.365629217074556,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.023843502879494993,
+    "top_quantile_excess_return": 0.017354093338649568,
+    "top_quantile_max_drawdown": -0.03473577091735103,
+    "top_quantile_turnover": 0.11050168591884522
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:58:03.239176+00:00"
+}

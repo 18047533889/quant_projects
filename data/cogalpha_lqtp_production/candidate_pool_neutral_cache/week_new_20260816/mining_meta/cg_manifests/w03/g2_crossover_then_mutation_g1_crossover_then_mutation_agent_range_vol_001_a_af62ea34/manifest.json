@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_then_mutation_agent_range_vol_001_a_af62ea34",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 203,
+  "factor_name": "factor_range_vol_squeeze_boost",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w03-20260805-083247-r16",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_range_vol_squeeze_boost(df):\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    short_ma_range = range_.rolling(5, min_periods=5).mean()\n    long_ma_range = range_.rolling(20, min_periods=20).mean()\n    range_ratio = short_ma_range / long_ma_range.replace(0.0, np.nan)\n    is_high_vol, _, _ = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    base_factor = -range_ratio\n    boost = 1.0 + 0.2 * is_high_vol\n    factor = base_factor * boost\n    df_copy[\"factor_range_vol_squeeze_boost\"] = factor.fillna(0.0)\n    return df_copy[\"factor_range_vol_squeeze_boost\"]",
+  "description": "Mutation of factor_range_vol_tool_squeeze preserving the core range compression mechanism (short-to-long average daily range ratio, negative). Replaces the continuous volume regime ratio multiplication with a lightweight conditional 20% boost on high-volume days derived from alpha_tools.classify_volume_regime. This reduces noise from extreme volume ratios while retaining institutional participation confirmation, aiming to improve signal stability (ICIR/RankICIR).",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.048775768625941456,
+    "icir": 0.5378582131805996,
+    "mi": 0.020120604296737454,
+    "rank_ic": 0.030616714199077386,
+    "rank_icir": 0.34087713407045833
+  },
+  "raw_metrics": {
+    "ic": 0.048775768625941456,
+    "icir": 0.5378582131805996,
+    "mi": 0.020120604296737454,
+    "rank_ic": 0.030616714199077386,
+    "rank_icir": 0.34087713407045833
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.18201607825470711,
+    "top_quantile_excess_return": 1.6001042783737107,
+    "top_quantile_max_drawdown": -0.09942526256748996,
+    "top_quantile_turnover": 0.25697318034208283
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:53:16.730931+00:00"
+}

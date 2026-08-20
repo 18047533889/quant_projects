@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_crossover_range_exp_rev_001_alpha_herding_0_2_e7298288",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 356,
+  "factor_name": "factor_range_reversal_bounded_vol_weighted",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260805-020538-r26",
+  "expression_type": "python",
+  "formula": "(-(close / close.shift(5) - 1) * ((high - low).rolling(20).zscore())) * clip(clip(volume / volume.rolling(20).mean(), 0, 2) / 2, 0.5, 1.0) smoothed EMA(3)",
+  "code": "def factor_range_reversal_bounded_vol_weighted(df):\n    \"\"\"Range expansion reversal with bounded volume weight: signals only when volume elevated, with continuous weight clipped to [0.5, 1.0].\"\"\"\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    range_mean = range_.rolling(20, min_periods=20).mean()\n    range_std = range_.rolling(20, min_periods=20).std(ddof=1)\n    range_z = (range_ - range_mean) / range_std.replace(0, np.nan)\n    ret5 = df_copy[\"close\"] / df_copy[\"close\"].shift(5) - 1\n    raw_signal = -ret5 * range_z\n    avg_vol = df_copy[\"volume\"].rolling(20, min_periods=20).mean()\n    vol_ratio = df_copy[\"volume\"] / avg_vol.replace(0, np.nan)\n    vol_weight = np.clip(vol_ratio, 0.0, 2.0) / 2.0\n    bounded_vol_weight = np.clip(vol_weight, 0.5, 1.0)\n    signal = raw_signal * bounded_vol_weight\n    signal = signal.ewm(span=3, min_periods=3).mean()\n    df_copy[\"factor_range_reversal_bounded_vol_weighted\"] = signal\n    return df_copy[\"factor_range_reversal_bounded_vol_weighted\"]",
+  "description": "Crossover combining the continuous volume weighting from the qualified mutation parent (vol_weight = clip(vol_ratio,0,2)/2) with the minimum attenuation floor from the elite parent's binary volume condition (0.5 floor). The bounded weight reduces signal sparsity while maintaining a floor to prevent excessive attenuation when volume is low; high volume signals still receive full weight up to 1.0. Parent strength target: preserve ICIR and RankICIR stability while enhancing rank stability through continuous scaling with a bounded floor.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.028491731520726232,
+    "icir": 0.41424562595700676,
+    "mi": 0.028860497667777985,
+    "rank_ic": 0.06604901573559657,
+    "rank_icir": 0.8522051994995254
+  },
+  "raw_metrics": {
+    "ic": 0.028491731520726232,
+    "icir": 0.41424562595700676,
+    "mi": 0.028860497667777985,
+    "rank_ic": 0.06604901573559657,
+    "rank_icir": 0.8522051994995254
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.18285445592881588,
+    "top_quantile_excess_return": 0.12518922114316977,
+    "top_quantile_max_drawdown": -0.014352227789049432,
+    "top_quantile_turnover": 0.40121714681228143
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:29:42.506074+00:00"
+}

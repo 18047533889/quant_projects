@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_vol_highvol_decay_v1_g1_crossover_vol_highvol_de_86489c8c",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 477,
+  "factor_name": "factor_volume_momentum_temporal_decay",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260805-231604-r34",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_volume_momentum_temporal_decay(df):\n    df_copy = df.copy()\n    # get volume regime info\n    is_high_vol, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    # compute returns\n    ret = df_copy[\"close\"].pct_change()\n    weighted_ret = ret * vol_ratio\n    # 5-day and 20-day volume-weighted momentum\n    sum_wt_ret_5 = weighted_ret.rolling(5, min_periods=5).sum()\n    sum_vol_5 = vol_ratio.rolling(5, min_periods=5).sum()\n    factor_5 = sum_wt_ret_5 / sum_vol_5.replace(0, np.nan)\n    sum_wt_ret_20 = weighted_ret.rolling(20, min_periods=20).sum()\n    sum_vol_20 = vol_ratio.rolling(20, min_periods=20).sum()\n    factor_20 = sum_wt_ret_20 / sum_vol_20.replace(0, np.nan)\n    # adaptive momentum (same as parent)\n    momentum = factor_5.where(is_high_vol > 0, factor_20)\n    # days since last high vol day\n    group = is_high_vol.cumsum()\n    days_since = is_high_vol.groupby(group).cumcount()  # 0 on high vol day\n    days_since = days_since.clip(upper=60)\n    # temporal decay weight\n    decay = 1.0 / (1.0 + days_since / 10.0)\n    # apply decay\n    signal = momentum * decay\n    df_copy[\"factor_volume_momentum_temporal_decay\"] = signal.fillna(0)\n    return df_copy[\"factor_volume_momentum_temporal_decay\"]",
+  "description": "Fuses volume-weighted momentum (primary mechanism from parent g1_crossover_vol_highvol_decay_v1_pvc_coherence_gen0_1_105b910e) with temporal decay since last high-volume day (lightweight modifier from parent vol_highvol_decay_v1). After a volume spike, the predictive power of momentum may fade as the market digests information; the signal is attenuated based on the elapsed time since the last spike. The core volume-weighted momentum uses a 5-day window during high volume regimes and a 20-day window otherwise, providing smooth adaptation. The decay factor is 1/(1+days_since/10), ensuring continuous attenuation without binary gating.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.027919591847801434,
+    "icir": 0.303305665883653,
+    "mi": 0.05270416188303617,
+    "rank_ic": 0.06188695162420465,
+    "rank_icir": 0.6200247331226565
+  },
+  "raw_metrics": {
+    "ic": -0.027919591847801434,
+    "icir": -0.303305665883653,
+    "mi": 0.05270416188303617,
+    "rank_ic": -0.06188695162420465,
+    "rank_icir": -0.6200247331226565
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.5,
+    "top_quantile_annualized_excess_return": 0.07125070778889975,
+    "top_quantile_excess_return": 0.05412667556252493,
+    "top_quantile_max_drawdown": -0.02504933298563583,
+    "top_quantile_turnover": 0.20723287783391528
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:40:45.971336+00:00"
+}

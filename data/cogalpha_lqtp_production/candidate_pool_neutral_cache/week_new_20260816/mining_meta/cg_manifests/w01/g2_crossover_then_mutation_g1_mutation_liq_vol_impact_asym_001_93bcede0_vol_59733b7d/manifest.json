@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_mutation_liq_vol_impact_asym_001_93bcede0_vol_59733b7d",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 363,
+  "factor_name": "factor_volume_impact_asymmetry",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w01-20260813-195334-r5",
+  "expression_type": "python",
+  "formula": "ewm_std(positive intraday return * high-volume weight) minus ewm_std(negative intraday return * low-volume weight), normalized by sum",
+  "code": "def factor_volume_impact_asymmetry(df):\n    df_copy = df.copy()\n    _, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    up_weight = vol_ratio.clip(0.3, 2.0)\n    down_weight = (1.0 / vol_ratio).clip(0.3, 2.0)\n    up_impact = intraday_ret.clip(lower=0.0) * up_weight\n    down_impact = (-intraday_ret.clip(upper=0.0)) * down_weight\n    up_vol = up_impact.ewm(span=20, min_periods=10).std()\n    down_vol = down_impact.ewm(span=20, min_periods=10).std()\n    denom = (up_vol + down_vol).replace(0.0, np.nan)\n    factor = (up_vol - down_vol) / denom\n    factor = factor.replace([np.inf, -np.inf], np.nan)\n    df_copy[\"factor_volume_impact_asymmetry\"] = factor\n    return df_copy[\"factor_volume_impact_asymmetry\"]",
+  "description": "Preserves the parent's core economic mechanism: asymmetric volume-impact on intraday returns, where high-volume up moves and low-volume down moves signal demand absorption versus illiquidity pressure. This mutation is an ablation that removes the auxiliary normalized high-low range deviation modifier, reducing the factor to its single core mechanism. The range multiplier added an extra component that may dilute the raw signal and introduce noise, so removing it should improve IC stability and interpretability while retaining the directional volume-confirmed pressure signal.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.012324478908599373,
+    "icir": 0.18563347936227134,
+    "mi": 0.00842762588825785,
+    "rank_ic": 0.03542401557959708,
+    "rank_icir": 0.49884804185843784
+  },
+  "raw_metrics": {
+    "ic": -0.012324478908599373,
+    "icir": -0.18563347936227134,
+    "mi": 0.00842762588825785,
+    "rank_ic": -0.03542401557959708,
+    "rank_icir": -0.49884804185843784
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.713087903110503,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.0038764674360050044,
+    "top_quantile_excess_return": 0.022511595820988495,
+    "top_quantile_max_drawdown": -0.14569984867115526,
+    "top_quantile_turnover": 0.14386062049770262
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:01:43.738710+00:00"
+}

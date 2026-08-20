@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_amc_gen0_001_b43f15da_amc_gen0_001_2773a460",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 375,
+  "factor_name": "factor_cycle_phase_duration_longstreak_boost",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w03-20260814-035032-r7",
+  "expression_type": "python",
+  "formula": "distance = (close - EMA(120)) / ATR(20); raw_streak = signed consecutive trend days; streak_log = sign * log1p(|raw_streak|); boost = 1.0 if |raw_streak| >= 5 else 0.5; factor = distance * (1 + boost * |streak_log|)",
+  "code": "def factor_cycle_phase_duration_longstreak_boost(df):\n    \"\"\"Long-term trend strength with phase-duration amplification boosted only for long streaks.\"\"\"\n    df_copy = df.copy()\n    ema = df_copy[\"close\"].ewm(span=120, adjust=False).mean()\n    atr = talib.ATR(df_copy[\"high\"].values, df_copy[\"low\"].values, df_copy[\"close\"].values, timeperiod=20)\n    atr = pd.Series(atr, index=df_copy.index)\n    distance = (df_copy[\"close\"] - ema) / atr.replace(0.0, np.nan)\n    direction = np.sign(distance)\n    pos = direction > 0\n    neg = direction < 0\n    pos_cum = pos.cumsum()\n    pos_reset = pos_cum.where(~pos).ffill().fillna(0.0)\n    pos_streak = pos_cum - pos_reset\n    neg_cum = neg.cumsum()\n    neg_reset = neg_cum.where(~neg).ffill().fillna(0.0)\n    neg_streak = neg_cum - neg_reset\n    raw_streak = np.where(pos, pos_streak, -neg_streak)\n    streak_log = np.sign(raw_streak) * np.log1p(np.abs(raw_streak))\n    boost = np.where(np.abs(raw_streak) >= 5, 1.0, 0.5)\n    factor = distance * (1.0 + boost * np.abs(streak_log))\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    df_copy[\"factor_cycle_phase_duration_longstreak_boost\"] = factor\n    return df_copy[\"factor_cycle_phase_duration_longstreak_boost\"]",
+  "description": "Crossover of qualified parent g1_mutation_amc_gen0_001_b43f15da (primary mechanism: distance from 120-day EMA normalized by ATR, amplified by damped phase duration) and amc-gen0-001 (secondary idea: full log(1+streak) amplification). The primary parent's 0.5 multiplier improved IC and ICIR but may underutilize long-established trends. The secondary parent's stronger 1.0 multiplier is borrowed as a conditional boost: for phases lasting at least 5 consecutive days, full amplification is retained, while shorter phases keep the damped 0.5 multiplier to reduce noise. This preserves the primary monotonic rank ordering and MI stability while targeting the IC/ICIR bottleneck by reinforcing only high-conviction long streaks.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.008637199696712936,
+    "icir": 0.09135627297928536,
+    "mi": 0.014740987623763857,
+    "rank_ic": 0.026547133052817234,
+    "rank_icir": 0.2665350400179449
+  },
+  "raw_metrics": {
+    "ic": -0.008637199696712936,
+    "icir": -0.09135627297928536,
+    "mi": 0.014740987623763857,
+    "rank_ic": -0.026547133052817234,
+    "rank_icir": -0.2665350400179449
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.1725983311095614,
+    "quantile_monotonicity": 0.9393939393939394,
+    "top_quantile_annualized_excess_return": 0.024071970570141765,
+    "top_quantile_excess_return": 0.1454874014108054,
+    "top_quantile_max_drawdown": -0.1778072969301987,
+    "top_quantile_turnover": 0.09292192254499386
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:05:19.603685+00:00"
+}

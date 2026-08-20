@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_cand_order_imbalance_1_e50774f4_g1_m_021bc3a4",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 52,
+  "factor_name": "factor_overnight_breakout_align_gate",
+  "domain_agent": "alpha-order-imbalance",
+  "run_id": "fleet-w01-20260803-061037-r5",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_overnight_breakout_align_gate(df):\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=60)\n    ret = df_copy[\"close\"].pct_change()\n    vol_change = df_copy[\"volume\"].pct_change()\n    agree = np.sign(ret) == np.sign(vol_change)\n    alignment = agree.rolling(10, min_periods=5).mean()\n    gate = 0.5 + 0.5 * alignment\n    signal = overnight_ret * vol_ratio * gate\n    df_copy[\"factor_overnight_breakout_align_gate\"] = signal\n    return df_copy[\"factor_overnight_breakout_align_gate\"]",
+  "description": "Crossover: primary parent mechanism of overnight return multiplied by volume ratio to confirm breakouts (high IC/ICIR). Borrows lightweight return-volume sign alignment gate from secondary parent as a continuous attenuation factor. When price and volume changes are consistently aligned, signal is amplified; when they diverge, signal is dampened. This aims to improve RankIC/IR by reducing noise during misalignment periods while preserving IC/ICIR. Parent strength target: IC and ICIR.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.04062122063145449,
+    "icir": 0.49625392608422214,
+    "mi": 0.025961337774107918,
+    "rank_ic": 0.02271291075359042,
+    "rank_icir": 0.36251514207233876
+  },
+  "raw_metrics": {
+    "ic": 0.04062122063145449,
+    "icir": 0.49625392608422214,
+    "mi": 0.025961337774107918,
+    "rank_ic": 0.02271291075359042,
+    "rank_icir": 0.36251514207233876
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.16407051266400008,
+    "top_quantile_excess_return": 1.404096202027577,
+    "top_quantile_max_drawdown": -0.04543105619081467,
+    "top_quantile_turnover": 0.7465896923843504
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:38:12.149829+00:00"
+}

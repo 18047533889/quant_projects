@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "tail_risk_semivar_asym_002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 282,
+  "factor_name": "factor_tail_semivariance_asymmetry",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w03-20260813-063501-r2",
+  "expression_type": "python",
+  "formula": "sum(min(return,0)^2, 60) / sum(max(return,0)^2, 60)",
+  "code": "def factor_tail_semivariance_asymmetry(df):\n    \"\"\"Measures downside variance dominance as a stress accumulation proxy; higher values indicate heavier lower tail.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    down_ret = ret.where(ret < 0)\n    up_ret = ret.where(ret > 0)\n    down_var = (down_ret ** 2).rolling(60, min_periods=20).sum()\n    up_var = (up_ret ** 2).rolling(60, min_periods=20).sum()\n    factor = down_var / up_var.replace(0, np.nan)\n    factor = factor.replace([np.inf, -np.inf], np.nan)\n    df_copy[\"factor_tail_semivariance_asymmetry\"] = factor\n    return df_copy[\"factor_tail_semivariance_asymmetry\"]",
+  "description": "The factor computes the ratio of rolling 60-day downside variance to upside variance. Higher downside variance relative to upside variance indicates asymmetric lower-tail risk and stress accumulation. This uncovered pathway directly measures variance asymmetry rather than skew/kurtosis or return percentiles, enriching tail-risk detection.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.007354793815873271,
+    "icir": 0.12989888931016177,
+    "mi": 0.006767935150053361,
+    "rank_ic": 0.0296763796884267,
+    "rank_icir": 0.44514583927350243
+  },
+  "raw_metrics": {
+    "ic": 0.007354793815873271,
+    "icir": 0.12989888931016177,
+    "mi": 0.006767935150053361,
+    "rank_ic": 0.0296763796884267,
+    "rank_icir": 0.44514583927350243
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.6665986589988013,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.013559282079116164,
+    "top_quantile_excess_return": 0.07878851581725987,
+    "top_quantile_max_drawdown": -0.09568772107784207,
+    "top_quantile_turnover": 0.11922335362267643
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:55:37.110849+00:00"
+}

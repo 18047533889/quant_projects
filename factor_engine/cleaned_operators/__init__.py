@@ -372,6 +372,7 @@ _REVIEWED_EXTENSIONS = (
     "cleaned_operators.price_volume.liquidity_naming_v2",
     "cleaned_operators.technical.indicators_v2",
     "cleaned_operators.technical.event_state_v2",
+    "cleaned_operators.technical.event_state_derivations_v1",
     "cleaned_operators.technical.exself_cs_v1",
     "cleaned_operators.technical.group_state_v1",
     "cleaned_operators.technical.polars_indicators_v2",

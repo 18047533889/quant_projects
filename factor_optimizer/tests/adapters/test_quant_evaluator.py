@@ -202,7 +202,7 @@ def _current_qe_fixture():
             horizon=1,
             decision_time=tuple(times),
             label_start_time=tuple(times),
-            label_end_time=tuple(times),
+            label_end_time=tuple(times + 1),
         ),
     )
 

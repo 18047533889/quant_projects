@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "cand_trend_regime_momentum_0",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 382,
+  "factor_name": "factor_trend_regime_momentum",
+  "domain_agent": "alpha-regime-gating",
+  "run_id": "fleet-w04-20260805-075323-r28",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_trend_regime_momentum(df):\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    prev_close = close.shift(1)\n    tr1 = high - low\n    tr2 = (high - prev_close).abs()\n    tr3 = (low - prev_close).abs()\n    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)\n    prev_high = high.shift(1)\n    prev_low = low.shift(1)\n    up_move = high - prev_high\n    down_move = prev_low - low\n    plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)\n    minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)\n    period = 14\n    alpha = 1.0 / period\n    atr = tr.ewm(alpha=alpha, adjust=False, min_periods=period).mean()\n    smoothed_plus_dm = pd.Series(plus_dm, index=df_copy.index).ewm(alpha=alpha, adjust=False, min_periods=period).mean()\n    smoothed_minus_dm = pd.Series(minus_dm, index=df_copy.index).ewm(alpha=alpha, adjust=False, min_periods=period).mean()\n    plus_di = 100.0 * smoothed_plus_dm / atr.replace(0, np.nan)\n    minus_di = 100.0 * smoothed_minus_dm / atr.replace(0, np.nan)\n    dx = 100.0 * np.abs(plus_di - minus_di) / (plus_di + minus_di).replace(0, np.nan)\n    adx = dx.ewm(alpha=alpha, adjust=False, min_periods=period).mean()\n    sma50 = close.rolling(50, min_periods=50).mean()\n    pct_diff = (close - sma50) / sma50\n    trend_signal = pct_diff\n    mean_rev_signal = -pct_diff\n    factor = np.where(adx > 20, trend_signal, mean_rev_signal)\n    df_copy[\"factor_trend_regime_momentum\"] = factor\n    return df_copy[\"factor_trend_regime_momentum\"]",
+  "description": "This factor implements a trend-strength adaptive gate: when ADX(14) exceeds 20, the market is trending and we follow the price momentum relative to its 50-day SMA (positive when above, negative when below). When ADX \u2264 20, the market is range-bound and mean reversion is expected, so we bet against the momentum. The ADX calculation uses standard pandas/numpy Wilder smoothing instead of talib to avoid runtime dependency issues. The mechanism directly addresses the Stability & Regime-Gating layer by switching signal direction based on a robust trend classifier.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0272000603915227,
+    "icir": 0.23964452735520217,
+    "mi": 0.04432170450349027,
+    "rank_ic": 0.05724259684981898,
+    "rank_icir": 0.5359972045041128
+  },
+  "raw_metrics": {
+    "ic": -0.0272000603915227,
+    "icir": -0.23964452735520217,
+    "mi": 0.04432170450349027,
+    "rank_ic": -0.05724259684981898,
+    "rank_icir": -0.5359972045041128
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.11052917974381637,
+    "top_quantile_excess_return": 0.06394824053999115,
+    "top_quantile_max_drawdown": -0.029299523804104832,
+    "top_quantile_turnover": 0.19525153140111948
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:31:15.697614+00:00"
+}

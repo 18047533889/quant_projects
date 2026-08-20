@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_pv_coherence_gen0_cand1_2b5c8d5b_02f25ba5",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 360,
+  "factor_name": "factor_volume_confirmed_ewm_mean_diff",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w01-20260813-195334-r5",
+  "expression_type": "python",
+  "formula": "ewm_mean(return | volume_change>0) - ewm_mean(return | volume_change<0) over span=20",
+  "code": "def factor_volume_confirmed_ewm_mean_diff(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_change = df_copy[\"volume\"].pct_change().replace([np.inf, -np.inf], np.nan)\n    up_mask = vol_change > 0\n    down_mask = vol_change < 0\n    up_ret_sum = (ret * up_mask).ewm(span=20, min_periods=10).sum()\n    up_count = up_mask.ewm(span=20, min_periods=10).sum()\n    down_ret_sum = (ret * down_mask).ewm(span=20, min_periods=10).sum()\n    down_count = down_mask.ewm(span=20, min_periods=10).sum()\n    up_mean = up_ret_sum / up_count.replace(0, np.nan)\n    down_mean = down_ret_sum / down_count.replace(0, np.nan)\n    factor = up_mean - down_mean\n    df_copy[\"factor_volume_confirmed_ewm_mean_diff\"] = factor\n    return df_copy[\"factor_volume_confirmed_ewm_mean_diff\"]\n",
+  "description": "Preserves the parent's price-volume coherence core: conditional mean difference between returns on volume expansion days and volume contraction days. The mutation replaces the simple rolling window with exponentially weighted moving averages (EWMA) with span=20. This gives more weight to recent price-volume interactions, potentially improving ICIR and responsiveness while keeping the same economic mechanism. The raw signal remains continuous and suitable for cross-sectional analysis.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01948979512363649,
+    "icir": 0.2702202804810609,
+    "mi": 0.02072923486236533,
+    "rank_ic": 0.04835709204363586,
+    "rank_icir": 0.7559195439466398
+  },
+  "raw_metrics": {
+    "ic": -0.01948979512363649,
+    "icir": -0.2702202804810609,
+    "mi": 0.02072923486236533,
+    "rank_ic": -0.04835709204363586,
+    "rank_icir": -0.7559195439466398
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.3701744408727015,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.05619827834774038,
+    "top_quantile_excess_return": 0.36941905801379926,
+    "top_quantile_max_drawdown": -0.12576765650512134,
+    "top_quantile_turnover": 0.24212062902052348
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:01:05.064319+00:00"
+}

@@ -411,3 +411,67 @@ class TestEdgeCases:
 
         with pytest.raises(ValueError):
             identify_drawdown_periods(returns)
+
+    def test_total_wipeout_nan_from_wipeout_onward(self):
+        """Return of -1.0 -> drawdown NaN from that index onward, finite before."""
+        returns = np.array([0.10, -0.05, -1.0, 0.50, 0.20])
+
+        dd_series, cum_ret, running_max = compute_drawdown_series(returns)
+
+        # Before the wipeout: finite, ordinary drawdowns
+        assert np.all(np.isfinite(dd_series[:2]))
+        expected_dd1 = (1.10 * 0.95 - 1.10) / 1.10
+        assert abs(dd_series[1] - expected_dd1) < 1e-10
+
+        # From the wipeout index onward: wealth <= 0 -> drawdown unmeasurable (NaN)
+        assert np.all(np.isnan(dd_series[2:]))
+
+    def test_negative_wealth_flip_does_not_resurrect_data(self):
+        """Wealth < 0 flipped positive again stays NaN (fail-closed)."""
+        # -1.5 gives factor -0.5: wealth 1.10 -> -0.55 -> +0.55 (two negative factors)
+        returns = np.array([0.10, -1.5, -1.5, 0.10])
+
+        dd_series, cum_ret, _ = compute_drawdown_series(returns)
+
+        # cum_returns genuinely flips positive again, but drawdown must stay NaN
+        assert cum_ret[2] > 0
+        assert np.all(np.isfinite(dd_series[:1]))
+        assert np.all(np.isnan(dd_series[1:]))
+
+    def test_normal_series_unchanged(self):
+        """Normal series: behavior identical to the plain ratio formula."""
+        returns = np.array([0.10, -0.05, -0.05, 0.10, 0.05])
+
+        dd_series, cum_ret, running_max = compute_drawdown_series(returns)
+
+        # Reference: the historical formula (cum - max) / max on the same inputs
+        expected = (cum_ret - running_max) / running_max
+        assert np.allclose(dd_series, expected)
+        assert np.all(np.isfinite(dd_series))
+        # Known small case: index 2 drawdown pinned
+        expected_dd_at_2 = (1.10 * 0.95 * 0.95 - 1.10) / 1.10
+        assert abs(dd_series[2] - expected_dd_at_2) < 0.001
+
+    def test_wipeout_mask_per_column_2d(self):
+        """2D (T, F) input: wipeout masks only the affected column."""
+        returns = np.array([
+            [0.10, 0.05, -0.02],
+            [-1.0, 0.05, -0.03],
+            [0.50, -0.05, 0.10],
+            [0.10, 0.05, 0.10],
+        ])
+
+        dd_series, cum_ret, running_max = compute_drawdown_series(returns)
+
+        assert dd_series.shape == (4, 3)
+
+        # Column 0: wiped out at index 1 -> NaN from index 1 onward
+        assert np.isfinite(dd_series[0, 0])
+        assert np.all(np.isnan(dd_series[1:, 0]))
+
+        # Columns 1 and 2: never wiped out -> all finite, matching the formula
+        for f in (1, 2):
+            assert np.all(np.isfinite(dd_series[:, f]))
+            expected = (cum_ret[:, f] - running_max[:, f]) / running_max[:, f]
+            assert np.allclose(dd_series[:, f], expected)
+            assert np.all(dd_series[:, f] <= 1e-10)

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "market_cycle_0002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 747,
+  "factor_name": "factor_cycle_range_pressure",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w04-20260814-081422-r12",
+  "expression_type": "python",
+  "formula": "(sum(close-low) - sum(high-close)) / sum(high-low) over trailing 60 days",
+  "code": "def factor_cycle_range_pressure(df):\n    \"\"\"Buyer/seller pressure within the trailing range indicates the cyclical phase.\"\"\"\n    df_copy = df.copy()\n    buy_pressure = (df_copy[\"close\"] - df_copy[\"low\"]).rolling(60, min_periods=20).sum()\n    sell_pressure = (df_copy[\"high\"] - df_copy[\"close\"]).rolling(60, min_periods=20).sum()\n    total_range = (df_copy[\"high\"] - df_copy[\"low\"]).rolling(60, min_periods=20).sum()\n    df_copy[\"factor_cycle_range_pressure\"] = (buy_pressure - sell_pressure) / total_range.replace(0.0, np.nan)\n    return df_copy[\"factor_cycle_range_pressure\"]\n",
+  "description": "Measures the accumulation/distribution pressure within a stock's own 60-day high-low range. When closes consistently sit near the upper end of the range, buy-side pressure dominates and the stock is in an upward cyclical phase; closes near the lower end signal distribution and a downward phase. This range-pressure ratio captures the internal cyclical structure of price action and is distinct from trend-following or volatility-based indicators.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.015457728501684464,
+    "icir": 0.3134099026810821,
+    "mi": 0.006328066113737485,
+    "rank_ic": 0.01639459068246483,
+    "rank_icir": 0.2847615546346722
+  },
+  "raw_metrics": {
+    "ic": -0.015457728501684464,
+    "icir": -0.3134099026810821,
+    "mi": 0.006328066113737485,
+    "rank_ic": -0.01639459068246483,
+    "rank_icir": -0.2847615546346722
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.09064606002681,
+    "quantile_monotonicity": 0.9393939393939394,
+    "top_quantile_annualized_excess_return": 0.01990193039799215,
+    "top_quantile_excess_return": 0.014096282673152771,
+    "top_quantile_max_drawdown": -0.016218467059808006,
+    "top_quantile_turnover": 0.13446605714235776
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:08:57.738123+00:00"
+}

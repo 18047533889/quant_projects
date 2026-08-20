@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_pv_coherence_001_c7d48196_g1_crossov_84a9d512",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 399,
+  "factor_name": "factor_range_reversal_highvol_gate",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260805-102842-r29",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_range_reversal_highvol_gate(df):\n    \"\"\"Crossover: panic reversal with high-volume regime gating, 60-day volume window.\"\"\"\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    open_ = df_copy[\"open\"]\n    volume = df_copy[\"volume\"]\n    range_ = high - low\n    range_mean = range_.rolling(20, min_periods=20).mean()\n    range_std = range_.rolling(20, min_periods=20).std(ddof=1)\n    range_z = (range_ - range_mean) / range_std.replace(0, np.nan)\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(close, open_)\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(volume, window=60)\n    overnight_neg = np.clip(-overnight_ret, 0, None)\n    range_z_clipped = np.maximum(range_z, 0)\n    vol_weight = np.clip(vol_ratio, 0, 2) / 2\n    high_vol_gate = np.where(is_high_vol > 0, 1.0, 0.5)\n    factor = overnight_neg * range_z_clipped * vol_weight * high_vol_gate\n    df_copy[\"factor_range_reversal_highvol_gate\"] = factor\n    return df_copy[\"factor_range_reversal_highvol_gate\"]",
+  "description": "Primary mechanism from Parent2 (g1_crossover_g0_range_exp_rev_decomp_001_pv_coherence_001_31f02d0d): panic selling reversal via range expansion (20-day rolling z-score), overnight gap down, and volume ratio scaling. Lightweight modifier from Parent1 (g1_mutation_pv_coherence_001_c7d48196): high-volume regime gate that attenuates the signal when volume is not in a high regime (classify_volume_regime with window=60, as successfully demonstrated by a qualified mutation of the range reversal factor). The 60-day window better identifies sustained elevated volume during genuine exhaustion episodes. The discordance term from Parent2 was dropped to simplify the design and focus on the core reversal, as the prior crossover with discordance was rejected.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.019604418591279902,
+    "icir": 0.36908887779170385,
+    "mi": 0.11176816784508947,
+    "rank_ic": 0.02722982460156281,
+    "rank_icir": 0.4520677773690471
+  },
+  "raw_metrics": {
+    "ic": -0.019604418591279902,
+    "icir": -0.36908887779170385,
+    "mi": 0.11176816784508947,
+    "rank_ic": -0.02722982460156281,
+    "rank_icir": -0.4520677773690471
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.07163270264381882,
+    "top_quantile_excess_return": 0.05036966046741154,
+    "top_quantile_max_drawdown": -0.03807591517330955,
+    "top_quantile_turnover": 0.2255387200658468
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:33:05.440283+00:00"
+}

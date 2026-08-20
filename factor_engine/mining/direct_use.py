@@ -412,6 +412,18 @@ _RELATIVE_ALPHA_OPS = frozenset(
         # strict EventBool {0,1,NaN} inputs, degenerate denominators -> NaN).
         "event_rate_pct", "event_recency_z", "event_cluster_score",
         "state_dwell_pct", "state_transition_surprise",
+        # R21-P0-EVENTSTATE-FRAMEWORK: dimensionless Event/State derivation
+        # primitives (trailing windows ending at t, strict EventBool {0,1,NaN}
+        # / SignedEvent {-1,0,+1,NaN} / state-code panels, min_periods=window
+        # fail-closed, degenerate denominators -> NaN).  SKIPPED: event_age
+        # (existing alias -> ts_days_since), event_decay (existing alias ->
+        # event_decay_asof); state_persistence == state_dwell_pct estimator.
+        "event_streak", "event_cluster_duration", "event_decay_window",
+        "signed_event_rate", "positive_event_rate", "negative_event_rate",
+        "positive_event_age", "negative_event_age", "signed_event_decay",
+        "event_direction_imbalance", "event_flip_density", "state_age",
+        "state_persistence", "state_transition_count",
+        "state_transition_rate", "state_flip_density",
         # R20-BVC-VPIN-DIRECTUSE: dimensionless causal intraday BVC/VPIN
         # canonicals (trailing windows ending at t, fail-closed masking,
         # strict-positive close+volume).  Documented non-duplicates:

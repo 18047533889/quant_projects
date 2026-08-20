@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_tail_risk_002_pv_coh_gen0_002_e76efb3b",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 664,
+  "factor_name": "factor_tail_range_vol_of_vol_zscore",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w04-20260813-184426-r7",
+  "expression_type": "python",
+  "formula": "- rolling_zscore( std(true_range, 30) / mean(true_range, 60), 60 )",
+  "code": "def factor_tail_range_vol_of_vol_zscore(df):\n    df_copy = df.copy()\n    tr = pd.Series(talib.TRANGE(df_copy[\"high\"], df_copy[\"low\"], df_copy[\"close\"]), index=df_copy.index)\n    vol_range = tr.rolling(30, min_periods=15).std()\n    avg_range = tr.rolling(60, min_periods=30).mean()\n    stress = vol_range / avg_range.replace(0.0, np.nan)\n    stress_mean = stress.rolling(60, min_periods=30).mean()\n    stress_std = stress.rolling(60, min_periods=30).std(ddof=1)\n    stress_z = (stress - stress_mean) / stress_std.replace(0.0, np.nan)\n    factor = -stress_z.fillna(0.0)\n    df_copy[\"factor_tail_range_vol_of_vol_zscore\"] = factor\n    return df_copy[\"factor_tail_range_vol_of_vol_zscore\"]",
+  "description": "Parent strength target: RankIC/RankICIR and payoff monotonicity from the negative volatility-of-volatility fragility mechanism. Bottleneck: linear IC/ICIR, because the parent's rolling percentile rank squeezes extreme stress values into uniform ranks and limits the linear signal amplitude. Mutation preserves the same true-range vol-of-vol stress ratio but replaces the rolling percentile rank with a rolling z-score over the same 60-day window. The rolling z-score is monotonic in stress, so the rank ordering is preserved and RankIC should remain stable, while retaining continuous magnitude information to improve linear IC/ICIR. The negative sign is unchanged. This is a raw single-stock factor; no cross-sectional transform is applied.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0126406514412529,
+    "icir": 0.26075714401152505,
+    "mi": 0.01027627602449055,
+    "rank_ic": 0.02074073898121523,
+    "rank_icir": 0.43893904575331294
+  },
+  "raw_metrics": {
+    "ic": 0.0126406514412529,
+    "icir": 0.26075714401152505,
+    "mi": 0.01027627602449055,
+    "rank_ic": 0.02074073898121523,
+    "rank_icir": 0.43893904575331294
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.810725356523656,
+    "quantile_monotonicity": 0.7575757575757576,
+    "top_quantile_annualized_excess_return": -0.006383599661692441,
+    "top_quantile_excess_return": -0.0035261676745241832,
+    "top_quantile_max_drawdown": -0.03641698204178856,
+    "top_quantile_turnover": 0.1377855700920239
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:00:57.231342+00:00"
+}

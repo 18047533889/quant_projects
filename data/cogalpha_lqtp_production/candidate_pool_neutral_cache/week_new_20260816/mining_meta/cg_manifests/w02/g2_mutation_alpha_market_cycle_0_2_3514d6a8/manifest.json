@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_alpha_market_cycle_0_2_3514d6a8",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 378,
+  "factor_name": "factor_overnight_intraday_cycle_dominance_60d",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w02-20260813-194428-r5",
+  "expression_type": "python",
+  "formula": "(sum(overnight_ret,60) - sum(intraday_ret,60)) / (sum(|overnight_ret|,60) + sum(|intraday_ret|,60))",
+  "code": "def factor_overnight_intraday_cycle_dominance_60d(df):\n    \"\"\"Cycle dominance from overnight minus intraday returns over a 60-day window.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    window = 60\n    overnight_cum = overnight_ret.rolling(window, min_periods=1).sum()\n    intraday_cum = intraday_ret.rolling(window, min_periods=1).sum()\n    total_abs = (overnight_ret.abs().rolling(window, min_periods=1).sum() + intraday_ret.abs().rolling(window, min_periods=1).sum()).replace(0.0, np.nan)\n    factor = ((overnight_cum - intraday_cum) / total_abs).fillna(0.0)\n    df_copy[\"factor_overnight_intraday_cycle_dominance_60d\"] = factor\n    return df_copy[\"factor_overnight_intraday_cycle_dominance_60d\"]",
+  "description": "Preserves the parent's core economic mechanism: cyclical market phase inferred from the dominance of overnight gap returns versus intraday trading returns. The parent cumulates this difference over 120 days, which is stable but slow to reflect recent phase shifts. This mutation shortens the accumulation window to 60 days while keeping the same normalization by total absolute move, producing a more responsive but still bounded signal. The goal is to improve level IC and RankIC without sacrificing the parent's stable ICIR/RankICIR and payoff thickness. Cross-sectional transform remains none because the raw normalized dominance is economically meaningful and comparable after industry/size neutralization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.019613580423026238,
+    "icir": 0.3456507823934174,
+    "mi": 0.008824411660778964,
+    "rank_ic": 0.026798751659496897,
+    "rank_icir": 0.45848095007552186
+  },
+  "raw_metrics": {
+    "ic": 0.019613580423026238,
+    "icir": 0.3456507823934174,
+    "mi": 0.008824411660778964,
+    "rank_ic": 0.026798751659496897,
+    "rank_icir": 0.45848095007552186
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 8.354355075915695,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.3864972321190936,
+    "top_quantile_excess_return": 5.623733120492371,
+    "top_quantile_max_drawdown": -0.05386370079083369,
+    "top_quantile_turnover": 0.1068447141903807
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:34:45.706988+00:00"
+}

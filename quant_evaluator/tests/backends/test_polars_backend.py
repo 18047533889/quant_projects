@@ -399,8 +399,12 @@ class TestPolarsPerformance:
         """Measure IC performance on large batch."""
         import time
 
+        # Sized for the shared-loop memory budget (≤15 GiB with other agents
+        # running): 252×3000×1000 float64 ≈ 6 GiB for factors alone, plus the
+        # polars LazyFrame copy — that allocation OOM-killed full-suite runs.
+        # 252×500×100 ≈ 100 MiB still exercises the vectorized path.
         np.random.seed(42)
-        T, N, F = 252, 3000, 1000
+        T, N, F = 252, 500, 100
 
         factors = np.random.randn(T, N, F)
         labels = np.random.randn(T, N)
@@ -432,7 +436,9 @@ class TestPolarsPerformance:
         import time
 
         np.random.seed(42)
-        T, N, F = 252, 3000, 500
+        T, N, F = 252, 500, 100
+        # See note in test_ic_performance_large_batch: the old 252×3000×500
+        # allocation (~3 GiB + polars copy) OOM-killed full-suite runs.
 
         factors = np.random.randn(T, N, F)
         factor_ids = tuple(f"factor_{i:04d}" for i in range(F))

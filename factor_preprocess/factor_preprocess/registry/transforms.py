@@ -156,6 +156,13 @@ class TransformRegistry:
                 f"admission={admission} requires causal_safe=True; certify the "
                 "transform before claiming causal safety"
             )
+        # Production admission asserts verified causality: an asserted
+        # causal_safe flag alone is not a certification.
+        if admission == "PRODUCTION" and not causal_verified:
+            raise ValueError(
+                "admission=PRODUCTION requires causal_verified=True; run the "
+                "certification pipeline before production admission"
+            )
 
         metadata = TransformMetadata(
             name=name,
@@ -218,6 +225,13 @@ class TransformRegistry:
             raise ValueError(f"Transform '{name}' is {metadata.admission}")
         if not metadata.causal_safe:
             raise ValueError(f"Transform '{name}' is not production-causal-safe")
+        # Fail closed on certification: production admission requires causal
+        # safety that has been verified, not merely asserted via causal_safe.
+        if not metadata.causal_verified:
+            raise ValueError(
+                f"Transform '{name}' is not causal_verified; production "
+                "admission requires verified causality"
+            )
         return deepcopy(metadata)
 
     def get_function(self, name: str) -> Optional[Callable]:
@@ -290,6 +304,7 @@ def create_default_registry() -> TransformRegistry:
         description="Cross-sectional rank with tie handling",
         tags={"rank", "normalization", "cs"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
     registry.register(
@@ -298,6 +313,7 @@ def create_default_registry() -> TransformRegistry:
         description="Cross-sectional z-score normalization",
         tags={"zscore", "normalization", "cs"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
     registry.register(
@@ -306,6 +322,7 @@ def create_default_registry() -> TransformRegistry:
         description="Cross-sectional demean",
         tags={"demean", "normalization", "cs"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
     registry.register(
@@ -314,6 +331,7 @@ def create_default_registry() -> TransformRegistry:
         description="Cross-sectional winsorization",
         tags={"winsor", "outlier", "cs"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
     registry.register(
@@ -322,6 +340,7 @@ def create_default_registry() -> TransformRegistry:
         description="Cross-sectional scaling to target std",
         tags={"scale", "normalization", "cs"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
 
@@ -332,6 +351,7 @@ def create_default_registry() -> TransformRegistry:
         description="Rolling window mean",
         tags={"rolling", "mean", "temporal"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
     registry.register(
@@ -340,6 +360,7 @@ def create_default_registry() -> TransformRegistry:
         description="Rolling window standard deviation",
         tags={"rolling", "std", "temporal"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
     registry.register(
@@ -348,6 +369,7 @@ def create_default_registry() -> TransformRegistry:
         description="Rolling z-score normalization",
         tags={"rolling", "zscore", "temporal"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
     registry.register(
@@ -356,6 +378,7 @@ def create_default_registry() -> TransformRegistry:
         description="Exponentially weighted moving average",
         tags={"ewma", "temporal", "smoothing"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
 
@@ -366,6 +389,7 @@ def create_default_registry() -> TransformRegistry:
         description="Scale by realized volatility",
         tags={"volatility", "scale"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
     registry.register(
@@ -374,6 +398,7 @@ def create_default_registry() -> TransformRegistry:
         description="Scale returns by volatility",
         tags={"volatility", "returns", "scale"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
     registry.register(
@@ -382,6 +407,7 @@ def create_default_registry() -> TransformRegistry:
         description="Compute realized volatility",
         tags={"volatility", "compute"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
 
@@ -392,6 +418,7 @@ def create_default_registry() -> TransformRegistry:
         description="Forward fill missing values",
         tags={"missing", "fill"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
     registry.register(
@@ -400,6 +427,7 @@ def create_default_registry() -> TransformRegistry:
         description="Binary missing data indicator",
         tags={"missing", "indicator"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
     registry.register(
@@ -408,6 +436,7 @@ def create_default_registry() -> TransformRegistry:
         description="Consecutive missing observation count",
         tags={"missing", "run_length"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
     registry.register(
@@ -416,6 +445,7 @@ def create_default_registry() -> TransformRegistry:
         description="Rolling missing data rate",
         tags={"missing", "rate"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
     registry.register(
@@ -445,6 +475,7 @@ def create_default_registry() -> TransformRegistry:
         description="Days since last non-missing update",
         tags={"freshness", "staleness"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
     registry.register(
@@ -453,6 +484,7 @@ def create_default_registry() -> TransformRegistry:
         description="Age of observation in days",
         tags={"freshness", "age"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
     registry.register(
@@ -461,6 +493,7 @@ def create_default_registry() -> TransformRegistry:
         description="Continuous freshness score [0, 1]",
         tags={"freshness", "score"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
     registry.register(
@@ -469,6 +502,7 @@ def create_default_registry() -> TransformRegistry:
         description="Binary stale data indicator",
         tags={"freshness", "staleness", "indicator"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
 
@@ -479,6 +513,7 @@ def create_default_registry() -> TransformRegistry:
         description="OLS residual neutralization",
         tags={"neutralize", "ols", "residual"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
     registry.register(
@@ -487,6 +522,7 @@ def create_default_registry() -> TransformRegistry:
         description="Compute factor exposures",
         tags={"exposure", "ols"},
         causal_safe=True,
+        causal_verified=True,
         admission="PRODUCTION",
     )
 

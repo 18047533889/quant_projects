@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_factor_trend_adaptive_f4f2aae6",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 313,
+  "factor_name": "factor_trend_adaptive_drawdown_gated_v3",
+  "domain_agent": "alpha-regime-gating",
+  "run_id": "fleet-w02-20260813-103714-r3",
+  "expression_type": "python",
+  "formula": "efficiency_ratio = abs(close - close.shift(20)) / sum(abs(close.diff()), 20); base_blend = efficiency_ratio * rolling_mean(intraday_ret,5) + (1-efficiency_ratio) * rolling_mean(-overnight_ret,5); stress = ewm(mean,10)(max(0, - (close / rolling_max(close,30) - 1))); factor = base_blend / (1 + stress)",
+  "code": "def factor_trend_adaptive_drawdown_gated_v3(df):\n    \"\"\"Adaptive intraday/overnight blend with recovery-aware drawdown attenuation.\"\"\"\n    df_copy = df.copy()\n    close = df_copy['close']\n    open_ = df_copy['open']\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(close, open_)\n    window = 20\n    price_change = close.diff()\n    abs_sum = price_change.abs().rolling(window, min_periods=window).sum()\n    net_change = close - close.shift(window)\n    efficiency_ratio = net_change.abs() / abs_sum.replace(0.0, np.nan)\n    efficiency_ratio = efficiency_ratio.fillna(0.0).clip(0.0, 1.0)\n    intraday_signal = intraday_ret.rolling(5, min_periods=1).mean()\n    overnight_reversal = -overnight_ret.rolling(5, min_periods=1).mean()\n    base_blend = efficiency_ratio * intraday_signal + (1.0 - efficiency_ratio) * overnight_reversal\n    rolling_peak = close.rolling(30, min_periods=20).max()\n    drawdown = close / rolling_peak - 1.0\n    drawdown_depth = -drawdown.clip(upper=0.0)\n    stress = drawdown_depth.ewm(span=10, min_periods=5).mean().fillna(0.0)\n    confidence_weight = 1.0 / (1.0 + stress)\n    factor = base_blend * confidence_weight\n    factor.name = 'factor_trend_adaptive_drawdown_gated_v3'\n    return factor\n",
+  "description": "Preserves parent_strength_target: high ICIR/RankICIR consistency, balanced IC profile, and monotonic payoff thickness from the Kaufman efficiency-ratio gated intraday momentum/overnight reversal blend. Bottleneck targeted: the parent's drawdown attenuation uses a 60-day rolling peak, which over-penalizes stocks that have recovered from a dip but have not yet set a new 60-day high, muting recovery payoff. Mutation changes the rolling peak window from 60 to 30 days, making the drawdown reference more recent. This allows recovered stocks to regain full signal once they exceed their 30-day peak while retaining the same ewm span 10 stress attenuation and bounded confidence weight. Compact window adjustment on one modifier only.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.050710806421596165,
+    "icir": 0.7462353535578606,
+    "mi": 0.027267470584345865,
+    "rank_ic": 0.03145939095975653,
+    "rank_icir": 0.6618503842621057
+  },
+  "raw_metrics": {
+    "ic": -0.050710806421596165,
+    "icir": -0.7462353535578606,
+    "mi": 0.027267470584345865,
+    "rank_ic": -0.03145939095975653,
+    "rank_icir": -0.6618503842621057
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 10.303565400801764,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.26980461276906276,
+    "top_quantile_excess_return": 2.982832721875087,
+    "top_quantile_max_drawdown": -0.2575393395692973,
+    "top_quantile_turnover": 0.3789139906852152
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:24:46.000090+00:00"
+}

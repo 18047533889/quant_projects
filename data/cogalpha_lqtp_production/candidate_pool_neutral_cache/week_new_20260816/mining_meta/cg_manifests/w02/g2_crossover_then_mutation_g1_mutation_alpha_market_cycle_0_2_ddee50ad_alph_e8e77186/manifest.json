@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_mutation_alpha_market_cycle_0_2_ddee50ad_alph_e8e77186",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 382,
+  "factor_name": "factor_overnight_intraday_cycle_ewm_phase",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w02-20260813-194428-r5",
+  "expression_type": "python",
+  "formula": "ewm_mean(overnight_ret, span=60) - ewm_mean(intraday_ret, span=60) / (ewm_mean(|overnight_ret|, span=60) + ewm_mean(|intraday_ret|, span=60))",
+  "code": "def factor_overnight_intraday_cycle_ewm_phase(df):\n    \"\"\"Recency-weighted overnight-intraday cycle dominance using exponentially weighted averages.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    span = 60\n    overnight_ewm = overnight_ret.ewm(span=span, min_periods=1).mean()\n    intraday_ewm = intraday_ret.ewm(span=span, min_periods=1).mean()\n    total_abs = (overnight_ret.abs().ewm(span=span, min_periods=1).mean() + intraday_ret.abs().ewm(span=span, min_periods=1).mean()).replace(0.0, np.nan)\n    raw_ratio = ((overnight_ewm - intraday_ewm) / total_abs).fillna(0.0)\n    df_copy[\"factor_overnight_intraday_cycle_ewm_phase\"] = raw_ratio\n    return df_copy[\"factor_overnight_intraday_cycle_ewm_phase\"]",
+  "description": "Mutation preserves the parent's overnight-intraday cycle dominance mechanism but replaces the rolling 120-day cumulative sums and outer EMA with direct exponentially weighted moving averages (span=60) for both numerator and denominator. This reduces stale accumulation and sharpens the current cyclical phase estimate while retaining a continuous, bounded ratio. The lighter denominator uses recency-weighted average absolute returns, improving level IC/RankIC responsiveness without sacrificing the stable ICIR/RankICIR core. Cross-sectional transform remains none because the raw payoff mechanism is preserved.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02551893708848079,
+    "icir": 0.41536724462168473,
+    "mi": 0.012279796165627133,
+    "rank_ic": 0.03312769446903886,
+    "rank_icir": 0.5335339722615718
+  },
+  "raw_metrics": {
+    "ic": 0.02551893708848079,
+    "icir": 0.41536724462168473,
+    "mi": 0.012279796165627133,
+    "rank_ic": 0.03312769446903886,
+    "rank_icir": 0.5335339722615718
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 9.620786811276226,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.450255285414048,
+    "top_quantile_excess_return": 7.591549581413847,
+    "top_quantile_max_drawdown": -0.045375388784313686,
+    "top_quantile_turnover": 0.13196042693912513
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:35:42.995170+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "alpha-order-imbalance-gen0-002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 777,
+  "factor_name": "factor_vwap_deviation_order_flow",
+  "domain_agent": "alpha-order-imbalance",
+  "run_id": "fleet-w04-20260814-111032-r13",
+  "expression_type": "python",
+  "formula": "(close - cumsum(typical_price * volume) / cumsum(volume)) / (cumsum(typical_price * volume) / cumsum(volume))",
+  "code": "def factor_vwap_deviation_order_flow(df):\n    df_copy = df.copy()\n    # Volume-weighted average price proxy using typical price\n    typical_price = (df_copy['high'] + df_copy['low'] + df_copy['close']) / 3.0\n    cum_tp_vol = (typical_price * df_copy['volume']).cumsum()\n    cum_vol = df_copy['volume'].cumsum()\n    vwap = cum_tp_vol / cum_vol.replace(0.0, np.nan)\n    # Deviation of close from VWAP scaled by VWAP to make relative\n    signal = (df_copy['close'] - vwap) / vwap.replace(0.0, np.nan)\n    df_copy['factor_vwap_deviation_order_flow'] = signal\n    return df_copy['factor_vwap_deviation_order_flow']\n",
+  "description": "Price-Volume Dynamics mechanism: deviation of close from cumulative volume-weighted average price (VWAP proxy). Stocks trading persistently above this volume-weighted average indicate buyers have dominated volume distribution in their history, capturing directional order-flow pressure. This is not a simple moving average but a volume-weighted accumulation path that reveals net buying or selling pressure.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01591916717843444,
+    "icir": 0.1757528695792533,
+    "mi": 0.027314808209624175,
+    "rank_ic": 0.0417742209406374,
+    "rank_icir": 0.5183408636086162
+  },
+  "raw_metrics": {
+    "ic": -0.01591916717843444,
+    "icir": -0.1757528695792533,
+    "mi": 0.027314808209624175,
+    "rank_ic": -0.0417742209406374,
+    "rank_icir": -0.5183408636086162
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.7409839757117305,
+    "quantile_monotonicity": 0.8787878787878788,
+    "top_quantile_annualized_excess_return": -0.009461475357389726,
+    "top_quantile_excess_return": -0.007441581446535173,
+    "top_quantile_max_drawdown": -0.04587444879480207,
+    "top_quantile_turnover": 0.1435444693465215
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:13:25.713218+00:00"
+}

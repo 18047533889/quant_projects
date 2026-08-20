@@ -1,14 +1,16 @@
 """Split contracts for SearchRunner.
 
-The validated boundary here is structural only: it does not sandbox evaluator
-access to data or prove PIT/temporal correctness. A trusted QE adapter remains
-responsible for enforcing the plan during evaluation.
+The validated boundary here is structural plus (optionally) temporal:
+purge/embargo/label-horizon leakage is rejected when the plan carries a
+time axis. It still does not sandbox evaluator access to data or prove
+PIT correctness; a trusted QE adapter remains responsible for enforcing
+the plan during evaluation.
 """
 
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional, Tuple
 
 
 class SplitType(Enum):
@@ -19,13 +21,30 @@ class SplitType(Enum):
 
 @dataclass(frozen=True)
 class SplitPlan:
-    """Immutable, externally supplied split boundary description."""
+    """Immutable, externally supplied split boundary description.
+
+    Optional temporal-leakage fields (backward compatible: existing plans
+    without them validate exactly as before):
+
+    - ``time_index``: positional ordering of samples along the time axis.
+      ``None`` means the plan is purely positional and leakage constraints
+      below are unexpressible (setting any of them then fails closed).
+    - ``label_horizon``: number of trailing positions a training label
+      reaches into the future.
+    - ``purge``: extra positions removed around the train/test boundary.
+    - ``embargo``: positions after a test segment that train data must not
+      occupy (coefficient/execution leakage).
+    """
 
     split_id: str
     train_mask: Any
     validation_mask: Any
     test_mask: Any
     metadata: Dict[str, Any]
+    time_index: Optional[Tuple] = None
+    label_horizon: int = 0
+    purge: int = 0
+    embargo: int = 0
 
     def __post_init__(self):
         validate_split_plan(self)
@@ -142,7 +161,86 @@ def validate_split_plan(split_plan: SplitPlan) -> Dict[str, Any]:
         if isinstance(exc, ValueError) and "disjoint" in str(exc):
             raise
         raise ValueError("split masks must contain boolean boundaries") from exc
+    _validate_temporal_leakage(split_plan, lengths[0])
     return {"split_id": split_plan.split_id, "n_samples": lengths[0], "validated": True}
+
+
+def _validate_temporal_leakage(split_plan: SplitPlan, n_samples: int) -> None:
+    """Fail-closed purge/embargo/label-horizon leakage check.
+
+    Only meaningful when the plan carries a time axis: without one the
+    masks are purely positional and the constraints are unexpressible,
+    so requesting them without ``time_index`` is rejected outright.
+    """
+    label_horizon = split_plan.label_horizon
+    purge = split_plan.purge
+    embargo = split_plan.embargo
+    for name, value in (("label_horizon", label_horizon), ("purge", purge), ("embargo", embargo)):
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"{name} must be a non-negative integer")
+    if label_horizon == 0 and purge == 0 and embargo == 0:
+        return
+    time_index = split_plan.time_index
+    if time_index is None:
+        raise ValueError(
+            "purge/embargo/label_horizon require a time_index; purely "
+            "positional masks cannot express temporal leakage constraints"
+        )
+    if (
+        not hasattr(time_index, "__len__")
+        or isinstance(time_index, (str, bytes))
+        or len(time_index) != n_samples
+    ):
+        raise ValueError(
+            "time_index must be a sequence aligned with the masks "
+            f"({n_samples} positions)"
+        )
+    # Map each mask position onto its rank on the time axis.
+    try:
+        order = sorted(range(n_samples), key=lambda pos: time_index[pos])
+    except TypeError as exc:
+        raise ValueError("time_index values must be mutually comparable") from exc
+    rank_of = {pos: rank for rank, pos in enumerate(order)}
+
+    train_positions = [
+        i for i, flag in enumerate(split_plan.train_mask) if flag
+    ]
+    validation_positions = [
+        i for i, flag in enumerate(split_plan.validation_mask) if flag
+    ]
+    test_positions = [i for i, flag in enumerate(split_plan.test_mask) if flag]
+
+    # (a) A test position whose label window reaches back into a
+    # train/validation position's forward-label span is leakage: the
+    # train/validation label at position p spans positions
+    # p..p+label_horizon, so any test position within
+    # purge + label_horizon positions AFTER a train/validation position
+    # (on the time axis) is rejected.
+    lookback = purge + label_horizon
+    if lookback > 0:
+        fitted_positions = sorted(rank_of[p] for p in train_positions + validation_positions)
+        for test_pos in test_positions:
+            test_rank = rank_of[test_pos]
+            for fitted_rank in fitted_positions:
+                if fitted_rank < test_rank <= fitted_rank + lookback:
+                    raise ValueError(
+                        "test position falls within purge + label_horizon "
+                        f"({lookback}) positions after a train/validation "
+                        "position: forward-label overlap into the test segment"
+                    )
+
+    # (b) Embargo: train positions within `embargo` positions AFTER a
+    # test position are rejected.
+    if embargo > 0:
+        test_ranks = sorted(rank_of[p] for p in test_positions)
+        for train_pos in train_positions:
+            train_rank = rank_of[train_pos]
+            for test_rank in test_ranks:
+                if test_rank < train_rank <= test_rank + embargo:
+                    raise ValueError(
+                        "train position falls within embargo "
+                        f"({embargo}) positions after a test position"
+                    )
 
 
 def create_split_aware_evaluation_fn(qe_adapter: Any, split_plan: SplitPlan) -> EvaluationProtocol:

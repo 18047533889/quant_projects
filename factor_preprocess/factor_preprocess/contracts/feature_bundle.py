@@ -3,16 +3,40 @@ Feature bundle contract for model input.
 """
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from types import MappingProxyType
+from typing import Any, Mapping, Optional, Tuple
 import numpy as np
 
 
 @dataclass(frozen=True)
 class AxisRef:
-    """Reference to a time or asset axis."""
+    """Reference to a time or asset axis.
+
+    ``axis_values`` accepts a numpy array, list, or reference at construction
+    time; storage is made immutable in ``__post_init__``: numpy arrays are
+    marked read-only in place, and lists are converted to tuples.
+    """
     axis_name: str
-    axis_values: Any  # numpy array, list, or reference
+    axis_values: Any  # numpy array (read-only), tuple, or reference
     axis_dtype: str
+
+    def __post_init__(self):
+        """Freeze axis_values so a frozen AxisRef cannot be mutated in place."""
+        values = self.axis_values
+        if isinstance(values, np.ndarray):
+            # Mark the array read-only in place; any later assignment through
+            # it raises ValueError.  Callers handing us an array they still
+            # own should pass a copy if they need to keep writing to it.
+            try:
+                values.flags.writeable = False
+            except ValueError:
+                # E.g. a view onto a read-only base or a non-contiguous slice
+                # of a buffer that cannot be locked; fall back to a frozen copy.
+                frozen = values.copy()
+                frozen.flags.writeable = False
+                object.__setattr__(self, "axis_values", frozen)
+        elif isinstance(values, list):
+            object.__setattr__(self, "axis_values", tuple(values))
 
 
 @dataclass(frozen=True)
@@ -20,7 +44,7 @@ class ChannelRef:
     """Reference to a feature channel."""
     channel_name: str
     channel_type: str  # "feature", "missing", "freshness", "exposure"
-    feature_ids: List[str]
+    feature_ids: Tuple[str, ...]
 
     def __post_init__(self):
         """Validate channel reference (FP-P0-11 fail-closed hardening)."""
@@ -41,6 +65,9 @@ class ChannelRef:
             raise ValueError(
                 f"ChannelRef '{self.channel_name}' has duplicate feature_ids"
             )
+        # Constructor accepts any iterable (lists keep working); storage is an
+        # immutable tuple so a frozen ChannelRef cannot be mutated in place.
+        object.__setattr__(self, "feature_ids", tuple(self.feature_ids))
 
 
 @dataclass(frozen=True)
@@ -56,19 +83,19 @@ class FeatureBundle:
     time_axis: AxisRef
     asset_axis: AxisRef
 
-    # Channels
-    channels: Dict[str, ChannelRef]
+    # Channels (read-only mapping; constructed from any mapping)
+    channels: Mapping[str, ChannelRef]
 
     # Values (can be numpy array or external reference)
     values: Any  # Shape depends on layout
     layout: str = "wide"  # "wide", "long", "block"
     dtype: str = "float64"
 
-    # Source factor metadata
-    source_factor_ids: List[str] = field(default_factory=list)
+    # Source factor metadata (immutable tuple; constructed from any iterable)
+    source_factor_ids: Tuple[str, ...] = field(default_factory=tuple)
 
     # Fitted state references (if any fitted transforms were applied)
-    fitted_state_refs: List[str] = field(default_factory=list)
+    fitted_state_refs: Tuple[str, ...] = field(default_factory=tuple)
 
     # Timing metadata
     transform_start_time: Optional[datetime] = None
@@ -87,7 +114,20 @@ class FeatureBundle:
     config_hash: Optional[str] = None
 
     def __post_init__(self):
-        """Validate bundle on construction (FP-P0-11 fail-closed hardening)."""
+        """Validate bundle on construction (FP-P0-11 fail-closed hardening).
+
+        Containers are also converted to immutable equivalents: ``channels``
+        becomes a ``MappingProxyType`` over a private dict, and the list-typed
+        fields become tuples, so a frozen bundle cannot be mutated in place.
+        """
+        # Deep immutability: constructors still accept plain dicts/lists, but
+        # storage is frozen before any validation logic reads it.
+        object.__setattr__(
+            self, "channels", MappingProxyType(dict(self.channels))
+        )
+        object.__setattr__(self, "source_factor_ids", tuple(self.source_factor_ids))
+        object.__setattr__(self, "fitted_state_refs", tuple(self.fitted_state_refs))
+
         if not self.bundle_id:
             raise ValueError("FeatureBundle.bundle_id cannot be empty")
         if not self.channels:

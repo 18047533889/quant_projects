@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_alpha_market_cycle_0_2_alpha_drawdo_e2dc1ea6",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 376,
+  "factor_name": "factor_cycle_dominance_ewm_60",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w02-20260813-194428-r5",
+  "expression_type": "python",
+  "formula": "ewm(overnight_ret - intraday_ret, 60) / (ewm(|overnight_ret|,60)+ewm(|intraday_ret|,60))",
+  "code": "def factor_cycle_dominance_ewm_60(df):\n    \"\"\"Cycle dominance using exponentially weighted overnight-intraday spread, removing stale cumulative lag.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    span = 60\n    overnight_ewm = overnight_ret.ewm(span=span, adjust=False).mean()\n    intraday_ewm = intraday_ret.ewm(span=span, adjust=False).mean()\n    abs_overnight_ewm = overnight_ret.abs().ewm(span=span, adjust=False).mean()\n    abs_intraday_ewm = intraday_ret.abs().ewm(span=span, adjust=False).mean()\n    denom = (abs_overnight_ewm + abs_intraday_ewm).replace(0.0, np.nan)\n    factor = ((overnight_ewm - intraday_ewm) / denom).fillna(0.0)\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    df_copy[\"factor_cycle_dominance_ewm_60\"] = factor\n    return df_copy[\"factor_cycle_dominance_ewm_60\"]",
+  "description": "Preserves parent core overnight-vs-intraday cycle dominance mechanism and its stable ICIR/RankICIR plus raw payoff thickness. The bottleneck is the 120-day cumulative sum, which is slow to reflect recent cyclical phase shifts and can suffer from stale amplitude. This mutation replaces the cumulative sum with an exponentially weighted moving average (span=60) for both the spread and the absolute move normalization, producing a sharper current-phase estimate while retaining comparability and bounded signal. The volume-confidence modifier is removed entirely to reduce cross-sectional ranking distortion and keep one core mechanism only. Cross-sectional transform remains none because the parent's raw payoff evidence is strong.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01712791913105108,
+    "icir": 0.312392414169281,
+    "mi": 0.008967583079799724,
+    "rank_ic": 0.0320081132507079,
+    "rank_icir": 0.5399850585175686
+  },
+  "raw_metrics": {
+    "ic": 0.01712791913105108,
+    "icir": 0.312392414169281,
+    "mi": 0.008967583079799724,
+    "rank_ic": 0.0320081132507079,
+    "rank_icir": 0.5399850585175686
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.479263898504739,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.11568447627254175,
+    "top_quantile_excess_return": 0.8839132519871722,
+    "top_quantile_max_drawdown": -0.0576749614515778,
+    "top_quantile_turnover": 0.12422557868027918
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:34:08.117007+00:00"
+}

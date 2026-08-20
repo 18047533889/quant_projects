@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_then_mutation_volasym_tail_jumps_002_adt_002_directional_movem_115cbd82",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 419,
+  "factor_name": "factor_tail_asymmetry_magnitude_smoothed",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w02-20260814-042827-r7",
+  "expression_type": "python",
+  "formula": "ewm(span=5) of -(down_tail_mag_63 - up_tail_mag_63)/(down_tail_mag_63 + up_tail_mag_63 + 1), where down_tail_mag = rolling 63-day sum of -ret when ret < -1.5*lagged_vol, up_tail_mag = rolling 63-day sum of ret when ret > +1.5*lagged_vol",
+  "code": "def factor_tail_asymmetry_magnitude_smoothed(df):\n    \"\"\"Downside vs upside tail-return magnitude asymmetry, preserving parent's jump frequency intuition but using continuous tail magnitudes for stronger cross-sectional signal.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol = ret.rolling(63, min_periods=20).std(ddof=1).shift(1)\n    down_tail = (ret < -1.5 * vol) & (vol > 0)\n    up_tail = (ret > 1.5 * vol) & (vol > 0)\n    down_mag = (-ret).where(down_tail, 0.0).rolling(63, min_periods=20).sum()\n    up_mag = ret.where(up_tail, 0.0).rolling(63, min_periods=20).sum()\n    raw_asym = -(down_mag - up_mag) / (down_mag + up_mag + 1.0)\n    smoothed = raw_asym.ewm(span=5, min_periods=1).mean()\n    df_copy[\"factor_tail_asymmetry_magnitude_smoothed\"] = smoothed\n    return df_copy[\"factor_tail_asymmetry_magnitude_smoothed\"]",
+  "description": "Primary mechanism inherits the parent's downside/upside tail-jump asymmetry using lagged 63-day realized volatility and \u00b11.5 sigma thresholds, but mutates the aggregation from binary jump counts to tail-return magnitudes (sum of negative tail returns vs sum of positive tail returns). This continuous aggregation preserves the downside-jump-heavy ranking orientation while improving cross-sectional discrimination and targeting the parent's weak IC/ICIR (IC=0.0066, ICIR=0.1223). Lightweight EWM smoothing (span=5) is retained from the parent to preserve the parent's strong payoff stability, low turnover, and RankICIR (0.3830). Cross-sectional transform remains none because raw payoff evidence and monotonicity are the parent strength to preserve.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.008861194256375092,
+    "icir": 0.11517573190122182,
+    "mi": 0.011615506907304507,
+    "rank_ic": 0.029374087759022845,
+    "rank_icir": 0.39268420023896256
+  },
+  "raw_metrics": {
+    "ic": -0.008861194256375092,
+    "icir": -0.11517573190122182,
+    "mi": 0.011615506907304507,
+    "rank_ic": -0.029374087759022845,
+    "rank_icir": -0.39268420023896256
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.44152324910122,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.0802797291570101,
+    "top_quantile_excess_return": 0.553708070474453,
+    "top_quantile_max_drawdown": -0.054941055774312075,
+    "top_quantile_turnover": 0.05776098131278407
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:39:36.691010+00:00"
+}

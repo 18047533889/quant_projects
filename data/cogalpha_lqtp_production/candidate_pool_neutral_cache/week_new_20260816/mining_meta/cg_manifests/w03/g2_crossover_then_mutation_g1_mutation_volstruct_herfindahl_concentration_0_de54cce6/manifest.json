@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_mutation_volstruct_herfindahl_concentration_0_de54cce6",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 335,
+  "factor_name": "factor_cycle_skewness_bounded",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w03-20260813-155035-r4",
+  "expression_type": "python",
+  "formula": "skew_120 = rolling_skewness(close.pct_change(), 120, min_periods=60); factor = skew_120 / (1 + abs(skew_120))",
+  "code": "def factor_cycle_skewness_bounded(df):\n    \"\"\"Slow-moving return distribution asymmetry, bounded by normalizing skewness.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    skew = ret.rolling(120, min_periods=60).skew()\n    factor = skew / (1.0 + skew.abs())\n    df_copy[\"factor_cycle_skewness_bounded\"] = factor\n    return df_copy[\"factor_cycle_skewness_bounded\"]",
+  "description": "Mutation of g2_crossover_g1_mutation_volstruct_herfindahl_concentration_0_0751c8de. Preserves the parent's core slow-moving return distribution asymmetry mechanism: 120-day rolling skewness of daily returns, with 60-day minimum observations, identifying cyclical shifts between positive and negative tail risk. Removes the volume-concentration HHI gate because parent and feedback suggest it adds noise and weakens IC/ICIR while not helping RankIC stability. Replaces tanh compression with the monotonic bounded transform skew/(1+|skew|), which preserves the exact rank ordering of the raw skewness (protecting RankIC/RankICIR and payoff evidence) while providing a more linear moderate range that should improve raw IC and ICIR. parent_strength_target: preserve RankIC/RankICIR stability and payoff evidence from the skewness parent; target slight IC/ICIR improvement via simplification and normalization. No cross-sectional transform is used, consistent with parent's raw payoff evidence.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.004308147465156801,
+    "icir": 0.1147849291748505,
+    "mi": 0.004350602922011504,
+    "rank_ic": 0.01854740555563314,
+    "rank_icir": 0.440840947692442
+  },
+  "raw_metrics": {
+    "ic": -0.004308147465156801,
+    "icir": -0.1147849291748505,
+    "mi": 0.004350602922011504,
+    "rank_ic": -0.01854740555563314,
+    "rank_icir": -0.440840947692442
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.8784573433419127,
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": 0.013994022094721892,
+    "top_quantile_excess_return": 0.08020459502551014,
+    "top_quantile_max_drawdown": -0.12001475840879994,
+    "top_quantile_turnover": 0.05184444417001362
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:02:08.179975+00:00"
+}

@@ -171,7 +171,8 @@ class TestEvaluator:
             use_chunking=False,
         )
 
-        assert result.get_metric("coverage") == (1.0, 250, 250)
+        # Registry-computed coverage is a scalar fraction (per-factor adapter).
+        assert result.get_metric("coverage") == 1.0
 
     def test_evaluate_with_caching(self):
         evaluator = Evaluator(enable_cache=True)

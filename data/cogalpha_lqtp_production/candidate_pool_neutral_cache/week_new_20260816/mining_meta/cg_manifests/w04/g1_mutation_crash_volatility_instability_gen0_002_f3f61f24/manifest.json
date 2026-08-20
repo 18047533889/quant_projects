@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_crash_volatility_instability_gen0_002_f3f61f24",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 651,
+  "factor_name": "factor_volatility_instability_range",
+  "domain_agent": "alpha-crash-predictor",
+  "run_id": "fleet-w04-20260813-184426-r7",
+  "expression_type": "python",
+  "formula": "std(std((high-low)/close, 10), 20)",
+  "code": "def factor_volatility_instability_range(df):\n    \"\"\"Volatility instability using normalized intraday range as the short-horizon volatility proxy.\"\"\"\n    df_copy = df.copy()\n    intraday_range = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"]\n    vol_short = intraday_range.rolling(10, min_periods=5).std()\n    vol_change = vol_short.rolling(20, min_periods=10).std()\n    df_copy[\"factor_volatility_instability_range\"] = vol_change\n    return df_copy[\"factor_volatility_instability_range\"]",
+  "description": "Parent strength: RankICIR=0.6609 and payoff monotonicity=0.927 from the original close-return vol-of-vol factor. Bottleneck: raw IC/ICIR and sensitivity to extreme intraday stress. Mutation preserves the core vol-of-vol mechanism but replaces close-to-close realized volatility with normalized intraday range before the two-stage rolling standard deviation. Intraday range is more responsive to same-day panic and price-span expansion, potentially improving IC without altering the relative rank stability that made the parent qualified. The factor remains a raw single-stock signal; no cross-sectional transform is applied.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01566286416144444,
+    "icir": 0.3259025873818413,
+    "mi": 0.007748079167538613,
+    "rank_ic": 0.04171009567226306,
+    "rank_icir": 0.7511002395066375
+  },
+  "raw_metrics": {
+    "ic": -0.01566286416144444,
+    "icir": -0.3259025873818413,
+    "mi": 0.007748079167538613,
+    "rank_ic": -0.04171009567226306,
+    "rank_icir": -0.7511002395066375
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.89257108737197,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.03421391320468192,
+    "top_quantile_excess_return": 0.02500473419645921,
+    "top_quantile_max_drawdown": -0.030195210130781747,
+    "top_quantile_turnover": 0.11476405428716217
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:58:37.629881+00:00"
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_crossover_then_mutation_alpha_crash_predictor_cdc84ce9",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 146,
+  "factor_name": "factor_momentum_vol_ratio",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w04-20260803-132707-r11",
+  "expression_type": "python",
+  "formula": "momentum = EMA10 of ( signed_power(close_ret5, 1.5) * signed_power(vol_ret5, 0.5) ); factor = momentum * vol_ratio",
+  "code": "def factor_momentum_vol_ratio(df):\n    \"\"\"Momentum signal amplified by volume regime ratio.\"\"\"\n    df_copy = df.copy()\n    # momentum signal with volume confirmation (primary mechanism from parent1)\n    price_chg = df_copy[\"close\"] - df_copy[\"close\"].shift(5)\n    vol_chg = df_copy[\"volume\"] - df_copy[\"volume\"].shift(5)\n    sp_price = np.sign(price_chg) * np.abs(price_chg) ** 1.5\n    sp_vol = np.sign(vol_chg) * np.abs(vol_chg) ** 0.5\n    raw_mom = sp_price * sp_vol\n    raw_mom_ema = raw_mom.ewm(span=10, min_periods=10).mean()\n    # volume ratio amplification (lightweight modifier from parent2)\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], 20)\n    factor = raw_mom_ema * vol_ratio\n    df_copy[\"factor_momentum_vol_ratio\"] = factor\n    return df_copy[\"factor_momentum_vol_ratio\"]",
+  "description": "Crossover: Primary momentum mechanism with signed-power price-volume interaction from parent1; lightweight modifier from parent2 is vol_ratio amplification from classify_volume_regime, which boosts momentum during high-volume episodes where institutional conviction is higher. This replaces the intraday range asymmetry weight to focus on volume-validated momentum, aiming to maintain strong IC/RankIC while capturing nonlinear MI improvements through volume regime sensitivity.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02405496653622746,
+    "icir": 0.23415224033177298,
+    "mi": 0.02506515207322746,
+    "rank_ic": 0.06607556828936466,
+    "rank_icir": 0.5437301732408394
+  },
+  "raw_metrics": {
+    "ic": -0.02405496653622746,
+    "icir": -0.23415224033177298,
+    "mi": 0.02506515207322746,
+    "rank_ic": -0.06607556828936466,
+    "rank_icir": -0.5437301732408394
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.12110897953074917,
+    "top_quantile_excess_return": 0.08705319615222451,
+    "top_quantile_max_drawdown": -0.028089148854997914,
+    "top_quantile_turnover": 0.155315424174897
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:19:13.543362+00:00"
+}

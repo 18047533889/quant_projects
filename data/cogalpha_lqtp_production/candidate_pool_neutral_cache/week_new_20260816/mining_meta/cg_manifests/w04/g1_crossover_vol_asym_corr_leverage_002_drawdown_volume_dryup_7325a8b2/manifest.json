@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_vol_asym_corr_leverage_002_drawdown_volume_dryup_7325a8b2",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 698,
+  "factor_name": "factor_vol_asym_volume_dryup",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w04-20260814-015906-r10",
+  "expression_type": "python",
+  "formula": "(-rolling_corr(lag1_return, volatility, 60)) * (1 - clamped_drawdown_volume_share(20))",
+  "code": "def factor_vol_asym_volume_dryup(df):\n    \"\"\"Leverage-effect asymmetry weighted by volume dry-up share.\"\"\"\n    df_copy = df.copy()\n    # Parent1 mechanism: rolling correlation between lagged returns and current volatility\n    ret = df_copy[\"close\"].pct_change()\n    vol = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"]\n    lag_ret = ret.shift(1)\n    corr = lag_ret.rolling(60, min_periods=30).corr(vol)\n    asym_signal = -corr\n    \n    # Parent2 lightweight modifier: volume dry-up share over trailing 20 days\n    df_copy[\"volume\"] = df_copy[\"volume\"].fillna(0.0)\n    peak_window = 20\n    vol_window = 20\n    rolling_peak = df_copy[\"close\"].rolling(peak_window, min_periods=1).max()\n    drawdown_state = (df_copy[\"close\"] < rolling_peak).astype(float)\n    drawdown_vol = (df_copy[\"volume\"] * drawdown_state).rolling(vol_window, min_periods=1).sum()\n    recovery_vol = (df_copy[\"volume\"] * (1.0 - drawdown_state)).rolling(vol_window, min_periods=1).sum()\n    total_vol = drawdown_vol + recovery_vol\n    drawdown_share = drawdown_vol / total_vol.replace(0.0, 1.0)\n    # weight: low drawdown share (selling exhaustion) -> near 1; high share -> near 0\n    weight = 1.0 - drawdown_share\n    weight = weight.clip(lower=0.1, upper=1.0)\n    factor = asym_signal * weight\n    df_copy[\"factor_vol_asym_volume_dryup\"] = factor\n    return df_copy[\"factor_vol_asym_volume_dryup\"]",
+  "description": "Preserves the core leverage-effect mechanism from vol_asym_corr_leverage_002: positive values when lagged returns and current volatility are negatively correlated, indicating asymmetric volatility response. The parent's raw payoff and ICIR/RankICIR stability are the primary strength to retain. The lightweight modifier from drawdown-volume-dryup-0000 is the volume dry-up share: the fraction of trailing 20-day volume occurring while the stock is below its 20-day peak. Low drawdown volume share indicates selling exhaustion and strengthens the signal (weight near 1); high drawdown volume share attenuates it (weight near 0.1). This bounded attenuation improves MI and RankIC without destroying the raw asymmetry signal or requiring cross-sectional ranking.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02137922982321236,
+    "icir": 0.43508506169346384,
+    "mi": 0.009663715803544193,
+    "rank_ic": 0.035477060546502764,
+    "rank_icir": 0.7513324700161753
+  },
+  "raw_metrics": {
+    "ic": 0.02137922982321236,
+    "icir": 0.43508506169346384,
+    "mi": 0.009663715803544193,
+    "rank_ic": 0.035477060546502764,
+    "rank_icir": 0.7513324700161753
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.383371207836979,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.01609385712246647,
+    "top_quantile_excess_return": 0.01063663091358924,
+    "top_quantile_max_drawdown": -0.025991575827435054,
+    "top_quantile_turnover": 0.1344258691362544
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:02:49.615105+00:00"
+}

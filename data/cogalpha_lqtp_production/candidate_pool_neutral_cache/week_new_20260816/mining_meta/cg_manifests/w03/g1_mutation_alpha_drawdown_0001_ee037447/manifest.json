@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_alpha_drawdown_0001_ee037447",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 387,
+  "factor_name": "factor_drawdown_recovery_volume_smooth",
+  "domain_agent": "alpha-drawdown",
+  "run_id": "fleet-w03-20260814-081141-r8",
+  "expression_type": "python",
+  "formula": "recovery_loc = (close - rolling_min(close,60)) / (rolling_max(close,60) - rolling_min(close,60)); vol_ratio = volume / rolling_mean(volume,20); vol_boost = tanh(vol_ratio - 1) * 0.5; factor = recovery_loc * (1 + vol_boost)",
+  "code": "def factor_drawdown_recovery_volume_smooth(df):\n    df_copy = df.copy()\n    L = 60\n    peak = df_copy[\"close\"].rolling(L, min_periods=20).max()\n    trough = df_copy[\"close\"].rolling(L, min_periods=20).min()\n    rng = (peak - trough).replace(0.0, np.nan)\n    recovery_loc = (df_copy[\"close\"] - trough) / rng\n    vol_mean = df_copy[\"volume\"].rolling(20, min_periods=5).mean().replace(0.0, np.nan)\n    vol_ratio = df_copy[\"volume\"] / vol_mean\n    vol_boost = np.tanh(vol_ratio - 1.0) * 0.5\n    factor = recovery_loc * (1.0 + vol_boost)\n    factor = factor.fillna(0.0)\n    df_copy[\"factor_drawdown_recovery_volume_smooth\"] = factor\n    return df_copy[\"factor_drawdown_recovery_volume_smooth\"]",
+  "description": "Preserves the parent's core mechanism: drawdown recovery location within a rolling 60-day peak-trough range, confirmed by volume expansion. The mutation replaces the hard-clipped volume boost with a smooth tanh transform bounded between -0.5 and 0.5. This removes kinks from the volume confirmation, reduces outlier influence, and improves signal smoothness to target the parent's relatively low IC and ICIR while maintaining the strong RankIC/RankICIR ordering and payoff monotonicity. No cross-sectional transform is added because the parent's raw mechanism already demonstrates payoff evidence and rank stability.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.014307565089730776,
+    "icir": 0.16503569267282767,
+    "mi": 0.01591172047389655,
+    "rank_ic": 0.030065112728879084,
+    "rank_icir": 0.3195198704228825
+  },
+  "raw_metrics": {
+    "ic": -0.014307565089730776,
+    "icir": -0.16503569267282767,
+    "mi": 0.01591172047389655,
+    "rank_ic": -0.030065112728879084,
+    "rank_icir": -0.3195198704228825
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.808187653905101,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.16967600326498888,
+    "top_quantile_excess_return": 1.4487597163153416,
+    "top_quantile_max_drawdown": -0.17020322424933,
+    "top_quantile_turnover": 0.23073182017331903
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:06:36.386826+00:00"
+}

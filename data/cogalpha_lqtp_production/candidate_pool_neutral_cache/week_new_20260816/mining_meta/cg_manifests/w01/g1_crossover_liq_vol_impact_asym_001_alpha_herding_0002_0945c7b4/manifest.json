@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_liq_vol_impact_asym_001_alpha_herding_0002_0945c7b4",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 357,
+  "factor_name": "factor_liquidity_impact_consensus",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w01-20260813-195334-r5",
+  "expression_type": "python",
+  "formula": "(ewm_std(positive_intraday_ret_on_high_vol) - ewm_std(negative_intraday_ret_on_low_vol)) / (sum_of_stds) * (0.5 + rolling_20d_same_sign_agreement)",
+  "code": "def factor_liquidity_impact_consensus(df):\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    up_impact = intraday_ret.clip(lower=0.0) * np.where(is_high_vol > 0, 1.0, 0.3)\n    down_impact = (-intraday_ret.clip(upper=0.0)) * np.where(is_low_vol > 0, 1.0, 0.3)\n    up_vol = up_impact.ewm(span=20, min_periods=10).std()\n    down_vol = down_impact.ewm(span=20, min_periods=10).std()\n    denom = (up_vol + down_vol).replace(0.0, np.nan)\n    asymmetry = (up_vol - down_vol) / denom\n    valid = overnight_ret.notna() & intraday_ret.notna()\n    same_sign = np.where(valid, np.sign(overnight_ret) == np.sign(intraday_ret), np.nan)\n    rolling_agreement = pd.Series(same_sign, index=df_copy.index).rolling(20, min_periods=5).mean()\n    consensus_weight = 0.5 + rolling_agreement\n    factor = asymmetry * consensus_weight\n    df_copy[\"factor_liquidity_impact_consensus\"] = factor.replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_liquidity_impact_consensus\"]",
+  "description": "Primary mechanism preserves the liquidity-conditioned asymmetric price impact from liq_vol_impact_asym_001: positive intraday moves on high-volume days reflect demand absorption, negative moves on low-volume days reflect illiquidity pressure. Borrowed lightweight idea from alpha-herding-0002 is the rolling session-sign agreement as a continuous confidence weight: higher overnight-intraday agreement indicates coordinated flow, amplifying the asymmetry signal; lower agreement dampens it. This keeps the raw signal continuous, bounded, and economically interpretable.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.010315776144546682,
+    "icir": 0.17629936455214537,
+    "mi": 0.005287874631905609,
+    "rank_ic": 0.032264442811900475,
+    "rank_icir": 0.5106085138131998
+  },
+  "raw_metrics": {
+    "ic": -0.010315776144546682,
+    "icir": -0.17629936455214537,
+    "mi": 0.005287874631905609,
+    "rank_ic": -0.032264442811900475,
+    "rank_icir": -0.5106085138131998
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.013602418074505,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.012490591413834462,
+    "top_quantile_excess_return": 0.0740379354445424,
+    "top_quantile_max_drawdown": -0.1326513029618358,
+    "top_quantile_turnover": 0.12688633540714384
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:00:03.701699+00:00"
+}

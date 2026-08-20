@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_liq_002_fused_momentum_reversal_001_6c118f50",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 98,
+  "factor_name": "factor_flow_regime_beta",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w02-20260803-232610-r9",
+  "expression_type": "python",
+  "formula": "cov(ret, vol_chg, 20) / var(vol_chg, 20) * clip(vol_ratio, 0.5, 2.0)",
+  "code": "def factor_flow_regime_beta(df):\n    \"\"\"Price impact beta with volume regime gating: multiply rolling beta by bounded volume ratio (volume / EMA volume) to emphasize signal during high relative volume periods, reducing noise compared to volume-change rank.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_chg = df_copy[\"volume\"].pct_change()\n    window = 20\n    cov = ret.rolling(window, min_periods=window).cov(vol_chg)\n    var_vol = vol_chg.rolling(window, min_periods=window).var()\n    beta = cov / var_vol.replace(0, np.nan)\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    vol_ratio_bounded = vol_ratio.clip(0.5, 2.0)\n    df_copy[\"factor_flow_regime_beta\"] = beta * vol_ratio_bounded\n    return df_copy[\"factor_flow_regime_beta\"]",
+  "description": "Preserves parent's core price impact beta mechanism (rolling covariance of returns with volume changes divided by volume-change variance), capturing flow-driven return-volume sensitivity. The lightweight modifier replaces the parent's noisy volume-change rank gate with a smoother volume ratio from classify_volume_regime (volume / EMA volume). The volume ratio is bounded to [0.5, 2.0] to prevent extreme multipliers, reducing temporal noise in the gating signal. This mutation targets improved ICIR and RankICIR stability by providing a more continuous and less spurious regime adjustment, while keeping the raw beta as the primary predictive engine. Cross-sectional transform is set to none as an ablation of the parent's cs_rank, letting the raw gated beta speak without additional normalization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.022053701125621637,
+    "icir": 0.2304691248538554,
+    "mi": 0.02252061020770668,
+    "rank_ic": 0.045353671284323015,
+    "rank_icir": 0.4727968588784216
+  },
+  "raw_metrics": {
+    "ic": -0.022053701125621637,
+    "icir": -0.2304691248538554,
+    "mi": 0.02252061020770668,
+    "rank_ic": -0.045353671284323015,
+    "rank_icir": -0.4727968588784216
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.11203432345668429,
+    "top_quantile_excess_return": 0.8337896528507023,
+    "top_quantile_max_drawdown": -0.06547367815204352,
+    "top_quantile_turnover": 0.15041181982684765
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:12:05.469457+00:00"
+}

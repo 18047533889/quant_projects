@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_alg_lr_001_7bee983f_89a3a45b",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 75,
+  "factor_name": "factor_volume_adjusted_reversal_v4",
+  "domain_agent": "alpha-lag-response",
+  "run_id": "fleet-w04-20260803-013655-r6",
+  "expression_type": "python",
+  "formula": "-5d_return * (current_volume_ratio - 1).clip(-2,2) using alpha_tools.classify_volume_regime",
+  "code": "def factor_volume_adjusted_reversal_v4(df):\n    df_copy = df.copy()\n    ret_5d = df_copy['close'].pct_change(5)\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy['volume'], window=20)\n    vol_dev = (vol_ratio - 1.0).clip(-2.0, 2.0)\n    factor = -ret_5d * vol_dev\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    df_copy['factor_volume_adjusted_reversal_v4'] = factor\n    return df_copy['factor_volume_adjusted_reversal_v4']",
+  "description": "Simplified mutation of factor_delayed_volume_divergence_v3. Removes the 2-day lag on volume ratio to improve timeliness and signal-to-noise ratio. The core mechanism remains volume-amplified short-term reversal: a large 5-day move on high current volume indicates overreaction and subsequent pullback. The clipping limits the impact of extreme volume spikes, preserving the parent's robust rank ordering while targeting higher IC and ICIR.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03390477924147387,
+    "icir": 0.44301278882744227,
+    "mi": 0.024586182762840636,
+    "rank_ic": 0.04006342976730205,
+    "rank_icir": 0.5333395456682476
+  },
+  "raw_metrics": {
+    "ic": 0.03390477924147387,
+    "icir": 0.44301278882744227,
+    "mi": 0.024586182762840636,
+    "rank_ic": 0.04006342976730205,
+    "rank_icir": 0.5333395456682476
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.0976275652008809,
+    "top_quantile_excess_return": 0.07394835416876822,
+    "top_quantile_max_drawdown": -0.010953291808103005,
+    "top_quantile_turnover": 0.6304298720701528
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:16:08.769418+00:00"
+}

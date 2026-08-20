@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_asym_vol_001_alpha_order_imbalance_313b101b",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 140,
+  "factor_name": "factor_asym_vol_intraday_conviction",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w01-20260804-120746-r12",
+  "expression_type": "python",
+  "formula": "intra_ret = (close - open)/open; down_sq = (intra_ret.clip(0)\u00b2; up_sq = (intra_ret.clip(0\u207a)\u00b2; raw_asym = EWM(down_sq,20) - EWM(up_sq,20); vol_ratio = volume / EMA20(volume); factor = raw_asym * vol_ratio",
+  "code": "def factor_asym_vol_intraday_conviction(df):\n    \"\"\"Intraday volatility asymmetry amplified by volume intensity.\"\"\"\n    df_copy = df.copy()\n    intra_ret = (df_copy[\"close\"] - df_copy[\"open\"]) / df_copy[\"open\"]\n    down_sq = (intra_ret.clip(upper=0) ** 2)\n    up_sq = (intra_ret.clip(lower=0) ** 2)\n    down_vol = down_sq.ewm(span=20, min_periods=20).mean()\n    up_vol = up_sq.ewm(span=20, min_periods=20).mean()\n    raw_asym = down_vol - up_vol\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    factor = raw_asym * vol_ratio\n    df_copy[\"factor_asym_vol_intraday_conviction\"] = factor\n    return df_copy[\"factor_asym_vol_intraday_conviction\"]",
+  "description": "Parent factor captures volatility asymmetry using close-to-close returns; overnight gaps introduce noise unrelated to intraday trading dynamics. This mutation replaces daily returns with intraday returns (open-to-close), focusing on volatility asymmetry that is more directly linked to intraday order flow and investor sentiment. The same EWM span (20) and volume conviction multiplier are retained, preserving the parent's economic mechanism (asymmetric volatility amplified by volume intensity) while targeting improved IC. Post-transform: cs_zscore (The volatility asymmetry multiplied by volume ratio can vary in scale across stocks; cs_zscore normalizes for cross-sectional comparability.)",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03969259193246503,
+    "icir": 0.3779660485524653,
+    "mi": 0.026076698491332984,
+    "rank_ic": 0.05205641396048418,
+    "rank_icir": 0.439116247333548
+  },
+  "raw_metrics": {
+    "ic": 0.03969259193246503,
+    "icir": 0.3779660485524653,
+    "mi": 0.026076698491332984,
+    "rank_ic": 0.05205641396048418,
+    "rank_icir": 0.439116247333548
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.12582045566376854,
+    "top_quantile_excess_return": 0.9683818179444994,
+    "top_quantile_max_drawdown": -0.0527631071255098,
+    "top_quantile_turnover": 0.20376374703300099
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:41:29.889445+00:00"
+}

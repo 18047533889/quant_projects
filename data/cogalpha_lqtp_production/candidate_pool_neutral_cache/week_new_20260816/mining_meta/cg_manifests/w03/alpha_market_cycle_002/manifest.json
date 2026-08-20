@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "alpha_market_cycle_002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 323,
+  "factor_name": "factor_cycle_return_skewness",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w03-20260813-155035-r4",
+  "expression_type": "python",
+  "formula": "rolling_skewness(close.pct_change(), 120, min_periods=60)",
+  "code": "def factor_cycle_return_skewness(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    skew = ret.rolling(120, min_periods=60).skew()\n    df_copy[\"factor_cycle_return_skewness\"] = skew\n    return df_copy[\"factor_cycle_return_skewness\"]",
+  "description": "Return distribution asymmetry is a well-documented cyclical feature. Early bull phases often exhibit positive skewness as upside surprises dominate, while late bull and bear phases exhibit negative skewness as downside shocks become more frequent. A 120-day rolling skewness of daily returns captures this slow-moving cyclical state transition. Unlike volatility ratios or moving-average crosses, skewness measures the shape of the return distribution, providing an orthogonal view of market-phase evolution. The raw signal is stock-specific and becomes more negative as downside tail risk increases, useful for ranking cross-sectionally after neutralization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.003906634580610744,
+    "icir": 0.10711472445189418,
+    "mi": 0.004999536508229596,
+    "rank_ic": 0.019057967697461164,
+    "rank_icir": 0.4643520540924189
+  },
+  "raw_metrics": {
+    "ic": -0.003906634580610744,
+    "icir": -0.10711472445189418,
+    "mi": 0.004999536508229596,
+    "rank_ic": -0.019057967697461164,
+    "rank_icir": -0.4643520540924189
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.672167825032862,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.013830110857285138,
+    "top_quantile_excess_return": 0.07923556605451565,
+    "top_quantile_max_drawdown": -0.103268180925294,
+    "top_quantile_turnover": 0.0506811145122458
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:00:32.587488+00:00"
+}

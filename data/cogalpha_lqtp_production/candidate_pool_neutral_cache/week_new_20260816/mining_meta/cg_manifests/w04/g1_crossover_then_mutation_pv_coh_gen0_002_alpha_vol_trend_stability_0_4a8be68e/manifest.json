@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_then_mutation_pv_coh_gen0_002_alpha_vol_trend_stability_0_4a8be68e",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 653,
+  "factor_name": "factor_price_volume_dollar_coherence",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260813-184426-r7",
+  "expression_type": "python",
+  "formula": "corr(rolling_rank(close,20), rolling_rank(close*volume,20), 20)",
+  "code": "def factor_price_volume_dollar_coherence(df):\n    \"\"\"Price rank vs dollar-volume rank coherence, simplified from parent.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    window = 20\n    dollar_volume = close * volume\n    close_rank = close.rolling(window, min_periods=window).rank(pct=True)\n    dollar_volume_rank = dollar_volume.rolling(window, min_periods=window).rank(pct=True)\n    pv_corr = close_rank.rolling(window, min_periods=window).corr(dollar_volume_rank)\n    df_copy[\"factor_price_volume_dollar_coherence\"] = pv_corr\n    return df_copy[\"factor_price_volume_dollar_coherence\"]",
+  "description": "Mutation of parent g1_crossover_pv_coh_gen0_002_alpha_vol_trend_stability_0_66c9b96f. The core mechanism is price-volume rank coherence: high coherence indicates capital commitment aligning with price direction. The parent used raw volume rank and a volume-trend stability multiplier. We ablate the stability multiplier to reduce noise and change the volume measure from raw share volume to dollar volume (close * volume), which better captures actual capital commitment and may improve linear IC. Preserves the parent strength of stable rank-order coherence (parent RankIC=0.0418, RankICIR=0.7874) while targeting the bottleneck of low linear IC (0.0166). Single-stock raw factor only; no cross-sectional or neutralization logic inside code.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.016116059801915522,
+    "icir": 0.3620988396858135,
+    "mi": 0.005981941584609629,
+    "rank_ic": 0.042299548146746045,
+    "rank_icir": 0.7509895004861002
+  },
+  "raw_metrics": {
+    "ic": -0.016116059801915522,
+    "icir": -0.3620988396858135,
+    "mi": 0.005981941584609629,
+    "rank_ic": -0.042299548146746045,
+    "rank_icir": -0.7509895004861002
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.024962507440638,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.08383805836187275,
+    "top_quantile_excess_return": 0.05244550386135427,
+    "top_quantile_max_drawdown": -0.023600220995431354,
+    "top_quantile_turnover": 0.17486868097495795
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:58:50.754034+00:00"
+}

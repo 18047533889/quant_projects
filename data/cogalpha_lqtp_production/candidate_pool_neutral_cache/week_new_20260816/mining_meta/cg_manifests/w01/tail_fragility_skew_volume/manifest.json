@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "tail_fragility_skew_volume",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 429,
+  "factor_name": "factor_tail_fragility_skew_volume",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w01-20260814-140446-r9",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_tail_fragility_skew_volume(df):\n    \"\"\"Tail fragility captured by negative return skewness amplified by volume concentration on down days.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    skew = ret.rolling(60, min_periods=30).skew()\n    vol_neg = (df_copy[\"volume\"] * (ret < 0)).rolling(60, min_periods=30).sum()\n    vol_total = df_copy[\"volume\"].rolling(60, min_periods=30).sum()\n    vol_share = vol_neg / vol_total.replace(0.0, np.nan)\n    factor = -skew * vol_share\n    factor_smooth = factor.ewm(span=10, min_periods=5).mean()\n    df_copy[\"factor_tail_fragility_skew_volume\"] = factor_smooth\n    return df_copy[\"factor_tail_fragility_skew_volume\"]",
+  "description": "Captures tail fragility as the product of negative return skewness (left-tail thickness) and volume concentration on negative return days. Rolling 60-day skewness of daily returns is negated so that more negative (left-skewed) distributions produce higher fragility, and then multiplied by the share of volume that occurs on down days. An exponential smoothing span of 10 days preserves stress persistence. This mechanism explores a distinct skew-volume pathway rather than downside magnitude or volatility alone.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.004047018709895362,
+    "icir": 0.12821791566770335,
+    "mi": 0.004775189379531142,
+    "rank_ic": 0.01741525614199969,
+    "rank_icir": 0.4439897321381312
+  },
+  "raw_metrics": {
+    "ic": 0.004047018709895362,
+    "icir": 0.12821791566770335,
+    "mi": 0.004775189379531142,
+    "rank_ic": 0.01741525614199969,
+    "rank_icir": 0.4439897321381312
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.0709107069931636,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.04028350118004642,
+    "top_quantile_excess_return": 0.2502269030946038,
+    "top_quantile_max_drawdown": -0.07619733764571912,
+    "top_quantile_turnover": 0.041466729794830834
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:08:05.275085+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_mutation_tail_risk_skewness_vol_stress_294d9b_edf0b872",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 533,
+  "factor_name": "factor_tail_risk_skewness_vol_stress_smoothed",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w04-20260813-014015-r1",
+  "expression_type": "python",
+  "formula": "-rolling_skewness(close returns, 60, min_periods=10) * normalized_ATR(14), EWM smoothed over 20 days",
+  "code": "def factor_tail_risk_skewness_vol_stress_smoothed(df):\n    \"\"\"Left-tail fragility: negative 60-day return skewness scaled by normalized ATR, EWM smoothed.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    skew = ret.rolling(60, min_periods=10).skew()\n    atr = pd.Series(\n        talib.ATR(\n            df_copy[\"high\"].to_numpy(),\n            df_copy[\"low\"].to_numpy(),\n            df_copy[\"close\"].to_numpy(),\n            timeperiod=14,\n        ),\n        index=df_copy.index,\n    )\n    norm_atr = atr / df_copy[\"close\"].replace(0.0, np.nan)\n    stress = -skew * norm_atr\n    factor = stress.ewm(span=20, min_periods=10).mean()\n    df_copy[\"factor_tail_risk_skewness_vol_stress_smoothed\"] = factor\n    return df_copy[\"factor_tail_risk_skewness_vol_stress_smoothed\"]",
+  "description": "Preserves the parent's core left-tail fragility mechanism: negative return skewness identifies fatter left tails, and normalized ATR scales that fragility by the current volatility regime. The mutation removes the liquidity impact weight (intraday range per dollar volume z-score compressed by tanh) because it adds unnecessary complexity and potential overfitting without evidence of improving tail-risk ordering. The child retains a single core economic mechanism, improving interpretability and focusing on the parent strength target of RankIC and ICIR robustness after industry-size neutralization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.009337645568247573,
+    "icir": 0.17381729276836533,
+    "mi": 0.0073061870891191205,
+    "rank_ic": 0.032125827348616555,
+    "rank_icir": 0.546995755594182
+  },
+  "raw_metrics": {
+    "ic": 0.009337645568247573,
+    "icir": 0.17381729276836533,
+    "mi": 0.0073061870891191205,
+    "rank_ic": 0.032125827348616555,
+    "rank_icir": 0.546995755594182
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.8116086719704363,
+    "quantile_monotonicity": 0.7575757575757576,
+    "top_quantile_annualized_excess_return": 0.10840888461765585,
+    "top_quantile_excess_return": 0.07409245399163855,
+    "top_quantile_max_drawdown": -0.03031595558256228,
+    "top_quantile_turnover": 0.035302984352586386
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:44:44.045811+00:00"
+}

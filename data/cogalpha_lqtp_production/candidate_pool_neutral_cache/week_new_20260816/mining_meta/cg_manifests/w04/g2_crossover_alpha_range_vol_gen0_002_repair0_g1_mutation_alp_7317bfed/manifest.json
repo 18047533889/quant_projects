@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_alpha_range_vol_gen0_002_repair0_g1_mutation_alp_7317bfed",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 413,
+  "factor_name": "factor_range_zscore_emavol_reversal",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260805-131056-r30",
+  "expression_type": "python",
+  "formula": "-intraday_ret * zscore(high-low,20) * ema_volume_ratio(60) smoothed EMA(3)",
+  "code": "def factor_range_zscore_emavol_reversal(df):\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    range_mean = range_.rolling(20, min_periods=20).mean()\n    range_std = range_.rolling(20, min_periods=20).std(ddof=1)\n    range_zscore = ((range_ - range_mean) / range_std.replace(0.0, np.nan)).fillna(0)\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=60)\n    signal = -intraday_ret * range_zscore * vol_ratio\n    signal_ema = signal.ewm(span=3, min_periods=1).mean()\n    df_copy[\"factor_range_zscore_emavol_reversal\"] = signal_ema.fillna(0)\n    return df_copy[\"factor_range_zscore_emavol_reversal\"]",
+  "description": "Crossover combining the elite parent's z-score range normalization with the qualified parent's EMA-based volume ratio from classify_volume_regime. The core mechanism remains intraday selling exhaustion: a large daily range, a sharp intraday decline (negative intraday return), and elevated volume signal panic, with a short-term mean-reversion expected. The z-score normalization from parent 1 retains outlier resistance and cross-stock comparability, while the EMA-based volume ratio (from alpha_tools.classify_volume_regime) replaces the manual SMA-based ratio, reducing ad-hoc parameters and reusing a tested volume regime module. The 3-day EMA smoothing reduces noise. The child targets preserved RankIC stability and improved MI through better volume normalization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.015438432484237503,
+    "icir": 0.21507037734940498,
+    "mi": 0.025464095128389097,
+    "rank_ic": 0.0441202119825704,
+    "rank_icir": 0.5677845209509915
+  },
+  "raw_metrics": {
+    "ic": 0.015438432484237503,
+    "icir": 0.21507037734940498,
+    "mi": 0.025464095128389097,
+    "rank_ic": 0.0441202119825704,
+    "rank_icir": 0.5677845209509915
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.4,
+    "top_quantile_annualized_excess_return": 0.01789422337956781,
+    "top_quantile_excess_return": 0.012677886602511013,
+    "top_quantile_max_drawdown": -0.05461320198367203,
+    "top_quantile_turnover": 0.4175243356525252
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:34:27.560146+00:00"
+}

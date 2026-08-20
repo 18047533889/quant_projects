@@ -311,46 +311,90 @@ def fast_turnover_estimate(
     min_obs: int = 10,
 ) -> np.ndarray:
     """
-    Fast turnover estimation from rank correlation changes.
+    Fast turnover estimation from rank-weight changes (canonical parity).
 
-    Turnover proxy: 1 - abs(rank_correlation(t-window, t))
-    Vectorized across factors.
+    QE-METRIC P0-14 residual: this kernel previously used the
+    ``1 - abs(spearman_corr)`` proxy, which is NOT the canonical turnover
+    definition and broke parity with ``metrics/turnover.py``. It now uses
+    the same definition as the reference:
+
+    1. Per (t, f) cross-section, rank finite assets with average-tie ranks
+       (``scipy.stats.rankdata(method="average")``), normalized to sum 1
+       over the finite assets.
+    2. turnover_t = 0.5 * sum_n |w_t,n - w_{t-window,n}| over jointly
+       finite assets.
+
+    Fast-path optimizations retained: (a) rankdata applied to a reshaped
+    (T*F, N) matrix in one vectorized call instead of a per-(t, f) Python
+    loop, and (b) the weight-difference summation vectorized across all
+    (t, f) pairs at once.
 
     Args:
         factor_values: Factor batch (T, N, F)
         window: Lag periods for comparison
-        min_obs: Minimum overlapping observations
+        min_obs: Minimum finite assets required per cross-section
+            (matches the reference's fixed floor of 10; the reference
+            applies ``min_obs=10`` internally)
 
     Returns:
         Turnover estimate (T, F), first 'window' periods are NaN
     """
-    from scipy.stats import spearmanr
+    from scipy.stats import rankdata
 
-    T, N, F = factor_values.shape
+    values = np.asarray(factor_values, dtype=np.float64)
+    if values.ndim != 3:
+        raise ValueError(
+            f"factor_values must be 3D (T, N, F), got shape {values.shape}"
+        )
+    if window < 1:
+        raise ValueError(f"window must be >= 1, got {window}")
+
+    T, N, F = values.shape
     turnover_est = np.full((T, F), np.nan, dtype=np.float64)
 
-    # Process each time period
-    for t in range(window, T):
-        v_t0 = factor_values[t - window, :, :]  # (N, F)
-        v_t1 = factor_values[t, :, :]  # (N, F)
+    if T <= window or N < 2:
+        return turnover_est
 
-        # Compute mask per factor
-        mask = np.isfinite(v_t0) & np.isfinite(v_t1)  # (N, F)
-        n_valid = np.sum(mask, axis=0)  # (F,)
+    finite = np.isfinite(values)  # (T, N, F)
 
-        # Process each factor with enough observations
-        for f in range(F):
-            if n_valid[f] < min_obs:
-                continue
+    # --- Fast rank weights (vectorized over all (t, f) cross-sections) ---
+    # Transpose to (T, F, N) and flatten to (T*F, N) so one rankdata call
+    # with axis=1 ranks every cross-section independently. rankdata turns a
+    # WHOLE row NaN if any entry is NaN, so finite values are filled with a
+    # sentinel and masked back out afterwards.
+    n_finite = np.sum(finite, axis=1)  # (T, F)
+    eligible = (n_finite >= max(min_obs, 2))  # (T, F)
 
-            m = mask[:, f]
-            x = v_t0[m, f]
-            y = v_t1[m, f]
+    flat = np.transpose(values, (0, 2, 1)).reshape(T * F, N)  # (T*F, N)
+    # rankdata returns +inf for NaN entries; replace with a sentinel below
+    # all finite ranks so masked slots never disturb the finite ranking.
+    big = np.finfo(np.float64).max
+    ranked_flat = rankdata(np.where(np.isnan(flat), big, flat), axis=1)
+    ranks_flat = np.where(np.isnan(flat), np.nan, ranked_flat)
+    # Normalize to sum 1 per cross-section over finite assets.
+    rank_sums = np.nansum(ranks_flat, axis=1, keepdims=True)  # (T*F, 1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        weights_flat = ranks_flat / rank_sums
+    weights_flat[~np.isfinite(weights_flat)] = np.nan
+    # Ineligible cross-sections (too few finite assets) get all-NaN weights,
+    # matching the reference's min_obs guard.
+    elig_flat = np.repeat(eligible.reshape(T * F), N).reshape(T * F, N)
+    weights_flat[~elig_flat] = np.nan
 
-            # Use scipy's optimized spearmanr
-            corr, _ = spearmanr(x, y)
+    weights = np.transpose(
+        weights_flat.reshape(T, F, N), (0, 2, 1)
+    )  # (T, N, F)
 
-            if np.isfinite(corr):
-                turnover_est[t, f] = 1.0 - abs(corr)
+    # --- Canonical turnover: 0.5 * sum |w_t - w_{t-window}| ---
+    w0 = weights[:-window]  # (T-window, N, F)
+    w1 = weights[window:]   # (T-window, N, F)
+    both_finite = np.isfinite(w0) & np.isfinite(w1)
+    abs_diff = np.abs(np.where(both_finite, w1 - w0, 0.0))
+    n_joint = np.sum(both_finite, axis=1)  # (T-window, F)
+    sums = np.sum(abs_diff, axis=1)  # (T-window, F)
+    turnover_vals = 0.5 * sums
+    # Reference requires >= 2 jointly finite assets; also NaN when none.
+    valid = n_joint >= 2
+    turnover_est[window:] = np.where(valid, turnover_vals, np.nan)
 
     return turnover_est

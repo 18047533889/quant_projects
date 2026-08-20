@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_pvc_coh_1_a1b2c3d4_alpha_range_vol_e378b42c",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 491,
+  "factor_name": "factor_volume_momentum_simple",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260806-014529-r35",
+  "expression_type": "python",
+  "formula": "momentum = close / shift(close, 20) - 1; _, _, vol_ratio = classify_volume_regime(volume, 20); vol_ratio = clip(vol_ratio, 0.5, 2.0); factor = momentum * vol_ratio",
+  "code": "def factor_volume_momentum_simple(df):\n    df_copy = df.copy()\n    momentum = df_copy[\"close\"] / df_copy[\"close\"].shift(20) - 1\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], 20)\n    vol_ratio = vol_ratio.clip(0.5, 2.0)\n    df_copy[\"factor_volume_momentum_simple\"] = momentum * vol_ratio\n    return df_copy[\"factor_volume_momentum_simple\"]",
+  "description": "Simplification of parent: removes the range compression modifier and replaces manual volume ratio with alpha_tools.classify_volume_regime EMA-based ratio. The core mechanism is momentum amplified by volume conviction: high momentum with high relative volume suggests strong conviction. This single mechanism is more interpretable and expected to reduce noise, potentially improving IC and information ratio while preserving rank stability.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03307814814219786,
+    "icir": 0.2828987880373727,
+    "mi": 0.03716155944578059,
+    "rank_ic": 0.05635268189707031,
+    "rank_icir": 0.4282803758134076
+  },
+  "raw_metrics": {
+    "ic": -0.03307814814219786,
+    "icir": -0.2828987880373727,
+    "mi": 0.03716155944578059,
+    "rank_ic": -0.05635268189707031,
+    "rank_icir": -0.4282803758134076
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.4,
+    "top_quantile_annualized_excess_return": 0.04963723065742842,
+    "top_quantile_excess_return": 0.034811010741483184,
+    "top_quantile_max_drawdown": -0.04593814175896682,
+    "top_quantile_turnover": 0.23057534049391512
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:41:51.912124+00:00"
+}

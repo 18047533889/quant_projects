@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "alpha-range-vol-gen0-001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 542,
+  "factor_name": "factor_vwap_sma_range_regime",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260813-044118-r2",
+  "expression_type": "python",
+  "formula": "div = (VWAP20 - SMA20)/close; compression = 1/(1 + CV(normalized_true_range,20)); factor = div * compression",
+  "code": "def factor_vwap_sma_range_regime(df):\n    df_copy = df.copy()\n    prev_close = df_copy[\"close\"].shift(1)\n    tr = pd.concat([(df_copy[\"high\"] - df_copy[\"low\"]),\n                    (df_copy[\"high\"] - prev_close).abs(),\n                    (df_copy[\"low\"] - prev_close).abs()], axis=1).max(axis=1)\n    norm_tr = tr / df_copy[\"close\"]\n    mean_tr = norm_tr.rolling(20).mean()\n    std_tr = norm_tr.rolling(20).std(ddof=1)\n    cv_tr = std_tr / mean_tr.replace(0, np.nan)\n    compression = 1.0 / (1.0 + cv_tr)\n    vwap = (df_copy[\"close\"] * df_copy[\"volume\"]).rolling(20).sum() / df_copy[\"volume\"].rolling(20).sum()\n    sma = df_copy[\"close\"].rolling(20).mean()\n    div = (vwap - sma) / df_copy[\"close\"]\n    factor = div * compression\n    df_copy[\"factor_vwap_sma_range_regime\"] = factor\n    return df_copy[\"factor_vwap_sma_range_regime\"]",
+  "description": "Range-based volatility compression modulates VWAP-SMA divergence. When normalized true range has low rolling coefficient of variation (compressed volatility), price-volume coherence (VWAP vs SMA) becomes a stronger signal; during volatility expansion, the divergence is attenuated. This changes the raw information pathway from binary compression gates to a continuous volatility-regime interaction while preserving the price-volume coherence mechanism.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.027752709117495465,
+    "icir": 0.3971640030290411,
+    "mi": 0.016629317801411858,
+    "rank_ic": 0.05264241291098485,
+    "rank_icir": 0.8246117691323871
+  },
+  "raw_metrics": {
+    "ic": -0.027752709117495465,
+    "icir": -0.3971640030290411,
+    "mi": 0.016629317801411858,
+    "rank_ic": -0.05264241291098485,
+    "rank_icir": -0.8246117691323871
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.815765024341285,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.07167069662713343,
+    "top_quantile_excess_return": 0.05039611263698762,
+    "top_quantile_max_drawdown": -0.016489173088309328,
+    "top_quantile_turnover": 0.15715874130846968
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:44:59.151284+00:00"
+}

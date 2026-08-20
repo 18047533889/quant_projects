@@ -75,3 +75,7 @@ data/**/reports/reports
 
 # 文档构建产物
 docs/team_docs/node_modules/
+
+# Loop stop switch (local only)
+loop/HALT
+

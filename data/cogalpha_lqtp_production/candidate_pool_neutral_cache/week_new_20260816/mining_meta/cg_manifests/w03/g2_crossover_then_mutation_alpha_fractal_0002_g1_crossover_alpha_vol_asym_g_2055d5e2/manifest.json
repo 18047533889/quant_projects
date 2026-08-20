@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_alpha_fractal_0002_g1_crossover_alpha_vol_asym_g_2055d5e2",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 346,
+  "factor_name": "factor_range_persistence_vol_phase_pos",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w03-20260813-194917-r5",
+  "expression_type": "python",
+  "formula": "rolling_corr(60)((high-low)/close, lag((high-low)/close,1)) * (0.5 - 0.5 * tanh((ATR_60 / ATR_14) - 1))",
+  "code": "def factor_range_persistence_vol_phase_pos(df):\n    \"\"\"Range persistence with volatility phase gate, positive direction for payoff improvement.\"\"\"\n    df_copy = df.copy()\n    range_ratio = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"].replace(0.0, np.nan)\n    range_lag = range_ratio.shift(1)\n    persistence = range_ratio.rolling(60, min_periods=60).corr(range_lag)\n\n    close = df_copy[\"close\"]\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    atr_short = pd.Series(talib.ATR(high, low, close, timeperiod=14), index=close.index)\n    atr_long = pd.Series(talib.ATR(high, low, close, timeperiod=60), index=close.index)\n    vol_phase = (atr_long / atr_short.replace(0.0, np.nan)) - 1.0\n    weight = 0.5 - 0.5 * np.tanh(vol_phase)\n\n    factor = persistence * weight\n    factor = factor.replace([np.inf, -np.inf], np.nan)\n    df_copy[\"factor_range_persistence_vol_phase_pos\"] = factor\n    return df_copy[\"factor_range_persistence_vol_phase_pos\"]",
+  "description": "Mutation of parent g2_crossover_alpha_fractal_0002_g1_crossover_alpha_vol_asym_g_d56d0f38. Core mechanism preserved: rolling 60-day autocorrelation of normalized high-low range captures long-memory volatility persistence. Lightweight modifier preserved: bounded volatility-phase weight based on short-vs-long ATR ratio attenuates signal when long ATR exceeds short ATR (expanding volatility) and preserves signal in contraction. Parent strength target: rank stability and monotonicity from persistence mechanism with conditional attenuation. Targeted bottleneck: negative direction associated with negative excess return in prior mutation evidence; flipping sign from negative to positive persistence aims to convert elevated volatility persistence into positive expected residual returns after industry/size neutralization, targeting top-quantile excess return without adding new features.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.008270682530771093,
+    "icir": 0.14242828483241865,
+    "mi": 0.006814735865443566,
+    "rank_ic": 0.020527809117435764,
+    "rank_icir": 0.4156204679108513
+  },
+  "raw_metrics": {
+    "ic": -0.008270682530771093,
+    "icir": -0.14242828483241865,
+    "mi": 0.006814735865443566,
+    "rank_ic": -0.020527809117435764,
+    "rank_icir": -0.4156204679108513
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.8142555633881146,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.014355092045385431,
+    "top_quantile_excess_return": 0.08234172578669452,
+    "top_quantile_max_drawdown": -0.04910907875982917,
+    "top_quantile_turnover": 0.10347433987221709
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:02:21.518864+00:00"
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_range_exp_exh_002_d2b54a5c_8bee2451",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 368,
+  "factor_name": "factor_range_exhaustion_ema_smooth",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260805-044444-r27",
+  "expression_type": "python",
+  "formula": "-close.ret3 * zscore(high-low, 20) * clip(volume / volume.ma(20), 0, 2) / 2, smoothed with EMA(span=5)",
+  "code": "def factor_range_exhaustion_ema_smooth(df):\n    \"\"\"Range expansion exhaustion with EMA smoothing: large daily range, negative 3-day return, and elevated volume signal a mean-reverting bounce. Smoothed with EMA (span=5) for timelier signals.\"\"\"\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    range_z = (range_ - range_.rolling(20, min_periods=20).mean()) / range_.rolling(20, min_periods=20).std(ddof=1).replace(0, np.nan)\n    ret3 = df_copy[\"close\"].pct_change(3)\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20, high_threshold=1.5, low_threshold=0.6)\n    vol_weight = vol_ratio.clip(0, 2) / 2.0\n    raw = -ret3 * range_z * vol_weight\n    df_copy[\"factor_range_exhaustion_ema_smooth\"] = raw.ewm(span=5, min_periods=5).mean()\n    return df_copy[\"factor_range_exhaustion_ema_smooth\"]",
+  "description": "Mutation of g1_mutation_range_exp_exh_002_d2b54a5c. Preserves the core economic mechanism: range expansion, negative return, and volume surge capture panic selling exhaustion. Modifies smoothing from a 5-day simple moving average to an exponential moving average (span=5) to improve signal timeliness and potentially increase IC and MI while maintaining the high RankICIR stability. All other components unchanged.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.037122462408791274,
+    "icir": 0.4020302871248346,
+    "mi": 0.03217226065479295,
+    "rank_ic": 0.07116010439977663,
+    "rank_icir": 0.8690219819039826
+  },
+  "raw_metrics": {
+    "ic": 0.037122462408791274,
+    "icir": 0.4020302871248346,
+    "mi": 0.03217226065479295,
+    "rank_ic": 0.07116010439977663,
+    "rank_icir": 0.8690219819039826
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.1911182626012713,
+    "top_quantile_excess_return": 0.12913650097724716,
+    "top_quantile_max_drawdown": -0.01682132351508936,
+    "top_quantile_turnover": 0.2975061770612256
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:30:27.678357+00:00"
+}

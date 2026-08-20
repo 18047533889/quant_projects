@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "amc_gen0_cycle_deviation",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 441,
+  "factor_name": "factor_long_term_cycle_deviation",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w04-20260805-182344-r32",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_long_term_cycle_deviation(df):\n    \"\"\"Measure long-term cycle stage as normalized deviation of price from its 200-day SMA relative to 200-day ATR.\"\"\"\n    import pandas as pd\n    import numpy as np\n    df_copy = df.copy()\n    # 200-day SMA\n    sma200 = df_copy[\"close\"].rolling(window=200, min_periods=1).mean()\n    # True range\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    tr_candidate1 = high - low\n    tr_candidate2 = (high - close.shift(1)).abs()\n    tr_candidate3 = (low - close.shift(1)).abs()\n    true_range = pd.concat([tr_candidate1, tr_candidate2, tr_candidate3], axis=1).max(axis=1)\n    atr200 = true_range.rolling(window=200, min_periods=1).mean()\n    factor = (close - sma200) / atr200.replace(0.0, np.nan)\n    df_copy[\"factor_long_term_cycle_deviation\"] = factor\n    return df_copy[\"factor_long_term_cycle_deviation\"]",
+  "description": "Captures where the current price sits relative to its long-term trend envelope in volatility-adjusted units. High positive values suggest overbought cyclical extremes, while low negatives indicate oversold extremes, reflecting phase within a long-term cycle.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0226399515576454,
+    "icir": 0.20024014328176007,
+    "mi": 0.026653810615321127,
+    "rank_ic": 0.05271669184090988,
+    "rank_icir": 0.4333389429055537
+  },
+  "raw_metrics": {
+    "ic": -0.0226399515576454,
+    "icir": -0.20024014328176007,
+    "mi": 0.026653810615321127,
+    "rank_ic": -0.05271669184090988,
+    "rank_icir": -0.4333389429055537
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.050430873181385394,
+    "top_quantile_excess_return": 0.039211492332915876,
+    "top_quantile_max_drawdown": -0.024384272278612174,
+    "top_quantile_turnover": 0.12498137512601891
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:36:50.264124+00:00"
+}

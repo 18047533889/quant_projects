@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_gen0_alpha_reversal_2_dc12eaa4_91b2e1f2",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 171,
+  "factor_name": "factor_gap_intensity_reversal_atr_ewm",
+  "domain_agent": "alpha-reversal",
+  "run_id": "fleet-w02-20260805-005047-r15",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_gap_intensity_reversal_atr_ewm(df):\n    \"\"\"Overnight gap normalized by exponentially weighted ATR captures reversal: large gap not supported by recent true range tends to fill.\"\"\"\n    df_copy = df.copy()\n    overnight_gap = df_copy[\"open\"] - df_copy[\"close\"].shift(1)\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    prev_close = df_copy[\"close\"].shift(1)\n    true_range = np.maximum(high - low, np.maximum(np.abs(high - prev_close), np.abs(low - prev_close)))\n    atr = true_range.ewm(span=60, adjust=False).mean()\n    gap_intensity = overnight_gap / (atr + 1e-12)\n    signal = -gap_intensity\n    df_copy[\"factor_gap_intensity_reversal_atr_ewm\"] = signal.fillna(0)\n    return df_copy[\"factor_gap_intensity_reversal_atr_ewm\"]",
+  "description": "Parent factor normalizes overnight gap by ATR (60-day rolling). This mutation replaces the rolling ATR with an exponentially weighted moving average (span=60) of true range, giving more weight to recent volatility. This keeps the reversal hypothesis and the core mechanism but makes normalization more responsive to current market conditions, potentially improving signal timeliness and rank stability while retaining ICIR strength.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.06897592111280003,
+    "icir": 0.7646740091091541,
+    "mi": 0.021815271410497772,
+    "rank_ic": 0.023216182120506274,
+    "rank_icir": 0.4185035194577904
+  },
+  "raw_metrics": {
+    "ic": -0.06897592111280003,
+    "icir": -0.7646740091091541,
+    "mi": 0.021815271410497772,
+    "rank_ic": -0.023216182120506274,
+    "rank_icir": -0.4185035194577904
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.26806004758770663,
+    "top_quantile_excess_return": 2.9512774641637436,
+    "top_quantile_max_drawdown": -0.0291549957290117,
+    "top_quantile_turnover": 0.7548525309393466
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:14:48.770550+00:00"
+}

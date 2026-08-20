@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_then_mutation_generated_0_2_alpha_r_4fde0d19",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 159,
+  "factor_name": "factor_vol_adaptive_reversal_smooth_weight",
+  "domain_agent": "alpha-reversal",
+  "run_id": "fleet-w02-20260804-205946-r14",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_vol_adaptive_reversal_smooth_weight(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    ret5 = close / close.shift(5) - 1.0\n    ret20 = close / close.shift(20) - 1.0\n    power = 1.5\n    rev_short = -np.sign(ret5) * np.abs(ret5) ** power\n    rev_long = -np.sign(ret20) * np.abs(ret20) ** power\n    ret = close.pct_change()\n    short_vol = ret.rolling(20, min_periods=5).std()\n    long_vol = ret.rolling(100, min_periods=20).std()\n    weight = short_vol / (short_vol + long_vol).replace(0, np.nan)\n    weight = weight.fillna(0.5)\n    signal = weight * rev_short + (1.0 - weight) * rev_long\n    df_copy[\"factor_vol_adaptive_reversal_smooth_weight\"] = signal.fillna(0.0)\n    return df_copy[\"factor_vol_adaptive_reversal_smooth_weight\"]",
+  "description": "Mutation of parent g2_crossover_g1_crossover_then_mutation_generated_0_2_alpha_r_25d38b28. Preserves the core adaptive reversal mechanism: blend short-term (5-day) and medium-term (20-day) reversal signals weighted by relative volatility. The mutation replaces the raw volatility ratio with EWMA smoothing and clipping by a naturally bounded weight: weight = short_vol / (short_vol + long_vol). This provides a [0,1] bounded weight without ad-hoc clipping or additional smoothing, simplifying the implementation and reducing potential noise from the EWMA. Signed power amplification (1.5) is retained to capture tail reversals. Target bottleneck: ICIR stability. Parent strength: RankIC=0.0355, RankICIR=0.2723 is preserved.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01992867440746738,
+    "icir": 0.19694930666135055,
+    "mi": 0.04048214530580285,
+    "rank_ic": 0.040629159972500314,
+    "rank_icir": 0.290235473881742
+  },
+  "raw_metrics": {
+    "ic": 0.01992867440746738,
+    "icir": 0.19694930666135055,
+    "mi": 0.04048214530580285,
+    "rank_ic": 0.040629159972500314,
+    "rank_icir": 0.290235473881742
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.4,
+    "top_quantile_annualized_excess_return": 0.03670514811267234,
+    "top_quantile_excess_return": 0.22856029908770537,
+    "top_quantile_max_drawdown": -0.17241766304735728,
+    "top_quantile_turnover": 0.2256526779619514
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:14:29.257885+00:00"
+}

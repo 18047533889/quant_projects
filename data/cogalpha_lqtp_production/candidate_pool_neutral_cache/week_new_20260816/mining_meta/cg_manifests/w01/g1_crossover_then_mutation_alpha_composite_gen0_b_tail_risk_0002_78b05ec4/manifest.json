@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_then_mutation_alpha_composite_gen0_b_tail_risk_0002_78b05ec4",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 376,
+  "factor_name": "factor_price_volume_demand_confirmation",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w01-20260814-002201-r6",
+  "expression_type": "python",
+  "formula": "corr(pct_change(close), pct_change(volume), 20)",
+  "code": "def factor_price_volume_demand_confirmation(df):\n    \"\"\"Price-volume demand confirmation via rolling correlation of price and volume changes.\"\"\"\n    df_copy = df.copy()\n    close_ret = df_copy[\"close\"].pct_change()\n    volume_safe = df_copy[\"volume\"].replace(0, np.nan)\n    vol_ret = volume_safe.pct_change()\n    corr = close_ret.rolling(20, min_periods=20).corr(vol_ret)\n    corr = corr.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    df_copy[\"factor_price_volume_demand_confirmation\"] = corr\n    return df_copy[\"factor_price_volume_demand_confirmation\"]\n",
+  "description": "Ablation mutation of the parent preserves the core price-volume demand-confirmation mechanism: a positive rolling correlation between price returns and volume changes indicates synchronized demand pressure, which tends to persist after industry and size neutralization. The volatility-stress multiplier from the tail-risk modifier is removed because it can amplify noisy regimes and destabilize cross-sectional ranking; a shorter 20-day correlation window makes the signal more responsive while retaining a single clear economic mechanism.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01083099924959661,
+    "icir": 0.23394843876030944,
+    "mi": 0.006933257593880526,
+    "rank_ic": 0.026847329013725683,
+    "rank_icir": 0.5083819919298505
+  },
+  "raw_metrics": {
+    "ic": -0.01083099924959661,
+    "icir": -0.23394843876030944,
+    "mi": 0.006933257593880526,
+    "rank_ic": -0.026847329013725683,
+    "rank_icir": -0.5083819919298505
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.573274545716228,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.10632830303339103,
+    "top_quantile_excess_return": 0.7807038714615953,
+    "top_quantile_max_drawdown": -0.11229844558946367,
+    "top_quantile_turnover": 0.15880937019594368
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:02:40.249251+00:00"
+}

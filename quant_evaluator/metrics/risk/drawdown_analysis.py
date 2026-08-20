@@ -40,7 +40,20 @@ def compute_drawdown_series(
     running_max = np.maximum.accumulate(cum_returns, axis=0)
 
     # Drawdown (negative values)
-    drawdown_series = (cum_returns - running_max) / running_max
+    # Total-wipeout guard: if a return <= -1 drives wealth (cum_returns) to <= 0,
+    # the ratio (cum - max) / max is wrong-signed (wealth 0 -> drawdown 0, i.e. a
+    # wipeout masquerading as "no drawdown"; negative wealth -> positive drawdown).
+    # Fail closed: from the first nonpositive wealth onward, drawdown stays NaN —
+    # a negative wealth times (1 + r) can flip positive again, which would
+    # fabricate a fake recovery, so forward-fill the invalid mask.
+    invalid = np.maximum.accumulate(cum_returns <= 0, axis=0)
+    drawdown_series = np.full(cum_returns.shape, np.nan)
+    np.divide(
+        cum_returns - running_max,
+        running_max,
+        out=drawdown_series,
+        where=~invalid,
+    )
 
     if squeeze:
         return drawdown_series[:, 0], cum_returns[:, 0], running_max[:, 0]
@@ -94,9 +107,23 @@ def compute_drawdown_statistics(
         # Compute drawdown series
         dd_series, _, _ = compute_drawdown_series(ret_f)
 
-        # Maximum drawdown (most negative, convert to positive)
-        max_dd[f] = -np.min(dd_series)
-        max_dd_idx[f] = np.argmin(dd_series)
+        # Maximum drawdown (most negative, convert to positive), NaN-safe:
+        # after a wipeout the dd_series is NaN from that index onward, so
+        # plain np.argmin would point at the NaN (QE-P1-28). Use the
+        # first-occurrence finite-min loop from portfolio_stats.
+        finite_idx = np.nonzero(np.isfinite(dd_series))[0]
+        if finite_idx.size == 0:
+            # All-NaN drawdown (wipeout from the very start): no finite
+            # trough, max_dd stays NaN.
+            max_dd[f] = np.nan
+            max_dd_idx[f] = -1
+        else:
+            vals = dd_series[finite_idx]
+            min_val = np.min(vals)
+            max_dd[f] = -min_val
+            max_dd_idx[f] = int(
+                finite_idx[np.nonzero(vals == min_val)[0][0]]
+            )
 
         # Average drawdown when in drawdown (negative values)
         in_drawdown = dd_series < -1e-10  # Small threshold to avoid floating point issues

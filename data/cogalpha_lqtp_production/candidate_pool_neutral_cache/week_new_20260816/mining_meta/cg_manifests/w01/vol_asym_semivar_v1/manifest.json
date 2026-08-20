@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "vol_asym_semivar_v1",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 278,
+  "factor_name": "factor_daily_semivariance_asymmetry",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w01-20260813-014015-r1",
+  "expression_type": "python",
+  "formula": "mean(max(ret, 0)^2, 20d) - mean(min(ret, 0)^2, 20d), where ret = close.pct_change()",
+  "code": "def factor_daily_semivariance_asymmetry(df):\n    \"\"\"Asymmetry between upside and downside semivariance of daily close-to-close returns.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    window = 20\n    min_periods = 20\n    upside_var = (ret.clip(lower=0) ** 2).rolling(window, min_periods=min_periods).mean()\n    downside_var = (ret.clip(upper=0) ** 2).rolling(window, min_periods=min_periods).mean()\n    factor = upside_var - downside_var\n    df_copy[\"factor_daily_semivariance_asymmetry\"] = factor\n    return df_copy[\"factor_daily_semivariance_asymmetry\"]",
+  "description": "Measures asymmetric volatility by comparing upside semivariance to downside semivariance of daily returns. Stocks with relatively higher upside volatility than downside volatility may exhibit positive residual momentum. This uses daily return sign-split variance, a distinct raw pathway from intraday return-based asymmetry.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0163400469090177,
+    "icir": 0.2164414152555406,
+    "mi": 0.016761105502538953,
+    "rank_ic": 0.0389040578764507,
+    "rank_icir": 0.4673384601029711
+  },
+  "raw_metrics": {
+    "ic": -0.0163400469090177,
+    "icir": -0.2164414152555406,
+    "mi": 0.016761105502538953,
+    "rank_ic": -0.0389040578764507,
+    "rank_icir": -0.4673384601029711
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.282026726553182,
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": -0.027133392098860565,
+    "top_quantile_excess_return": -0.14536527604188143,
+    "top_quantile_max_drawdown": -0.2236441694461856,
+    "top_quantile_turnover": 0.1906907985267551
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:46:18.243426+00:00"
+}

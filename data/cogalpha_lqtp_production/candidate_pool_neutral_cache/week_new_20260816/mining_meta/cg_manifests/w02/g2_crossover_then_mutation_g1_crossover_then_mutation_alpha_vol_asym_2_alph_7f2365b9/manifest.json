@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_then_mutation_alpha_vol_asym_2_alph_7f2365b9",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 147,
+  "factor_name": "factor_overnight_reversal_vol_intensity",
+  "domain_agent": "alpha-volatility-regime",
+  "run_id": "fleet-w02-20260804-164806-r13",
+  "expression_type": "python",
+  "formula": "-overnight_ret * (1 + clip(-sign(overnight_ret)*intraday_ret,0,2)) * (1 + clip(vol_ratio-1,0,0.5))",
+  "code": "def factor_overnight_reversal_vol_intensity(df):\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    overnight_sign = np.sign(overnight_ret)\n    disagreement = -overnight_sign * intraday_ret\n    disagreement = np.clip(disagreement, 0.0, 2.0)\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    vol_intensity = 1.0 + np.clip(vol_ratio - 1.0, 0.0, 0.5)\n    signal = -overnight_ret * (1.0 + disagreement) * vol_intensity\n    df_copy[\"factor_overnight_reversal_vol_intensity\"] = signal\n    return df_copy[\"factor_overnight_reversal_vol_intensity\"]",
+  "description": "Mutation of parent overnight reversal with disagreement. Replaces the range expansion scaling from the parent with a volume intensity factor derived from classify_volume_regime. The volume intensity (1 + min(max(vol_ratio-1,0),0.5)) amplifies the reversal signal when volume is elevated relative to recent average, indicating stronger positioning pressure and more reliable reversal. This preserves the core overnight gap overreaction mechanism (negative overnight return and intraday disagreement) while incorporating a volume-based noise filter that has shown improved signal-to-noise in prior mutations. The core economic idea remains: stocks with large overnight gaps reversing intraday are likely overreaction corrections, and high volume confirms the move.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.08836058738843278,
+    "icir": 0.8039780803453083,
+    "mi": 0.043422983337411125,
+    "rank_ic": 0.025524971673852034,
+    "rank_icir": 0.39100474124316714
+  },
+  "raw_metrics": {
+    "ic": -0.08836058738843278,
+    "icir": -0.8039780803453083,
+    "mi": 0.043422983337411125,
+    "rank_ic": -0.025524971673852034,
+    "rank_icir": -0.39100474124316714
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.2634142594847,
+    "top_quantile_excess_return": 2.8682526938848643,
+    "top_quantile_max_drawdown": -0.03546641375543402,
+    "top_quantile_turnover": 0.7516839775393187
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:14:00.541343+00:00"
+}

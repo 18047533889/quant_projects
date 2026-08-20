@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "alpha-herding-gen0-A-001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 723,
+  "factor_name": "factor_herding_volume_price_position_asymmetry",
+  "domain_agent": "alpha-herding",
+  "run_id": "fleet-w04-20260814-050458-r11",
+  "expression_type": "python",
+  "formula": "2 * rolling_sum(volume * (close - rolling_low_20) / (rolling_high_20 - rolling_low_20), 20) / rolling_sum(volume, 20) - 1",
+  "code": "def factor_herding_volume_price_position_asymmetry(df):\n    \"\"\"Volume-weighted close position within trailing high-low range, minus neutral.\"\"\"\n    df_copy = df.copy()\n    high_roll = df_copy[\"high\"].rolling(20, min_periods=20).max()\n    low_roll = df_copy[\"low\"].rolling(20, min_periods=20).min()\n    range_ = high_roll - low_roll\n    position = (df_copy[\"close\"] - low_roll) / range_.replace(0, np.nan)\n    volume = df_copy[\"volume\"]\n    vol_sum = volume.rolling(20, min_periods=20).sum()\n    weighted_pos = (volume * position).rolling(20, min_periods=20).sum() / vol_sum.replace(0, np.nan)\n    factor = 2 * weighted_pos - 1\n    return factor.rename(\"factor_herding_volume_price_position_asymmetry\")",
+  "description": "Measures directional consensus by computing the volume-weighted average position of close within the trailing 20-day high-low range. A high positive value indicates that recent volume is concentrated near the upper range as prices crowd upward; a low negative value indicates volume near the lower range. This continuous crowding metric is more stable than simple sign(close-open) volume imbalance and reflects herding pressure.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.010319838866618573,
+    "icir": 0.17434394566370667,
+    "mi": 0.007195995594338811,
+    "rank_ic": 0.028416569963494478,
+    "rank_icir": 0.40817264298475214
+  },
+  "raw_metrics": {
+    "ic": -0.010319838866618573,
+    "icir": -0.17434394566370667,
+    "mi": 0.007195995594338811,
+    "rank_ic": -0.028416569963494478,
+    "rank_icir": -0.40817264298475214
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.710500634136076,
+    "quantile_monotonicity": 0.8787878787878788,
+    "top_quantile_annualized_excess_return": 0.011048666792503159,
+    "top_quantile_excess_return": 0.00700094915536198,
+    "top_quantile_max_drawdown": -0.048280237229538336,
+    "top_quantile_turnover": 0.09263140487786065
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:05:34.291264+00:00"
+}

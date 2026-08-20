@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_mutation_alpha_herding_gen0_2_8b7a67c6_g1_cro_4cf9584b",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 109,
+  "factor_name": "factor_atr_volume_ratio",
+  "domain_agent": "alpha-herding",
+  "run_id": "fleet-w02-20260804-030942-r10",
+  "expression_type": "python",
+  "formula": "norm_atr * vol_ratio",
+  "code": "def factor_atr_volume_ratio(df):\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    prev_close = close.shift(1)\n    tr = pd.concat([high - low, (high - prev_close).abs(), (low - prev_close).abs()], axis=1).max(axis=1)\n    atr = tr.rolling(14, min_periods=14).mean()\n    norm_atr = atr / close.replace(0, np.nan)\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], 20, 1.5, 0.6)\n    df_copy[\"factor_atr_volume_ratio\"] = norm_atr * vol_ratio\n    return df_copy[\"factor_atr_volume_ratio\"]",
+  "description": "Mutation of factor_atr_signedpower_volume. The parent amplified normalized ATR via signed power (squaring), which can over-weight extreme true range events and introduce instability. This mutation removes the signed power and multiplies the raw normalized ATR directly by the volume ratio, simplifying the signal to a smooth herding indicator. The core mechanism remains: elevated true range relative to price, combined with above-average volume, indicates crowding and directional consensus. The mutation aims to improve robustness and ICIR while preserving the direction and order of the parent signal.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02337960286793184,
+    "icir": 0.19083965637945885,
+    "mi": 0.04894704653445636,
+    "rank_ic": 0.048603595762661204,
+    "rank_icir": 0.36966808704858933
+  },
+  "raw_metrics": {
+    "ic": -0.02337960286793184,
+    "icir": -0.19083965637945885,
+    "mi": 0.04894704653445636,
+    "rank_ic": -0.048603595762661204,
+    "rank_icir": -0.36966808704858933
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.3,
+    "top_quantile_annualized_excess_return": 0.018711667455382663,
+    "top_quantile_excess_return": 0.11224128811950318,
+    "top_quantile_max_drawdown": -0.09229975182634009,
+    "top_quantile_turnover": 0.38095677626217256
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:12:31.262504+00:00"
+}

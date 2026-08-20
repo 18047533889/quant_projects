@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "bar-shape-cand-2",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "elite",
+  "factor_id": 220,
+  "factor_name": "factor_lower_shadow_volume_weighted",
+  "domain_agent": "alpha-bar-shape",
+  "run_id": "fleet-w01-20260805-145547-r18",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_lower_shadow_volume_weighted(df):\n    df_copy = df.copy()\n    candle_min = np.minimum(df_copy[\"open\"], df_copy[\"close\"])\n    lower_shadow = candle_min - df_copy[\"low\"]\n    vol_ma = df_copy[\"volume\"].rolling(20, min_periods=5).mean()\n    vol_ratio = df_copy[\"volume\"] / vol_ma.replace(0, np.nan)\n    weighted_shadow = lower_shadow * vol_ratio\n    signal = weighted_shadow.ewm(span=5, adjust=False).mean()\n    df_copy[\"factor_lower_shadow_volume_weighted\"] = signal.fillna(0)\n    return df_copy[\"factor_lower_shadow_volume_weighted\"]",
+  "description": "Captures buying pressure at the lows using the lower shadow (distance from min(open, close) to low). A large lower shadow indicates that buyers stepped in aggressively near the day's low, often a precursor to a bullish reversal. Volume weighting amplifies the signal when the session was active, and a 5-day EMA smooths the measure. Cross-sectional ranking identifies stocks with the most pronounced relative buying pressure.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03465153039662556,
+    "icir": 0.36446977422061705,
+    "mi": 0.021864681552868248,
+    "rank_ic": 0.038651404448815554,
+    "rank_icir": 0.36442177924928626
+  },
+  "raw_metrics": {
+    "ic": -0.03465153039662556,
+    "icir": -0.36446977422061705,
+    "mi": 0.021864681552868248,
+    "rank_ic": -0.038651404448815554,
+    "rank_icir": -0.36442177924928626
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.3427209331545906,
+    "top_quantile_excess_return": 4.482332832937303,
+    "top_quantile_max_drawdown": -0.06914369511131457,
+    "top_quantile_turnover": 0.15848498419737422
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:44:00.014118+00:00"
+}

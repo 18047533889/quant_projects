@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "vol_asym_001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 104,
+  "factor_name": "factor_downside_upasym",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w04-20260803-062912-r8",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_downside_upasym(df):\n    \"\"\"Measure downside volatility asymmetry: higher downside vol relative to upside vol may signal increased risk and underperformance.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    down_mask = ret < 0\n    up_mask = ret > 0\n    down_sq = (ret * down_mask).pow(2).rolling(20, min_periods=10).sum()\n    up_sq = (ret * up_mask).pow(2).rolling(20, min_periods=10).sum()\n    down_count = down_mask.rolling(20, min_periods=10).sum()\n    up_count = up_mask.rolling(20, min_periods=10).sum()\n    down_vol = (down_sq / down_count.replace(0, np.nan)).pow(0.5)\n    up_vol = (up_sq / up_count.replace(0, np.nan)).pow(0.5)\n    raw_factor = down_vol - up_vol\n    df_copy[\"factor_downside_upasym\"] = raw_factor.ewm(span=5, min_periods=1).mean()\n    return df_copy[\"factor_downside_upasym\"]",
+  "description": "Captures relative downside volatility: stocks with higher recent downside volatility relative to upside volatility may underperform going forward due to increased risk perception or fundamental deterioration. Computed as the difference between rolling downside and upside realized volatility.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01592770939658115,
+    "icir": 0.1677557254663296,
+    "mi": 0.02538204187215687,
+    "rank_ic": 0.04374127626477622,
+    "rank_icir": 0.42907062092066056
+  },
+  "raw_metrics": {
+    "ic": 0.01592770939658115,
+    "icir": 0.1677557254663296,
+    "mi": 0.02538204187215687,
+    "rank_ic": 0.04374127626477622,
+    "rank_icir": 0.42907062092066056
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.3,
+    "top_quantile_annualized_excess_return": 0.03761930800559665,
+    "top_quantile_excess_return": 0.027933193582447613,
+    "top_quantile_max_drawdown": -0.04175682885138532,
+    "top_quantile_turnover": 0.0827179972336446
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:17:28.186216+00:00"
+}

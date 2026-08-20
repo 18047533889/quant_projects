@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_mutation_gen0_agentcreative_1_1546ec3c_g1_cro_a4c118b9",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 452,
+  "factor_name": "factor_overnight_intraday_median_smoothed_normalized",
+  "domain_agent": "alpha-daily-trend",
+  "run_id": "fleet-w02-20260814-091505-r8",
+  "expression_type": "python",
+  "formula": "rolling_median_5(sign(overnight)*sqrt(abs(overnight)) - sign(intraday)*sqrt(abs(intraday))) / rolling_mean_5(sqrt(abs(overnight)) + sqrt(abs(intraday)))",
+  "code": "def factor_overnight_intraday_median_smoothed_normalized(df):\n    '''Persistent overnight-intraday dissonance smoothed by 5-day median, normalized by average compressed session magnitude.'''\n    df_copy = df.copy()\n    overnight, intraday = alpha_tools.decompose_overnight_intraday(df_copy['close'], df_copy['open'])\n    overnight = overnight.replace([np.inf, -np.inf], np.nan)\n    intraday = intraday.replace([np.inf, -np.inf], np.nan)\n    signed_sqrt_overnight = np.sign(overnight) * np.sqrt(np.abs(overnight))\n    signed_sqrt_intraday = np.sign(intraday) * np.sqrt(np.abs(intraday))\n    raw_dissonance = signed_sqrt_overnight - signed_sqrt_intraday\n    smoothed = raw_dissonance.rolling(5, min_periods=1).median()\n    total_magnitude = (np.sqrt(np.abs(overnight)) + np.sqrt(np.abs(intraday))).rolling(5, min_periods=1).mean()\n    factor = (smoothed / total_magnitude.replace(0.0, np.nan)).fillna(0.0)\n    df_copy['factor_overnight_intraday_median_smoothed_normalized'] = factor\n    return df_copy['factor_overnight_intraday_median_smoothed_normalized']",
+  "description": "Preserves parent's core overnight-intraday dissonance mechanism and 5-day smoothing concept plus denominator normalization. Mutates only the numerator aggregator from arithmetic mean to median, reducing sensitivity to occasional extreme session gaps and improving stability of the smoothed signal while retaining the same magnitude denominator. This targets improved ICIR/RankICIR robustness without adding new features or cross-sectional transforms.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02049617405539176,
+    "icir": 0.4556323976282958,
+    "mi": 0.005616021932372206,
+    "rank_ic": 0.02473576808557714,
+    "rank_icir": 0.4749687065300087
+  },
+  "raw_metrics": {
+    "ic": 0.02049617405539176,
+    "icir": 0.4556323976282958,
+    "mi": 0.005616021932372206,
+    "rank_ic": 0.02473576808557714,
+    "rank_icir": 0.4749687065300087
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 11.442299003480992,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.23138215859376765,
+    "top_quantile_excess_return": 2.334166189254527,
+    "top_quantile_max_drawdown": -0.25055722249425816,
+    "top_quantile_turnover": 0.4534920802907536
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:43:31.846815+00:00"
+}

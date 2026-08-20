@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_vol_asym_corr_leverage_002_drawdown_ef8c9e5e",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 704,
+  "factor_name": "factor_vol_asym_volume_dryup_nonlinear",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w04-20260814-015906-r10",
+  "expression_type": "python",
+  "formula": "(-rolling_corr(lag1_return, volatility, 60)) * (1 / (1 + 9 * drawdown_volume_share(20)))",
+  "code": "def factor_vol_asym_volume_dryup_nonlinear(df):\n    \"\"\"Leverage-effect asymmetry weighted by nonlinear volume dry-up attenuation.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"]\n    lag_ret = ret.shift(1)\n    corr = lag_ret.rolling(60, min_periods=30).corr(vol)\n    asym_signal = -corr\n\n    df_copy[\"volume\"] = df_copy[\"volume\"].fillna(0.0)\n    peak_window = 20\n    vol_window = 20\n    rolling_peak = df_copy[\"close\"].rolling(peak_window, min_periods=1).max()\n    drawdown_state = (df_copy[\"close\"] < rolling_peak).astype(float)\n    drawdown_vol = (df_copy[\"volume\"] * drawdown_state).rolling(vol_window, min_periods=1).sum()\n    recovery_vol = (df_copy[\"volume\"] * (1.0 - drawdown_state)).rolling(vol_window, min_periods=1).sum()\n    total_vol = drawdown_vol + recovery_vol\n    drawdown_share = drawdown_vol / total_vol.replace(0.0, 1.0)\n    # nonlinear attenuation: reciprocal mapping gives weight in [0.1, 1]\n    weight = 1.0 / (1.0 + 9.0 * drawdown_share)\n    factor = asym_signal * weight\n    df_copy[\"factor_vol_asym_volume_dryup_nonlinear\"] = factor\n    return df_copy[\"factor_vol_asym_volume_dryup_nonlinear\"]",
+  "description": "Preserves the core leverage-effect mechanism from the parent: negative rolling correlation between lagged returns and current range volatility captures asymmetric volatility response. Parent strength to retain is RankICIR stability and raw payoff evidence, so no cross-sectional transform is applied. Bottleneck targeted is MI, which is the weakest elite metric. The original linear attenuation weight = 1 - drawdown_share is replaced with a reciprocal attenuation weight = 1 / (1 + 9 * drawdown_share). This nonlinear mapping keeps weight near 1 for very low drawdown share (selling exhaustion) and smoothly reduces it toward 0.1 for high share, producing a sharper contrast that may increase nonlinear dependence while preserving the continuous raw signal and monotonic core. The mutation changes only the weight function; all windows and the core correlation remain unchanged to avoid disrupting rank stability.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.019968499294989086,
+    "icir": 0.4262963433819202,
+    "mi": 0.008547029571046139,
+    "rank_ic": 0.036157648822458886,
+    "rank_icir": 0.7711803538344677
+  },
+  "raw_metrics": {
+    "ic": 0.019968499294989086,
+    "icir": 0.4262963433819202,
+    "mi": 0.008547029571046139,
+    "rank_ic": 0.036157648822458886,
+    "rank_icir": 0.7711803538344677
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.294892992542919,
+    "quantile_monotonicity": 0.9272727272727272,
+    "top_quantile_annualized_excess_return": 0.07314097033439815,
+    "top_quantile_excess_return": 0.047891208020159004,
+    "top_quantile_max_drawdown": -0.023542346138699988,
+    "top_quantile_turnover": 0.1105891402837605
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:04:02.487727+00:00"
+}

@@ -5,6 +5,8 @@ Tests for intermediate result caching.
 import pytest
 import time
 
+from quant_evaluator.runtime.cache_v2 import CacheV2Config
+from quant_evaluator.runtime.cache_v2_adapter import V2IntermediateCache
 from quant_evaluator.runtime.intermediates import (
     CacheKey,
     CacheEntry,
@@ -248,6 +250,103 @@ class TestIntermediateCache:
         assert not cache.has(key)
 
 
+class TestV2IntermediateCache:
+    """Tests for the cache_v2-backed intermediate cache."""
+
+    def test_put_get_round_trip(self, tmp_path):
+        cache = V2IntermediateCache(
+            config=CacheV2Config(
+                runtime_mode="research",
+                disk_root=tmp_path,
+                enable_l2=True,
+            )
+        )
+        key = CacheKey("metric_a", chunk_id=0, input_hash="hash1")
+
+        assert cache.put(key, [1, 2, 3]) is True
+        assert cache.get(key) == [1, 2, 3]
+
+    def test_has_does_not_promote_l2_entries(self, tmp_path):
+        """``has`` must answer without promoting an evicted L1 entry."""
+        cache = V2IntermediateCache(
+            config=CacheV2Config(
+                runtime_mode="research",
+                disk_root=tmp_path,
+                enable_l2=True,
+            )
+        )
+        key = CacheKey("metric_a", chunk_id=0, input_hash="hash1")
+        cache.put(key, [1, 2, 3])
+
+        # Simulate L1 eviction: the value survives only in L2.
+        cache._cache.l1.clear()
+        assert cache._cache.l1.get(cache._physical_key(key)) is None
+
+        assert cache.has(key) is True
+        # has() must not have promoted the entry back into L1 and must not
+        # have recorded any layer hit.
+        assert cache._cache.l1.get(cache._physical_key(key)) is None
+        stats = cache.get_stats()
+        assert stats["l1_hits"] == 0
+        assert stats["l2_hits"] == 0
+
+    def test_invalidate_metric_removes_l2_only_entries(self, tmp_path):
+        """Entries evicted from L1 into L2 must still be invalidated."""
+        cache = V2IntermediateCache(
+            config=CacheV2Config(
+                runtime_mode="research",
+                disk_root=tmp_path,
+                enable_l2=True,
+            )
+        )
+        key1 = CacheKey("metric_a", chunk_id=0, input_hash="hash1")
+        key2 = CacheKey("metric_a", chunk_id=1, input_hash="hash1")
+        key3 = CacheKey("metric_b", chunk_id=0, input_hash="hash1")
+
+        cache.put(key1, [1])
+        cache.put(key2, [2])
+        cache.put(key3, [3])
+
+        # Evict everything from L1 so the entries live only in L2/L3.
+        cache._cache.l1.clear()
+
+        assert cache.invalidate_metric("metric_a") == 2
+
+        # The evicted entries must not resurrect through later reads.
+        assert cache.get(key1) is None
+        assert cache.get(key2) is None
+        assert cache.get(key3) == [3]
+
+    def test_invalidate_metric_count_is_per_logical_entry(self, tmp_path):
+        """A metric present in multiple layers is counted and removed once."""
+        cache = V2IntermediateCache(
+            config=CacheV2Config(
+                runtime_mode="research",
+                disk_root=tmp_path,
+                enable_l2=True,
+            )
+        )
+        key1 = CacheKey("metric_a", chunk_id=0, input_hash="hash1")
+        key2 = CacheKey("metric_a", chunk_id=1, input_hash="hash1")
+
+        cache.put(key1, [1])
+        cache.put(key2, [2])
+
+        # Entries live in both L1 and L2 simultaneously.
+        assert cache.invalidate_metric("metric_a") == 2
+        assert cache.has(key1) is False
+        assert cache.has(key2) is False
+        assert cache.invalidate_metric("metric_a") == 0
+
+    def test_disabled_cache_is_noop(self):
+        cache = V2IntermediateCache(enable=False)
+        key = CacheKey("metric_a")
+
+        assert cache.put(key, [1]) is False
+        assert cache.get(key) is None
+        assert cache.has(key) is False
+
+
 class TestComputeInputHash:
     def test_basic_hash(self):
         hash1 = compute_input_hash(("factor_a", "factor_b"))
@@ -255,9 +354,7 @@ class TestComputeInputHash:
 
         assert hash1 == hash2
         assert isinstance(hash1, str)
-        assert len(hash1) == 64  # SHA256 hex digest
-
-    def test_different_factors_different_hash(self):
+        assert len(hash1) == 64  # SHA256 hex digest    def test_different_factors_different_hash(self):
         hash1 = compute_input_hash(("factor_a",))
         hash2 = compute_input_hash(("factor_b",))
 

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_pv_coh_002_f933847b",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 549,
+  "factor_name": "factor_price_volume_rank_corr",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w04-20260813-044118-r2",
+  "expression_type": "python",
+  "formula": "rolling_corr(rolling_rank(close.pct_change(), 20), rolling_rank(volume.pct_change(), 20), 20)",
+  "code": "def factor_price_volume_rank_corr(df):\n    \"\"\"Rolling rank-based coherence between price returns and volume changes.\"\"\"\n    df_copy = df.copy()\n    window = 20\n    ret = df_copy[\"close\"].pct_change()\n    vol_change = df_copy[\"volume\"].pct_change()\n    # Rank each series within trailing window to reduce outlier influence\n    ret_rank = ret.rolling(window, min_periods=window).rank(pct=True)\n    vol_rank = vol_change.rolling(window, min_periods=window).rank(pct=True)\n    # Pearson correlation of trailing rank series\n    corr = ret_rank.rolling(window, min_periods=window).corr(vol_rank)\n    df_copy[\"factor_price_volume_rank_corr\"] = corr\n    return df_copy[\"factor_price_volume_rank_corr\"]",
+  "description": "Mutation of parent price-volume coherence factor. The parent's Pearson correlation is sensitive to outliers in daily returns and volume changes. The exact Spearman rolling correlation is not directly supported by pandas Rolling.corr, so this repaired version uses trailing rolling rank transforms of price returns and volume changes, followed by a rolling Pearson correlation of those rank series. This captures the monotonic association between price movement and volume confirmation while reducing outlier influence and keeping the implementation fully vectorized and contract-compliant.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.013404131239525949,
+    "icir": 0.32700734533382997,
+    "mi": 0.004615308301533005,
+    "rank_ic": 0.04261846067931279,
+    "rank_icir": 0.891453973339342
+  },
+  "raw_metrics": {
+    "ic": -0.013404131239525949,
+    "icir": -0.32700734533382997,
+    "mi": 0.004615308301533005,
+    "rank_ic": -0.04261846067931279,
+    "rank_icir": -0.891453973339342
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.065810460827063,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": -0.01077912669343739,
+    "top_quantile_excess_return": -0.006814710078490327,
+    "top_quantile_max_drawdown": -0.04195151790973228,
+    "top_quantile_turnover": 0.19810499738107343
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:46:52.040490+00:00"
+}

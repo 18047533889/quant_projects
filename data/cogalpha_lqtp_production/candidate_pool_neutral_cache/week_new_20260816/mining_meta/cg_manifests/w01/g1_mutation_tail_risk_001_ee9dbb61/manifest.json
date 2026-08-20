@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_tail_risk_001_ee9dbb61",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 297,
+  "factor_name": "factor_tail_downside_variance_ratio_volume_weighted",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w01-20260813-064101-r2",
+  "expression_type": "python",
+  "formula": "factor = 1 / (1 + rolling_sum_60(downside_ret^2 * clip(volume / rolling_mean_60(volume), 0.5, 2.0)) / rolling_sum_60(upside_ret^2 * clip(volume / rolling_mean_60(volume), 0.5, 2.0)))",
+  "code": "def factor_tail_downside_variance_ratio_volume_weighted(df):\n    \"\"\"Asymmetric volatility with volume-weighted downside/upside variance over trailing 60 days.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    down_ret = np.minimum(ret, 0.0)\n    up_ret = np.maximum(ret, 0.0)\n    vol_mean = df_copy[\"volume\"].rolling(60, min_periods=20).mean()\n    vol_ratio = df_copy[\"volume\"] / vol_mean.replace(0.0, np.nan)\n    vol_weight = np.clip(vol_ratio.fillna(1.0), 0.5, 2.0)\n    down_var = (down_ret ** 2 * vol_weight).rolling(60, min_periods=20).sum()\n    up_var = (up_ret ** 2 * vol_weight).rolling(60, min_periods=20).sum()\n    ratio = down_var / up_var.replace(0.0, np.nan)\n    ratio = ratio.replace([np.inf, -np.inf], np.nan)\n    factor = 1.0 / (1.0 + ratio)\n    factor = factor.fillna(0.0)\n    return pd.Series(factor, index=df_copy.index, name=\"factor_tail_downside_variance_ratio_volume_weighted\")",
+  "description": "Retains the core downside/upside variance asymmetry from the parent but adds a bounded volume confirmation weight. On days with abnormally high volume, the squared return contribution is amplified up to 2x, and on low-volume days dampened to 0.5x. This emphasizes tail-risk signals that occur during active trading, potentially improving linear IC without disrupting the existing rank stability and payoff monotonicity. Higher factor still indicates lower downside variance share, i.e., tail-risk resilience.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.012940284069951308,
+    "icir": 0.20205621303192428,
+    "mi": 0.018814686391985802,
+    "rank_ic": 0.02750623835074623,
+    "rank_icir": 0.41609680941027843
+  },
+  "raw_metrics": {
+    "ic": -0.012940284069951308,
+    "icir": -0.20205621303192428,
+    "mi": 0.018814686391985802,
+    "rank_ic": -0.02750623835074623,
+    "rank_icir": -0.41609680941027843
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 8.619190890059048,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.565075634206768,
+    "top_quantile_excess_return": 11.907986208719818,
+    "top_quantile_max_drawdown": -0.08170478928848446,
+    "top_quantile_turnover": 0.10477410403322775
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:48:13.963711+00:00"
+}

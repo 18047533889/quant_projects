@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_agentrangevol_range_expansion_reversal_001_g1_cr_df4797b2",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 339,
+  "factor_name": "factor_enhanced_regime_aware_reversal",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260804-234255-r25",
+  "expression_type": "python",
+  "formula": "reversal_signal = -ret5 * zscore(range) * (1 - direction_ratio_50), smoothed EMA(3)",
+  "code": "def factor_enhanced_regime_aware_reversal(df):\n    df_copy = df.copy()\n    # Reversal component from parent 1: range expansion reversal\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    lookback = 50\n    mean_range = range_.rolling(lookback, min_periods=lookback).mean()\n    std_range = range_.rolling(lookback, min_periods=lookback).std()\n    range_z = (range_ - mean_range) / std_range.replace(0, np.nan)\n    ret5 = df_copy[\"close\"].pct_change(5)\n    raw_reversal = -ret5 * range_z\n    # Directional consistency filter with longer lookback (50 days) inspired by parent 1\n    ret = df_copy[\"close\"].pct_change()\n    up_sum = ret.clip(lower=0).rolling(50, min_periods=50).sum()\n    down_sum = (-ret.clip(upper=0)).rolling(50, min_periods=50).sum()\n    total_abs = up_sum + down_sum\n    direction_ratio = up_sum / total_abs.replace(0, np.nan)\n    direction_ratio = direction_ratio.clip(0, 1).fillna(0.5)\n    # Attenuate reversal when trend is persistent (high direction ratio)\n    regime_weight = 1.0 - direction_ratio\n    raw = raw_reversal * regime_weight\n    # Smooth with EMA(3)\n    signal = raw.ewm(span=3, min_periods=3).mean()\n    df_copy[\"factor_enhanced_regime_aware_reversal\"] = signal\n    return df_copy[\"factor_enhanced_regime_aware_reversal\"]",
+  "description": "This crossover factor retains the elite regime-aware reversal mechanism from parent 2 but transfers a single lightweight modification from parent 1: the 50-day lookback window. The directional consistency filter (up-day return ratio) is now computed over 50 days instead of 20, aligning the persistence estimation with the volatility lookback used in the range expansion z-score. When directional consistency is high (persistent trend), reversal signals are dampened; when low (choppy, mean-reverting conditions), reversal signals are amplified. The longer window may capture more stable regime patterns, aiming to improve ICIR and MI while preserving parent 2's strong RankICIR.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.039312891660542665,
+    "icir": 0.4615151660976599,
+    "mi": 0.03271205863821969,
+    "rank_ic": 0.0544887649699895,
+    "rank_icir": 0.6849004464845418
+  },
+  "raw_metrics": {
+    "ic": 0.039312891660542665,
+    "icir": 0.4615151660976599,
+    "mi": 0.03271205863821969,
+    "rank_ic": 0.0544887649699895,
+    "rank_icir": 0.6849004464845418
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.09218640147255375,
+    "top_quantile_excess_return": 0.05278522067418079,
+    "top_quantile_max_drawdown": -0.021340119170388916,
+    "top_quantile_turnover": 0.39021053879705236
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:28:31.878734+00:00"
+}

@@ -1,0 +1,110 @@
+id: R21-DEF1-SUPERTRND
+slice: R21-DEF1-SUPERTRND — rebuild SupertrendNative as a true ratchet state
+  machine (Wilder ATR, band ratchet, close-cross flip) + independent oracle
+  tests + honest ExecutionKind
+campaign: Operator Rehabilitation (R21; LOCAL ONLY, working tree is truth)
+git_sha: working-tree  # no commit; working tree is truth
+timestamp: "2026-08-20"
+status: COMPLETED_LOCAL
+
+owned_files:
+  - cleaned_operators/common/polars_technical_indicators.py  # SupertrendNative
+    + _SupertrendSpec block ONLY (minimal diff; 172 insertions/24 deletions
+    in file, all inside SupertrendNative + its spec/classification)
+  - tests/backend/test_polars_supertrend_native.py  # NEW: 11 oracle tests
+  - evidence/r2/R21-DEF1-SUPERTRND.yaml  # this file
+
+problem:
+  "R20-REDTEAM-MATH-1 DEF-1 (P1): SupertrendNative
+  (cleaned_operators/common/polars_technical_indicators.py:1307-1353) returned
+  EXACTLY (high+low)/2 on every row — the m*ATR bands cancelled algebraically
+  in (upper+lower)/2, making window/multiplier dead parameters, with zero
+  ratchet state and a simple rolling mean of TR instead of Wilder ATR. Any
+  consumer of the polars 'Supertrend' name got a bar-midpoint proxy with zero
+  trend information. The pandas Supertrend
+  (cleaned_operators/technical/indicators_v2.py:257-321) is the verified
+  canonical reference."
+
+fix:
+  "Kernel route: per-column NumPy ratchet state machine over Polars column
+  arrays (df[col].to_numpy().astype(float)) — NOT a pure native Polars
+  expression. (1) TR = max(h-l, |h-pc|, |l-pc|) with NaN propagation
+  (np.maximum.reduce semantics — any NaN part -> NaN TR). (2) Wilder ATR =
+  pandas ewm(alpha=1/w, adjust=False, min_periods=w) reproduced exactly,
+  including NaN semantics: NaN rows hold the previous state forward, leading
+  NaNs -> NaN until the first finite observation seeds state, and after k
+  consecutive NaN rows the next finite observation re-blends as
+  state=(x + r*s)/(1+r) with r=(1-alpha)^(gap+1)/alpha (formula derived and
+  verified against pandas ewm on hand series across alpha in {1/14, 0.25,
+  0.5, 0.75} x gap in {1,2,3}, then on random panels seeds 5/11/21/31 with
+  NaN 0-30% and w 1-20 — all bit-exact). (3) Basic bands mid +/-
+  m*ATR; final-band ratchet (upper only falls when basic_u >= final_u[t-1]
+  and c[t-1] <= final_u[t-1]; mirrored for lower); trend flips when close
+  crosses the active final band; output = active band level (lower in
+  uptrend, upper in downtrend); row 0 NaN; post-gap bar publishes UNKNOWN
+  (trend=0, out=NaN) then re-asserts direction from close vs band midline
+  (R30 §22 policy, matching the audited pandas semantics). Inf fails closed
+  (poisoned row -> NaN, no Inf ever leaks to output). Classification:
+  PhysicalImplementationSpec _SupertrendSpec added with
+  execution_kind=POLARS_NUMPY_KERNEL (NEVER POLARS_NATIVE_EXPR for a per-row
+  loop), stateful=True, supports_lazy/streaming=False,
+  materializes_full_panel=True, requires_sorted=True, supports_nan=True,
+  supports_inf=False, identity hashes *:v2-r21-def1; metadata tags now
+  ['time_series','polars','stateful','full_replay','technical']; docstring
+  documents the R21-DEF1 fix. No forbidden tokens used (no
+  map_elements/map_groups/rolling_map/to_pandas); static audit scans only
+  backend/polars_expr_emitter.py _compile_polars blocks so
+  cleaned_operators files are out of its scope by construction (verified)."
+
+commands_run:
+  - "OPENBLAS/OMP/MKL/POLARS threads=1 pytest tests/backend/test_polars_supertrend_native.py -q -> 11 passed in 0.33s (serial, no xdist)"
+  - "threads=1 pytest tests/backend/test_polars_supertrend_native.py tests/operators/test_r20_supertrend_direct_use_rehab.py tests/backend/test_polars_long_static_audit.py -q -> 24 passed in 76.18s"
+  - "threads=1 GATE: pytest tests/backend/test_polars_tech_misc.py tests/operators/test_r20_supertrend_direct_use_rehab.py tests/backend/test_polars_long_static_audit.py + new module -> 2 failed, 24 passed in 76.58s. The 2 failures are PRE-EXISTING in tests/backend/test_polars_tech_misc.py (parity of the LIVE registry polars Supertrend in cleaned_operators/technical/polars_tech_misc.py — a file NOT owned by this slice — vs pandas): test_native_polars_tech_misc_matches_pandas fails with 'nan location mismatch' at row 14 on the clean panel (pandas first finite row 15, polars_tech_misc row 14; max abs diff on shared-finite rows 1.42e-14 — float assoc. in Wilder ewm); test_native_polars_tech_misc_nan_warmup_matches_pandas fails with the same nan-location mismatch class on post-gap rows (pandas emits NaN UNKNOWN after gaps, polars_tech_misc re-seeds trend=1 and emits a value). Verified identical failures (2 failed, 13 passed) on the unedited baseline before any change by this slice. Not-this-slice: needs polars_tech_misc.py to add the post-gap UNKNOWN row (its owner's call)."
+
+results:
+  new_tests: 11
+  new_tests_passed: 11
+  regression_tests: 13   # test_r20_supertrend_direct_use_rehab + test_polars_long_static_audit
+  regression_tests_passed: 13
+  unrelated_failures: "2 pre-existing test_polars_tech_misc.py Supertrend/SupertrendDirection parity failures (live polars_tech_misc implementation, not this slice's file; verbatim record above)"
+
+guards_in_tests:
+  - "Red Team 8-bar counterexample (window=4, multiplier=3.0): output must NOT be allclose to (h+l)/2 (pre-fix: identical) AND must match the independent hand-loop oracle"
+  - "window sensitivity: window=4 vs 14 outputs must DIFFER (pre-fix: window was dead) + both match oracle"
+  - "multiplier sensitivity: multiplier=1.0 vs 4.0 must DIFFER (pre-fix: dead) + both match oracle"
+  - "direction flip: rally-then-crash panel flips band from below midline to above midline exactly at close-cross, pinned by oracle"
+  - "warmup: first w-1 rows NaN (family min_periods=window contract); post-warmup finite on clean panel"
+  - "NaN hole: hole row and first post-gap row NaN (UNKNOWN, no manufactured direction), direction re-asserted at hole+2"
+  - "Inf: poisoned row NaN, no +/-Inf ever leaks into output"
+  - "missing low/close -> ValueError"
+  - "pandas reference parity: ast-extracted indicators_v2.Supertrend (no registry side effects) on seeds 5/11/21 x NaN 0/15/30% x (w,m) in {(4,3),(14,3),(10,2),(2,1)} — all match to 1e-9"
+  - "ExecutionKind honesty: _physical_spec.execution_kind == POLARS_NUMPY_KERNEL, stateful is True — never POLARS_NATIVE_EXPR"
+  - "oracle independence: hand-loop TR/Wilder/ratchet sharing NO code with either implementation; pandas reference loaded via AST extraction"
+
+known_limitations:
+  - "SupertrendNative lives in cleaned_operators/common/polars_technical_indicators.py which is NOT in load_all() _LOAD_MODULES — a dead module (latent defect fixed in place). The LIVE registry polars 'Supertrend' is PolarsTechMisc_Supertrend from cleaned_operators/technical/polars_tech_misc.py (not owned here); its pre-existing parity failures remain open for its owner."
+  - "the module cannot be imported twice (duplicate-registration guards); the test module loads SupertrendNative by exec'ing the source with only the @register_operator decorators AST-stripped — pure class definitions, zero registry side effects, works both standalone and combined with load_all()-populated sessions"
+  - "Wilder ATR gap re-blend formula r=(1-alpha)^(gap+1)/alpha was derived empirically against pandas ewm(adjust=False) across alpha/gap grids and random panels (bit-exact), not from pandas source code"
+
+not_run:
+  - item: "production certification"
+    status: NOT_RUN
+  - item: "polars battery beyond Supertrend"
+    status: NOT_RUN
+  - item: "physical implementation matrix regen (Writer C ownership)"
+    status: NOT_RUN
+
+production_certification: NOT_RUN
+independent_review:
+  reviewer: scoped-reviewer (background agent, 2026-08-20)
+  verdict: PASS
+  checks: "5/5: (1) diff scope exact — 172+/24- all in lines 1296-1501 (_SupertrendSpec block, _wilder_atr_1d/_supertrend_1d, rewritten _calculate_series); no other indicator classes; polars_tech_misc.py and its test empty-diff. (2) math PASS — reviewer independently bit-matched kernel ATR vs pandas ewm(alpha=1/w, adjust=False, min_periods=w) incl. 3-row gap on 60-row series for w=3/5/14; _supertrend_1d is a line-for-line port of indicators_v2.py:271-320 (ratchet gates, close-cross-only flip, post-gap UNKNOWN, active-band output, Inf poisoning); full Supertrend pandas parity across seeds {5,11,21,99} x NaN {0,15,25,30}% x (w,m) {(4,3),(14,3),(10,2),(2,1),(7,1.5)} all match 1e-9. (3) counterexample load-bearing — test_redteam_8bar_counterexample_not_midpoint asserts not allclose(out, mid) which the old (h+l)/2 formula can never satisfy; scratch confirmed multiplier 2.0->3.0 and window changes both move output. (4) gate reproduced: 24 passed 74.93s serial threads=1; test_polars_tech_misc.py 2 failed = exactly the two disclosed pre-existing live-registry parity failures in untouched files. (5) evidence honest — owned_files exactly 3, counts match, NOT_RUN recorded, dead-module claim verified (polars_technical_indicators absent from _LOAD_MODULES)."
+  findings:
+    - id: R21-ST-P2a
+      finding: "_calculate_series accepts multiplier=0 (strict_finite_scalar minimum=0.0) while the pandas twin raises ValueError for mult<=0 (bands collapse to midpoint); boundary-only divergence, parameter_domain_hash consistently says min=0; no production impact."
+      resolution: "NOTED — tighten to minimum exclusive of 0 in a follow-up slice if the family contract requires strict positivity."
+    - id: R21-ST-P2b
+      finding: "np.nanmax in _wilder_atr_1d emits a cosmetic RuntimeWarning on all-NaN candidate rows; output unaffected (np.where discards); matches pandas result."
+      resolution: "NOTED — no action required."
+  no_p0_p1: "No P0/P1 findings."
+independent_review_status: CLOSED_VERIFIED

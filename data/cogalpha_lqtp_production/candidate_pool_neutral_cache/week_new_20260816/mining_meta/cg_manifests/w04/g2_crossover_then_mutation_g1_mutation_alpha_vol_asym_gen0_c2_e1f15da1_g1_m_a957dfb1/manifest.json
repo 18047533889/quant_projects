@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_mutation_alpha_vol_asym_gen0_c2_e1f15da1_g1_m_a957dfb1",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 611,
+  "factor_name": "factor_intraday_vol_asym_persistence_ewm90",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w04-20260813-133626-r5",
+  "expression_type": "python",
+  "formula": "EWMA-persistence asymmetry on intraday returns: (neg_persist - pos_persist) / (neg_persist + pos_persist), where sign_persist = EWMA(sign_intraday_ret^2 * sign_intraday_ret_lag1^2, span=90, min_periods=40)",
+  "code": "def factor_intraday_vol_asym_persistence_ewm90(df):\n    \"\"\"Asymmetric intraday volatility clustering persistence with longer EWMA smoothing.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    ret = intraday_ret\n    pos_ret = ret.clip(lower=0.0)\n    neg_ret = ret.clip(upper=0.0)\n    pos_persist = (pos_ret**2 * pos_ret.shift(1)**2).ewm(span=90, min_periods=40).mean()\n    neg_persist = (neg_ret**2 * neg_ret.shift(1)**2).ewm(span=90, min_periods=40).mean()\n    total_persist = pos_persist + neg_persist\n    factor = (neg_persist - pos_persist) / total_persist.replace(0.0, np.nan)\n    df_copy[\"factor_intraday_vol_asym_persistence_ewm90\"] = factor\n    return df_copy[\"factor_intraday_vol_asym_persistence_ewm90\"]",
+  "description": "Preserve the parent's core mechanism of asymmetric volatility clustering persistence: comparing how strongly squared negative returns follow squared negative returns versus squared positive returns following squared positive returns, using only intraday returns from decompose_overnight_intraday. Mutation increases the EWMA smoothing horizon from span=60/min_periods=20 to span=90/min_periods=40 to further reduce sensitivity to short-term noise and boundary effects while keeping the bounded ratio interpretation. This targets improved stability (RankICIR/RankIC) without adding new features.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.011307087878035927,
+    "icir": 0.2691898940021715,
+    "mi": 0.010203624815449786,
+    "rank_ic": 0.03624354956456216,
+    "rank_icir": 0.7788986415605471
+  },
+  "raw_metrics": {
+    "ic": 0.011307087878035927,
+    "icir": 0.2691898940021715,
+    "mi": 0.010203624815449786,
+    "rank_ic": 0.03624354956456216,
+    "rank_icir": 0.7788986415605471
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.9317841864883247,
+    "quantile_monotonicity": 0.8787878787878788,
+    "top_quantile_annualized_excess_return": 0.11187417431031621,
+    "top_quantile_excess_return": 0.06875007217880391,
+    "top_quantile_max_drawdown": -0.021694452386219365,
+    "top_quantile_turnover": 0.045911712609670086
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:54:30.320927+00:00"
+}

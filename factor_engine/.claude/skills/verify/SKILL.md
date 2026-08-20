@@ -5,7 +5,7 @@ description: Verify FactorEngine planner changes through the public planner pack
 
 # FactorEngine Runtime Verification
 
-Run from `/home/shw/quant_projects/factor_engine` with `PYTHONPATH` set to that directory.
+Run from repo `factor_engine/` with `PYTHONPATH` set to that directory (do not hardcode a home path).
 
 - For planner/compiler changes, execute a representative plan through public `planner` exports and `Optimizer.compile()`.
 - Capture optimized output, stage, pass names, equivalence declarations, invariant results, and legacy API compatibility.

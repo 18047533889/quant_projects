@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_market_cycle_0002_acp_dfd91f03",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 759,
+  "factor_name": "factor_range_pressure_smooth_vol_gate",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w04-20260814-081422-r12",
+  "expression_type": "python",
+  "formula": "((rolling_sum_60(close-low) - rolling_sum_60(high-close)) / rolling_sum_60(high-low)) * (1 - 0.3 * tanh(max(0, (rolling_sum_60(volume*1{ret<0}) / rolling_sum_60(volume) / rolling_median_60(rolling_sum_60(volume*1{ret<0}) / rolling_sum_60(volume)) - 1) / 0.2)))",
+  "code": "def factor_range_pressure_smooth_vol_gate(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    # primary mechanism: cycle range pressure over 60 days\n    buy_pressure = (close - df_copy[\"low\"]).rolling(60, min_periods=20).sum()\n    sell_pressure = (df_copy[\"high\"] - close).rolling(60, min_periods=20).sum()\n    total_range = (df_copy[\"high\"] - df_copy[\"low\"]).rolling(60, min_periods=20).sum()\n    range_pressure = (buy_pressure - sell_pressure) / total_range.replace(0.0, np.nan)\n    # lightweight modifier: downside volume participation with smooth attenuation\n    ret = close.pct_change()\n    down_vol = volume.where(ret < 0, 0.0).rolling(60, min_periods=30).sum()\n    total_vol = volume.rolling(60, min_periods=30).sum().replace(0.0, np.nan)\n    down_ratio = down_vol / total_vol\n    median_down_ratio = down_ratio.rolling(60, min_periods=20).median()\n    safe_median = median_down_ratio.clip(lower=1e-8)\n    # continuous excess above median (0 when at or below median)\n    excess = (down_ratio / safe_median - 1.0).clip(lower=0.0)\n    # smooth attenuation: scale ~1 at median, ~0.77 at +20% excess, asymptote 0.7\n    scale = 1.0 - 0.3 * np.tanh(excess / 0.2)\n    factor = range_pressure * scale\n    df_copy[\"factor_range_pressure_smooth_vol_gate\"] = factor\n    return df_copy[\"factor_range_pressure_smooth_vol_gate\"]",
+  "description": "This child preserves the parent's primary cycle range-pressure mechanism: the position of closes within the trailing 60-day high-low range identifies accumulation/distribution phase. Parent strength target: RankICIR=0.2913, RankIC=0.0166, and payoff long_short_sharpe=5.1388. The bottleneck targeted is modest MI=0.0061 and IC=0.0157, likely caused by the parent's hard binary gate on downside volume participation. The mutation replaces the discrete 0.7/1.0 attenuation with a smooth tanh-based scale that transitions continuously when downside volume exceeds its trailing median, reducing discontinuities and improving nonlinear information content while retaining the raw payoff structure. One core mechanism and one lightweight modifier are preserved; cross_sectional_transform remains none.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.016038504978020045,
+    "icir": 0.3354635014421921,
+    "mi": 0.005366048512350119,
+    "rank_ic": 0.016271849875594945,
+    "rank_icir": 0.2901833456062632
+  },
+  "raw_metrics": {
+    "ic": -0.016038504978020045,
+    "icir": -0.3354635014421921,
+    "mi": 0.005366048512350119,
+    "rank_ic": -0.016271849875594945,
+    "rank_icir": -0.2901833456062632
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.511240007855029,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.01303580604145771,
+    "top_quantile_excess_return": 0.007739061480734222,
+    "top_quantile_max_drawdown": -0.015325245763161188,
+    "top_quantile_turnover": 0.13553374035919202
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:11:13.497416+00:00"
+}

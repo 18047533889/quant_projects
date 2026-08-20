@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "liq_vol_impact_asym_001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 351,
+  "factor_name": "factor_volume_impact_asymmetry",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w01-20260813-195334-r5",
+  "expression_type": "python",
+  "formula": "ewm_std(positive intraday returns on high-volume days) - ewm_std(negative intraday returns on low-volume days) normalized by sum",
+  "code": "def factor_volume_impact_asymmetry(df):\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    up_impact = intraday_ret.clip(lower=0.0) * np.where(is_high_vol > 0, 1.0, 0.3)\n    down_impact = (-intraday_ret.clip(upper=0.0)) * np.where(is_low_vol > 0, 1.0, 0.3)\n    up_vol = up_impact.ewm(span=20, min_periods=10).std()\n    down_vol = down_impact.ewm(span=20, min_periods=10).std()\n    denom = (up_vol + down_vol).replace(0.0, np.nan)\n    factor = (up_vol - down_vol) / denom\n    df_copy[\"factor_volume_impact_asymmetry\"] = factor.replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_volume_impact_asymmetry\"]",
+  "description": "Liquidity-conditioned asymmetric price impact: on high-volume days, positive intraday moves reflect strong demand absorption; on low-volume days, negative moves reflect illiquidity-driven pressure. The EWM volatility asymmetry isolates volume-regime-dependent return pressure after controlling for overall volatility. This changes the raw information pathway from the prior asymmetric volatility factor by embedding volume-regime gating instead of using unconditional return signs.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.009568833584041588,
+    "icir": 0.1612596223443273,
+    "mi": 0.00597112015670298,
+    "rank_ic": 0.031165612734588375,
+    "rank_icir": 0.4791052867349621
+  },
+  "raw_metrics": {
+    "ic": -0.009568833584041588,
+    "icir": -0.1612596223443273,
+    "mi": 0.00597112015670298,
+    "rank_ic": -0.031165612734588375,
+    "rank_icir": -0.4791052867349621
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.322333851016437,
+    "quantile_monotonicity": 0.9272727272727272,
+    "top_quantile_annualized_excess_return": 0.012531521114403477,
+    "top_quantile_excess_return": 0.07428778373651612,
+    "top_quantile_max_drawdown": -0.12797631775769402,
+    "top_quantile_turnover": 0.1238529501559826
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:58:01.726986+00:00"
+}

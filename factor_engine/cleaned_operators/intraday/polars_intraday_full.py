@@ -110,6 +110,10 @@ def _mk(canonical: str, description: str, params: list[str], fn, extra_tags=None
         business_category="intraday_microstructure",
         canonical=canonical,
         source="intraday.polars_intraday_full",
+        backend="polars",
+        replace=True,
+        expected_old_source="factor_dsl_np",
+        replacement_reason="Consolidating polars native operators into polars_intraday_full"
     )(cls)
     return cls
 

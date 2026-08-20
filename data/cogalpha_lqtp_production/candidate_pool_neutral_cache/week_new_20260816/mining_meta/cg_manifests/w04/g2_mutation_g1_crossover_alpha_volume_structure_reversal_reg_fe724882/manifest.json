@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_alpha_volume_structure_reversal_reg_fe724882",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 167,
+  "factor_name": "factor_volume_accel_reversal",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260803-181227-r13",
+  "expression_type": "python",
+  "formula": "-ret_5d * (ema_vol_5 / ema_vol_20 - 1)",
+  "code": "def factor_volume_accel_reversal(df):\n    \"\"\"Volume acceleration reversal: reversal signal amplified solely by volume acceleration.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    ema_vol_5 = volume.ewm(span=5, min_periods=5).mean()\n    ema_vol_20 = volume.ewm(span=20, min_periods=20).mean()\n    vol_accel = ema_vol_5 / (ema_vol_20 + 1e-12) - 1.0\n    reversal = -close.pct_change(5)\n    factor = reversal * vol_accel\n    factor = factor.clip(-2.0, 2.0)\n    df_copy[\"factor_volume_accel_reversal\"] = factor\n    return df_copy[\"factor_volume_accel_reversal\"]",
+  "description": "Simplify parent by removing redundant volume regime multiplier. The volume acceleration (ratio of short-term to long-term volume EMA) already captures the temporal surge structure; removing the overall volume level (vol_ratio) reduces noise and model complexity while preserving the core reversal-amplification mechanism. Expected to maintain or improve RankIC and ICIR by reducing over-weighting of volume level extremes.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03064262440017081,
+    "icir": 0.37902113682065786,
+    "mi": 0.0263716145417483,
+    "rank_ic": 0.03602371461523414,
+    "rank_icir": 0.4655969428623435
+  },
+  "raw_metrics": {
+    "ic": 0.03064262440017081,
+    "icir": 0.37902113682065786,
+    "mi": 0.0263716145417483,
+    "rank_ic": 0.03602371461523414,
+    "rank_icir": 0.4655969428623435
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.0560253058913196,
+    "top_quantile_excess_return": 0.03948035660200433,
+    "top_quantile_max_drawdown": -0.01685865568321465,
+    "top_quantile_turnover": 0.4824054229612179
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:19:35.778949+00:00"
+}

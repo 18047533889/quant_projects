@@ -1,0 +1,11 @@
+{
+  "fleet_stamp": "202608130940",
+  "local_root": "/home/hsunbj/quant_projects/data/factor_pools/mining_outputs/cogalpha/202608130940",
+  "cos_prefix": "cos://qs-cold/candidate_pool/mining_outputs/cogalpha/202608130940",
+  "files_total": 1326,
+  "files_ok": 860,
+  "files_failed": 466,
+  "status": "partial",
+  "synced_at": "2026-08-14T21:56:00.903798+00:00",
+  "log": "/home/hsunbj/quant_projects/workspaces/zhangjiayin/cogalpha/outputs/fleet/logs/cos_sync_202608130940_20260815_042442.log"
+}

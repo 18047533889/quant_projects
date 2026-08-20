@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "alpha-lag-response-0002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 430,
+  "factor_name": "factor_delayed_vol_volume_alignment",
+  "domain_agent": "alpha-lag-response",
+  "run_id": "fleet-w01-20260814-140446-r9",
+  "expression_type": "python",
+  "formula": "rolling_corr( lag(volume,1), rolling_std(return,5), window=20 )",
+  "code": "def factor_delayed_vol_volume_alignment(df):\n    \"\"\"Correlation between lagged volume and current volatility captures delayed adjustment.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_short = ret.rolling(5, min_periods=3).std(ddof=1)\n    lag_vol = df_copy[\"volume\"].shift(1)\n    corr = lag_vol.rolling(20, min_periods=10).corr(vol_short)\n    factor = corr.fillna(0.0)\n    factor = factor.clip(-1.0, 1.0)\n    factor.name = \"factor_delayed_vol_volume_alignment\"\n    return factor\n",
+  "description": "Measures the lagged alignment between volume and volatility. A positive rolling correlation indicates that yesterday's volume shock is followed by today's volatility expansion, suggesting informed traders are gradually incorporating information. This delayed volatility response to volume is a signal of momentum; high correlation predicts continued price movement in the same direction as the initial shock. The factor uses only past data via a one-day lag and trailing rolling windows.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.006873099871951174,
+    "icir": 0.23678379625051887,
+    "mi": 0.005933045798860448,
+    "rank_ic": 0.01780453367757397,
+    "rank_icir": 0.5587177028581998
+  },
+  "raw_metrics": {
+    "ic": -0.006873099871951174,
+    "icir": -0.23678379625051887,
+    "mi": 0.005933045798860448,
+    "rank_ic": -0.01780453367757397,
+    "rank_icir": -0.5587177028581998
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.376426490734562,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.013348973873303027,
+    "top_quantile_excess_return": 0.07911748066638391,
+    "top_quantile_max_drawdown": -0.1960136736648076,
+    "top_quantile_turnover": 0.20099709152012293
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:08:21.453038+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_pvcoherence_vw_ret_spread_gen0_1_72fc6699",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 414,
+  "factor_name": "factor_log_volume_weighted_return_spread",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w03-20260814-124837-r9",
+  "expression_type": "python",
+  "formula": "rolling_sum(log(volume+1) * return, 20) / rolling_sum(log(volume+1), 20) - rolling_mean(return, 20)",
+  "code": "def factor_log_volume_weighted_return_spread(df):\n    \"\"\"Log-volume-weighted return minus equally weighted return over trailing window.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    log_vol = np.log1p(df_copy[\"volume\"])\n    vol_sum = log_vol.rolling(20, min_periods=5).sum()\n    vw_ret = (ret * log_vol).rolling(20, min_periods=5).sum() / vol_sum.replace(0.0, np.nan)\n    simple_ret = ret.rolling(20, min_periods=5).mean()\n    df_copy[\"factor_log_volume_weighted_return_spread\"] = vw_ret - simple_ret\n    return df_copy[\"factor_log_volume_weighted_return_spread\"]",
+  "description": "Compares log-volume-weighted average return to equally weighted return over a trailing 20-day window. Using log(volume+1) dampens the impact of extreme volume spikes relative to raw volume, making the price-volume coherence signal more robust to volume outliers while preserving the core mechanism: high-volume days with larger directional moves produce positive spread. This is a raw single-stock signal; cross-sectional normalization not required.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01873202911603397,
+    "icir": 0.34720906000007146,
+    "mi": 0.015430679588520846,
+    "rank_ic": 0.034323185551696105,
+    "rank_icir": 0.5986834893012671
+  },
+  "raw_metrics": {
+    "ic": -0.01873202911603397,
+    "icir": -0.34720906000007146,
+    "mi": 0.015430679588520846,
+    "rank_ic": -0.034323185551696105,
+    "rank_icir": -0.5986834893012671
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.603465530563436,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.10671035412800256,
+    "top_quantile_excess_return": 0.7950189402028567,
+    "top_quantile_max_drawdown": -0.21894322349449824,
+    "top_quantile_turnover": 0.19843619137194543
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:10:41.622998+00:00"
+}

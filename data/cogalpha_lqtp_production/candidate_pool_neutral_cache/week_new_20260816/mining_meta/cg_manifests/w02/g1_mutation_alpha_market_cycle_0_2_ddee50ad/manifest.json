@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_alpha_market_cycle_0_2_ddee50ad",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 368,
+  "factor_name": "factor_overnight_intraday_cycle_ema",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w02-20260813-194428-r5",
+  "expression_type": "python",
+  "formula": "EMA(overnight_ret - intraday_ret, span=60) / (sum(|overnight_ret|,120) + sum(|intraday_ret|,120))",
+  "code": "def factor_overnight_intraday_cycle_ema(df):\n    \"\"\"EMA-smoothed overnight minus intraday cycle dominance, normalized by trailing absolute move.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    diff = overnight_ret - intraday_ret\n    smooth_diff = diff.ewm(span=60, min_periods=1).mean()\n    total_abs = (overnight_ret.abs().rolling(120, min_periods=1).sum() + intraday_ret.abs().rolling(120, min_periods=1).sum()).replace(0.0, np.nan)\n    factor = (smooth_diff / total_abs).fillna(0.0)\n    df_copy[\"factor_overnight_intraday_cycle_ema\"] = factor\n    return df_copy[\"factor_overnight_intraday_cycle_ema\"]",
+  "description": "Mutation of parent overnight-intraday cycle dominance. The parent cumulates overnight and intraday return differences over a trailing 120-day window, which can be slow to reflect recent cyclical phase shifts. This child preserves the same core economic mechanism but replaces the simple cumulative sum of the daily difference with an exponentially weighted moving average (span=60) to reduce stale accumulation and sharpen the current phase estimate. Normalization by total absolute move over 120 days retains comparability and bounds the signal. The aim is to improve level IC/RankIC while preserving the parent's stable ICIR/RankICIR and payoff thickness.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.045641081086313824,
+    "icir": 0.6680774941429728,
+    "mi": 0.015328623388015217,
+    "rank_ic": 0.02872740231395977,
+    "rank_icir": 0.45374481025624325
+  },
+  "raw_metrics": {
+    "ic": 0.045641081086313824,
+    "icir": 0.6680774941429728,
+    "mi": 0.015328623388015217,
+    "rank_ic": 0.02872740231395977,
+    "rank_icir": 0.45374481025624325
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 8.685028997519643,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.399426387658564,
+    "top_quantile_excess_return": 5.989165746844332,
+    "top_quantile_max_drawdown": -0.1426649873412894,
+    "top_quantile_turnover": 0.21760039439683995
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:32:27.566593+00:00"
+}

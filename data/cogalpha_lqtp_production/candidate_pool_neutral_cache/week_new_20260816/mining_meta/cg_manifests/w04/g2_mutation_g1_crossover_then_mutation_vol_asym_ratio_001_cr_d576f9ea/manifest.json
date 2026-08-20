@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_vol_asym_ratio_001_cr_d576f9ea",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 214,
+  "factor_name": "factor_asym_vol_ratio_clean",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w04-20260804-014006-r16",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_asym_vol_ratio_clean(df):\n    df_copy = df.copy()\n    ret = df_copy['close'] / df_copy['close'].shift(1) - 1.0\n    up_mask = ret > 0\n    down_mask = ret < 0\n    sq_ret = ret ** 2\n    span = 20\n    up_var = sq_ret.where(up_mask, 0.0).ewm(span=span, min_periods=span).mean()\n    down_var = sq_ret.where(down_mask, 0.0).ewm(span=span, min_periods=span).mean()\n    up_vol = np.sqrt(up_var)\n    down_vol = np.sqrt(down_var)\n    ratio = down_vol / up_vol.replace(0.0, np.nan)\n    df_copy['factor_asym_vol_ratio_clean'] = ratio\n    return df_copy['factor_asym_vol_ratio_clean']",
+  "description": "This mutation simplifies the parent by removing the second exponential smoothing on the volatility ratio. The core mechanism remains asymmetric volatility (leverage effect): the ratio of downside to upside volatility using 20-day EWMA variances. Removing the extra smoothing reduces lag and may improve IC while preserving the stable RankIC from the underlying asymmetry signal. Parent strength target: RankIC=0.0526, RankICIR=0.4840, MI=0.0214; target bottleneck: IC=0.0139.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.011337476648709615,
+    "icir": 0.12380689432901254,
+    "mi": 0.023829990197153705,
+    "rank_ic": 0.05162524052308385,
+    "rank_icir": 0.48652542240843494
+  },
+  "raw_metrics": {
+    "ic": 0.011337476648709615,
+    "icir": 0.12380689432901254,
+    "mi": 0.023829990197153705,
+    "rank_ic": 0.05162524052308385,
+    "rank_icir": 0.48652542240843494
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.1,
+    "top_quantile_annualized_excess_return": 0.02935904218206553,
+    "top_quantile_excess_return": 0.020766660497474998,
+    "top_quantile_max_drawdown": -0.044618650694353335,
+    "top_quantile_turnover": 0.16004934469032522
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:21:38.804598+00:00"
+}

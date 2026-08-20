@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_agentcreative_gen0_002_range_vol_vol_of_vol_mean_7089c841",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 280,
+  "factor_name": "factor_range_vol_of_vol_signed_power",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w01-20260813-014015-r1",
+  "expression_type": "python",
+  "formula": "-( (std_{20}(H-L) / mean_{60}(H-L)) ^ (1/3) )",
+  "code": "def factor_range_vol_of_vol_signed_power(df):\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    mean_range = range_.rolling(60, min_periods=20).mean()\n    std_range = range_.rolling(20, min_periods=10).std(ddof=1)\n    cv = std_range / mean_range.replace(0.0, np.nan)\n    signed_power_cv = np.sign(cv) * np.abs(cv) ** (1.0 / 3.0)\n    factor = -signed_power_cv\n    df_copy[\"factor_range_vol_of_vol_signed_power\"] = factor\n    return df_copy[\"factor_range_vol_of_vol_signed_power\"]",
+  "description": "Preserves the primary range vol-of-vol mean-reversion mechanism from range_vol_vol_of_vol_mean_reversion: high volatility of daily range relative to its trailing mean indicates unstable price formation and predicts lower forward returns. Borrows the signed cube-root normalization from volume_price_elasticity to compress extreme vol-of-vol ratios, reducing outlier influence and potentially improving top-quantile payoff thickness while retaining the monotonic ranking of the raw signal. The lightweight modifier is a nonlinear compression, not a second feature.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.014918829053486574,
+    "icir": 0.2405896784810109,
+    "mi": 0.004390320809989134,
+    "rank_ic": 0.03049862801842931,
+    "rank_icir": 0.5130963106197347
+  },
+  "raw_metrics": {
+    "ic": 0.014918829053486574,
+    "icir": 0.2405896784810109,
+    "mi": 0.004390320809989134,
+    "rank_ic": 0.03049862801842931,
+    "rank_icir": 0.5130963106197347
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.90582143266209,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": -0.015433164459957571,
+    "top_quantile_excess_return": -0.08504200019012487,
+    "top_quantile_max_drawdown": -0.15419219923906358,
+    "top_quantile_turnover": 0.16821286554807713
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:46:36.852154+00:00"
+}

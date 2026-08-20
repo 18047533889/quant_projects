@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "drawdown-volume-dryup-0000",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 695,
+  "factor_name": "factor_drawdown_volume_dryup",
+  "domain_agent": "alpha-drawdown",
+  "run_id": "fleet-w04-20260814-015906-r10",
+  "expression_type": "python",
+  "formula": "- (sum_volume_on_drawdown_days / sum_volume_total) over trailing 20 days, where drawdown is close below rolling 20-day peak",
+  "code": "def factor_drawdown_volume_dryup(df):\n    \"\"\"Volume dry-up share: share of total volume occurring on drawdown days\n    (close below rolling 20-day peak) over the trailing 20-day window. Low drawdown\n    volume share suggests selling exhaustion; sign is reversed so higher factor is bullish.\"\"\"\n    df_copy = df.copy()\n    df_copy[\"volume\"] = df_copy[\"volume\"].fillna(0.0)\n    peak_window = 20\n    vol_window = 20\n    rolling_peak = df_copy[\"close\"].rolling(peak_window, min_periods=1).max()\n    drawdown_state = (df_copy[\"close\"] < rolling_peak).astype(float)\n    drawdown_vol = (df_copy[\"volume\"] * drawdown_state).rolling(vol_window, min_periods=1).sum()\n    recovery_vol = (df_copy[\"volume\"] * (1.0 - drawdown_state)).rolling(vol_window, min_periods=1).sum()\n    total_vol = drawdown_vol + recovery_vol\n    drawdown_share = drawdown_vol / total_vol.replace(0.0, 1.0)\n    df_copy[\"factor_drawdown_volume_dryup\"] = -drawdown_share\n    return df_copy[\"factor_drawdown_volume_dryup\"]",
+  "description": "Expresses drawdown absorption through volume behavior rather than depth or duration. The factor compares total volume while the stock is underwater to total volume over the trailing window. Low underwater volume share indicates selling exhaustion, making the recovery path more durable after industry and size neutralization. This changes the raw information pathway by using conditional volume composition, not the previous recovery/(1+depth) family.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.015444114255366223,
+    "icir": 0.28019044603514265,
+    "mi": 0.009480656943583021,
+    "rank_ic": 0.03623638943966919,
+    "rank_icir": 0.5583881990255235
+  },
+  "raw_metrics": {
+    "ic": -0.015444114255366223,
+    "icir": -0.28019044603514265,
+    "mi": 0.009480656943583021,
+    "rank_ic": -0.03623638943966919,
+    "rank_icir": -0.5583881990255235
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.367041838697921,
+    "quantile_monotonicity": 0.8424242424242424,
+    "top_quantile_annualized_excess_return": 0.015295642789832975,
+    "top_quantile_excess_return": 0.011937472234510915,
+    "top_quantile_max_drawdown": -0.04155440271463895,
+    "top_quantile_turnover": 0.14088558589291178
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:02:07.312032+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_amc_gen0_001_31ec8445",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 371,
+  "factor_name": "factor_cycle_phase_duration_dampened",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w03-20260814-035032-r7",
+  "expression_type": "python",
+  "formula": "distance = (close - EMA(120)) / ATR(20); streak = signed consecutive trend days; factor = distance * (1 + 0.5*abs(log1p(streak)))",
+  "code": "def factor_cycle_phase_duration_dampened(df):\n    \"\"\"Long-term trend strength amplified by phase duration, with dampened streak multiplier.\"\"\"\n    df_copy = df.copy()\n    ema = df_copy[\"close\"].ewm(span=120, adjust=False).mean()\n    atr = talib.ATR(df_copy[\"high\"].values, df_copy[\"low\"].values, df_copy[\"close\"].values, timeperiod=20)\n    atr = pd.Series(atr, index=df_copy.index)\n    distance = (df_copy[\"close\"] - ema) / atr.replace(0.0, np.nan)\n    direction = np.sign(distance)\n    pos = direction > 0\n    neg = direction < 0\n    pos_cum = pos.cumsum()\n    pos_reset = pos_cum.where(~pos).ffill().fillna(0.0)\n    pos_streak = pos_cum - pos_reset\n    neg_cum = neg.cumsum()\n    neg_reset = neg_cum.where(~neg).ffill().fillna(0.0)\n    neg_streak = neg_cum - neg_reset\n    streak = np.where(pos, pos_streak, -neg_streak)\n    streak = np.sign(streak) * np.log1p(np.abs(streak))\n    factor = distance * (1.0 + 0.5 * np.abs(streak))\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    df_copy[\"factor_cycle_phase_duration_dampened\"] = factor\n    return df_copy[\"factor_cycle_phase_duration_dampened\"]",
+  "description": "Long-term trend strength measured by distance from a 120-day EMA normalized by ATR, amplified by phase duration. This mutation dampens the streak multiplier from 1+log1p(abs(streak)) to 1+0.5*log1p(abs(streak)) to reduce overamplification of long streaks, aiming to improve linear IC/ICIR while preserving RankICIR and MI and monotonic ranking. No new features; single parameter adjustment.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.008868588066603377,
+    "icir": 0.09320046956404845,
+    "mi": 0.015688820407381954,
+    "rank_ic": 0.027374486485107378,
+    "rank_icir": 0.2716127714981737
+  },
+  "raw_metrics": {
+    "ic": -0.008868588066603377,
+    "icir": -0.09320046956404845,
+    "mi": 0.015688820407381954,
+    "rank_ic": -0.027374486485107378,
+    "rank_icir": -0.2716127714981737
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.2827702821534306,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.021346408635035452,
+    "top_quantile_excess_return": 0.12818707423767028,
+    "top_quantile_max_drawdown": -0.18020364008995804,
+    "top_quantile_turnover": 0.09414513667570977
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:04:21.437815+00:00"
+}

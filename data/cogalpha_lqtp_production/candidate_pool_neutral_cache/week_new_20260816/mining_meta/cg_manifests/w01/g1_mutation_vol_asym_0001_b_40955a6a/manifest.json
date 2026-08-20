@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_vol_asym_0001_b_40955a6a",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 354,
+  "factor_name": "factor_volume_gated_leverage_corr",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w01-20260813-195334-r5",
+  "expression_type": "python",
+  "formula": "-(rolling_corr(ret, range_vol, 60) * volume_weight)",
+  "code": "def factor_volume_gated_leverage_corr(df):\n    \"\"\"Volume-gated leverage effect: rolling correlation between return and range volatility, amplified in high-volume regimes and dampened in low-volume regimes.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    prev_close = df_copy[\"close\"].shift(1)\n    range_vol = (df_copy[\"high\"] - df_copy[\"low\"]) / prev_close.replace(0.0, np.nan)\n    corr = ret.rolling(60, min_periods=30).corr(range_vol)\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(\n        df_copy[\"volume\"], window=20\n    )\n    weight = np.where(is_high_vol > 0, 1.3, 1.0)\n    weight = np.where(is_low_vol > 0, 0.7, weight)\n    factor = -corr * weight\n    factor.name = \"factor_volume_gated_leverage_corr\"\n    return factor",
+  "description": "Preserves the parent leverage-effect mechanism: negative rolling correlation between daily return and normalized high-low range captures asymmetric volatility where down moves coincide with larger ranges. The targeted mutation adds a volume-regime attenuation using alpha_tools.classify_volume_regime as a bounded weight (1.3 in high-volume, 0.7 in low-volume, 1.0 otherwise), emphasizing liquidity-driven price impact and damping illiquid noise. This keeps one core mechanism and one modifier, and the continuous raw signal remains suitable for cross-sectional binning.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01096274422403795,
+    "icir": 0.21634472253475415,
+    "mi": 0.004708987812831467,
+    "rank_ic": 0.03236972326662854,
+    "rank_icir": 0.6303215101002724
+  },
+  "raw_metrics": {
+    "ic": 0.01096274422403795,
+    "icir": 0.21634472253475415,
+    "mi": 0.004708987812831467,
+    "rank_ic": 0.03236972326662854,
+    "rank_icir": 0.6303215101002724
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.876623802638291,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.01954246903825263,
+    "top_quantile_excess_return": 0.11599823290279865,
+    "top_quantile_max_drawdown": -0.059351537393090514,
+    "top_quantile_turnover": 0.1455042963649814
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:59:07.743628+00:00"
+}

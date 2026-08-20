@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_crossover_then_mutation_alpha_herding_gen0_a_a4c2807d",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 735,
+  "factor_name": "factor_herding_dm_volasym_gate",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w04-20260814-050458-r11",
+  "expression_type": "python",
+  "formula": "herding_position_20 * (0.2 + 0.8 * (0.5 + 0.5 * DM_imbalance_60)) * (1 - 0.5 * sigmoid(DownsideVolPersistenceAsymmetry_40))",
+  "code": "def factor_herding_dm_volasym_gate(df):\n    \"\"\"Volume-weighted herding with directional movement confirmation and downside vol persistence gate.\"\"\"\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n\n    # Primary mechanism: volume-weighted close position within 20-day range\n    high_roll = high.rolling(20, min_periods=20).max()\n    low_roll = low.rolling(20, min_periods=20).min()\n    range_ = high_roll - low_roll\n    position = (close - low_roll) / range_.replace(0, np.nan)\n    vol_sum = volume.rolling(20, min_periods=20).sum()\n    weighted_pos = (volume * position).rolling(20, min_periods=20).sum() / vol_sum.replace(0, np.nan)\n    herding = 2 * weighted_pos - 1\n\n    # Directional movement confirmation (from primary parent)\n    up_move = high.diff()\n    down_move = -low.diff()\n    plus_dm = pd.Series(np.where((up_move > down_move) & (up_move > 0), up_move, 0.0), index=df_copy.index)\n    minus_dm = pd.Series(np.where((down_move > up_move) & (down_move > 0), down_move, 0.0), index=df_copy.index)\n    plus_sum = plus_dm.rolling(60, min_periods=1).sum()\n    minus_sum = minus_dm.rolling(60, min_periods=1).sum()\n    dm_total = plus_sum + minus_sum\n    dm_imbalance = (plus_sum - minus_sum) / dm_total.replace(0, np.nan)\n    dm_imbalance = dm_imbalance.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    dm_weight = 0.2 + 0.8 * (0.5 + 0.5 * dm_imbalance.clip(-1, 1))\n\n    # Lightweight modifier from secondary parent: downside vs upside volatility persistence asymmetry\n    ret = close.pct_change()\n    neg_ret_sq = (ret.clip(upper=0) ** 2)\n    pos_ret_sq = (ret.clip(lower=0) ** 2)\n    neg_ac = neg_ret_sq.rolling(40, min_periods=20).corr(neg_ret_sq.shift(1))\n    pos_ac = pos_ret_sq.rolling(40, min_periods=20).corr(pos_ret_sq.shift(1))\n    asym_persist = neg_ac - pos_ac\n    asym_persist = asym_persist.fillna(0.0)\n    asym_persist_clipped = asym_persist.clip(-5, 5)\n    vol_asym_weight = 1.0 - 0.5 / (1.0 + np.exp(-asym_persist_clipped))\n\n    factor = herding * dm_weight * vol_asym_weight\n    return factor.rename(\"factor_herding_dm_volasym_gate\")",
+  "description": "Crossover preserves parent1's primary mechanism: the volume-weighted close position within a 20-day high-low range, which measures directional crowding and has strong RankICIR and payoff monotonicity. The directional movement (DM) confirmation weight is retained as part of the primary parent's internal structure. From parent2, we borrow the lightweight idea of downside versus upside volatility persistence asymmetry, computed via rolling autocorrelation of signed squared returns. This asymmetry is converted into a smooth bounded weight in [0.5, 1.0] using a sigmoid mapping: when downside volatility persistence is high relative to upside, the gate attenuates the herding signal, reflecting reduced reliability of crowding dynamics in unstable markets. This single regime-dependent modifier targets the bottleneck of improving IC and MI while preserving RankIC/RankICIR and payoff thickness, without full formula fusion or unrelated feature stacking.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.011966273686855327,
+    "icir": 0.19156219993702112,
+    "mi": 0.010552530654189596,
+    "rank_ic": 0.030627609380839207,
+    "rank_icir": 0.43740523304472195
+  },
+  "raw_metrics": {
+    "ic": -0.011966273686855327,
+    "icir": -0.19156219993702112,
+    "mi": 0.010552530654189596,
+    "rank_ic": -0.030627609380839207,
+    "rank_icir": -0.43740523304472195
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.782735922056907,
+    "quantile_monotonicity": 0.8909090909090909,
+    "top_quantile_annualized_excess_return": -0.010445132651667244,
+    "top_quantile_excess_return": -0.006644535313254707,
+    "top_quantile_max_drawdown": -0.0561246599439269,
+    "top_quantile_turnover": 0.09522114581803673
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:07:52.465855+00:00"
+}

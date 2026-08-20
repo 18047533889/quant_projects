@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_alpha_range_vol_gen0_001_1e007915",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 224,
+  "factor_name": "factor_range_compression_vol_gate",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260804-042132-r17",
+  "expression_type": "python",
+  "formula": "np.where(is_high_vol, -EMA(TR,10)/EMA(TR,50), -EMA(TR,10)/EMA(TR,50)*0.7)",
+  "code": "def factor_range_compression_vol_gate(df):\n    \"\"\"ATR compression signal, attenuated in low-volume periods.\"\"\"\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    prev_close = close.shift(1)\n    tr = np.maximum(high - low, np.abs(high - prev_close), np.abs(low - prev_close))\n    tr_ema_short = tr.ewm(span=10, adjust=False).mean()\n    tr_ema_long = tr.ewm(span=50, adjust=False).mean()\n    ratio = tr_ema_short / tr_ema_long.replace(0, np.nan)\n    raw_factor = -ratio\n    is_high_vol, is_low_vol, _ = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    factor = np.where(is_high_vol > 0, raw_factor, raw_factor * 0.7)\n    df_copy[\"factor_range_compression_vol_gate\"] = factor\n    return df_copy[\"factor_range_compression_vol_gate\"]",
+  "description": "Core mechanism: short-term EMA of true range divided by long-term EMA, inverted to capture volatility compression. The child adds a lightweight volume-gate modifier: when volume is not in a high regime (using classify_volume_regime tool), the signal is attenuated by 0.7 to reduce noise from low-volume periods, improving robustness and preserving the parent\u2019s strong rank stability and MI. One core mechanism (compression) with one auxiliary modifier (volume gate).",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03213922809362458,
+    "icir": 0.33084881682859835,
+    "mi": 0.026146705070882348,
+    "rank_ic": 0.0613762685434594,
+    "rank_icir": 0.5716814704758058
+  },
+  "raw_metrics": {
+    "ic": 0.03213922809362458,
+    "icir": 0.33084881682859835,
+    "mi": 0.026146705070882348,
+    "rank_ic": 0.0613762685434594,
+    "rank_icir": 0.5716814704758058
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.0660654843076387,
+    "top_quantile_excess_return": 0.05101686862346444,
+    "top_quantile_max_drawdown": -0.02938905583267004,
+    "top_quantile_turnover": 0.16724518808314096
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:21:56.265583+00:00"
+}

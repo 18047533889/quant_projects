@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_tail_risk_fragility_downside_vol_ratio_v1_969295d4",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 337,
+  "factor_name": "factor_tail_fragility_downside_vol_ratio_m120",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w01-20260813-152857-r4",
+  "expression_type": "python",
+  "formula": "( rolling_std_120d(negative returns) - rolling_std_120d(positive returns) ) / ( rolling_std_120d(negative returns) + rolling_std_120d(positive returns) )",
+  "code": "def factor_tail_fragility_downside_vol_ratio_m120(df):\n    '''Tail-risk fragility: ratio of downside volatility to upside volatility, smoothed with 120d window.'''\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    down_ret = ret.clip(upper=0.0)\n    up_ret = ret.clip(lower=0.0)\n    window = 120\n    minp = 40\n    down_vol = down_ret.rolling(window, min_periods=minp).std(ddof=1)\n    up_vol = up_ret.rolling(window, min_periods=minp).std(ddof=1)\n    total_vol = down_vol + up_vol\n    factor = (down_vol - up_vol) / total_vol.replace(0.0, np.nan)\n    return factor.rename('factor_tail_fragility_downside_vol_ratio_m120')",
+  "description": "Mutation of tail_risk_fragility_downside_vol_ratio_v1. Preserves parent's bounded downside-vs-upside volatility asymmetry mechanism, which drives RankICIR=0.4532 and monotonicity=0.9758. Bottleneck is low ICIR=0.1330 due to estimation noise in 60-day rolling std. Increasing window to 120 with minimum 40 observations reduces sampling variance, targeting higher ICIR and IC stability without changing the economic mechanism or adding components.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.005083331315646589,
+    "icir": 0.08535361584813654,
+    "mi": 0.008213424916828416,
+    "rank_ic": 0.025737931878934726,
+    "rank_icir": 0.40850825861903145
+  },
+  "raw_metrics": {
+    "ic": 0.005083331315646589,
+    "icir": 0.08535361584813654,
+    "mi": 0.008213424916828416,
+    "rank_ic": 0.025737931878934726,
+    "rank_icir": 0.40850825861903145
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.38967469993689,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.023494635584799806,
+    "top_quantile_excess_return": 0.1397021527960851,
+    "top_quantile_max_drawdown": -0.08225405999886803,
+    "top_quantile_turnover": 0.06327944099107317
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:56:05.419133+00:00"
+}

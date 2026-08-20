@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_alpha_crash_predictor_2cc6d786",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 142,
+  "factor_name": "factor_crash_risk_bounded_vol_amp",
+  "domain_agent": "alpha-lag-response",
+  "run_id": "fleet-w04-20260803-132707-r11",
+  "expression_type": "python",
+  "formula": "crash_risk = (-corr_ret_vol).clip(lower=0) * (-skew).clip(lower=0, upper=5); weight = 1.0 + 0.5 * is_high_vol; signal = crash_risk * weight",
+  "code": "def factor_crash_risk_bounded_vol_amp(df):\n    \"\"\"Crash risk: leverage effect * negative skew, amplified only during high volume.\n    Mutated from parent to use bounded binary volume amplification.\n    \"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"]\n    vol_change = vol.diff()\n    corr_ret_vol = ret.rolling(60, min_periods=30).corr(vol_change)\n    skew = ret.rolling(60, min_periods=30).skew()\n    is_high_vol, _, _ = alpha_tools.classify_volume_regime(df_copy[\"volume\"], 20)\n    crash_risk = (-corr_ret_vol).clip(lower=0) * (-skew).clip(lower=0, upper=5)\n    weight = 1.0 + 0.5 * is_high_vol\n    df_copy[\"factor_crash_risk_bounded_vol_amp\"] = crash_risk * weight\n    return df_copy[\"factor_crash_risk_bounded_vol_amp\"]",
+  "description": "This mutation preserves the parent's core crash risk mechanism (leverage effect from return-volatility correlation and negative return skew as a crash precursor) but replaces the continuous raw volume ratio amplification with a bounded binary high-volume amplifier. The parent aimed to concentrate the signal during high-volume panic episodes but the raw vol_ratio could introduce extreme noise and weaken linear predictive power (IC=0.0059, RankIC=0.0337). Now we use the high-volume flag from classify_volume_regime to apply a moderate 1.5x boost only during high-volume regimes (weight=1.5); otherwise weight remains 1.0. This reduces noise from volume ratio extremes while preserving the panic-concentration idea. The expected outcome is improved IC and RankIC without sacrificing the high MI (0.1082) and stable RankICIR (0.5218) that characterize the parent's crash detection ability.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.007761973180119359,
+    "icir": 0.2110814374711074,
+    "mi": 0.11383153065186669,
+    "rank_ic": 0.034563000614156,
+    "rank_icir": 0.5351262472879547
+  },
+  "raw_metrics": {
+    "ic": 0.007761973180119359,
+    "icir": 0.2110814374711074,
+    "mi": 0.11383153065186669,
+    "rank_ic": 0.034563000614156,
+    "rank_icir": 0.5351262472879547
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.18482620492189117,
+    "top_quantile_excess_return": 0.11970366731604831,
+    "top_quantile_max_drawdown": -0.015144075736489349,
+    "top_quantile_turnover": 0.049743953654994094
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:18:45.242902+00:00"
+}

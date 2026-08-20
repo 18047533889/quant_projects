@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "cand_price_vol_coh_002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "elite",
+  "factor_id": 17,
+  "factor_name": "factor_vwap_sma_divergence",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w03-20260802-181255-r2",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_vwap_sma_divergence(df):\n    df_copy = df.copy()\n    d = 20\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    vwap = (close * volume).rolling(window=d, min_periods=d).sum() / volume.rolling(window=d, min_periods=d).sum()\n    sma = close.rolling(window=d, min_periods=d).mean()\n    factor = (vwap - sma) / close\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    factor.name = \"factor_vwap_sma_divergence\"\n    return factor",
+  "description": "Computes divergence between volume-weighted average price (VWAP) and simple moving average (SMA) over a 20-day window. When VWAP > SMA, it indicates that high-volume days drove prices above the average, implying bullish coherence; when VWAP < SMA, high-volume days were at lower prices, implying bearish coherence. Normalized by current close for stationarity.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.023523310776522678,
+    "icir": 0.26865205679928966,
+    "mi": 0.02719838076526937,
+    "rank_ic": 0.04189815668016319,
+    "rank_icir": 0.4156488488998222
+  },
+  "raw_metrics": {
+    "ic": -0.023523310776522678,
+    "icir": -0.26865205679928966,
+    "mi": 0.02719838076526937,
+    "rank_ic": -0.04189815668016319,
+    "rank_icir": -0.4156488488998222
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.27938854856739304,
+    "top_quantile_excess_return": 3.087357489517733,
+    "top_quantile_max_drawdown": -0.07642060514490545,
+    "top_quantile_turnover": 0.13398432152595277
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:45:10.688907+00:00"
+}

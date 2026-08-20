@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_then_mutation_pvc_gen0_1_alpha_lag_fcd98bef",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 216,
+  "factor_name": "factor_volume_weighted_reversal_robust",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w03-20260805-124500-r17",
+  "expression_type": "python",
+  "formula": "-daily_return * clip(vol_ratio, 0.5, 1.5) smoothed with EMA(10)",
+  "code": "def factor_volume_weighted_reversal_robust(df):\n    \"\"\"Volume-weighted reversal with extended smoothing and no cross-sectional transform.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"] / df_copy[\"close\"].shift(1) - 1.0\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    weight = np.clip(vol_ratio, 0.5, 1.5)\n    raw_signal = -ret * weight\n    smoothed = raw_signal.ewm(span=10, min_periods=10).mean()\n    df_copy[\"factor_volume_weighted_reversal_robust\"] = smoothed\n    return df_copy[\"factor_volume_weighted_reversal_robust\"]",
+  "description": "Mutation preserves the parent's volume-weighted reversal mechanism: daily return sign is inverted (mean-reversion) and scaled by a continuous volume ratio capped at [0.5, 1.5]. Two targeted changes are applied: (1) the smoothing span is extended from 5 to 10 bars to reduce noise and improve signal stability; (2) the cross-sectional transform is removed (set to 'none') to preserve raw payoff thickness, as evidence from similar candidates suggests that cs_rank can dilute top-quantile excess returns while the raw signal remains interpretable as a relative volume-weighted mean-reversion intensity.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01009717378778632,
+    "icir": 0.0823824272399058,
+    "mi": 0.026630252946629795,
+    "rank_ic": 0.04587626755326717,
+    "rank_icir": 0.3519978447987813
+  },
+  "raw_metrics": {
+    "ic": 0.01009717378778632,
+    "icir": 0.0823824272399058,
+    "mi": 0.026630252946629795,
+    "rank_ic": 0.04587626755326717,
+    "rank_icir": 0.3519978447987813
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.05343061618381495,
+    "top_quantile_excess_return": 0.3489136001793094,
+    "top_quantile_max_drawdown": -0.0617730669689418,
+    "top_quantile_turnover": 0.27312799195298815
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:53:37.064801+00:00"
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_then_mutation_order_imbalance_002_a_5a1a817f",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "elite",
+  "factor_id": 166,
+  "factor_name": "factor_pressure_ewma5",
+  "domain_agent": "alpha-order-imbalance",
+  "run_id": "fleet-w03-20260804-184706-r13",
+  "expression_type": "python",
+  "formula": "raw_pressure = intraday_ret - overnight_ret; EWMA(span=5)",
+  "code": "def factor_pressure_ewma5(df):\n    \"\"\"Directional pressure (intraday - overnight) smoothed with EWMA span=5.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    raw_pressure = intraday_ret - overnight_ret\n    factor = raw_pressure.ewm(span=5, min_periods=5).mean()\n    df_copy[\"factor_pressure_ewma5\"] = factor\n    return df_copy[\"factor_pressure_ewma5\"]",
+  "description": "The parent's core directional pressure mechanism is preserved. The volume-based adaptive smoothing is ablated for simplicity; a fixed 5-day EWMA captures recent intraday conviction more directly, potentially improving IC while maintaining the robustness of smoothing. The parent strength target is RankICIR, and the bottleneck is IC. This simplification reduces regime-switching noise and keeps one core economic mechanism with one lightweight modifier (smoothing).",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.07325325280797743,
+    "icir": 0.6902329910596242,
+    "mi": 0.02412720116788236,
+    "rank_ic": 0.04665462929122273,
+    "rank_icir": 0.4507068742297426
+  },
+  "raw_metrics": {
+    "ic": -0.07325325280797743,
+    "icir": -0.6902329910596242,
+    "mi": 0.02412720116788236,
+    "rank_ic": -0.04665462929122273,
+    "rank_icir": -0.4507068742297426
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.21873252613130933,
+    "top_quantile_excess_return": 2.1309623339002797,
+    "top_quantile_max_drawdown": -0.03798339305207654,
+    "top_quantile_turnover": 0.4179579647972027
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:51:49.262576+00:00"
+}

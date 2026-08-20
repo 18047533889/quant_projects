@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_crossover_then_mutation_acreative_0_1_overnig_8d8aa88c",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 70,
+  "factor_name": "factor_intraday_momentum_volume_amplifier",
+  "domain_agent": "alpha-herding",
+  "run_id": "fleet-w02-20260803-143019-r7",
+  "expression_type": "python",
+  "formula": "np.sign(smooth_intraday_ret) * (smooth_intraday_ret)^2 * np.clip(1 + volume_pct_change, 0.5, 2.0)",
+  "code": "def factor_intraday_momentum_volume_amplifier(df):\n    \"\"\"Intraday momentum amplified by volume change. Large intraday directional moves on expanding volume are more reliable.\"\"\"\n    df_copy = df.copy()\n    _, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    smooth_ret = intraday_ret.rolling(5, min_periods=5).mean()\n    base_signal = np.sign(smooth_ret) * np.abs(smooth_ret) ** 2\n    vol_chg = df_copy[\"volume\"].pct_change()\n    amplification = np.clip(1.0 + vol_chg, 0.5, 2.0)\n    factor = base_signal * amplification\n    df_copy[\"factor_intraday_momentum_volume_amplifier\"] = factor\n    return df_copy[\"factor_intraday_momentum_volume_amplifier\"]",
+  "description": "Crossover combining primary mechanism of intraday momentum with signed power transformation (from parent g1_crossover_then_mutation_acreative_0_1_overnight_intraday_reversal_f844d4ab) with volume change amplification (lightweight modifier from herding reversal parent g1_crossover_then_mutation_alpha_herding_volregime_cov_v1_alpha_herding_raw_fc8c9ed8). The idea: strong intraday directional moves are more reliable when accompanied by volume expansion, reflecting broad market participation. The volume amplification scales the signal up or down based on daily volume change, preserving the raw payoff mechanism while adding a conviction filter. The primary mechanism's smoothing and nonlinear emphasis is preserved. This aims to improve payoff thickness by focusing on high-conviction days.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.031301751076046894,
+    "icir": 0.32696667170381144,
+    "mi": 0.024899834758197237,
+    "rank_ic": 0.043226865511477634,
+    "rank_icir": 0.3600158018219218
+  },
+  "raw_metrics": {
+    "ic": -0.031301751076046894,
+    "icir": -0.32696667170381144,
+    "mi": 0.024899834758197237,
+    "rank_ic": -0.043226865511477634,
+    "rank_icir": -0.3600158018219218
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.08186081384451938,
+    "top_quantile_excess_return": 0.5750672438714368,
+    "top_quantile_max_drawdown": -0.07556997126422405,
+    "top_quantile_turnover": 0.38981239697291376
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:11:43.754357+00:00"
+}

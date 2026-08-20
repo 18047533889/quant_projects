@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_gen0_agentcreative_1_43db4646",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 448,
+  "factor_name": "factor_overnight_intraday_dissonance_median",
+  "domain_agent": "alpha-creative",
+  "run_id": "fleet-w02-20260814-091505-r8",
+  "expression_type": "python",
+  "formula": "rolling_median_5(sign(overnight_return) * sqrt(abs(overnight_return)) - sign(intraday_return) * sqrt(abs(intraday_return)))",
+  "code": "def factor_overnight_intraday_dissonance_median(df):\n    \"\"\"Smoothed signed square-root overnight-intraday dissonance using a 5-day rolling median for outlier robustness.\"\"\"\n    df_copy = df.copy()\n    overnight, intraday = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    overnight = overnight.replace([np.inf, -np.inf], np.nan)\n    intraday = intraday.replace([np.inf, -np.inf], np.nan)\n    signed_sqrt_overnight = np.sign(overnight) * np.sqrt(np.abs(overnight))\n    signed_sqrt_intraday = np.sign(intraday) * np.sqrt(np.abs(intraday))\n    raw = signed_sqrt_overnight - signed_sqrt_intraday\n    smooth = raw.rolling(5, min_periods=1).median()\n    df_copy[\"factor_overnight_intraday_dissonance_median\"] = smooth.fillna(0.0)\n    return df_copy[\"factor_overnight_intraday_dissonance_median\"]",
+  "description": "Preserves the parent's overnight-intraday dissonance mechanism: a signed square-root difference between overnight/global and intraday/local return components. The parent's raw daily point estimate is noisy and weakens IC/ICIR. This mutation replaces the raw point with a 5-day rolling median of the same signed-square-root dissonance, reducing sensitivity to single-day outliers and persistent transient gaps while retaining the exact cross-sectional economic signal. The median is a monotone robust smoother, improving RankIC/ICIR stability without changing the sign or economic meaning. No cross-sectional transform is used because the raw signal remains continuous and the parent's successful elite descendant also kept transform none; evidence shows trailing smoothing is sufficient.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0282611969287884,
+    "icir": 0.5331653872396035,
+    "mi": 0.01630388316239184,
+    "rank_ic": 0.029112336493006204,
+    "rank_icir": 0.5468045989301406
+  },
+  "raw_metrics": {
+    "ic": 0.0282611969287884,
+    "icir": 0.5331653872396035,
+    "mi": 0.01630388316239184,
+    "rank_ic": 0.029112336493006204,
+    "rank_icir": 0.5468045989301406
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 10.982192283879098,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.2570576408758112,
+    "top_quantile_excess_return": 2.7569961918328874,
+    "top_quantile_max_drawdown": -0.22160868288994573,
+    "top_quantile_turnover": 0.4395519470788952
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:42:49.277306+00:00"
+}

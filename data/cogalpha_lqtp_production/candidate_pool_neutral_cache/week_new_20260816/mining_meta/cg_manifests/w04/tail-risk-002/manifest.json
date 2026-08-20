@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "tail-risk-002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 648,
+  "factor_name": "factor_tail_range_vol_of_vol",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w04-20260813-184426-r7",
+  "expression_type": "python",
+  "formula": "- (std(true_range, 30) / mean(true_range, 60))",
+  "code": "def factor_tail_range_vol_of_vol(df):\n    df_copy = df.copy()\n    tr = pd.Series(talib.TRANGE(df_copy[\"high\"], df_copy[\"low\"], df_copy[\"close\"]), index=df_copy.index)\n    vol_range = tr.rolling(30, min_periods=15).std()\n    avg_range = tr.rolling(60, min_periods=30).mean()\n    stress = vol_range / avg_range.replace(0.0, np.nan)\n    factor = -stress.fillna(0.0)\n    df_copy[\"factor_tail_range_vol_of_vol\"] = factor\n    return df_copy[\"factor_tail_range_vol_of_vol\"]",
+  "description": "Tail-risk exposure is not only the level of volatility but the instability of the risk process itself. The volatility of true range measures how much daily price range fluctuates; a high vol-of-vol signals a fragile regime where stress can suddenly escalate. The negative sign reflects that such fragility tends to precede underperformance. This is a path-dependent stress-accumulation mechanism distinct from level-based volatility indicators.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02060719172075633,
+    "icir": 0.3553006307067933,
+    "mi": 0.006407952451165322,
+    "rank_ic": 0.04036566711182726,
+    "rank_icir": 0.6608550427037704
+  },
+  "raw_metrics": {
+    "ic": 0.02060719172075633,
+    "icir": 0.3553006307067933,
+    "mi": 0.006407952451165322,
+    "rank_ic": 0.04036566711182726,
+    "rank_icir": 0.6608550427037704
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.133552407331458,
+    "quantile_monotonicity": 0.9272727272727272,
+    "top_quantile_annualized_excess_return": 0.047508799827330916,
+    "top_quantile_excess_return": 0.03142689899913331,
+    "top_quantile_max_drawdown": -0.020076459082411735,
+    "top_quantile_turnover": 0.12881294565481013
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:57:49.180594+00:00"
+}

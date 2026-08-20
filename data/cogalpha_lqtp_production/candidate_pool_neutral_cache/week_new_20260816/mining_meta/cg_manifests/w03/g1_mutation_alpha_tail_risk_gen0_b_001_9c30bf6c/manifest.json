@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_alpha_tail_risk_gen0_b_001_9c30bf6c",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 413,
+  "factor_name": "factor_tail_risk_intraday_overnight_abs_asymmetry",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w03-20260814-124837-r9",
+  "expression_type": "python",
+  "formula": "-rolling_mean_60(abs(min(intraday_ret,0))) / (rolling_mean_60(abs(min(intraday_ret,0))) + rolling_mean_60(abs(min(overnight_ret,0))))",
+  "code": "def factor_tail_risk_intraday_overnight_abs_asymmetry(df):\n    \"\"\"Downside tail asymmetry using absolute overnight/intraday losses; negated share of intraday downside magnitude.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(\n        df_copy[\"close\"], df_copy[\"open\"]\n    )\n    intra_down = np.minimum(intraday_ret, 0.0).abs()\n    over_down = np.minimum(overnight_ret, 0.0).abs()\n    intra_lpm = intra_down.rolling(60, min_periods=30).mean()\n    over_lpm = over_down.rolling(60, min_periods=30).mean()\n    total_lpm = intra_lpm + over_lpm\n    intra_share = intra_lpm / total_lpm.replace(0.0, np.nan)\n    factor = -intra_share\n    return pd.Series(factor, index=df_copy.index, name=\"factor_tail_risk_intraday_overnight_abs_asymmetry\")",
+  "description": "Preserves the parent tail-risk mechanism of comparing intraday vs overnight downside fragility using the active decompose_overnight_intraday tool. The mutation replaces squared downside (variance-like) with absolute downside magnitude, reducing the influence of a few large gap days and improving cross-sectional rank stability. High intraday absolute loss share yields a negative signal; the factor remains raw single-stock and interpretable.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.014956654138731193,
+    "icir": 0.3101943031055717,
+    "mi": 0.004070275471708129,
+    "rank_ic": 0.024408837395511678,
+    "rank_icir": 0.5261847886089847
+  },
+  "raw_metrics": {
+    "ic": -0.014956654138731193,
+    "icir": -0.3101943031055717,
+    "mi": 0.004070275471708129,
+    "rank_ic": -0.024408837395511678,
+    "rank_icir": -0.5261847886089847
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.1327343907152825,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.05768212864419797,
+    "top_quantile_excess_return": 0.374387688935252,
+    "top_quantile_max_drawdown": -0.04530391937932299,
+    "top_quantile_turnover": 0.09563459178219678
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:10:24.311217+00:00"
+}

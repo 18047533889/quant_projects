@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_order_imbalance_002_g1_mutation_order_imbalance_2e655d3a",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 167,
+  "factor_name": "factor_adaptive_pressure_span",
+  "domain_agent": "alpha-order-imbalance",
+  "run_id": "fleet-w03-20260804-184706-r13",
+  "expression_type": "python",
+  "formula": "ewm(span=5 or 15) of (intraday_ret - overnight_ret) based on vol_ratio > 1",
+  "code": "def factor_adaptive_pressure_span(df):\n    \"\"\"Directional pressure with volume-adaptive smoothing span. High relative volume uses shorter span for responsiveness; low volume uses longer span for noise reduction.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(\n        df_copy[\"close\"], df_copy[\"open\"]\n    )\n    raw_pressure = intraday_ret - overnight_ret\n    is_high, is_low, vol_ratio = alpha_tools.classify_volume_regime(\n        df_copy[\"volume\"], window=20, high_threshold=1.5, low_threshold=0.6\n    )\n    short_span = 5\n    long_span = 15\n    smoothed_short = raw_pressure.ewm(span=short_span, min_periods=short_span).mean()\n    smoothed_long = raw_pressure.ewm(span=long_span, min_periods=long_span).mean()\n    factor = np.where(vol_ratio > 1, smoothed_short, smoothed_long)\n    df_copy[\"factor_adaptive_pressure_span\"] = factor\n    return df_copy[\"factor_adaptive_pressure_span\"]",
+  "description": "The core mechanism is directional pressure (intraday minus overnight return) smoothed with an EWMA. The volume ratio from classify_volume_regime is used as a gate: when relative volume is above its EMA (vol_ratio > 1), indicating active participation, we use a shorter smoothing span (5) to react quickly to price changes. When volume is below average, we use a longer span (15) to filter noise. This fusion preserves the robust directional pressure signal from the primary parent while borrowing the continuous volume ratio idea from the secondary parent to make smoothing adaptive rather than scaling the signal.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.06975348402306396,
+    "icir": 0.6675292199639048,
+    "mi": 0.02431635427117662,
+    "rank_ic": 0.045804549263790656,
+    "rank_icir": 0.4585304965679131
+  },
+  "raw_metrics": {
+    "ic": -0.06975348402306396,
+    "icir": -0.6675292199639048,
+    "mi": 0.02431635427117662,
+    "rank_ic": -0.045804549263790656,
+    "rank_icir": -0.4585304965679131
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.20390923245833115,
+    "top_quantile_excess_return": 1.9175151218762965,
+    "top_quantile_max_drawdown": -0.043287773100776694,
+    "top_quantile_turnover": 0.3639388633677651
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:52:05.764667+00:00"
+}

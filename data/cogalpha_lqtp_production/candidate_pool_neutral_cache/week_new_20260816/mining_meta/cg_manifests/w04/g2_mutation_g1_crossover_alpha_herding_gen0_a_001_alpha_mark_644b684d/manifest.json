@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_alpha_herding_gen0_a_001_alpha_mark_644b684d",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 730,
+  "factor_name": "factor_herding_dm_ewm_confirmed",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w04-20260814-050458-r11",
+  "expression_type": "python",
+  "formula": "herding_position_20 * (0.5 + 0.5 * directional_movement_imbalance_ewm60)",
+  "code": "def factor_herding_dm_ewm_confirmed(df):\n    \"\"\"Volume-weighted close position within 20-day range, attenuated by exponential-smoothed directional-movement imbalance.\"\"\"\n    df_copy = df.copy()\n    high = df_copy['high']\n    low = df_copy['low']\n    close = df_copy['close']\n    volume = df_copy['volume']\n\n    high_roll = high.rolling(20, min_periods=20).max()\n    low_roll = low.rolling(20, min_periods=20).min()\n    range_ = high_roll - low_roll\n    position = (close - low_roll) / range_.replace(0, np.nan)\n    vol_sum = volume.rolling(20, min_periods=20).sum()\n    weighted_pos = (volume * position).rolling(20, min_periods=20).sum() / vol_sum.replace(0, np.nan)\n    herding = 2 * weighted_pos - 1\n\n    up_move = high.diff()\n    down_move = -low.diff()\n    plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)\n    minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)\n    plus_ewm = pd.Series(plus_dm, index=df_copy.index).ewm(span=60, adjust=False).mean()\n    minus_ewm = pd.Series(minus_dm, index=df_copy.index).ewm(span=60, adjust=False).mean()\n    dm_total = plus_ewm + minus_ewm\n    dm_imbalance = (plus_ewm - minus_ewm) / dm_total.replace(0, np.nan)\n    dm_imbalance = dm_imbalance.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n\n    weight = 0.5 + 0.5 * dm_imbalance.clip(-1, 1)\n    factor = herding * weight\n    return factor.rename('factor_herding_dm_ewm_confirmed')",
+  "description": "Mutation preserves the parent's core volume-weighted close-position herding signal within a 20-day range, which has strong RankICIR and payoff monotonicity. The single modifier is changed from a rolling 60-day sum of directional movement to an exponential moving average (span=60) for plus and minus directional movement. This gives more weight to recent directional movement, making the confirmation weight more responsive to current trend conditions. The weight remains bounded between 0 and 1, preserving the attenuation mechanism. This targets improved IC and MI while retaining the rank ordering that underpins the parent's stability. Parent strength target: RankICIR ~0.44 and payoff monotonicity 0.879.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01250417045803693,
+    "icir": 0.19735915711730012,
+    "mi": 0.010873141859725877,
+    "rank_ic": 0.030940782062977058,
+    "rank_icir": 0.4481389803757968
+  },
+  "raw_metrics": {
+    "ic": -0.01250417045803693,
+    "icir": -0.19735915711730012,
+    "mi": 0.010873141859725877,
+    "rank_ic": -0.030940782062977058,
+    "rank_icir": -0.4481389803757968
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.728935915737569,
+    "quantile_monotonicity": 0.7696969696969697,
+    "top_quantile_annualized_excess_return": -0.021826248673047166,
+    "top_quantile_excess_return": -0.013913703372961828,
+    "top_quantile_max_drawdown": -0.053914366263944635,
+    "top_quantile_turnover": 0.09796263411025813
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:07:03.287303+00:00"
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_order_imbalance_002_g1_mutation_order_imbalance_fc7e19e5",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "elite",
+  "factor_id": 164,
+  "factor_name": "factor_smooth_directional_pressure",
+  "domain_agent": "alpha-order-imbalance",
+  "run_id": "fleet-w03-20260804-184706-r13",
+  "expression_type": "python",
+  "formula": "ewm(span=5) of (intraday_ret - overnight_ret)",
+  "code": "def factor_smooth_directional_pressure(df):\n    \"\"\"Simplified directional pressure: intraday minus overnight return smoothed with a single EWMA span of 5. Removes adaptive volume-span switching to reduce noise.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(\n        df_copy[\"close\"], df_copy[\"open\"]\n    )\n    raw_pressure = intraday_ret - overnight_ret\n    span = 5\n    smoothed = raw_pressure.ewm(span=span, min_periods=span).mean()\n    df_copy[\"factor_smooth_directional_pressure\"] = smoothed\n    return df_copy[\"factor_smooth_directional_pressure\"]",
+  "description": "Simplification of the parent's adaptive smoothing by removing volume-adaptive span switching. The core signal (intraday minus overnight return) is smoothed with a fixed EWMA span of 5. This removes a source of instability from the binary switch based on volume ratio, targeting improved ICIR and RankICIR while preserving the strong IC and RankIC of the directional pressure signal.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.07325325280797743,
+    "icir": 0.6902329910596242,
+    "mi": 0.02412720116788236,
+    "rank_ic": 0.04665462929122273,
+    "rank_icir": 0.4507068742297426
+  },
+  "raw_metrics": {
+    "ic": -0.07325325280797743,
+    "icir": -0.6902329910596242,
+    "mi": 0.02412720116788236,
+    "rank_ic": -0.04665462929122273,
+    "rank_icir": -0.4507068742297426
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.21873252613130933,
+    "top_quantile_excess_return": 2.1309623339002797,
+    "top_quantile_max_drawdown": -0.03798339305207654,
+    "top_quantile_turnover": 0.4179579647972027
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:51:32.752298+00:00"
+}

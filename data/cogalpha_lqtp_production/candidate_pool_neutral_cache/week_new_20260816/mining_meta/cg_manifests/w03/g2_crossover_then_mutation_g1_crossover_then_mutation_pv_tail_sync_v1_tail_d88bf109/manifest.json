@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_then_mutation_pv_tail_sync_v1_tail_d88bf109",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 294,
+  "factor_name": "factor_intraday_tail_semivar_volume_asymmetry",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w03-20260813-063501-r2",
+  "expression_type": "python",
+  "formula": "down_var / up_var, where down_sq = min(intraday_ret, 0)^2 * clip(vol_ratio, 0.5, 2.0).fillna(0), up_sq = max(intraday_ret, 0)^2 * clip(vol_ratio, 0.5, 2.0).fillna(0), down_var = 0.5*rolling_mean_60(down_sq) + 0.5*ewm_mean_span60(down_sq), up_var analogously; intraday_ret from decompose_overnight_intraday",
+  "code": "def factor_intraday_tail_semivar_volume_asymmetry(df):\n    \"\"\"Intraday volume-confirmed downside/upside variance asymmetry with hybrid smoothing.\n\n    Economic mechanism:\n        Lower-tail stress accumulation is captured by the ratio of downside\n        variance to upside variance using intraday open-to-close returns.\n        Close-to-close returns often include overnight gaps that reflect\n        market-wide shocks removed by industry+size neutralization; intraday\n        returns isolate idiosyncratic same-session tail moves. Squared intraday\n        returns are weighted by a bounded continuous volume-regime ratio to\n        confirm tail moves, and the variance components are smoothed with a\n        50/50 blend of rolling mean and exponential moving average to balance\n        stable long-term accumulation with recent stress sensitivity.\n    \"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(\n        df_copy[\"close\"], df_copy[\"open\"]\n    )\n    ret = intraday_ret\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(\n        df_copy[\"volume\"], window=20, high_threshold=1.5, low_threshold=0.6\n    )\n    vol_weight = vol_ratio.clip(lower=0.5, upper=2.0).fillna(1.0)\n    down_ret = ret.where(ret < 0)\n    up_ret = ret.where(ret > 0)\n    down_sq = (down_ret ** 2 * vol_weight).fillna(0)\n    up_sq = (up_ret ** 2 * vol_weight).fillna(0)\n    down_roll = down_sq.rolling(60, min_periods=20).mean()\n    up_roll = up_sq.rolling(60, min_periods=20).mean()\n    down_ewm = down_sq.ewm(span=60, min_periods=20).mean()\n    up_ewm = up_sq.ewm(span=60, min_periods=20).mean()\n    down_var = 0.5 * down_roll + 0.5 * down_ewm\n    up_var = 0.5 * up_roll + 0.5 * up_ewm\n    factor = down_var / up_var.replace(0, np.nan)\n    factor = factor.replace([np.inf, -np.inf], np.nan)\n    df_copy[\"factor_intraday_tail_semivar_volume_asymmetry\"] = factor\n    return df_copy[\"factor_intraday_tail_semivar_volume_asymmetry\"]\n",
+  "description": "Parent strength target: preserve the raw downside/upside variance ratio interpretation and hybrid 50/50 rolling-mean/EWM smoothing that stabilizes RankICIR. Bottleneck: parent uses close-to-close pct_change returns, which include overnight gaps dominated by market-wide shocks that are later removed by industry+size neutralization, contaminating tail semivariance. Mutation replaces close-to-close returns with intraday open-to-close returns from decompose_overnight_intraday, isolating same-session idiosyncratic tail stress. Volume-confirmation gate (clip 0.5-2.0) and hybrid smoothing remain unchanged; this is a single return-definition change targeting improved IC/ICIR and MI while preserving RankICIR stability.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.008487937442278274,
+    "icir": 0.20160944074953813,
+    "mi": 0.004915925476354666,
+    "rank_ic": 0.033449127787994096,
+    "rank_icir": 0.6342000511854722
+  },
+  "raw_metrics": {
+    "ic": 0.008487937442278274,
+    "icir": 0.20160944074953813,
+    "mi": 0.004915925476354666,
+    "rank_ic": 0.033449127787994096,
+    "rank_icir": 0.6342000511854722
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.911294083119342,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.0739548734049289,
+    "top_quantile_excess_return": 0.5033601920573627,
+    "top_quantile_max_drawdown": -0.06818277784413107,
+    "top_quantile_turnover": 0.08882813343481472
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:58:21.037973+00:00"
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_crossover_then_mutation_regime_gating_002_cra_f86c033b",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 201,
+  "factor_name": "factor_dynamic_smooth_vol_expansion_volume_gated",
+  "domain_agent": "alpha-regime-gating",
+  "run_id": "fleet-w04-20260803-231216-r15",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_dynamic_smooth_vol_expansion_volume_gated(df):\n    df_copy = df.copy()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    intraday_range = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"]\n    disloc_ma = intraday_range.rolling(60, min_periods=60).mean()\n    disloc_std = intraday_range.rolling(60, min_periods=60).std()\n    disloc_z = (intraday_range - disloc_ma) / disloc_std.replace(0.0, np.nan)\n    overnight_gap = (df_copy[\"open\"] - df_copy[\"close\"].shift(1)).abs() / df_copy[\"close\"].shift(1)\n    gap_ma = overnight_gap.rolling(20, min_periods=20).mean()\n    gap_median = gap_ma.rolling(60, min_periods=60).median()\n    high_gap_regime = gap_ma > gap_median\n    span_high = 5\n    span_low = 10\n    ema_high = disloc_z.ewm(span=span_high, min_periods=span_high).mean()\n    ema_low = disloc_z.ewm(span=span_low, min_periods=span_low).mean()\n    disloc_z_smooth = np.where(high_gap_regime, ema_high, ema_low)\n    signal = disloc_z_smooth * vol_ratio\n    df_copy[\"factor_dynamic_smooth_vol_expansion_volume_gated\"] = signal.fillna(0)\n    return df_copy[\"factor_dynamic_smooth_vol_expansion_volume_gated\"]",
+  "description": "Crossover between qualified volatility-expansion-volume-gated (primary mechanism: intraday range z-score, EMA smoothed, volume gated) and rejected volatility-breakout-with-gap (lightweight overnight gap idea). The secondary idea adapts the smoothing EMA span based on overnight gap regime: when recent average gap is elevated (above its 60-day median), use shorter span (5) for faster response; otherwise use longer span (10). This preserves the qualified parent's volume-confirmed volatility expansion strength while adding regime-adaptive smoothing that may improve responsiveness around gap-driven stress. Parent_strength_target: maintain qualified metrics (IC=0.0293, RankIC=0.0527, ICIR=0.3222, RankICIR=0.5071, MI=0.0237).",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.032219619376870685,
+    "icir": 0.37301018895880805,
+    "mi": 0.025574241101074868,
+    "rank_ic": 0.05480178130527391,
+    "rank_icir": 0.5497382090450573
+  },
+  "raw_metrics": {
+    "ic": -0.032219619376870685,
+    "icir": -0.37301018895880805,
+    "mi": 0.025574241101074868,
+    "rank_ic": -0.05480178130527391,
+    "rank_icir": -0.5497382090450573
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.04859320411876267,
+    "top_quantile_excess_return": 0.02477993927320976,
+    "top_quantile_max_drawdown": -0.02865390629507647,
+    "top_quantile_turnover": 0.2658102451977643
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:21:11.031249+00:00"
+}

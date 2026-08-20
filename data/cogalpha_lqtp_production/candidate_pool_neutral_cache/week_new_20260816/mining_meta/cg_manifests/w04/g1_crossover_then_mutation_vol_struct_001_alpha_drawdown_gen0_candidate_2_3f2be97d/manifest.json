@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_then_mutation_vol_struct_001_alpha_drawdown_gen0_candidate_2_3f2be97d",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 237,
+  "factor_name": "factor_volume_breakout_ratio",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260804-063220-r18",
+  "expression_type": "python",
+  "formula": "max(volume, 10) / max(volume, 50)",
+  "code": "def factor_volume_breakout_ratio(df):\n    \"\"\"Volume breakout ratio comparing short-term maximum volume to long-term maximum volume.\"\"\"\n    df_copy = df.copy()\n    vol_short_max = df_copy[\"volume\"].rolling(window=10, min_periods=10).max()\n    vol_long_max = df_copy[\"volume\"].rolling(window=50, min_periods=50).max()\n    ratio = vol_short_max / vol_long_max.replace(0, np.nan)\n    ratio = ratio.fillna(1.0)\n    df_copy[\"factor_volume_breakout_ratio\"] = ratio\n    return df_copy[\"factor_volume_breakout_ratio\"]",
+  "description": "Ablation of parent factor_volume_breakout_price_location. Removes the price location modifier to isolate the core volume anomaly signal. Compares recent 10-day max volume to 50-day max volume; a high ratio indicates volume surges that may signal breakout. Preserves the economic mechanism of volume abnormality detection while simplifying interpretation.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.017781324463509413,
+    "icir": 0.23840408710596353,
+    "mi": 0.025836138017654164,
+    "rank_ic": 0.04586808505363068,
+    "rank_icir": 0.512962535823479
+  },
+  "raw_metrics": {
+    "ic": -0.017781324463509413,
+    "icir": -0.23840408710596353,
+    "mi": 0.025836138017654164,
+    "rank_ic": -0.04586808505363068,
+    "rank_icir": -0.512962535823479
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.09967040526611615,
+    "top_quantile_excess_return": 0.05778473137320295,
+    "top_quantile_max_drawdown": -0.031833303405438884,
+    "top_quantile_turnover": 0.09427111383541438
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:22:32.598239+00:00"
+}

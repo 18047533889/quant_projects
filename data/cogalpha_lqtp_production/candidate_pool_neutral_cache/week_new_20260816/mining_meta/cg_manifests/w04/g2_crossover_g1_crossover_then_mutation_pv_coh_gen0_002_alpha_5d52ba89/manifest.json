@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_crossover_then_mutation_pv_coh_gen0_002_alpha_5d52ba89",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 660,
+  "factor_name": "factor_price_volume_dollar_coherence_stability",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260813-184426-r7",
+  "expression_type": "python",
+  "formula": "corr(rolling_rank(close,20), rolling_rank(close*volume,20), 20) * (1 + 0.25 * tanh(LINEARREG_SLOPE(close*volume,20) / STD(close*volume,20)))",
+  "code": "def factor_price_volume_dollar_coherence_stability(df):\n    \"\"\"Price-dollar-volume rank coherence modulated by dollar-volume trend stability.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    window = 20\n    dollar_volume = close * volume\n\n    close_rank = close.rolling(window, min_periods=window).rank(pct=True)\n    dollar_volume_rank = dollar_volume.rolling(window, min_periods=window).rank(pct=True)\n    pv_corr = close_rank.rolling(window, min_periods=window).corr(dollar_volume_rank)\n\n    # Lightweight idea from parent2: volume trend stability bounded multiplier\n    dollar_volume_slope = pd.Series(talib.LINEARREG_SLOPE(dollar_volume.values.astype(float), timeperiod=window), index=df_copy.index)\n    dollar_volume_std = dollar_volume.rolling(window, min_periods=window).std(ddof=1)\n    dollar_volume_stability = dollar_volume_slope / dollar_volume_std.replace(0.0, np.nan)\n    stability_modifier = 1.0 + 0.25 * np.tanh(dollar_volume_stability)\n\n    factor = pv_corr * stability_modifier\n    df_copy[\"factor_price_volume_dollar_coherence_stability\"] = factor\n    return df_copy[\"factor_price_volume_dollar_coherence_stability\"]",
+  "description": "Crossover between parent1 (qualified, g1_crossover_then_mutation_pv_coh_gen0_002_alpha_vol_trend_stability_0_4a8be68e) and parent2 (rejected, g1_crossover_pv_coh_gen0_002_alpha_vol_trend_stability_0_66c9b96f). Primary mechanism from parent1: price-dollar-volume rank coherence, which preserves stable rank-order predictive strength (parent RankIC=0.0423, RankICIR=0.7510). Bottleneck: low linear IC (0.0161). Lightweight idea from parent2: volume trend stability bounded multiplier, adapted to dollar volume for consistency. The multiplier is reduced from 0.5 to 0.25 coefficient to keep the adjustment gentle and avoid the noise that likely contributed to parent2's rejection. This aims to improve linear IC while preserving the dominant rank coherence signal. Raw single-stock factor only; no cross-sectional or neutralization logic inside code.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.016614482442249213,
+    "icir": 0.37030096373583965,
+    "mi": 0.006095500533827902,
+    "rank_ic": 0.043856593571252586,
+    "rank_icir": 0.7826649360264822
+  },
+  "raw_metrics": {
+    "ic": -0.016614482442249213,
+    "icir": -0.37030096373583965,
+    "mi": 0.006095500533827902,
+    "rank_ic": -0.043856593571252586,
+    "rank_icir": -0.7826649360264822
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.95961852587256,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.0852494283324925,
+    "top_quantile_excess_return": 0.053315449972040074,
+    "top_quantile_max_drawdown": -0.02318094584786423,
+    "top_quantile_turnover": 0.17481850384382797
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:00:12.502179+00:00"
+}

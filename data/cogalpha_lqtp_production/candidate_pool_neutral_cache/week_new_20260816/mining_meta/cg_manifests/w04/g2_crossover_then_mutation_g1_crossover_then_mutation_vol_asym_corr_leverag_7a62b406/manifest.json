@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_then_mutation_vol_asym_corr_leverag_7a62b406",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 707,
+  "factor_name": "factor_vol_asym_volume_regime_smoothed",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w04-20260814-015906-r10",
+  "expression_type": "python",
+  "formula": "(-rolling_corr(lag1_return, range_volatility, 60)) * clip(volume_ema_ratio(30), 0.6, 1.25)",
+  "code": "def factor_vol_asym_volume_regime_smoothed(df):\n    \"\"\"Leverage-effect asymmetry scaled by smoothed relative volume surprise.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"]\n    lag_ret = ret.shift(1)\n    corr = lag_ret.rolling(60, min_periods=30).corr(vol)\n    asym_signal = -corr\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=30)\n    vol_ratio = vol_ratio.replace([np.inf, -np.inf], np.nan)\n    weight = vol_ratio.clip(lower=0.6, upper=1.25)\n    factor = asym_signal * weight\n    df_copy[\"factor_vol_asym_volume_regime_smoothed\"] = factor\n    return df_copy[\"factor_vol_asym_volume_regime_smoothed\"]",
+  "description": "Mutation of parent g2_crossover_g1_crossover_then_mutation_vol_asym_corr_leverag_1cc7c7b5. Preserves parent_strength_target: the core leverage-effect asymmetry (negative rolling correlation between lagged returns and current range volatility) and associated RankICIR/ICIR stability. Targets the raw IC bottleneck from the volume regime modifier: the original 20-day volume/EMA ratio clipped to [0.5,1.5] can over-amplify short-lived volume spikes and add noise. This child smooths the volume regime by extending the volume window from 20 to 30 bars and tightening the attenuation bounds to [0.6,1.25], reducing noise amplification without changing the raw asymmetry signal or requiring cross-sectional normalization. The factor remains single-stock and continuous.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.019257005348238824,
+    "icir": 0.4392842628217523,
+    "mi": 0.007640666614535441,
+    "rank_ic": 0.03734292281671367,
+    "rank_icir": 0.8521720599154907
+  },
+  "raw_metrics": {
+    "ic": 0.019257005348238824,
+    "icir": 0.4392842628217523,
+    "mi": 0.007640666614535441,
+    "rank_ic": 0.03734292281671367,
+    "rank_icir": 0.8521720599154907
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.9748410962500635,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.019387833079153705,
+    "top_quantile_excess_return": 0.012806634239785675,
+    "top_quantile_max_drawdown": -0.02739938882166304,
+    "top_quantile_turnover": 0.1945285775186695
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:04:24.319982+00:00"
+}

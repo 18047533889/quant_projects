@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_pv_coherence_002_vol_9545965e",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 404,
+  "factor_name": "factor_volume_return_dir_corr_zscorevoldev",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w01-20260814-043935-r7",
+  "expression_type": "python",
+  "formula": "rolling_corr(close.pct_change(), (volume - rolling_mean(volume,20)) / rolling_std(volume,20), window=30)",
+  "code": "def factor_volume_return_dir_corr_zscorevoldev(df):\n    \"\"\"Rolling correlation between daily return and z-scored volume deviation.\"\"\"\n    df_copy = df.copy()\n    daily_ret = df_copy[\"close\"].pct_change()\n    vol_mean = df_copy[\"volume\"].rolling(20, min_periods=5).mean()\n    vol_std = df_copy[\"volume\"].rolling(20, min_periods=5).std(ddof=1)\n    vol_z = (df_copy[\"volume\"] - vol_mean) / vol_std.replace(0.0, np.nan)\n    corr = daily_ret.rolling(30, min_periods=20).corr(vol_z)\n    factor = corr.fillna(0.0)\n    df_copy[\"factor_volume_return_dir_corr_zscorevoldev\"] = factor\n    return df_copy[\"factor_volume_return_dir_corr_zscorevoldev\"]",
+  "description": "Preserves parent's core mechanism of rolling correlation between signed daily returns and volume surprise to capture directional volume coherence. Mutation replaces the rolling percentile rank normalization of volume deviation with a continuous rolling z-score (volume - rolling_mean) / rolling_std. This removes the arbitrary rank nonlinearity and makes the volume surprise linearly comparable across time, aiming to improve Pearson IC while retaining the parent's strong RankICIR and long-short Sharpe. Parent strength target: RankICIR=0.424, long_short_sharpe=5.55, RankIC=0.0219. Bottleneck targeted: slightly improve IC and MI without degrading rank stability. No cross-sectional transform, preserving raw payoff evidence.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.009599742738211561,
+    "icir": 0.20484576997711723,
+    "mi": 0.006642665186001651,
+    "rank_ic": 0.02412206941861473,
+    "rank_icir": 0.46086663233692365
+  },
+  "raw_metrics": {
+    "ic": -0.009599742738211561,
+    "icir": -0.20484576997711723,
+    "mi": 0.006642665186001651,
+    "rank_ic": -0.02412206941861473,
+    "rank_icir": -0.46086663233692365
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.216147156357497,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.08588734997550107,
+    "top_quantile_excess_return": 0.5992501853612004,
+    "top_quantile_max_drawdown": -0.08900754281158907,
+    "top_quantile_turnover": 0.14783106105688804
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:06:19.087780+00:00"
+}

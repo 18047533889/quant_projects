@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_then_mutation_vol_asym_corr_leverage_002_drawdown_volume_dryup_bc783c4f",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 700,
+  "factor_name": "factor_vol_asym_volume_dryup_stable",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w04-20260814-015906-r10",
+  "expression_type": "python",
+  "formula": "(-rolling_corr(lag1_return, range_volatility, 60)) * (1 - clamped_drawdown_volume_share(30, floor=0.2))",
+  "code": "def factor_vol_asym_volume_dryup_stable(df):\n    \"\"\"Leverage-effect asymmetry with stabilized drawdown dry-up weight.\"\"\"\n    df_copy = df.copy()\n    # Core mechanism: rolling correlation between lagged returns and current range volatility\n    ret = df_copy[\"close\"].pct_change()\n    vol = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"]\n    lag_ret = ret.shift(1)\n    corr = lag_ret.rolling(60, min_periods=30).corr(vol)\n    asym_signal = -corr\n    \n    # Lightweight modifier: volume dry-up share over trailing 30 days\n    df_copy[\"volume\"] = df_copy[\"volume\"].fillna(0.0)\n    peak_window = 30\n    vol_window = 30\n    rolling_peak = df_copy[\"close\"].rolling(peak_window, min_periods=1).max()\n    drawdown_state = (df_copy[\"close\"] < rolling_peak).astype(float)\n    drawdown_vol = (df_copy[\"volume\"] * drawdown_state).rolling(vol_window, min_periods=1).sum()\n    recovery_vol = (df_copy[\"volume\"] * (1.0 - drawdown_state)).rolling(vol_window, min_periods=1).sum()\n    total_vol = drawdown_vol + recovery_vol\n    drawdown_share = drawdown_vol / total_vol.replace(0.0, 1.0)\n    # weight: low drawdown share (selling exhaustion) -> near 1; high share -> floor 0.2, reducing attenuation\n    weight = 1.0 - drawdown_share\n    weight = weight.clip(lower=0.2, upper=1.0)\n    factor = asym_signal * weight\n    df_copy[\"factor_vol_asym_volume_dryup_stable\"] = factor\n    return df_copy[\"factor_vol_asym_volume_dryup_stable\"]",
+  "description": "Parent strength preserved: RankICIR stability from the leverage-effect core (negative rolling correlation between lagged returns and current range volatility) and MI contribution from the volume dry-up modifier. Bottleneck targeted: the original 20-day dry-up window and aggressive floor of 0.1 could over-attenuate the raw asymmetry signal during prolonged drawdowns, dampening raw IC without adding rank stability. Mutation extends the volume composition window to 30 days to reduce noise and raises the attenuation floor to 0.2, keeping the signal economically meaningful while preserving the bounded weight modifier. Raw signal remains continuous and single-stock; cross-sectional normalization is not needed.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.019364972680866153,
+    "icir": 0.38644612936169287,
+    "mi": 0.00834860727267106,
+    "rank_ic": 0.03569036473806959,
+    "rank_icir": 0.7511828181261497
+  },
+  "raw_metrics": {
+    "ic": 0.019364972680866153,
+    "icir": 0.38644612936169287,
+    "mi": 0.00834860727267106,
+    "rank_ic": 0.03569036473806959,
+    "rank_icir": 0.7511828181261497
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.411441621301404,
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": 0.05135389804978763,
+    "top_quantile_excess_return": 0.03374395009528386,
+    "top_quantile_max_drawdown": -0.021793465265664724,
+    "top_quantile_turnover": 0.11295104570668402
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:03:13.754428+00:00"
+}

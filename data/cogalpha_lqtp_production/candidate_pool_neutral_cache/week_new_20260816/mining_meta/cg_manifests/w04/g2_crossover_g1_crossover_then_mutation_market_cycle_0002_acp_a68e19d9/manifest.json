@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_crossover_then_mutation_market_cycle_0002_acp_a68e19d9",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 766,
+  "factor_name": "factor_range_pressure_tail_skew_attenuation",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w04-20260814-081422-r12",
+  "expression_type": "python",
+  "formula": "((rolling_sum_60(close-low) - rolling_sum_60(high-close)) / rolling_sum_60(high-low)) * (1 - 0.3 * clip(-rolling_skew_60(ret), 0, 1))",
+  "code": "def factor_range_pressure_tail_skew_attenuation(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    # primary mechanism: cycle range pressure over 60 days\n    buy_pressure = (close - low).rolling(60, min_periods=20).sum()\n    sell_pressure = (high - close).rolling(60, min_periods=20).sum()\n    total_range = (high - low).rolling(60, min_periods=20).sum()\n    range_pressure = (buy_pressure - sell_pressure) / total_range.replace(0.0, np.nan)\n    # lightweight idea from secondary parent: tail skew as crash fragility attenuator\n    ret = close.pct_change()\n    skew = ret.rolling(60, min_periods=30).skew()\n    neg_skew = np.clip(-skew, 0.0, 1.0)\n    scale = 1.0 - 0.3 * neg_skew\n    factor = range_pressure * scale\n    df_copy[\"factor_range_pressure_tail_skew_attenuation\"] = factor\n    return df_copy[\"factor_range_pressure_tail_skew_attenuation\"]",
+  "description": "Preserves the primary cycle range-pressure mechanism from parent g1_crossover_then_mutation_market_cycle_0002_acp_gen0_b_tail_skew_volume_as_800a1c2c, which identifies accumulation/distribution phase by close position within the trailing 60-day high-low range. Borrows the lightweight trailing return skewness idea from parent acp_gen0_b_tail_skew_volume_asymmetry: when 60-day return skew is strongly negative (left-tail crash fragility), the range-pressure signal is attenuated by a bounded factor between 0.7 and 1.0. This keeps the raw range-pressure strength most of the time, preserves cross-sectional variation, and targets improved MI/robustness without changing the core economics. Cross-sectional transform remains none to preserve raw payoff structure.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.017050368493468443,
+    "icir": 0.34305616745329875,
+    "mi": 0.005035459090336758,
+    "rank_ic": 0.016791652221268823,
+    "rank_icir": 0.2985543579128178
+  },
+  "raw_metrics": {
+    "ic": -0.017050368493468443,
+    "icir": -0.34305616745329875,
+    "mi": 0.005035459090336758,
+    "rank_ic": -0.016791652221268823,
+    "rank_icir": -0.2985543579128178
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.652168898298804,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.01938247944274063,
+    "top_quantile_excess_return": 0.012880266255339556,
+    "top_quantile_max_drawdown": -0.022535210098075464,
+    "top_quantile_turnover": 0.1355814444578573
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:12:44.729922+00:00"
+}

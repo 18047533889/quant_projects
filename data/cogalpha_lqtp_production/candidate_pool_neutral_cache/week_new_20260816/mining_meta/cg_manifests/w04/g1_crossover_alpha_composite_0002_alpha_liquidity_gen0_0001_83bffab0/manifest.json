@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_alpha_composite_0002_alpha_liquidity_gen0_0001_83bffab0",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 579,
+  "factor_name": "factor_volume_price_beta_liquidity_adj",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w04-20260813-075113-r3",
+  "expression_type": "python",
+  "formula": "rolling_cov(close.pct_change(), volume.pct_change(), 20) / rolling_var(volume.pct_change(), 20) * (1 / (1 + rolling_mean((high-low)/(volume*close), 20)))",
+  "code": "def factor_volume_price_beta_liquidity_adj(df):\n    \"\"\"Volume-price coupling beta, attenuated when Amihud illiquidity is high.\"\"\"\n    df_copy = df.copy()\n    ret_1 = df_copy[\"close\"].pct_change()\n    vol_chg = df_copy[\"volume\"].pct_change()\n    cov = ret_1.rolling(20, min_periods=5).cov(vol_chg)\n    var = vol_chg.rolling(20, min_periods=5).var()\n    beta = cov / var.replace(0.0, np.nan)\n    beta = beta.replace([np.inf, -np.inf], np.nan)\n    dollar_volume = df_copy[\"volume\"] * df_copy[\"close\"]\n    illiquidity = (df_copy[\"high\"] - df_copy[\"low\"]) / dollar_volume.replace(0.0, np.nan)\n    avg_illiquidity = illiquidity.rolling(20, min_periods=5).mean()\n    weight = 1.0 / (1.0 + avg_illiquidity)\n    factor = beta * weight\n    df_copy[\"factor_volume_price_beta_liquidity_adj\"] = factor\n    return df_copy[\"factor_volume_price_beta_liquidity_adj\"]",
+  "description": "Preserves the qualified volume-price elasticity beta from parent alpha-composite-0002: a positive beta indicates informed flow backs price changes, while a negative beta signals divergence. Borrows the Amihud illiquidity denominator from parent alpha-liquidity-gen0-0001 as a lightweight attenuation weight: when average illiquidity is high, price changes may be noisier and less informative, so the beta signal is scaled down. The raw beta sign and cross-sectional variation are retained, and no cross-sectional transform is applied because the primary parent's strong RankICIR and payoff evidence came from the raw mechanism.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.012368924385569219,
+    "icir": 0.17516043052098398,
+    "mi": 0.019878503214565413,
+    "rank_ic": 0.04365464752977971,
+    "rank_icir": 0.6551336741226758
+  },
+  "raw_metrics": {
+    "ic": -0.012368924385569219,
+    "icir": -0.17516043052098398,
+    "mi": 0.019878503214565413,
+    "rank_ic": -0.04365464752977971,
+    "rank_icir": -0.6551336741226758
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.2061255153436896,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.025268018773225487,
+    "top_quantile_excess_return": 0.019295437730881382,
+    "top_quantile_max_drawdown": -0.036218532274667425,
+    "top_quantile_turnover": 0.15961122415665352
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:51:37.879160+00:00"
+}

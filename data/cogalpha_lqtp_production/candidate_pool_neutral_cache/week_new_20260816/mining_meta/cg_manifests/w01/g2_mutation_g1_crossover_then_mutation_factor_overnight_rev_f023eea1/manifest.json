@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_factor_overnight_rev_f023eea1",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 180,
+  "factor_name": "factor_overnight_rev_vol_norm_volregime_cont",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w01-20260805-005308-r15",
+  "expression_type": "python",
+  "formula": "-overnight_ret / std(close_ret,20) * clip(1+0.3*(vol_ratio-1), 0.5, 1.5)",
+  "code": "def factor_overnight_rev_vol_norm_volregime_cont(df):\n    \"\"\"\n    Overnight gap reversal normalized by close volatility, with continuous volume regime attenuation.\n    \"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    close_ret = df_copy[\"close\"].pct_change()\n    vol = close_ret.rolling(20, min_periods=1).std()\n    vol_safe = vol.replace(0.0, np.nan).fillna(1e-8)\n    rev_signal = -overnight_ret / vol_safe\n    volume = df_copy[\"volume\"]\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(volume, window=20)\n    weight = 1.0 + 0.3 * (vol_ratio - 1.0)\n    weight = weight.clip(0.5, 1.5)\n    factor = rev_signal * weight\n    df_copy[\"factor_overnight_rev_vol_norm_volregime_cont\"] = factor\n    return df_copy[\"factor_overnight_rev_vol_norm_volregime_cont\"]",
+  "description": "This mutation replaces the discrete volume regime weights (1.2/0.8) with a continuous attenuation based on vol_ratio from classify_volume_regime. The weight is 1.0 + 0.3 * (vol_ratio - 1.0), clipped to [0.5, 1.5], providing smoother adaptivity to trading volume intensity. The core mechanism of overnight gap reversal normalized by close return volatility is preserved, aiming to improve payoff thickness by reducing threshold artifacts while maintaining rank stability.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.07844851954764319,
+    "icir": 1.075083880128407,
+    "mi": 0.04169706309209431,
+    "rank_ic": 0.02257395308562481,
+    "rank_icir": 0.41578686771963014
+  },
+  "raw_metrics": {
+    "ic": -0.07844851954764319,
+    "icir": -1.075083880128407,
+    "mi": 0.04169706309209431,
+    "rank_ic": -0.02257395308562481,
+    "rank_icir": -0.41578686771963014
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.2859369193578494,
+    "top_quantile_excess_return": 3.284634464501174,
+    "top_quantile_max_drawdown": -0.024747298255707095,
+    "top_quantile_turnover": 0.7519553601088169
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:42:15.307048+00:00"
+}

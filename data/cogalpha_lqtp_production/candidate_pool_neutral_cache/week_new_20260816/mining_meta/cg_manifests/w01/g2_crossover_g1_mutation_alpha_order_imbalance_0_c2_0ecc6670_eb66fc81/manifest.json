@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_alpha_order_imbalance_0_c2_0ecc6670_eb66fc81",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 256,
+  "factor_name": "factor_vol_asymmetry_highvol_accel",
+  "domain_agent": "alpha-order-imbalance",
+  "run_id": "fleet-w01-20260806-031819-r21",
+  "expression_type": "python",
+  "formula": "(EWM20(up_squared_intraday_ret) - EWM20(down_squared_intraday_ret)) * (IF high_volume_regime THEN volume_acceleration(5,20) ELSE 1.0)",
+  "code": "def factor_vol_asymmetry_highvol_accel(df):\n    \"\"\"Volatility asymmetry amplified by volume acceleration on high-volume days.\"\"\"\n    df_copy = df.copy()\n    intraday_ret = df_copy[\"close\"] / df_copy[\"open\"] - 1.0\n    up_vol = np.power(intraday_ret.clip(lower=0), 2)\n    down_vol = np.power(intraday_ret.clip(upper=0), 2)\n    asym = up_vol.ewm(span=20, min_periods=20).mean() - down_vol.ewm(span=20, min_periods=20).mean()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    vol_short = df_copy[\"volume\"].rolling(5, min_periods=5).mean()\n    vol_medium = df_copy[\"volume\"].rolling(20, min_periods=20).mean()\n    vol_accel = (vol_short / vol_medium.replace(0, np.nan)).fillna(1.0)\n    df_copy[\"factor_vol_asymmetry_highvol_accel\"] = asym * np.where(is_high_vol > 0, vol_accel, 1.0)\n    return df_copy[\"factor_vol_asymmetry_highvol_accel\"]",
+  "description": "Preserves the core volatility asymmetry mechanism from the first parent (difference between exponentially weighted upside and downside squared intraday returns). Borrows the volume acceleration measure (short-term vs medium-term volume mean) from the second parent, but applies it only on days classified as high-volume by the alpha_tools volume regime module (from the first parent). This conditional gating aims to amplify the directional signal during high-conviction high-volume periods while avoiding unnecessary scaling on normal days, targeting improved ICIR and RankICIR without sacrificing the cross-sectional predictive power.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.04055145353580679,
+    "icir": 0.375399988224635,
+    "mi": 0.0261338933173505,
+    "rank_ic": 0.05256255680465164,
+    "rank_icir": 0.4410753326325299
+  },
+  "raw_metrics": {
+    "ic": -0.04055145353580679,
+    "icir": -0.375399988224635,
+    "mi": 0.0261338933173505,
+    "rank_ic": -0.05256255680465164,
+    "rank_icir": -0.4410753326325299
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.11523811508560611,
+    "top_quantile_excess_return": 0.8649707351935998,
+    "top_quantile_max_drawdown": -0.06432940315304014,
+    "top_quantile_turnover": 0.1591097284444735
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:45:20.728023+00:00"
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_agentdailytrend_volum_a21f14b9",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 1,
+  "factor_name": "factor_volume_momentum_smooth",
+  "domain_agent": "alpha-daily-trend",
+  "run_id": "fleet-w04-20260802-140831-r1",
+  "expression_type": "python",
+  "formula": "sign(log_return) * |log_return|^1.2 * (volume / volume_rolling_10_mean)",
+  "code": "def factor_volume_momentum_smooth(df):\n    df_copy = df.copy()\n    log_return = np.log(df_copy['close'] / df_copy['close'].shift(5))\n    avg_volume = df_copy['volume'].rolling(10, min_periods=10).mean()\n    volume_ratio = df_copy['volume'] / avg_volume.replace(0, np.nan)\n    power = 1.2\n    enhanced_log_return = np.sign(log_return) * np.abs(log_return) ** power\n    df_copy['factor_volume_momentum_smooth'] = enhanced_log_return * volume_ratio\n    return df_copy['factor_volume_momentum_smooth']",
+  "description": "Reduces the signed power exponent from 1.5 to 1.2 to soften nonlinear amplification, aiming to improve ICIR by making the signal more linear and less sensitive to large return outliers while preserving the core momentum-volume confirmation mechanism.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03473202085146782,
+    "icir": 0.35641057559344796,
+    "mi": 0.03390225665432922,
+    "rank_ic": 0.04299856366580265,
+    "rank_icir": 0.3252081077162865
+  },
+  "raw_metrics": {
+    "ic": -0.03473202085146782,
+    "icir": -0.35641057559344796,
+    "mi": 0.03390225665432922,
+    "rank_ic": -0.04299856366580265,
+    "rank_icir": -0.3252081077162865
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6,
+    "top_quantile_annualized_excess_return": 0.044908720587190754,
+    "top_quantile_excess_return": 0.033495917188286706,
+    "top_quantile_max_drawdown": -0.05109231192603614,
+    "top_quantile_turnover": 0.3930853021070198
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:12:43.983122+00:00"
+}

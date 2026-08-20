@@ -34,7 +34,7 @@ class EvictionPolicy(str, Enum):
 
 @dataclass
 class CacheEntry(Generic[T]):
-    """缓存条目（带 TTL、访问统计）。"""
+    """缓存条目（带 TTL、访问统计、依赖关系）。"""
     key: str
     value: T
     size_bytes: int
@@ -43,6 +43,8 @@ class CacheEntry(Generic[T]):
     access_count: int
     expires_at: float | None = None  # None = 永不过期
     pin_count: int = 0  # 引用计数（>0 时不可逐出）
+    dependencies: set[str] = field(default_factory=set)  # 依赖的其他缓存键
+    dependents: set[str] = field(default_factory=set)  # 依赖此键的其他缓存键
 
     def is_expired(self, now: float | None = None) -> bool:
         """是否已过期。"""
@@ -428,21 +430,28 @@ class UnifiedCache(Generic[T]):
 
             return entry.value
 
-    def set(self, key: str, value: T, ttl: float | None = None) -> None:
+    def set(self, key: str, value: T, ttl: float | None = None, absolute_ttl: float | None = None) -> None:
         """写入缓存。
 
         Args:
             key: 缓存键
             value: 缓存值
-            ttl: TTL（秒，None = 使用 default_ttl）
+            ttl: 相对 TTL（秒，None = 使用 default_ttl）
+            absolute_ttl: 绝对 TTL（时间戳，None = 使用 ttl 或 default_ttl）
         """
         with self._lock:
             now = time.monotonic()
             size = self._size_estimator(value)
 
-            # 确定过期时间
-            ttl_seconds = ttl if ttl is not None else self.default_ttl
-            expires_at = now + ttl_seconds if ttl_seconds is not None else None
+            # 确定过期时间：优先使用 absolute_ttl，其次 ttl，最后 default_ttl
+            if absolute_ttl is not None:
+                expires_at = absolute_ttl
+            elif ttl is not None:
+                expires_at = now + ttl
+            elif self.default_ttl is not None:
+                expires_at = now + self.default_ttl
+            else:
+                expires_at = None
 
             # 删除旧条目（如存在）
             old_entry = self._backend.get(key)
@@ -471,7 +480,7 @@ class UnifiedCache(Generic[T]):
             self._evict_to_budget()
 
     def invalidate(self, key: str) -> bool:
-        """使某个键失效（删除）。
+        """使某个键失效（删除），并级联失效依赖此键的所有缓存。
 
         Args:
             key: 缓存键
@@ -482,10 +491,43 @@ class UnifiedCache(Generic[T]):
         with self._lock:
             entry = self._backend.get(key)
             if entry:
+                # 级联失效依赖此键的缓存
+                for dependent_key in entry.dependents.copy():
+                    self.invalidate(dependent_key)
+
+                # 从依赖项中移除自身
+                for dep_key in entry.dependencies:
+                    dep_entry = self._backend.get(dep_key)
+                    if dep_entry:
+                        dep_entry.dependents.discard(key)
+
                 self._backend.delete(key)
                 self._stats.size_bytes -= entry.size_bytes
                 self._stats.entry_count -= 1
                 self._stats.deletes += 1
+                return True
+            return False
+
+    def add_dependency(self, key: str, depends_on: str) -> bool:
+        """添加依赖关系：key 依赖 depends_on。
+
+        Args:
+            key: 缓存键
+            depends_on: 依赖的缓存键
+
+        Returns:
+            是否成功添加依赖
+        """
+        with self._lock:
+            entry = self._backend.get(key)
+            dep_entry = self._backend.get(depends_on)
+
+            if entry and dep_entry:
+                entry.dependencies.add(depends_on)
+                dep_entry.dependents.add(key)
+                # 更新后端
+                self._backend.set(entry)
+                self._backend.set(dep_entry)
                 return True
             return False
 

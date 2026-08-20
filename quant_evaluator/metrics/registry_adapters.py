@@ -8,7 +8,9 @@ import numpy as np
 
 from quant_evaluator.contracts.factor_batch import FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
+from quant_evaluator.metrics.ic import compute_daily_ic, compute_mean_ic
 from quant_evaluator.metrics.ic_summary import compute_icir
+from quant_evaluator.metrics.quality import compute_coverage_per_factor
 from quant_evaluator.metrics.quantile import compute_quantile_returns_fast
 from quant_evaluator.metrics.robustness import (
     compute_block_bootstrap_ci,
@@ -86,7 +88,11 @@ def compute_turnover_value(
     """Return mean cross-sectional turnover per factor.
 
     Ranks are used as proxy weights so the value is well defined for a raw
-    factor batch without a portfolio construction step.
+    factor batch without a portfolio construction step. Weights are
+    average-tie ranks (``scipy.stats.rankdata(method="average")``)
+    normalized to sum 1 per row, so the value is universe-size invariant
+    and conforms to the canonical turnover definition in
+    ``metrics/turnover.py``.
     """
     values = np.asarray(factor_batch.values, dtype=np.float64)
     if values.ndim != 3:
@@ -95,17 +101,22 @@ def compute_turnover_value(
     result = np.full(n_factors, np.nan, dtype=np.float64)
     for f in range(n_factors):
         series = values[:, :, f]
-        # Cross-sectional rank weights in [0, 1]; NaN positions stay NaN so
-        # turnover is only measured over jointly finite neighbours.
+        # Cross-sectional average-tie rank weights (scipy rankdata,
+        # method="average"), normalized to sum 1 over the finite assets of
+        # each row: universe-size invariant and consistent with the canonical
+        # turnover definition (see metrics/turnover.py module docstring).
+        # NaN positions stay NaN so turnover is only measured over jointly
+        # finite neighbours.
+        from scipy.stats import rankdata
+
         ranks = np.full_like(series, np.nan)
         for t in range(series.shape[0]):
             row = series[t]
             finite = np.isfinite(row)
             if finite.sum() < 2:
                 continue
-            ranks[t, finite] = np.argsort(np.argsort(row[finite])) / (
-                finite.sum() - 1
-            )
+            ranks_f = rankdata(row[finite], method="average")
+            ranks[t, finite] = ranks_f / np.sum(ranks_f)
         if series.shape[0] < 2:
             continue
         turnover_series = compute_turnover_series(ranks)
@@ -212,3 +223,149 @@ def compute_factor_turnover_rate_value(
         means = np.nanmean(turnover_series, axis=0)
     valid_counts = np.sum(np.isfinite(turnover_series), axis=0)
     return np.where(valid_counts >= min_periods, means, np.nan)
+
+
+# ---------------------------------------------------------------------------
+# QE-METRIC-P0-01..04 additions (coverage semantics, canonical IC namespace,
+# metric artifacts). Purely additive: append-only block.
+# ---------------------------------------------------------------------------
+
+def compute_coverage_value(
+    factor_batch: FactorBatch,
+    label_bundle: LabelBundle,
+    min_assets: int = 10,
+) -> np.ndarray:
+    """Return the coverage fraction per factor, shape (F,).
+
+    Uses :func:`quant_evaluator.metrics.quality.compute_coverage_per_factor`
+    (the single truth for coverage semantics): no aggregation across factor
+    columns, and ``min_assets`` is honoured for day-level diagnostics.
+    """
+    report = compute_coverage_per_factor(factor_batch, label_bundle, min_assets=min_assets)
+    return np.asarray(
+        [report[factor_id]["coverage"] for factor_id in factor_batch.factor_ids],
+        dtype=np.float64,
+    )
+
+
+def compute_pearson_ic_value(
+    factor_batch: FactorBatch,
+    label_bundle: LabelBundle,
+    min_periods: int = 1,
+    min_assets: int = 10,
+) -> np.ndarray:
+    """Return the time-mean daily Pearson IC per factor, shape (F,)."""
+    ic_series, _ = compute_daily_ic(
+        factor_batch, label_bundle, method="pearson", min_assets=min_assets
+    )
+    mean, _ = compute_mean_ic(ic_series, min_periods=min_periods)
+    return mean
+
+
+def compute_rank_ic_value(
+    factor_batch: FactorBatch,
+    label_bundle: LabelBundle,
+    min_periods: int = 1,
+    min_assets: int = 10,
+) -> np.ndarray:
+    """Return the time-mean daily Spearman (rank) IC per factor, shape (F,).
+
+    ``rank_ic`` has exactly ONE meaning in this package: the time-average of
+    daily Spearman rank IC between factor values and labels.
+    """
+    ic_series, _ = compute_daily_ic(
+        factor_batch, label_bundle, method="spearman", min_assets=min_assets
+    )
+    mean, _ = compute_mean_ic(ic_series, min_periods=min_periods)
+    return mean
+
+
+def compute_pearson_ic_series_value(
+    factor_batch: FactorBatch,
+    label_bundle: LabelBundle,
+    min_assets: int = 10,
+) -> np.ndarray:
+    """Return the daily Pearson IC series per factor, shape (T, F)."""
+    ic_series, _ = compute_daily_ic(
+        factor_batch, label_bundle, method="pearson", min_assets=min_assets
+    )
+    return ic_series
+
+
+def compute_rank_ic_series_value(
+    factor_batch: FactorBatch,
+    label_bundle: LabelBundle,
+    min_assets: int = 10,
+) -> np.ndarray:
+    """Return the daily Spearman (rank) IC series per factor, shape (T, F)."""
+    ic_series, _ = compute_daily_ic(
+        factor_batch, label_bundle, method="spearman", min_assets=min_assets
+    )
+    return ic_series
+
+
+def compute_ic_median_value(
+    ic_series: np.ndarray,
+    min_periods: int = 20,
+) -> np.ndarray:
+    """Return the time-median IC per factor, shape (F,)."""
+    import warnings
+
+    valid_periods = np.sum(np.isfinite(ic_series), axis=0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        with np.errstate(invalid="ignore"):
+            medians = np.nanmedian(ic_series, axis=0)
+    medians = np.where(np.isfinite(medians), medians, np.nan)
+    return np.where(valid_periods >= min_periods, medians, np.nan)
+
+
+def compute_hac_pvalue_value(
+    ic_series: np.ndarray,
+    min_periods: int = 30,
+    max_lag: int = 5,
+    kernel: str = "bartlett",
+) -> np.ndarray:
+    """Return the two-sided HAC p-value for mean(IC) != 0 per factor.
+
+    Uses the HAC t-statistic with a Gaussian null approximation; NaN below
+    min_periods (matching the hac_tstat adapter contract).
+    """
+    from scipy import stats as _stats
+
+    t_stat, _ = compute_hac_tstat(ic_series, max_lag=max_lag, kernel=kernel)
+    valid_periods = np.sum(np.isfinite(ic_series), axis=0)
+    with np.errstate(invalid="ignore"):
+        p_values = 2.0 * _stats.norm.sf(np.abs(t_stat))
+    p_values = np.where(np.isfinite(p_values), p_values, np.nan)
+    return np.where(valid_periods >= min_periods, p_values, np.nan)
+
+
+def compute_quantile_returns_full_artifact(
+    factor_batch: FactorBatch,
+    label_bundle: LabelBundle,
+    min_periods: int = 20,
+    n_quantiles: int = 5,
+) -> "VectorMetricArtifact":
+    """Wrap the per-quantile return vector as a VectorMetricArtifact.
+
+    ``quantile_returns_full`` is a VECTOR per factor — shape
+    (n_quantiles, F) — not a scalar; this artifact type says so in the type
+    system instead of lying about dimensionality.
+    """
+    from quant_evaluator.contracts.metric_artifacts import VectorMetricArtifact
+
+    values = compute_quantile_returns_full_value(
+        factor_batch,
+        label_bundle,
+        min_periods=min_periods,
+        n_quantiles=n_quantiles,
+    )
+    return VectorMetricArtifact(
+        metric_id="quantile_returns_full",
+        domain="quantile",
+        artifact_kind="vector",
+        values=np.asarray(values),
+        provenance={"n_quantiles": int(n_quantiles), "min_periods": int(min_periods)},
+        created_from=("factor_batch", "label_bundle"),
+    )

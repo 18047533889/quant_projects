@@ -39,7 +39,7 @@ def test_ts_interval_union_coverage_basic() -> None:
 
     op = _op("ts_interval_union_coverage")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)  # low and high are the same for testing
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -53,7 +53,7 @@ def test_ts_interval_union_coverage_handles_nans() -> None:
 
     op = _op("ts_interval_union_coverage")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)  # low and high are the same for testing
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -67,8 +67,8 @@ def test_ts_interval_union_coverage_deterministic() -> None:
 
     op = _op("ts_interval_union_coverage")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = op.calculate(x, x)  # low and high are the same for testing
+        result2 = op.calculate(x, x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception:
         pass  # Some operators may not be deterministic
@@ -86,7 +86,7 @@ def test_ts_interval_occupancy_entropy_basic() -> None:
 
     op = _op("ts_interval_occupancy_entropy")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)  # low and high are the same for testing
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -100,7 +100,7 @@ def test_ts_interval_occupancy_entropy_handles_nans() -> None:
 
     op = _op("ts_interval_occupancy_entropy")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)  # low and high are the same for testing
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -114,8 +114,8 @@ def test_ts_interval_occupancy_entropy_deterministic() -> None:
 
     op = _op("ts_interval_occupancy_entropy")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = op.calculate(x, x)  # low and high are the same for testing
+        result2 = op.calculate(x, x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception:
         pass  # Some operators may not be deterministic
@@ -133,7 +133,7 @@ def test_ts_interval_occupancy_mode_distance_basic() -> None:
 
     op = _op("ts_interval_occupancy_mode_distance")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x, x)  # x, low, high are the same for testing
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -147,7 +147,7 @@ def test_ts_interval_occupancy_mode_distance_handles_nans() -> None:
 
     op = _op("ts_interval_occupancy_mode_distance")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x, x)  # x, low, high are the same for testing
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -161,8 +161,8 @@ def test_ts_interval_occupancy_mode_distance_deterministic() -> None:
 
     op = _op("ts_interval_occupancy_mode_distance")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = op.calculate(x, x, x)  # x, low, high are the same for testing
+        result2 = op.calculate(x, x, x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception:
         pass  # Some operators may not be deterministic
@@ -180,7 +180,7 @@ def test_ts_interval_nesting_depth_basic() -> None:
 
     op = _op("ts_interval_nesting_depth")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)  # low and high are the same for testing
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -194,7 +194,7 @@ def test_ts_interval_nesting_depth_handles_nans() -> None:
 
     op = _op("ts_interval_nesting_depth")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)  # low and high are the same for testing
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -208,8 +208,8 @@ def test_ts_interval_nesting_depth_deterministic() -> None:
 
     op = _op("ts_interval_nesting_depth")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = op.calculate(x, x)  # low and high are the same for testing
+        result2 = op.calculate(x, x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception:
         pass  # Some operators may not be deterministic
@@ -227,7 +227,7 @@ def test_ts_interval_exploration_efficiency_basic() -> None:
 
     op = _op("ts_interval_exploration_efficiency")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x, x)  # high, low, close are the same for testing
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -241,7 +241,7 @@ def test_ts_interval_exploration_efficiency_handles_nans() -> None:
 
     op = _op("ts_interval_exploration_efficiency")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x, x)  # high, low, close are the same for testing
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -255,8 +255,8 @@ def test_ts_interval_exploration_efficiency_deterministic() -> None:
 
     op = _op("ts_interval_exploration_efficiency")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = op.calculate(x, x, x)  # high, low, close are the same for testing
+        result2 = op.calculate(x, x, x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception:
         pass  # Some operators may not be deterministic

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_market_cycle_0002_acp_gen0_b_tail_s_b614c7ae",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 756,
+  "factor_name": "factor_range_pressure_excess_downside",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w04-20260814-081422-r12",
+  "expression_type": "python",
+  "formula": "range_pressure * (1 - max(down_ratio - 0.5, 0)), where range_pressure = (rolling_sum_60(close-low)-rolling_sum_60(high-close))/rolling_sum_60(high-low), down_ratio = rolling_sum_60(volume*1{ret<0})/rolling_sum_60(volume)",
+  "code": "def factor_range_pressure_excess_downside(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    # primary mechanism: cycle range pressure over 60 days\n    buy_pressure = (close - df_copy[\"low\"]).rolling(60, min_periods=20).sum()\n    sell_pressure = (df_copy[\"high\"] - close).rolling(60, min_periods=20).sum()\n    total_range = (df_copy[\"high\"] - df_copy[\"low\"]).rolling(60, min_periods=20).sum()\n    range_pressure = (buy_pressure - sell_pressure) / total_range.replace(0.0, np.nan)\n    # lightweight modifier: excess downside volume participation above neutral 0.5\n    ret = close.pct_change()\n    down_vol = volume.where(ret < 0, 0.0).rolling(60, min_periods=30).sum()\n    total_vol = volume.rolling(60, min_periods=30).sum().replace(0.0, np.nan)\n    down_ratio = down_vol / total_vol\n    excess_down = (down_ratio - 0.5).clip(lower=0.0, upper=0.5)\n    attenuation = 1.0 - excess_down\n    factor = range_pressure * attenuation\n    df_copy[\"factor_range_pressure_excess_downside\"] = factor\n    return df_copy[\"factor_range_pressure_excess_downside\"]",
+  "description": "Parent strength target: preserve the parent's balanced ICIR/RankICIR and high long-short payoff (ICIR=0.3559, RankICIR=0.3025, long_short_sharpe=5.994). Bottleneck: raw IC=0.0178 and RankIC=0.0170 are held back because the parent attenuates range_pressure by absolute down_ratio even when downside volume is neutral near 0.5, reducing signal strength in normal regimes. This mutation adjusts the modifier to excess downside participation above 0.5: only abnormal downside volume dominance attenuates the signal, while balanced or upside regimes preserve full range-pressure strength. This is a compact direction adjustment of the existing modifier, keeping one core cycle-range-pressure mechanism and one lightweight continuous modifier, with cross-sectional transform none to preserve raw payoff structure.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.016932085945911887,
+    "icir": 0.3451307778696678,
+    "mi": 0.005502480785677832,
+    "rank_ic": 0.01723048908017639,
+    "rank_icir": 0.3010797146538409
+  },
+  "raw_metrics": {
+    "ic": -0.016932085945911887,
+    "icir": -0.3451307778696678,
+    "mi": 0.005502480785677832,
+    "rank_ic": -0.01723048908017639,
+    "rank_icir": -0.3010797146538409
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.777051021066452,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.03599893138236965,
+    "top_quantile_excess_return": 0.024001252694176856,
+    "top_quantile_max_drawdown": -0.017006577590405914,
+    "top_quantile_turnover": 0.134112120323771
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:10:36.462914+00:00"
+}

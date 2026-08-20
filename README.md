@@ -2,9 +2,8 @@
 
 A 股 / 美股量化因子研究 monorepo：**data_access 统一读数据** + **factor_engine 计算因子** + **COS Parquet 镜像**。
 
-> **总使用文档（从这里开始）→ [docs/量化平台使用总览.md](docs/量化平台使用总览.md)**
-
-详细目录说明见 [STRUCTURE.md](STRUCTURE.md)。
+> **总使用文档（从这里开始）→ [docs/量化平台使用总览.md](docs/量化平台使用总览.md)**  
+> **Agent loop 控制面 → [loop/README.md](loop/README.md)**
 
 ## 路径约定
 

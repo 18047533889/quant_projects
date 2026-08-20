@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_alpha_range_vol_gen0_001_g1_crossover_alpha_rang_d8876c31",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 567,
+  "factor_name": "factor_vwap_sma_compression_volume_persistence_short_persistence",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260813-044118-r2",
+  "expression_type": "python",
+  "formula": "compression = 1/(1+CV(norm_true_range,20)); vwap_sma_div=(VWAP20-SMA20)/close; persistence=corr(vol_ratio, lag(vol_ratio),20); weight=0.5+0.5*clip(persistence,-1,1); factor=vwap_sma_div*compression*weight",
+  "code": "def factor_vwap_sma_compression_volume_persistence_short_persistence(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    volume = df_copy[\"volume\"]\n    prev_close = close.shift(1)\n    tr = pd.concat([(high - low),\n                    (high - prev_close).abs(),\n                    (low - prev_close).abs()], axis=1).max(axis=1)\n    norm_tr = tr / close.replace(0, np.nan)\n    mean_tr = norm_tr.rolling(20, min_periods=20).mean()\n    std_tr = norm_tr.rolling(20, min_periods=20).std(ddof=1)\n    cv_tr = std_tr / mean_tr.replace(0, np.nan)\n    compression = 1.0 / (1.0 + cv_tr)\n    vwap = (close * volume).rolling(20, min_periods=20).sum() / volume.rolling(20, min_periods=20).sum().replace(0, np.nan)\n    sma = close.rolling(20, min_periods=20).mean()\n    div = (vwap - sma) / close.replace(0, np.nan)\n    med_volume = volume.rolling(20, min_periods=20).median()\n    vol_ratio = volume / med_volume.replace(0, np.nan)\n    lag_vol_ratio = vol_ratio.shift(1)\n    persistence = vol_ratio.rolling(20, min_periods=20).corr(lag_vol_ratio).fillna(0.0)\n    weight = 0.5 + 0.5 * np.clip(persistence, -1.0, 1.0)\n    factor = div * compression * weight\n    df_copy[\"factor_vwap_sma_compression_volume_persistence_short_persistence\"] = factor\n    return df_copy[\"factor_vwap_sma_compression_volume_persistence_short_persistence\"]",
+  "description": "Mutation preserves the parent's core mechanism: VWAP-SMA divergence attenuated by range-based volatility compression and a bounded volume-persistence weight. The only change is reducing the rolling correlation window for volume persistence from 30 to 20 bars, aligning it with the compression and volume median windows. This reduces lag in the persistence gate while keeping the weight bounded between 0.5 and 1.0, preserving sign continuity and targeting responsiveness without altering the economic interpretation. Cross-sectional transform remains none to retain the raw payoff structure.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.027641499392988243,
+    "icir": 0.40334953779653726,
+    "mi": 0.017636654397914953,
+    "rank_ic": 0.05121438907213124,
+    "rank_icir": 0.8177324604061873
+  },
+  "raw_metrics": {
+    "ic": -0.027641499392988243,
+    "icir": -0.40334953779653726,
+    "mi": 0.017636654397914953,
+    "rank_ic": -0.05121438907213124,
+    "rank_icir": -0.8177324604061873
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.9422581433753745,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.07068645222436376,
+    "top_quantile_excess_return": 0.049710774365116395,
+    "top_quantile_max_drawdown": -0.020446399091857748,
+    "top_quantile_turnover": 0.15510375635163398
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:50:28.972328+00:00"
+}

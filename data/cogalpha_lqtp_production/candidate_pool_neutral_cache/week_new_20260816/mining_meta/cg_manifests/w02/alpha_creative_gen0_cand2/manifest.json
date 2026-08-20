@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "alpha_creative_gen0_cand2",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 333,
+  "factor_name": "factor_volume_skew_range_tension",
+  "domain_agent": "alpha-creative",
+  "run_id": "fleet-w02-20260813-150507-r4",
+  "expression_type": "python",
+  "formula": "tanh((high-low)/close * 20) * rolling_skew(volume,20)",
+  "code": "def factor_volume_skew_range_tension(df):\n    \"\"\"Nonlinear fusion of volume skewness and normalized intraday range.\"\"\"\n    df_copy = df.copy()\n    range_ratio = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"]\n    range_ratio = range_ratio.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    vol_skew = df_copy[\"volume\"].rolling(20, min_periods=5).skew()\n    vol_skew = vol_skew.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    range_nl = np.tanh(range_ratio * 20.0)\n    factor = range_nl * vol_skew\n    df_copy[\"factor_volume_skew_range_tension\"] = factor\n    return df_copy[\"factor_volume_skew_range_tension\"]",
+  "description": "Rolling skewness of volume captures asymmetric trading activity: positive skew means occasional large volume spikes amid quiet baseline, often linked to information arrivals or liquidity shocks. Multiplying by tanh of normalized high-low range creates a nonlinear feature that amplifies volume distribution asymmetry when intraday price range is wide. This raw signal should survive industry/size neutralization by focusing on idiosyncratic volume and price tension.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.010791672963356591,
+    "icir": 0.2759081259336511,
+    "mi": 0.010666108579421518,
+    "rank_ic": 0.025097085268284035,
+    "rank_icir": 0.7439519089600898
+  },
+  "raw_metrics": {
+    "ic": -0.010791672963356591,
+    "icir": -0.2759081259336511,
+    "mi": 0.010666108579421518,
+    "rank_ic": -0.025097085268284035,
+    "rank_icir": -0.7439519089600898
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 10.58682722556424,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.2938524705795271,
+    "top_quantile_excess_return": 3.4258968658605493,
+    "top_quantile_max_drawdown": -0.21605253587570328,
+    "top_quantile_turnover": 0.3264512669244763
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:27:23.577323+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_range_vol_vol_of_vol_mean_reversion_agentcreativ_6ddb501d",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 286,
+  "factor_name": "factor_range_vol_of_vol_robust_mad_median",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w01-20260813-014015-r1",
+  "expression_type": "python",
+  "formula": "sign(-(mad20(high-low)/median60(high-low))) * sqrt(abs(-(mad20(high-low)/median60(high-low))))",
+  "code": "def factor_range_vol_of_vol_robust_mad_median(df):\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    mean_range_20 = range_.rolling(20, min_periods=10).mean()\n    abs_dev = (range_ - mean_range_20).abs()\n    mad_range = abs_dev.rolling(20, min_periods=10).mean()\n    median_range = range_.rolling(60, min_periods=20).median()\n    ratio = mad_range / median_range.replace(0.0, np.nan)\n    factor = np.sign(-ratio) * np.sqrt(np.abs(-ratio))\n    df_copy[\"factor_range_vol_of_vol_robust_mad_median\"] = factor\n    return df_copy[\"factor_range_vol_of_vol_robust_mad_median\"]",
+  "description": "Preserves the core range vol-of-vol mean-reversion mechanism: high volatility of daily range relative to its typical level predicts lower forward returns. Mutates the parent by replacing the trailing 20-day standard deviation with a more robust trailing 20-day mean absolute deviation and the trailing 60-day mean denominator with a trailing 60-day median. The signed square-root compression is retained as the only lightweight modifier. This specifically targets the parent's failed top-quantile payoff thickness by reducing the influence of outlier wide-range days in both numerator and denominator, while keeping the stable monotonic ranking and RankICIR of the raw signal. Cross-sectional transform remains none to preserve the raw payoff mechanism.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.015517660045848602,
+    "icir": 0.23917648193795576,
+    "mi": 0.004993912625888441,
+    "rank_ic": 0.029759032227427474,
+    "rank_icir": 0.5658536100933992
+  },
+  "raw_metrics": {
+    "ic": 0.015517660045848602,
+    "icir": 0.23917648193795576,
+    "mi": 0.004993912625888441,
+    "rank_ic": 0.029759032227427474,
+    "rank_icir": 0.5658536100933992
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.076559750158483,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.005971492127246902,
+    "top_quantile_excess_return": 0.03460667867535272,
+    "top_quantile_max_drawdown": -0.08911141830885805,
+    "top_quantile_turnover": 0.16487259195828233
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:47:23.150271+00:00"
+}

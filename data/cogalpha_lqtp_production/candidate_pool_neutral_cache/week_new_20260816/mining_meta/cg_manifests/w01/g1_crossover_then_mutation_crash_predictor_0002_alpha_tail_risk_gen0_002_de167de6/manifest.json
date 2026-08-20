@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_then_mutation_crash_predictor_0002_alpha_tail_risk_gen0_002_de167de6",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 323,
+  "factor_name": "factor_volume_beta_ewm_tail_gated",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w01-20260813-111511-r3",
+  "expression_type": "python",
+  "formula": "-ewm_beta(daily_ret, log_volume_change, span=20) * (0.5 + 0.5 * downside_var_ratio(60))",
+  "code": "def factor_volume_beta_ewm_tail_gated(df):\n    \"\"\"Crash-predictor liquidity beta with recursive smoothing and tail fragility scaling.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    log_vol = np.log(df_copy[\"volume\"].clip(lower=1.0))\n    vol_change = log_vol.diff()\n    span = 20\n    cov = ret.ewm(span=span, min_periods=span).cov(vol_change)\n    var_vol = vol_change.ewm(span=span, min_periods=span).var()\n    beta = cov / var_vol.replace(0.0, np.nan)\n    downside_ret = ret.clip(upper=0.0)\n    downside_var = downside_ret.pow(2).rolling(60, min_periods=60).sum()\n    total_var = ret.pow(2).rolling(60, min_periods=60).sum()\n    downside_ratio = downside_var / total_var.replace(0.0, np.nan)\n    downside_ratio = downside_ratio.replace([np.inf, -np.inf], np.nan).clip(0.0, 1.0)\n    weight = 0.5 + 0.5 * downside_ratio.fillna(0.5)\n    factor = -beta * weight\n    factor.name = \"factor_volume_beta_ewm_tail_gated\"\n    return factor",
+  "description": "Mutates parent by replacing the fixed 20-day rolling beta with an exponentially weighted moving covariance (EWM, span=20) to reduce endpoint noise and improve stability while preserving the crash-predictor economic mechanism: a negative beta of returns on log volume changes indicates distributional selling, negated so higher values signal fragility. The lightweight downside variance ratio weight is retained unchanged to amplify the signal during concentrated downside regimes and attenuate it otherwise. Parent strength target: RankICIR/payoff monotonicity from the crash-predictor lineage; bottleneck targeted: ICIR/RankICIR stability through smoother beta estimation.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0173578754613843,
+    "icir": 0.24554501931729378,
+    "mi": 0.017913856117345972,
+    "rank_ic": 0.045635227939241504,
+    "rank_icir": 0.6913154440985736
+  },
+  "raw_metrics": {
+    "ic": 0.0173578754613843,
+    "icir": 0.24554501931729378,
+    "mi": 0.017913856117345972,
+    "rank_ic": 0.045635227939241504,
+    "rank_icir": 0.6913154440985736
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.496238291412487,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.061824012450150345,
+    "top_quantile_excess_return": 0.4085370910115991,
+    "top_quantile_max_drawdown": -0.13896578682919203,
+    "top_quantile_turnover": 0.18414325594366562
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:54:20.994574+00:00"
+}

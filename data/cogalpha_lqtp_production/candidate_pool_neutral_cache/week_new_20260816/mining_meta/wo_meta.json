@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "output_timestamp": "20260814T153353Z",
+    "created_at": "2026-08-14 15:50:44.938299+00:00",
+    "incremental": true,
+    "analysis_contract": {
+      "rank_ic": {
+        "metric": "mean daily cross-sectional Spearman",
+        "absolute_gt": 0.02,
+        "test_start": "2022-01-04 00:00:00",
+        "test_end": "2023-12-29 00:00:00"
+      },
+      "forward_return": {
+        "price": "post-adjusted VWAP (Vwap * Factor)",
+        "entry_offset": 1,
+        "exit_offset": 2
+      },
+      "correlation": {
+        "metric": "absolute mean daily cross-sectional Spearman",
+        "absolute_max": 0.7,
+        "existing_weekly_outputs_priority": true,
+        "new_candidate_order": "absolute RankIC desc, algorithm, campaign timestamp, factor id"
+      },
+      "backtest": {
+        "vectorbt_execution_mode": "accurate",
+        "price_type": "vwap_adj"
+      },
+      "long_short": {
+        "groups": 10,
+        "sharpe_annualization": "sqrt(252)"
+      }
+    }
+  },
+  "summary": {
+    "selected": 0,
+    "algorithms": {
+      "factorminer": {
+        "produced": 15,
+        "rank_ic_selected": 0,
+        "final_selected": 0,
+        "final_ratio_of_produced": 0.0
+      }
+    }
+  },
+  "factors": []
+}

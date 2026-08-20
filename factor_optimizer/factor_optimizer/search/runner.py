@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from math import isfinite
 from types import MappingProxyType
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional
 
 from factor_optimizer.capabilities import ExecutionMode, require_production_capability
 from factor_optimizer.contracts.search_budget import BudgetTracker, SearchBudget
@@ -19,6 +19,7 @@ from factor_optimizer.contracts.splits import (
     validate_split_plan,
 )
 from factor_optimizer.search.multifidelity import FidelityTier, MultiFidelityScheduler
+from factor_optimizer.search.plateau import PlateauConfig, PlateauDetector
 
 
 @dataclass
@@ -40,6 +41,10 @@ class SearchConfig:
     # require_evaluation_protocol=False (deprecated escape hatch, research
     # mode only; always rejected under PRODUCTION).
     require_evaluation_protocol: bool = True
+    # Direction of the search objective. "maximize" (default) keeps the
+    # historical `score > best` incumbent rule; "minimize" inverts it
+    # (strictly lower score wins, e.g. loss/error objectives).
+    objective_direction: Literal["maximize", "minimize"] = "maximize"
 
     def __post_init__(self):
         if isinstance(self.execution_mode, str):
@@ -63,6 +68,10 @@ class SearchConfig:
             not isfinite(self.evaluation_cost_units) or self.evaluation_cost_units < 0
         ):
             raise ValueError("evaluation_cost_units must be finite and >= 0")
+        if self.objective_direction not in ("maximize", "minimize"):
+            raise ValueError(
+                "objective_direction must be 'maximize' or 'minimize'"
+            )
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize search configuration."""
@@ -75,6 +84,7 @@ class SearchConfig:
             "evaluation_cost_units": self.evaluation_cost_units,
             "execution_mode": self.execution_mode.value,
             "require_evaluation_protocol": self.require_evaluation_protocol,
+            "objective_direction": self.objective_direction,
         }
 
     @classmethod
@@ -157,7 +167,9 @@ class SearchSession:
             finite = False
         if not finite:
             raise ValueError("best score must be a finite non-boolean number")
-        if self.best_score is None or score > self.best_score:
+        if self.best_score is None or _is_improvement(
+            score, self.best_score, self.config.objective_direction
+        ):
             self.best_score = score
             self.best_trial_id = trial_id
             return True
@@ -617,6 +629,15 @@ class SearchSession:
         return session
 
 
+def _is_improvement(
+    score: float, best_score: float, direction: str
+) -> bool:
+    """Strict improvement under the session's objective direction."""
+    if direction == "minimize":
+        return score < best_score
+    return score > best_score
+
+
 def _sealed_test_disjoint(search_plan: SplitPlan, sealed_plan: SplitPlan) -> bool:
     """Check the sealed test segment is disjoint from all search-time data."""
     try:
@@ -731,6 +752,8 @@ class SearchRunner:
         self.evaluation_fn = evaluation_fn
         self.plateau_detector = plateau_detector
         self.trial_validator = trial_validator
+        # Lazily-built default PlateauDetector (package semantics).
+        self._default_plateau_detector: Optional[PlateauDetector] = None
         if isinstance(evaluation_fn, EvaluationProtocol):
             # Record the search-time data boundary so freeze_for_sealed_test
             # can reject sealed plans that overlap search data.
@@ -963,17 +986,25 @@ class SearchRunner:
         return {"is_legal": not errors, "errors": errors}
 
     def _check_plateau(self, recent_scores: List[float]) -> bool:
-        """Check if search has plateaued."""
+        """Check if search has plateaued.
+
+        Canonical semantics: delegate to the package ``PlateauDetector``
+        (split-half comparison) with this config's window/threshold mapped
+        onto ``PlateauConfig``. The package detector is now the single
+        source of truth; the pre-duplication max/min window heuristic no
+        longer runs here.
+        """
         if len(recent_scores) < self.config.plateau_window:
             return False
         if self.plateau_detector is not None:
             return self.plateau_detector(recent_scores)
         if not recent_scores:
             return False
-
-        max_score = max(recent_scores)
-        min_score = min(recent_scores)
-        if max_score == 0:
-            return min_score == 0
-        relative_improvement = (max_score - min_score) / abs(max_score)
-        return relative_improvement < self.config.plateau_threshold
+        if self._default_plateau_detector is None:
+            self._default_plateau_detector = PlateauDetector(
+                PlateauConfig(
+                    window_size=max(self.config.plateau_window, 2),
+                    min_relative_improvement=self.config.plateau_threshold,
+                )
+            )
+        return self._default_plateau_detector.is_plateau(recent_scores)

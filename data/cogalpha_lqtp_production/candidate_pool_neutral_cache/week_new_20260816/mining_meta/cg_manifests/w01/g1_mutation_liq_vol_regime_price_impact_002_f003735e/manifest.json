@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_liq_vol_regime_price_impact_002_f003735e",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 319,
+  "factor_name": "factor_vol_regime_log_price_impact",
+  "domain_agent": "alpha-liquidity",
+  "run_id": "fleet-w01-20260813-111511-r3",
+  "expression_type": "python",
+  "formula": "rolling_avg(log1p(|daily_return|) on high-volume days, 20) - rolling_avg(log1p(|daily_return|) on low-volume days, 20); missing category averages filled with 0",
+  "code": "def factor_vol_regime_log_price_impact(df):\n    \"\"\"Conditional price impact with log-compressed absolute returns: difference in average log absolute returns between high-volume and low-volume days.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    log_abs_ret = np.log1p(ret.abs())\n    is_high_vol, is_low_vol, _ = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    high_sum = (log_abs_ret * is_high_vol).rolling(20, min_periods=1).sum()\n    high_cnt = is_high_vol.rolling(20, min_periods=1).sum()\n    low_sum = (log_abs_ret * is_low_vol).rolling(20, min_periods=1).sum()\n    low_cnt = is_low_vol.rolling(20, min_periods=1).sum()\n    avg_high = (high_sum / high_cnt.replace(0, np.nan)).fillna(0.0)\n    avg_low = (low_sum / low_cnt.replace(0, np.nan)).fillna(0.0)\n    factor = avg_high - avg_low\n    df_copy[\"factor_vol_regime_log_price_impact\"] = factor\n    return df_copy[\"factor_vol_regime_log_price_impact\"]\n",
+  "description": "Mutated from parent liq_vol_regime_price_impact_002: preserves the core conditional price impact mechanism (contrast of average absolute returns between high-volume and low-volume days) but compresses absolute returns via log1p to reduce the influence of outlier days. This targets the parent's weaker IC (0.0107) and MI (0.0137) while preserving stable RankICIR (0.5228) and monotonic payoff (long_short_sharpe 5.035, monotonicity 1.0). Log compression smooths extreme price moves, improving robustness without changing the economic interpretation of liquidity stress.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.010743090226767553,
+    "icir": 0.2542878292046419,
+    "mi": 0.013891487087683174,
+    "rank_ic": 0.023757921552086794,
+    "rank_icir": 0.5208159569514083
+  },
+  "raw_metrics": {
+    "ic": -0.010743090226767553,
+    "icir": -0.2542878292046419,
+    "mi": 0.013891487087683174,
+    "rank_ic": -0.023757921552086794,
+    "rank_icir": -0.5208159569514083
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.013984149849617,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.037166031812928546,
+    "top_quantile_excess_return": 0.23507590045102034,
+    "top_quantile_max_drawdown": -0.1773278925701517,
+    "top_quantile_turnover": 0.1570210657216748
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:53:30.875444+00:00"
+}

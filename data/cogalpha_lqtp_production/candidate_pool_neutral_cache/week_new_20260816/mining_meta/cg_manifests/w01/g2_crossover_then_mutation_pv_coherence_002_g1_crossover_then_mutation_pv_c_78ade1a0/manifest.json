@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_pv_coherence_002_g1_crossover_then_mutation_pv_c_78ade1a0",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 412,
+  "factor_name": "factor_corr_ret_volrank",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w01-20260814-043935-r7",
+  "expression_type": "python",
+  "formula": "rolling_corr(ts_rank(close.pct_change(), 30), ts_rank(volume / rolling_mean(volume,20) - 1, 30), 30)",
+  "code": "def factor_corr_ret_volrank(df):\n    \"\"\"Rolling correlation between return rank and volume surprise rank.\"\"\"\n    df_copy = df.copy()\n    daily_ret = df_copy['close'].pct_change()\n    vol_mean = df_copy['volume'].rolling(20, min_periods=5).mean()\n    vol_surprise = df_copy['volume'] / vol_mean - 1.0\n    ret_rank = daily_ret.rolling(30, min_periods=20).rank(pct=True)\n    vol_surprise_rank = vol_surprise.rolling(30, min_periods=20).rank(pct=True)\n    corr = ret_rank.rolling(30, min_periods=20).corr(vol_surprise_rank)\n    factor = corr.fillna(0.0)\n    df_copy['factor_corr_ret_volrank'] = factor\n    return df_copy['factor_corr_ret_volrank']",
+  "description": "Preserves the parent's core directional volume coherence mechanism: rolling correlation between signed daily returns and volume surprise captures persistent directional volume confirmation. This mutation replaces the raw return and rolling z-scored volume surprise with their trailing 30-bar percentile ranks before correlation. This robust normalization reduces sensitivity to extreme single-day moves and outliers, making the correlation more stable without adding new feature families. It targets the bottleneck of modest Pearson IC while preserving the parent strength target of high RankICIR and long-short Sharpe. No cross-sectional transform is used to retain raw payoff evidence.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.007250509416175522,
+    "icir": 0.13470519013248033,
+    "mi": 0.008762454565312439,
+    "rank_ic": 0.020232436632442365,
+    "rank_icir": 0.33514042598065835
+  },
+  "raw_metrics": {
+    "ic": -0.007250509416175522,
+    "icir": -0.13470519013248033,
+    "mi": 0.008762454565312439,
+    "rank_ic": -0.020232436632442365,
+    "rank_icir": -0.33514042598065835
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.485887613521525,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.02171108484440465,
+    "top_quantile_excess_return": 0.12837143559041064,
+    "top_quantile_max_drawdown": -0.11089626692277565,
+    "top_quantile_turnover": 0.19405322814484827
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:07:41.705292+00:00"
+}

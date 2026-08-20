@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_pvcoherence_volume_lead_coherence_ge_9deed94a",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 397,
+  "factor_name": "factor_volume_lead_coherence_robust_surprise",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w03-20260814-081141-r8",
+  "expression_type": "python",
+  "formula": "ewm(span=5).mean(rolling(20).corr(close.pct_change(), robust_volume_surprise.shift(1)) - rolling(20).corr(close.pct_change(), robust_volume_surprise))",
+  "code": "def factor_volume_lead_coherence_robust_surprise(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_median = df_copy['volume'].rolling(20, min_periods=10).median()\n    vol_std = df_copy['volume'].rolling(20, min_periods=10).std(ddof=1)\n    vol_surprise = (df_copy['volume'] - vol_median) / vol_std.replace(0.0, np.nan)\n    vol_surprise = vol_surprise.clip(-3.0, 3.0).fillna(0.0)\n    vol_lag1 = vol_surprise.shift(1)\n    lead_corr = ret.rolling(20, min_periods=10).corr(vol_lag1)\n    contemp_corr = ret.rolling(20, min_periods=10).corr(vol_surprise)\n    raw_diff = lead_corr - contemp_corr\n    factor = raw_diff.ewm(span=5, min_periods=1).mean()\n    factor = factor.fillna(0.0)\n    factor.name = 'factor_volume_lead_coherence_robust_surprise'\n    return factor",
+  "description": "Preserves the parent's volume lead-lag coherence mechanism: volume surprises that lead returns more than contemporaneous surprises indicate informed order flow and future continuation. The mutation replaces the volume surprise definition from a ratio to rolling mean with a robust z-score using rolling median and rolling standard deviation, clipped to [-3,3]. This normalization reduces sensitivity to extreme volume outliers and improves the linear and nonlinear association of the lead-lag correlation difference, targeting the parent's weak IC and MI while preserving its strong RankICIR, low turnover, and monotonic payoff profile. Parent strength target: RankICIR=0.4312, RankIC=0.0208, low turnover=0.099, monotonicity=1.0.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.00963821218716098,
+    "icir": 0.22952488680823532,
+    "mi": 0.004636674623959891,
+    "rank_ic": 0.021094676867257738,
+    "rank_icir": 0.4431020125760884
+  },
+  "raw_metrics": {
+    "ic": 0.00963821218716098,
+    "icir": 0.22952488680823532,
+    "mi": 0.004636674623959891,
+    "rank_ic": 0.021094676867257738,
+    "rank_icir": 0.4431020125760884
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.056367009305986,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.1652836839513141,
+    "top_quantile_excess_return": 1.4098059768909095,
+    "top_quantile_max_drawdown": -0.09150178485019211,
+    "top_quantile_turnover": 0.10065497674940731
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:08:17.067445+00:00"
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_pvc_coh_1_a1b2c3d4_g1_crossover_pvc_coh_1_a1b2c3_8fd26a38",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 493,
+  "factor_name": "factor_volume_momentum_volregime_gate",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260806-014529-r35",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_volume_momentum_volregime_gate(df):\n    df_copy = df.copy()\n    momentum = df_copy[\"close\"] / df_copy[\"close\"].shift(20) - 1\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    gate = np.where(is_high_vol > 0, 1.2, np.where(is_low_vol > 0, 0.7, 1.0))\n    df_copy[\"factor_volume_momentum_volregime_gate\"] = momentum * vol_ratio * gate\n    return df_copy[\"factor_volume_momentum_volregime_gate\"]",
+  "description": "Mutation of volume-amplified momentum with compression gate. The parent's range compression gate is replaced by a volume-regime gate using the active alpha_tools.classify_volume_regime. The core mechanism remains volume-amplified momentum: 20-day price momentum multiplied by volume/EMA ratio. The volume-regime gate amplifies signals on high-volume days (1.2x) and dampens on low-volume days (0.7x), filtering noise and focusing on conviction moves. This simplification reduces complexity and targets improved rank stability (RankICIR) by emphasizing trades when volume supports the momentum signal.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03545055280505957,
+    "icir": 0.3271512737083047,
+    "mi": 0.03572792797151525,
+    "rank_ic": 0.05623143600060198,
+    "rank_icir": 0.43853798392344595
+  },
+  "raw_metrics": {
+    "ic": -0.03545055280505957,
+    "icir": -0.3271512737083047,
+    "mi": 0.03572792797151525,
+    "rank_ic": -0.05623143600060198,
+    "rank_icir": -0.43853798392344595
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6,
+    "top_quantile_annualized_excess_return": 0.05417555738696156,
+    "top_quantile_excess_return": 0.03796937166024472,
+    "top_quantile_max_drawdown": -0.037882130891064736,
+    "top_quantile_turnover": 0.25582378793410404
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:42:13.025404+00:00"
+}

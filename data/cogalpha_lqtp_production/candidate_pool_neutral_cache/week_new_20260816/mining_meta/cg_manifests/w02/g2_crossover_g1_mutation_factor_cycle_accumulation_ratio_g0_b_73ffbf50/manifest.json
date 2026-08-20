@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_factor_cycle_accumulation_ratio_g0_b_73ffbf50",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 289,
+  "factor_name": "factor_volume_accumulation_return_weighted_smoothed",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w02-20260813-060516-r2",
+  "expression_type": "python",
+  "formula": "(sum(volume * ret^2 for ret > 0) - sum(volume * ret^2 for ret < 0)) / sum(volume), over 60 days, smoothed 5 days",
+  "code": "def factor_volume_accumulation_return_weighted_smoothed(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    ret = close.pct_change()\n    up_weight = np.where(ret > 0, ret ** 2, 0.0)\n    down_weight = np.where(ret < 0, ret ** 2, 0.0)\n    up_vol_weighted = volume * up_weight\n    down_vol_weighted = volume * down_weight\n    net_weighted = up_vol_weighted.rolling(60, min_periods=20).sum() - down_vol_weighted.rolling(60, min_periods=20).sum()\n    total_vol = volume.rolling(60, min_periods=20).sum()\n    raw_ratio = net_weighted / total_vol.replace(0.0, np.nan)\n    smoothed = raw_ratio.rolling(5, min_periods=1).mean()\n    df_copy['factor_volume_accumulation_return_weighted_smoothed'] = smoothed\n    return df_copy['factor_volume_accumulation_return_weighted_smoothed']\n",
+  "description": "Primary mechanism retains parent1's net volume accumulation ratio (buying vs selling pressure over 60 days) with its positive payoff evidence and monotonicity. Lightweight modifier from parent2 borrows the squared-return weighting idea: volume on large return days is emphasized, reducing noise from small moves. This targets ICIR/RankICIR stability without introducing new feature families. Cross_sectional_transform remains none to preserve raw payoff thickness.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.006018834970730578,
+    "icir": 0.12481340081402777,
+    "mi": 0.013437360258567566,
+    "rank_ic": 0.02281498287194806,
+    "rank_icir": 0.30542573099561
+  },
+  "raw_metrics": {
+    "ic": -0.006018834970730578,
+    "icir": -0.12481340081402777,
+    "mi": 0.013437360258567566,
+    "rank_ic": -0.02281498287194806,
+    "rank_icir": -0.30542573099561
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.057863940587568,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.053700505408553756,
+    "top_quantile_excess_return": 0.3483806294747178,
+    "top_quantile_max_drawdown": -0.11028524536220219,
+    "top_quantile_turnover": 0.0591008948237668
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:21:30.838736+00:00"
+}

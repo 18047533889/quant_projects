@@ -1,0 +1,67 @@
+# R21-P0-10: Ridge / Quantile / OU strict-prior family evidence
+# Writer K — 2026-08-20
+# ---------------------------------------------------------------------------
+git_sha: local-only
+date: 2026-08-20
+ticket: R21-P0-10
+scope: "strict-prior variants for Ridge/Quantile/OU (fit_lag=1, fit_cutoff_offset=1)"
+
+operators:
+  - canonical: ts_ridge_regression_coeff_prior
+    file: cleaned_operators/ts_model/dynamic_regression.py
+    fit_lag: 1
+    timing_contract: explicit  # MODEL_TIMING_CONTRACTS fit_cutoff_offset=1
+    lane: FAST_NATIVE_ALPHA
+    diagnostic_only: false
+
+  - canonical: ts_quantile_regression_coeff_prior
+    file: cleaned_operators/ts_model/dynamic_regression.py
+    fit_lag: 1
+    timing_contract: explicit
+    lane: FAST_NATIVE_ALPHA
+    diagnostic_only: false
+
+  - canonical: ts_mean_reversion_ou_approx_half_life_prior
+    file: cleaned_operators/ts_model/ar_meanrev.py
+    fit_lag: 1
+    timing_contract: explicit  # MODEL_TIMING_CONTRACTS fit_cutoff_offset=1
+    lane: FAST_NATIVE_ALPHA
+    diagnostic_only: false
+
+timing_contracts_verified:
+  - ts_ridge_regression_coeff_prior:
+      model_kind: regression
+      fit_cutoff_offset: 1
+      forecast_horizon: 0
+  - ts_quantile_regression_coeff_prior:
+      model_kind: regression
+      fit_cutoff_offset: 1
+      forecast_horizon: 0
+  - ts_mean_reversion_ou_approx_half_life_prior:
+      model_kind: ar
+      fit_cutoff_offset: 1
+      forecast_horizon: 0
+
+lane_assignments_verified:
+  ts_ridge_regression_coeff_prior: FAST_NATIVE_ALPHA
+  ts_quantile_regression_coeff_prior: FAST_NATIVE_ALPHA
+  ts_mean_reversion_ou_approx_half_life_prior: FAST_NATIVE_ALPHA
+
+tests:
+  file: tests/operators/test_r21_p0_10_strict_prior.py
+  total: 18
+  passed: 18
+  failed: 0
+  skipped: 0
+  run_time_s: 85.58
+  test_categories:
+    - TestPriorLagInvariant (3 tests): Verifies fit_lag=1 excludes current observation
+    - TestParameterSelection (3 tests): Window/q/parameter propagation
+    - TestFamilyCompleteness (9 tests): Timing contracts, lane assignments, registration
+    - TestDeterminism (3 tests): Same input -> same output
+
+limitations:
+  - LOCAL ONLY — no remote/CI run
+  - Serial pytest — no xdist parallelism
+  - Thread env vars set: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1
+  - No data-access / PIT / calendar integration tests (pure operator logic)

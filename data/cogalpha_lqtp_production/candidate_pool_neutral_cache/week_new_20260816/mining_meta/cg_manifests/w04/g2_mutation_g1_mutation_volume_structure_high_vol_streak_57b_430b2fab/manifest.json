@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_volume_structure_high_vol_streak_57b_430b2fab",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 305,
+  "factor_name": "factor_volume_intensity_streak_avg",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260804-191240-r23",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_volume_intensity_streak_avg(df):\n    \"\"\"\n    Average excess volume during high-volume streaks, normalizing for streak length.\n    \"\"\"\n    df_copy = df.copy()\n    vol_ma = df_copy[\"volume\"].rolling(50, min_periods=1).mean()\n    vol_ratio = df_copy[\"volume\"] / vol_ma\n    high_vol = vol_ratio > 1.5\n    excess = (vol_ratio - 1.0).where(high_vol, 0.0)\n    group = (high_vol != high_vol.shift(1)).cumsum()\n    streak_excess = excess.groupby(group).cumsum()\n    streak_count = high_vol.groupby(group).cumsum()\n    avg_excess = (streak_excess / streak_count.replace(0, np.nan)).fillna(0.0)\n    df_copy[\"factor_volume_intensity_streak_avg\"] = avg_excess\n    return df_copy[\"factor_volume_intensity_streak_avg\"]",
+  "description": "Mutates the parent volume intensity streak factor by taking the running average excess volume per day within each streak instead of the cumulative sum. This normalization removes the streak-length bias, making the signal more stationary and comparable across stocks, which should improve linear correlation (IC) and stability (ICIR) while preserving the core mechanism of capturing volume intensity persistence.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.022374398748173017,
+    "icir": 0.3036404703653341,
+    "mi": 0.18566625015650473,
+    "rank_ic": 0.054365671877246516,
+    "rank_icir": 0.7404825928809458
+  },
+  "raw_metrics": {
+    "ic": -0.022374398748173017,
+    "icir": -0.3036404703653341,
+    "mi": 0.18566625015650473,
+    "rank_ic": -0.054365671877246516,
+    "rank_icir": -0.7404825928809458
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.12570123677544887,
+    "top_quantile_excess_return": 0.09698285052000766,
+    "top_quantile_max_drawdown": -0.031342978199043525,
+    "top_quantile_turnover": 0.11097436038912172
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:25:55.657021+00:00"
+}

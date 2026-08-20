@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_alpha_tail_risk_gen0_a_001_pvcoherence_vw_ret_sp_abf9e60b",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 416,
+  "factor_name": "factor_volume_weighted_return_shadow_gated",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w03-20260814-124837-r9",
+  "expression_type": "python",
+  "formula": "rolling_sum(volume*(1+max((lower_shadow-upper_shadow)/range, 0))*return, 20) / rolling_sum(volume*(1+max((lower_shadow-upper_shadow)/range, 0)), 20) - rolling_mean(return, 20)",
+  "code": "def factor_volume_weighted_return_shadow_gated(df):\n    \"\"\"Volume-weighted return spread, emphasizing days with dominant lower shadow.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol = df_copy[\"volume\"]\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    lower_shadow = np.minimum(df_copy[\"open\"], df_copy[\"close\"]) - df_copy[\"low\"]\n    upper_shadow = df_copy[\"high\"] - np.maximum(df_copy[\"open\"], df_copy[\"close\"])\n    lower_dom = (lower_shadow - upper_shadow) / range_.replace(0.0, np.nan)\n    lower_dom = lower_dom.clip(lower=0.0, upper=1.0).fillna(0.0)\n    weight = 1.0 + lower_dom\n    vol_w = vol * weight\n    vw_ret = (ret * vol_w).rolling(20, min_periods=5).sum() / vol_w.rolling(20, min_periods=5).sum().replace(0.0, np.nan)\n    simple_ret = ret.rolling(20, min_periods=5).mean()\n    factor = vw_ret - simple_ret\n    return pd.Series(factor, index=df_copy.index, name=\"factor_volume_weighted_return_shadow_gated\")",
+  "description": "Primary mechanism is the volume-weighted return spread from pvcoherence_vw_ret_spread_gen0_1: comparing volume-weighted to equally weighted returns to measure coherent price-volume flow. Borrow the lower-shadow dominance concept from alpha-tail-risk-gen0-a-001 as a bounded weight on volume: days with a larger lower shadow relative to upper shadow get extra volume weight, emphasizing sessions where intraday order flow shows pronounced lower-wick activity. This modifies the coherence measure without adding a second independent signal, aiming to improve RankIC and payoff by focusing on volume-confirmed lower-shadow moves. Cross-sectional transform is none because the raw signal retains meaning.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.013351515405199313,
+    "icir": 0.24983128011210565,
+    "mi": 0.01289499663791105,
+    "rank_ic": 0.03404871081843457,
+    "rank_icir": 0.6710738215453382
+  },
+  "raw_metrics": {
+    "ic": -0.013351515405199313,
+    "icir": -0.24983128011210565,
+    "mi": 0.01289499663791105,
+    "rank_ic": -0.03404871081843457,
+    "rank_icir": -0.6710738215453382
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.323136562513418,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.07774923192157779,
+    "top_quantile_excess_return": 0.5403595110454991,
+    "top_quantile_max_drawdown": -0.2256908242408956,
+    "top_quantile_turnover": 0.19756659943542304
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:10:57.423689+00:00"
+}

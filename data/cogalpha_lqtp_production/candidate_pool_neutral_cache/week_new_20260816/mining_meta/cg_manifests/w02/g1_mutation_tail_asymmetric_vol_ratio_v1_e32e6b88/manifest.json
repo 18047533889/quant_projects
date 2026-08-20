@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_tail_asymmetric_vol_ratio_v1_e32e6b88",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 335,
+  "factor_name": "factor_tail_asymmetric_vol_ewm",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w02-20260813-150507-r4",
+  "expression_type": "python",
+  "formula": "( ewm_span_60( I(logret<0) * logret^2 ) - ewm_span_60( I(logret>0) * logret^2 ) ) / ( ewm_span_60( I(logret<0) * logret^2 ) + ewm_span_60( I(logret>0) * logret^2 ) )",
+  "code": "def factor_tail_asymmetric_vol_ewm(df):\n    df_copy = df.copy()\n    logret = np.log(df_copy[\"close\"] / df_copy[\"close\"].shift(1))\n    downside_sq = np.where(logret < 0, logret**2, 0.0)\n    upside_sq = np.where(logret > 0, logret**2, 0.0)\n    downs = pd.Series(downside_sq, index=df_copy.index).ewm(span=60, min_periods=20).mean()\n    ups = pd.Series(upside_sq, index=df_copy.index).ewm(span=60, min_periods=20).mean()\n    asym = (downs - ups) / (downs + ups).replace(0.0, np.nan)\n    return asym.rename(\"factor_tail_asymmetric_vol_ewm\")",
+  "description": "Preserves the parent mechanism of downside vs upside realized variance asymmetry as a tail-risk signal. Mutation replaces equal-weight 60-day rolling mean with 60-day exponentially weighted moving average (span=60) to reduce lag and react faster to recent volatility regime shifts while retaining long-term stability. The ratio remains bounded between -1 and 1 when denominator non-zero, focusing on residual downside pressure after industry/size neutralization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.011999350537162091,
+    "icir": 0.15190035349083833,
+    "mi": 0.011512890373820639,
+    "rank_ic": 0.0362780059828923,
+    "rank_icir": 0.44202383408819
+  },
+  "raw_metrics": {
+    "ic": 0.011999350537162091,
+    "icir": 0.15190035349083833,
+    "mi": 0.011512890373820639,
+    "rank_ic": 0.0362780059828923,
+    "rank_icir": 0.44202383408819
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.6903291196976373,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.01909455727032494,
+    "top_quantile_excess_return": 0.11414033689140135,
+    "top_quantile_max_drawdown": -0.11574019876403463,
+    "top_quantile_turnover": 0.10575455808394853
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:27:54.226801+00:00"
+}

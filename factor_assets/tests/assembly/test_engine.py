@@ -5,6 +5,7 @@ from factor_assets.contracts.lifecycle import LifecycleState
 from factor_assets.contracts.lineage import LineageRef
 from factor_assets.contracts.evidence_ref import EvidenceBundleRef
 from factor_assets.selection import SelectionDecision, SelectionReason
+from types import MappingProxyType
 
 
 def make_asset(factor_id, *, frequency="daily", domains=("price",), state=LifecycleState.APPROVED):
@@ -355,6 +356,79 @@ def test_factor_set_split_and_snapshot_refs_flow_from_spec():
     assert result.snapshot_ref == "universe:ashare-v3"
     assert result.split_ref == "split:oos-2024h1"
     assert result.universe_ref == "universe:ashare-v3"
+
+
+def test_explicit_data_snapshot_ref_overrides_universe_fallback():
+    # data_snapshot_ref is explicit provenance: when set, it must not be
+    # aliased to universe_ref.
+    spec = FactorSetSpec(
+        "set-1", "Snapshot", "manual",
+        universe_ref="universe:ashare-v3",
+        data_snapshot_ref="snapshot:2024-08-01T00:00:00Z",
+    )
+    result = FactorSetAssembler().assemble(spec, [make_asset("F1")])
+    assert result.snapshot_ref == "snapshot:2024-08-01T00:00:00Z"
+    assert result.universe_ref == "universe:ashare-v3"
+    # Legacy spec (no data_snapshot_ref) keeps the universe_ref fallback.
+    legacy = FactorSetSpec("set-2", "Legacy", "manual", universe_ref="universe:ashare-v3")
+    assert FactorSetAssembler().assemble(legacy, [make_asset("F1")]).snapshot_ref == "universe:ashare-v3"
+
+
+def test_pareto_front_ranking_uses_dominance_not_recency():
+    # F2 dominates F1 on both objectives (rank_ic and sharpe) despite F1
+    # having the MORE RECENT admission decision — dominance must win over
+    # the timestamp-priority ordering.
+    def decided(factor_id, objectives, timestamp):
+        d = make_decision(factor_id, timestamp=timestamp)
+        object.__setattr__(d, "metadata", MappingProxyType({"objectives": dict(objectives)}))
+        return d
+
+    spec = FactorSetSpec("set-1", "Pareto", "pareto_front", max_factors=1)
+    result = FactorSetAssembler().assemble(
+        spec,
+        [make_asset("F1"), make_asset("F2")],
+        selection_decisions=[
+            decided("F1", {"rank_ic": 0.01, "sharpe": 0.5}, "2024-06-01T00:00:00Z"),
+            decided("F2", {"rank_ic": 0.05, "sharpe": 1.2}, "2024-01-01T00:00:00Z"),
+        ],
+    )
+    assert result.factor_ids == ("F2",)
+
+
+def test_pareto_front_ranking_ignores_partial_objectives():
+    # One decision lacking the objective set makes the objective space
+    # undefined — ranking falls back to recency ordering rather than
+    # scoring a factor on -inf defaults.
+    def decided(factor_id, objectives, timestamp):
+        d = make_decision(factor_id, timestamp=timestamp)
+        object.__setattr__(d, "metadata", MappingProxyType({"objectives": dict(objectives)}))
+        return d
+
+    spec = FactorSetSpec("set-1", "Partial", "pareto_front", max_factors=1)
+    result = FactorSetAssembler().assemble(
+        spec,
+        [make_asset("F1"), make_asset("F2")],
+        selection_decisions=[
+            decided("F1", {}, "2024-06-01T00:00:00Z"),
+            decided("F2", {"rank_ic": 0.05}, "2024-01-01T00:00:00Z"),
+        ],
+    )
+    assert result.factor_ids == ("F1",)
+
+
+def test_pareto_front_ranking_without_objectives_keeps_recency():
+    # Metadata-only decisions (no objectives anywhere): all points are
+    # mutually non-dominated; ordering preserves the previous behaviour.
+    spec = FactorSetSpec("set-1", "NoObj", "pareto_front", max_factors=1)
+    result = FactorSetAssembler().assemble(
+        spec,
+        [make_asset("F1"), make_asset("F2")],
+        selection_decisions=[
+            make_decision("F1", timestamp="2024-01-01T00:00:00Z"),
+            make_decision("F2", timestamp="2024-03-01T00:00:00Z"),
+        ],
+    )
+    assert result.factor_ids == ("F2",)
 
 
 def test_factor_set_artifact_round_trip_from_assembly():

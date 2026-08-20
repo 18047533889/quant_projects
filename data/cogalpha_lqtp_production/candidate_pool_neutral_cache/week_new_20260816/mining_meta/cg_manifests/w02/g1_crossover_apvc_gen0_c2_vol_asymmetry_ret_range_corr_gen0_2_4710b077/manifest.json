@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_apvc_gen0_c2_vol_asymmetry_ret_range_corr_gen0_2_4710b077",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 269,
+  "factor_name": "factor_volume_beta_range_asymmetry_gated",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w02-20260813-014015-r1",
+  "expression_type": "python",
+  "formula": "beta = Cov(ret, dlog(volume), 20) / Var(dlog(volume), 20); weight = 1 + 0.5 * Corr(ret, pct_change(high-low), 20); factor = beta * weight",
+  "code": "def factor_volume_beta_range_asymmetry_gated(df):\n    \"\"\"Volume-confirmed return beta gated by range asymmetry correlation.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    log_volume = np.log(df_copy['volume'].clip(lower=1e-12))\n    dlog_volume = log_volume.diff()\n    cov = ret.rolling(20, min_periods=20).cov(dlog_volume)\n    var_vol = dlog_volume.rolling(20, min_periods=20).var(ddof=1)\n    beta = cov / var_vol.replace(0.0, np.nan)\n    range_ = df_copy['high'] - df_copy['low']\n    range_chg = range_.pct_change()\n    range_chg = range_chg.replace([np.inf, -np.inf], np.nan)\n    corr_range = ret.rolling(20, min_periods=20).corr(range_chg)\n    weight = 1.0 + 0.5 * corr_range\n    factor = beta * weight\n    df_copy['factor_volume_beta_range_asymmetry_gated'] = factor\n    return df_copy['factor_volume_beta_range_asymmetry_gated']",
+  "description": "Preserves the qualified parent's core mechanism: rolling sensitivity of daily returns to volume changes, capturing volume-confirmed accumulation or distribution. Borrows from the secondary parent the idea of range-based volatility asymmetry. Instead of a separate signal, it uses the rolling correlation between returns and high-low range changes as a continuous, bounded reliability weight (0.5 to 1.5). When returns and range changes are positively correlated, volume-confirmed moves are reinforced; when negatively correlated (leverage effect), the beta is dampened. This keeps the raw single-stock signal continuous and interpretable, targeting improved MI and robustness while preserving RankICIR and volume-confirmed beta lineage.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0163916287808934,
+    "icir": 0.22809586519004468,
+    "mi": 0.01813734193120453,
+    "rank_ic": 0.04255390055428109,
+    "rank_icir": 0.6586119907269354
+  },
+  "raw_metrics": {
+    "ic": -0.0163916287808934,
+    "icir": -0.22809586519004468,
+    "mi": 0.01813734193120453,
+    "rank_ic": -0.04255390055428109,
+    "rank_icir": -0.6586119907269354
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.496437874996538,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.07484028723957148,
+    "top_quantile_excess_return": 0.5100239197736609,
+    "top_quantile_max_drawdown": -0.08705253036903948,
+    "top_quantile_turnover": 0.17287224264358875
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:19:16.982620+00:00"
+}

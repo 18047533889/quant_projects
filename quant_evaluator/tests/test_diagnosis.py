@@ -4,6 +4,10 @@ Tests for diagnosis module.
 
 import numpy as np
 
+# Seeded local Generator: tests must not depend on (or perturb) NumPy's
+# global RNG state.
+rng = np.random.default_rng(20260820)
+
 from quant_evaluator.contracts.factor_batch import FactorBatch, AxisRef
 from quant_evaluator.api.requests import FactorDiagnosis
 
@@ -38,7 +42,7 @@ class TestDiagnoseFactor:
         )
 
     def test_diagnose_normal_factor(self):
-        values = np.random.randn(100, 50, 1)
+        values = rng.standard_normal((100, 50, 1))
         batch = self.create_test_batch(values, factor_ids=("test_factor",))
 
         diagnosis = diagnose_factor(batch, factor_idx=0)
@@ -55,7 +59,7 @@ class TestDiagnoseFactor:
         assert diagnosis.mean_value is not None
 
     def test_diagnose_with_nans(self):
-        values = np.random.randn(100, 50, 1)
+        values = rng.standard_normal((100, 50, 1))
         values[0:10, :, 0] = np.nan
         batch = self.create_test_batch(values)
 
@@ -66,7 +70,7 @@ class TestDiagnoseFactor:
         assert diagnosis.num_missing == 500
 
     def test_diagnose_with_infs(self):
-        values = np.random.randn(100, 50, 1)
+        values = rng.standard_normal((100, 50, 1))
         values[0, 0, 0] = np.inf
         values[1, 0, 0] = -np.inf
         batch = self.create_test_batch(values)
@@ -88,7 +92,7 @@ class TestDiagnoseFactor:
         assert diagnosis.mean_value == 5.0
 
     def test_diagnose_with_validity_mask(self):
-        values = np.random.randn(100, 50, 1)
+        values = rng.standard_normal((100, 50, 1))
         validity = np.ones((100, 50, 1), dtype=bool)
         validity[0:20, :, 0] = False
 
@@ -124,7 +128,7 @@ class TestDiagnoseFactor:
         assert diagnosis.mean_value is None
 
     def test_diagnose_high_coverage(self):
-        values = np.random.randn(100, 50, 1)
+        values = rng.standard_normal((100, 50, 1))
         values[0:5, 0:10, 0] = np.nan  # 50 missing out of 5000
         batch = self.create_test_batch(values)
 
@@ -133,7 +137,7 @@ class TestDiagnoseFactor:
         assert diagnosis.coverage == 0.99
 
     def test_diagnose_multiple_factors(self):
-        values = np.random.randn(100, 50, 3)
+        values = rng.standard_normal((100, 50, 3))
         batch = self.create_test_batch(
             values,
             factor_ids=("factor_a", "factor_b", "factor_c"),
@@ -150,7 +154,7 @@ class TestDiagnoseFactor:
             assert isinstance(diag, FactorDiagnosis)
 
     def test_diagnose_factor_idx_out_of_range(self):
-        values = np.random.randn(100, 50, 2)
+        values = rng.standard_normal((100, 50, 2))
         batch = self.create_test_batch(values)
 
         try:
@@ -160,7 +164,7 @@ class TestDiagnoseFactor:
             assert "out of range" in str(e)
 
     def test_diagnose_warnings_included(self):
-        values = np.random.randn(100, 50, 1)
+        values = rng.standard_normal((100, 50, 1))
         values[0:60, :, 0] = np.nan  # Low coverage
         batch = self.create_test_batch(values)
 
@@ -299,7 +303,7 @@ class TestWarningSystem:
     def test_check_outliers_with_extremes(self):
         ws = WarningSystem(outlier_z_threshold=3.0)
 
-        values = np.random.randn(100, 50, 1)
+        values = rng.standard_normal((100, 50, 1))
         values[0, 0, 0] = 100.0  # Extreme outlier
 
         time_axis = AxisRef(name="time", dtype="datetime64", size=100)
@@ -321,7 +325,7 @@ class TestWarningSystem:
     def test_check_outliers_none(self):
         ws = WarningSystem()
 
-        values = np.random.randn(100, 50, 1) * 0.1
+        values = rng.standard_normal((100, 50, 1)) * 0.1
 
         time_axis = AxisRef(name="time", dtype="datetime64", size=100)
         asset_axis = AxisRef(name="asset", dtype="int64", size=50)
@@ -354,7 +358,7 @@ class TestWarningSystem:
     def test_diagnose_factor_with_batch(self):
         ws = WarningSystem(outlier_z_threshold=3.0)
 
-        values = np.random.randn(100, 50, 1)
+        values = rng.standard_normal((100, 50, 1))
         values[0, 0, 0] = 50.0
 
         time_axis = AxisRef(name="time", dtype="datetime64", size=100)

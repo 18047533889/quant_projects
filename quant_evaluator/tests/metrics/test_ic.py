@@ -325,3 +325,31 @@ class TestMeanIC:
         # Only 3 valid periods: 0.5, 0.6, 0.4
         expected_mean = (0.5 + 0.6 + 0.4) / 3
         assert np.isclose(mean_ic[0], expected_mean, atol=1e-10)
+
+    def test_inf_in_series_returns_nan(self):
+        """Inf values must not leak an infinite mean through nanmean.
+
+        nanmean ignores NaN but propagates ±inf; a non-finite mean is
+        invalid and must be reported as NaN."""
+        ic_series = np.array([[0.5], [np.inf], [0.6], [0.4], [0.55]])
+        mean_ic, ic_std = compute_mean_ic(ic_series, min_periods=3)
+
+        assert np.isnan(mean_ic[0])
+        assert np.isnan(ic_std[0])
+
+    def test_boolean_series_raises(self):
+        """Boolean IC series must raise ValueError, not silently coerce.
+
+        True/False would become 1.0/0.0 and a validity mask would then
+        yield a plausible-looking mean IC."""
+        ic_series = np.array([[True], [False], [True], [True], [False]] * 5)
+
+        with pytest.raises(ValueError, match="boolean"):
+            compute_mean_ic(ic_series, min_periods=3)
+
+    def test_object_series_with_python_bools_raises(self):
+        """Object-dtype series containing Python bools must also raise."""
+        ic_series = np.array([[True], [0.5], [False], [0.6], [0.4]], dtype=object)
+
+        with pytest.raises(ValueError, match="numeric"):
+            compute_mean_ic(ic_series, min_periods=3)

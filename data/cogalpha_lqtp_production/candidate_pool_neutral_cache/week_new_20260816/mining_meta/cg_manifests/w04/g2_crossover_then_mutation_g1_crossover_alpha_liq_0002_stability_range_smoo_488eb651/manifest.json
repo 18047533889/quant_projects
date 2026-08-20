@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_alpha_liq_0002_stability_range_smoo_488eb651",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 634,
+  "factor_name": "factor_volume_instability_range_gate_unewm",
+  "domain_agent": "alpha-stability",
+  "run_id": "fleet-w04-20260813-161708-r6",
+  "expression_type": "python",
+  "formula": "cv_volume * (1 + 0.5*tanh(-std_20((high-low)/close)))",
+  "code": "def factor_volume_instability_range_gate_unewm(df):\n    df_copy = df.copy()\n    vol_mean = df_copy['volume'].rolling(20, min_periods=20).mean()\n    vol_std = df_copy['volume'].rolling(20, min_periods=20).std(ddof=1)\n    cv = vol_std / vol_mean.replace(0.0, np.nan)\n    cv = cv.replace([np.inf, -np.inf], np.nan)\n    range_ratio = (df_copy['high'] - df_copy['low']) / df_copy['close'].replace(0.0, np.nan)\n    range_stability = -range_ratio.rolling(20, min_periods=20).std(ddof=1)\n    weight = 1.0 + 0.5 * np.tanh(range_stability)\n    df_copy['factor_volume_instability_range_gate_unewm'] = cv * weight\n    return df_copy['factor_volume_instability_range_gate_unewm']",
+  "description": "Mutation of parent g2_crossover_g1_crossover_alpha_liq_0002_stability_range_smoo_02a37d9d. Primary mechanism preserved: coefficient of variation of trailing 20-day volume captures liquidity instability. Parent_strength_target: RankICIR and payoff monotonicity from qualified ancestor; preserve the volume-instability core and bounded continuous range gate. Bottleneck: raw IC and MI remain modest. This child removes the EWMA(5) smoothing on the range-stability gate weight, using the raw 20-day range-stability signal directly inside tanh. This reduces lag in the regime gate so the weight reacts more promptly to turbulent-range episodes, allowing the volume-instability signal to be attenuated earlier and potentially increasing nonlinear payoff (MI) without adding features. The bounded continuous weight remains 0.5 to 1.5 via tanh, preserving cross-sectional variation. Cross-sectional z-score retained for outlier control before neutralization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02105828035934101,
+    "icir": 0.47640150977588547,
+    "mi": 0.006463264394139578,
+    "rank_ic": 0.04147719454552416,
+    "rank_icir": 0.9581349702545885
+  },
+  "raw_metrics": {
+    "ic": -0.02105828035934101,
+    "icir": -0.47640150977588547,
+    "mi": 0.006463264394139578,
+    "rank_ic": -0.04147719454552416,
+    "rank_icir": -0.9581349702545885
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.037450200332198,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.05866500205483538,
+    "top_quantile_excess_return": 0.04132533504204261,
+    "top_quantile_max_drawdown": -0.031083682606515062,
+    "top_quantile_turnover": 0.15994198529837242
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:56:57.536346+00:00"
+}

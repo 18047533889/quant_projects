@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "pvc_coh_1_a1b2c3d4",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 488,
+  "factor_name": "factor_volume_amplified_momentum",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w04-20260806-014529-r35",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_volume_amplified_momentum(df):\n    df_copy = df.copy()\n    momentum = df_copy[\"close\"] / df_copy[\"close\"].shift(20) - 1\n    vol_ratio = df_copy[\"volume\"] / df_copy[\"volume\"].rolling(20, min_periods=1).mean()\n    vol_ratio = vol_ratio.clip(0.5, 2.0)\n    df_copy[\"factor_volume_amplified_momentum\"] = momentum * vol_ratio\n    return df_copy[\"factor_volume_amplified_momentum\"]",
+  "description": "Price momentum is confirmed by volume: high momentum with high volume indicates stronger conviction, while low volume momentum may be noise. The factor multiplies raw 20-day momentum by the volume ratio relative to its 20-day average, emphasizing moves that are supported by volume. Clipping the volume ratio prevents extreme values.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.033093221568762994,
+    "icir": 0.283878134311322,
+    "mi": 0.03719218459943363,
+    "rank_ic": 0.05594829941161058,
+    "rank_icir": 0.42727388273276024
+  },
+  "raw_metrics": {
+    "ic": -0.033093221568762994,
+    "icir": -0.283878134311322,
+    "mi": 0.03719218459943363,
+    "rank_ic": -0.05594829941161058,
+    "rank_icir": -0.42727388273276024
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.3,
+    "top_quantile_annualized_excess_return": 0.04910283501550383,
+    "top_quantile_excess_return": 0.034438844776306654,
+    "top_quantile_max_drawdown": -0.04515079276113021,
+    "top_quantile_turnover": 0.2297997313566358
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:41:14.370563+00:00"
+}

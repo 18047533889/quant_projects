@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_volasym_tail_jumps_00_63c42145",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 422,
+  "factor_name": "factor_tail_asymmetry_vol_normalized",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w02-20260814-042827-r7",
+  "expression_type": "python",
+  "formula": "ewm(span=5) of -(down_norm_63 - up_norm_63)/(down_norm_63 + up_norm_63 + 1), where down_norm_63 = rolling 63-day sum of (-ret / lagged_vol) when ret < -1.5*lagged_vol, up_norm_63 = rolling 63-day sum of (ret / lagged_vol) when ret > +1.5*lagged_vol",
+  "code": "def factor_tail_asymmetry_vol_normalized(df):\n    \"\"\"Downside vs upside tail-return magnitude asymmetry, each tail return scaled by lagged realized vol, preserving parent's economic mechanism while targeting IC/ICIR linearity.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol = ret.rolling(63, min_periods=20).std(ddof=1).shift(1)\n    down_tail = (ret < -1.5 * vol) & (vol > 0)\n    up_tail = (ret > 1.5 * vol) & (vol > 0)\n    down_norm = ((-ret) / vol).where(down_tail, 0.0).rolling(63, min_periods=20).sum()\n    up_norm = (ret / vol).where(up_tail, 0.0).rolling(63, min_periods=20).sum()\n    raw_asym = -(down_norm - up_norm) / (down_norm + up_norm + 1.0)\n    smoothed = raw_asym.ewm(span=5, min_periods=1).mean()\n    df_copy[\"factor_tail_asymmetry_vol_normalized\"] = smoothed\n    return df_copy[\"factor_tail_asymmetry_vol_normalized\"]",
+  "description": "Preserves parent's downside/upside tail-return magnitude asymmetry mechanism using lagged 63-day realized vol and \u00b11.5 sigma thresholds. Mutation changes aggregation from raw tail-return sums to volatility-normalized tail-return sums: each tail exceedance contributes excess return divided by lagged realized vol. This normalization removes volatility-scale effects on raw tail magnitudes, making signal more linear and comparable across stocks, targeting weak IC/ICIR while retaining the downside-jump-heavy ordering and EWM span=5 smoothing that drive RankICIR and payoff stability. Cross-sectional transform remains none.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.006259994480436673,
+    "icir": 0.11492544021796273,
+    "mi": 0.00489642152500025,
+    "rank_ic": 0.023869212349335513,
+    "rank_icir": 0.39094999680102394
+  },
+  "raw_metrics": {
+    "ic": -0.006259994480436673,
+    "icir": -0.11492544021796273,
+    "mi": 0.00489642152500025,
+    "rank_ic": -0.023869212349335513,
+    "rank_icir": -0.39094999680102394
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.390707369869116,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.06528676559052182,
+    "top_quantile_excess_return": 0.4346092317376906,
+    "top_quantile_max_drawdown": -0.06007850302804574,
+    "top_quantile_turnover": 0.05796402449617314
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:40:18.363716+00:00"
+}

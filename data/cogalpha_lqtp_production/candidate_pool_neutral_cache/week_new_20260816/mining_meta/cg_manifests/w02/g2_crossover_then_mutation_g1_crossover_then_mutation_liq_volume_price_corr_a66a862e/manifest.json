@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_then_mutation_liq_volume_price_corr_a66a862e",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 350,
+  "factor_name": "factor_logvol_price_spearman_corr_ewm_vol_scaled",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w02-20260813-150507-r4",
+  "expression_type": "python",
+  "formula": "ewm_span_5(rolling_corr(rolling_rank(close.pct_change(),20), rolling_rank(log1p(volume).pct_change(),20))) / (1 + rolling_std(close.pct_change(),20))",
+  "code": "def factor_logvol_price_spearman_corr_ewm_vol_scaled(df):\n    \"\"\"Rolling Spearman price-log-volume correlation smoothed by EWM and scaled by inverse return volatility.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_chg = np.log1p(df_copy[\"volume\"]).pct_change()\n    ret_rank = ret.rolling(20, min_periods=5).rank(pct=True)\n    vol_rank = vol_chg.rolling(20, min_periods=5).rank(pct=True)\n    corr = ret_rank.rolling(20, min_periods=5).corr(vol_rank)\n    corr_smooth = corr.ewm(span=5, min_periods=5).mean()\n    ret_std = ret.rolling(20, min_periods=5).std()\n    scale = 1.0 / (1.0 + ret_std)\n    factor = corr_smooth * scale\n    factor = factor.fillna(0.0)\n    factor.name = \"factor_logvol_price_spearman_corr_ewm_vol_scaled\"\n    return factor",
+  "description": "Mutation preserves parent's core strength: stable rank-order predictive power from rolling Spearman rank correlation between price returns and volume changes, smoothed by EWM and scaled by inverse return volatility. Bottleneck is low MI caused by raw volume percent-change outliers that distort the rank correlation. The mutation replaces raw volume pct_change with log1p(volume).pct_change(), a bounded log-volume change that retains sign and direction while reducing extreme volume spikes. This preserves the RankICIR and monotonic payoff target while improving nonlinear dependence without altering the core mechanism or requiring cross-sectional normalization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01027517954777067,
+    "icir": 0.19756111970566975,
+    "mi": 0.005762224129778559,
+    "rank_ic": 0.024971944023450026,
+    "rank_icir": 0.42997557035168943
+  },
+  "raw_metrics": {
+    "ic": -0.01027517954777067,
+    "icir": -0.19756111970566975,
+    "mi": 0.005762224129778559,
+    "rank_ic": -0.024971944023450026,
+    "rank_icir": -0.42997557035168943
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.822788866008198,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.20028017863896186,
+    "top_quantile_excess_return": 1.8505673469032464,
+    "top_quantile_max_drawdown": -0.09178366003805372,
+    "top_quantile_turnover": 0.10106119094677152
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:30:25.649598+00:00"
+}

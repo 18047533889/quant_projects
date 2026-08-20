@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_mutation_alpha_range_vol_gen0_001_a41d05a1_g1_c980d4c9",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 563,
+  "factor_name": "factor_volume_stability_bounded",
+  "domain_agent": "alpha-stability",
+  "run_id": "fleet-w04-20260813-044118-r2",
+  "expression_type": "python",
+  "formula": "stability = -rolling_std(log1p(volume),20) / (rolling_mean(log1p(volume),20) + rolling_std(log1p(volume),20)); compression = 1 / (1 + rolling_std(normalized_true_range,20)); factor = stability * compression",
+  "code": "def factor_volume_stability_bounded(df):\n    \"\"\"Negative coefficient of variation of log1p volume with denominator mean + std, attenuated by true range volatility compression.\"\"\"\n    df_copy = df.copy()\n\n    # Primary mechanism: negative CV of log1p volume over 20 bars, denominator regularized by std\n    window = 20\n    log_volume = np.log1p(df_copy['volume'])\n    vol_mean = log_volume.rolling(window, min_periods=window).mean()\n    vol_std = log_volume.rolling(window, min_periods=window).std(ddof=1)\n    stability = -(vol_std / (vol_mean + vol_std).replace(0.0, np.nan))\n\n    # Lightweight modifier: compression weight based on normalized true range volatility\n    prev_close = df_copy['close'].shift(1)\n    tr = pd.concat([\n        df_copy['high'] - df_copy['low'],\n        (df_copy['high'] - prev_close).abs(),\n        (df_copy['low'] - prev_close).abs()\n    ], axis=1).max(axis=1)\n    norm_tr = tr / df_copy['close']\n    std_tr = norm_tr.rolling(20, min_periods=20).std(ddof=1)\n    compression = 1.0 / (1.0 + std_tr)\n\n    factor = stability * compression\n    df_copy['factor_volume_stability_bounded'] = factor\n    return df_copy['factor_volume_stability_bounded']",
+  "description": "Mutation of parent g2_crossover_g1_mutation_alpha_range_vol_gen0_001_a41d05a1_g1_91066014. Parent strength target: ICIR/RankICIR stability from smooth volume persistence (negative coefficient of variation of log1p volume). Bottleneck: instability of the raw CV denominator when rolling mean volume is very low, causing outlier distortion. Mutation: change denominator from rolling mean to rolling mean plus rolling std, bounding the ratio between -1 and 0 and reducing outlier impact. The original compression modifier from true range volatility is preserved without changes. This is a compact normalization mutation that maintains the core volume-smoothness mechanism while improving robustness.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.019938670647346467,
+    "icir": 0.43131188832076267,
+    "mi": 0.006969938808028431,
+    "rank_ic": 0.0419057325254121,
+    "rank_icir": 0.8642855346494102
+  },
+  "raw_metrics": {
+    "ic": 0.019938670647346467,
+    "icir": 0.43131188832076267,
+    "mi": 0.006969938808028431,
+    "rank_ic": 0.0419057325254121,
+    "rank_icir": 0.8642855346494102
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.142698888805022,
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": 0.032991563232085186,
+    "top_quantile_excess_return": 0.02332405967087614,
+    "top_quantile_max_drawdown": -0.038843435331101905,
+    "top_quantile_turnover": 0.15457009617147657
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:49:35.734253+00:00"
+}

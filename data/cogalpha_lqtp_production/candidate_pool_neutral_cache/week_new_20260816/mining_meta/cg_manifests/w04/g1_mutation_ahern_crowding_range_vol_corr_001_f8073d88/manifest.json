@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_ahern_crowding_range_vol_corr_001_f8073d88",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 794,
+  "factor_name": "factor_range_volume_herding_smooth",
+  "domain_agent": "alpha-herding",
+  "run_id": "fleet-w04-20260814-135044-r14",
+  "expression_type": "python",
+  "formula": "rolling_mean(corr(log(true_range), log(volume), 20), 5)",
+  "code": "def factor_range_volume_herding_smooth(df):\n    \"\"\"Smoothed rolling correlation between log true range and log volume.\n\n    Preserves the crowding/herding mechanism: when volume concentrates on\n    high-volatility days, the correlation is positive. The raw 20-day\n    correlation is smoothed over 5 days to reduce estimation noise and\n    improve cross-sectional stability.\"\"\"\n    df_copy = df.copy()\n    prev_close = df_copy[\"close\"].shift(1)\n    true_range = np.maximum(df_copy[\"high\"] - df_copy[\"low\"],\n                            np.maximum((df_copy[\"high\"] - prev_close).abs(),\n                                       (df_copy[\"low\"] - prev_close).abs()))\n    log_range = np.log(true_range.replace(0, np.nan).clip(lower=1e-12))\n    log_volume = np.log(df_copy[\"volume\"].clip(lower=1e-12))\n    raw_corr = log_range.rolling(20, min_periods=10).corr(log_volume)\n    factor = raw_corr.rolling(5, min_periods=3).mean()\n    df_copy[\"factor_range_volume_herding_smooth\"] = factor\n    return df_copy[\"factor_range_volume_herding_smooth\"]",
+  "description": "Preserves the core herding/crowding mechanism: positive rolling correlation between log true range and log volume indicates volume piling into high-volatility days. The parent's raw 20-day correlation is noisy, likely weakening ICIR/RankICIR. This mutation adds a 5-day moving average to smooth the correlation, preserving the bounded [-1,1] signal while reducing high-frequency estimation noise. One core mechanism, one lightweight smoothing modifier.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.00812961871400037,
+    "icir": 0.23889817381225328,
+    "mi": 0.004968866410063555,
+    "rank_ic": 0.02975374902264386,
+    "rank_icir": 0.73279679377778
+  },
+  "raw_metrics": {
+    "ic": -0.00812961871400037,
+    "icir": -0.23889817381225328,
+    "mi": 0.004968866410063555,
+    "rank_ic": -0.02975374902264386,
+    "rank_icir": -0.73279679377778
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.2704400408033445,
+    "quantile_monotonicity": 0.9151515151515152,
+    "top_quantile_annualized_excess_return": 0.026950237145757283,
+    "top_quantile_excess_return": 0.01982242336887996,
+    "top_quantile_max_drawdown": -0.03806552506733407,
+    "top_quantile_turnover": 0.11188080544745088
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:15:24.357532+00:00"
+}

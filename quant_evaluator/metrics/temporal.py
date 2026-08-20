@@ -2,6 +2,12 @@
 Temporal stability metrics: autocorrelation and factor persistence analysis.
 
 Reference implementation for measuring factor temporal properties and stability.
+
+True-time-axis policy: all lag-based estimators in this module
+(``compute_autocorrelation``, ``compute_half_life``) use pairwise-finite lag
+alignment — for lag k, only pairs (t, t-k) where BOTH original positions are
+finite contribute. Observations are never NaN-compressed before lagging:
+compression destroys calendar alignment and fabricates pairs across gaps.
 """
 
 from typing import Tuple
@@ -16,6 +22,15 @@ def compute_autocorrelation(
 ) -> np.ndarray:
     """
     Compute autocorrelation function (ACF) for time series.
+
+    True-time-axis semantics: for lag k, only pairs (t, t-k) where BOTH
+    original positions are finite contribute. Missing observations are never
+    compressed out before lagging — calendar gaps destroy real lag alignment
+    and this implementation keeps it intact.
+
+    The estimator is the standard correlation between the lag-k pair samples
+    (x_t, x_{t-k}), computed with pair-specific means, so it is unaffected by
+    where the NaNs sit.
 
     Args:
         series: Time series (T,) or (T, F) for multiple factors
@@ -40,27 +55,35 @@ def compute_autocorrelation(
 
     for f in range(F):
         ts = series[:, f]
-        valid_ts = ts[~np.isnan(ts)]
+        finite = np.isfinite(ts)
+        n_finite = int(np.sum(finite))
 
-        if len(valid_ts) < min_obs:
+        if n_finite < min_obs:
             continue
 
-        # Compute ACF using correlation at each lag
-        acf[0, f] = 1.0  # Lag 0
-
-        mean_ts = np.mean(valid_ts)
-        var_ts = np.var(valid_ts, ddof=0)
-
-        if var_ts == 0:
-            continue
+        # Lag 0: correlation of the finite values with themselves.
+        acf[0, f] = 1.0
 
         for lag in range(1, max_lag + 1):
-            if len(valid_ts) - lag < min_obs:
+            # Pairs (t, t-lag) where BOTH original positions are finite.
+            pair_mask = finite[lag:] & finite[:-lag]  # length T - lag
+            n_pairs = int(np.sum(pair_mask))
+            if n_pairs < min_obs:
                 break
 
-            # Covariance at lag
-            cov = np.mean((valid_ts[:-lag] - mean_ts) * (valid_ts[lag:] - mean_ts))
-            acf[lag, f] = cov / var_ts
+            x_prev = ts[:-lag][pair_mask]  # x_{t-lag}
+            x_curr = ts[lag:][pair_mask]   # x_t
+
+            # Correlation between the two aligned pair samples.
+            x_prev_c = x_prev - np.mean(x_prev)
+            x_curr_c = x_curr - np.mean(x_curr)
+
+            denom = np.sqrt(np.sum(x_prev_c ** 2) * np.sum(x_curr_c ** 2))
+            if denom <= 0 or not np.isfinite(denom):
+                # Constant pair sample(s): correlation undefined.
+                continue
+
+            acf[lag, f] = float(np.sum(x_prev_c * x_curr_c) / denom)
 
     return acf[:, 0] if one_dimensional else acf
 
@@ -240,6 +263,10 @@ def compute_half_life(
     Half-life = -log(2) / log(phi) where phi is AR(1) coefficient.
     Measures how quickly factor predictive power decays.
 
+    True-time-axis semantics: phi is estimated on (t, t-1) pairs where BOTH
+    original positions are finite. NaNs are never compressed out before
+    lagging, so calendar gaps do not fabricate adjacent pairs.
+
     Args:
         ic_series: Daily IC series (T, F)
         min_periods: Minimum periods for AR estimation
@@ -252,27 +279,32 @@ def compute_half_life(
 
     for f in range(F):
         ic_f = ic_series[:, f]
-        valid_ic = ic_f[~np.isnan(ic_f)]
+        finite = np.isfinite(ic_f)
+        n_finite = int(np.sum(finite))
 
-        if len(valid_ic) < min_periods:
+        if n_finite < min_periods:
             continue
 
-        # AR(1): IC_t = phi * IC_{t-1} + epsilon
-        y = valid_ic[1:]
-        x = valid_ic[:-1]
+        # AR(1): IC_t = phi * IC_{t-1} + epsilon, estimated on pairs
+        # (t, t-1) where BOTH original positions are finite. Missing
+        # observations are never compressed out before lagging — that would
+        # fabricate adjacent pairs across calendar gaps.
+        pair_mask = finite[1:] & finite[:-1]  # length T - 1
+        x = ic_f[:-1][pair_mask]  # IC_{t-1}
+        y = ic_f[1:][pair_mask]   # IC_t
 
         if len(y) < min_periods - 1:
             continue
 
-        # OLS estimate of phi
-        try:
-            phi = np.sum(x * y) / np.sum(x * x)
-
-            # Half-life is only meaningful for 0 < phi < 1
-            if 0 < phi < 1:
-                half_life[f] = -np.log(2) / np.log(phi)
-
-        except (ZeroDivisionError, ValueError):
+        # OLS estimate of phi (no intercept, matching the original model)
+        denom = np.sum(x * x)
+        if not np.isfinite(denom) or denom <= 0:
             continue
+
+        phi = np.sum(x * y) / denom
+
+        # Half-life is only meaningful for 0 < phi < 1
+        if 0 < phi < 1:
+            half_life[f] = -np.log(2) / np.log(phi)
 
     return half_life

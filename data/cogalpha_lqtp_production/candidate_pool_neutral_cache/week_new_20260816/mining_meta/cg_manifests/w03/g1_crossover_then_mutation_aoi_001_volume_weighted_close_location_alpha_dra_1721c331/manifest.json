@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_then_mutation_aoi_001_volume_weighted_close_location_alpha_dra_1721c331",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 392,
+  "factor_name": "factor_volume_weighted_drawdown_location_40d",
+  "domain_agent": "alpha-order-imbalance",
+  "run_id": "fleet-w03-20260814-081141-r8",
+  "expression_type": "python",
+  "formula": "sum(volume * ((close - rolling_min(close,40)) / (rolling_max(close,40) - rolling_min(close,40)))) over 20 days / sum(volume) over 20 days",
+  "code": "def factor_volume_weighted_drawdown_location_40d(df):\n    \"\"\"Volume-weighted location of close within trailing 40-day drawdown range; high values indicate sustained buying pressure near range highs.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    peak = close.rolling(40, min_periods=20).max()\n    trough = close.rolling(40, min_periods=20).min()\n    drawdown_range = (peak - trough).replace(0.0, np.nan)\n    location = (close - trough) / drawdown_range\n    location = location.clip(0.0, 1.0)\n    weighted = (volume * location).rolling(20, min_periods=5).sum()\n    volume_sum = volume.rolling(20, min_periods=5).sum().replace(0.0, np.nan)\n    factor = weighted / volume_sum\n    factor = factor.fillna(0.0)\n    factor.name = \"factor_volume_weighted_drawdown_location_40d\"\n    return factor",
+  "description": "Mutation of parent volume-weighted drawdown location. Preserves the core mechanism: volume-weighted close location within a rolling drawdown range, which showed strong IC=0.0238 and ICIR=0.3594. Targets weak RankIC=0.0132 / RankICIR=0.1931 by shortening the drawdown range window from 60 to 40 days. A shorter range reduces stale normalization and makes cross-sectional location differences more responsive, improving rank stability without abandoning the economic intuition. Volume weighting window remains 20 days, and cs_zscore retained.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.009079512434323892,
+    "icir": 0.1102274341711859,
+    "mi": 0.009189577250987568,
+    "rank_ic": 0.019920565121567688,
+    "rank_icir": 0.21333038773645532
+  },
+  "raw_metrics": {
+    "ic": -0.009079512434323892,
+    "icir": -0.1102274341711859,
+    "mi": 0.009189577250987568,
+    "rank_ic": -0.019920565121567688,
+    "rank_icir": -0.21333038773645532
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.277146953333432,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.35752923798832725,
+    "top_quantile_excess_return": 4.707680856347609,
+    "top_quantile_max_drawdown": -0.08976714638667316,
+    "top_quantile_turnover": 0.06395444663947146
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:07:30.155581+00:00"
+}

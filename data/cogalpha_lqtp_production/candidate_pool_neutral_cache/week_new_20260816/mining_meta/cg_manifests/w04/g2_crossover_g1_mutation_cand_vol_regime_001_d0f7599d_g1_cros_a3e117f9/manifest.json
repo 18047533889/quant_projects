@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_mutation_cand_vol_regime_001_d0f7599d_g1_cros_a3e117f9",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 64,
+  "factor_name": "factor_vol_regime_reversal_ema_vol",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260802-233330-r5",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_vol_regime_reversal_ema_vol(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_short = ret.ewm(span=10, adjust=True).std()\n    vol_long = ret.ewm(span=252, adjust=True).std()\n    vol_ratio = vol_short / vol_long.replace(0.0, np.nan)\n    weight = 1.0 / (1.0 + np.exp(-5.0 * (vol_ratio - 1.0)))\n    rev_short = -ret.rolling(5, min_periods=5).sum()\n    rev_long = -ret.rolling(20, min_periods=5).sum()\n    factor = weight * rev_short + (1.0 - weight) * rev_long\n    df_copy[\"factor_vol_regime_reversal_ema_vol\"] = factor\n    return df_copy[\"factor_vol_regime_reversal_ema_vol\"]",
+  "description": "Crossover of volatility-regime reversal (primary) with directional volume asymmetry's EMA weighting (lightweight idea). Replaces the rolling standard deviation for volatility estimation with an exponential weighted moving standard deviation, giving more weight to recent volatility observations. This aims to make the regime blending weight more reactive to recent volatility shifts, improving timely switching between short and long reversal signals while preserving the core sigmoid blending mechanism and the strong RankIC properties.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.026612086614152573,
+    "icir": 0.23082315011234106,
+    "mi": 0.03127495829967142,
+    "rank_ic": 0.05141448324876635,
+    "rank_icir": 0.3988162379314893
+  },
+  "raw_metrics": {
+    "ic": 0.026612086614152573,
+    "icir": 0.23082315011234106,
+    "mi": 0.03127495829967142,
+    "rank_ic": 0.05141448324876635,
+    "rank_icir": 0.3988162379314893
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.5,
+    "top_quantile_annualized_excess_return": 0.08303170774418756,
+    "top_quantile_excess_return": 0.06299381732935805,
+    "top_quantile_max_drawdown": -0.0499126909882569,
+    "top_quantile_turnover": 0.24120697044466755
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:15:50.327953+00:00"
+}

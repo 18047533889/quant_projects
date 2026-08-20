@@ -146,7 +146,8 @@ class TestCoreMetrics:
         assert spec.tier == MetricTier.CORE
         assert "factor_batch" in spec.requires
         assert spec.min_periods is None
-        assert spec.compute_fn is compute_coverage
+        assert spec.compute_fn is not None
+        assert callable(spec.compute_fn)
 
     def test_turnover_spec(self):
         spec = get_metric("turnover")

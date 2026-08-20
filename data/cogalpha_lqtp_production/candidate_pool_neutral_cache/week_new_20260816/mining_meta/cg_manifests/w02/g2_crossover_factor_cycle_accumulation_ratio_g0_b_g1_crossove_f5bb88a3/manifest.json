@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_factor_cycle_accumulation_ratio_g0_b_g1_crossove_f5bb88a3",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 291,
+  "factor_name": "factor_cycle_accumulation_tail_gated",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w02-20260813-060516-r2",
+  "expression_type": "python",
+  "formula": "((sum_vol_up_60 - sum_vol_down_60) / sum_vol_60) * (1 - 0.3 * tanh(neg_var_60 / pos_var_60 - 1))",
+  "code": "def factor_cycle_accumulation_tail_gated(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    ret = close.pct_change()\n    up_vol = volume.where(ret > 0, 0.0)\n    down_vol = volume.where(ret < 0, 0.0)\n    net = up_vol.rolling(60, min_periods=20).sum() - down_vol.rolling(60, min_periods=20).sum()\n    total = volume.rolling(60, min_periods=20).sum()\n    accumulation = net / total.replace(0.0, np.nan)\n    accumulation = accumulation.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    pos = np.maximum(ret, 0.0)\n    neg = np.maximum(-ret, 0.0)\n    pos_var = (pos ** 2).rolling(60, min_periods=20).sum()\n    neg_var = (neg ** 2).rolling(60, min_periods=20).sum()\n    tail_ratio = neg_var / pos_var.replace(0.0, np.nan)\n    tail_ratio = tail_ratio.replace([np.inf, -np.inf], np.nan).fillna(1.0)\n    weight = 1.0 - 0.3 * np.tanh(tail_ratio - 1.0)\n    factor = accumulation * weight\n    df_copy[\"factor_cycle_accumulation_tail_gated\"] = factor\n    return df_copy[\"factor_cycle_accumulation_tail_gated\"]\n",
+  "description": "Primary mechanism is the net volume accumulation ratio over a 60-day cycle from parent factor_cycle_accumulation_ratio_g0_b, which showed strong long-short Sharpe (2.728) and perfect monotonicity (1.0) despite low IC/RankIC. The bottleneck is poor rank stability and possibly false accumulation signals during high tail-risk regimes. The lightweight transferred idea from parent g1_crossover_tail_risk_dusr_001_factor_cycle_accumulation_rat_18f5f558 is the downside/upside variance asymmetry, used only as a bounded continuous modifier. When accumulated downside variance exceeds upside variance (tail_ratio > 1), the weight is attenuated below 1; when upside variance dominates, the weight is amplified above 1. This suppresses accumulation signals during high tail-risk states and enhances them during low tail-risk states, aiming to improve IC/ICIR while preserving the raw accumulation payoff. cross_sectional_transform remains none to maintain raw payoff thickness.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.011341776534090723,
+    "icir": 0.1567103004060716,
+    "mi": 0.009306917668794767,
+    "rank_ic": 0.020261883683641936,
+    "rank_icir": 0.27647105838800773
+  },
+  "raw_metrics": {
+    "ic": -0.011341776534090723,
+    "icir": -0.1567103004060716,
+    "mi": 0.009306917668794767,
+    "rank_ic": -0.020261883683641936,
+    "rank_icir": -0.27647105838800773
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.9847956103731614,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": -0.011732624545985337,
+    "top_quantile_excess_return": -0.06521616688611032,
+    "top_quantile_max_drawdown": -0.2350204369756972,
+    "top_quantile_turnover": 0.14977813181632157
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:21:47.730715+00:00"
+}

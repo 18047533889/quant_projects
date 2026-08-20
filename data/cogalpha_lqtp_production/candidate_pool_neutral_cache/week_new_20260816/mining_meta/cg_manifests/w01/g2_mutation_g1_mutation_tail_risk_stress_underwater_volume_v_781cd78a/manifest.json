@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_mutation_tail_risk_stress_underwater_volume_v_781cd78a",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 338,
+  "factor_name": "factor_tail_stress_underwater_volume_robust_120",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w01-20260813-152857-r4",
+  "expression_type": "python",
+  "formula": "rolling_mean_21d( max(0, -daily_return) * clip(volume / rolling_mean_120d_volume, 3.0) * I(close < rolling_max_63d_close) )",
+  "code": "def factor_tail_stress_underwater_volume_robust_120(df):\n    '''Tail-risk stress: volume-confirmed downside persistence while underwater, using a smoother 120-day volume baseline.'''\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    daily_ret = close.pct_change()\n    downside_move = (-daily_ret).clip(lower=0.0)\n    rolling_high = close.rolling(63, min_periods=10).max()\n    underwater = close < rolling_high\n    volume_ratio = volume / volume.rolling(120, min_periods=20).mean().replace(0.0, np.nan)\n    volume_ratio = volume_ratio.clip(upper=3.0)\n    stress = downside_move * volume_ratio\n    stress = stress.where(underwater, 0.0)\n    factor = stress.rolling(21, min_periods=5).mean()\n    return factor.rename('factor_tail_stress_underwater_volume_robust_120')",
+  "description": "Preserves parent's volume-confirmed downside stress while underwater. Mutation increases the volume baseline window from 60 to 120 days with a higher minimum observation count (20 vs 10) to reduce sampling variance in the volume ratio, targeting higher ICIR and IC stability while maintaining the raw downside-underwater mechanism, monotonicity, and long-short payoff structure.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.005742549250653249,
+    "icir": 0.07254770503436163,
+    "mi": 0.013706137286916942,
+    "rank_ic": 0.023127376500723384,
+    "rank_icir": 0.295796457322782
+  },
+  "raw_metrics": {
+    "ic": -0.005742549250653249,
+    "icir": -0.07254770503436163,
+    "mi": 0.013706137286916942,
+    "rank_ic": -0.023127376500723384,
+    "rank_icir": -0.295796457322782
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.9595217509159166,
+    "quantile_monotonicity": 0.7575757575757576,
+    "top_quantile_annualized_excess_return": 0.11318041095363163,
+    "top_quantile_excess_return": 0.8453930784670112,
+    "top_quantile_max_drawdown": -0.25326101469490647,
+    "top_quantile_turnover": 0.12089451956823649
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:56:22.121461+00:00"
+}

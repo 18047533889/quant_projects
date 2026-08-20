@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "tail_risk_001",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 295,
+  "factor_name": "factor_tail_downside_variance_ratio",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w01-20260813-064101-r2",
+  "expression_type": "python",
+  "formula": "factor = 1 / (1 + rolling_sum_60(downside_ret^2) / rolling_sum_60(upside_ret^2))",
+  "code": "def factor_tail_downside_variance_ratio(df):\n    \"\"\"Lower downside variance relative to upside variance indicates tail-risk resilience.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    down_ret = np.minimum(ret, 0.0)\n    up_ret = np.maximum(ret, 0.0)\n    down_var = (down_ret ** 2).rolling(60, min_periods=20).sum()\n    up_var = (up_ret ** 2).rolling(60, min_periods=20).sum()\n    ratio = down_var / up_var.replace(0.0, np.nan)\n    ratio = ratio.replace([np.inf, -np.inf], np.nan)\n    factor = 1.0 / (1.0 + ratio)\n    factor = factor.fillna(0.0)\n    return pd.Series(factor, index=df_copy.index, name=\"factor_tail_downside_variance_ratio\")",
+  "description": "Measures asymmetric volatility: downside semi-variance relative to upside semi-variance over 60 days. Stocks with lower downside variance share exhibit tail-risk resilience; higher factor indicates lower tail-risk exposure. The mechanism focuses on volatility asymmetry rather than generic moving-average or stacked-indicator patterns.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.013203426339922787,
+    "icir": 0.1811501285650037,
+    "mi": 0.022247482898631432,
+    "rank_ic": 0.02958843838003443,
+    "rank_icir": 0.38111129542399985
+  },
+  "raw_metrics": {
+    "ic": -0.013203426339922787,
+    "icir": -0.1811501285650037,
+    "mi": 0.022247482898631432,
+    "rank_ic": -0.02958843838003443,
+    "rank_icir": -0.38111129542399985
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.602656659069681,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.5379325340834009,
+    "top_quantile_excess_return": 10.680763703120212,
+    "top_quantile_max_drawdown": -0.07981251376770337,
+    "top_quantile_turnover": 0.10977172353574649
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:47:42.021659+00:00"
+}

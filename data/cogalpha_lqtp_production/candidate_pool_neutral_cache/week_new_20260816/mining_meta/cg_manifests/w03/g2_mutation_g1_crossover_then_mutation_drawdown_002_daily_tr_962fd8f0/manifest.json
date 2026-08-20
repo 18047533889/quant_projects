@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_drawdown_002_daily_tr_962fd8f0",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w03",
+  "pool": "qualified",
+  "factor_id": 178,
+  "factor_name": "factor_drawdown_vol_cont_momentum_ewm",
+  "domain_agent": "alpha-drawdown",
+  "run_id": "fleet-w03-20260804-230117-r14",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_drawdown_vol_cont_momentum_ewm(df):\n    df_copy = df.copy()\n    rolling_max_60 = df_copy[\"close\"].rolling(60, min_periods=1).max()\n    pain_shifted = (rolling_max_60.shift(1) / df_copy[\"close\"].shift(1)) - 1.0\n    ret = df_copy[\"close\"].pct_change()\n    weighted_ret = ret * pain_shifted\n    short_factor = weighted_ret.ewm(span=10, min_periods=1).mean()\n    long_factor = weighted_ret.ewm(span=30, min_periods=1).mean()\n    is_high, is_low, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    blend_weight = vol_ratio / (1.0 + vol_ratio)\n    factor = short_factor * blend_weight + long_factor * (1.0 - blend_weight)\n    df_copy[\"factor_drawdown_vol_cont_momentum_ewm\"] = factor\n    return df_copy[\"factor_drawdown_vol_cont_momentum_ewm\"]",
+  "description": "Mutates parent by replacing rolling mean with exponential moving average (EWM) for the short and long momentum smoothing components. EWM gives more weight to recent observations, improving signal timeliness and reducing noise, thereby targeting ICIR improvement while preserving the core drawdown-weighted momentum and volume-adaptive blend mechanism. RankICIR strength is preserved as the parent strength target.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02305392882265431,
+    "icir": 0.20978542153963242,
+    "mi": 0.02061371981610627,
+    "rank_ic": 0.04650598700198587,
+    "rank_icir": 0.35687898868650636
+  },
+  "raw_metrics": {
+    "ic": -0.02305392882265431,
+    "icir": -0.20978542153963242,
+    "mi": 0.02061371981610627,
+    "rank_ic": -0.04650598700198587,
+    "rank_icir": -0.35687898868650636
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.10834422654438325,
+    "top_quantile_excess_return": 0.8125815602420243,
+    "top_quantile_max_drawdown": -0.06864698610061071,
+    "top_quantile_turnover": 0.25888681392876484
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:52:28.887356+00:00"
+}

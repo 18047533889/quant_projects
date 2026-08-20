@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_tail_risk_stress_underwater_volume_v1_916e8a23",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 339,
+  "factor_name": "factor_tail_stress_underwater_volume_median",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w01-20260813-152857-r4",
+  "expression_type": "python",
+  "formula": "rolling_sum_21d( max(0, -daily_return) * min(volume / rolling_median_60d_volume, 3.0) * I(close < rolling_max_63d_close) )",
+  "code": "def factor_tail_stress_underwater_volume_median(df):\n    '''Tail-risk stress: volume-confirmed downside persistence while underwater, using median volume baseline.'''\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    daily_ret = close.pct_change()\n    downside_move = (-daily_ret).clip(lower=0.0)\n    rolling_high = close.rolling(63, min_periods=10).max()\n    underwater = close < rolling_high\n    volume_ratio = volume / volume.rolling(60, min_periods=10).median().replace(0.0, np.nan)\n    stress = downside_move * volume_ratio.clip(upper=3.0)\n    stress = stress.where(underwater, 0.0)\n    factor = stress.rolling(21, min_periods=5).sum()\n    return factor.rename('factor_tail_stress_underwater_volume_median')",
+  "description": "Preserves parent's volume-confirmed downside stress while underwater: high-volume down moves during drawdowns signal forced liquidation and persistent fragility. The mutation replaces rolling mean volume normalization with rolling median, reducing distortion from occasional volume spikes and producing a more stable volume ratio. This targets the parent's bottleneck of low IC/ICIR relative to strong RankICIR and payoff evidence by lowering estimation noise without adding new components or altering the economic mechanism.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.004504358154252073,
+    "icir": 0.06002494643374535,
+    "mi": 0.012110667400985875,
+    "rank_ic": 0.023990327575723336,
+    "rank_icir": 0.3108012134554842
+  },
+  "raw_metrics": {
+    "ic": -0.004504358154252073,
+    "icir": -0.06002494643374535,
+    "mi": 0.012110667400985875,
+    "rank_ic": -0.023990327575723336,
+    "rank_icir": -0.3108012134554842
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.8420845721086847,
+    "quantile_monotonicity": 0.6121212121212121,
+    "top_quantile_annualized_excess_return": 0.12838371004946847,
+    "top_quantile_excess_return": 1.0037097290199584,
+    "top_quantile_max_drawdown": -0.26016136937725653,
+    "top_quantile_turnover": 0.13682578127592032
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:56:40.731886+00:00"
+}

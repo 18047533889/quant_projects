@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "pv_coherence_002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 393,
+  "factor_name": "factor_volume_return_directional_corr",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w01-20260814-043935-r7",
+  "expression_type": "python",
+  "formula": "rolling_corr(close.pct_change(), volume / rolling_mean(volume,20) - 1, window=30)",
+  "code": "def factor_volume_return_directional_corr(df):\n    \"\"\"Rolling correlation between daily return and volume deviation.\"\"\"\n    df_copy = df.copy()\n    daily_ret = df_copy[\"close\"].pct_change()\n    vol_mean = df_copy[\"volume\"].rolling(20, min_periods=5).mean()\n    vol_dev = df_copy[\"volume\"] / vol_mean - 1.0\n    corr = daily_ret.rolling(30, min_periods=20).corr(vol_dev)\n    factor = corr.fillna(0.0)\n    df_copy[\"factor_volume_return_directional_corr\"] = factor\n    return df_copy[\"factor_volume_return_directional_corr\"]",
+  "description": "Rolling correlation between signed daily returns and volume deviation captures persistent directional volume coherence. Positive correlation means volume expands on up days and contracts on down days, confirming trend; negative correlation signals volume divergence. Unlike volume-weighted return differences, this pathway isolates the time-series relationship between return sign/magnitude and contemporaneous volume deviations.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.008613561937248495,
+    "icir": 0.18862913620034308,
+    "mi": 0.006451108406215766,
+    "rank_ic": 0.021895137244321704,
+    "rank_icir": 0.4239729604046034
+  },
+  "raw_metrics": {
+    "ic": -0.008613561937248495,
+    "icir": -0.18862913620034308,
+    "mi": 0.006451108406215766,
+    "rank_ic": -0.021895137244321704,
+    "rank_icir": -0.4239729604046034
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.547989840847468,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.05066702871358131,
+    "top_quantile_excess_return": 0.32530861112467635,
+    "top_quantile_max_drawdown": -0.09640377152949342,
+    "top_quantile_turnover": 0.15093363718258312
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:04:06.569998+00:00"
+}

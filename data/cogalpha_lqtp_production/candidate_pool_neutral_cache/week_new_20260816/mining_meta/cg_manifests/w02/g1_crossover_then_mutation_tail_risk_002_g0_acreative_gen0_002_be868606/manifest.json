@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_then_mutation_tail_risk_002_g0_acreative_gen0_002_be868606",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 394,
+  "factor_name": "factor_intraday_calmness_stress_attenuated",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w02-20260814-001724-r6",
+  "expression_type": "python",
+  "formula": "calmness * (1 / (1 + 10 * rolling_sum(abs(min(overnight_return, 0)), 20)))",
+  "code": "def factor_intraday_calmness_stress_attenuated(df):\n    \"\"\"Intraday calmness via rolling mean cosine of intraday angle, attenuated by overnight downside stress.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    theta = np.arctan(intraday_ret * 10)\n    window = 20\n    calmness = np.cos(theta).rolling(window, min_periods=window).mean()\n    overnight_stress = overnight_ret.clip(upper=0.0).abs().rolling(window, min_periods=5).sum()\n    stress_weight = 1.0 / (1.0 + overnight_stress * 10.0)\n    factor = calmness * stress_weight\n    factor.name = \"factor_intraday_calmness_stress_attenuated\"\n    return factor",
+  "description": "Rolling mean of cos(arctan(intraday_ret*10)) equals 1/sqrt(1+100*intraday_ret^2), a positive measure of intraday return stability inversely related to return magnitude. Multiplying by an overnight downside stress attenuation term (inverse of 1 + 10*rolling_sum of negative overnight returns) produces a factor that favors stocks with calm intraday dynamics and low overnight tail risk. This is a low-risk/quality style mechanism expected to retain residual cross-sectional predictive power after industry and size neutralization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.013874258775099358,
+    "icir": 0.16802551602225105,
+    "mi": 0.0171966157641279,
+    "rank_ic": 0.04199053942979472,
+    "rank_icir": 0.47380143000992614
+  },
+  "raw_metrics": {
+    "ic": 0.013874258775099358,
+    "icir": 0.16802551602225105,
+    "mi": 0.0171966157641279,
+    "rank_ic": 0.04199053942979472,
+    "rank_icir": 0.47380143000992614
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.5356318943458587,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.0009058477700947254,
+    "top_quantile_excess_return": 0.005187337818467697,
+    "top_quantile_max_drawdown": -0.1525020533546546,
+    "top_quantile_turnover": 0.14352902981485752
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:36:23.550970+00:00"
+}

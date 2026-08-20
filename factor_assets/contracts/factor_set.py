@@ -47,6 +47,10 @@ class FactorSetSpec:
     name: str
     selection_policy: str  # "family_robust", "pareto_front", "manual", etc.
     universe_ref: Optional[str] = None
+    # Provenance of the data snapshot the set was assembled against.  When
+    # None, ``universe_ref`` is used as the snapshot reference (legacy
+    # behaviour) so existing specs keep their meaning.
+    data_snapshot_ref: Optional[str] = None
     frequency: Optional[str] = None
     max_factors: Optional[int] = None
     min_evidence_date: Optional[str] = None

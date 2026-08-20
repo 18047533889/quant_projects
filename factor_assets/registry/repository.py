@@ -17,13 +17,13 @@ from factor_assets.contracts.evidence_ref import (
     evidence_bundle_event_id,
 )
 from factor_assets.contracts.lifecycle import (
+    HealthState,
     LifecycleState,
     StateEvent,
     validate_transition,
 )
 from factor_assets.contracts.lineage import LineageRef
 from factor_assets.errors import (
-    CapabilityError,
     DuplicateIdentityError,
     LifecycleConflictError,
 )
@@ -63,6 +63,17 @@ class LifecycleRepository(Protocol):
         """Atomically validate, mutate state, and append exactly one event."""
         ...
 
+    def update_asset_health(
+        self,
+        factor_id: str,
+        health: HealthState,
+        *,
+        reason: str = "",
+        actor: Optional[str] = None,
+    ) -> None:
+        """Append a health-change event and update the orthogonal health dimension."""
+        ...
+
 
 @dataclass
 class RepositoryStats:
@@ -88,6 +99,7 @@ class AssetRepository:
         self._canonical_hash_index: dict[str, str] = {}
         self._revisions: dict[str, int] = {}
         self._idempotency_keys: set[tuple[str, str]] = set()
+        self._committed_decisions: dict[tuple[str, str], CommittedTransition] = {}
         self._lock = RLock()
 
     def register(
@@ -203,9 +215,37 @@ class AssetRepository:
                 )
             if decision_id is not None:
                 idempotency_key = (factor_id, decision_id)
-                if idempotency_key in self._idempotency_keys:
+                stored = self._committed_decisions.get(idempotency_key)
+                if stored is not None:
+                    stored_refs = stored.event.evidence_refs
+                    replay_refs = tuple(dict.fromkeys((
+                        *evidence_refs,
+                        "evaluation_bundle_ref",
+                        evidence_bundle_event_id(evidence_bundle_ref),
+                    ))) if evidence_bundle_ref is not None else tuple(evidence_refs)
+                    identical = (
+                        from_state == stored.event.to_state
+                        and revision == stored.revision
+                        and stored.event.to_state == to_state
+                        and tuple(stored_refs) == replay_refs
+                        and stored.event.policy_version == policy_version
+                        and stored.event.actor == actor
+                        and stored.event.notes == notes
+                        and (
+                            evidence_bundle_ref is None
+                            and stored.asset.latest_evidence_ref is None
+                            or evidence_bundle_ref is not None
+                            and stored.asset.latest_evidence_ref is not None
+                        )
+                    )
+                    if evidence_bundle_ref is not None and identical:
+                        identical = (
+                            evidence_bundle_ref == stored.asset.latest_evidence_ref
+                        )
+                    if identical:
+                        return stored
                     raise LifecycleConflictError(
-                        f"Duplicate transition decision_id {decision_id} for factor {factor_id}"
+                        f"Conflicting transition decision_id {decision_id} for factor {factor_id}"
                     )
             if evidence_bundle_ref is not None:
                 if not isinstance(evidence_bundle_ref, EvidenceBundleRef):
@@ -258,7 +298,40 @@ class AssetRepository:
             self._events.append(event)
             if decision_id is not None:
                 self._idempotency_keys.add((factor_id, decision_id))
+                self._committed_decisions[(factor_id, decision_id)] = CommittedTransition(
+                    updated_asset, event, new_revision
+                )
             return CommittedTransition(updated_asset, event, new_revision)
+
+    def update_asset_health(
+        self,
+        factor_id: str,
+        health: HealthState,
+        *,
+        reason: str = "",
+        actor: Optional[str] = None,
+    ) -> None:
+        """Update the orthogonal health dimension and append one health event."""
+        if not isinstance(health, HealthState):
+            raise TypeError("health must be a HealthState")
+        with self._lock:
+            if factor_id not in self._assets:
+                raise AssetNotFoundError(f"Factor {factor_id} not found")
+            asset = self._assets[factor_id]
+            now = datetime.now(timezone.utc).isoformat()
+            updated_asset = replace(asset, health_state=health)
+            event = StateEvent(
+                factor_id=factor_id,
+                from_state=asset.lifecycle_state,
+                to_state=asset.lifecycle_state,
+                timestamp=now,
+                evidence_refs=(),
+                notes=f"Health change {asset.health_state.value} -> {health.value}"
+                + (f": {reason}" if reason else ""),
+                actor=actor,
+            )
+            self._assets[factor_id] = updated_asset
+            self._events.append(event)
 
     def transition(
         self,
@@ -315,13 +388,3 @@ class AssetRepository:
                 first_registration=min(timestamps) if timestamps else None,
                 last_registration=max(timestamps) if timestamps else None,
             )
-
-
-def create_repository(*, production: bool = False) -> AssetRepository:
-    """Create the available repository, refusing ephemeral storage in production."""
-    if production:
-        raise CapabilityError(
-            "No production-capable durable factor-assets repository is implemented; "
-            "the in-memory AssetRepository is RESEARCH_ONLY and ephemeral"
-        )
-    return AssetRepository()

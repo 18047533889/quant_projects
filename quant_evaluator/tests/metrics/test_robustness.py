@@ -355,3 +355,106 @@ class TestBlockBootstrapCI:
 
         assert np.isnan(ci_lower[0])
         assert np.isnan(ci_upper[0])
+
+
+class TestRNGHygiene:
+    """RNG hygiene (QE-METRIC-P0-08): all sampling uses a LOCAL
+    np.random.default_rng(random_seed) Generator. The GLOBAL numpy random
+    state must never be touched (no np.random.seed, no np.random.choice)."""
+
+    def _global_state_signature(self):
+        st = np.random.get_state()
+        return (st[0], tuple(st[1][:4]), st[2])
+
+    def test_same_seed_identical_subsample_results(self):
+        rng = np.random.default_rng(7)
+        ic_series = rng.normal(0.05, 0.1, size=(200, 2))
+
+        means_a, stds_a = compute_subsample_ic(
+            ic_series, num_subsamples=30, subsample_fraction=0.8, random_seed=123
+        )
+        means_b, stds_b = compute_subsample_ic(
+            ic_series, num_subsamples=30, subsample_fraction=0.8, random_seed=123
+        )
+
+        np.testing.assert_array_equal(means_a, means_b)
+        np.testing.assert_array_equal(stds_a, stds_b)
+
+    def test_different_seeds_different_subsample_draws(self):
+        rng = np.random.default_rng(8)
+        ic_series = rng.normal(0.05, 0.1, size=(200, 1))
+
+        means_a, _ = compute_subsample_ic(
+            ic_series, num_subsamples=20, subsample_fraction=0.8, random_seed=1
+        )
+        means_b, _ = compute_subsample_ic(
+            ic_series, num_subsamples=20, subsample_fraction=0.8, random_seed=2
+        )
+
+        # Different seeds must draw different subsamples (different means).
+        assert not np.allclose(means_a, means_b)
+
+    def test_global_rng_state_unchanged(self):
+        """Calling the samplers must not perturb np.random's global state."""
+        rng = np.random.default_rng(9)
+        ic_series = rng.normal(0.05, 0.1, size=(150, 2))
+
+        before = self._global_state_signature()
+        compute_subsample_ic(
+            ic_series, num_subsamples=25, subsample_fraction=0.8, random_seed=42
+        )
+        mid = self._global_state_signature()
+        compute_block_bootstrap_ci(
+            ic_series, block_length=10, num_bootstrap=200,
+            confidence_level=0.95, random_seed=42,
+        )
+        after = self._global_state_signature()
+
+        assert before == mid
+        assert before == after
+
+    def test_block_bootstrap_same_seed_reproducible_and_local(self):
+        rng = np.random.default_rng(10)
+        ic_series = rng.normal(0.03, 0.08, size=(180, 1))
+
+        before = self._global_state_signature()
+        lo_a, hi_a = compute_block_bootstrap_ci(
+            ic_series, block_length=10, num_bootstrap=300,
+            confidence_level=0.95, random_seed=77,
+        )
+        lo_b, hi_b = compute_block_bootstrap_ci(
+            ic_series, block_length=10, num_bootstrap=300,
+            confidence_level=0.95, random_seed=77,
+        )
+        after = self._global_state_signature()
+
+        np.testing.assert_array_equal(lo_a, lo_b)
+        np.testing.assert_array_equal(hi_a, hi_b)
+        assert before == after
+
+    def test_subsample_uses_generator_not_legacy_choice(self):
+        """The sampler's draws must match default_rng(seed).choice, not the
+        legacy np.random.choice stream (regression guard for global RNG use)."""
+        T = 100
+        subsample_size = 80
+        ic_series = np.linspace(0.01, 0.1, T).reshape(-1, 1)
+
+        # What default_rng(5).choice would produce for draw 0:
+        expected_first = np.sort(np.random.default_rng(5).choice(
+            T, size=subsample_size, replace=False
+        ))
+
+        # Reconstruct the actual first subsample from its mean: seed the
+        # sampler, then verify determinism against the Generator stream by
+        # running the sampler twice with the same seed (equality) and once
+        # with a seed matching the expected draw.
+        means_a, _ = compute_subsample_ic(
+            ic_series, num_subsamples=1, subsample_fraction=0.8, random_seed=5
+        )
+        means_b, _ = compute_subsample_ic(
+            ic_series, num_subsamples=1, subsample_fraction=0.8, random_seed=5
+        )
+        assert means_a[0, 0] == means_b[0, 0]
+        # And the mean equals the mean over the Generator's own draw.
+        expected_mean = float(np.mean(ic_series[expected_first, 0]))
+        assert means_a[0, 0] == pytest.approx(expected_mean, rel=1e-12)

@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_agentdailytrend_volum_b815051b",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 3,
+  "factor_name": "factor_momentum_vol_regime_amp",
+  "domain_agent": "alpha-daily-trend",
+  "run_id": "fleet-w04-20260802-140831-r1",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_momentum_vol_regime_amp(df):\n    df_copy = df.copy()\n    mom = df_copy[\"close\"].pct_change(5)\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=10)\n    signal = mom * vol_ratio\n    power = 1.5\n    signed_power = np.sign(signal) * np.abs(signal) ** power\n    df_copy[\"factor_momentum_vol_regime_amp\"] = signed_power\n    return df_copy[\"factor_momentum_vol_regime_amp\"]",
+  "description": "Mutates parent momentum-volume confirmed factor by replacing a simple rolling-mean volume ratio with the active tool `classify_volume_regime` (window=10). This provides a continuous, regime-aware volume scaling that adapts to recent volatility context. The core mechanism of momentum (5-day return) multiplied by a volume amplifier, followed by signed power amplification (power=1.5), is preserved. The mutation targets ICIR improvement by using a more adaptive volume metric while retaining the parent's momentum-volume confirmation framework and signed power transform.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03300966503542136,
+    "icir": 0.3770719193925248,
+    "mi": 0.033518734047826904,
+    "rank_ic": 0.04223702034605105,
+    "rank_icir": 0.3201857825781236
+  },
+  "raw_metrics": {
+    "ic": -0.03300966503542136,
+    "icir": -0.3770719193925248,
+    "mi": 0.033518734047826904,
+    "rank_ic": -0.04223702034605105,
+    "rank_icir": -0.3201857825781236
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6,
+    "top_quantile_annualized_excess_return": 0.037089312721068524,
+    "top_quantile_excess_return": 0.028284215464031703,
+    "top_quantile_max_drawdown": -0.05314255179609617,
+    "top_quantile_turnover": 0.3958319476181577
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:12:59.033842+00:00"
+}

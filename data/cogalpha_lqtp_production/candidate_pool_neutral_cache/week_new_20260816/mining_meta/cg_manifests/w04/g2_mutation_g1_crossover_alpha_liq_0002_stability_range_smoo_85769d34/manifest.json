@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_alpha_liq_0002_stability_range_smoo_85769d34",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 626,
+  "factor_name": "factor_volume_instability_range_gated_log",
+  "domain_agent": "alpha-stability",
+  "run_id": "fleet-w04-20260813-161708-r6",
+  "expression_type": "python",
+  "formula": "log1p(cv_volume_trailing20) * (1 + 0.5 * tanh(-std_20((high-low)/close)))",
+  "code": "def factor_volume_instability_range_gated_log(df):\n    df_copy = df.copy()\n    vol_mean = df_copy[\"volume\"].rolling(20, min_periods=20).mean()\n    vol_std = df_copy[\"volume\"].rolling(20, min_periods=20).std(ddof=1)\n    cv = vol_std / vol_mean.replace(0.0, np.nan)\n    cv = cv.replace([np.inf, -np.inf], np.nan)\n    cv = np.log1p(cv)\n    range_ratio = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"].replace(0.0, np.nan)\n    range_stability = -range_ratio.rolling(20, min_periods=20).std(ddof=1)\n    weight = 1.0 + 0.5 * np.tanh(range_stability)\n    df_copy[\"factor_volume_instability_range_gated_log\"] = cv * weight\n    return df_copy[\"factor_volume_instability_range_gated_log\"]",
+  "description": "Mutation of qualified parent g1_crossover_alpha_liq_0002_stability_range_smooth_gen0_001_f07710b2. The core economic mechanism remains volume instability (coefficient of variation of trailing 20-day volume) as a liquidity fragility signal, with the same bounded range-stability gate. The mutation applies a log1p compression to the volume CV to reduce right-skew and outlier influence, targeting improvement in MI and nonlinear payoff thickness while preserving the parent's strong RankICIR/ICIR and ranking stability. The log transform is monotonic, so cross-sectional rank ordering is largely retained, and the existing cs_zscore post-transform continues to standardize the asset-specific ratio.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01973491717140468,
+    "icir": 0.4694195885540581,
+    "mi": 0.006193789442829889,
+    "rank_ic": 0.041377062765696554,
+    "rank_icir": 0.9809660575944782
+  },
+  "raw_metrics": {
+    "ic": -0.01973491717140468,
+    "icir": -0.4694195885540581,
+    "mi": 0.006193789442829889,
+    "rank_ic": -0.041377062765696554,
+    "rank_icir": -0.9809660575944782
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 6.914832206988047,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.05584193060474707,
+    "top_quantile_excess_return": 0.03935213943383653,
+    "top_quantile_max_drawdown": -0.027403983228011075,
+    "top_quantile_turnover": 0.1614026724913183
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:55:36.739946+00:00"
+}

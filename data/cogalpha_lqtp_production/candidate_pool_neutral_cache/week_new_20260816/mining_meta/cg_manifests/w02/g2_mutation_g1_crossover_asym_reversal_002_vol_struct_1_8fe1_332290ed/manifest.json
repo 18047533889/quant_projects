@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_asym_reversal_002_vol_struct_1_8fe1_332290ed",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 242,
+  "factor_name": "factor_asymmetry_reversal",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w02-20260806-024836-r21",
+  "expression_type": "python",
+  "formula": "ema(3) of ((0.5 - loc)*range/close * (1 + 0.5 * ema(asym,10)))",
+  "code": "def factor_asymmetry_reversal(df):\n    df_copy = df.copy()\n    # Primary reversal with asymmetry (from parent)\n    ret = df_copy[\"close\"] / df_copy[\"close\"].shift(1) - 1\n    pos_mask = ret > 0\n    neg_mask = ret < 0\n    up_vol = (ret.where(pos_mask, 0.0) ** 2).rolling(60, min_periods=30).mean() ** 0.5\n    down_vol = (ret.where(neg_mask, 0.0) ** 2).rolling(60, min_periods=30).mean() ** 0.5\n    asym = (down_vol - up_vol) / (down_vol + up_vol).replace(0.0, np.nan)\n    asym_smooth = asym.ewm(span=10).mean()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    loc = (df_copy[\"close\"] - df_copy[\"low\"]) / range_.replace(0.0, np.nan)\n    reversal_raw = (0.5 - loc) * range_ / df_copy[\"close\"]\n    scale_asym = 1.0 + 0.5 * asym_smooth\n    factor = reversal_raw * scale_asym\n    # Smooth with EMA to reduce noise (mutation)\n    factor = factor.ewm(span=3).mean()\n    df_copy[\"factor_asymmetry_reversal\"] = factor\n    return df_copy[\"factor_asymmetry_reversal\"]",
+  "description": "This mutation removes the volume climax modifier from the parent, which was causing payoff gate failure, and instead adds a short EMA smoothing (span=3) to the raw asymmetry-amplified reversal signal. The core economic mechanism remains: intraday location (close-low)/(high-low) captures closing position; low location suggests upward reversal, amplified when downside volatility exceeds upside volatility (asym>0). The EMA reduces noise while preserving the mean-reversion signal, aiming to improve IC and ICIR stability.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03924218468157606,
+    "icir": 0.40142629931902046,
+    "mi": 0.021070844899805152,
+    "rank_ic": 0.038327613233658436,
+    "rank_icir": 0.3320187260191398
+  },
+  "raw_metrics": {
+    "ic": 0.03924218468157606,
+    "icir": 0.40142629931902046,
+    "mi": 0.021070844899805152,
+    "rank_ic": 0.038327613233658436,
+    "rank_icir": 0.3320187260191398
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.13782482586526634,
+    "top_quantile_excess_return": 1.080681821344871,
+    "top_quantile_max_drawdown": -0.04876338766565569,
+    "top_quantile_turnover": 0.5312942385303561
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:17:20.748106+00:00"
+}

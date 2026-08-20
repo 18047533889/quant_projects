@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_alpha_market_cycle_0_2_alpha_drawdown_volume_con_ecd53c80",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 371,
+  "factor_name": "factor_cycle_dominance_volume_confirmed",
+  "domain_agent": "alpha-market-cycle",
+  "run_id": "fleet-w02-20260813-194428-r5",
+  "expression_type": "python",
+  "formula": "(sum(overnight_ret,120) - sum(intraday_ret,120)) / (sum(|overnight_ret|,120)+sum(|intraday_ret|,120)) * (0.6 + 0.4 * recovery_volume_ratio_60)",
+  "code": "def factor_cycle_dominance_volume_confirmed(df):\n    \"\"\"Cycle dominance signal gated by drawdown recovery buy-volume confidence.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    window_cycle = 120\n    overnight_cum = overnight_ret.rolling(window_cycle, min_periods=1).sum()\n    intraday_cum = intraday_ret.rolling(window_cycle, min_periods=1).sum()\n    total_abs = (overnight_ret.abs().rolling(window_cycle, min_periods=1).sum() + intraday_ret.abs().rolling(window_cycle, min_periods=1).sum()).replace(0.0, np.nan)\n    cycle_dominance = ((overnight_cum - intraday_cum) / total_abs).fillna(0.0)\n\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    window_conf = 60\n    rolling_peak = close.rolling(window_conf, min_periods=1).max()\n    underwater = close < rolling_peak\n    up_day = close > close.shift(1)\n    recovery_volume = (volume * underwater * up_day).rolling(window_conf, min_periods=1).sum()\n    underwater_volume = (volume * underwater).rolling(window_conf, min_periods=1).sum()\n    volume_conf = recovery_volume / underwater_volume.replace(0, np.nan)\n    volume_conf = volume_conf.replace([np.inf, -np.inf], np.nan).fillna(0.5).clip(0.0, 1.0)\n    confidence_weight = 0.6 + 0.4 * volume_conf\n    factor = cycle_dominance * confidence_weight\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    df_copy[\"factor_cycle_dominance_volume_confirmed\"] = factor\n    return df_copy[\"factor_cycle_dominance_volume_confirmed\"]",
+  "description": "Primary mechanism is the overnight-vs-intraday cycle dominance from parent alpha-market-cycle-0-2, which has qualified ICIR/RankICIR and strong payoff evidence. The child keeps this raw cycle signal and applies a single bounded confidence weight derived from the lightweight recovery volume confirmation idea of parent alpha-drawdown-volume-confirm-002. When a stock is underwater and up-day volume is high relative to all underwater volume, the cycle signal is up-weighted (max 1.0); when recovery volume is weak, it is attenuated to 0.6. This preserves the raw payoff character of the cycle factor while using volume confirmation to filter false regime signals, targeting RankIC and MI without adding a second independent factor. Cross-sectional transform remains none because the parent cycle factor has strong raw payoff evidence.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.019476298561681024,
+    "icir": 0.39150479755338885,
+    "mi": 0.009022266971419057,
+    "rank_ic": 0.021443026709171156,
+    "rank_icir": 0.433634829178508
+  },
+  "raw_metrics": {
+    "ic": 0.019476298561681024,
+    "icir": 0.39150479755338885,
+    "mi": 0.009022266971419057,
+    "rank_ic": 0.021443026709171156,
+    "rank_icir": 0.433634829178508
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 8.098994452652553,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.39283647532515387,
+    "top_quantile_excess_return": 5.800878974468208,
+    "top_quantile_max_drawdown": -0.03851213167152323,
+    "top_quantile_turnover": 0.0723209741427606
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:33:04.308862+00:00"
+}

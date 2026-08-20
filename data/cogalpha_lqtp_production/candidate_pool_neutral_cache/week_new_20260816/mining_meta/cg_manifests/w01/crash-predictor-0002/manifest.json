@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "crash-predictor-0002",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 316,
+  "factor_name": "factor_volume_return_liquidity_beta",
+  "domain_agent": "alpha-crash-predictor",
+  "run_id": "fleet-w01-20260813-111511-r3",
+  "expression_type": "python",
+  "formula": "-beta(daily_ret, log_volume_change, 20)",
+  "code": "def factor_volume_return_liquidity_beta(df):\n    \"\"\"Liquidity fragility: negative rolling beta of returns to volume changes indicates distributional selling pressure.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    log_vol = np.log(df_copy[\"volume\"].clip(lower=1.0))\n    vol_change = log_vol.diff()\n    window = 20\n    cov = ret.rolling(window, min_periods=window).cov(vol_change)\n    var_vol = vol_change.rolling(window, min_periods=window).var(ddof=1)\n    beta = cov / var_vol.replace(0.0, np.nan)\n    factor = -beta\n    factor.name = \"factor_volume_return_liquidity_beta\"\n    return factor",
+  "description": "Regime breakdown is often preceded by a shift from normal liquidity-demand dynamics to distributional selling: returns become negatively related to volume changes. This factor estimates a rolling 20-day beta of daily returns on log changes in volume and negates it. A more negative beta indicates that rising volume accompanies falling prices, a crash precursor. The mechanism is distinct from simple volume-ratio pressure and provides a novel raw pathway.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.015544846031908201,
+    "icir": 0.22377785798397928,
+    "mi": 0.016572370436653827,
+    "rank_ic": 0.04113409056753225,
+    "rank_icir": 0.6341234581294629
+  },
+  "raw_metrics": {
+    "ic": 0.015544846031908201,
+    "icir": 0.22377785798397928,
+    "mi": 0.016572370436653827,
+    "rank_ic": 0.04113409056753225,
+    "rank_icir": 0.6341234581294629
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.11312382352799,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.05750231297136388,
+    "top_quantile_excess_return": 0.37611294250925775,
+    "top_quantile_max_drawdown": -0.13256040822847637,
+    "top_quantile_turnover": 0.17078267140711573
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:52:34.361540+00:00"
+}

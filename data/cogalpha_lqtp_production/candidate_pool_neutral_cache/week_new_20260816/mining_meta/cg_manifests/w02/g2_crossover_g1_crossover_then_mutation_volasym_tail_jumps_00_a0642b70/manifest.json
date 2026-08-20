@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_g1_crossover_then_mutation_volasym_tail_jumps_00_a0642b70",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 432,
+  "factor_name": "factor_intraday_tail_asymmetry_magnitude_smoothed",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w02-20260814-042827-r7",
+  "expression_type": "python",
+  "formula": "ewm(span=5) of -(down_intraday_tail_mag_63 - up_intraday_tail_mag_63)/(down_intraday_tail_mag_63 + up_intraday_tail_mag_63 + 1), where down_intraday_tail_mag = rolling 63-day sum of -intraday_ret when intraday_ret < -1.5*lagged_vol, up_intraday_tail_mag = rolling 63-day sum of intraday_ret when intraday_ret > +1.5*lagged_vol, vol = rolling 63-day std of intraday_ret lagged by 1, intraday_ret from alpha_tools.decompose_overnight_intraday",
+  "code": "def factor_intraday_tail_asymmetry_magnitude_smoothed(df):\n    '''Downside vs upside intraday tail-return magnitude asymmetry, borrowing overnight/intraday decomposition from secondary parent.'''\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy['close'], df_copy['open'])\n    vol = intraday_ret.rolling(63, min_periods=20).std(ddof=1).shift(1)\n    down_tail = (intraday_ret < -1.5 * vol) & (vol > 0)\n    up_tail = (intraday_ret > 1.5 * vol) & (vol > 0)\n    down_mag = (-intraday_ret).where(down_tail, 0.0).rolling(63, min_periods=20).sum()\n    up_mag = intraday_ret.where(up_tail, 0.0).rolling(63, min_periods=20).sum()\n    raw_asym = -(down_mag - up_mag) / (down_mag + up_mag + 1.0)\n    smoothed = raw_asym.ewm(span=5, min_periods=1).mean()\n    df_copy['factor_intraday_tail_asymmetry_magnitude_smoothed'] = smoothed\n    return df_copy['factor_intraday_tail_asymmetry_magnitude_smoothed']",
+  "description": "Primary mechanism inherits the qualified parent's downside/upside tail-jump magnitude asymmetry using lagged 63-day realized volatility and \u00b11.5 sigma thresholds, but applies it to intraday returns only. The lightweight idea borrowed from the secondary parent is the overnight/intraday decomposition via alpha_tools.decompose_overnight_intraday, isolating intraday tail behavior from overnight gap noise. This focuses the signal on intraday crash-like vs rally-like tail magnitudes, targeting the parent's weak IC/ICIR while preserving the parent's strong rank stability and payoff monotonicity through raw scaling (none) and EWM smoothing span=5.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.010686845758248157,
+    "icir": 0.14616327509558222,
+    "mi": 0.009684169408773258,
+    "rank_ic": 0.030689716634954282,
+    "rank_icir": 0.4362045568838497
+  },
+  "raw_metrics": {
+    "ic": -0.010686845758248157,
+    "icir": -0.14616327509558222,
+    "mi": 0.009684169408773258,
+    "rank_ic": -0.030689716634954282,
+    "rank_icir": -0.4362045568838497
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.11514937093531,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.08838011147775493,
+    "top_quantile_excess_return": 0.6219179708081704,
+    "top_quantile_max_drawdown": -0.05348039218258582,
+    "top_quantile_turnover": 0.05699072343270915
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:41:27.093773+00:00"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_stability_range_smooth_gen0_001_e6a2a8dd",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 629,
+  "factor_name": "factor_range_stability_smoothed",
+  "domain_agent": "alpha-stability",
+  "run_id": "fleet-w04-20260813-161708-r6",
+  "expression_type": "python",
+  "formula": "-std_20(mean_3((high-low)/close))",
+  "code": "def factor_range_stability_smoothed(df):\n    \"\"\"Smoothed range ratio stability: negative rolling std of 3-day averaged daily range to close ratio.\"\"\"\n    df_copy = df.copy()\n    range_ratio = (df_copy['high'] - df_copy['low']) / df_copy['close'].replace(0.0, np.nan)\n    smoothed_ratio = range_ratio.rolling(3, min_periods=1).mean()\n    stability = -smoothed_ratio.rolling(20, min_periods=20).std(ddof=1)\n    df_copy['factor_range_stability_smoothed'] = stability\n    return df_copy['factor_range_stability_smoothed']",
+  "description": "Preserves the parent's core mechanism: stable daily price range relative to close captures calm, persistent price discovery. Mutation smooths the range ratio with a 3-day moving average before computing the rolling standard deviation, reducing day-to-day measurement noise and improving the signal's stability without adding new feature families. Higher values indicate a more stable trading range. Cross-sectional transform remains none to preserve the parent's raw payoff mechanism and strong payoff evidence.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.0198680750098073,
+    "icir": 0.2510078562760191,
+    "mi": 0.022369873160880793,
+    "rank_ic": 0.05358061232488097,
+    "rank_icir": 0.6546883605577994
+  },
+  "raw_metrics": {
+    "ic": 0.0198680750098073,
+    "icir": 0.2510078562760191,
+    "mi": 0.022369873160880793,
+    "rank_ic": 0.05358061232488097,
+    "rank_icir": 0.6546883605577994
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.066039555725502,
+    "quantile_monotonicity": 0.9272727272727272,
+    "top_quantile_annualized_excess_return": 0.007327973583443281,
+    "top_quantile_excess_return": 0.005199680167107257,
+    "top_quantile_max_drawdown": -0.045201312067692956,
+    "top_quantile_turnover": 0.11614409029849666
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:56:11.547767+00:00"
+}

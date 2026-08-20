@@ -1,0 +1,55 @@
+ticket: QE-FULL-SUITE-VERIFY
+status: DONE
+agent: Coordinator (direct)
+timestamp: "2026-08-20T12:40:00Z"
+
+verification:
+  focused_suite:
+    command: "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/ -x --ignore=tests/test_streaming_evaluator.py --ignore=tests/backends/test_polars_backend.py --ignore=tests/kernels/test_performance.py -q"
+    result: "1540 passed, 25 skipped, 41 warnings in 189.44s"
+    pass: true
+    notes: "1540 > 1528 from Writer-A run (12 new QE-METRIC V2 tests included). All 25 skips are CuPy GPU tests."
+
+  streaming_evaluator_audit:
+    file: tests/test_streaming_evaluator.py
+    lines: 1204
+    test_count: 51
+    result: "51 passed in 14.49s"
+    memory_peak: "~2.5 GB (well within 15 GiB)"
+    exclusion_markers: "None (no @pytest.mark.slow)"
+    global_state: "None (conftest.py autouse fixture handles cleanup)"
+    recommendation: "INCLUDE in normal suite. Previously excluded by convention, not by marker."
+    notes: "Pure numpy + internal QE modules. No Redis, polars, or external deps."
+
+  registry_spec_leak_fix:
+    file: tests/test_coverage_namespace.py
+    all_8_tests_pass: true
+    notes: "try/finally restores compute_fn via object.__setattr__"
+
+  polars_perf_reduction:
+    file: tests/backends/test_polars_backend.py
+    new_shape: "252 x 500 x 100 (~100 MiB)"
+    tests_marked_slow: 2
+    notes: "Down from 252x3000x1000 (~6 GiB)"
+
+  quick_reference_status:
+    exists: false
+    notes: "quick_reference directory does not exist. examples/quick_reference_parallel.py is a standalone copy-paste reference, not an importable module. No test imports it."
+
+  pit_leakage_audit:
+    result: "No look-ahead bias found in quant_evaluator/metrics/"
+    notes: "exposure.py has explicit look-ahead guard (ValueError if factor periods > label). ic_summary shift detection is backward-looking. No negative shifts found in metrics code."
+
+  bug_fixes_applied:
+    - file: quant_evaluator/tests/test_a_share_acceptance.py
+      line: 250
+      fix: "Fail-open pattern: except Exception: pass now collects inaccessible metric IDs for diagnostic output"
+
+summary: |
+  1. QE full suite (excluding streaming + polars perf + kernels/perf): 1540 passed, 25 skipped.
+  2. Streaming evaluator audit: 51 tests pass in 14.49s, ~2.5 GB peak. RECOMMEND INCLUDING in normal suite.
+  3. Registry-spec leak fix verified (8/8 tests).
+  4. Polars perf tests reduced to 252x500x100 and marked slow.
+  5. quick_reference does not exist as a module; examples/ uses standalone scripts. No import fix needed.
+  6. PIT leakage audit: no look-ahead bias in QE metrics code.
+  7. Bug fix: test_a_share_acceptance.py fail-open pattern hardened with diagnostic output.

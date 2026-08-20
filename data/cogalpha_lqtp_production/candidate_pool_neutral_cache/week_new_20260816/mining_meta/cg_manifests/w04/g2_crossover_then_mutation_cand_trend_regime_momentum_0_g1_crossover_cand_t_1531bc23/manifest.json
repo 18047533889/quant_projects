@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_cand_trend_regime_momentum_0_g1_crossover_cand_t_1531bc23",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 386,
+  "factor_name": "factor_adx_linear_momentum_ema30_blend20_25",
+  "domain_agent": "alpha-volatility-regime",
+  "run_id": "fleet-w04-20260805-075323-r28",
+  "expression_type": "python",
+  "formula": "(2*clip((ADX(14)-20)/5,0,1)-1) * (close - EMA30)/EMA30",
+  "code": "def factor_adx_linear_momentum_ema30_blend20_25(df):\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    \n    # ---- Manual ADX (14) ----\n    period = 14\n    prev_close = close.shift(1)\n    tr = np.maximum(high - low,\n                    np.maximum((high - prev_close).abs(),\n                               (low - prev_close).abs()))\n    atr = tr.ewm(alpha=1/period, min_periods=period).mean()\n    \n    up_move = high - high.shift(1)\n    down_move = low.shift(1) - low\n    plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)\n    minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)\n    plus_dm = pd.Series(plus_dm, index=df_copy.index)\n    minus_dm = pd.Series(minus_dm, index=df_copy.index)\n    \n    atr_eps = atr.replace(0.0, np.nan)\n    plus_di = 100 * (plus_dm.ewm(alpha=1/period, min_periods=period).mean() / atr_eps)\n    minus_di = 100 * (minus_dm.ewm(alpha=1/period, min_periods=period).mean() / atr_eps)\n    dx = (np.abs(plus_di - minus_di) / (plus_di + minus_di).replace(0.0, np.nan)) * 100\n    adx = dx.ewm(alpha=1/period, min_periods=period).mean()\n    # ------------------------\n    \n    ema30 = close.ewm(span=30, min_periods=30).mean()\n    pct_diff = (close - ema30) / ema30\n    blend = np.clip((adx - 20) / 5.0, 0.0, 1.0)\n    factor = (2.0 * blend - 1.0) * pct_diff\n    \n    df_copy[\"factor_adx_linear_momentum_ema30_blend20_25\"] = factor\n    return df_copy[\"factor_adx_linear_momentum_ema30_blend20_25\"]",
+  "description": "Repaired version of mutation of parent factor_adx_linear_momentum. Preserves core regime-gated momentum mechanism but replaces 50-day SMA with 30-day EMA. ADX blend range narrowed to 20\u201325. ADX computed manually with pandas to avoid talib runtime unavailability. Smoothing uses Wilder's method (ewm alpha=1/14). No cross-sectional transform, preserving parent's rank-order stability.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03025712709378586,
+    "icir": 0.2913824400009803,
+    "mi": 0.0425935318325692,
+    "rank_ic": 0.05048048665145342,
+    "rank_icir": 0.5589271536721404
+  },
+  "raw_metrics": {
+    "ic": -0.03025712709378586,
+    "icir": -0.2913824400009803,
+    "mi": 0.0425935318325692,
+    "rank_ic": -0.05048048665145342,
+    "rank_icir": -0.5589271536721404
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.12610886895300188,
+    "top_quantile_excess_return": 0.08290810276777827,
+    "top_quantile_max_drawdown": -0.022552339725373183,
+    "top_quantile_turnover": 0.25924528132568886
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:32:09.199400+00:00"
+}

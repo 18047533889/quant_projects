@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_range_exp_rev_001_alpha_herding_0_2_cd19296b",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 354,
+  "factor_name": "factor_range_expansion_reversal_vol_confirm",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w04-20260805-020538-r26",
+  "expression_type": "python",
+  "formula": "(-((close / close.shift(5) - 1) * ((high - low).rolling(20).zscore())) * np.where(volume > 1.2 * volume.rolling(20).mean(), 1.0, 0.5)) smoothed EMA(3)",
+  "code": "def factor_range_expansion_reversal_vol_confirm(df):\n    \"\"\"Range expansion reversal with volume confirmation: oversold bounce only when volume is elevated.\"\"\"\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    range_mean = range_.rolling(20, min_periods=20).mean()\n    range_std = range_.rolling(20, min_periods=20).std(ddof=1)\n    range_z = (range_ - range_mean) / range_std.replace(0, np.nan)\n    ret5 = df_copy[\"close\"] / df_copy[\"close\"].shift(5) - 1\n    raw_signal = -ret5 * range_z\n    avg_vol = df_copy[\"volume\"].rolling(20, min_periods=20).mean()\n    vol_condition = df_copy[\"volume\"] > 1.2 * avg_vol\n    signal = raw_signal * np.where(vol_condition, 1.0, 0.5)\n    signal = signal.ewm(span=3, min_periods=3).mean()\n    df_copy[\"factor_range_expansion_reversal_vol_confirm\"] = signal\n    return df_copy[\"factor_range_expansion_reversal_vol_confirm\"]",
+  "description": "Evolved from range_exp_rev_001, preserving the range expansion reversal logic but incorporating volume conviction filter from alpha-herding-0-2. The signal is only active when volume exceeds 1.2x its 20-day average, indicating strong participation that validates the oversold condition. This reduces noise from low-volume reversals and enhances signal quality. The negative sign inverts the 5-day return to produce positive score for deep drops with wide ranges. Exponential smoothing (span=3) smooths the sparse signal.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.028428030961254833,
+    "icir": 0.4122840978181747,
+    "mi": 0.02840710711580119,
+    "rank_ic": 0.06615715700086058,
+    "rank_icir": 0.8569359866102507
+  },
+  "raw_metrics": {
+    "ic": 0.028428030961254833,
+    "icir": 0.4122840978181747,
+    "mi": 0.02840710711580119,
+    "rank_ic": 0.06615715700086058,
+    "rank_icir": 0.8569359866102507
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.1880452776783752,
+    "top_quantile_excess_return": 0.12865515228235713,
+    "top_quantile_max_drawdown": -0.01543768253887623,
+    "top_quantile_turnover": 0.3956135320247677
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:29:24.389365+00:00"
+}

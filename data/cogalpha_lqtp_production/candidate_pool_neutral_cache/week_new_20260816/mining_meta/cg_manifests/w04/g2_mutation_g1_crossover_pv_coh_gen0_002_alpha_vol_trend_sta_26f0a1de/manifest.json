@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_pv_coh_gen0_002_alpha_vol_trend_sta_26f0a1de",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 657,
+  "factor_name": "factor_price_dollar_volume_coherence_stability",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260813-184426-r7",
+  "expression_type": "python",
+  "formula": "corr( rolling_rank(close,20), rolling_rank(close*volume,20) ) * (1 + 0.5 * tanh( LINEARREG_SLOPE(close*volume,20) / STD(close*volume,20) ))",
+  "code": "def factor_price_dollar_volume_coherence_stability(df):\n    \"\"\"Price-dollar-volume rank correlation scaled by dollar volume trend stability.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    dollar_volume = close * volume\n    window = 20\n    close_rank = close.rolling(window, min_periods=window).rank(pct=True)\n    dollar_volume_rank = dollar_volume.rolling(window, min_periods=window).rank(pct=True)\n    pv_corr = close_rank.rolling(window, min_periods=window).corr(dollar_volume_rank)\n    dollar_volume_slope = pd.Series(talib.LINEARREG_SLOPE(dollar_volume.values.astype(float), timeperiod=window), index=df_copy.index)\n    dollar_volume_std = dollar_volume.rolling(window, min_periods=window).std(ddof=1)\n    volume_stability = dollar_volume_slope / dollar_volume_std.replace(0.0, np.nan)\n    stability_modifier = 1.0 + 0.5 * np.tanh(volume_stability)\n    factor = pv_corr * stability_modifier\n    df_copy[\"factor_price_dollar_volume_coherence_stability\"] = factor\n    return df_copy[\"factor_price_dollar_volume_coherence_stability\"]",
+  "description": "Mutation of parent factor_price_volume_coherence_stability. The core mechanism is price-volume rank correlation; we preserve that but change the volume measure from raw share volume to dollar volume (close * volume) to better capture actual capital commitment. The parent's volume trend stability modifier is retained but now computed on dollar volume slope divided by dollar volume standard deviation, reflecting persistent dollar volume trends. This mutation targets the parent's low linear IC by using a more economically meaningful volume measure, while preserving the stable rank-order coherence (RankIC=0.0418, RankICIR=0.7874) as the parent strength. The bounded tanh modifier keeps the adjustment gentle, ensuring the modifier remains a lightweight auxiliary rather than dominating the signal. No cross-sectional transform is applied.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01709180592719531,
+    "icir": 0.3777310279483334,
+    "mi": 0.00568709252138877,
+    "rank_ic": 0.04529127028936975,
+    "rank_icir": 0.8113283909043714
+  },
+  "raw_metrics": {
+    "ic": -0.01709180592719531,
+    "icir": -0.3777310279483334,
+    "mi": 0.00568709252138877,
+    "rank_ic": -0.04529127028936975,
+    "rank_icir": -0.8113283909043714
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 7.324116120171234,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.08210785037186907,
+    "top_quantile_excess_return": 0.051378466557503444,
+    "top_quantile_max_drawdown": -0.023621916186211678,
+    "top_quantile_turnover": 0.1749823153855063
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:59:33.935431+00:00"
+}

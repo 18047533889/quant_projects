@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_cand_regime_002_cdacda78",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 17,
+  "factor_name": "factor_volume_regime_reversal_cont",
+  "domain_agent": "alpha-regime-gating",
+  "run_id": "fleet-w04-20260802-162129-r2",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_volume_regime_reversal_cont(df):\n    \"\"\"Adaptive mean-reversion with continuous volume-based blending.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    rev_short = -ret.rolling(5, min_periods=5).sum()\n    rev_long = -ret.rolling(20, min_periods=20).sum()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(\n        df_copy[\"volume\"], window=20\n    )\n    w = vol_ratio.clip(0.5, 1.5)\n    w = (w - 0.5) / 1.0  # maps [0.5,1.5] -> [0,1]\n    factor = w * rev_short + (1 - w) * rev_long\n    factor = pd.Series(factor, index=df_copy.index, name=\"factor_volume_regime_reversal_cont\").fillna(0.0)\n    return factor",
+  "description": "Volume-regime adaptive reversal: uses continuous volume ratio from classify_volume_regime to smoothly interpolate between short-term (5-day) reversal, dominating in high-volume regimes, and long-term (20-day) reversal, dominating in low-volume regimes. The mutation replaces binary regime flags with a clipped linear weight from volume ratio (0.5 to 1.5) mapped to [0,1], providing smoother transitions and potentially improving IC and ICIR while preserving the high RankIC and MI of the elite parent.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.022719782486463662,
+    "icir": 0.19033136074328422,
+    "mi": 0.033592966152252046,
+    "rank_ic": 0.05724967210432296,
+    "rank_icir": 0.44290684573627387
+  },
+  "raw_metrics": {
+    "ic": 0.022719782486463662,
+    "icir": 0.19033136074328422,
+    "mi": 0.033592966152252046,
+    "rank_ic": 0.05724967210432296,
+    "rank_icir": 0.44290684573627387
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.08760305547458147,
+    "top_quantile_excess_return": 0.061111085158171985,
+    "top_quantile_max_drawdown": -0.04528647458687163,
+    "top_quantile_turnover": 0.2742428235177185
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:13:39.131327+00:00"
+}

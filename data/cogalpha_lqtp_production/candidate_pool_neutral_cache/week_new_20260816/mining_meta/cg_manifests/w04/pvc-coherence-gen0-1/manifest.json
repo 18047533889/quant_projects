@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "pvc-coherence-gen0-1",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "elite",
+  "factor_id": 470,
+  "factor_name": "factor_volume_weighted_momentum",
+  "domain_agent": "alpha-price-volume-coherence",
+  "run_id": "fleet-w04-20260805-231604-r34",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_volume_weighted_momentum(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_ratio = df_copy[\"volume\"] / df_copy[\"volume\"].rolling(20, min_periods=20).mean()\n    weighted_ret = ret * vol_ratio\n    sum_wt_ret = weighted_ret.rolling(10, min_periods=10).sum()\n    sum_vol = vol_ratio.rolling(10, min_periods=10).sum()\n    factor = sum_wt_ret / sum_vol.replace(0, np.nan)\n    df_copy[\"factor_volume_weighted_momentum\"] = factor.fillna(0)\n    return df_copy[\"factor_volume_weighted_momentum\"]",
+  "description": "Captures price momentum weighted by volume coherence; when price moves up on high volume and down on low volume, the weighted average is positive, signaling sustainable trend. Cross-sectional z-scoring highlights stocks with strongest volume-confirmed momentum relative to peers.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.02518029242773168,
+    "icir": 0.2484237607418768,
+    "mi": 0.032855691417954525,
+    "rank_ic": 0.05431270255378238,
+    "rank_icir": 0.48737559542121833
+  },
+  "raw_metrics": {
+    "ic": -0.02518029242773168,
+    "icir": -0.2484237607418768,
+    "mi": 0.032855691417954525,
+    "rank_ic": -0.05431270255378238,
+    "rank_icir": -0.48737559542121833
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.3,
+    "top_quantile_annualized_excess_return": 0.028461301316693444,
+    "top_quantile_excess_return": 0.019112275938587775,
+    "top_quantile_max_drawdown": -0.048058525219694115,
+    "top_quantile_turnover": 0.26658837966570376
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:39:18.096752+00:00"
+}

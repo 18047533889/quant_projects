@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_mutation_alpha_tail_risk_gen0_001_cc445e1b",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 683,
+  "factor_name": "factor_intraday_downside_pressure",
+  "domain_agent": "alpha-tail-risk",
+  "run_id": "fleet-w04-20260813-232233-r9",
+  "expression_type": "python",
+  "formula": "negative rolling sum of (max(previous_close - low, 0) / previous_close * volume / rolling_mean_volume)",
+  "code": "def factor_intraday_downside_pressure(df):\n    \"\"\"Volume-confirmed intraday downside excursions accumulated over a rolling window.\"\"\"\n    df_copy = df.copy()\n    prev_close = df_copy[\"close\"].shift(1)\n    intraday_downside = ((prev_close - df_copy[\"low\"]) / prev_close.replace(0.0, np.nan)).clip(lower=0.0)\n    vol_mean = df_copy[\"volume\"].rolling(60, min_periods=20).mean()\n    vol_ratio = df_copy[\"volume\"] / vol_mean.replace(0.0, np.nan)\n    vol_ratio = vol_ratio.replace([np.inf, -np.inf], np.nan).clip(lower=0.0, upper=5.0)\n    downside_shock = intraday_downside * vol_ratio\n    pressure = downside_shock.rolling(20, min_periods=5).sum()\n    df_copy[\"factor_intraday_downside_pressure\"] = -pressure\n    return df_copy[\"factor_intraday_downside_pressure\"]",
+  "description": "Mutation preserves the parent's core mechanism of volume-confirmed downside selling pressure but replaces close-to-close negative returns with intraday downside excursion from prior close to low. This better captures informed liquidation and tail risk that occurs during the trading session, even if prices recover by close. The high-volume weighting remains, and the negative sign orients higher factor values to lower selling pressure, consistent with expected better future returns.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.019698184873521284,
+    "icir": 0.24604161617209877,
+    "mi": 0.018716532088504323,
+    "rank_ic": 0.045349610689447595,
+    "rank_icir": 0.5884353137227539
+  },
+  "raw_metrics": {
+    "ic": 0.019698184873521284,
+    "icir": 0.24604161617209877,
+    "mi": 0.018716532088504323,
+    "rank_ic": 0.045349610689447595,
+    "rank_icir": 0.5884353137227539
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 4.069958530767767,
+    "quantile_monotonicity": 0.7090909090909091,
+    "top_quantile_annualized_excess_return": -0.007034170932940564,
+    "top_quantile_excess_return": -0.004890106628505531,
+    "top_quantile_max_drawdown": -0.0433411900900601,
+    "top_quantile_turnover": 0.10017267427051146
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T20:01:13.190940+00:00"
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_vol_highvol_decay_v1_b1628ed0",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 475,
+  "factor_name": "factor_volume_regime_ema_adaptive_momentum",
+  "domain_agent": "alpha-volume-structure",
+  "run_id": "fleet-w04-20260805-231604-r34",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_volume_regime_ema_adaptive_momentum(df):\n    df_copy = df.copy()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    ret = df_copy[\"close\"].pct_change()\n    weighted_ret = ret * vol_ratio\n    ewm_wt_ret_5 = weighted_ret.ewm(span=5, adjust=False).mean()\n    ewm_vol_5 = vol_ratio.ewm(span=5, adjust=False).mean()\n    factor_5 = ewm_wt_ret_5 / ewm_vol_5.replace(0, np.nan)\n    ewm_wt_ret_20 = weighted_ret.ewm(span=20, adjust=False).mean()\n    ewm_vol_20 = vol_ratio.ewm(span=20, adjust=False).mean()\n    factor_20 = ewm_wt_ret_20 / ewm_vol_20.replace(0, np.nan)\n    weight = np.clip((vol_ratio - 1) * 2.0, 0, 1)\n    factor = weight * factor_5 + (1 - weight) * factor_20\n    df_copy[\"factor_volume_regime_ema_adaptive_momentum\"] = factor.fillna(0)\n    return df_copy[\"factor_volume_regime_ema_adaptive_momentum\"]",
+  "description": "EMA-smoothed volume-regime adaptive momentum: replaces rolling sum with exponential moving average for the volume-weighted returns and volume normalization. EMA better captures recent volume information and reduces equal-weight window noise. The core mechanism remains blending short (span=5) and long (span=20) volume-weighted momentum based on continuous volume ratio weight. This preserves the parent's smooth regime adaptation and rank stability while targeting improved IC through noise reduction.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.027373888620250725,
+    "icir": 0.27376657928978426,
+    "mi": 0.034047429696792975,
+    "rank_ic": 0.0728450113636229,
+    "rank_icir": 0.6211907413644571
+  },
+  "raw_metrics": {
+    "ic": -0.027373888620250725,
+    "icir": -0.27376657928978426,
+    "mi": 0.034047429696792975,
+    "rank_ic": -0.0728450113636229,
+    "rank_icir": -0.6211907413644571
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.1283250150723727,
+    "top_quantile_excess_return": 0.09898114340556052,
+    "top_quantile_max_drawdown": -0.03735700001208253,
+    "top_quantile_turnover": 0.24768545503090292
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_zscore",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:40:19.525515+00:00"
+}

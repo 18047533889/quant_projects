@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g1_crossover_then_mutation_agentcreative_gen0_002_range_vol_vol_of_vol_mean_58fc1ead",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w01",
+  "pool": "qualified",
+  "factor_id": 282,
+  "factor_name": "factor_range_vol_of_vol_median_stable",
+  "domain_agent": "alpha-range-vol",
+  "run_id": "fleet-w01-20260813-014015-r1",
+  "expression_type": "python",
+  "formula": "-( (std_{20}(H-L) / median_{60}(H-L)) ^ (1/3) )",
+  "code": "def factor_range_vol_of_vol_median_stable(df):\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    median_range = range_.rolling(60, min_periods=20).median()\n    std_range = range_.rolling(20, min_periods=10).std(ddof=1)\n    cv = std_range / median_range.replace(0.0, np.nan)\n    factor = -np.cbrt(cv)\n    df_copy[\"factor_range_vol_of_vol_median_stable\"] = factor\n    return df_copy[\"factor_range_vol_of_vol_median_stable\"]",
+  "description": "Mutates parent vol-of-vol mean-reversion by replacing the trailing 60-day mean range denominator with the trailing 60-day median range. The core mechanism remains high volatility of daily range relative to its typical level predicting lower forward returns; the median denominator is more robust to outlier wide-range days and should improve top-quantile payoff thickness while preserving the stable monotonic ranking (parent RankICIR=0.5300). One lightweight signed cube-root compression is retained as the only modifier.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.01606139492245295,
+    "icir": 0.24895495671090673,
+    "mi": 0.004376867613695268,
+    "rank_ic": 0.031056905003925626,
+    "rank_icir": 0.5423398742557629
+  },
+  "raw_metrics": {
+    "ic": 0.01606139492245295,
+    "icir": 0.24895495671090673,
+    "mi": 0.004376867613695268,
+    "rank_ic": 0.031056905003925626,
+    "rank_icir": 0.5423398742557629
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 5.028172709082371,
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": -0.012196011515726357,
+    "top_quantile_excess_return": -0.06771802408871752,
+    "top_quantile_max_drawdown": -0.13424979980897023,
+    "top_quantile_turnover": 0.17109619320948935
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T17:46:51.243794+00:00"
+}

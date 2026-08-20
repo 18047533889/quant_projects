@@ -1,0 +1,55 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "ADT_002_directional_movement_persistence",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w02",
+  "pool": "qualified",
+  "factor_id": 413,
+  "factor_name": "factor_directional_movement_persistence",
+  "domain_agent": "alpha-daily-trend",
+  "run_id": "fleet-w02-20260814-042827-r7",
+  "expression_type": "python",
+  "formula": "ewm(span=5) of (sum(plus_dm,20) - sum(minus_dm,20)) / sum(true_range,20), where plus_dm and minus_dm are directional movement components",
+  "code": "def factor_directional_movement_persistence(df):\n    df_copy = df.copy()\n    n = 20\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    prev_high = high.shift(1)\n    prev_low = low.shift(1)\n    prev_close = close.shift(1)\n    up_move = high - prev_high\n    down_move = prev_low - low\n    plus_dm = up_move.where((up_move > down_move) & (up_move > 0), 0.0)\n    minus_dm = down_move.where((down_move > up_move) & (down_move > 0), 0.0)\n    tr1 = high - low\n    tr2 = (high - prev_close).abs()\n    tr3 = (low - prev_close).abs()\n    true_range = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)\n    plus_dm_sum = plus_dm.rolling(n, min_periods=n).sum()\n    minus_dm_sum = minus_dm.rolling(n, min_periods=n).sum()\n    true_range_sum = true_range.rolling(n, min_periods=n).sum()\n    dx = (plus_dm_sum - minus_dm_sum) / true_range_sum.replace(0.0, np.nan)\n    dx = dx.ewm(span=5, min_periods=1).mean()\n    df_copy[\"factor_directional_movement_persistence\"] = dx\n    return df_copy[\"factor_directional_movement_persistence\"]",
+  "description": "Uses directional movement (higher highs vs lower lows) accumulated over 20 days, normalized by true range, then exponentially smoothed (span=5). This measures whether persistent directional pressure is upward or downward, isolating sustained trend from noise. The smoothing reduces turnover and supports persistent Top10% membership after neutralization.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.008840267069780496,
+    "icir": 0.11394857892722467,
+    "mi": 0.006804388033026854,
+    "rank_ic": 0.02755596224761227,
+    "rank_icir": 0.31959896913987224
+  },
+  "raw_metrics": {
+    "ic": -0.008840267069780496,
+    "icir": -0.11394857892722467,
+    "mi": 0.006804388033026854,
+    "rank_ic": -0.02755596224761227,
+    "rank_icir": -0.31959896913987224
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 3.8129913669859192,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.011621979214969436,
+    "top_quantile_excess_return": 0.06825701102391935,
+    "top_quantile_max_drawdown": -0.08641248787361555,
+    "top_quantile_turnover": 0.11262605522587425
+  },
+  "fitness_direction": -1,
+  "cross_sectional_transform": "cs_rank",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T18:38:17.159215+00:00"
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_vol_asym_001_g1_crossover_then_mutation_vol_asym_bb3004fd",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 106,
+  "factor_name": "factor_downside_upasym_adaptive_window",
+  "domain_agent": "alpha-vol-asymmetry",
+  "run_id": "fleet-w04-20260803-062912-r8",
+  "expression_type": "python",
+  "formula": null,
+  "code": "def factor_downside_upasym_adaptive_window(df):\n    \"\"\"Downside volatility asymmetry with volume-regime adaptive rolling window.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n\n    is_high_vol, _, _ = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n\n    down_sq_20 = (ret.clip(upper=0)).pow(2).rolling(20, min_periods=10).sum()\n    up_sq_20 = (ret.clip(lower=0)).pow(2).rolling(20, min_periods=10).sum()\n    down_count_20 = ret.lt(0).rolling(20, min_periods=10).sum()\n    up_count_20 = ret.gt(0).rolling(20, min_periods=10).sum()\n    down_vol_20 = (down_sq_20 / down_count_20.replace(0.0, np.nan)).pow(0.5)\n    up_vol_20 = (up_sq_20 / up_count_20.replace(0.0, np.nan)).pow(0.5)\n    raw_20 = down_vol_20 - up_vol_20\n\n    down_sq_10 = (ret.clip(upper=0)).pow(2).rolling(10, min_periods=5).sum()\n    up_sq_10 = (ret.clip(lower=0)).pow(2).rolling(10, min_periods=5).sum()\n    down_count_10 = ret.lt(0).rolling(10, min_periods=5).sum()\n    up_count_10 = ret.gt(0).rolling(10, min_periods=5).sum()\n    down_vol_10 = (down_sq_10 / down_count_10.replace(0.0, np.nan)).pow(0.5)\n    up_vol_10 = (up_sq_10 / up_count_10.replace(0.0, np.nan)).pow(0.5)\n    raw_10 = down_vol_10 - up_vol_10\n\n    signal = np.where(is_high_vol > 0, raw_10, raw_20)\n    df_copy[\"factor_downside_upasym_adaptive_window\"] = signal\n    return df_copy[\"factor_downside_upasym_adaptive_window\"]",
+  "description": "Mutation of parent g2_crossover_vol_asym_001_g1_crossover_then_mutation_vol_asym_750950b1, which used fixed 20-day downside/upside volatility and volume-regime EWM smoothing. This child removes smoothing and instead makes the rolling window adaptive: 10 days during high-volume regimes (as per classify_volume_regime), 20 days otherwise. The shorter window enhances responsiveness to rapidly changing risk dynamics, targeting improvement in MI and IC, while the longer window in low-volume regimes preserves the stability and high ICIR/RankICIR of the elite vol_asym_001 lineage. Preserves core downside vs upside volatility asymmetry.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.020838759615661822,
+    "icir": 0.22452296002100341,
+    "mi": 0.029298731049848925,
+    "rank_ic": 0.05003335044775492,
+    "rank_icir": 0.526091124363368
+  },
+  "raw_metrics": {
+    "ic": 0.020838759615661822,
+    "icir": 0.22452296002100341,
+    "mi": 0.029298731049848925,
+    "rank_ic": 0.05003335044775492,
+    "rank_icir": 0.526091124363368
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8,
+    "top_quantile_annualized_excess_return": 0.06972275956247143,
+    "top_quantile_excess_return": 0.052974974839550715,
+    "top_quantile_max_drawdown": -0.0384053145816009,
+    "top_quantile_turnover": 0.2041308469308237
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:17:46.332016+00:00"
+}

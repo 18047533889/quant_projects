@@ -168,12 +168,6 @@ _LEGAL_TRANSITIONS = [
         required_evidence=(),
         description="Marked deprecated before production"
     ),
-    StateTransition(
-        LifecycleState.DEPRECATED,
-        LifecycleState.RETIRED,
-        required_evidence=(),
-        description="Archived and retired"
-    ),
 ]
 
 

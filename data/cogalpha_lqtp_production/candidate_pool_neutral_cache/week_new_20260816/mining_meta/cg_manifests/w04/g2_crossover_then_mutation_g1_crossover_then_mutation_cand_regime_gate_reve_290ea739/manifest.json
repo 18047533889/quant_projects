@@ -1,0 +1,54 @@
+{
+  "schema_version": "mining_outputs.v1",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_then_mutation_cand_regime_gate_reve_290ea739",
+  "campaign_stamp": "202608130940",
+  "instance": "cogalpha_ashare_v1",
+  "worker_id": "w04",
+  "pool": "qualified",
+  "factor_id": 78,
+  "factor_name": "factor_vol_amplified_20d_reversal",
+  "domain_agent": "alpha-regime-gating",
+  "run_id": "fleet-w04-20260803-013655-r6",
+  "expression_type": "python",
+  "formula": "rev_20d * clip(vol_ratio, 0.5, 2.0)",
+  "code": "def factor_vol_amplified_20d_reversal(df):\n    df_copy = df.copy()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20, high_threshold=1.5, low_threshold=0.6)\n    vol_mult = vol_ratio.clip(0.5, 2.0)\n    rev_20d = -(df_copy[\"close\"] / df_copy[\"close\"].shift(20) - 1)\n    factor = rev_20d * vol_mult\n    df_copy[\"factor_vol_amplified_20d_reversal\"] = factor\n    return df_copy[\"factor_vol_amplified_20d_reversal\"]",
+  "description": "Mutation of parent factor_vol_weighted_reversal_lagged_vol. Preserves the core volume-contingent reversal mechanism but simplifies by removing the two-horizon blend and the 2-day volume lag. Instead, a single 20-day reversal window is directly amplified by the current continuous volume ratio, clipped to prevent extreme values. The hypothesis is that medium-term reversals are more reliable under elevated trading volume (indicating climax behavior), and focusing on one clean horizon reduces noise and improves interpretability and robustness. Parent strengths: strong IC and ICIR from volume-conditioned reversals are maintained.",
+  "generator_name": "cogalpha",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "metrics": {
+    "ic": 0.03307814814219786,
+    "icir": 0.2828987880373727,
+    "mi": 0.0412771858434855,
+    "rank_ic": 0.05635268189707031,
+    "rank_icir": 0.4282803758134076
+  },
+  "raw_metrics": {
+    "ic": 0.03307814814219786,
+    "icir": 0.2828987880373727,
+    "mi": 0.0412771858434855,
+    "rank_ic": 0.05635268189707031,
+    "rank_icir": 0.4282803758134076
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.4,
+    "top_quantile_annualized_excess_return": 0.04963723065742842,
+    "top_quantile_excess_return": 0.034811010741483184,
+    "top_quantile_max_drawdown": -0.04593814175896682,
+    "top_quantile_turnover": 0.23057534049391512
+  },
+  "fitness_direction": 1,
+  "cross_sectional_transform": "none",
+  "neutralize_mode": "industry_size",
+  "neutralization_applied": true,
+  "values_artifact": "values.parquet",
+  "values_window": {
+    "start": "2018-01-01",
+    "end": "2026-07-31"
+  },
+  "values_layout": "wide_date_by_asset",
+  "exported_at": "2026-08-14T19:16:31.828080+00:00"
+}
