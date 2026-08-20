@@ -1121,6 +1121,9 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
         else "estimated"
     )
     # R39-P1-PERF-082: compile-time execution certificate (O(1) runtime check).
+    # R21-P026: pass data_kind so the certificate records the datasource
+    # identity (requested_backend / resolved_dialect / datasource_identity)
+    # instead of silently labelling a ClickHouse route as DuckDB.
     certificate = _build_execution_certificate(
         plan,
         ops,
@@ -1128,6 +1131,7 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
         chosen_backend=chosen[0],
         rows=rows,
         occurrence_count=len(occurrences),
+        data_kind=data_kind,
     )
     return PlanRoute(
         backend=chosen[0],
@@ -1260,10 +1264,13 @@ def plan_native_subgraph_fraction(
     plan: PlanNode,
     ctx: Any,
     *,
-    backend: str = "duckdb_sql",
+    backend: str | None = None,
     mode: str | None = None,
 ) -> dict[str, Any]:
     """R33 §11.2/§75 Step 3：maximal native subgraph 覆盖评估。
+
+    ``backend`` 仅为调用方提示；SQL dialect 由 ``ctx`` 的 data source 决定
+    （R21-P026：ClickHouse 数据源不再默认按 duckdb 评估）。
 
     返回 ``{native_ops, unsupported_ops, native_fraction, tail_fraction}``：
        - ``native_fraction``：SQL-native occurrence 占比（可下推的部分）。
