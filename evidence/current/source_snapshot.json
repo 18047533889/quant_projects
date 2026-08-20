@@ -1,16 +1,16 @@
 {
   "schema_version": 1,
-  "source_snapshot_id": "src:v1:dcfc1dd953dd53cd",
-  "merkle_root": "dcfc1dd953dd53cd058ca1a04d95aa1220dc77ec458dbf1e89d82419871a762c",
+  "source_snapshot_id": "src:v1:6db776ff6ddbbdfc",
+  "merkle_root": "6db776ff6ddbbdfc9a2b163d1499c4a0d52b74a8aa7a39f2aa936d8e13a69c66",
   "tree_count": 7,
   "file_count": 843,
   "trees": {
     "backend": "78f2d076f1d20c5fa192840273a0442896161edc234c4b1bcbae345cb30f1bef",
     "cleaned_operators": "aa2cc497137c42d4b1500c24d592cb34a86e84633452746c856b27b838e0e949",
-    "mining": "87d56b9d47a71bf73945c9bfb8fd375a3f576ea82443d8d39372bc7474d65a3b",
+    "mining": "6b5527c886a737dd1ca04329d32af94e3be22fa2546518acd04cdf9e66da1990",
     "planner": "bdcc8d32c61422a413080ad0c56d9941d30bae563a6ac364b9cbd9d27506eb9b",
     "runtime": "8350bbe1451acb0fb511aa9136abdb5d48c4bb74a8d7a6272465fff50685323a",
-    "market": "e40a6456b4292976e413140ec6db37703a36512d100f2e00d5779492af7d0a64",
+    "market": "50ecdcf308689a343ad701674a22c895de0bd4d2fa0f21f31c4d952861c132ec",
     "fields": "63b65d77f090c0d42e2ab017bb5fbfed64500178e2c9842959b9b7b3846e1d7c"
   },
   "files": [
@@ -2504,7 +2504,7 @@
     },
     {
       "path": "market/context.py",
-      "sha256": "524bdbac37c007444dc0f73436abb5d2b2041c5ac916ad0e4f3625ba9c20d2eb"
+      "sha256": "b87d2abb0a1baf7025853ba2cea29bc04bdc8c225e9a960af0308659f1629447"
     },
     {
       "path": "market/exchange_session_calendar.py",
@@ -2548,7 +2548,7 @@
     },
     {
       "path": "mining/direct_use.py",
-      "sha256": "988f35995695e86d222fec762bab1de1d546a51e90082589f4566a538a92acde"
+      "sha256": "542c205fee3fee39e8a9a6044a73a3b90fe9cb8b933f685bcd476cf9a1854aab"
     },
     {
       "path": "mining/operator_catalog.py",
@@ -3396,5 +3396,5 @@
     "market",
     "fields"
   ],
-  "generated_at": "2026-08-20T18:34:30.678202+00:00"
+  "generated_at": "2026-08-20T18:51:36.055278+00:00"
 }

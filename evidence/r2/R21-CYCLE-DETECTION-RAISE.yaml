@@ -1,0 +1,36 @@
+# R21-CYCLE-DETECTION-RAISE
+# Cycle detection now raises PhysicalPlanCycleError (fail closed)
+id: R21-CYCLE-DETECTION-RAISE
+status: implemented
+date: 2026-08-21
+
+summary: |
+  Cycle detection in _topological_layers() now raises PhysicalPlanCycleError
+  instead of logging an error and breaking. This ensures fail-closed semantics
+  for cyclic dependency detection in the parallel region scheduler.
+
+changes:
+  - file: factor_engine/runtime/multibackend/parallel_region_scheduler.py
+    what: _topological_layers() raises PhysicalPlanCycleError on cycle
+    before: _logger.error("cyclic dependency detected in region graph"); break
+    after: raise PhysicalPlanCycleError(f"Cyclic dependency detected...")
+    rationale: Fail closed — no silent continue on cycle
+
+  - file: factor_engine/runtime/exceptions.py
+    what: Added PhysicalPlanCycleError class
+    class: PhysicalPlanCycleError(FactorEngineError)
+    docstring: "物理计划中检测到循环依赖 —— 必须 fail closed。"
+
+  - file: factor_engine/tests/runtime/test_cycle_detection_raise.py
+    what: 3 regression tests for PhysicalPlanCycleError
+    tests:
+      - test_simple_two_node_cycle: A->B->A
+      - test_three_node_cycle: A->B->C->A
+      - test_self_cycle: A->A
+
+test_evidence:
+  pytest_output: |
+    factor_engine/tests/runtime/test_cycle_detection_raise.py::TestCycleDetectionRaise::test_simple_two_node_cycle PASSED [ 33%]
+    factor_engine/tests/runtime/test_cycle_detection_raise.py::TestCycleDetectionRaise::test_three_node_cycle PASSED [ 66%]
+    factor_engine/tests/runtime/test_cycle_detection_raise.py::TestCycleDetectionRaise::test_self_cycle PASSED [100%]
+    3 passed in 0.14s

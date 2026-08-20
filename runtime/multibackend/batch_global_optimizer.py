@@ -291,7 +291,7 @@ class PhysicalBatchGlobalOptimizer:
         source_nodes = {nid for nid, node in all_nodes.items()
                        if getattr(node, "op", "") == "column"}
 
-        # MB-P1-010: Calculate real shared benefits
+        # MB-P1-010: Calculate initial shared benefits using Pandas baseline
         shared_benefits, total_benefit = estimate_shared_benefits(
             shared_nodes,
             consumer_counts,
@@ -316,6 +316,20 @@ class PhysicalBatchGlobalOptimizer:
             all_nodes, node_graph, estimate_rows, ctx, node_estimates
         )
         per_node_choices = dict(self._choices)
+
+        # MB-P1-010, §44: Recompute shared benefit based on selected physical implementation.
+        # The initial estimate used Pandas baseline costs; after physical assignment,
+        # we recalculate avoided compute based on each shared node's selected backend cost.
+        shared_benefits, total_benefit = self._recompute_shared_benefits_after_assignment(
+            shared_nodes=shared_nodes,
+            consumer_counts=consumer_counts,
+            per_node_choices=per_node_choices,
+            source_nodes=source_nodes,
+            node_estimates=node_estimates,
+            rows=estimate_rows,
+            ctx=ctx,
+        )
+
         total_compute = sum(choice.compute_cost_ms for choice in per_node_choices.values())
         total_transfer = sum(choice.transfer_from_children_ms for choice in per_node_choices.values())
 
@@ -963,6 +977,96 @@ class PhysicalBatchGlobalOptimizer:
         if run_mode != "production":
             return False, "production readiness requires production run mode"
         return True, ""
+
+    def _recompute_shared_benefits_after_assignment(
+        self,
+        *,
+        shared_nodes: dict[str, PlanNode],
+        consumer_counts: dict[str, int],
+        per_node_choices: dict[str, NodeBackendChoice],
+        source_nodes: set[str],
+        node_estimates: dict[str, tuple[int, int, int]],
+        rows: int,
+        ctx: Any,
+    ) -> tuple[dict[str, SharedNodeBenefit], float]:
+        """MB-P1-010, §44: Recompute shared benefit using selected backend costs.
+
+        After physical assignment, the actual compute cost for a shared node
+        depends on its assigned backend (Polars, Q, Numba, etc.), not the
+        Pandas baseline used in the initial estimate.  This method recalculates
+        avoided compute based on the selected implementation.
+        """
+        from backend.operator_cost import estimate_backend_cost
+
+        benefits: dict[str, SharedNodeBenefit] = {}
+        total_benefit = 0.0
+
+        for node_id, node in shared_nodes.items():
+            consumers = consumer_counts.get(node_id, 0)
+            if consumers <= 1:
+                continue
+
+            # Use the assigned backend cost if available, else fall back to
+            # the initially-estimated cost (which used Pandas baseline).
+            choice = per_node_choices.get(node_id)
+            if choice is not None:
+                # Recompute cost with the selected backend
+                from backend.plan_cost_router import plan_occurrences
+
+                occurrences = plan_occurrences(node)
+                if occurrences:
+                    occ = occurrences[0]
+                    compute_cost = estimate_backend_cost(
+                        occ.canonical,
+                        choice.backend.value,
+                        row_count_estimate=rows,
+                    )
+                else:
+                    compute_cost = choice.compute_cost_ms
+            else:
+                # Shared node not directly assigned; use initial estimate
+                from backend.plan_cost_router import plan_occurrences
+
+                occurrences = plan_occurrences(node)
+                if occurrences:
+                    occ = occurrences[0]
+                    compute_cost = estimate_backend_cost(
+                        occ.canonical,
+                        "pandas_numpy",
+                        row_count_estimate=rows,
+                    )
+                else:
+                    compute_cost = 0.0
+
+            # Benefit: we compute once but N consumers use it
+            avoided_recompute = compute_cost * (consumers - 1)
+
+            # Source scan benefit
+            scan_bytes = 0
+            avoided_scan_bytes = 0
+            if node_id in source_nodes:
+                attrs = getattr(node, "attrs", None) or {}
+                scan_bytes = int(attrs.get("estimated_bytes", 0) or 0)
+                if scan_bytes < 0:
+                    scan_bytes = 0
+                avoided_scan_bytes = scan_bytes * (consumers - 1)
+
+            scan_benefit = avoided_scan_bytes / 1_000_000.0 * self.scan_cost_per_mb
+            total_node_benefit = avoided_recompute + scan_benefit
+
+            benefit = SharedNodeBenefit(
+                node_id=node_id,
+                consumer_count=consumers,
+                compute_cost_ms=compute_cost,
+                avoided_recompute_ms=avoided_recompute,
+                scan_bytes=scan_bytes,
+                avoided_scan_bytes=avoided_scan_bytes,
+                benefit_ms=total_node_benefit,
+            )
+            benefits[node_id] = benefit
+            total_benefit += total_node_benefit
+
+        return benefits, total_benefit
 
     def _build_physical_plan(
         self,

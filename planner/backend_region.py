@@ -46,6 +46,30 @@ class Representation(str, Enum):
     Q_SHARED_HANDLE = "q_shared_handle"
 
 
+class TransferTransform(str, Enum):
+    """Transfer operation type at region boundary.
+
+    R21-TRANSFER-BOUNDARIES: Formal transfer boundaries for cross-backend data movement.
+    Each transform has a specific cost model and semantic contract.
+    """
+
+    SAME_BACKEND_NATIVE = "same_backend_native"  # No conversion
+    DUCKDB_TO_ARROW = "duckdb_to_arrow"  # Section 21: Preferred boundary
+    Q_TO_ARROW = "q_to_arrow"  # R21: Q → Arrow for cross-backend consumption
+    CLICKHOUSE_TO_ARROW = "clickhouse_to_arrow"  # R21: ClickHouse → Arrow boundary
+    ARROW_TO_POLARS = "arrow_to_polars"  # Arrow → Polars DataFrame/LazyFrame
+    ARROW_TO_PANDAS = "arrow_to_pandas"  # Arrow → Pandas DataFrame
+    POLARS_TO_PANDAS = "polars_to_pandas"  # Polars → Pandas
+    PANDAS_TO_POLARS = "pandas_to_polars"  # Pandas → Polars
+    POLARS_TO_NUMPY = "polars_to_numpy"  # R21: Polars Series → NumPy ndarray
+    NUMPY_TO_POLARS = "numpy_to_polars"  # R21: NumPy ndarray → Polars Series
+    WIDE_TO_LONG = "wide_to_long"  # Reshape operation
+    LONG_TO_WIDE = "long_to_wide"  # Reshape operation
+    SORT = "sort"  # Explicit sort to satisfy downstream property
+    REPARTITION = "repartition"  # Repartition by different key
+    DTYPE_CAST = "dtype_cast"  # Type conversion
+
+
 class ExecutionAxis(str, Enum):
     """Execution partitioning axis."""
 
@@ -240,6 +264,7 @@ class TransferEdge:
     MB-P2-002: Typed contract for all transfer edges.
     Section 22: SQL ordering cannot be assumed — downstream requiring sorted data
     must check producer properties and set requires_sort=True if needed.
+    R21-TRANSFER-BOUNDARIES: Uses TransferTransform enum for formal transform type.
     """
 
     edge_id: str
@@ -249,6 +274,7 @@ class TransferEdge:
     target_backend: PhysicalBackend
     source_representation: Representation
     target_representation: Representation
+    transform: TransferTransform  # R21-TRANSFER-BOUNDARIES: formal transform type
     estimated_rows: int
     estimated_bytes: int
     estimated_transfer_ms: float
@@ -278,6 +304,7 @@ class TransferEdge:
             "consumer_region": self.consumer_region,
             "source_representation": self.source_representation.value if isinstance(self.source_representation, Enum) else str(self.source_representation),
             "target_representation": self.target_representation.value if isinstance(self.target_representation, Enum) else str(self.target_representation),
+            "transform": self.transform.value if isinstance(self.transform, Enum) else str(self.transform),
             "estimated_bytes": self.estimated_bytes,
             "requires_sort": self.requires_sort,
             "requires_repartition": self.requires_repartition,
@@ -520,6 +547,7 @@ class PhysicalRegionPlan:
             "target_backend": _enum(e.target_backend),
             "source_repr": _enum(e.source_representation),
             "target_repr": _enum(e.target_representation),
+            "transform": _enum(e.transform),  # R21-TRANSFER-BOUNDARIES: bind transform type
             # transfer transforms (§22: explicit and costed — hence hashed)
             "requires_sort": e.requires_sort,
             "requires_repartition": e.requires_repartition,

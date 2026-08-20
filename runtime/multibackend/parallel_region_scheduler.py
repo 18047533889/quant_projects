@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 _logger = logging.getLogger(__name__)
@@ -44,6 +44,44 @@ class ExecutionRegion:
             "dependencies": self.dependencies,
             "estimated_cost_ms": round(self.estimated_cost_ms, 2),
             "memory_requirement_bytes": self.memory_requirement_bytes,
+        }
+
+
+@dataclass
+class TypedRegionFailure:
+    """Typed region failure with structured error information."""
+
+    region_id: str
+    error_type: str
+    error_message: str
+    exception: Exception | None = None
+    failed_dependencies: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "region_id": self.region_id,
+            "error_type": self.error_type,
+            "error_message": self.error_message,
+            "failed_dependencies": self.failed_dependencies,
+        }
+
+
+@dataclass
+class RegionExecutionResult:
+    """Result of a single region execution."""
+
+    region_id: str
+    success: bool
+    result: Any = None
+    failure: TypedRegionFailure | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        if self.success:
+            return {"region_id": self.region_id, "success": True, "result": self.result}
+        return {
+            "region_id": self.region_id,
+            "success": False,
+            "failure": self.failure.to_dict() if self.failure else None,
         }
 
 
@@ -91,7 +129,14 @@ class ParallelRegionScheduler:
         regions: list[ExecutionRegion],
         execute_fn: Any,
     ) -> dict[str, Any]:
-        """并行调度多个 region（拓扑排序 + 并发执行）。
+        """并行调度多个 region（topological ready-queue, work-conserving）。
+
+        与旧版 strict-layer-barrier 的区别：
+            - 旧版：Layer 0 全部完成 → Layer 1 全部完成 → ...（层内等待）
+            - 新版：region 完成后立即唤醒其依赖者（ready queue push），不再等
+              同层未完成的兄弟。
+            - 优势：减少关键路径延迟（关键 path 上的 region 不被非关键 path 上
+              的兄弟阻塞）。
 
         Args:
             regions: Region 列表
@@ -101,50 +146,116 @@ class ParallelRegionScheduler:
             执行结果摘要 {"results": {region_id: result}, "elapsed_ms": ...}
         """
         import time
+        from concurrent.futures import FIRST_COMPLETED, wait
 
         start_ms = time.monotonic() * 1000.0
 
-        # 构建依赖图（region_id → 依赖的 region_id 列表）
+        # 构建依赖图
         dep_graph = {r.region_id: set(r.dependencies) for r in regions}
         region_by_id = {r.region_id: r for r in regions}
 
-        # 拓扑排序（分层：每层是独立可并行的 region）
-        layers = self._topological_layers(dep_graph)
+        # 反向依赖图（用于推入 ready queue）
+        reverse_deps: dict[str, set[str]] = {rid: set() for rid in dep_graph}
+        for rid, deps in dep_graph.items():
+            for d in deps:
+                if d in reverse_deps:
+                    reverse_deps[d].add(rid)
 
-        results: dict[str, Any] = {}
+        results: dict[str, RegionExecutionResult] = {}
+        failed_regions: set[str] = set()
         completed: set[str] = set()
 
-        # 逐层执行（层内并行）
-        for layer_idx, layer in enumerate(layers):
-            _logger.info(
-                "executing layer %d: %d regions (parallel)", layer_idx, len(layer)
-            )
+        # Ready queue：所有依赖已满足的 region
+        ready_queue: list[str] = [
+            rid for rid, deps in dep_graph.items() if not deps
+        ]
 
-            # 提交层内所有 region（并行执行）
-            futures = {}
-            for region_id in layer:
-                region = region_by_id[region_id]
+        # 在跑 futures: {region_id: Future}
+        running: dict[str, Any] = {}
+        admitted: set[str] = set()
+
+        def _admit_from_queue() -> None:
+            """从 ready_queue 提交可运行的 region 到线程池。"""
+            nonlocal ready_queue
+            new_ready: list[str] = []
+            for rid in ready_queue:
+                if len(running) >= self.max_parallel_regions:
+                    break
+                if rid in admitted or rid in completed or rid in failed_regions:
+                    continue
+                # 二次检查依赖（可能在 queue 排序期间被取消）
+                failed_deps = [d for d in dep_graph[rid] if d in failed_regions]
+                if failed_deps:
+                    results[rid] = RegionExecutionResult(
+                        region_id=rid,
+                        success=False,
+                        failure=TypedRegionFailure(
+                            region_id=rid,
+                            error_type="DependencyCancellation",
+                            error_message=f"Region cancelled due to failed dependencies: {failed_deps}",
+                            failed_dependencies=failed_deps,
+                        ),
+                    )
+                    failed_regions.add(rid)
+                    continue
+                region = region_by_id[rid]
                 future = self._executor.submit(execute_fn, region)
-                futures[future] = region_id
+                running[rid] = future
+                admitted.add(rid)
+            ready_queue = new_ready
 
-            # 等待层内所有 region 完成
-            for future in as_completed(futures):
-                region_id = futures[future]
+        def _on_complete(rid: str) -> None:
+            """region 完成后的回调：记录结果 + 推入 ready queue。"""
+            completed.add(rid)
+            running.pop(rid, None)
+            # 推入 ready queue：依赖此 region 且所有依赖已满足
+            for child in reverse_deps.get(rid, set()):
+                if child in completed or child in failed_regions or child in admitted:
+                    continue
+                child_deps = dep_graph[child]
+                if child_deps.issubset(completed):
+                    ready_queue.append(child)
+
+        # 主循环：work-conserving ready-queue 调度
+        while ready_queue or running:
+            _admit_from_queue()
+            if not running:
+                break
+            # 等待任意一个完成（事件驱动，非轮询）
+            done_set, _ = wait(
+                list(running.values()),
+                timeout=0.1,
+                return_when=FIRST_COMPLETED,
+            )
+            for future in done_set:
+                # 找到对应的 region_id
+                rid = None
+                for r, f in list(running.items()):
+                    if f is future:
+                        rid = r
+                        break
+                if rid is None:
+                    continue
                 try:
-                    result = future.result(timeout=600)
-                    results[region_id] = result
-                    completed.add(region_id)
-
+                    result = future.result(timeout=0)
+                    results[rid] = RegionExecutionResult(
+                        region_id=rid, success=True, result=result
+                    )
                     with self._lock:
                         self._metrics.total_regions_scheduled += 1
-                        if len(layer) > 1:
-                            self._metrics.parallel_executions += 1
-                        else:
-                            self._metrics.sequential_executions += 1
-
                 except Exception as exc:
-                    _logger.error("region %s execution failed: %s", region_id, exc)
-                    results[region_id] = {"error": str(exc)}
+                    _logger.error("region %s execution failed: %s", rid, exc)
+                    failure = TypedRegionFailure(
+                        region_id=rid,
+                        error_type=type(exc).__name__,
+                        error_message=str(exc),
+                        exception=exc,
+                    )
+                    results[rid] = RegionExecutionResult(
+                        region_id=rid, success=False, failure=failure
+                    )
+                    failed_regions.add(rid)
+                _on_complete(rid)
 
         elapsed_ms = (time.monotonic() * 1000.0) - start_ms
 
@@ -159,12 +270,32 @@ class ParallelRegionScheduler:
             self._metrics.total_saved_ms += saved_ms
 
         return {
-            "results": results,
+            "results": {rid: res.to_dict() for rid, res in results.items()},
             "elapsed_ms": elapsed_ms,
             "estimated_serial_ms": serial_time_ms,
             "saved_ms": saved_ms,
-            "layers": len(layers),
+            "layers": self._topological_depth(dep_graph),
+            "failed_regions": list(failed_regions),
         }
+
+    def _topological_depth(self, dep_graph: dict[str, set[str]]) -> int:
+        """计算 DAG 的拓扑深度（关键路径层数），用于估算加速比。"""
+        depths: dict[str, int] = {}
+
+        def _depth(rid: str) -> int:
+            if rid in depths:
+                return depths[rid]
+            deps = dep_graph.get(rid, set())
+            if not deps:
+                depths[rid] = 0
+                return 0
+            d = max(_depth(d) for d in deps if d in dep_graph) + 1
+            depths[rid] = d
+            return d
+
+        for rid in dep_graph:
+            _depth(rid)
+        return max(depths.values()) + 1 if depths else 0
 
     def _topological_layers(
         self, dep_graph: dict[str, set[str]]

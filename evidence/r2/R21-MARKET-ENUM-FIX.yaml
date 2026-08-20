@@ -20,19 +20,24 @@ root_cause: |
 
 # Fix
 fix: |
-  1. Import Market enum from market.context in mining/direct_use.py
-  2. Change DirectUseContext.market type from `str` to `Market`
-  3. Update all callers to use Market enum values (Market.ASHARE, Market.US)
-  4. Maintain backward compatibility: Market enum inherits from str, so comparisons
+  1. Create Market enum in market/context.py (str, Enum) with ASHARE and US values
+  2. Import Market enum in mining/direct_use.py
+  3. Change DirectUseContext.market type from `str` to `Market`
+  4. Add runtime validation in __post_init__ to ensure market is a Market enum instance
+  5. Update all callers to use Market enum values (Market.ASHARE, Market.US)
+  6. Maintain backward compatibility: Market enum inherits from str, so comparisons
      with string values still work (e.g., `ctx.market == "ashare"` remains valid)
-  5. Update existing tests to use Market enum
-  6. Add regression tests for Market enum enforcement
+  7. Update existing tests to use Market enum
+  8. Add regression tests for Market enum enforcement
 
 # Files modified
 files:
+  - path: market/context.py
+    lines: [1-18]
+    change: "Created Market enum (str, Enum) with ASHARE and US values"
   - path: mining/direct_use.py
     lines: [32-42, 1698-1714]
-    change: "Added Market import; changed market: str to market: Market"
+    change: "Added Market import; changed market: str to market: Market; added runtime validation"
   - path: api/mining_integration.py
     lines: [1168-1186, 1242-1253]
     change: "Updated DirectUseContext instantiation to use Market enum"
@@ -75,8 +80,8 @@ evidence:
     actual: ValueError
   - operator: DirectUseContext
     scenario: Construct with arbitrary string
-    expected: TypeError/ValueError
-    actual: TypeError/ValueError
+    expected: TypeError
+    actual: TypeError: market must be a Market enum, got str; expected Market.ASHARE or Market.US
   - operator: DirectUseContext
     scenario: String comparison (backward compat)
     expected: ctx.market == "ashare" is True
