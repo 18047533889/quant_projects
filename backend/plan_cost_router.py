@@ -570,6 +570,10 @@ def _candidate_is_measured(ops: tuple[str, ...], backend: str) -> bool:
         keys = ("polars_long", "polars")
     elif backend == "polars_panel":
         keys = ("polars_panel", "polars")
+    elif backend == "clickhouse_sql":
+        # ClickHouse has no per-operator measured baseline yet; DuckDB entries
+        # must NOT be inherited as ClickHouse measurements.
+        return False
     for op in ops:
         row = entries.get(op)
         if not isinstance(row, dict):
@@ -940,6 +944,7 @@ def _execute_ms_for_backend(backend: str, rows: int) -> float:
         return 0.0
     rate = {
         "duckdb_sql": 5_000_000,
+        "clickhouse_sql": 5_000_000,
         "polars": 3_000_000,
         "polars_panel": 3_000_000,
         "polars_long": 3_000_000,
@@ -971,7 +976,7 @@ def predict_ttdc(shape: Any, backend: str) -> TtdcEstimate:
         scan_ms = rows / 500_000.0 * 20.0  # 无字节信息时的粗粒度 fallback
     conversion_ms = 0.0
     materialize_ms = 0.0
-    if backend == "duckdb_sql":
+    if backend in ("duckdb_sql", "clickhouse_sql"):
         conversion_ms = 0.0
         if scan_bytes > 0:
             materialize_ms = (scan_bytes / 1024.0 / 1024.0) / _CONVERT_MBPS * 1000.0
@@ -1097,8 +1102,12 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
             est = predict_ttdc(shape, backend)
             candidates[backend] = float(candidates[backend]) + est.total_ms
         # 规则：下游是 DuckDB fused factor 时，不为「size」选 Polars lazy——
-        # duckdb 候选存在时给 polars 候选加明确惩罚。
-        if downstream_duckdb_fused and "duckdb_sql" in candidates:
+        # SQL 候选存在时给 polars 候选加明确惩罚（R21-P026：ClickHouse
+        # 数据源的候选键是 clickhouse_sql，不再误写 duckdb_sql）。
+        sql_candidate_present = any(
+            k in candidates for k in ("duckdb_sql", "clickhouse_sql")
+        )
+        if downstream_duckdb_fused and sql_candidate_present:
             for backend in ("polars_panel", "polars_long", "pyarrow"):
                 if backend in candidates:
                     candidates[backend] = (

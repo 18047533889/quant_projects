@@ -147,7 +147,12 @@ class ProductionExecutionCertificate:
         2. ``no_fallback``: if the runtime event reports a fallback, the
            executed backend must be explicitly listed in ``allowed_fallbacks``;
         3. backend match: the executed backend (normalized) must be in
-           ``backend_eligibility``.
+           ``backend_eligibility``;
+        4. R21-P026 dialect identity: if both the certificate
+           (``resolved_dialect``) and the runtime event (``dialect``) declare a
+           datasource dialect, they must match — a DuckDB-issued certificate
+           must NOT validate a ClickHouse execution (and vice versa) even
+           though both normalize to the ``duckdb_sql`` executor family.
         """
         if runtime_backend_event is None:
             return False
@@ -162,6 +167,10 @@ class ProductionExecutionCertificate:
             if backend not in allowed:
                 return False
         if backend not in self.backend_eligibility:
+            return False
+        event_dialect = str(runtime_backend_event.get("dialect") or "")
+        cert_dialect = str(self.resolved_dialect or "")
+        if event_dialect and cert_dialect and event_dialect != cert_dialect:
             return False
         return True
 

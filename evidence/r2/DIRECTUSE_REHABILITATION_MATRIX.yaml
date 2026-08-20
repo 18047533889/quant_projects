@@ -1,6 +1,6 @@
 schema_version: 1
 task_id: R21-MATRIX-CONSOLIDATION-DIRECTUSE
-current_sha: c00321abe3fe610c33bc73fef57af77439145445
+current_sha: f798b527004511d2fc9611ca1d09a49cc8783232
 generation_timestamp: '2026-08-20'
 status: COMPLETED_LOCAL
 production_certification: NOT_RUN
@@ -16,10 +16,10 @@ target:
   estimated_new_direct_alpha_canonicals: 100-160
   rule: preserve raw primitives; add causal dimensionless mineable siblings
 direct_use_split:
-  total_canonicals: 1620
-  mining_visible: 1561
-  composition_usable: 1561
-  terminal_usable: 1388
+  total_canonicals: 1624
+  mining_visible: 1565
+  composition_usable: 1565
+  terminal_usable: 1392
   production_admitted: 0
   directly_usable: 0
 p0_families:
@@ -63,6 +63,6 @@ gates:
   DIRECT_MINING_CATALOG_EXPORT: NOT_RUN
   PRODUCTION_CERTIFICATION: NOT_RUN
 limitations:
-  - Counts are from the machine-generated PHYSICAL_IMPLEMENTATION_MATRIX.md (HEAD 83f4fef3; counts stable across batch-5 hotfix c00321ab).
+  - Counts are from the machine-generated PHYSICAL_IMPLEMENTATION_MATRIX.md (measured at HEAD f798b527).
   - Role promotion alone is forbidden and no operator is certified by this artifact.
-  - Consolidated from R21-MATRIX-REGEN-V2 authority.
+  - Consolidated from R21-MATRIX-REGEN-V2 authority; the generator is the single authority.

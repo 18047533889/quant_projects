@@ -91,15 +91,11 @@ def _pi(v, name, minimum=1):
     # bool is an int subclass: reject explicitly (bool-as-int never legal).
     if isinstance(v, bool):
         raise ValueError(f"{name} must be integer")
-    try:
-        iv = int(v)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} must be integer") from exc
-    # float-as-int rejection: 5.0 -> 5 is a silent truncation risk only when
-    # the float is not integral; integral floats are accepted by the sibling
-    # event_state_v2._pi idiom — match it exactly (contract parity).
-    if float(v) != float(iv):
+    # R21-P1-7 strict_integer: only true int instances are valid.
+    # 5 -> valid; 5.0 -> invalid; 5.5 -> invalid; True/NaN/Inf/None -> invalid.
+    if not isinstance(v, int):
         raise ValueError(f"{name} must be integer")
+    iv = v
     if iv < minimum:
         raise ValueError(f"{name} must be >= {minimum}")
     return iv

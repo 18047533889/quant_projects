@@ -495,6 +495,91 @@ def test_cat_event_oracle_match(name):
         return  # early return since we used a different panel
     elif name == "state_episode_age":
         expected = _oracle_state_age(st, w)  # same kernel as state_age
+    elif name == "state_episode_age_lower_bound":
+        # independent oracle for lower-bound episode age
+        arr = st.to_numpy(float).ravel()
+        out = []
+        for t in range(len(arr)):
+            if t < w - 1:
+                out.append(np.nan)
+                continue
+            chunk = arr[t - w + 1 : t + 1]
+            if np.any(np.isnan(chunk)):
+                out.append(np.nan)
+                continue
+            start = None
+            for i in range(len(chunk) - 1, 0, -1):
+                if chunk[i] != chunk[i - 1]:
+                    start = i
+                    break
+            if start is None:
+                out.append(float(w))  # censored: lower bound = window
+            else:
+                out.append(float(len(chunk) - 1 - start))
+        expected = pd.DataFrame(out, index=st.index, columns=st.columns)
+    elif name == "state_episode_age_capped":
+        # independent oracle for capped episode age (max_cap=10 in this test)
+        arr = st.to_numpy(float).ravel()
+        out = []
+        for t in range(len(arr)):
+            if t < w - 1:
+                out.append(np.nan)
+                continue
+            chunk = arr[t - w + 1 : t + 1]
+            if np.any(np.isnan(chunk)):
+                out.append(np.nan)
+                continue
+            start = None
+            for i in range(len(chunk) - 1, 0, -1):
+                if chunk[i] != chunk[i - 1]:
+                    start = i
+                    break
+            if start is None:
+                out.append(np.nan)  # censored: age unknown, cannot cap
+            else:
+                out.append(min(float(len(chunk) - 1 - start), 10.0))
+        expected = pd.DataFrame(out, index=st.index, columns=st.columns)
+    elif name == "state_episode_censored_flag":
+        # independent oracle for censoring flag
+        arr = st.to_numpy(float).ravel()
+        out = []
+        for t in range(len(arr)):
+            if t < w - 1:
+                out.append(np.nan)
+                continue
+            chunk = arr[t - w + 1 : t + 1]
+            if np.any(np.isnan(chunk)):
+                out.append(np.nan)
+                continue
+            censored = True
+            for i in range(len(chunk) - 1, 0, -1):
+                if chunk[i] != chunk[i - 1]:
+                    censored = False
+                    break
+            out.append(1.0 if censored else 0.0)
+        expected = pd.DataFrame(out, index=st.index, columns=st.columns)
+    elif name == "category_age_lower_bound":
+        # independent oracle for lower-bound category age (same kernel as state_episode_age_lower_bound)
+        arr = st.to_numpy(float).ravel()
+        out = []
+        for t in range(len(arr)):
+            if t < w - 1:
+                out.append(np.nan)
+                continue
+            chunk = arr[t - w + 1 : t + 1]
+            if np.any(np.isnan(chunk)):
+                out.append(np.nan)
+                continue
+            start = None
+            for i in range(len(chunk) - 1, 0, -1):
+                if chunk[i] != chunk[i - 1]:
+                    start = i
+                    break
+            if start is None:
+                out.append(float(w))  # censored: lower bound = window
+            else:
+                out.append(float(len(chunk) - 1 - start))
+        expected = pd.DataFrame(out, index=st.index, columns=st.columns)
     elif name == "state_flip_age":
         # independent oracle for flip age
         arr = st.to_numpy(float).ravel()
@@ -532,7 +617,10 @@ def test_cat_event_oracle_match(name):
                     comp_count += 1
             out.append(float(len(chunk) - 1 - orig_idx))
         expected = pd.DataFrame(out, index=st.index, columns=st.columns)
-    got = _op(name).calculate(st, window=w)
+    kw = {"window": w}
+    if name == "state_episode_age_capped":
+        kw["max_cap"] = 10
+    got = _op(name).calculate(st, **kw)
     pd.testing.assert_frame_equal(expected, got)
 
 
@@ -815,6 +903,16 @@ def test_causality_mutation_does_not_touch_earlier_rows():
         b = _op(name).calculate(st_mut, window=15)
         pd.testing.assert_frame_equal(a.iloc[:30], b.iloc[:30])
 
+    # Censoring variants causality (state_episode_age_capped needs max_cap)
+    for name in ("state_episode_age_lower_bound", "state_episode_age_capped",
+                 "state_episode_censored_flag", "category_age_lower_bound"):
+        kw = {"window": 15}
+        if name == "state_episode_age_capped":
+            kw["max_cap"] = 10
+        a = _op(name).calculate(st, **kw)
+        b = _op(name).calculate(st_mut, **kw)
+        pd.testing.assert_frame_equal(a.iloc[:30], b.iloc[:30])
+
     # CategoricalEvent family causality
     st_cat = _state_panel(n=80, k=3, seed=31)
     st_cat_mut = st_cat.copy()
@@ -822,8 +920,11 @@ def test_causality_mutation_does_not_touch_earlier_rows():
     for name in CAT_EVENT_NAMES:
         if name == "event_direction_persistence":
             continue  # tested above with signed panel
-        a = _op(name).calculate(st_cat, window=15)
-        b = _op(name).calculate(st_cat_mut, window=15)
+        kw = {"window": 15}
+        if name == "state_episode_age_capped":
+            kw["max_cap"] = 10
+        a = _op(name).calculate(st_cat, **kw)
+        b = _op(name).calculate(st_cat_mut, **kw)
         pd.testing.assert_frame_equal(a.iloc[:30], b.iloc[:30])
 
 
@@ -879,6 +980,8 @@ def test_nan_in_window_fail_closed(name):
     kw = {"window": w}
     if name in HALFLIFE_NAMES:
         kw["halflife"] = 4.0
+    if name == "state_episode_age_capped":
+        kw["max_cap"] = 4
     out = _op(name).calculate(frame, **kw)
     assert out.iloc[20:30].isna().all().all(), name
     assert out.iloc[9:20].notna().all().all(), name
@@ -916,8 +1019,11 @@ def test_invalid_state_panel_rejected():
     for name in STATE_NAMES + CAT_EVENT_NAMES:
         if name == "event_direction_persistence":
             continue  # tested in signed event rejection
+        kw = {"window": 8}
+        if name == "state_episode_age_capped":
+            kw["max_cap"] = 4
         with pytest.raises(ValueError):
-            _op(name).calculate(st, window=8)
+            _op(name).calculate(st, **kw)
 
 
 def test_bool_input_rejected_for_signed_ops():

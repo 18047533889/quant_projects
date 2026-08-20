@@ -10,6 +10,7 @@ status: COMPLETED_LOCAL
 
 owned_files:
   - planner/physical_plan.py                  # updated ExecKind enum with 7 new members
+  - planner/backend_region.py                 # BackendRegion + TransferEdge identity/resource/cost fields
   - backend/contracts/__init__.py             # updated ExecutionKind enum with 3 new members
   - evidence/r2/R21-P023-FOUR-BACKEND-PLAN.yaml  # this file
 
@@ -39,12 +40,22 @@ fix:
      - NUMBA_CPU_KERNEL
      - CLICKHOUSE_NATIVE_SQL
      - Q_NATIVE
-  3. Updated is_native_execution() to include new native backends."
+  3. Updated is_native_execution() to include new native backends.
+  4. BackendRegion (planner/backend_region.py) now carries:
+     implementation_id (PhysicalImplementationID binding), input_bytes,
+     output_bytes, liveness (eager/lazy/stream), parameter_domain_identity;
+     all exposed in to_dict(). Existing fields already cover representation,
+     sortedness (PhysicalProperties.sorted_by), grain, availability
+     (available_at), memory (estimated_memory_bytes), and source identity
+     (source_snapshot).
+  5. TransferEdge now carries materialization cost decomposition:
+     materialization_cost_arrow_ms / _numpy_ms / _polars_ms / _sql_ms,
+     exposed in to_dict()."
 
 commands_run:
   - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/planner/test_physical_region_plan_validation.py -q -> 27 passed (0.08s serial, no xdist)"
   - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/planner/test_physical_region_plan_contract.py -q -> 4 passed (0.07s serial, no xdist)"
-  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/planner/test_physical_region_plan_validation.py tests/planner/test_physical_region_plan_contract.py -q -> 31 passed (0.18s serial, no xdist)"
+  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/planner/test_physical_region_plan_validation.py tests/planner/test_physical_region_plan_contract.py -q -> 31 passed (serial, no xdist)"
 
 results:
   exec_kind_members:
@@ -72,14 +83,14 @@ guards_in_tests:
 
 known_limitations:
   - PhysicalRegion plan model (backend_region.py) already has PhysicalBackend enum with 5 members
-  - TransferEdge materialization cost tracking is implicit via estimated_transfer_ms
-  - No runtime executor changes in this slice - only enum/contract definitions
+  - No runtime executor changes in this slice - only enum/contract/dataclass definitions
   - Backend-specific native kernel implementations are NOT_RUN (research-only)
+  - tests/planner/test_duckdb_region_optimization.py has 4 pre-existing failures on HEAD
+    (BackendRegion has never accepted a top-level sorted_by kwarg; the tests were
+    broken before this slice and are untouched by it — 10/14 pass)
 
 not_run:
-  - item: "PhysicalRegion implementation identity/representation/sortedness tracking"
-    status: NOT_RUN
-  - item: "TransferEdge explicit materialization cost decomposition (Arrow/NumPy/Polars/SQL)"
+  - item: "tests/planner/test_duckdb_region_optimization.py 4 sorted_by failures (pre-existing on HEAD, not caused by this slice)"
     status: NOT_RUN
   - item: "Numba CPU kernel runtime implementation"
     status: NOT_RUN

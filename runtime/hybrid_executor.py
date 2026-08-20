@@ -169,13 +169,21 @@ class HybridExecutor:
         kind: str,
         *,
         no_fallback: bool = True,
+        dialect: str | None = None,
     ) -> dict[str, Any]:
-        """R39-P1-PERF-082: 记录 runtime backend event（供 O(1) 校验消费）。"""
+        """R39-P1-PERF-082: 记录 runtime backend event（供 O(1) 校验消费）。
+
+        R21-P026: ``dialect``（duckdb / clickhouse）随事件记录，certificate
+        校验据此区分同一 ``duckdb_sql`` executor family 下的两种数据源——
+        DuckDB 证书不再继承 ClickHouse 执行。
+        """
         event = {
             "backend": str(backend or "pandas_numpy"),
             "execution_kind": str(kind or "thread"),
             "no_fallback": bool(no_fallback),
         }
+        if dialect:
+            event["dialect"] = str(dialect)
         self._last_runtime_backend_event = event
         return event
 

@@ -1181,7 +1181,9 @@ def default_mining_operator_allowlist(*, tier: str = "production_fastpath") -> l
             if r.direct_use_status is DirectUseStatus.RESEARCH_TOOL
         )
     lane = _R22_MINING_TIER_LANES.get(tier_key, "all")
-    rows = get_direct_use_mining_operators(DirectUseContext(), admission="all")
+    rows = get_direct_use_mining_operators(
+        DirectUseContext(market="ashare"), admission="all"
+    )
     direct = [r for r in rows if lane == "all" or r.mining_lane == lane]
     return sorted(r.canonical for r in direct)
 

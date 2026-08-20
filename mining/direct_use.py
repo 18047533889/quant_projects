@@ -430,6 +430,12 @@ _RELATIVE_ALPHA_OPS = frozenset(
         "category_age", "category_frequency", "category_transition_rate",
         "category_transition_surprise", "event_direction_persistence",
         "state_episode_age", "state_flip_age",
+        # R21-CENSORING-VARIANTS: non-censored episode-age siblings so stable
+        # long-trend regimes don't degrade to NaN (lower-bound / capped / flag
+        # episode-age estimators over state-code panels, trailing windows
+        # ending at t, fail-closed NaN semantics).
+        "state_episode_age_lower_bound", "state_episode_age_capped",
+        "state_episode_censored_flag", "category_age_lower_bound",
         # R20-BVC-VPIN-DIRECTUSE: dimensionless causal intraday BVC/VPIN
         # canonicals (trailing windows ending at t, fail-closed masking,
         # strict-positive close+volume).  Documented non-duplicates:
@@ -1693,7 +1699,8 @@ class DirectUseContext:
     """Environment the miner declares — R18-031 contextual direct usability.
 
     R21-P033: market is now a required field. market=None is not allowed in
-    production contexts.
+    production contexts.  ``__post_init__`` hard-fails on a missing/empty
+    market so no caller can silently construct a market-less context.
     """
 
     market: str  # Required: "ashare" | "us"
