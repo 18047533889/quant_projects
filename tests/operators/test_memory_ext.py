@@ -69,8 +69,8 @@ def test_ts_autocorrelation_time_deterministic() -> None:
         result1 = op.calculate(x)
         result2 = op.calculate(x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -116,8 +116,8 @@ def test_ts_autocorrelation_time_initial_positive_sequence_deterministic() -> No
         result1 = op.calculate(x)
         result2 = op.calculate(x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -163,8 +163,8 @@ def test_ts_fractional_difference_deterministic() -> None:
         result1 = op.calculate(x)
         result2 = op.calculate(x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -210,8 +210,8 @@ def test_ts_fractional_difference_discarded_weight_mass_deterministic() -> None:
         result1 = op.calculate(x)
         result2 = op.calculate(x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 

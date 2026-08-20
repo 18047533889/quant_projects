@@ -17,7 +17,7 @@ Hard Gates (文档 §85):
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Mapping
 
 import pandas as pd
 
@@ -407,6 +407,31 @@ class QBackend(Backend):
             # 返回第一列
             return df.iloc[:, 0] if len(df.columns) > 0 else pd.Series()
 
+    def _build_output_contract(self, ctx: ExecutionContext) -> QOutputContract:
+        """Derive output contract from execution context semantic contract.
+
+        ``grain`` is no longer hardcoded. The validator now defaults to
+        ``allow_nulls=True`` so legal rolling-warmup NaN rows pass through.
+        """
+        grain = None
+        semantic = getattr(ctx, "semantic_attrs", None)
+        if isinstance(semantic, Mapping):
+            grain = semantic.get("grain") or semantic.get("frequency")
+        if grain is None:
+            grain = getattr(ctx, "grain", None)
+
+        return QOutputContract(
+            expected_columns=("timestamp", "instrument", "value"),
+            expected_dtypes={
+                "timestamp": "datetime64[ns]",
+                "value": "float64",
+            },
+            require_sorted=True,
+            allow_nulls=True,
+            grain=str(grain) if grain is not None else None,
+            min_rows=0,
+        )
+
     def _result_to_series_validated(
         self,
         df: pd.DataFrame,
@@ -426,18 +451,8 @@ class QBackend(Backend):
         抛出:
             QOutputContractViolation: Schema 不匹配
         """
-        # Q2-P0-017: Define expected output contract
-        contract = QOutputContract(
-            expected_columns=("timestamp", "instrument", "value"),
-            expected_dtypes={
-                "timestamp": "datetime64[ns]",
-                "value": "float64",
-            },
-            require_sorted=True,
-            allow_nulls=False,
-            grain="daily",
-            min_rows=0,  # Allow empty results (but not missing data input)
-        )
+        # Q2-P0-017: Derive expected output contract from semantic metadata
+        contract = self._build_output_contract(ctx)
 
         # Validate contract
         self._validate_output_contract(df, contract)

@@ -70,8 +70,8 @@ def test_ts_interval_union_coverage_deterministic() -> None:
         result1 = op.calculate(x, x)  # low and high are the same for testing
         result2 = op.calculate(x, x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -117,8 +117,8 @@ def test_ts_interval_occupancy_entropy_deterministic() -> None:
         result1 = op.calculate(x, x)  # low and high are the same for testing
         result2 = op.calculate(x, x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -164,8 +164,8 @@ def test_ts_interval_occupancy_mode_distance_deterministic() -> None:
         result1 = op.calculate(x, x, x)  # x, low, high are the same for testing
         result2 = op.calculate(x, x, x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -211,8 +211,8 @@ def test_ts_interval_nesting_depth_deterministic() -> None:
         result1 = op.calculate(x, x)  # low and high are the same for testing
         result2 = op.calculate(x, x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -258,8 +258,8 @@ def test_ts_interval_exploration_efficiency_deterministic() -> None:
         result1 = op.calculate(x, x, x)  # high, low, close are the same for testing
         result2 = op.calculate(x, x, x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 

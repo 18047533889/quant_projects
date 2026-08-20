@@ -69,8 +69,8 @@ def test_ts_chatterjee_xi_deterministic() -> None:
         result1 = op.calculate(x)
         result2 = op.calculate(x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -116,8 +116,8 @@ def test_ts_hsic_deterministic() -> None:
         result1 = op.calculate(x)
         result2 = op.calculate(x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -163,8 +163,8 @@ def test_ts_conditional_mutual_information_deterministic() -> None:
         result1 = op.calculate(x)
         result2 = op.calculate(x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -210,8 +210,8 @@ def test_ts_distance_correlation_partial_proxy_deterministic() -> None:
         result1 = op.calculate(x)
         result2 = op.calculate(x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 

@@ -25,6 +25,8 @@ from typing import Any, Literal, Sequence
 
 # Import unified enums from contracts (FE-P0-003)
 from backend.contracts import (
+    Accelerator,
+    BackendFamily,
     BackendKind,
     CapabilityLevel,
     ExecutionKind,
@@ -37,6 +39,7 @@ BackendName = Literal[
     "polars",
     "duckdb_sql",
     "clickhouse_sql",
+    "q_kdb",
 ]
 CapabilityStatus = Literal[
     "unsupported",
@@ -71,6 +74,7 @@ _REGISTRY_TO_CAPABILITY: dict[str, BackendName | None] = {
     "pandas_numpy": "pandas_numpy",
     "polars": "polars",
     "sql": "duckdb_sql",
+    "q_kdb": "q_kdb",
 }
 _SQL_BACKENDS: tuple[BackendName, ...] = ("duckdb_sql", "clickhouse_sql")
 
@@ -862,6 +866,9 @@ def backend_status(
         return _polars_status(canon, production_mode=production_mode)
     if backend in _SQL_BACKENDS:
         return _sql_status(canon, dialect=backend)
+    if backend == "q_kdb":
+        # Q/KDB backend: fail-closed until certified
+        return "unsupported"
     return "unsupported"
 
 
@@ -1030,6 +1037,7 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
         "polars": BackendKind.POLARS,
         "duckdb_sql": BackendKind.DUCKDB_SQL,
         "clickhouse_sql": BackendKind.CLICKHOUSE_SQL,
+        "q_kdb": BackendKind.Q_KDB,
     }
     backend_kind = backend_kind_map.get(backend, BackendKind.PANDAS_NUMPY)
 
@@ -1479,6 +1487,7 @@ class BackendCapabilityRegistry:
             BackendKind.POLARS: "polars",
             BackendKind.DUCKDB_SQL: "duckdb_sql",
             BackendKind.CLICKHOUSE_SQL: "clickhouse_sql",
+            BackendKind.Q_KDB: "q_kdb",
         }
 
         backend_name: BackendName = backend_name_map[backend]  # type: ignore
@@ -1520,6 +1529,7 @@ class BackendCapabilityRegistry:
             BackendKind.PANDAS_NUMPY,
             BackendKind.POLARS,
             BackendKind.DUCKDB_SQL,
+            BackendKind.Q_KDB,
         ]:
             if cls.supports_backend(canonical, backend, mode=mode):
                 backends.append(backend)

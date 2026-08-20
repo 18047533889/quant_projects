@@ -1,0 +1,29 @@
+id: R21-TYPE-UNIFICATION
+task: R21-TYPE-UNIFICATION
+title: "Three-layer backend type system unification"
+status: done
+files:
+  - backend/contracts/__init__.py
+  - planner/backend_region.py
+  - backend/operator_capability.py
+  - tests/test_type_unification.py
+evidence:
+  - BackendFamily enum added (PANDAS_NUMPY, POLARS, SQL, Q_KDB)
+  - PhysicalBackend updated with Q_KDB member
+  - Accelerator enum added (NONE, NUMBA_CPU)
+  - Accelerator and kernel_signature added to PhysicalImplementationSpec
+  - BackendName in operator_capability.py includes q_kdb
+  - BackendKind already had Q_KDB (no removal needed - NUMBA_CPU_KERNEL is ExecutionKind, not BackendKind)
+  - normalize_backend_name handles q_kdb
+  - infer_representation handles Q_KDB → Q_TABLE
+  - BackendCapabilityRegistry._build_record includes Q_KDB
+  - list_backends includes Q_KDB
+  - backend_status handles q_kdb (returns "unsupported" until certified)
+tests_created:
+  - tests/test_type_unification.py (5 regression tests)
+tests_passed: 5/5
+limitations: |
+  BackendKind.Q_KDB was already present in contracts/__init__.py.
+  NUMBA_CPU_KERNEL is an ExecutionKind (how to execute), not a BackendKind (what engine),
+  so no removal from BackendKind was needed.
+  Q_KDB backend_status returns "unsupported" until q_backend is certified.

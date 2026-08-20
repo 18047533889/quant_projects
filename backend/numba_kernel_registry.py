@@ -22,6 +22,11 @@ from typing import Any, Callable
 
 import numpy as np
 
+
+class DuplicateKernelRegistrationError(RuntimeError):
+    """Raised when the same kernel_name is registered with a different PhysicalImplementationID."""
+
+
 try:  # numba is an optional accel dependency (pyproject [accel])
     import numba
 
@@ -94,11 +99,23 @@ class NumbaKernelRegistry:
             cache=cache,
             fastmath=fastmath,
         )
-        cls._kernels[kernel_name] = NumbaKernel(
+        new_kernel = NumbaKernel(
             spec=spec,
             reference_fn=reference_fn,
             numba_fn=numba_fn,
         )
+        # --- Registry dedup: same kernel_name + different spec → DuplicateKernelRegistrationError ---
+        existing = cls._kernels.get(kernel_name)
+        if existing is not None:
+            # Same kernel_name is allowed if the spec is identical (idempotent re-registration).
+            # Different spec → duplicate with a different implementation → error.
+            if dataclasses.asdict(existing.spec) != dataclasses.asdict(spec):
+                raise DuplicateKernelRegistrationError(
+                    f"kernel_name={kernel_name!r} already registered with "
+                    f"spec={dataclasses.asdict(existing.spec)}; "
+                    f"new spec={dataclasses.asdict(spec)} differs"
+                )
+        cls._kernels[kernel_name] = new_kernel
         return kernel_name
 
     @classmethod
@@ -131,17 +148,59 @@ def parity_check(
         }
     ref = np.asarray(kernel.reference_fn(*args))
     num = np.asarray(kernel.numba_fn(*args))
-    ref_fin = np.isfinite(ref) & np.isfinite(num)
-    nan_ok = np.isnan(ref) == np.isnan(num)
-    match = np.allclose(
-        ref[ref_fin], num[ref_fin], rtol=rtol, atol=atol, equal_nan=True
-    ) and nan_ok.all()
+
+    # --- R21-NUMBA-PARITY-INF-FIX: explicit +Inf / -Inf / finite masks ---
+    ref_posinf = np.isposinf(ref)
+    num_posinf = np.isposinf(num)
+    ref_neginf = np.isneginf(ref)
+    num_neginf = np.isneginf(num)
+    ref_fin = np.isfinite(ref)
+    num_fin = np.isfinite(num)
+
+    posinf_ok = bool(np.array_equal(ref_posinf, num_posinf))
+    neginf_ok = bool(np.array_equal(ref_neginf, num_neginf))
+    finite_mask_ok = bool(np.array_equal(ref_fin, num_fin))
+    nan_ok = bool(np.array_equal(np.isnan(ref), np.isnan(num)))
+    dtype_ok = ref.dtype == num.dtype
+    shape_ok = ref.shape == num.shape
+
+    # When shapes differ, skip the finite-value comparison (it would index-fail).
+    if shape_ok and ref_fin.any():
+        finite_match = bool(
+            np.allclose(ref[ref_fin], num[ref_fin], rtol=rtol, atol=atol)
+        )
+    elif shape_ok:
+        finite_match = True
+    else:
+        finite_match = False
+
+    match = (
+        posinf_ok
+        and neginf_ok
+        and finite_mask_ok
+        and nan_ok
+        and dtype_ok
+        and shape_ok
+        and finite_match
+    )
+
+    max_abs_diff = 0.0
+    if shape_ok and ref_fin.any():
+        max_abs_diff = float(np.nanmax(np.abs(ref[ref_fin] - num[ref_fin])))
+
     return {
         "kernel": kernel.spec.kernel_name,
         "status": "PASS" if match else "FAIL",
         "numba": bool(match),
         "ref": bool(match),
-        "max_abs_diff": float(np.nanmax(np.abs(ref[ref_fin] - num[ref_fin]))) if ref_fin.any() else 0.0,
+        "posinf_ok": posinf_ok,
+        "neginf_ok": neginf_ok,
+        "finite_mask_ok": finite_mask_ok,
+        "nan_ok": nan_ok,
+        "dtype_ok": dtype_ok,
+        "shape_ok": shape_ok,
+        "finite_match": finite_match,
+        "max_abs_diff": max_abs_diff,
     }
 
 

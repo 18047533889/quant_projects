@@ -1,0 +1,38 @@
+task_id: R21-Q-OUTPUT-CONTRACT
+finding: q_output_contract_grain_hardcoded_and_nulls_disallowed
+base_sha: UNKNOWN
+current_head: UNCOMMITTED_CURRENT_TREE
+dirty_count_before_evidence: 85
+commit_sha: UNCOMMITTED_CURRENT_TREE
+owned_files:
+  - factor_engine/backend/q_backend/q_errors.py
+  - factor_engine/backend/q_backend/q_backend.py
+  - factor_engine/tests/q_backend/test_q_output_contract_grain_and_nulls.py
+  - factor_engine/evidence/r2/R21-Q-OUTPUT-CONTRACT.yaml
+modified_files:
+  - factor_engine/backend/q_backend/q_errors.py
+  - factor_engine/backend/q_backend/q_backend.py
+  - factor_engine/tests/q_backend/test_q_output_contract_grain_and_nulls.py
+  - factor_engine/evidence/r2/R21-Q-OUTPUT-CONTRACT.yaml
+status: CLOSED_LOCAL
+implementation:
+  - QOutputContract.default allow_nulls changed from False to True so legal rolling-warmup NaN rows pass validation.
+  - QOutputContract.grain changed from hardcoded "daily" to str | None defaulting to None.
+  - QBackend._result_to_series_validated now derives contract grain from ExecutionContext semantic metadata via new QBackend._build_output_contract helper.
+focused_tests:
+  command: cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/q_backend/test_q_output_contract_grain_and_nulls.py -q -p no:xdist
+  result: 2 passed
+adjacent_regression:
+  command: cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/q_backend/test_q_adapter_null_contract.py tests/q_backend/test_q_compatibility_contract.py -q -p no:xdist
+  result: 30 passed
+syntax_compile:
+  command: python3 -m py_compile backend/q_backend/q_errors.py backend/q_backend/q_backend.py
+  result: PASS
+git_diff_check:
+  result: PASS
+known_limitations:
+  - Broader q_backend suite has pre-existing failures unrelated to this slice.
+  - Actual q runtime process execution was not exercised.
+production_certification: NOT_RUN
+commit: NOT_CREATED
+remotes: NOT_USED

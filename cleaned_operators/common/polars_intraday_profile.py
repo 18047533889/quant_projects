@@ -50,6 +50,8 @@ class IntraVolumeProfileCosineNative(SeriesOperator):
         param_names=["volume", "avg_profile"],
         return_type="series",
         tags=["intraday", "profile", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, volume: pl.DataFrame, avg_profile: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
@@ -81,6 +83,8 @@ class IntraVolumeProfileJsdNative(SeriesOperator):
         param_names=["volume", "avg_profile"],
         return_type="series",
         tags=["intraday", "profile", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, volume: pl.DataFrame, avg_profile: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
@@ -113,6 +117,8 @@ class IntraAmountProfileCosineNative(SeriesOperator):
         param_names=["amount", "avg_profile"],
         return_type="series",
         tags=["intraday", "profile", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, amount: pl.DataFrame, avg_profile: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
@@ -144,6 +150,8 @@ class IntraAmountProfileJsdNative(SeriesOperator):
         param_names=["amount", "avg_profile"],
         return_type="series",
         tags=["intraday", "profile", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, amount: pl.DataFrame, avg_profile: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
@@ -180,6 +188,8 @@ class IntraReturnProfileCosineNative(SeriesOperator):
         param_names=["ret", "avg_profile"],
         return_type="series",
         tags=["intraday", "profile", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, ret: pl.DataFrame, avg_profile: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
@@ -211,6 +221,8 @@ class IntraSignedReturnProfileCosineNative(SeriesOperator):
         param_names=["ret", "avg_profile"],
         return_type="series",
         tags=["intraday", "profile", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, ret: pl.DataFrame, avg_profile: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
@@ -242,6 +254,8 @@ class IntraAbsReturnProfileCosineNative(SeriesOperator):
         param_names=["ret", "avg_profile"],
         return_type="series",
         tags=["intraday", "profile", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, ret: pl.DataFrame, avg_profile: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
@@ -278,6 +292,8 @@ class IntraVolumeProfilePeakGeometryNative(SeriesOperator):
         param_names=["volume"],
         return_type="series",
         tags=["intraday", "profile", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, volume: pl.DataFrame, **kwargs) -> pl.DataFrame:
@@ -304,6 +320,8 @@ class IntraVolumeProfileSupplyStructureNative(SeriesOperator):
         param_names=["volume", "price"],
         return_type="series",
         tags=["intraday", "profile", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, volume: pl.DataFrame, price: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
@@ -332,6 +350,8 @@ class IntraVolumeProfileValueAreaNative(SeriesOperator):
         param_names=["volume", "price"],
         return_type="series",
         tags=["intraday", "profile", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, volume: pl.DataFrame, price: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
@@ -360,6 +380,8 @@ class IntraVolumeAtPriceProfileNative(SeriesOperator):
         param_names=["volume", "price"],
         return_type="series",
         tags=["intraday", "profile", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, volume: pl.DataFrame, price: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
@@ -393,6 +415,8 @@ class IntraRoundPriceClusteringShareNative(SeriesOperator):
         param_names=["price", "volume"],
         return_type="series",
         tags=["intraday", "microstructure", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, price: pl.DataFrame, volume: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
@@ -427,6 +451,8 @@ class IntraRoundPriceBarrierResponseNative(SeriesOperator):
         param_names=["price", "ret"],
         return_type="series",
         tags=["intraday", "microstructure", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, price: pl.DataFrame, ret: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
@@ -464,6 +490,8 @@ class IntraBarRangePersistenceNative(SeriesOperator):
             "window": ParamSpec(dtype=int, min=2, default=5, searchable=True,
                                param_role=ParamRole.HORIZON),
         },
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(
@@ -504,6 +532,8 @@ class IntraBarRangeDeviationNative(SeriesOperator):
             "window": ParamSpec(dtype=int, min=2, default=20, searchable=True,
                                param_role=ParamRole.HORIZON),
         },
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(
@@ -543,6 +573,8 @@ class IntraConsolidationQualityNative(SeriesOperator):
         param_names=["high", "low"],
         return_type="series",
         tags=["intraday", "consolidation", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
@@ -583,6 +615,8 @@ class IntraExtremeBarReturnNative(SeriesOperator):
         param_names=["ret"],
         return_type="series",
         tags=["intraday", "extremes", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, ret: pl.DataFrame, **kwargs) -> pl.DataFrame:
@@ -613,6 +647,8 @@ class IntraTailEventCountNative(SeriesOperator):
             "threshold": ParamSpec(dtype=float, min=0.0, default=2.0, searchable=True,
                                   param_role=ParamRole.STATE_THRESHOLD),
         },
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, x: pl.DataFrame, threshold: float = 2.0, **kwargs) -> pl.DataFrame:
@@ -652,6 +688,8 @@ class IntraTailVolumeShareNative(SeriesOperator):
             "threshold": ParamSpec(dtype=float, min=0.0, default=2.0, searchable=True,
                                   param_role=ParamRole.STATE_THRESHOLD),
         },
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(
@@ -695,6 +733,8 @@ class IntraNegativeTailVariationNative(SeriesOperator):
             "threshold": ParamSpec(dtype=float, max=0.0, default=-2.0, searchable=True,
                                   param_role=ParamRole.STATE_THRESHOLD),
         },
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, x: pl.DataFrame, threshold: float = -2.0, **kwargs) -> pl.DataFrame:
@@ -734,6 +774,8 @@ class IntraPositiveTailVariationNative(SeriesOperator):
             "threshold": ParamSpec(dtype=float, min=0.0, default=2.0, searchable=True,
                                   param_role=ParamRole.STATE_THRESHOLD),
         },
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, x: pl.DataFrame, threshold: float = 2.0, **kwargs) -> pl.DataFrame:
@@ -769,6 +811,8 @@ class IntraSignedTailVariationRatioNative(SeriesOperator):
         param_names=["pos_tail", "neg_tail"],
         return_type="series",
         tags=["intraday", "extremes", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, pos_tail: pl.DataFrame, neg_tail: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
@@ -809,6 +853,8 @@ class IntraPriceVwapMaxPositiveExcursionNative(SeriesOperator):
         param_names=["price", "vwap"],
         return_type="series",
         tags=["intraday", "vwap", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, price: pl.DataFrame, vwap: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
@@ -846,6 +892,8 @@ class IntraPriceVwapMaxNegativeExcursionNative(SeriesOperator):
         param_names=["price", "vwap"],
         return_type="series",
         tags=["intraday", "vwap", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, price: pl.DataFrame, vwap: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
@@ -888,6 +936,8 @@ class IntradayProfilePcaResidualNative(SeriesOperator):
         param_names=["profile"],
         return_type="series",
         tags=["intraday", "profile", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, profile: pl.DataFrame, **kwargs) -> pl.DataFrame:
@@ -914,6 +964,8 @@ class IntradayProfilePhaseShiftNative(SeriesOperator):
         param_names=["profile", "avg_profile"],
         return_type="series",
         tags=["intraday", "profile", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, profile: pl.DataFrame, avg_profile: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
@@ -942,6 +994,8 @@ class IntradayProfileSurpriseEnergyNative(SeriesOperator):
         param_names=["profile", "avg_profile"],
         return_type="series",
         tags=["intraday", "profile", "polars", "native"],
+        available_at="session_close",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, profile: pl.DataFrame, avg_profile: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:

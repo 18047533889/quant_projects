@@ -48,6 +48,10 @@ class OperatorMetadata:
     # WS4 P0-07: time-frequency grain contract (mirror of base.OperatorMetadata).
     input_grain: str | None = None
     output_grain: str | None = None
+    # R6-196: machine-readable availability contract for EOD-realised / session-
+    # realised operators.
+    available_at: str | None = None
+    same_session_usable: bool | None = None
 
 
 class Operator(ABC):

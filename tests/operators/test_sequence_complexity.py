@@ -73,8 +73,8 @@ def test_ts_permutation_entropy_deterministic() -> None:
         result1 = op.calculate(x)
         result2 = op.calculate(x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -120,8 +120,8 @@ def test_ts_weighted_permutation_entropy_deterministic() -> None:
         result1 = op.calculate(x)
         result2 = op.calculate(x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -167,8 +167,8 @@ def test_ts_permutation_transition_entropy_deterministic() -> None:
         result1 = op.calculate(x)
         result2 = op.calculate(x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -214,8 +214,8 @@ def test_ts_sample_entropy_deterministic() -> None:
         result1 = op.calculate(x)
         result2 = op.calculate(x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -261,8 +261,8 @@ def test_ts_hurst_dfa_deterministic() -> None:
         result1 = op.calculate(x)
         result2 = op.calculate(x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -308,8 +308,8 @@ def test_ts_higuchi_fractal_dimension_deterministic() -> None:
         result1 = op.calculate(x)
         result2 = op.calculate(x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -355,8 +355,8 @@ def test_ts_variogram_slope_deterministic() -> None:
         result1 = op.calculate(x)
         result2 = op.calculate(x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -402,8 +402,8 @@ def test_ts_autocorr_decay_half_life_deterministic() -> None:
         result1 = op.calculate(x)
         result2 = op.calculate(x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism check failed: {e}")
 
 
 

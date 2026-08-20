@@ -19,7 +19,7 @@ class PhysicalBackend(str, Enum):
     POLARS_LONG = "polars_long"
     DUCKDB_SQL = "duckdb_sql"
     CLICKHOUSE_SQL = "clickhouse_sql"
-    # Future: Q_TABLE = "q_table"
+    Q_KDB = "q_kdb"
 
 
 class Representation(str, Enum):
@@ -33,8 +33,10 @@ class Representation(str, Enum):
     POLARS_LAZY_LONG = "polars_lazy_long"
     ARROW_TABLE = "arrow_table"
     DUCKDB_RELATION = "duckdb_relation"
-    # Future: Q_TABLE = "q_table"
-    # Future: Q_VECTOR = "q_vector"
+    Q_TABLE = "q_table"
+    Q_VECTOR = "q_vector"
+    Q_KEYED_TABLE = "q_keyed_table"
+    Q_SHARED_HANDLE = "q_shared_handle"
 
 
 class ExecutionAxis(str, Enum):
@@ -75,15 +77,6 @@ class PhysicalProperties:
         if required.grain and self.grain != required.grain:
             return False
         return True
-
-
-@dataclass(frozen=True)
-class StateContract:
-    """State continuation contract for stateful operators (§40)."""
-    requires_checkpoint: bool = False
-    checkpoint_seed: str | None = None
-    stateful_operators: tuple[str, ...] = ()
-    checkpoint_interval: int | None = None
 
 
 @dataclass(frozen=True)
@@ -408,6 +401,8 @@ def normalize_backend_name(backend: str) -> PhysicalBackend:
         return PhysicalBackend.DUCKDB_SQL
     if normalized in {"clickhouse", "clickhouse_sql"}:
         return PhysicalBackend.CLICKHOUSE_SQL
+    if normalized in {"q", "q_kdb", "kdb"}:
+        return PhysicalBackend.Q_KDB
 
     raise ValueError(f"Unknown backend: {backend}")
 
@@ -431,6 +426,8 @@ def infer_representation(backend: PhysicalBackend, wide: bool = False) -> Repres
         return Representation.DUCKDB_RELATION
     if backend == PhysicalBackend.CLICKHOUSE_SQL:
         return Representation.ARROW_TABLE  # ClickHouse → Arrow boundary
+    if backend == PhysicalBackend.Q_KDB:
+        return Representation.Q_TABLE
     return Representation.PANDAS_LONG
 
 

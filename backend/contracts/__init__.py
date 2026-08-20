@@ -20,12 +20,22 @@ if TYPE_CHECKING:
     from typing import Literal
 
 __all__ = [
+    "BackendFamily",
     "BackendKind",
     "ExecutionKind",
     "CapabilityLevel",
     "PhysicalImplementationID",
     "PhysicalImplementationSpec",
+    "Accelerator",
 ]
+
+
+class BackendFamily(str, Enum):
+    """Logical backend family grouping physical backends."""
+    PANDAS_NUMPY = "pandas_numpy"
+    POLARS = "polars"
+    SQL = "sql"
+    Q_KDB = "q_kdb"
 
 
 class BackendKind(str, Enum):
@@ -35,6 +45,12 @@ class BackendKind(str, Enum):
     DUCKDB_SQL = "duckdb_sql"
     CLICKHOUSE_SQL = "clickhouse_sql"
     Q_KDB = "q_kdb"
+
+
+class Accelerator(str, Enum):
+    """Hardware accelerator for kernel execution."""
+    NONE = "none"
+    NUMBA_CPU = "numba_cpu"
 
 
 class ExecutionKind(str, Enum):
@@ -56,7 +72,7 @@ class ExecutionKind(str, Enum):
     POLARS_NATIVE_EXPR = "polars_native_expr"
     POLARS_NUMPY_KERNEL = "polars_numpy_kernel"
 
-    # Numba CPU kernel execution
+    # Numba CPU kernel execution (NUMBA_CPU_KERNEL is an accelerator, not a backend kind)
     NUMBA_CPU_KERNEL = "numba_cpu_kernel"
 
     # Delegation to other backends
@@ -144,6 +160,8 @@ class PhysicalImplementationSpec:
     implementation_source_hash: str = ""
     emitter_identity: str = ""
     kernel_identity: str = ""
+    accelerator: Accelerator = Accelerator.NONE
+    kernel_signature: str = ""
     parameter_domain_hash: str = ""
     semantic_contract_hash: str = ""
 

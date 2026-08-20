@@ -88,8 +88,8 @@ class QOutputContract:
     expected_columns: tuple[str, ...]
     expected_dtypes: dict[str, str]  # column -> dtype name
     require_sorted: bool = True
-    allow_nulls: bool = False
-    grain: str = "daily"
+    allow_nulls: bool = True
+    grain: str | None = None
     min_rows: int | None = None
     max_rows: int | None = None
 
