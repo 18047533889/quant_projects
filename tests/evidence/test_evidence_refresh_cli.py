@@ -37,7 +37,7 @@ if str(_REPO_ROOT) not in sys.path:
 def test_cli_help() -> None:
     """CLI --help should exit with code 0 and print usage."""
     result = subprocess.run(
-        [sys.executable, "-m", "evidence.refresh", "--help"],
+        [sys.executable, "-m", "evidence", "--help"],
         cwd=str(_REPO_ROOT),
         capture_output=True,
         text=True,
@@ -53,7 +53,7 @@ def test_cli_help() -> None:
 def test_cli_dry_run() -> None:
     """CLI --dry-run should complete without errors."""
     result = subprocess.run(
-        [sys.executable, "-m", "evidence.refresh", "--dry-run"],
+        [sys.executable, "-m", "evidence", "--dry-run"],
         cwd=str(_REPO_ROOT),
         capture_output=True,
         text=True,
