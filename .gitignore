@@ -1,11 +1,57 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 
-# HTTP service local state
-.factor_engine_service/
-
-# R38 local test spill/spool
-_r38_spill_store/
-_r38_spool/
-cleaned_operators.zip
-
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
 dist/
-*.whl
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Environment files
+.env
+
+# Logs
+*.log
+
+# Archives
+*.tar.gz
+*.zip
+
+# Data directories
+data/
+raw_data_layer/
+
+# Docs build
+docs/build/
+docs/logging/
+
+# IDE / editor
+.vscode/
+.idea/
+
+# Misc
+coscli_output/
+factor_assets/
+factor_cold_start/
+logs/
+modeling/build/
+modeling/modeling_adapters.egg-info/
