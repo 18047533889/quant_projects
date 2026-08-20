@@ -6,9 +6,16 @@ explicit backend assignments, transfer edges, and execution contracts.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
+
+# R21-PLAN-HASH-STRENGTHEN: plan-hash payload version.  Bump when the set of
+# hashed physical-plan semantics changes so stale hashes cannot be confused
+# with hashes from a different binding contract.
+_PLAN_HASH_PAYLOAD_VERSION = 1
 
 
 class PhysicalBackend(str, Enum):
@@ -355,32 +362,129 @@ class PhysicalRegionPlan:
         edges: tuple[TransferEdge, ...],
         logical_hash: str,
     ) -> str:
-        """Compute stable hash for the physical plan (§68, MB-P2-014)."""
-        import hashlib
-        import json as _json
+        """Compute stable hash for the physical plan (§68, MB-P2-014).
 
+        R21-PLAN-HASH-STRENGTHEN: the hash must bind ALL physical plan
+        semantics — two plans that would execute even one byte differently
+        must not share a plan hash.  Previously the payload only covered
+        region_id/backend/node_count and edge producer/consumer/source_repr/
+        target_repr, so plans differing in node identity, representation,
+        execution axis, implementation identity, semantic contracts,
+        parameter domains, or transfer transforms collided silently.
+
+        Binds (per region): region_id, backend, node_ids, representation,
+        execution_axis, implementation_id (PhysicalImplementationID),
+        liveness, parameter_domain_identity, source identity
+        (source_snapshot/universe_contract), semantic contract
+        (grain/available_at/pit_safe), required/output physical properties
+        (sorted_by/partitioned_by/grouped_by/unique_key/grain), state
+        contract (checkpoint/seed/stateful operators/sequential).
+
+        Binds (per edge): edge_id, producer/consumer, source/target backend,
+        source/target representation, transfer transforms
+        (requires_sort/repartition/reshape/dtype_cast + producer ordering
+        guarantees), and preserved semantic contracts
+        (pit/universe/grain/source_snapshot).
+
+        Binds (per plan): the logical DAG hash.
+
+        Not included: cost/size estimates (estimated_rows, estimated_*_ms,
+        *_bytes) — these are predictions, not plan identity (§68).
+        """
         payload = {
+            "version": _PLAN_HASH_PAYLOAD_VERSION,
             "logical_hash": logical_hash,
             "regions": [
-                {
-                    "region_id": r.region_id,
-                    "backend": r.backend.value if isinstance(r.backend, Enum) else str(r.backend),
-                    "node_count": len(r.node_ids),
-                }
-                for r in regions
+                PhysicalRegionPlan._region_hash_payload(r) for r in regions
             ],
             "edges": [
-                {
-                    "producer": e.producer_region,
-                    "consumer": e.consumer_region,
-                    "source_repr": e.source_representation.value if isinstance(e.source_representation, Enum) else str(e.source_representation),
-                    "target_repr": e.target_representation.value if isinstance(e.target_representation, Enum) else str(e.target_representation),
-                }
-                for e in edges
+                PhysicalRegionPlan._edge_hash_payload(e) for e in edges
             ],
         }
-        raw = _json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        raw = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _region_hash_payload(r: BackendRegion) -> dict[str, Any]:
+        """Full semantic identity of one BackendRegion for plan hashing."""
+
+        def _enum(v: Any) -> str:
+            return v.value if isinstance(v, Enum) else str(v)
+
+        def _props(p: PhysicalProperties | None) -> dict[str, Any]:
+            if p is None:
+                return {"__absent__": True}
+            return {
+                "sorted_by": list(p.sorted_by),
+                "partitioned_by": list(p.partitioned_by),
+                "grouped_by": list(p.grouped_by),
+                "unique_key": list(p.unique_key),
+                "grain": p.grain,
+            }
+
+        def _state(s: StateContract | None) -> dict[str, Any]:
+            if s is None:
+                return {"__absent__": True}
+            return {
+                "requires_checkpoint": s.requires_checkpoint,
+                "checkpoint_seed": s.checkpoint_seed,
+                "stateful_operators": list(s.stateful_operators),
+                "checkpoint_interval": s.checkpoint_interval,
+                "sequential_only": s.sequential_only,
+            }
+
+        return {
+            "region_id": r.region_id,
+            "backend": _enum(r.backend),
+            "node_ids": list(r.node_ids),
+            "representation": _enum(r.representation),
+            "execution_axis": _enum(r.execution_axis),
+            # R21-P023: PhysicalImplementationID binding ("pi:v1:...")
+            "implementation_id": r.implementation_id,
+            # eager / lazy / stream
+            "liveness": r.liveness,
+            # parameter-domain hash identity
+            "parameter_domain_identity": r.parameter_domain_identity,
+            # source identity
+            "source_snapshot": r.source_snapshot,
+            "universe_contract": r.universe_contract,
+            # semantic contract
+            "grain": r.grain,
+            "available_at": r.available_at,
+            "pit_safe": r.pit_safe,
+            "required_properties": _props(r.required_properties),
+            "output_properties": _props(r.output_properties),
+            "state_contract": _state(r.state_contract),
+        }
+
+    @staticmethod
+    def _edge_hash_payload(e: TransferEdge) -> dict[str, Any]:
+        """Full semantic identity of one TransferEdge for plan hashing."""
+
+        def _enum(v: Any) -> str:
+            return v.value if isinstance(v, Enum) else str(v)
+
+        return {
+            "edge_id": e.edge_id,
+            "producer": e.producer_region,
+            "consumer": e.consumer_region,
+            "source_backend": _enum(e.source_backend),
+            "target_backend": _enum(e.target_backend),
+            "source_repr": _enum(e.source_representation),
+            "target_repr": _enum(e.target_representation),
+            # transfer transforms (§22: explicit and costed — hence hashed)
+            "requires_sort": e.requires_sort,
+            "requires_repartition": e.requires_repartition,
+            "requires_reshape": e.requires_reshape,
+            "requires_dtype_cast": e.requires_dtype_cast,
+            "producer_sorted_by": list(e.producer_sorted_by),
+            "producer_guarantees_order": e.producer_guarantees_order,
+            # semantic contracts preserved across the boundary (MB-P0-013)
+            "preserves_pit": e.preserves_pit,
+            "preserves_universe": e.preserves_universe,
+            "preserves_grain": e.preserves_grain,
+            "source_snapshot_id": e.source_snapshot_id,
+        }
 
 
 def normalize_backend_name(backend: str) -> PhysicalBackend:

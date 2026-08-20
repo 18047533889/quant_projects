@@ -169,6 +169,7 @@ class OperatorCapabilitySummary:
     polars: CapabilityStatus
     duckdb_sql: CapabilityStatus
     clickhouse_sql: CapabilityStatus
+    q_kdb: CapabilityStatus
     allow_in_production: bool
     parity_verified: bool
     polars_long_tier: str = "unsupported"
@@ -846,6 +847,30 @@ def _sql_status(canon: str, *, dialect: BackendName) -> CapabilityStatus:
     return "implemented"
 
 
+def _q_status(canon: str) -> CapabilityStatus:
+    """Q/KDB status derived from the q physical-implementation evidence authority.
+
+    Mirrors ``backend.q_backend.q_capability.QBackendCapability`` admission
+    exactly: production_safe only for registry production-ready (fully
+    certified) operators; ``implemented`` for declared operators with a
+    lowering (research-ready). Everything else — including any failure to
+    reach the q authority — fails closed to ``unsupported``.
+    """
+    try:
+        from backend.q_backend.q_physical_implementation_registry import (
+            get_q_physical_implementation_registry,
+        )
+
+        registry = get_q_physical_implementation_registry()
+        if canon in registry.get_production_ready():
+            return "production_safe"
+        if registry.has_lowering(canon) and canon in registry.declared_targets():
+            return "implemented"
+    except Exception:
+        return "unsupported"
+    return "unsupported"
+
+
 def backend_status(
     canonical: str,
     backend: BackendName,
@@ -867,8 +892,9 @@ def backend_status(
     if backend in _SQL_BACKENDS:
         return _sql_status(canon, dialect=backend)
     if backend == "q_kdb":
-        # Q/KDB backend: fail-closed until certified
-        return "unsupported"
+        # R21-BACKENDNAME-Q-ALIGN: route through the q evidence authority
+        # (fail-closed). Previously hardcoded "unsupported".
+        return _q_status(canon)
     return "unsupported"
 
 
@@ -995,6 +1021,8 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
         status = _pandas_status(canon)
     elif backend == "polars":
         status = _polars_status(canon)
+    elif backend == "q_kdb":
+        status = _q_status(canon)
     else:
         status = _sql_status(canon, dialect=backend)
 
@@ -1019,6 +1047,8 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
             )
 
     notes = ""
+    if backend == "q_kdb" and status != "unsupported":
+        notes = "q/kdb physical backend; evidence authority: q_physical_implementation_registry"
     if backend == "clickhouse_sql" and status != "unsupported":
         notes = "dialect=clickhouse; verify per deployment"
     supports_streaming = bool(backend_meta.get("supports_streaming", False))
@@ -1112,6 +1142,7 @@ def summarize_operator(canonical: str) -> OperatorCapabilitySummary:
         polars=_polars_status(canon),
         duckdb_sql=_sql_status(canon, dialect="duckdb_sql"),
         clickhouse_sql=_sql_status(canon, dialect="clickhouse_sql"),
+        q_kdb=_q_status(canon),
         allow_in_production=bool(spec.allow_in_production) if spec is not None else False,
         parity_verified=canon in POLARS_PARITY_VERIFIED,
         polars_long_tier=spec.polars_long_tier if spec is not None else "unsupported",
@@ -1146,6 +1177,7 @@ def export_flat_capabilities(
             "polars",
             "duckdb_sql",
             "clickhouse_sql",
+            "q_kdb",
         ):
             rows.append(capability_for(summary.canonical, backend))
     return rows
@@ -1230,6 +1262,10 @@ def get_best_backend(
                 else "duckdb_sql"
             )
             status = _sql_status(canonical, dialect=dialect)
+        elif registry_backend == "q_kdb":
+            # R21-BACKENDNAME-Q-ALIGN: q_kdb routes through the q evidence
+            # authority. Fail-closed: unavailable authority => unsupported.
+            status = _q_status(canonical)
         else:
             return False
         if prod:
@@ -1240,7 +1276,24 @@ def get_best_backend(
         )
 
     requested = str(prefer or "auto").lower()
-    if requested in {"pandas_numpy", "polars", "sql"}:
+    if requested in {"pandas_numpy", "polars", "sql", "q_kdb"}:
+        # R21-BACKENDNAME-Q-ALIGN: explicit prefer="q_kdb" selects the Q/KDB
+        # physical backend. The q evidence authority gates eligibility; a
+        # denied request raises (no silent fallback). The operator object is
+        # taken from the q physical-implementation registry path via
+        # OperatorRegistry when a q slot exists, otherwise the selection is
+        # rejected fail-closed.
+        if requested == "q_kdb":
+            if not permitted("q_kdb"):
+                raise UnsupportedOperatorBackendError(
+                    f"{canonical!r} backend='q_kdb' is not eligible in mode={mode!r}"
+                )
+            op = OperatorRegistry.get(canonical, "q_kdb")
+            if op is None:
+                raise UnsupportedOperatorBackendError(
+                    f"{canonical!r} backend='q_kdb' has no registered q operator"
+                )
+            return op, "q_kdb"
         op = OperatorRegistry.get(canonical, requested)
         if op is None or not permitted(requested):
             raise UnsupportedOperatorBackendError(
@@ -1411,8 +1464,29 @@ class BackendCapabilityRegistry:
         else:
             backend_kind = backend
 
-        # Handle SQL bound params validation
-        if backend_kind in {BackendKind.DUCKDB_SQL, BackendKind.CLICKHOUSE_SQL} and bound_params:
+        backend_kind_map = {
+            BackendKind.PANDAS_NUMPY: "pandas_numpy",
+            BackendKind.POLARS: "polars",
+            BackendKind.DUCKDB_SQL: "duckdb_sql",
+            BackendKind.CLICKHOUSE_SQL: "clickhouse_sql",
+            BackendKind.Q_KDB: "q_kdb",
+        }
+        if backend_kind is BackendKind.Q_KDB:
+            # R21-BACKENDNAME-Q-ALIGN: Q is not an SQL dialect, so the
+            # bound-param SQL compile check does not apply. Status comes from
+            # the q physical-implementation evidence authority (fail-closed).
+            status = _q_status(canon)
+            record = cls._build_record(canon, backend_kind, data_source_kind)
+            return CapabilityQueryResult(
+                supported=status != "unsupported",
+                production_safe=status == "production_safe",
+                record=record,
+                reason=f"Status: {status}",
+            )
+        if backend_kind in {
+            BackendKind.DUCKDB_SQL,
+            BackendKind.CLICKHOUSE_SQL,
+        } and bound_params:
             dialect = "duckdb_sql" if backend_kind == BackendKind.DUCKDB_SQL else "clickhouse_sql"
             decision = check_call_capability(canon, bound_params, dialect=dialect)
 
@@ -1432,14 +1506,7 @@ class BackendCapabilityRegistry:
                 reason=decision.reason,
             )
 
-        # Standard capability lookup
-        backend_name_map = {
-            BackendKind.PANDAS_NUMPY: "pandas_numpy",
-            BackendKind.POLARS: "polars",
-            BackendKind.DUCKDB_SQL: "duckdb_sql",
-            BackendKind.CLICKHOUSE_SQL: "clickhouse_sql",
-        }
-
+        backend_name = backend_name_map[backend_kind]  # type: ignore[assignment]
         if backend_kind not in backend_name_map:
             return CapabilityQueryResult(
                 supported=False,
@@ -1448,7 +1515,6 @@ class BackendCapabilityRegistry:
                 reason=f"Backend {backend_kind} not yet implemented",
             )
 
-        backend_name: BackendName = backend_name_map[backend_kind]  # type: ignore
         status = backend_status(canon, backend_name, data_source_kind=data_source_kind)
 
         supported = status != "unsupported"

@@ -250,32 +250,29 @@ def register_polars_udf(canonical: str) -> None:
     # param_specs from a second registration.
     _pandas_ref = OperatorRegistry.get(canonical, "pandas_numpy")
     if _pandas_ref is not None:
-        _ref_specs = getattr(getattr(_pandas_ref, "metadata", None), "param_specs", None)
-        _ref_names = set(getattr(getattr(_pandas_ref, "metadata", None), "param_names", None) or [])
-        _ref_aliases = set(getattr(getattr(_pandas_ref, "metadata", None), "param_aliases", None) or [])
+        _ref_meta = getattr(_pandas_ref, "metadata", None)
+        _ref_specs = getattr(_ref_meta, "param_specs", None)
+        _ref_names = set(getattr(_ref_meta, "param_names", None) or [])
+        _ref_aliases = set(getattr(_ref_meta, "param_aliases", None) or [])
         _udf_names = set(getattr(_PolarsUdf.metadata, "param_names", None) or [])
         _udf_aliases = set(getattr(_PolarsUdf.metadata, "param_aliases", None) or [])
+        # R6-196: carry the availability contract from the pandas reference so
+        # the polars delegate slot reports the same session-close availability.
+        _ref_available_at = getattr(_ref_meta, "available_at", None)
+        _ref_same_session_usable = getattr(_ref_meta, "same_session_usable", None)
+        _filtered = {}
         if _ref_specs:
             from cleaned_operators.base import ParamSpec as _PS
             _filtered = {k: v for k, v in _ref_specs.items()
                          if isinstance(v, _PS)
                          and (k in _ref_names or k in _ref_aliases)
                          and (k in _udf_names or k in _udf_aliases)}
-            if _filtered:
-                _PolarsUdf.metadata = PolarsMetadata(
-                    name=canonical,
-                    category="polars_udf",
-                    param_names=[],
-                    param_specs=_filtered,
-                )
-        # Copy available_at and same_session_usable from pandas reference
-        _ref_available_at = getattr(getattr(_pandas_ref, "metadata", None), "available_at", None)
-        _ref_same_session_usable = getattr(getattr(_pandas_ref, "metadata", None), "same_session_usable", None)
-        if _ref_available_at is not None or _ref_same_session_usable is not None:
+        if _filtered or _ref_available_at is not None or _ref_same_session_usable is not None:
             _PolarsUdf.metadata = PolarsMetadata(
                 name=canonical,
                 category="polars_udf",
                 param_names=[],
+                param_specs=_filtered,
                 available_at=_ref_available_at,
                 same_session_usable=_ref_same_session_usable,
             )
