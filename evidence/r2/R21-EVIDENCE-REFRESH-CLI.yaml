@@ -1,0 +1,74 @@
+# -*- coding: utf-8 -*-
+"""R21-EVIDENCE-REFRESH-CLI: Local-only evidence autopilot CLI.
+
+Implements `python -m evidence.refresh` with the following pipeline:
+1. scan_source → Merkle-tree source snapshot
+2. calculate_snapshot → Source identity computation
+3. load_registry → Load evidence artifact registry
+4. compute_input_identities → SHA-256 digests for all inputs
+5. mark_stale → Detect artifacts with changed inputs
+6. regenerate_inventories → Regenerate inventory CSVs
+7. run_certifications → Run certification verification
+8. generate_current → Generate CURRENT.json as single-truth entry point
+9. verify_no_stale_production → Final verification gate
+
+Output: Summary table with CURRENT/STALE/FAILED/NOT_RUN per artifact.
+"""
+id: R21-EVIDENCE-REFRESH-CLI
+slice: R21-EVIDENCE-REFRESH-CLI
+campaign: Operator Rehabilitation (R21; LOCAL ONLY, working tree is truth)
+git_sha: 4b2b39bfce16e2dfa5d1449a344157a31631aa17
+timestamp: "2026-08-21"
+status: COMPLETED_LOCAL
+
+owned_files:
+  - evidence/__main__.py
+  - evidence/CURRENT.json
+  - tests/evidence/test_evidence_refresh_cli.py
+  - evidence/r2/R21-EVIDENCE-REFRESH-CLI.yaml
+
+problem: |
+  No CLI existed to refresh evidence artifacts locally; manual regeneration was
+  ad-hoc and error-prone, leading to stale evidence in production.
+
+root_cause: |
+  The evidence refresh process was not automated as a single entry point;
+  individual scripts existed but were not orchestrated.
+
+fix: |
+  Implemented `python -m evidence.refresh` CLI with 9-step pipeline:
+  - Step 1: scan_source → Merkle-tree source snapshot (reuses evidence.source_snapshot)
+  - Step 2: calculate_snapshot → Source identity computation
+  - Step 3: load_registry → Load evidence artifact registry (reuses evidence.registry)
+  - Step 4: compute_input_identities → SHA-256 digests for all inputs
+  - Step 5: mark_stale → Detect artifacts with changed inputs
+  - Step 6: regenerate_inventories → Regenerate inventory CSVs
+  - Step 7: run_certifications → Run certification verification
+  - Step 8: generate_current → Generate CURRENT.json as single-truth entry point
+  - Step 9: verify_no_stale_production → Final verification gate
+
+  CLI supports:
+  - --changed-only: Only refresh artifacts with changed inputs
+  - --all: Refresh all artifacts (default)
+  - --dry-run: Show what would be done without making changes
+
+commands_run:
+  - "python3 -m evidence.refresh --help"
+  - "python3 -m evidence.refresh --dry-run"
+  - "python3 -m evidence.refresh"
+  - "pytest tests/evidence/test_evidence_refresh_cli.py -v"
+
+results:
+  cli_created: evidence/__main__.py
+  current_json_created: evidence/CURRENT.json
+  tests_created: tests/evidence/test_evidence_refresh_cli.py
+  evidence_yaml_created: evidence/r2/R21-EVIDENCE-REFRESH-CLI.yaml
+  pipeline_steps: 9
+  cli_options: ["--changed-only", "--all", "--dry-run"]
+  output_statuses: ["CURRENT", "STALE", "FAILED", "NOT_RUN"]
+
+notes:
+  - "CLI reuses existing evidence.source_snapshot and evidence.registry modules"
+  - "CURRENT.json serves as single-truth entry point for AI and production"
+  - "Serial pytest, no xdist; thread env vars set by runner"
+  - "LOCAL ONLY - no git or network dependencies"

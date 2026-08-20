@@ -1,0 +1,6 @@
+[submodule "factor_engine"]
+	path = factor_engine
+	url = https://github.com/HKUST-QUANT-SOCIETY/factor_engine.git
+[submodule "dataaccess"]
+	path = dataaccess
+	url = https://github.com/HKUST-QUANT-SOCIETY/data_access.git

@@ -1,0 +1,38 @@
+# R21-TODO-STUB-AUDIT.yaml
+# Audit of placeholder / TODO stub operators across the target files.
+# All are off-mining today because evidence_artifact_valid is False (no PRIMITIVE_BACKEND_EXECUTION_CERTIFIED),
+# so no register_operator(status="research_only") edits are required right now.
+
+title: R21 — TODO stub operator audit
+created: 2026-08-21
+files:
+  - cleaned_operators/polars_native/ts_advanced_batch1.py
+  - cleaned_operators/polars_native/ts_advanced_batch2.py
+  - cleaned_operators/polars_native/ts_advanced_batch3.py
+  - cleaned_operators/common/polars_ts_complex.py
+
+summary:
+  total_todo_in_target_files: 264
+  classes_with_placeholder_bodies: 240
+  by_file:
+    ts_advanced_batch1: 48
+    ts_advanced_batch2: 71
+    ts_advanced_batch3: 77
+    polars_ts_complex: 44
+  kinds:
+    nan_placeholder: 45
+    null_series: 67
+    null_literal: 77
+    passthrough: 44
+    none_return: 1
+    todo_comment_real_impl: 5
+  registered_canonicals_in_loaded_registry: 0
+  mineable_now: 0
+  mineable_by_file: 0
+  research_only_status_now: 0
+
+notes:
+  - batch5 is already quarantined by a local register_operator wrapper that forces status="research_only".
+  - These four modules are not in cleaned_operators._LOAD_MODULES / load_all today; direct import only.
+  - After load_all, target stubs are mostly classified extended/daily by existing authoritative canonicals, but are still off-mining.
+  - Current repo snapshot has evidence_artifact_valid == False, so PRIMITIVE_BACKEND_EXECUTION_CERTIFIED is empty and the admission matrix has 0 mining_eligible operators.

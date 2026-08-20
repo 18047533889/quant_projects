@@ -41,4 +41,4 @@ summary: |
   2. R21-NUMBA-FAIL-CLOSED-TESTS: FIXED (3 regression tests created and passing)
   3. R21-NUMBA-FAIL-CLOSED-EVIDENCE: FIXED (evidence file created)
   4. NumbaKernel.call() now enforces production mode fail-closed policy
-  5. Test results: 6 passed in 0.10s
+  5. Test results: 6 passed in 0.08s

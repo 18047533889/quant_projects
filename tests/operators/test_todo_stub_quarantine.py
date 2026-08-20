@@ -89,3 +89,12 @@ def test_classified_daily_implied_by_surface_sets() -> None:
     for canonical in sorted(OperatorRegistry.list_canonical()):
         if S.classify_canonical(canonical) == "daily":
             assert canonical in daily or canonical in migrated, f"daylisted but not in surface sets: {canonical}"
+
+
+def test_evidence_yaml_exists_and_matches_audit() -> None:
+    evidence = pathlib.Path("evidence/r2/R21-TODO-STUB-AUDIT.yaml").read_text()
+    assert "R21-TODO-STUB-AUDIT" in evidence
+    assert "ts_advanced_batch1" in evidence
+    assert "ts_advanced_batch2" in evidence
+    assert "ts_advanced_batch3" in evidence
+    assert "polars_ts_complex" in evidence
