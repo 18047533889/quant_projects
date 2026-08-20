@@ -1484,19 +1484,18 @@ class BackendCapabilityRegistry:
                 reason=f"Backend {backend_kind!r} not implemented",
             )
 
+        # Q_KDB: bypass SQL bound-param path; use q evidence authority.
         if backend_kind is BackendKind.Q_KDB:
-            # R21-BACKENDNAME-Q-ALIGN: Q is not an SQL dialect, so the
-            # bound-param SQL compile check does not apply. Status comes from
-            # the q physical-implementation evidence authority (fail-closed).
-            backend_name: BackendName = backend_kind_map[backend_kind]  # type: ignore
-            status = _q_status(canon)
+            q_status = _q_status(canon)
             record = cls._build_record(canon, backend_kind, data_source_kind)
             return CapabilityQueryResult(
-                supported=status != "unsupported",
-                production_safe=status == "production_safe",
+                supported=q_status != "unsupported",
+                production_safe=q_status == "production_safe",
                 record=record,
-                reason=f"Status: {status}",
+                reason=f"Status: {q_status}",
             )
+
+        # SQL bound-param validation for DuckDB/ClickHouse only.
         if backend_kind in {
             BackendKind.DUCKDB_SQL,
             BackendKind.CLICKHOUSE_SQL,
