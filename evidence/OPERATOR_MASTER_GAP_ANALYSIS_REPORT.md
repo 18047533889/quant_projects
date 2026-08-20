@@ -374,7 +374,7 @@ Do not implement:
 - Master list: `/home/shw/quant_projects/FactorEngine_全部新增算子_Master清单_20260812.md`
 - Operator surfaces: `cleaned_operators/operator_surface.py`
 - Implementation files: `cleaned_operators/*.py`, `cleaned_operators/fundamental/*.py`, `cleaned_operators/intraday/*.py`
-- Current HEAD: 854bdc2278678e3db03c894c059cd5fdbb7dac1b
+- Current HEAD: 4b2b39bfce16e2dfa5d1449a344157a31631aa17
 
 ---
 

@@ -12,21 +12,21 @@ evidence:
   - summarize_operator() now exposes a q_kdb column derived from the q physical-implementation evidence authority
   - OperatorCapabilitySummary schema is extended with the q_kdb CapabilityStatus field
   - backend_status("x", "q_kdb") routes through _q_status(); fail-closed to unsupported when q evidence authority is unavailable/missing
-  - capability_for("x", "q_kdb") preserves BackendKind.Q_KDB identity and uses _q_status()
+  - capability_for("x", "q_kdb") preserves BackendKind.Q_KDB identity, uses _q_status(), and emits a q-kdb-specific notes value when supported
   - export_flat_capabilities() iterates q_kdb as a backend row alongside pandas_numpy / polars / duckdb_sql / clickhouse_sql
-  - BackendCapabilityRegistry.query(BackendKind.Q_KDB, ...) bypasses the SQL bound-param compile path and returns q evidence authority status
-  - get_best_backend(prefer="q_kdb") routes via q evidence authority, fail-closed on ineligibility or missing q registry slot
-  - ExecutionKind now carries a backward-compatible SQL_NATIVE alias so the existing single-authority test remains green while preserving enum identity
+  - BackendCapabilityRegistry.query() normalizes string or BackendKind.Q_KDB, bypasses the SQL bound-param compile path, and returns q evidence authority status
+  - get_best_backend() now accepts an injectable registry, resolves canonicals through it, and routes explicit prefer="q_kdb" directly when a q operator is registered; production admission still requires q evidence authority certification
+  - ExecutionKind retains backward-compatible POLARS_NATIVE_KERNEL and SQL_NATIVE aliases to keep the existing single-authority test green while preserving enum identity
 focused_tests:
-  command: cd /home/shw/quant_projects && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/backend/test_backendname_q_align.py tests/test_type_unification.py tests/backend/test_capability_contracts.py -q -p no:xdist
-  result: 19 passed
+  command: cd /home/shw/quant_projects && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/backend/test_backendname_q_align.py tests/test_type_unification.py tests/backend/test_capability_contracts.py "tests/backend/test_operator_capability.py::test_execution_kind_has_single_authority" -q -p no:xdist
+  result: 20 passed
 adjacent_regression:
   command_2: cd /home/shw/quant_projects && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/q_backend/test_q_capability_evidence.py -q -p no:xdist
   result_2: 36 passed, 2 pre-existing q registry declaration mismatches unrelated to BackendName alignment
 limitations:
   - OperatorRegistry currently registers only pandas_numpy / polars / sql slots; therefore OperatorRegistry.get(canonical, "q_kdb") returns None in this environment, so get_best_backend raises when forcing prefer="q_kdb" because no registered q operator object is available.
   - Q runtime is not available in this environment; q capability tests that depend on pykx remain skipped.
-  - The focused target suite (tests/backend/test_backendname_q_align.py) and the contract/unification suites pass. Several tests in tests/backend/test_operator_capability.py were failing before this change because evidence artifact validity and q compiler evidence are not set in this environment; those failures are pre-existing and not caused by the BackendName alignment.
+  - The focused target suite (tests/backend/test_backendname_q_align.py) and the contract/unification suites pass. Several tests in tests/backend/test_operator_capability.py remain failing in this environment because evidence artifact validity is False (source hash mismatches and provenance drift), which keeps PRIMITIVE_BACKEND_EXECUTION_CERTIFIED empty and production routing/coverage assertions fail-closed; those failures are pre-existing and not caused by the BackendName alignment.
 known_gaps:
   - The test in tests/q_backend/test_q_capability_evidence.py asserting ts_beta has no declared-without-lowering mismatch is pre-existing and not caused by this alignment.
 production_certification: NOT_RUN

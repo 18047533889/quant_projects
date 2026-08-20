@@ -1,0 +1,39 @@
+id: R21-EVIDENCE-REGISTRY
+slice: R21-EVIDENCE-REGISTRY
+campaign: Operator Rehabilitation (R21; LOCAL ONLY, working tree is truth)
+git_sha: LOCAL-ONLY
+timestamp: "2026-08-21"
+status: COMPLETED_LOCAL
+
+owned_files:
+  - evidence/registry.py
+  - evidence/current/
+  - evidence/archive/
+  - tests/test_evidence_registry.py
+  - evidence/r2/R21-EVIDENCE-REGISTRY.yaml
+
+problem: |
+  Evidence artifacts were committed without a unified registry that (a) enumerates inventory / certification / benchmark artifacts, (b) tracks their input dependencies, and (c) detects staleness automatically when sources change.
+
+root_cause: |
+  Artifact generation was handled ad-hoc per script; no module recorded which source files each artifact depends on, nor compared stored identities against current file hashes.
+
+fix: |
+  Added a local-only evidence artifact registry with input dependency tracking and auto-staleness:
+  - evidence/registry.py: EvidenceArtifact entries for inventory / certification / benchmark artifacts, evidence_input_identity (SHA-256 of inputs), freshness checking, and current/archive workflow.
+  - evidence/current/: canonical location for live artifact outputs.
+  - evidence/archive/<snapshot>/: retained superseded artifacts.
+  - tests/test_evidence_registry.py: 11 regression tests validating identity tracking, staleness detection, publish/archive, and default registry bootstrap.
+
+commands_run:
+  - python3 -m py_compile evidence/registry.py
+  - python3 -m pytest tests/test_evidence_registry.py -q
+
+results:
+  registry_entries:
+    - operator-inventory
+    - operator-certification
+    - operator-benchmark-manifest
+  tests_passed: 11
+  stale_detection_validated: true
+  local_only: true

@@ -1,0 +1,77 @@
+# R21-NODE-IMPL: BackendRegion Per-Node Implementation IDs
+# Generated: 2026-08-21
+# Git SHA: (working tree)
+
+id: R21-NODE-IMPL
+slice: R21-NODE-IMPL — BackendRegion per-node implementation ID support
+campaign: BackendRegion Node Implementations (R21; LOCAL ONLY, working tree is truth)
+timestamp: "2026-08-21"
+status: COMPLETED_LOCAL
+
+owned_files:
+  - planner/backend_region.py                 # BackendRegion + RegionImplementationManifestHash
+  - tests/planner/test_node_implementations.py  # 11 regression tests
+  - evidence/r2/R21-NODE-IMPL.yaml           # this file
+
+problem:
+  "BackendRegion had a single implementation_id field for the whole region.
+  Heterogeneous regions where different nodes use different physical
+  implementations (PIs) had no way to express per-node implementation identity."
+
+root_cause:
+  "1. implementation_id was a single string binding for the entire region.
+  2. No mechanism to track node_id → PhysicalImplementationID mapping.
+  3. Plan hash did not include per-node implementation details."
+
+fix:
+  "1. Added node_implementations: dict[str, str] field to BackendRegion
+     mapping node_id → PhysicalImplementationID ('pi:v1:...').
+  2. Added RegionImplementationManifestHash computation:
+     'rimh:v1:' + SHA256(sorted node_implementations items).
+  3. Backward compatibility: when node_implementations is provided,
+     implementation_id auto-populates to manifest hash if empty.
+  4. Consistency validation: if both are provided, implementation_id
+     must match computed manifest hash.
+  5. to_dict() exposes node_implementations and manifest hash.
+  6. Plan hash payload includes node_implementations and manifest hash
+     for stable identity of heterogeneous regions.
+  7. Added compute_region_implementation_manifest_hash() static method."
+
+commands_run:
+  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/planner/test_node_implementations.py -v -> 11 passed (0.12s serial, no xdist)"
+  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/planner/test_physical_region_plan_validation.py tests/planner/test_physical_region_plan_contract.py -v -> 31 passed (0.11s serial, no xdist)"
+  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/planner/test_plan_hash_strengthen.py -v -> 16 passed (0.09s serial, no xdist)"
+
+results:
+  tests:
+    total: 58
+    passed: 58
+    failed: 0
+    skipped: 0
+
+  test_files:
+    - tests/planner/test_node_implementations.py: 11 passed
+    - tests/planner/test_physical_region_plan_validation.py: 27 passed
+    - tests/planner/test_physical_region_plan_contract.py: 4 passed
+    - tests/planner/test_plan_hash_strengthen.py: 16 passed
+
+  new_fields_added:
+    - "BackendRegion.node_implementations: dict[str, str] — node_id → PI mapping"
+    - "BackendRegion._compute_manifest_hash_impl() — instance method for manifest hash"
+    - "BackendRegion.compute_region_implementation_manifest_hash() — static method"
+
+guards_in_tests:
+  - "test_node_implementations.py: 11 passed (0.12s serial, no xdist)"
+  - "All 58 tests pass with current HEAD"
+
+known_limitations:
+  - "node_implementations dict values are plain strings (PhysicalImplementationID values)"
+  - "No runtime executor changes in this slice — only dataclass definition"
+  - "Manifest hash prefix is 'rimh:v1:' (RegionImplementationManifestHash v1)"
+  - "Backward compatible: existing code without node_implementations continues to work"
+
+backward_compatibility:
+  - "node_implementations defaults to empty dict"
+  - "implementation_id auto-populates only when node_implementations is non-empty"
+  - "to_dict() includes new fields but does not break existing consumers"
+  - "Plan hash payload version remains 1 (additive change)"

@@ -41,11 +41,37 @@ def test_registry_to_capability_maps_q_kdb_and_family_literals_agree():
     assert BackendFamily.Q_KDB.value == "q_kdb"
     assert BackendKind.Q_KDB.value == "q_kdb"
     # planner.PhysicalBackend agrees too (no import cycle: planner imports backend).
+    from backend.operator_capability import _OperatorBackendRegistryStub
     from planner.backend_region import PhysicalBackend, normalize_backend_name
 
     assert PhysicalBackend.Q_KDB.value == "q_kdb"
     for alias in ("q", "q_kdb", "kdb"):
         assert normalize_backend_name(alias) is PhysicalBackend.Q_KDB
+
+    # get_best_backend respects an injectable registry's canonical resolver.
+    registry = _OperatorBackendRegistryStub(
+        backends_for={"ts_mean": ["q_kdb"]},
+        get_impl=lambda canonical, backend: f"{canonical}:{backend}",
+        resolve_canonical=lambda name: name.upper(),
+    )
+    # Production must reject q_kdb when evidence authority does not certify it.
+    with pytest.raises(UnsupportedOperatorBackendError):
+        get_best_backend(
+            "ts_mean",
+            mode="production",
+            prefer="q_kdb",
+            registry=registry,  # type: ignore[arg-type]
+        )
+
+    op, backend = get_best_backend(
+        "ts_mean",
+        mode="research",
+        prefer="q_kdb",
+        allow_unverified_backend=True,
+        registry=registry,  # type: ignore[arg-type]
+    )
+    assert backend == "q_kdb"
+    assert op == "TS_MEAN:q_kdb"
 
 
 def test_summary_and_status_expose_q_kdb_column_from_evidence_authority():

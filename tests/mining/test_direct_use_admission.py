@@ -113,7 +113,7 @@ class TestProductionAdmittedRequiresPhysicalEvidence:
                             # The admitting implementation must be an exact
                             # current-head PhysicalImplementationID.
                             assert record.implementation_id is not None
-                            assert str(record.implementation_id).startswith("pi:v1:")
+                            assert str(record.implementation_id).startswith("pi:v2:")
 
 
 class TestDirectlyUsableRequiresProductionAdmitted:
@@ -156,7 +156,7 @@ class TestPhysicalInventoryAdmissionConsistency:
                     f"but has no implementation_id"
                 )
                 assert record.admission.spec_complete is True
-                assert str(record.implementation_id).startswith("pi:v1:")
+                assert str(record.implementation_id).startswith("pi:v2:")
 
 
 class TestProductionAdmittedLogic:

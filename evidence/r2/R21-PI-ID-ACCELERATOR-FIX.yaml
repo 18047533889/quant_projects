@@ -1,0 +1,28 @@
+# R21-PI-ID-ACCELERATOR-FIX
+# Added accelerator and kernel_signature to PhysicalImplementationID hash payload.
+# Version bumped from v1 to v2 to invalidate old hashes.
+
+id: R21-PI-ID-ACCELERATOR-FIX
+title: "PhysicalImplementationID: add accelerator + kernel_signature to payload"
+status: implemented
+date: 2026-08-21
+
+summary: |
+  The PhysicalImplementationID hash (physical_implementation_id property on
+  PhysicalImplementationSpec) previously did not include `accelerator` or
+  `kernel_signature`. Two specs differing only in accelerator type or kernel
+  signature would produce the same hash, which is incorrect.
+
+  Changes:
+  - Added `"accelerator": self.accelerator.value` to the hash payload.
+  - Added `"kernel_signature": self.kernel_signature.strip()` to the hash payload.
+  - Version bumped from `pi:v1:` to `pi:v2:` to invalidate old hashes.
+
+file: backend/contracts/__init__.py
+lines: "202-215 (payload dict + digest)"
+
+evidence:
+  - 3 regression tests in tests/backend/test_pi_id_accelerator_signature.py
+    1. Different accelerator -> different hash
+    2. Different kernel_signature -> different hash
+    3. Same spec -> same hash (stability)

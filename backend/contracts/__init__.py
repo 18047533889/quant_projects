@@ -196,23 +196,32 @@ class PhysicalImplementationSpec:
 
     @property
     def physical_implementation_id(self) -> PhysicalImplementationID | None:
-        """Return the bound ID, or ``None`` for an incomplete declaration."""
+        """Return the bound ID, or ``None`` for an incomplete declaration.
+
+        Version history:
+            v1: original payload (backend, canonical, emitter_identity, execution_kind,
+                implementation_source_hash, kernel_identity, parameter_domain_hash,
+                semantic_contract_hash).
+            v2: added accelerator and kernel_signature to payload.
+        """
         if self.validation_errors():
             return None
         payload = {
+            "accelerator": self.accelerator.value,
             "backend": self.backend.strip(),
             "canonical": self.canonical.strip(),
             "emitter_identity": self.emitter_identity.strip(),
             "execution_kind": self.execution_kind.value,
             "implementation_source_hash": self.implementation_source_hash.strip(),
             "kernel_identity": self.kernel_identity.strip(),
+            "kernel_signature": self.kernel_signature.strip(),
             "parameter_domain_hash": self.parameter_domain_hash.strip(),
             "semantic_contract_hash": self.semantic_contract_hash.strip(),
         }
         digest = hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
-        return PhysicalImplementationID(f"pi:v1:{digest}")
+        return PhysicalImplementationID(f"pi:v2:{digest}")
 
     def is_production_eligible(self) -> bool:
         """Check if this spec allows production eligibility.

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
@@ -142,13 +142,16 @@ class BackendRegion:
     supports_direct_sink: bool = False
     # R21-P023: Four-backend plan identity and resource tracking
     implementation_id: str = ""  # PhysicalImplementationID ("pi:v1:...") binding
+    # R21-NODE-IMPL: Per-node implementation mapping for heterogeneous regions
+    node_implementations: dict[str, str] = field(default_factory=dict)
+    # node_id → PhysicalImplementationID for fine-grained implementation identity
     input_bytes: int = 0  # estimated input data volume
     output_bytes: int = 0  # estimated output data volume
     liveness: str = "eager"  # "eager" / "lazy" / "stream"
     parameter_domain_identity: str = ""  # parameter-domain hash identity
 
     def __post_init__(self):
-        """Validate region constraints (MB-P0-011, MB-P0-012)."""
+        """Validate region constraints and compute manifest hash (MB-P0-011, MB-P0-012, R21-NODE-IMPL)."""
         # MB-P0-011: CROSS_SECTION_PER_DATE cannot partition by instrument
         if self.execution_axis == ExecutionAxis.CROSS_SECTION_PER_DATE:
             if self.required_properties and "instrument" in self.required_properties.partitioned_by:
@@ -165,6 +168,45 @@ class BackendRegion:
                         "RECURSIVE_TIME without checkpoint must be sequential_only: "
                         "cannot parallelize stateful operations without checkpointing"
                     )
+
+        # R21-NODE-IMPL: Compute manifest hash for node implementations
+        if self.node_implementations and not self.implementation_id:
+            # Use object.__setattr__ for frozen dataclass
+            object.__setattr__(self, 'implementation_id', self._compute_manifest_hash_impl())
+        elif self.node_implementations and self.implementation_id:
+            # Verify consistency if both are provided
+            expected = self._compute_manifest_hash_impl()
+            if self.implementation_id != expected:
+                raise ValueError(
+                    f"implementation_id ({self.implementation_id}) does not match "
+                    f"computed manifest hash ({expected}) for node_implementations"
+                )
+
+    def _compute_manifest_hash_impl(self) -> str:
+        """Compute SHA256 manifest hash from node_implementations dict.
+
+        R21-NODE-IMPL: Deterministic hash of sorted (node_id, pi) pairs.
+        Returns "rimh:v1:<sha256>" format for RegionImplementationManifestHash.
+        """
+        if not self.node_implementations:
+            return ""
+        sorted_items = sorted(self.node_implementations.items())
+        payload = json.dumps(dict(sorted_items), sort_keys=True, separators=(",", ":"))
+        return "rimh:v1:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def compute_region_implementation_manifest_hash(node_implementations: dict[str, str]) -> str:
+        """Compute RegionImplementationManifestHash from node_implementations.
+
+        R21-NODE-IMPL: SHA256(sorted node_implementations items) for stable
+        identity of heterogeneous regions where different nodes may use
+        different PhysicalImplementationIDs.
+        """
+        if not node_implementations:
+            return ""
+        sorted_items = sorted(node_implementations.items())
+        payload = json.dumps(dict(sorted_items), sort_keys=True, separators=(",", ":"))
+        return "rimh:v1:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -183,6 +225,9 @@ class BackendRegion:
             "output_bytes": self.output_bytes,
             "liveness": self.liveness,
             "parameter_domain_identity": self.parameter_domain_identity,
+            # R21-NODE-IMPL: per-node implementation mapping
+            "node_implementations": self.node_implementations,
+            "region_implementation_manifest_hash": self._compute_manifest_hash_impl(),
         }
 
 
@@ -441,6 +486,9 @@ class PhysicalRegionPlan:
             "execution_axis": _enum(r.execution_axis),
             # R21-P023: PhysicalImplementationID binding ("pi:v1:...")
             "implementation_id": r.implementation_id,
+            # R21-NODE-IMPL: per-node implementation mapping for plan identity
+            "node_implementations": r.node_implementations,
+            "region_implementation_manifest_hash": r._compute_manifest_hash_impl(),
             # eager / lazy / stream
             "liveness": r.liveness,
             # parameter-domain hash identity

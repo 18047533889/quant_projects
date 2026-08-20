@@ -1,0 +1,95 @@
+# R21-NUMBA-IMPL-HASH
+
+task_id: R21-NUMBA-IMPL-HASH
+date: 2026-08-21
+author: Writer BM
+status: COMPLETE
+
+## Problem
+
+The `NumbaKernelRegistry` dedup logic compared only `NumbaKernelSpec` fields
+(kernel_name + semantic_version + supported_dtype).  This allowed a silent swap:
+same spec but different function implementations (e.g. someone registers a
+different reference_fn or numba_fn under the same kernel_name with identical
+spec fields).  The registry would silently overwrite the existing kernel without
+raising an error.
+
+## Solution
+
+Introduced `NumbaKernelImplementationID = SHA256(reference_fn source + numba_fn source + transitive helpers)`.
+
+The implementation_id is computed at registration time from:
+- `reference_fn` source text (via `inspect.getsource`)
+- `numba_fn` source text (via `inspect.getsource`)
+- Transitive helper functions referenced in the source text
+
+### Dedup policy (§14.1):
+
+| Same spec | Same impl_id | Result |
+|-----------|--------------|--------|
+| Yes       | Yes          | Idempotent re-registration (allowed) |
+| Yes       | No           | `DuplicateKernelRegistrationError` (silent swap detected) |
+| No        | Any          | `DuplicateSpecMismatchError` |
+
+## Changes
+
+### backend/numba_kernel_registry.py
+
+1. **New helper functions:**
+   - `_get_source_safely(fn)` — safely get source text, returns "" for C/builtin/JIT
+   - `_resolve_helper_sources(fn)` — collect transitive helper sources from same module
+   - `_compute_numba_kernel_implementation_id(ref, numba)` — compute SHA256-based ID
+
+2. **NumbaKernel dataclass:**
+   - Added `implementation_id: str = ""` field, set at registration time
+
+3. **NumbaKernelRegistry.register():**
+   - Computes `impl_id` via `_compute_numba_kernel_implementation_id()`
+   - Passes `implementation_id` to `NumbaKernel` constructor
+   - New dedup check: same spec but different `impl_id` → `DuplicateKernelRegistrationError`
+
+4. **New exception class:**
+   - `DuplicateSpecMismatchError` — raised when kernel_name registered with different spec
+
+5. **New audit function:**
+   - `get_implementation_registry()` — returns implementation IDs for all registered kernels
+
+### tests/backend_parity/test_r21_numba_impl_hash.py (NEW)
+
+12 regression tests across 3 test classes:
+
+| # | Class | Test | Purpose |
+|---|-------|------|---------|
+| 1 | TestImplementationIDDeterminism | test_same_function_same_hash | Same fn → same hash |
+| 2 | TestImplementationIDDeterminism | test_different_ref_different_hash | Different ref → different hash |
+| 3 | TestImplementationIDDeterminism | test_different_numba_different_hash | Different numba → different hash |
+| 4 | TestImplementationIDDeterminism | test_none_numba_hash | None numba → valid hash |
+| 5 | TestImplementationIDDeterminism | test_same_body_different_qualname_same_hash | Different qualname → different hash (expected) |
+| 6 | TestImplementationIDDeterminism | test_helper_in_hash | Helpers included in hash |
+| 7 | TestRegistryDedupByImplID | test_idempotent_same_spec_same_fn | Idempotent re-registration allowed |
+| 8 | TestRegistryDedupByImplID | test_same_spec_different_ref_raises | Same spec + different ref → error |
+| 9 | TestRegistryDedupByImplID | test_same_spec_different_numba_raises | Same spec + different numba → error |
+| 10 | TestRegistryDedupByImplID | test_different_spec_raises_spec_mismatch | Different spec → DuplicateSpecMismatchError |
+| 11 | TestRegistryDedupByImplID | test_implementation_id_stored_on_kernel | implementation_id stored correctly |
+| 12 | TestGetImplementationRegistry | test_returns_all_registered_kernels | Audit function returns all IDs |
+
+## Test results
+
+All 12 new tests pass. All 17 existing numba kernel tests pass (no regression).
+
+## Implementation ID format
+
+```
+nki:v1:<sha256-hex-digest>
+```
+
+Payload structure:
+```
+REF:<reference_fn source>
+---
+NUMBA:<numba_fn source or "none">
+---
+REF_HELPER[0]:<helper source>
+---
+NUMBA_HELPER[0]:<helper source>
+```

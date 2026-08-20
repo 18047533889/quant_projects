@@ -1,0 +1,44 @@
+ticket: R21-NUMBA-FAIL-CLOSED
+status: DONE
+agent: Writer BL (Numba fail-closed)
+timestamp: "2026-08-20T23:45:00Z"
+
+findings:
+  - id: R21-NUMBA-FAIL-CLOSED-IMPLEMENTATION
+    severity: P0
+    file: backend/numba_kernel_registry.py
+    issue: "NumbaKernel.call() silently falls back to reference when numba unavailable, even in production"
+    root_cause: "Original design allowed silent fallback for all modes"
+    fix: |
+      Added KernelUnavailableError exception class.
+      Modified NumbaKernel.call() to check production mode via runtime.production_policy.is_production_mode().
+      Production mode: raises KernelUnavailableError if numba requested but unavailable.
+      Research mode: falls back to reference with UserWarning.
+    verification: "3 regression tests created and passing"
+    status: FIXED
+
+  - id: R21-NUMBA-FAIL-CLOSED-TESTS
+    severity: P0
+    file: tests/backend/test_numba_fail_closed.py
+    issue: "No regression tests for production mode fail-closed behavior"
+    fix: |
+      Created test_numba_fail_closed.py with 3 test classes:
+      - TestNumbaProductionModeFailClosed: verifies KernelUnavailableError raised in production
+      - TestNumbaResearchModeWarns: verifies UserWarning issued in research mode
+      - TestNumbaAvailableWorks: verifies both modes work when numba is available
+    verification: "Tests use monkeypatch to set FACTOR_ENGINE_RUN_MODE env var"
+    status: FIXED
+
+  - id: R21-NUMBA-FAIL-CLOSED-EVIDENCE
+    severity: P1
+    file: evidence/r2/R21-NUMBA-FAIL-CLOSED.yaml
+    issue: "Missing evidence for production mode enforcement"
+    fix: "Created this evidence file documenting the change"
+    status: FIXED
+
+summary: |
+  1. R21-NUMBA-FAIL-CLOSED-IMPLEMENTATION: FIXED (production mode raises KernelUnavailableError)
+  2. R21-NUMBA-FAIL-CLOSED-TESTS: FIXED (3 regression tests created and passing)
+  3. R21-NUMBA-FAIL-CLOSED-EVIDENCE: FIXED (evidence file created)
+  4. NumbaKernel.call() now enforces production mode fail-closed policy
+  5. Test results: 6 passed in 0.10s

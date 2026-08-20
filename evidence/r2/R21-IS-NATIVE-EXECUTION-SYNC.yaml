@@ -1,0 +1,32 @@
+id: R21-IS-NATIVE-EXECUTION-SYNC
+task: R21-IS-NATIVE-EXECUTION-SYNC
+title: "Sync is_native_execution() with all ExecutionKind members"
+status: done
+files:
+  - backend/operator_capability.py
+  - backend/contracts/__init__.py
+  - tests/backend/test_unified_capability_contracts.py
+evidence:
+  - BackendCapability.is_native_execution() now covers all native ExecutionKind members
+  - NUMBA_CPU_KERNEL added to is_native_execution set
+  - CLICKHOUSE_NATIVE_SQL added to is_native_execution set
+  - Q_NATIVE added to is_native_execution set
+  - capability_for execution_kind_map extended with clickhouse_native_sql, numba_cpu_kernel, q_native string keys
+  - Previously six members were covered (NATIVE_EXPR, NATIVE_GROUP, NATIVE_STREAMING, POLARS_NATIVE_EXPR, POLARS_NUMPY_KERNEL, DUCKDB_NATIVE_SQL)
+  - Now nine members are covered (the above six plus NUMBA_CPU_KERNEL, CLICKHOUSE_NATIVE_SQL, Q_NATIVE)
+rationale: |
+  is_native_execution() is the single capability query that downstream
+  routing (cost estimator, backend selector, planner) uses to decide whether
+  an implementation runs natively or via delegation.  The three new
+  backends—Numba CPU kernel, ClickHouse SQL, and Q/kdb—are genuinely native
+  execution paths, not delegates.  Leaving them out of the set caused those
+  backends to be misclassified as non-native, which affected downstream
+  routing decisions.
+  The execution_kind_map in capability_for was also extended so that
+  backend_meta strings "clickhouse_native_sql", "numba_cpu_kernel", and
+  "q_native" resolve to the correct ExecutionKind enum values.
+tests_created:
+  - test_is_native_execution_covers_numba_cpu_kernel
+  - test_is_native_execution_covers_clickhouse_native_sql
+  - test_is_native_execution_covers_q_native
+tests_passed: 3/3 (serial, no xdist)

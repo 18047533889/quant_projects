@@ -21,7 +21,7 @@ import dataclasses
 import enum
 import inspect
 from dataclasses import dataclass
-from typing import Any, Literal, Sequence
+from typing import Any, Callable, Literal, Mapping, Sequence
 
 # Import unified enums from contracts (FE-P0-003)
 from backend.contracts import (
@@ -145,6 +145,10 @@ class BackendCapability:
         """Check if execution is truly native (not delegate).
 
         FE-BE-P0-002: Updated to use unified ExecutionKind enum members.
+        R21-IS-NATIVE-EXECUTION-SYNC: All native ExecutionKind members are
+        covered. New backends (Numba CPU kernel, ClickHouse SQL, Q/kdb) must
+        be listed here so that downstream routing can rely on a single
+        capability query instead of ad-hoc enum checks.
         """
         return self.execution_kind in {
             ExecutionKind.NATIVE_EXPR,
@@ -153,6 +157,9 @@ class BackendCapability:
             ExecutionKind.POLARS_NATIVE_EXPR,
             ExecutionKind.POLARS_NUMPY_KERNEL,
             ExecutionKind.DUCKDB_NATIVE_SQL,
+            ExecutionKind.NUMBA_CPU_KERNEL,
+            ExecutionKind.CLICKHOUSE_NATIVE_SQL,
+            ExecutionKind.Q_NATIVE,
         }
 
     # Legacy compatibility properties
@@ -1099,6 +1106,9 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
         "polars_numpy_kernel": ExecutionKind.POLARS_NUMPY_KERNEL,
         "polars_pandas_delegate": ExecutionKind.POLARS_PANDAS_DELEGATE,
         "duckdb_native_sql": ExecutionKind.DUCKDB_NATIVE_SQL,
+        "clickhouse_native_sql": ExecutionKind.CLICKHOUSE_NATIVE_SQL,
+        "numba_cpu_kernel": ExecutionKind.NUMBA_CPU_KERNEL,
+        "q_native": ExecutionKind.Q_NATIVE,
     }
     exec_kind = execution_kind_map.get(execution_kind_str, ExecutionKind.UNSUPPORTED)
 
@@ -1250,7 +1260,11 @@ def get_best_backend(
     if registry is None:
         registry = OperatorRegistry
 
-    canonical = resolve_canonical(name)
+    def resolve(name_: str) -> str:
+        resolver = getattr(registry, "resolve_canonical", None)
+        return resolver(name_) if callable(resolver) else resolve_canonical(name_)
+
+    canonical = resolve(name)
     mode = str(mode or "research").lower()
     backends = registry.backends_for(canonical)
     prod = mode == "production"
@@ -1283,13 +1297,11 @@ def get_best_backend(
     requested = str(prefer or "auto").lower()
     if requested in {"pandas_numpy", "polars", "sql", "q_kdb"}:
         # R21-BACKENDNAME-Q-ALIGN: explicit prefer="q_kdb" selects the Q/KDB
-        # physical backend. The q evidence authority gates eligibility; a
-        # denied request raises (no silent fallback). The operator object is
-        # taken from the q physical-implementation registry path via
-        # OperatorRegistry when a q slot exists, otherwise the selection is
-        # rejected fail-closed.
+        # physical backend. The q evidence authority gates production eligibility;
+        # research admission is allowed when the request is explicit and the
+        # operator object is registered in the injected registry.
         if requested == "q_kdb":
-            if not permitted("q_kdb"):
+            if prod and not permitted("q_kdb"):
                 raise UnsupportedOperatorBackendError(
                     f"{canonical!r} backend='q_kdb' is not eligible in mode={mode!r}"
                 )
@@ -1377,6 +1389,34 @@ def get_best_backend(
             f"selected backend {chosen!r} disappeared for {canonical!r}"
         )
     return op, chosen
+
+
+class _OperatorBackendRegistryStub:
+    """Minimal injectable stub for ``get_best_backend`` tests.
+
+    This is intentionally private; production callers still use
+    ``cleaned_operators.registry.OperatorRegistry`` by default.
+    """
+
+    def __init__(
+        self,
+        *,
+        backends_for: Mapping[str, Sequence[str]] | None = None,
+        get_impl: Callable[[str, str], object | None] | None = None,
+        resolve_canonical: Callable[[str], str] | None = None,
+    ) -> None:
+        self._backends = backends_for or {}
+        self._get = get_impl or (lambda canonical, backend: None)
+        self._resolve = resolve_canonical
+
+    def backends_for(self, canonical: str) -> Sequence[str]:
+        return self._backends.get(canonical, ())
+
+    def get(self, canonical: str, backend: str) -> object | None:
+        return self._get(canonical, backend)
+
+    def resolve_canonical(self, canonical: str) -> str:
+        return self._resolve(canonical) if self._resolve is not None else canonical
 
 
 class BackendCapabilityRegistry:

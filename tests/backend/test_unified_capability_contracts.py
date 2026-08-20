@@ -236,5 +236,42 @@ def test_is_native_execution():
     assert not cap_delegate.is_native_execution()
 
 
+# ---------------------------------------------------------------------------
+# R21-IS-NATIVE-EXECUTION-SYNC regression tests
+# ---------------------------------------------------------------------------
+
+def test_is_native_execution_covers_numba_cpu_kernel():
+    """R21-IS-NATIVE-EXECUTION-SYNC: NUMBA_CPU_KERNEL is native."""
+    cap = BackendCapability(
+        canonical="test",
+        backend=BackendKind.PANDAS_NUMPY,
+        level=CapabilityLevel.IMPLEMENTED,
+        execution_kind=ExecutionKind.NUMBA_CPU_KERNEL,
+    )
+    assert cap.is_native_execution()
+
+
+def test_is_native_execution_covers_clickhouse_native_sql():
+    """R21-IS-NATIVE-EXECUTION-SYNC: CLICKHOUSE_NATIVE_SQL is native."""
+    cap = BackendCapability(
+        canonical="test",
+        backend=BackendKind.CLICKHOUSE_SQL,
+        level=CapabilityLevel.IMPLEMENTED,
+        execution_kind=ExecutionKind.CLICKHOUSE_NATIVE_SQL,
+    )
+    assert cap.is_native_execution()
+
+
+def test_is_native_execution_covers_q_native():
+    """R21-IS-NATIVE-EXECUTION-SYNC: Q_NATIVE is native."""
+    cap = BackendCapability(
+        canonical="test",
+        backend=BackendKind.Q_KDB,
+        level=CapabilityLevel.IMPLEMENTED,
+        execution_kind=ExecutionKind.Q_NATIVE,
+    )
+    assert cap.is_native_execution()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
