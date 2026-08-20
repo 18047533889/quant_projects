@@ -1,0 +1,32 @@
+id: R21-P033-MARKET-CONTEXT
+title: "Market enum must be explicit — no market=None in production interfaces"
+date: 2026-08-20
+status: implemented
+author: Writer AJ
+scope:
+  - backend/market/context.py
+  - mining/direct_use.py
+  - api/mining_integration.py
+  - backend/dsl_validator.py (not found; production validation is in api/mining_integration.py)
+
+summary: >
+  Enforce that production interfaces require explicit Market enum ("ashare" | "us").
+  market=None must hard-fail in production contexts.
+
+evidence:
+  - file: api/mining_integration.py
+    function: validate_production_dsl
+    change: "market parameter changed from `str | None = None` to required `str`. Removed default fallback to 'ashare'."
+  - file: api/mining_integration.py
+    function: export_dsl_allowlist_json
+    change: "market parameter changed from `str | None = None` to required `str`. Removed default fallback to 'us'."
+  - file: mining/direct_use.py
+    class: DirectUseContext
+    change: "market field changed from `str | None = None` to required `str` (no None default)."
+
+tests:
+  - file: tests/market/test_market_context_enforcement.py
+    tests:
+      - test_validate_production_dsl_requires_market
+      - test_export_dsl_allowlist_json_requires_market
+      - test_direct_use_context_requires_market

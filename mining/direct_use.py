@@ -1690,11 +1690,15 @@ class DirectUseOperator:
 
 @dataclass(frozen=True)
 class DirectUseContext:
-    """Environment the miner declares — R18-031 contextual direct usability."""
+    """Environment the miner declares — R18-031 contextual direct usability.
+
+    R21-P033: market is now a required field. market=None is not allowed in
+    production contexts.
+    """
 
     available_sources: tuple[str, ...] = ()
     target_frequency: str | None = None
-    market: str | None = None
+    market: str  # Required: "ashare" | "us"
     max_cost: int | None = None
 
 

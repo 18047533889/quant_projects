@@ -41,7 +41,7 @@ _US_VALUATION_FIELD_ALIASES: dict[str, str] = {
 }
 
 
-def validate_production_dsl(formula: str, *, market: str | None = None) -> tuple[bool, str]:
+def validate_production_dsl(formula: str, *, market: str) -> tuple[bool, str]:
     """production 模式公式校验：语法 + 算子 production 允许。
 
     R24-158..160: the production validator runs a REAL ``Analyzer(production=True,
@@ -50,14 +50,15 @@ def validate_production_dsl(formula: str, *, market: str | None = None) -> tuple
     ``MULTI_MARKET_FIELD_REGISTRY.registry_for(market)`` — a US formula must
     never be validated against the legacy A-share registry.
 
+    R21-P033: market is now a required parameter. Passing None or omitting it
+    will cause a TypeError, preventing implicit defaults in production.
+
     Parameters
     ----------
     formula : str
         DSL 公式字符串。
-    market : str | None
-        The market the formula will run in (``ashare`` / ``us``).  ``None``
-        defaults to ``ashare`` for back-compat, but every production entry point
-        MUST pass the resolved market (R24-159).
+    market : str
+        The market the formula will run in (``ashare`` / ``us``).  Required.
 
     Returns
     -------
@@ -70,7 +71,9 @@ def validate_production_dsl(formula: str, *, market: str | None = None) -> tuple
     from backend.cleaned_bridge import ensure_cleaned_loaded
 
     import ast
-    market = str(market or "ashare").strip().lower()
+    if market is None:
+        raise ValueError("market is required for production validation (R21-P033)")
+    market = str(market).strip().lower()
     # R24-160: per-market field registry — never the legacy A-only FIELD_REGISTRY.
     from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
@@ -272,15 +275,18 @@ def list_dsl_allowlist(*, surface: str = "daily") -> list[str]:
 
 def export_dsl_allowlist_json(
     *,
-    market: str | None = None,
+    market: str,
     surface: str = "daily",
 ) -> dict[str, Any]:
     """导出 AFV Gateway 对齐用的算子白名单 JSON。
 
+    R21-P033: market is now a required parameter. Passing None or omitting it
+    will cause a TypeError.
+
     Parameters
     ----------
-    market : str | None
-        市场标识（``us`` / ``ashare`` 等），决定 ``operator_policy`` 字段。
+    market : str
+        市场标识（``us`` / ``ashare`` 等），决定 ``operator_policy`` 字段。Required.
     surface : str
         ``daily`` 或 ``compat``（GTJA185 等 published 包用 compat）。
 
@@ -291,7 +297,9 @@ def export_dsl_allowlist_json(
     """
     surf = str(surface or "daily").strip() or "daily"
     names = list_dsl_allowlist(surface=surf)
-    mkt = str(market or "us").strip().lower()
+    if market is None:
+        raise ValueError("market is required for export_dsl_allowlist_json (R21-P033)")
+    mkt = str(market).strip().lower()
     policy_by_market = {
         "ashare": "lqtp_pv_daily",
         "a_share": "lqtp_pv_daily",
