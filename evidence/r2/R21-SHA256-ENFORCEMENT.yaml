@@ -1,0 +1,49 @@
+title: R21-SHA256-ENFORCEMENT
+date: 2026-08-21
+author: Writer CH
+type: sha256_validation
+status: implemented
+
+summary: |
+  Enforced strict SHA256 format validation for all hash fields in PhysicalImplementationSpec.
+  Fields implementation_source_hash, parameter_domain_hash, and semantic_contract_hash
+  must match pattern ^[0-9a-f]{64}$ (64-character lowercase hexadecimal).
+  Any non-SHA256 string raises ValidationError at spec creation time.
+
+changes:
+  - file: backend/contracts/__init__.py
+    description: |
+      Added _valid_sha256() static method to validate 64-char lowercase hex SHA256.
+      Modified validation_errors() to enforce SHA256 format for all hash fields.
+      Blank values still allowed (for incomplete specs), but non-blank invalid formats rejected.
+
+  - file: tests/backend/test_unified_capability_contracts.py
+    description: |
+      Added 3 regression tests for SHA256 enforcement:
+      1. test_valid_sha256_hashes_pass_validation - valid hashes pass validation
+      2. test_invalid_hash_format_with_label_prefix - "ts_mean:v2" rejected
+      3. test_invalid_hash_format_uppercase_hex - uppercase hex rejected
+
+validation:
+  pattern: "^[0-9a-f]{64}$"
+  method: _valid_sha256() static method
+  fields:
+    - implementation_source_hash
+    - parameter_domain_hash
+    - semantic_contract_hash
+
+examples:
+  valid:
+    - "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+    - "0000000000000000000000000000000000000000000000000000000000000000"
+    - "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  invalid:
+    - "ts_mean:v2"
+    - "A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1B2"
+    - "short"
+    - "65 characters exceeds limit for 64 char hash value here more chars needed"
+
+regression_tests:
+  - test_valid_sha256_hashes_pass_validation
+  - test_invalid_hash_format_with_label_prefix
+  - test_invalid_hash_format_uppercase_hex

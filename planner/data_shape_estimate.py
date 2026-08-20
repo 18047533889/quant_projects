@@ -77,6 +77,7 @@ class DataShapeEstimate:
         sorted_by: 已排序键（tuple of column names）
         partition_by: 分区键（tuple of column names）
         projected_columns: 投影列（tuple of column names）
+        rows_known: whether estimated_rows is known (True) or unknown (False)
     """
 
     estimated_rows: int
@@ -94,6 +95,7 @@ class DataShapeEstimate:
     sorted_by: tuple[str, ...] = ()
     partition_by: tuple[str, ...] = ()
     projected_columns: tuple[str, ...] = ()
+    rows_known: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -112,6 +114,7 @@ class DataShapeEstimate:
             "sorted_by": list(self.sorted_by),
             "partition_by": list(self.partition_by),
             "projected_columns": list(self.projected_columns),
+            "rows_known": self.rows_known,
         }
 
 
@@ -347,6 +350,7 @@ def estimate_shape_from_metadata(
                 remote=remote,
                 storage_kind=storage_kind,
                 projected_columns=tuple(columns) if columns else (),
+                rows_known=True,
             )
 
     # 4. DataAccess manifest
@@ -373,6 +377,7 @@ def estimate_shape_from_metadata(
                 remote=remote,
                 storage_kind=storage_kind,
                 projected_columns=tuple(columns) if columns else (),
+                rows_known=True,
             )
 
     # 5. 推断默认 shape（date × instrument × columns）
@@ -398,6 +403,7 @@ def estimate_shape_from_metadata(
         remote=remote,
         storage_kind=storage_kind,
         projected_columns=tuple(columns) if columns else (),
+        rows_known=True,
     )
 
 

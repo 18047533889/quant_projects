@@ -28,6 +28,7 @@ class DataShapeEstimate:
         representation: Data representation (pandas/polars/arrow)
         overhead_bytes: Framework overhead (index, metadata)
         confidence: Estimate confidence [0.0, 1.0]
+        rows_known: whether rows count is known (True) or unknown (False)
     """
     rows: int
     cols: int
@@ -38,6 +39,7 @@ class DataShapeEstimate:
     representation: str
     overhead_bytes: int
     confidence: float
+    rows_known: bool = True
 
     def scale_to_rows(self, target_rows: int) -> DataShapeEstimate:
         """Scale estimate to different row count."""
@@ -54,6 +56,7 @@ class DataShapeEstimate:
             representation=self.representation,
             overhead_bytes=self.overhead_bytes,
             confidence=max(0.5, self.confidence - 0.1 * abs(scale - 1.0)),
+            rows_known=self.rows_known,
         )
 
 
@@ -107,6 +110,7 @@ class DataShapeEstimator:
                 nullable_fraction=0.0, sparse_fraction=0.0,
                 representation=representation, overhead_bytes=0,
                 confidence=0.0,
+                rows_known=False,
             )
 
         col_stats = column_stats or {}
@@ -153,6 +157,7 @@ class DataShapeEstimator:
             representation=representation,
             overhead_bytes=overhead_bytes,
             confidence=confidence,
+            rows_known=True,
         )
 
     def estimate_from_plan(
@@ -264,6 +269,7 @@ class DataShapeEstimator:
             representation=representation,
             overhead_bytes=overhead_bytes,
             confidence=0.40,  # Low confidence fallback
+            rows_known=False,  # Conservative fallback
         )
 
 

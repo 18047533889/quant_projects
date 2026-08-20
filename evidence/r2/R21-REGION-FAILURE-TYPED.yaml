@@ -1,0 +1,96 @@
+# R21-REGION-FAILURE-TYPED
+# Evidence: Typed region failure with dependency cancellation
+# Date: 2026-08-21
+# Author: Claude Code (region failure typed)
+
+id: R21-REGION-FAILURE-TYPED
+title: "Typed Region Failure with Dependency Cancellation"
+type: evidence
+created: 2026-08-21
+author: Claude Code
+
+# Summary
+summary: |
+  Implemented typed TypedRegionFailure dataclass for structured error handling
+  in ParallelRegionScheduler. Added automatic dependency chain cancellation:
+  when region A fails, all regions depending on A are cancelled with
+  DependencyCancellation error type.
+
+# Files Modified
+files:
+  - path: runtime/multibackend/parallel_region_scheduler.py
+    changes:
+      - Added TypedRegionFailure dataclass with error_type, error_message, exception fields
+      - Added RegionExecutionResult dataclass wrapping success/failure state
+      - Modified schedule_parallel() to track failed_regions set
+      - Added dependency check before executing each region
+      - Regions with failed dependencies get DependencyCancellation error type
+      - Failed dependency IDs tracked in failed_dependencies field
+
+  - path: tests/runtime/test_parallel_region_scheduler_failure.py
+    changes:
+      - Created regression test suite with 6 tests
+      - Tests typed failure structure, dependency chain cancellation,
+        independent region failure isolation, partial dependency cancellation
+
+# Test Results
+tests:
+  - test_typed_region_failure_structure: PASSED
+  - test_typed_region_failure_with_dependencies: PASSED
+  - test_dependency_chain_cancellation: PASSED
+  - test_independent_region_failure_does_not_cancel_others: PASSED
+  - test_partial_dependency_chain_cancellation: PASSED
+  - test_success_result_structure: PASSED
+
+# All 6 tests pass
+test_summary: "6/6 tests passed"
+
+# Typed Failure Structure
+typed_failure_structure:
+  TypedRegionFailure:
+    - region_id: str
+    - error_type: str (e.g., "RuntimeError", "ValueError", "DependencyCancellation")
+    - error_message: str
+    - exception: Exception | None (not serialized)
+    - failed_dependencies: list[str] (for DependencyCancellation)
+
+  RegionExecutionResult:
+    - region_id: str
+    - success: bool
+    - result: Any (only when success=True)
+    - failure: TypedRegionFailure | None (only when success=False)
+
+# Cancellation Logic
+cancellation_logic:
+  - Before executing region, check if any dependencies are in failed_regions set
+  - If failed deps found: create RegionExecutionResult with DependencyCancellation
+  - Propagate failure to all downstream dependents transitively
+  - Region A fails → B cancelled (depends on A) → C cancelled (depends on B)
+
+# Sample Output
+sample_output:
+  results:
+    r1:
+      region_id: "r1"
+      success: false
+      failure:
+        region_id: "r1"
+        error_type: "RuntimeError"
+        error_message: "r1 failed"
+    r2:
+      region_id: "r2"
+      success: false
+      failure:
+        region_id: "r2"
+        error_type: "DependencyCancellation"
+        error_message: "Region cancelled due to failed dependencies: ['r1']"
+        failed_dependencies: ["r1"]
+    r3:
+      region_id: "r3"
+      success: false
+      failure:
+        region_id: "r3"
+        error_type: "DependencyCancellation"
+        error_message: "Region cancelled due to failed dependencies: ['r2']"
+        failed_dependencies: ["r2"]
+  failed_regions: ["r1", "r2", "r3"]

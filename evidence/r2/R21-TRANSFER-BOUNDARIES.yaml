@@ -1,0 +1,72 @@
+# R21-TRANSFER-BOUNDARIES
+# Formal transfer boundaries for q→Arrow, ClickHouse→Arrow, Polars→NumPy, NumPy→Polars
+
+id: R21-TRANSFER-BOUNDARIES
+title: "Formal Transfer Boundaries for Cross-Backend Data Movement"
+version: 1.0.0
+status: implemented
+created: 2026-08-21
+author: Writer BY
+
+summary: |
+  Added formal TransferTransform enum values for Q_TO_ARROW, CLICKHOUSE_TO_ARROW,
+  POLARS_TO_NUMPY, and NUMPY_TO_POLARS transforms. These are now first-class
+  citizens in the transfer edge model with explicit cost models and semantic contracts.
+
+transforms_added:
+  - name: Q_TO_ARROW
+    value: "q_to_arrow"
+    description: "Q/kdb+ → Arrow table boundary"
+    source_representation: ["q_table", "q_vector", "q_keyed_table"]
+    target_representation: ["arrow_table"]
+    cost_ms_per_million: 4.0
+    per_million_rows_ms: 1.0
+    semantic_contract: "Zero-copy or minimal conversion via Arrow IPC"
+
+  - name: CLICKHOUSE_TO_ARROW
+    value: "clickhouse_to_arrow"
+    description: "ClickHouse → Arrow table boundary"
+    source_representation: ["arrow_table"]  # ClickHouse produces Arrow natively
+    target_representation: ["arrow_table"]
+    cost_ms_per_million: 0.0  # No-op if already Arrow
+    per_million_rows_ms: 0.0
+    semantic_contract: "ClickHouse native Arrow output"
+
+  - name: POLARS_TO_NUMPY
+    value: "polars_to_numpy"
+    description: "Polars Series/DataFrame → NumPy ndarray"
+    source_representation: ["polars_long", "polars_wide", "polars_lazy_long"]
+    target_representation: ["numpy_panel"]
+    cost_ms_per_million: 1.5
+    per_million_rows_ms: 0.3
+    semantic_contract: "Zero-copy via buffer protocol when possible"
+
+  - name: NUMPY_TO_POLARS
+    value: "numpy_to_polars"
+    description: "NumPy ndarray → Polars Series/DataFrame"
+    source_representation: ["numpy_panel"]
+    target_representation: ["polars_long", "polars_wide", "polars_lazy_long"]
+    cost_ms_per_million: 2.0
+    per_million_rows_ms: 0.4
+    semantic_contract: "Memory copy with type inference"
+
+files_modified:
+  - path: planner/backend_region.py
+    changes:
+      - Added TransferTransform enum with all 15 transform types
+      - Added transform field to TransferEdge dataclass
+      - Updated to_dict to include transform field
+      - Updated _edge_hash_payload to bind transform type
+      - Added infer_transfer_transform function
+      - Updated estimate_transfer_cost_ms with new cost models
+
+evidence:
+  - file: evidence/r2/R21-TRANSFER-BOUNDARIES.yaml
+    this_file: true
+
+regression_tests:
+  - file: tests/planner/test_transfer_transform.py
+    tests:
+      - test_transfer_transform_inference
+      - test_transfer_edge_transform_binding
+      - test_transfer_cost_estimation_new_transforms

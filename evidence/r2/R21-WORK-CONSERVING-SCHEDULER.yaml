@@ -1,0 +1,60 @@
+task_id: R21-WORK-CONSERVING-SCHEDULER
+finding: work_conserving_ready_queue_dag_scheduler
+base_sha: UNCOMMITTED_CURRENT_TREE
+current_head: LOCAL_TREE
+commit_sha: LOCAL_TREE
+timestamp: '2026-08-21T00:00:00Z'
+status: CLOSED_LOCAL
+owned_files:
+- runtime/multibackend/parallel_region_scheduler.py
+- tests/runtime/test_r21_work_conserving_scheduler.py
+- evidence/r2/R21-WORK-CONSERVING-SCHEDULER.yaml
+modified_files:
+- runtime/multibackend/parallel_region_scheduler.py
+- tests/runtime/test_r21_work_conserving_scheduler.py
+problem:
+- 'Previous implementation used strict layer barrier: Layer 0 all done -> Layer 1 all
+  done -> ... This meant a child region could not start until ALL its siblings in
+  the same layer finished, even if the child only depended on one completed sibling.'
+- 'Under the old approach, a slow non-critical-path region in Layer N would block all
+  critical-path children in Layer N+1 from starting, increasing total execution time.'
+implementation:
+- 'runtime/multibackend/parallel_region_scheduler.py: Replaced _topological_layers-based
+  strict barrier with work-conserving ready-queue DAG scheduler.'
+- 'New schedule_parallel() method uses reverse dependency graph to push children to
+  ready queue immediately when their parent completes.'
+- 'Added _topological_depth() helper for estimating parallel speedup.'
+- 'Uses FIRST_COMPLETED event-driven wait instead of per-layer blocking.'
+- 'Children start as soon as all their dependencies complete, not when all siblings
+  complete.'
+- 'tests/runtime/test_r21_work_conserving_scheduler.py: 6 regression tests verifying
+  work-conserving behavior.'
+focused_tests:
+  command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1
+    python3 -m pytest tests/runtime/test_r21_work_conserving_scheduler.py -v
+  result: 6 passed (2026-08-21, 0.55s)
+  coverage:
+  - Child runs immediately after parent, not waiting for sibling
+  - Diamond DAG children start immediately after parent completes
+  - Three-level chain timing verification
+  - Failed parent cascades cancellation to children
+  - Work-conserving reduces total time vs serial
+  - Metrics are tracked correctly
+serial_regression_gate:
+  command: cd /home/shw/quant_projects && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
+    MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/runtime/test_r21_work_conserving_scheduler.py
+    -q
+  result: 6 passed (2026-08-21, 0.55s, serial, no xdist)
+compile_gate:
+  command: python3 -m py_compile runtime/multibackend/parallel_region_scheduler.py
+    tests/runtime/test_r21_work_conserving_scheduler.py
+  result: PASS
+known_limitations:
+- The work-conserving scheduler replaces the strict layer barrier in ParallelRegionScheduler.
+  AdaptiveBatchScheduler already uses a work-conserving approach (R27-173).
+- The _topological_layers() method is retained for estimate_parallel_speedup() which
+  still uses the layer-based model for speedup estimation.
+- Global singleton pattern is preserved unchanged.
+production_certification: NOT_RUN
+commit: NOT_CREATED
+remotes: NOT_USED

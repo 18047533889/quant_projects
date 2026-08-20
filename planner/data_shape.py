@@ -36,6 +36,7 @@ class DataShapeEstimate:
       - sorted_by: physical sort order
       - partition_by: partition columns
       - projected_columns: subset of columns needed for this plan
+      - rows_known: whether estimated_rows is known (True) or unknown (False)
     """
 
     estimated_rows: int
@@ -53,6 +54,7 @@ class DataShapeEstimate:
     sorted_by: tuple[str, ...] = ()
     partition_by: tuple[str, ...] = ()
     projected_columns: tuple[str, ...] = ()
+    rows_known: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -71,6 +73,7 @@ class DataShapeEstimate:
             "sorted_by": list(self.sorted_by),
             "partition_by": list(self.partition_by),
             "projected_columns": list(self.projected_columns),
+            "rows_known": self.rows_known,
         }
 
 
@@ -119,8 +122,11 @@ def _estimate_from_scan_shape(scan_shape: Any, ctx: Any) -> DataShapeEstimate:
     # Empty universe -> rows=0 (R21-P029)
     if estimated_instruments == 0:
         estimated_rows = 0
-    elif estimated_rows == 0 and estimated_dates > 0 and estimated_instruments > 0:
-        estimated_rows = estimated_dates * estimated_instruments
+        rows_known = False
+    else:
+        rows_known = True
+        if estimated_rows == 0 and estimated_dates > 0 and estimated_instruments > 0:
+            estimated_rows = estimated_dates * estimated_instruments
 
     avg_row_width = (
         (estimated_bytes / estimated_rows) if (estimated_rows > 0 and estimated_bytes > 0) else 64.0
@@ -153,6 +159,7 @@ def _estimate_from_scan_shape(scan_shape: Any, ctx: Any) -> DataShapeEstimate:
         sorted_by=(),
         partition_by=(),
         projected_columns=projected_columns,
+        rows_known=rows_known,
     )
 
 
@@ -167,7 +174,9 @@ def _estimate_from_data_source(ds: Any, ctx: Any) -> DataShapeEstimate:
     # Empty universe -> rows=0 (R21-P029)
     if estimated_instruments == 0:
         estimated_rows = 0
+        rows_known = False
     else:
+        rows_known = True
         estimated_rows = estimated_dates * estimated_instruments
 
     # Estimate columns from schema if available
@@ -213,6 +222,7 @@ def _estimate_from_data_source(ds: Any, ctx: Any) -> DataShapeEstimate:
         sorted_by=(),
         partition_by=(),
         projected_columns=(),
+        rows_known=rows_known,
     )
 
 
@@ -239,6 +249,7 @@ def _conservative_default_shape() -> DataShapeEstimate:
         sorted_by=(),
         partition_by=(),
         projected_columns=(),
+        rows_known=False,
     )
 
 

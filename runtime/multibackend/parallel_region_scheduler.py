@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed, wait
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -146,7 +146,6 @@ class ParallelRegionScheduler:
             执行结果摘要 {"results": {region_id: result}, "elapsed_ms": ...}
         """
         import time
-        from concurrent.futures import FIRST_COMPLETED, wait
 
         start_ms = time.monotonic() * 1000.0
 
@@ -177,7 +176,7 @@ class ParallelRegionScheduler:
         def _admit_from_queue() -> None:
             """从 ready_queue 提交可运行的 region 到线程池。"""
             nonlocal ready_queue
-            new_ready: list[str] = []
+            admitted_this_round: list[str] = []
             for rid in ready_queue:
                 if len(running) >= self.max_parallel_regions:
                     break
@@ -202,7 +201,31 @@ class ParallelRegionScheduler:
                 future = self._executor.submit(execute_fn, region)
                 running[rid] = future
                 admitted.add(rid)
-            ready_queue = new_ready
+                admitted_this_round.append(rid)
+            # Remove admitted regions from queue (keep unadmitted ones for next round)
+            ready_queue = [r for r in ready_queue if r not in admitted_this_round]
+
+        def _cancel_descendants(failed_rid: str) -> None:
+            """Recursively cancel all descendants of a failed region."""
+            for child in reverse_deps.get(failed_rid, set()):
+                if child in completed or child in failed_regions or child in admitted:
+                    continue
+                child_deps = dep_graph[child]
+                failed_deps = [d for d in child_deps if d in failed_regions]
+                if failed_deps:
+                    results[child] = RegionExecutionResult(
+                        region_id=child,
+                        success=False,
+                        failure=TypedRegionFailure(
+                            region_id=child,
+                            error_type="DependencyCancellation",
+                            error_message=f"Region cancelled due to failed dependencies: {failed_deps}",
+                            failed_dependencies=failed_deps,
+                        ),
+                    )
+                    failed_regions.add(child)
+                    # Recursively cancel this child's descendants
+                    _cancel_descendants(child)
 
         def _on_complete(rid: str) -> None:
             """region 完成后的回调：记录结果 + 推入 ready queue。"""
@@ -255,6 +278,8 @@ class ParallelRegionScheduler:
                         region_id=rid, success=False, failure=failure
                     )
                     failed_regions.add(rid)
+                    # Cancel all descendants of this failed region
+                    _cancel_descendants(rid)
                 _on_complete(rid)
 
         elapsed_ms = (time.monotonic() * 1000.0) - start_ms

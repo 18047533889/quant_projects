@@ -641,6 +641,76 @@ def supports_streaming(backend: PhysicalBackend, operators: tuple[str, ...]) -> 
     return False
 
 
+def infer_transfer_transform(
+    source_repr: Representation,
+    target_repr: Representation,
+) -> TransferTransform:
+    """Infer transfer transform from source and target representations.
+
+    R21-TRANSFER-BOUNDARIES: Maps representation pairs to formal TransferTransform values.
+    """
+    if source_repr == target_repr:
+        return TransferTransform.SAME_BACKEND_NATIVE
+
+    # DuckDB → Arrow (Section 21: preferred boundary)
+    if source_repr == Representation.DUCKDB_RELATION and target_repr == Representation.ARROW_TABLE:
+        return TransferTransform.DUCKDB_TO_ARROW
+
+    # Q → Arrow (R21: Q → Arrow for cross-backend consumption)
+    if source_repr in {Representation.Q_TABLE, Representation.Q_VECTOR, Representation.Q_KEYED_TABLE} and target_repr == Representation.ARROW_TABLE:
+        return TransferTransform.Q_TO_ARROW
+
+    # ClickHouse → Arrow (R21: ClickHouse → Arrow boundary)
+    # Note: ClickHouse typically produces Arrow directly, but formalizing the boundary
+    if source_repr == Representation.ARROW_TABLE and target_repr == Representation.ARROW_TABLE:
+        # ClickHouse → Arrow is a no-op if already Arrow, but we keep the transform
+        # for explicit tracking
+        pass  # Fall through to other checks
+
+    # Arrow → Polars
+    if source_repr == Representation.ARROW_TABLE and target_repr in {
+        Representation.POLARS_LONG, Representation.POLARS_WIDE, Representation.POLARS_LAZY_LONG
+    }:
+        return TransferTransform.ARROW_TO_POLARS
+
+    # Arrow → Pandas
+    if source_repr == Representation.ARROW_TABLE and target_repr in {
+        Representation.PANDAS_LONG, Representation.PANDAS_WIDE
+    }:
+        return TransferTransform.ARROW_TO_PANDAS
+
+    # Polars → Pandas
+    if source_repr in {Representation.POLARS_LONG, Representation.POLARS_WIDE, Representation.POLARS_LAZY_LONG} and target_repr in {
+        Representation.PANDAS_LONG, Representation.PANDAS_WIDE
+    }:
+        return TransferTransform.POLARS_TO_PANDAS
+
+    # Pandas → Polars
+    if source_repr in {Representation.PANDAS_LONG, Representation.PANDAS_WIDE} and target_repr in {
+        Representation.POLARS_LONG, Representation.POLARS_WIDE, Representation.POLARS_LAZY_LONG
+    }:
+        return TransferTransform.PANDAS_TO_POLARS
+
+    # Polars → NumPy (R21: Polars Series → NumPy ndarray)
+    if source_repr in {Representation.POLARS_LONG, Representation.POLARS_WIDE, Representation.POLARS_LAZY_LONG} and target_repr == Representation.NUMPY_PANEL:
+        return TransferTransform.POLARS_TO_NUMPY
+
+    # NumPy → Polars (R21: NumPy ndarray → Polars Series)
+    if source_repr == Representation.NUMPY_PANEL and target_repr in {
+        Representation.POLARS_LONG, Representation.POLARS_WIDE, Representation.POLARS_LAZY_LONG
+    }:
+        return TransferTransform.NUMPY_TO_POLARS
+
+    # Wide ↔ Long reshapes
+    if "wide" in source_repr.value and "long" in target_repr.value:
+        return TransferTransform.WIDE_TO_LONG
+    if "long" in source_repr.value and "wide" in target_repr.value:
+        return TransferTransform.LONG_TO_WIDE
+
+    # Default to PANDAS_TO_POLARS for unknown combinations
+    return TransferTransform.PANDAS_TO_POLARS
+
+
 def estimate_transfer_cost_ms(
     source_repr: Representation,
     target_repr: Representation,
@@ -652,15 +722,26 @@ def estimate_transfer_cost_ms(
     """Estimate transfer edge cost (MB-P1-021, §32).
 
     Includes representation conversion, sort, repartition, and reshape costs.
+    R21-TRANSFER-BOUNDARIES: Now supports all formal transfer transforms.
     """
-    # Base conversion cost by edge type
+    # Base conversion cost by edge type (R21-TRANSFER-BOUNDARIES: expanded)
     conversion_costs = {
         ("duckdb_relation", "arrow_table"): 3.0,
+        ("q_table", "arrow_table"): 4.0,  # R21: Q → Arrow
+        ("q_vector", "arrow_table"): 4.0,  # R21: Q → Arrow
         ("arrow_table", "polars_long"): 2.0,
+        ("arrow_table", "polars_lazy_long"): 2.0,
         ("arrow_table", "pandas_long"): 2.0,
         ("polars_long", "pandas_long"): 2.0,
+        ("polars_lazy_long", "pandas_long"): 2.0,
         ("pandas_wide", "pandas_long"): 2.0,  # reshape
         ("pandas_long", "pandas_wide"): 2.0,  # reshape
+        ("polars_long", "numpy_panel"): 1.5,  # R21: Polars → NumPy (zero-copy)
+        ("polars_wide", "numpy_panel"): 1.5,  # R21: Polars → NumPy (zero-copy)
+        ("polars_lazy_long", "numpy_panel"): 2.0,  # R21: Polars Lazy → NumPy
+        ("numpy_panel", "polars_long"): 2.0,  # R21: NumPy → Polars
+        ("numpy_panel", "polars_wide"): 2.0,  # R21: NumPy → Polars
+        ("numpy_panel", "polars_lazy_long"): 2.5,  # R21: NumPy → Polars Lazy
     }
 
     src = source_repr.value if isinstance(source_repr, Enum) else str(source_repr)

@@ -1,0 +1,63 @@
+# R21-DATASHAPE-KNOWN-ZERO: DataShapeEstimate rows_known field
+# Date: 2026-08-21
+# Author: Writer BZ
+
+summary: |
+  Added rows_known: bool = True field to DataShapeEstimate to distinguish
+  between known-zero rows and unknown rows. Previously, rows=0 could mean
+  either "known empty" or "unknown", which caused issues in the optimizer
+  when it needed to treat these cases differently.
+
+changes:
+  - file: planner/data_shape.py
+    description: |
+      Added rows_known field to DataShapeEstimate dataclass.
+      Updated _estimate_from_scan_shape: rows_known=False when estimated_instruments=0
+      Updated _estimate_from_data_source: rows_known=False when estimated_instruments=0
+      Updated _conservative_default_shape: rows_known=False (conservative fallback)
+      Updated to_dict to include rows_known field
+      Updated docstring to document the new field
+
+  - file: planner/data_shape_estimate.py
+    description: |
+      Added rows_known field to DataShapeEstimate dataclass
+      Updated to_dict to include rows_known field
+      Updated estimate_shape_from_metadata: rows_known=True (metadata-derived)
+
+  - file: planning/memory_model.py
+    description: |
+      Added rows_known field to DataShapeEstimate dataclass
+      Updated to_dict to include rows_known field
+      Updated estimate_shape_from_metadata: rows_known=True
+
+  - file: scripts/minimal_benchmark_calibration.py
+    description: |
+      Updated DataShapeEstimate creation to include rows_known=True
+
+  - file: scripts/performance_benchmark_calibration.py
+    description: |
+      Updated DataShapeEstimate creation to include rows_known=True
+
+  - file: tests/planner/test_data_shape_estimate.py
+    description: |
+      Updated test to include rows_known=True in DataShapeEstimate creation
+
+  - file: runtime/multibackend/data_shape_estimator.py
+    description: |
+      Added rows_known field to DataShapeEstimate dataclass
+      Updated scale_to_rows to preserve rows_known
+      Updated estimate_from_schema: rows_known=False when empty/invalid
+      Updated _conservative_estimate: rows_known=False
+
+semantics:
+  rows_known=True: estimated_rows is definitely known (e.g., from metadata)
+  rows_known=False: estimated_rows is unknown or conservative fallback
+
+rationale: |
+  The optimizer needs to distinguish between:
+  1. Known zero (rows=0, rows_known=True): empty dataset, skip computation
+  2. Unknown (rows=0, rows_known=False): metadata unavailable, use conservative estimate
+  3. Known non-zero (rows>0, rows_known=True): use exact values for cost planning
+
+  Without rows_known, the optimizer cannot reliably distinguish case 1 from case 2,
+  leading to suboptimal decisions (e.g., trying to load data that doesn't exist).
