@@ -25,10 +25,38 @@ _logger = logging.getLogger(__name__)
 # Token lease 默认超时（毫秒）：任务超过此时间未完成自动回收 token
 DEFAULT_TOKEN_LEASE_TIMEOUT_MS = 300_000  # 5 minutes
 
+# 默认 CPU/IO token 预算：由真实资源探测决定（不再硬编码 8/4）
+_DEFAULT_CPU_TOKENS = 8
+_DEFAULT_IO_TOKENS = 4
+
+
+def _default_token_budgets() -> tuple[int, int, int]:
+    """探测真实 (cpu_tokens, io_tokens, memory_bytes)。
+
+    显式环境变量优先（``FACTOR_ENGINE_CPU_BUDGET`` / ``FACTOR_ENGINE_MAX_MEMORY_BYTES``）；
+    否则复用 ``runtime.resource_governor`` 的真实资源探测（cgroup CPU quota /
+    cpuset / affinity / cgroup v2/v1 / SLURM / RLIMIT / host RAM 取最严格 min）。
+    探测失败回退 ``(8, 4, 32GiB)``——回退值绝不做 4 倍放大。
+    """
+    try:
+        from runtime.resource_governor import effective_cpu_slots, effective_memory_limit_bytes
+
+        cpu = effective_cpu_slots()
+        io = max(1, cpu)
+        mem = effective_memory_limit_bytes()
+        return cpu, io, mem
+    except Exception:  # pragma: no cover - 探测不可用时保守回退
+        return _DEFAULT_CPU_TOKENS, _DEFAULT_IO_TOKENS, 32 * 1024**3
+
 
 @dataclass
 class TokenReservation:
-    """单次 token 预留记录（可撤销、可超时）。"""
+    """单次 token 预留记录（可撤销、可超时）。
+
+    ``generation`` 用于抢占后的代际检查：抢占方通过 :meth:`ConcurrentTokenManager
+    .preempt_tokens` 递增 ``revoked_generation``，被抢占任务在 checkpoint 处比较
+    自己拿到的 ``generation`` 与管理器当前代际，不一致即主动停止。
+    """
 
     reservation_id: str
     cpu_tokens: int
@@ -38,6 +66,7 @@ class TokenReservation:
     timeout_ms: float
     priority: int = 0  # 优先级（高优先级可抢占低优先级）
     task_id: str = ""
+    generation: int = 0  # 抢代际：0 = 未抢占
 
     def is_expired(self, now_ms: float) -> bool:
         """判断 lease 是否超时（自动回收）。"""
@@ -53,7 +82,24 @@ class TokenReservation:
             "timeout_ms": round(self.timeout_ms, 2),
             "priority": self.priority,
             "task_id": self.task_id,
+            "generation": self.generation,
         }
+
+
+@dataclass(frozen=True)
+class RevocationToken:
+    """资源抢占凭据：任务在 checkpoint 处校验是否已被抢占。
+
+    - ``reservation_id``：被抢占的 reservation
+    - ``generation``：被抢占时刻的代际（调用 ``preempt_tokens`` 后管理器代际会递增）
+    - ``priority``：抢占方的优先级
+    - ``reason``：抢占原因（诊断）
+    """
+
+    reservation_id: str
+    generation: int
+    priority: int
+    reason: str = "preempted"
 
 
 @dataclass
@@ -66,6 +112,8 @@ class TokenManagerMetrics:
     timeout_reclaims: int = 0
     preemptions: int = 0
     overload_rejections: int = 0
+    preempted: int = 0  # 被抢占（且已撤销）的任务数
+    revoked_generation: int = 0  # 当前抢占代际
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -75,6 +123,8 @@ class TokenManagerMetrics:
             "timeout_reclaims": self.timeout_reclaims,
             "preemptions": self.preemptions,
             "overload_rejections": self.overload_rejections,
+            "preempted": self.preempted,
+            "revoked_generation": self.revoked_generation,
         }
 
 
@@ -90,27 +140,41 @@ class ConcurrentTokenManager:
     def __init__(
         self,
         *,
-        cpu_budget: int = 8,
-        io_budget: int = 4,
+        cpu_budget: int | None = None,
+        io_budget: int | None = None,
         memory_budget_bytes: int | None = None,
         lease_timeout_ms: float = DEFAULT_TOKEN_LEASE_TIMEOUT_MS,
         overload_threshold: float = 1.1,
     ) -> None:
         """
         Args:
-            cpu_budget: CPU token 总预算（逻辑核心数）
-            io_budget: IO token 总预算（并发 IO 任务数）
-            memory_budget_bytes: 内存总预算（字节）。If None, uses adaptive config.
+            cpu_budget: CPU token 总预算（逻辑核心数）。None 时探测真实 CPU 硬上限。
+            io_budget: IO token 总预算（并发 IO 任务数）。None 时 = cpu_budget。
+            memory_budget_bytes: 内存总预算（字节）。None 时探测真实内存上限
+                （cgroup/host 最严格 min），**绝不做 ×4 放大**。
             lease_timeout_ms: Token lease 超时自动回收（毫秒）
             overload_threshold: 超发阈值（actual / budget > threshold 拒绝新请求）
         """
+        cpu, io, mem = _default_token_budgets()
         if memory_budget_bytes is None:
-            try:
-                from runtime.adaptive_config import get_global_adaptive_config
-                # 使用 hard_memory_limit 的 4x（原比例：32GB vs 8GB）
-                memory_budget_bytes = get_global_adaptive_config().hard_memory_limit_bytes * 4
-            except ImportError:
-                memory_budget_bytes = 32 * 1024**3  # 回退默认值
+            memory_budget_bytes = mem
+        if cpu_budget is None:
+            cpu_budget = cpu
+        if io_budget is None:
+            io_budget = io
+        # R21：负数 / 显式 0 视为非法配置，显式 fail-fast。
+        if not isinstance(cpu_budget, int) or isinstance(cpu_budget, bool) or cpu_budget <= 0:
+            raise ValueError(f"cpu_budget 必须为正整数，得到 {cpu_budget!r}")
+        if not isinstance(io_budget, int) or isinstance(io_budget, bool) or io_budget <= 0:
+            raise ValueError(f"io_budget 必须为正整数，得到 {io_budget!r}")
+        if (
+            not isinstance(memory_budget_bytes, int)
+            or isinstance(memory_budget_bytes, bool)
+            or memory_budget_bytes <= 0
+        ):
+            raise ValueError(
+                f"memory_budget_bytes 必须为正整数，得到 {memory_budget_bytes!r}"
+            )
 
         self.cpu_budget = cpu_budget
         self.io_budget = io_budget
@@ -122,6 +186,7 @@ class ConcurrentTokenManager:
         self._metrics = TokenManagerMetrics()
         self._lock = threading.RLock()
         self._reservation_counter = 0
+        self._revoked_generation = 0
 
     def acquire_tokens(
         self,
@@ -149,6 +214,17 @@ class ConcurrentTokenManager:
         with self._lock:
             # 1) 先回收过期 lease
             self._reclaim_expired_internal(time.monotonic() * 1000.0)
+
+            # R21：负数 token 显式拒绝（不静默 clamp 成 0/跳过）。
+            for name, val in (
+                ("cpu_tokens", cpu_tokens),
+                ("io_tokens", io_tokens),
+                ("memory_bytes", memory_bytes),
+            ):
+                if not isinstance(val, int) or isinstance(val, bool) or val < 0:
+                    raise ValueError(
+                        f"{name} 必须为非负整数，得到 {val!r}（禁止负 token）"
+                    )
 
             # 2) 计算当前占用
             used_cpu = sum(r.cpu_tokens for r in self._reservations.values())
@@ -195,6 +271,7 @@ class ConcurrentTokenManager:
                 timeout_ms=timeout,
                 priority=priority,
                 task_id=task_id,
+                generation=self._revoked_generation,
             )
             self._reservations[rid] = reservation
             self._metrics.total_reservations += 1
@@ -206,44 +283,61 @@ class ConcurrentTokenManager:
             )
             return rid
 
-    def release_tokens(self, reservation_id: str) -> None:
-        """释放 token（任务完成时调用）。
+    def preempt_tokens(
+        self,
+        reservation_id: str,
+        *,
+        priority: int = 0,
+        reason: str = "preempted",
+    ) -> RevocationToken | None:
+        """主动撤销一个低优先级 reservation（R21 资源抢占）。
 
-        Args:
-            reservation_id: acquire_tokens() 返回的 reservation_id
+        - 从 ``_reservations`` 移除该 reservation（释放其 CPU/IO/memory 占用），
+          供更高优先级任务使用——这是真正的抢占，不再是「只删 dict 条目」。
+        - 递增 ``revoked_generation``，并返回 :class:`RevocationToken`。
+        - 被抢占任务在 checkpoint 处调用 :meth:`is_revoked` 比较代际，
+          发现已被抢占即主动停止，不再继续执行。
+
+        Returns:
+            RevocationToken（成功）或 None（reservation 不存在 / 已释放）。
         """
         with self._lock:
             reservation = self._reservations.pop(reservation_id, None)
             if reservation is None:
-                _logger.debug("release_tokens: reservation %s not found", reservation_id)
-                return
-
-            self._metrics.total_releases += 1
+                _logger.debug("preempt_tokens: reservation %s not found", reservation_id)
+                return None
+            # 递增代际 + 把被抢占 reservation 标记为 revoked（供 checkpoint 检查）。
+            self._revoked_generation += 1
+            reservation.generation = -1
+            self._metrics.preemptions += 1
+            self._metrics.preempted += 1
             self._metrics.active_reservations = len(self._reservations)
-
-            _logger.debug(
-                "token released: rid=%s, cpu=%d, io=%d, mem=%d",
+            _logger.info(
+                "token revoked: rid=%s, task=%s, gen=%d",
                 reservation_id,
-                reservation.cpu_tokens,
-                reservation.io_tokens,
-                reservation.memory_bytes,
+                reservation.task_id,
+                self._revoked_generation,
+            )
+            return RevocationToken(
+                reservation_id=reservation_id,
+                generation=self._revoked_generation,
+                priority=priority,
+                reason=reason,
             )
 
-    def _is_overloaded(self, used_cpu: int, used_io: int, used_mem: int) -> bool:
-        """判断当前是否过载（已占用 / 预算 > threshold）。"""
-        if self.cpu_budget > 0:
-            cpu_ratio = used_cpu / self.cpu_budget
-            if cpu_ratio > self.overload_threshold:
-                return True
-        if self.io_budget > 0:
-            io_ratio = used_io / self.io_budget
-            if io_ratio > self.overload_threshold:
-                return True
-        if self.memory_budget_bytes > 0:
-            mem_ratio = used_mem / self.memory_budget_bytes
-            if mem_ratio > self.overload_threshold:
-                return True
-        return False
+    def is_revoked(self, reservation: TokenReservation | RevocationToken | None) -> bool:
+        """checkpoint 代际检查：该 reservation 是否已被抢占（应停止执行）。
+
+        - ``TokenReservation``：被抢占时其 ``generation`` 被置为 ``-1``（revoked
+          哨兵），``generation < 0`` 即表示已被抢占。
+        - ``RevocationToken``：只在抢占发生时签发，本身即代表「已撤销」→ True。
+        - ``None``：视为已撤销（无 token = 无许可，fail-closed）。
+        """
+        if reservation is None:
+            return True
+        if isinstance(reservation, RevocationToken):
+            return True
+        return reservation.generation < 0
 
     def _try_preempt(
         self, need_cpu: int, need_io: int, need_mem: int, priority: int
@@ -296,13 +390,64 @@ class ConcurrentTokenManager:
             and used_io - freed_io + need_io <= self.io_budget
             and used_mem - freed_mem + need_mem <= self.memory_budget_bytes
         ):
-            # 真正移除被抢占的 reservation
+            # 真正移除被抢占的 reservation（并递增代际，通知被抢占任务停止）
             for rid in to_remove:
-                self._reservations.pop(rid, None)
+                reservation = self._reservations.pop(rid, None)
                 self._metrics.preemptions += 1
-                _logger.info("token preempted: rid=%s", rid)
+                self._metrics.preempted += 1
+                if reservation is not None:
+                    self._revoked_generation += 1
+                    reservation.generation = -1
+                    _logger.info(
+                        "token preempted: rid=%s, task=%s, gen=%d",
+                        rid,
+                        reservation.task_id,
+                        self._revoked_generation,
+                    )
+                else:
+                    _logger.info("token preempted: rid=%s", rid)
+            self._metrics.active_reservations = len(self._reservations)
             return True
 
+        return False
+
+    def release_tokens(self, reservation_id: str) -> None:
+        """释放 token（任务完成时调用）。
+
+        Args:
+            reservation_id: acquire_tokens() 返回的 reservation_id
+        """
+        with self._lock:
+            reservation = self._reservations.pop(reservation_id, None)
+            if reservation is None:
+                _logger.debug("release_tokens: reservation %s not found", reservation_id)
+                return
+
+            self._metrics.total_releases += 1
+            self._metrics.active_reservations = len(self._reservations)
+
+            _logger.debug(
+                "token released: rid=%s, cpu=%d, io=%d, mem=%d",
+                reservation_id,
+                reservation.cpu_tokens,
+                reservation.io_tokens,
+                reservation.memory_bytes,
+            )
+
+    def _is_overloaded(self, used_cpu: int, used_io: int, used_mem: int) -> bool:
+        """判断当前是否过载（已占用 / 预算 > threshold）。"""
+        if self.cpu_budget > 0:
+            cpu_ratio = used_cpu / self.cpu_budget
+            if cpu_ratio > self.overload_threshold:
+                return True
+        if self.io_budget > 0:
+            io_ratio = used_io / self.io_budget
+            if io_ratio > self.overload_threshold:
+                return True
+        if self.memory_budget_bytes > 0:
+            mem_ratio = used_mem / self.memory_budget_bytes
+            if mem_ratio > self.overload_threshold:
+                return True
         return False
 
     def reclaim_expired(self) -> int:
@@ -386,6 +531,8 @@ class ConcurrentTokenManager:
                 timeout_reclaims=self._metrics.timeout_reclaims,
                 preemptions=self._metrics.preemptions,
                 overload_rejections=self._metrics.overload_rejections,
+                preempted=self._metrics.preempted,
+                revoked_generation=self._metrics.revoked_generation or self._revoked_generation,
             )
 
     def summary(self) -> dict[str, Any]:
@@ -398,6 +545,7 @@ class ConcurrentTokenManager:
                 "metrics": metrics,
                 "lease_timeout_ms": self.lease_timeout_ms,
                 "overload_threshold": self.overload_threshold,
+                "revoked_generation": self._revoked_generation,
             }
 
 
@@ -407,10 +555,18 @@ _global_lock = threading.Lock()
 
 
 def get_global_token_manager() -> ConcurrentTokenManager:
-    """返回全局 ConcurrentTokenManager（进程级单例）。"""
+    """返回全局 ConcurrentTokenManager（进程级单例）。
+
+    首次调用时按真实资源探测预算（cgroup/host min，不做 ×4 放大）。
+    """
     global _global_token_manager
     if _global_token_manager is None:
         with _global_lock:
             if _global_token_manager is None:
-                _global_token_manager = ConcurrentTokenManager()
+                cpu, io, mem = _default_token_budgets()
+                _global_token_manager = ConcurrentTokenManager(
+                    cpu_budget=cpu,
+                    io_budget=io,
+                    memory_budget_bytes=mem,
+                )
     return _global_token_manager

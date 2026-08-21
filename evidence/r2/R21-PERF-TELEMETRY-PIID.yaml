@@ -1,0 +1,113 @@
+---
+id: R21-PERF-TELEMETRY-PIID
+title: "Bind performance telemetry to PhysicalImplementationID"
+date: 2026-08-21
+status: PASS
+owner: Writer DO (perf telemetry)
+head_sha: "working-tree"
+---
+
+# Problem
+
+Performance telemetry records `backend` / `operator` but does NOT bind the
+`PhysicalImplementationID` (`pi:v3:...`) of the physical implementation that
+actually ran, nor the bound params, output shape, source residency, threads,
+actual TTDC, peak RSS, spill, or transfer bytes. Without the PI-ID binding,
+telemetry cannot be attributed to a specific immutable physical implementation:
+two different `PhysicalImplementationSpec` bindings (different emitter, kernel,
+parameter domain, or implementation closure hash) collapse into the same
+`backend` label, making performance regression attribution and calibration
+impossible.
+
+# Fix
+
+`backend/telemetry_region.py` (the full-chain region/batch telemetry authority)
+now carries the PI-ID telemetry contract on every performance record:
+
+1. Added `PIID_TELEMETRY_FIELDS` — the single authority enumerating the ten
+   required per-record fields:
+
+   ```
+   canonical, physical_implementation_id, bound_params, shape,
+   source_residency, threads, actual_ttdc_ms, peak_rss_bytes,
+   spill_bytes, transfer_bytes
+   ```
+
+2. `RegionTelemetry` (per-region record) gained the ten fields and emits them in
+   `to_dict()`. Defaults are zero/empty so legacy constructions are unchanged.
+
+3. `bind_piid_telemetry(region, ...)` writes all ten fields onto a region
+   record. A blank `physical_implementation_id` raises `ValueError` (fail-closed:
+   a production telemetry record can never be written without its PI-ID).
+
+4. `BatchExecutionTelemetry` (batch record) gained the ten fields. `to_dict()`
+   derives the singular `canonical` / `physical_implementation_id` when exactly
+   one distinct value exists across the recorded regions, and lists every
+   distinct PI-ID in `physical_implementation_ids`. `actual_ttdc_ms` on the
+   batch record aliases the legacy aggregate `total_ttdc_ms` so the contract is
+   uniform across region and batch records.
+
+5. Real `PhysicalImplementationID`s are derived from a complete
+   `PhysicalImplementationSpec` (`physical_implementation_id` property in
+   `backend/contracts/__init__.py`, which hashes backend / canonical / emitter /
+   execution_kind / implementation_source_hash / kernel_identity /
+   kernel_signature / parameter_domain_hash / semantic_contract_hash /
+   implementation_closure_hash / accelerator) and bind end-to-end into the
+   telemetry record.
+
+# Scope
+
+- Telemetry record fields ONLY. No planner, executor, or backend routing change.
+- `backend/telemetry_region.py` is the region/batch telemetry authority; the
+  runtime-level `runtime/region_telemetry.py` and the R39
+  `runtime/performance_run_summary.py` are untouched.
+- The legacy plain-dict `runtime_stats` consumers (plan_cost_router, sql_backend,
+  polars_long_backend, runtime_events) are untouched — the record-field
+  contract is additive.
+
+# Tests
+
+Serial pytest (no xdist), thread env vars pinned to 1:
+
+```
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 \
+  python3 -m pytest tests/backend/test_perf_telemetry_piid_2026_08.py -q
+7 passed
+```
+
+Regression sweep (telemetry-adjacent modules) — 24 passed, 2 pre-existing
+failures in `tests/backend/test_runtime_events.py`:
+`test_winsorize_native_tier_production_safe` and
+`test_ts_std_native_tier_production_safe` assert `production_safe` while
+`polars_long_production_tier` currently returns `implemented`. These two tests
+fail on a clean tree at HEAD `d34846da` (pre-existing, unrelated to this
+change — they encode a separate production-tier promotion task, NOT_RUN here).
+
+New regression tests (3 test classes / 7 test functions):
+
+```
+tests/backend/test_perf_telemetry_piid_2026_08.py
+  TestBindPiidTelemetry
+    test_bind_requires_non_blank_piid
+    test_bind_writes_all_required_fields
+    test_region_to_dict_contains_all_required_fields
+  TestBatchPiidTelemetry
+    test_batch_defaults_all_required_fields
+    test_batch_aggregates_piid_ids_and_required_fields
+  TestPhysicalImplementationIdEndToEnd
+    test_real_piid_binds_into_region_and_batch
+    test_piid_changes_when_spec_binding_changes
+```
+
+# Files
+
+- `backend/telemetry_region.py` (region/batch telemetry record fields + bind helper)
+- `tests/backend/test_perf_telemetry_piid_2026_08.py` (regression tests)
+
+# Known Limitations
+
+- Full registry bootstrap / full backend / root CI NOT_RUN.
+- The two `tests/backend/test_runtime_events.py` production-tier failures are
+  pre-existing on the working tree and NOT_RUN for this change.
+- No production certification claim; the telemetry record contract is additive
+  and does not gate production.

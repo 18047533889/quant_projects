@@ -146,6 +146,45 @@ def _host_memory_bytes() -> int | None:
     return None
 
 
+def _cpuset_effective_cpus() -> int | None:
+    """cgroup cpuset 可用核数（``cpuset.cpus.effective`` 或 ``cpuset.cpus``）。
+
+    解析逗号/区间列表（``"0-3,5,8-11"``）；cgroup v1 的 ``cpuset.cpus`` 与 v2 的
+    ``cpuset.cpus.effective`` 都试。``max`` 或不可读返回 ``None``。
+    """
+    for p in (
+        "/sys/fs/cgroup/cpuset.cpus.effective",
+        "/sys/fs/cgroup/cpuset/cpuset.cpus.effective",
+        "/sys/fs/cgroup/cpuset/cpuset.cpus",
+    ):
+        try:
+            raw = Path(p).read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if not raw or raw == "max":
+            return None
+        count = 0
+        for token in raw.split(","):
+            token = token.strip()
+            if not token:
+                continue
+            if "-" in token:
+                lo_s, hi_s = token.split("-", 1)
+                try:
+                    count += max(0, int(hi_s) - int(lo_s) + 1)
+                except ValueError:
+                    continue
+            else:
+                try:
+                    int(token)
+                    count += 1
+                except ValueError:
+                    continue
+        if count > 0:
+            return count
+    return None
+
+
 def _host_mem_available_bytes() -> int:
     """当前可用内存（MemAvailable）——live headroom 的主机侧输入（R27-023/025）。"""
     try:
@@ -397,6 +436,90 @@ def effective_cpu_slots(
         if env_v is not None:
             requested = env_v
     return max(1, min(requested, hard))
+
+
+# ---------------------------------------------------------------------------
+# ResourceBudget（R21 资源抢占 + 真实内存预算）
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ResourceBudget:
+    """启动时探测的进程真实资源预算（最严格来源取 min）。
+
+    与 :func:`effective_memory_limit_bytes` / :func:`effective_cpu_slots` 同构，
+    但一次调用同时给出 CPU 与内存两个维度，供 token 类 admission 使用。
+
+    - ``cgroup_cpu_quota_cores``：cgroup ``cpu.max`` quota 折算核数（``None`` 表示无限）
+    - ``cpuset_cores``：cgroup cpuset 可用核数（``None`` 表示未探测到）
+    - ``hard_cpu_cores``：进程真实 CPU 硬上限（cgroup quota / cpuset / affinity 取 min）
+    - ``host_memory_bytes``：host 物理内存总量（``None`` 表示探测失败）
+    - ``hard_memory_limit_bytes``：进程真实内存上限（cgroup v2 > v1 > SLURM >
+      RLIMIT > host RAM 取 min；探测失败回退 8GiB）
+    """
+
+    cgroup_cpu_quota_cores: int | None
+    cpuset_cores: int | None
+    hard_cpu_cores: int
+    host_memory_bytes: int | None
+    hard_memory_limit_bytes: int
+
+    def to_dict(self) -> dict[str, int | None]:
+        return {
+            "cgroup_cpu_quota_cores": self.cgroup_cpu_quota_cores,
+            "cpuset_cores": self.cpuset_cores,
+            "hard_cpu_cores": self.hard_cpu_cores,
+            "host_memory_bytes": self.host_memory_bytes,
+            "hard_memory_limit_bytes": self.hard_memory_limit_bytes,
+        }
+
+
+def detect_resource_budget(*, explicit_bytes: int | None = None) -> ResourceBudget:
+    """探测 cgroup CPU quota / cpuset / 物理核 / RAM，返回 :class:`ResourceBudget`。
+
+    复用现有探测原语，保证与 :func:`effective_cpu_slots` 的 ``hard_limit`` 语义
+    完全一致（cgroup quota 用 ceil 折算，且不与 affinity 重复计算）。
+    """
+    quota_cores: int | None = None
+    qp = _read_cgroup_cpu_quota()
+    if qp is not None:
+        quota, period = qp
+        quota_cores = max(1, math.ceil(quota / period))
+    cpuset_cores = _cpuset_effective_cpus()
+    hard_cpu = _probe_hard_cpu_limit()
+    host_mem = _host_memory_bytes()
+    mem_limit = effective_memory_limit_bytes(explicit_bytes=explicit_bytes)
+    return ResourceBudget(
+        cgroup_cpu_quota_cores=quota_cores,
+        cpuset_cores=cpuset_cores,
+        hard_cpu_cores=hard_cpu,
+        host_memory_bytes=host_mem,
+        hard_memory_limit_bytes=mem_limit,
+    )
+
+
+def resolve_token_budget(
+    *,
+    cpu_tokens: int | None = None,
+    io_tokens: int | None = None,
+    memory_bytes: int | None = None,
+) -> tuple[int, int, int]:
+    """把 token 预算解析为 (cpu, io, memory_bytes)。
+
+    - 未显式给出的维度按真实资源探测：CPU = ``effective_cpu_slots()``，
+      IO = max(1, cpu)，内存 = ``effective_memory_limit_bytes()``。
+    - 负数（或显式 0）抛 ``ValueError``，禁止隐式把非法配置当「未配置」。
+    """
+    cpu = effective_cpu_slots() if cpu_tokens is None else cpu_tokens
+    io = max(1, cpu) if io_tokens is None else io_tokens
+    memory = effective_memory_limit_bytes() if memory_bytes is None else memory_bytes
+    if not isinstance(cpu, int) or isinstance(cpu, bool) or cpu <= 0:
+        raise ValueError(f"cpu_tokens 必须为正整数，得到 {cpu!r}")
+    if not isinstance(io, int) or isinstance(io, bool) or io <= 0:
+        raise ValueError(f"io_tokens 必须为正整数，得到 {io!r}")
+    if not isinstance(memory, int) or isinstance(memory, bool) or memory <= 0:
+        raise ValueError(f"memory_bytes 必须为正整数，得到 {memory!r}")
+    return cpu, io, memory
 
 
 def spill_disk_available(path: str | os.PathLike | None = None) -> int | None:

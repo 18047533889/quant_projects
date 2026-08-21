@@ -10,10 +10,37 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+#: R21-PERF-TELEMETRY-PIID: canonical ordering of per-record PI-ID telemetry
+#: fields shared by :class:`RegionTelemetry` and :class:`BatchExecutionTelemetry`.
+#: Every record MUST bind: canonical, physical_implementation_id, bound_params,
+#: shape, source residency, threads, actual TTDC, peak RSS, spill and transfer
+#: bytes.  Keeping the tuple as a single authority means the JSON evidence and
+#: the tests can enumerate the exact field contract once.
+PIID_TELEMETRY_FIELDS: tuple[str, ...] = (
+    "canonical",
+    "physical_implementation_id",
+    "bound_params",
+    "shape",
+    "source_residency",
+    "threads",
+    "actual_ttdc_ms",
+    "peak_rss_bytes",
+    "spill_bytes",
+    "transfer_bytes",
+)
+
 
 @dataclass
 class RegionTelemetry:
-    """Telemetry for a single backend region execution (MB-P2-009)."""
+    """Telemetry for a single backend region execution (MB-P2-009).
+
+    R21-PERF-TELEMETRY-PIID: every region record additionally binds
+    ``physical_implementation_id`` (the ``pi:v3:...`` digest of the selected
+    physical implementation), its ``canonical`` operator name, the bound
+    parameter payload, the output shape, the data-source residency the region
+    executed on, the concurrency it used, the actual TTDC it took, and its
+    peak RSS / spill / transfer bytes.
+    """
 
     region_id: str
     backend: str
@@ -37,6 +64,20 @@ class RegionTelemetry:
     fallback_applied: bool = False
     error_message: str = ""
 
+    # R21-PERF-TELEMETRY-PIID: PI-ID binding fields (all default to None/empty
+    # so legacy constructions keep working; a record that carries them is
+    # production telemetry and must bind every field).
+    canonical: str = ""
+    physical_implementation_id: str = ""
+    bound_params: dict[str, Any] | None = None
+    shape: dict[str, Any] | None = None
+    source_residency: str = ""
+    threads: int = 0
+    actual_ttdc_ms: float = 0.0
+    peak_rss_bytes: int = 0
+    spill_bytes: int = 0
+    transfer_bytes: int = 0
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "region_id": self.region_id,
@@ -54,6 +95,17 @@ class RegionTelemetry:
             "actual_rows": self.actual_rows,
             "fallback_applied": self.fallback_applied,
             "error_message": self.error_message,
+            # R21-PERF-TELEMETRY-PIID binding
+            "canonical": self.canonical,
+            "physical_implementation_id": self.physical_implementation_id,
+            "bound_params": dict(self.bound_params) if self.bound_params else None,
+            "shape": dict(self.shape) if self.shape else None,
+            "source_residency": self.source_residency,
+            "threads": self.threads,
+            "actual_ttdc_ms": round(self.actual_ttdc_ms, 3),
+            "peak_rss_bytes": self.peak_rss_bytes,
+            "spill_bytes": self.spill_bytes,
+            "transfer_bytes": self.transfer_bytes,
         }
 
 
@@ -145,7 +197,35 @@ class BatchExecutionTelemetry:
     backend_switches: int = 0
     fallback_count: int = 0
 
+    # R21-PERF-TELEMETRY-PIID: batch-level binding of the PI-ID telemetry
+    # contract.  The singular ``canonical`` / ``physical_implementation_id``
+    # hold the sole value when the batch executed exactly one distinct
+    # canonical / PI-ID; ``physical_implementation_ids`` lists every distinct
+    # PI-ID recorded across the regions.  Blank singular values default to the
+    # derived distinct value in ``to_dict`` when there is exactly one.
+    physical_implementation_ids: tuple[str, ...] = ()
+    canonical: str = ""
+    physical_implementation_id: str = ""
+    bound_params: dict[str, Any] | None = None
+    shape: dict[str, Any] | None = None
+    source_residency: str = ""
+    threads: int = 0
+    peak_rss_bytes: int = 0
+    spill_bytes: int = 0
+    transfer_bytes: int = 0
+
     def to_dict(self) -> dict[str, Any]:
+        distinct_canonicals = sorted(
+            {r.canonical for r in self.regions if getattr(r, "canonical", "")}
+        )
+        region_piids = sorted(
+            {r.physical_implementation_id for r in self.regions if getattr(r, "physical_implementation_id", "")}
+        )
+        canonical = self.canonical or (distinct_canonicals[0] if len(distinct_canonicals) == 1 else "")
+        piid = self.physical_implementation_id or (
+            region_piids[0] if len(region_piids) == 1 else ""
+        )
+        piids = list(self.physical_implementation_ids) or region_piids
         return {
             "batch_id": self.batch_id,
             "regions": [r.to_dict() for r in self.regions],
@@ -160,6 +240,21 @@ class BatchExecutionTelemetry:
             "actual_backend_count": self.actual_backend_count,
             "backend_switches": self.backend_switches,
             "fallback_count": self.fallback_count,
+            # R21-PERF-TELEMETRY-PIID binding
+            "canonical": canonical,
+            "physical_implementation_id": piid,
+            "physical_implementation_ids": piids,
+            "bound_params": dict(self.bound_params) if self.bound_params else None,
+            "shape": dict(self.shape) if self.shape else None,
+            "source_residency": self.source_residency,
+            "threads": self.threads,
+            # ``actual_ttdc_ms`` is the R21 required key; on the batch record it
+            # aliases the legacy aggregate ``total_ttdc_ms`` so the contract is
+            # uniform across region and batch records.
+            "actual_ttdc_ms": round(self.total_ttdc_ms, 3),
+            "peak_rss_bytes": self.peak_rss_bytes,
+            "spill_bytes": self.spill_bytes,
+            "transfer_bytes": self.transfer_bytes,
         }
 
 
@@ -301,3 +396,46 @@ def build_explain_plan(plan: Any, region_decisions: list[dict[str, Any]]) -> Exp
         backend_distribution=dict(backend_counts),
         total_backend_switches=backend_switches,
     )
+
+
+# ---------------------------------------------------------------------------
+# R21-PERF-TELEMETRY-PIID: bind PI-ID telemetry into a region record
+# ---------------------------------------------------------------------------
+def bind_piid_telemetry(
+    region: RegionTelemetry,
+    *,
+    canonical: str,
+    physical_implementation_id: str,
+    bound_params: dict[str, Any] | None = None,
+    shape: dict[str, Any] | None = None,
+    source_residency: str = "",
+    threads: int = 0,
+    actual_ttdc_ms: float = 0.0,
+    peak_rss_bytes: int = 0,
+    spill_bytes: int = 0,
+    transfer_bytes: int = 0,
+) -> RegionTelemetry:
+    """Bind the R21-PERF-TELEMETRY-PIID fields onto one region telemetry record.
+
+    The ``physical_implementation_id`` must be a non-empty string (the
+    ``pi:v3:...`` digest of the selected physical implementation); a blank PI-ID
+    is rejected with ``ValueError`` so a production record can never be written
+    without its PI-ID binding.  All other fields default to their zero value and
+    are recorded as-is.
+    """
+    if not str(physical_implementation_id or "").strip():
+        raise ValueError(
+            "R21-PERF-TELEMETRY-PIID: physical_implementation_id is required "
+            "on every performance telemetry record"
+        )
+    region.canonical = str(canonical or "")
+    region.physical_implementation_id = str(physical_implementation_id)
+    region.bound_params = dict(bound_params) if bound_params else None
+    region.shape = dict(shape) if shape else None
+    region.source_residency = str(source_residency or "")
+    region.threads = max(0, int(threads or 0))
+    region.actual_ttdc_ms = max(0.0, float(actual_ttdc_ms or 0.0))
+    region.peak_rss_bytes = max(0, int(peak_rss_bytes or 0))
+    region.spill_bytes = max(0, int(spill_bytes or 0))
+    region.transfer_bytes = max(0, int(transfer_bytes or 0))
+    return region
