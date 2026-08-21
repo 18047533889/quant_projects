@@ -163,3 +163,24 @@ class CheckpointInvalid(FactorEngineError):
 class ProductionEventAutoPublishDisabled(FactorEngineError):
     """production 下 DataEvent 自动发布被禁用 / 缺 event_id（原子两阶段必需）。"""
 
+
+class TypedTransferError(FactorEngineError):
+    """类型化传输失败（R21-TRANSFER-EXECUTOR）。
+
+    由 BatchTransferOptimizer / TransferExecutor 抛出，代表一次 backend 边界
+    数据转换的确定性失败。不得被上层静默吞掉 —— 调用方必须能把它与普通 IO
+    错误区分并据此决定失败关闭（fail closed）。
+    """
+
+
+class UnknownTransferTargetError(TypedTransferError):
+    """未知传输目标 backend / transform —— 必须 fail closed，不得静默成功。"""
+
+
+class TransferInputTypeError(TypedTransferError):
+    """传输输入的类型/格式与 transform 契约不匹配（无法执行真实转换）。"""
+
+
+class SemanticMismatchError(TypedTransferError):
+    """传输后语义快照与源不一致（date/instrument/order/dtype/null/timezone/grain 等）。"""
+

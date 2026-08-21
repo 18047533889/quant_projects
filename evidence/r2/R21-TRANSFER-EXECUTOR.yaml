@@ -1,0 +1,87 @@
+# R21-TRANSFER-EXECUTOR
+# BatchTransferOptimizer 1:1 映射到真实 executor；移除 fake _single_transfer
+
+id: R21-TRANSFER-EXECUTOR
+title: "TransferTransform → 真实 executor；未知 target fail closed；批处理传播 typed failure"
+version: 1.0.0
+status: implemented
+created: 2026-08-21
+author: Writer DC
+
+summary: |
+  将 BatchTransferOptimizer 从“只加 metrics 的 no-op”升级为真实转换执行器：
+  - 每个 TransferTransform（Q_TO_ARROW / CLICKHOUSE_TO_ARROW / POLARS_TO_NUMPY /
+    NUMPY_TO_POLARS / DUCKDB_TO_ARROW / ARROW_TO_POLARS / ARROW_TO_PANDAS /
+    POLARS_TO_PANDAS / PANDAS_TO_POLARS）绑定到真实 executor 函数。
+  - 移除 fake `_single_transfer`（原实现只累加 metrics，不转换数据）。
+  - 未知 target / 无真实 executor 的 transform → 抛 TypedTransferError（fail closed），
+    不再静默成功。
+  - 批处理不再吞错返回 batch_id；任一表转换失败向上传播 typed failure。
+  - `_batch_to_duckdb()` 连接作为常驻句柄返回（resident handle，所有权/存活由持方负责），
+    不再泄漏。
+  - Arrow → Polars 直接 `pl.from_arrow()`，不经 `to_pandas()`+`from_pandas()` 中转。
+  - 每次传输后校验语义保留（date/instrument/order/dtype/null/timezone/grain/universe/source）。
+
+files_modified:
+  - path: runtime/multibackend/batch_transfer_optimizer.py
+    changes:
+      - 新增 TransferExecutor：每个 transform 一个真实转换方法
+      - 新增 SemanticSnapshot + _assert_semantic_preservation 语义校验
+      - BatchTransferOptimizer 复用 TransferExecutor；移除 _single_transfer no-op
+      - register_transfer_request 支持显式 transform；未知 backend fail closed
+      - _execute_batch_transfer 传播 TypedTransferError，不吞错
+      - resident_duckdb_conn 属性暴露常驻连接句柄
+      - BatchTransferMetrics 增加 failures 计数
+  - path: runtime/exceptions.py
+    changes:
+      - 新增 TypedTransferError（FactorEngineError 子类）
+      - 新增 UnknownTransferTargetError / TransferInputTypeError / SemanticMismatchError
+  - path: tests/multibackend/test_batch_transfer_executor.py
+    changes:
+      - 新增 5 个回归测试类（20 个用例）
+
+transform_to_executor:
+  Q_TO_ARROW: q_to_arrow
+  CLICKHOUSE_TO_ARROW: clickhouse_to_arrow
+  POLARS_TO_NUMPY: polars_to_numpy
+  NUMPY_TO_POLARS: numpy_to_polars
+  DUCKDB_TO_ARROW: duckdb_to_arrow
+  ARROW_TO_POLARS: arrow_to_polars
+  ARROW_TO_PANDAS: arrow_to_pandas
+  POLARS_TO_PANDAS: polars_to_pandas
+  PANDAS_TO_POLARS: pandas_to_polars
+
+semantic_checks:
+  - date: 列名/行数/列数保留
+  - instrument: 列名保留
+  - order: 行数保留（不丢行）
+  - dtype: category→numeric、string→numeric 视为漂移
+  - null: null 计数保留
+  - timezone: 快照记录 tz
+  - grain: 快照字段
+  - universe/source: source_snapshot 字段
+
+regression_tests:
+  - file: tests/multibackend/test_batch_transfer_executor.py
+    classes:
+      - TestTransferExecutorRealConversions (8 tests)
+      - TestUnknownTargetFailsClosed (4 tests)
+      - TestBatchTransferPropagatesFailure (2 tests)
+      - TestDuckDBResidentHandle (2 tests)
+      - TestSemanticPreservation (4 tests)
+    total: 20 tests
+    status: all passing
+
+related_tests:
+  - file: tests/planner/test_transfer_transform.py
+    status: all passing (22 tests)
+  - file: tests/multibackend/test_batch_global_streaming_regressions.py
+    status: all passing (5 tests)
+
+limitations:
+  - Q_TO_ARROW 在无真实 Q 客户端（pyq/qpython 未安装）时，仅接受已就绪的
+    pyarrow.Table / .to_arrow() 结果；真实 kdb+ 序列化路径标记为 NOT_RUN。
+  - CLICKHOUSE_TO_ARROW 对非 Arrow 输入经 pandas 中转（clickhouse_connect 客户端
+    返回 pandas）；真实 ClickHouse 服务端往返未跑（NOT_RUN）。
+  - 语义校验对 Polars/NumPy 输出不强制 dtype 全等（表示层差异合法），仅对
+    pandas/Arrow 快照做严格校验。
