@@ -85,8 +85,8 @@ _BACKEND_CHARACTERISTICS: dict[PhysicalBackend, BackendCharacteristics] = {
         parallel_efficiency=0.3,  # GIL 限制
         conversion_penalty_ms=5.0,
     ),
-    PhysicalBackend.POLARS_EAGER: BackendCharacteristics(
-        backend=PhysicalBackend.POLARS_EAGER,
+    PhysicalBackend.POLARS_PANEL: BackendCharacteristics(
+        backend=PhysicalBackend.POLARS_PANEL,
         startup_cost_ms=8.0,  # 中等启动
         per_row_throughput_mrows_per_sec=2.5,  # 高吞吐
         memory_overhead_factor=1.5,  # 中等内存开销
@@ -100,8 +100,8 @@ _BACKEND_CHARACTERISTICS: dict[PhysicalBackend, BackendCharacteristics] = {
         parallel_efficiency=0.85,  # 高并行效率
         conversion_penalty_ms=8.0,
     ),
-    PhysicalBackend.POLARS_LAZY: BackendCharacteristics(
-        backend=PhysicalBackend.POLARS_LAZY,
+    PhysicalBackend.POLARS_LONG: BackendCharacteristics(
+        backend=PhysicalBackend.POLARS_LONG,
         startup_cost_ms=10.0,  # 稍慢启动（优化器开销）
         per_row_throughput_mrows_per_sec=3.0,  # 最高吞吐（优化后）
         memory_overhead_factor=1.3,  # 低内存开销（lazy）
@@ -128,29 +128,6 @@ _BACKEND_CHARACTERISTICS: dict[PhysicalBackend, BackendCharacteristics] = {
         ),
         parallel_efficiency=0.95,  # 最高并行效率（vectorized）
         conversion_penalty_ms=20.0,  # 最高转换成本（SQL 边界）
-    ),
-    # R21-NUMBA-COST-MODEL: Numba JIT backend for stateful/recursive operators
-    # cold_jit_ms: One-time JIT compilation cost (typical: 50-200ms)
-    # warm_ms: Execution cost after JIT cache hit (typical: 1-10ms)
-    # cache_hit_probability: Likelihood of hitting cached JIT binary (0.0-1.0)
-    PhysicalBackend.NUMBA_CPU: BackendCharacteristics(
-        backend=PhysicalBackend.NUMBA_CPU,
-        startup_cost_ms=5.0,  # Low import cost (numba already loaded)
-        per_row_throughput_mrows_per_sec=2.0,  # High throughput after JIT
-        memory_overhead_factor=1.1,  # Low memory overhead
-        supports_streaming=False,
-        preferred_scale=(DataScale.SMALL, DataScale.MEDIUM, DataScale.LARGE),
-        preferred_profiles=(
-            OperatorProfile.WINDOW_HEAVY,
-            OperatorProfile.ELEMENTWISE_HEAVY,
-            OperatorProfile.MIXED,
-        ),
-        parallel_efficiency=0.7,  # Good parallelism (GIL released in JIT)
-        conversion_penalty_ms=12.0,  # Moderate conversion cost (numpy array)
-        # JIT cost model fields
-        cold_jit_ms=100.0,  # Cold JIT compilation: ~100ms
-        warm_ms=5.0,  # Warm execution: ~5ms
-        cache_hit_probability=0.8,  # 80% chance of JIT cache hit
     ),
 }
 
@@ -328,7 +305,8 @@ class IntelligentBackendSelector:
                 # 允许跨规模使用，但有惩罚
                 if scale in (DataScale.TINY, DataScale.SMALL) and backend in (
                     PhysicalBackend.DUCKDB_SQL,
-                    PhysicalBackend.POLARS_LAZY,
+                    PhysicalBackend.POLARS_LONG,
+                    PhysicalBackend.POLARS_PANEL,
                 ):
                     # 小数据不推荐重型 backend
                     continue
@@ -444,16 +422,6 @@ class IntelligentBackendSelector:
                 + distribution_penalty
             ) * adjustment
 
-            # R21-NUMBA-COST-MODEL: Apply Numba JIT cost model for NUMBA_CPU backend
-            if backend == PhysicalBackend.NUMBA_CPU and hasattr(chars, 'cold_jit_ms'):
-                # Effective cost = (1 - cache_hit_probability) * cold_jit_ms + warm_ms
-                jit_effective_cost = (
-                    (1.0 - chars.cache_hit_probability) * chars.cold_jit_ms
-                    + chars.warm_ms
-                )
-                # Add JIT cost to total (replaces generic compute for Numba)
-                total_cost = total_cost - compute_ms + jit_effective_cost
-
             results.append((backend, total_cost, memory_bytes))
 
         return results
@@ -468,18 +436,18 @@ class IntelligentBackendSelector:
         # Conversion cost matrix (ms baseline + per-GB scaling)
         # Key: (source, target) -> (baseline_ms, ms_per_gb)
         conversion_matrix = {
-            (PhysicalBackend.PANDAS_NUMPY, PhysicalBackend.POLARS_EAGER): (5.0, 30.0),
-            (PhysicalBackend.PANDAS_NUMPY, PhysicalBackend.POLARS_LAZY): (8.0, 40.0),
+            (PhysicalBackend.PANDAS_NUMPY, PhysicalBackend.POLARS_PANEL): (5.0, 30.0),
+            (PhysicalBackend.PANDAS_NUMPY, PhysicalBackend.POLARS_LONG): (8.0, 40.0),
             (PhysicalBackend.PANDAS_NUMPY, PhysicalBackend.DUCKDB_SQL): (15.0, 60.0),
-            (PhysicalBackend.POLARS_EAGER, PhysicalBackend.PANDAS_NUMPY): (4.0, 25.0),
-            (PhysicalBackend.POLARS_EAGER, PhysicalBackend.POLARS_LAZY): (2.0, 10.0),
-            (PhysicalBackend.POLARS_EAGER, PhysicalBackend.DUCKDB_SQL): (10.0, 45.0),
-            (PhysicalBackend.POLARS_LAZY, PhysicalBackend.PANDAS_NUMPY): (6.0, 35.0),
-            (PhysicalBackend.POLARS_LAZY, PhysicalBackend.POLARS_EAGER): (3.0, 15.0),
-            (PhysicalBackend.POLARS_LAZY, PhysicalBackend.DUCKDB_SQL): (8.0, 40.0),
+            (PhysicalBackend.POLARS_PANEL, PhysicalBackend.PANDAS_NUMPY): (4.0, 25.0),
+            (PhysicalBackend.POLARS_PANEL, PhysicalBackend.POLARS_LONG): (2.0, 10.0),
+            (PhysicalBackend.POLARS_PANEL, PhysicalBackend.DUCKDB_SQL): (10.0, 45.0),
+            (PhysicalBackend.POLARS_LONG, PhysicalBackend.PANDAS_NUMPY): (6.0, 35.0),
+            (PhysicalBackend.POLARS_LONG, PhysicalBackend.POLARS_PANEL): (3.0, 15.0),
+            (PhysicalBackend.POLARS_LONG, PhysicalBackend.DUCKDB_SQL): (8.0, 40.0),
             (PhysicalBackend.DUCKDB_SQL, PhysicalBackend.PANDAS_NUMPY): (12.0, 50.0),
-            (PhysicalBackend.DUCKDB_SQL, PhysicalBackend.POLARS_EAGER): (10.0, 45.0),
-            (PhysicalBackend.DUCKDB_SQL, PhysicalBackend.POLARS_LAZY): (8.0, 40.0),
+            (PhysicalBackend.DUCKDB_SQL, PhysicalBackend.POLARS_PANEL): (10.0, 45.0),
+            (PhysicalBackend.DUCKDB_SQL, PhysicalBackend.POLARS_LONG): (8.0, 40.0),
         }
 
         key = (source, target)
@@ -523,7 +491,7 @@ class IntelligentBackendSelector:
         # Apply complexity penalty based on backend capability
         if backend == PhysicalBackend.PANDAS_NUMPY and complexity_score > 3.0:
             return base_compute_ms * 0.2 * complexity_score
-        elif backend in (PhysicalBackend.POLARS_LAZY, PhysicalBackend.DUCKDB_SQL):
+        elif backend in (PhysicalBackend.POLARS_LONG, PhysicalBackend.DUCKDB_SQL):
             # These backends handle complexity better
             return base_compute_ms * 0.05 * complexity_score
         else:
@@ -557,7 +525,7 @@ class IntelligentBackendSelector:
             rows_per_group = ctx.estimated_rows / max(ctx.estimated_columns, 1)
             if rows_per_group > 10000:
                 # Large groups benefit from vectorized backends
-                if backend in (PhysicalBackend.POLARS_EAGER, PhysicalBackend.DUCKDB_SQL):
+                if backend in (PhysicalBackend.POLARS_PANEL, PhysicalBackend.DUCKDB_SQL):
                     penalty -= base_compute_ms * 0.1
                 else:
                     penalty += base_compute_ms * 0.05

@@ -165,10 +165,10 @@ class PhysicalRegionPlan:
             lines.append(f"   Nodes: {len(region.node_ids)}")
             lines.append(f"   Axis: {region.execution_axis.value}")
             lines.append(f"   Rows: ~{region.estimated_rows:,}")
-            lines.append(f"   Memory: ~{region.estimated_bytes / 1024.0 / 1024.0:.1f} MB")
-            if region.can_stream:
+            lines.append(f"   Memory: ~{region.estimated_memory_bytes / 1024.0 / 1024.0:.1f} MB")
+            if region.streaming_capable:
                 lines.append("   Streaming: Yes")
-            if region.required_properties.sorted_by:
+            if region.required_properties and region.required_properties.sorted_by:
                 lines.append(f"   Sorted by: {', '.join(region.required_properties.sorted_by)}")
             lines.append("")
 
@@ -230,8 +230,8 @@ def compute_plan_hash(
                 "representation": r.representation.value if hasattr(r.representation, "value") else str(r.representation),
                 "node_ids": sorted(r.node_ids),
                 "execution_axis": r.execution_axis.value if hasattr(r.execution_axis, "value") else str(r.execution_axis),
-                "sorted_by": list(r.required_properties.sorted_by),
-                "partitioned_by": list(r.required_properties.partitioned_by),
+                "sorted_by": list(r.required_properties.sorted_by) if r.required_properties else [],
+                "partitioned_by": list(r.required_properties.partitioned_by) if r.required_properties else [],
             }
             for r in regions
         ],
@@ -265,7 +265,7 @@ def estimate_plan_peak_memory(regions: tuple[BackendRegion, ...], edges: tuple[T
         return 0
 
     # Largest single region
-    max_region_bytes = max(r.estimated_bytes for r in regions)
+    max_region_bytes = max(r.estimated_memory_bytes for r in regions)
 
     # Largest transfer edge (source + target + 20% scratch)
     max_edge_bytes = 0

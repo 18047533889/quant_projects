@@ -1,0 +1,74 @@
+id: R21-LOGICAL-NODE-ID
+title: Duplicate LogicalNodeID detection (fail closed)
+status: done
+date: 2026-08-21
+role: Writer DN
+scope: planner/ + runtime/multibackend/batch_global_optimizer.py
+summary: >
+  The batch-global optimizer discovered the physical graph from PlanNode.inputs
+  and keyed it by canonical node_id.  When two DISTINCT objects carried the same
+  node_id it silently renamed the second to ``<id>_<object-id>``, making the
+  physical graph depend on traversal order / object identity — the same formula
+  could produce different physical graphs across runs.  Added a typed
+  ``DuplicateLogicalNodeIdentityError`` and a guard that fails closed at the
+  collision site instead of renaming.
+files_changed:
+  - planner/logical_plan.py          # DuplicateLogicalNodeIdentityError (ValueError)
+  - planner/__init__.py              # public export
+  - runtime/multibackend/batch_global_optimizer.py
+  - tests/planner/test_r21_logical_node_id.py   # 5 regression tests
+changes:
+  collision_site:
+    path: runtime/multibackend/batch_global_optimizer.py
+    function: PhysicalBatchGlobalOptimizer.optimize_batch -> discover()
+    before: |
+      if key in used_ids and all_nodes.get(key) is not node:
+          key = f"{key}_{id(node)}"     # SILENT RENAME
+    after: |
+      if key in used_ids and all_nodes.get(key) is not node:
+          _raise_duplicate_logical_node_identity(
+              node_id=key, existing_node=all_nodes[key], new_node=node)
+  error_type:
+    name: DuplicateLogicalNodeIdentityError
+    base: ValueError
+    message: "duplicate canonical logical node_id=... refers to distinct PlanNode objects"
+rationale: >
+  A node_id that names two distinct objects is an identity ambiguity: the id can
+  no longer identify a single node, so any graph built from it is ill-defined.
+  Renaming silently (suffix by object id) made the graph traversal-order and
+  object-identity dependent; the same formula could yield different physical
+  graphs across runs.  Fail closed so the identity bug surfaces instead of
+  producing an unstable physical plan.
+verification:
+  new_tests:
+    pytest_command: >
+      cd /home/shw/quant_projects/factor_engine &&
+      /home/shw/quant_projects/.venv/bin/python -m pytest
+      tests/planner/test_r21_logical_node_id.py -v --tb=short
+    result: PASS (5/5)
+    coverage:
+      - duplicate canonical node_id on distinct nodes -> raises
+      - collision never silently renamed (traversal-order invariance)
+      - shared PlanNode object reference still allowed (no false positive)
+      - duplicate node_id found in discovered graph (deeper than roots)
+      - error message carries both distinct node ops
+  regression_suites:
+    pytest_command: >
+      cd /home/shw/quant_projects/factor_engine &&
+      /home/shw/quant_projects/.venv/bin/python -m pytest
+      tests/planner/test_batch_global_optimizer_p0.py
+      tests/q_backend/test_q_plan_node_abi.py
+      tests/planner/test_cse_semantic_round8_2026_08.py
+      tests/r39/test_change_impact_2026_08.py
+      tests/r42/test_compiler_pass_manager.py
+      tests/planner/test_r20_compile_semantics.py
+      -v --tb=short
+    result: PASS (96/96 across suites)
+  thread_env:
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1
+    serial pytest, no xdist
+  git_sha: NOT_RUN (LOCAL ONLY; working tree is truth)
+limitations: >
+  Guard is installed at the batch-global discovery collision site only.  Other
+  node_id consumers (e.g. backend/q_backend, runtime/engine duplicate checks)
+  already fail closed on their own paths.  No full dataset runs performed.

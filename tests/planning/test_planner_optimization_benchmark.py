@@ -166,7 +166,7 @@ class TestBackendSelectorBenchmark:
 
         # Should prefer streaming backends for large data
         assert decision.chosen_backend in (
-            PhysicalBackend.POLARS_LAZY,
+            PhysicalBackend.POLARS_LONG,
             PhysicalBackend.DUCKDB_SQL,
         )
 
@@ -177,8 +177,8 @@ class TestBackendSelectorBenchmark:
         # Test all backend pairs
         backends = [
             PhysicalBackend.PANDAS_NUMPY,
-            PhysicalBackend.POLARS_EAGER,
-            PhysicalBackend.POLARS_LAZY,
+            PhysicalBackend.POLARS_PANEL,
+            PhysicalBackend.POLARS_LONG,
             PhysicalBackend.DUCKDB_SQL,
         ]
 
@@ -276,8 +276,8 @@ class TestRegionOptimizerBenchmark:
                 PhysicalBackend.PANDAS_NUMPY: NodeCost(
                     node_id, PhysicalBackend.PANDAS_NUMPY, 10.0 + i * 2, 1024 * 1024
                 ),
-                PhysicalBackend.POLARS_EAGER: NodeCost(
-                    node_id, PhysicalBackend.POLARS_EAGER, 8.0 + i * 1.5, 1024 * 1024 * 1.5
+                PhysicalBackend.POLARS_PANEL: NodeCost(
+                    node_id, PhysicalBackend.POLARS_PANEL, 8.0 + i * 1.5, 1024 * 1024 * 1.5
                 ),
                 PhysicalBackend.DUCKDB_SQL: NodeCost(
                     node_id, PhysicalBackend.DUCKDB_SQL, 6.0 + i, 1024 * 1024 * 1.2

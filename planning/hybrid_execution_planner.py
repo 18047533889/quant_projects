@@ -270,10 +270,12 @@ class HybridExecutionPlanner:
         # 转换分区为 BackendRegion
         regions = []
         for p in partition_plan.partitions:
-            # 映射后端名称到 PhysicalBackend 枚举
+            # 映射后端名称到 PhysicalBackend 枚举 (R21-PLANNER-TYPE-UNIFICATION)
             backend_map = {
                 "pandas_numpy": PhysicalBackend.PANDAS_NUMPY,
-                "polars": PhysicalBackend.POLARS_LAZY,
+                "polars": PhysicalBackend.POLARS_PANEL,
+                "polars_panel": PhysicalBackend.POLARS_PANEL,
+                "polars_long": PhysicalBackend.POLARS_LONG,
                 "duckdb_sql": PhysicalBackend.DUCKDB_SQL,
             }
             backend_enum = backend_map.get(p.backend, PhysicalBackend.PANDAS_NUMPY)
@@ -281,7 +283,8 @@ class HybridExecutionPlanner:
             # 推断 representation
             repr_map = {
                 PhysicalBackend.PANDAS_NUMPY: Representation.PANDAS_LONG,
-                PhysicalBackend.POLARS_LAZY: Representation.POLARS_LAZY_LONG,
+                PhysicalBackend.POLARS_PANEL: Representation.POLARS_LONG,
+                PhysicalBackend.POLARS_LONG: Representation.POLARS_LAZY_LONG,
                 PhysicalBackend.DUCKDB_SQL: Representation.DUCKDB_RELATION,
             }
             representation = repr_map.get(backend_enum, Representation.PANDAS_LONG)
@@ -292,13 +295,10 @@ class HybridExecutionPlanner:
                 representation=representation,
                 node_ids=tuple(p.node_ids),
                 execution_axis=ExecutionAxis.GLOBAL_PANEL,
-                required_properties=PhysicalProperty(),
-                state_contract=StateContract(),
                 estimated_rows=p.total_rows,
-                estimated_bytes=sum(dag_nodes[nid].shape.bytes for nid in p.node_ids),
-                can_stream=False,
-                requires_global_sort=False,
-                requires_full_group=False,
+                estimated_compute_ms=0.0,
+                estimated_memory_bytes=sum(dag_nodes[nid].shape.bytes for nid in p.node_ids),
+                input_bytes=sum(dag_nodes[nid].shape.bytes for nid in p.node_ids),
             )
             regions.append(region)
 
@@ -311,7 +311,7 @@ class HybridExecutionPlanner:
             infer_transfer_kind,
         )
 
-        partition_map = {p.partition_id: p for p in regions}
+        partition_map = {p.region_id: p for p in regions}
         edges = []
         edge_counter = [0]
 
@@ -336,14 +336,14 @@ class HybridExecutionPlanner:
                 target_representation=to_region.representation,
                 transfer_kind=transfer_kind,
                 estimated_rows=from_region.estimated_rows,
-                estimated_bytes=from_region.estimated_bytes,
+                estimated_bytes=from_region.estimated_memory_bytes,
                 requires_sort=False,
                 requires_repartition=False,
                 requires_reshape=False,
                 requires_dtype_cast=False,
                 semantic_contract=SemanticContract(),
-                source_properties=from_region.required_properties,
-                target_properties=to_region.required_properties,
+                source_properties=PhysicalProperty(),
+                target_properties=PhysicalProperty(),
             )
             object.__setattr__(edge, "estimated_cost_ms", estimate_transfer_cost(edge))
             edges.append(edge)
@@ -463,11 +463,10 @@ class HybridExecutionPlanner:
         for node_id, meta in node_metadata.items():
             backend_costs: dict[PhysicalBackend, NodeCost] = {}
 
-            # 为该节点尝试所有可能的 backend
+            # 为该节点尝试所有可能的 backend (R21-PLANNER-TYPE-UNIFICATION)
             for backend in [
                 PhysicalBackend.PANDAS_NUMPY,
-                PhysicalBackend.POLARS_EAGER,
-                PhysicalBackend.POLARS_LAZY,
+                PhysicalBackend.POLARS_PANEL,
                 PhysicalBackend.DUCKDB_SQL,
             ]:
                 # 使用智能选择器评估成本

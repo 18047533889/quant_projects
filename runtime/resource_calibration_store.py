@@ -23,12 +23,77 @@ import os
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 from runtime.resource_shape import ResourceShapeKey, hardware_fingerprint
 
+
+def _utc_now_ms() -> float:
+    """R21-COST-CALIBRATION-KEY：UTC wall-clock 毫秒（持久化校准时间戳）。"""
+    return datetime.now(timezone.utc).timestamp() * 1000.0
+
+
+class _CalibrationAtomicWrite:
+    """R21-COST-CALIBRATION-KEY：原子写 + 进程锁。
+
+    - 进程锁：O_EXCL 独占 lock file（跨进程互斥，防止并发 save 互相覆盖）。
+    - 原子写：先写同目录 ``.tmp``，fsync 后 ``os.replace`` 覆盖目标文件。
+    """
+
+    def __init__(self, target: str, lock_timeout_s: float = 5.0) -> None:
+        self._target = Path(target)
+        self._lock_path = self._target.with_suffix(self._target.suffix + ".lock")
+        self._lock_timeout_s = lock_timeout_s
+        self._tmp_path = self._target.with_suffix(self._target.suffix + ".tmp")
+        self._held = False
+
+    def __enter__(self) -> Path:
+        self._target.parent.mkdir(parents=True, exist_ok=True)
+        deadline = time.monotonic() + self._lock_timeout_s
+        while True:
+            try:
+                fd = os.open(str(self._lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(fd, str(os.getpid()).encode("utf-8"))
+                os.close(fd)
+                self._held = True
+                break
+            except FileExistsError:
+                if time.monotonic() >= deadline:
+                    raise RuntimeError(
+                        f"calibration lock busy after {self._lock_timeout_s}s: "
+                        f"{self._lock_path}"
+                    )
+                time.sleep(0.05)
+        return self._tmp_path
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        try:
+            if exc_type is None and self._tmp_path.exists():
+                try:
+                    with open(self._tmp_path, "rb") as fh:
+                        os.fsync(fh.fileno())
+                except OSError:
+                    pass
+                os.replace(self._tmp_path, self._target)
+        finally:
+            for leftover in (self._tmp_path, self._lock_path):
+                try:
+                    os.remove(leftover)
+                except OSError:
+                    pass
+            self._held = False
+
+
+def _calibration_atomic_write_lock(target: str) -> _CalibrationAtomicWrite:
+    """返回进程锁 + 原子写的上下文管理器（写校准持久化文件用）。"""
+    return _CalibrationAtomicWrite(target)
+
 #: 每 shape 保留的最大原始样本数（超出做 recency 抽样）。
 MAX_SAMPLES_PER_SHAPE = 256
+#: R21-COST-CALIBRATION-KEY：持久化校准时间戳是 UTC wall-clock（不是
+#: monotonic）。monotonic 是 boot 相对时间，写入持久化文件在跨进程/跨重启后
+#: 无意义 —— 校准新鲜度判断必须以墙上时钟为准。
 #: 指数衰减半衰期（样本数）：约 N 个样本后权重减半。
 AGING_HALFLIFE_SAMPLES = 128
 #: correction factor bounds（§311 safety floor：learned model 不能把安全系数
@@ -98,7 +163,8 @@ class ShapeCalibration:
         self.elapsed_obs.append(float(elapsed_ms))
         self.output_obs.append(float(output_bytes))
         self.spill_obs.append(float(spill_bytes))
-        self.updated_at_ms = time.monotonic() * 1000.0
+        # R21-COST-CALIBRATION-KEY：持久化校准时间戳是 UTC wall-clock。
+        self.updated_at_ms = _utc_now_ms()
         self._cap_samples()
 
         # OOM 不能等均值稀释（§211）：立即提高 tail safety（与 attribution 无关）。
@@ -312,11 +378,13 @@ class ResourceCalibrationStore:
         try:
             import pandas as pd
 
-            pd.DataFrame(rows).to_parquet(target, index=False)
+            with _calibration_atomic_write_lock(target) as tmp_path:
+                pd.DataFrame(rows).to_parquet(tmp_path, index=False)
         except Exception:
             # 无 pandas/parquet 环境降级 JSON（calibration 是性能数据，非正确性数据）。
-            with open(target, "w", encoding="utf-8") as fh:
-                json.dump(rows, fh)
+            with _calibration_atomic_write_lock(target) as tmp_path:
+                with open(tmp_path, "w", encoding="utf-8") as fh:
+                    json.dump(rows, fh)
         self._path = target
         return target
 

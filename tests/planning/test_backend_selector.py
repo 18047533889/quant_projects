@@ -129,8 +129,8 @@ class TestBackendSelection:
         selector = IntelligentBackendSelector()
         decision = selector.select_backend(ctx)
         assert decision.chosen_backend in (
-            PhysicalBackend.POLARS_LAZY,
-            PhysicalBackend.POLARS_EAGER,
+            PhysicalBackend.POLARS_PANEL,
+            PhysicalBackend.POLARS_LONG,
             PhysicalBackend.DUCKDB_SQL,
         )
 
@@ -153,7 +153,8 @@ class TestBackendSelection:
         decision = selector.select_backend(ctx)
         # Should select streaming-capable backend
         assert decision.chosen_backend in (
-            PhysicalBackend.POLARS_LAZY,
+            PhysicalBackend.POLARS_PANEL,
+            PhysicalBackend.POLARS_LONG,
             PhysicalBackend.DUCKDB_SQL,
         )
 
@@ -210,7 +211,7 @@ class TestBackendSelection:
             execution_axis=ExecutionAxis.GLOBAL_PANEL,
             window_params=[],
             has_regression=False,
-            parent_backend=PhysicalBackend.POLARS_EAGER,
+            parent_backend=PhysicalBackend.POLARS_PANEL,
             allows_streaming=True,
             performance_priority="balanced",
         )
@@ -374,21 +375,19 @@ class TestPerformanceComparison:
                 representation=Representation.PANDAS_LONG,
                 node_ids=("n1", "n2"),
                 execution_axis=ExecutionAxis.GLOBAL_PANEL,
-                required_properties=PhysicalProperty(),
-                state_contract=StateContract(),
                 estimated_rows=10000,
-                estimated_bytes=10000 * 8 * 5,
+                estimated_compute_ms=10.0,
+                estimated_memory_bytes=10000 * 8 * 5,
             ),
             BackendRegion(
                 region_id="R2",
-                backend=PhysicalBackend.POLARS_EAGER,
+                backend=PhysicalBackend.POLARS_PANEL,
                 representation=Representation.POLARS_LONG,
                 node_ids=("n3",),
                 execution_axis=ExecutionAxis.GLOBAL_PANEL,
-                required_properties=PhysicalProperty(),
-                state_contract=StateContract(),
                 estimated_rows=10000,
-                estimated_bytes=10000 * 8 * 5,
+                estimated_compute_ms=10.0,
+                estimated_memory_bytes=10000 * 8 * 5,
             ),
         ]
 
@@ -468,7 +467,7 @@ class TestAdaptiveLearning:
         # Record consistent higher costs
         for _ in range(20):
             selector.record_actual_cost(
-                backend=PhysicalBackend.POLARS_EAGER,
+                backend=PhysicalBackend.POLARS_PANEL,
                 scale=DataScale.LARGE,
                 profile=OperatorProfile.CROSS_SECTION_HEAVY,
                 actual_cost_ms=200.0,  # Consistently higher
@@ -476,7 +475,7 @@ class TestAdaptiveLearning:
 
         # Adjustment factor should increase
         original_factor = 1.0
-        current_factor = selector._adjustment_factors.get(PhysicalBackend.POLARS_EAGER, 1.0)
+        current_factor = selector._adjustment_factors.get(PhysicalBackend.POLARS_PANEL, 1.0)
         # Should be adjusted (either up or down depending on baseline)
         assert current_factor > 0
 

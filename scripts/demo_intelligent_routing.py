@@ -179,7 +179,7 @@ def demo_adaptive_learning():
     selector = IntelligentBackendSelector(enable_adaptive_learning=True)
 
     print("\n初始调整系数:")
-    for backend in [PhysicalBackend.PANDAS_NUMPY, PhysicalBackend.POLARS_EAGER]:
+    for backend in [PhysicalBackend.PANDAS_NUMPY, PhysicalBackend.POLARS_PANEL]:
         factor = selector._adjustment_factors.get(backend, 1.0)
         print(f"  {backend.value}: {factor:.3f}")
 
@@ -187,14 +187,14 @@ def demo_adaptive_learning():
     print("\n模拟 20 次实测（Polars 实测比预期慢 20%）...")
     for _ in range(20):
         selector.record_actual_cost(
-            backend=PhysicalBackend.POLARS_EAGER,
+            backend=PhysicalBackend.POLARS_PANEL,
             scale=DataScale.LARGE,
             profile=OperatorProfile.CROSS_SECTION_HEAVY,
             actual_cost_ms=60.0,  # 假设预期是 50ms
         )
 
     print("\n更新后调整系数:")
-    for backend in [PhysicalBackend.PANDAS_NUMPY, PhysicalBackend.POLARS_EAGER]:
+    for backend in [PhysicalBackend.PANDAS_NUMPY, PhysicalBackend.POLARS_PANEL]:
         factor = selector._adjustment_factors.get(backend, 1.0)
         change = (factor - 1.0) * 100
         print(f"  {backend.value}: {factor:.3f} ({change:+.1f}%)")
