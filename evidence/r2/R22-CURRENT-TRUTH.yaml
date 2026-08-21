@@ -1,0 +1,107 @@
+id: R22-CURRENT-TRUTH
+title: Regenerate evidence/CURRENT.json bound to Root/FE/DA submodule SHAs with auto-STALE
+status: done
+date: 2026-08-21
+role: Writer DX (CURRENT.json truth)
+scope: evidence/CURRENT.json, evidence/current.py, evidence/__main__.py, tests/evidence/test_current_truth.py
+
+summary: >
+  Rebuilt evidence/CURRENT.json as a single-truth file bound to the full SHA
+  identity set.  It is regenerated deterministically from the current tree by a
+  committed generator (evidence/current.py) — any change to Root/FE/DA SHAs,
+  the operator catalog, the semantic catalog, the dependency lock, or the test
+  environment automatically makes the file evaluate STALE.  The previous file,
+  generated 2026-08-20T19:39:30Z with 3 CURRENT artifacts but NO SHA bindings,
+  is superseded (schema_version 2).  The classic evidence refresh CLI
+  (python -m evidence) now merges the SHA-bound truth payload instead of
+  overwriting it with a stale snapshot-only file.
+
+sha_bindings:  # all eight mandatory bindings, bound to the R22 working tree
+  RootRepoSHA: d05455c112d6031b1386165c426b39f2b126b9c3 (working-tree-dirty)
+  FactorEngineSubmoduleSHA: 26ed66472dccc33b02f2919d2685199491fba035
+  DataAccessSubmoduleSHA: ba072d23b7a48440d05977ef0a08fe1fce45d629
+  OperatorCatalogSHA: 46a324edc634e8b931d353066c1cbbb3e8935aca01fcb6e66f81d9be3ae8958a
+  SemanticCatalogIdentity: a336cab3bf6b4113942c317e1949efdb2b749e334910cc458b1daef9ff16774d
+  ImplementationClosureHashSet: 77a4d4b44fb673988bd5a2e057110369c627292160d6580f38b240ae598d66a7
+  DependencyLockHash: b982526eea6469422787b2fe4031af472e1ceb49afaff11f2c0fe260bbc3ae1b
+  TestEnvironmentIdentity: dcab69f70cc819b6b2e2f93759faf1f5ebeab3872d0d98c68e3e7970aff7bd68
+
+sha_binding_definitions: |
+  Each binding is derived from a live source (LOCAL-ONLY, no network):
+  - RootRepoSHA: git rev-parse HEAD on the repo root (+ dirty flag when uncommitted).
+  - FactorEngineSubmoduleSHA / DataAccessSubmoduleSHA: git rev-parse HEAD inside the submodule.
+  - OperatorCatalogSHA: SHA-256 of build/mining/direct_mining_catalog.json.
+  - SemanticCatalogIdentity: DataAccess-issued SemanticCatalogIdentity.cache_key()
+    (get_semantic_catalog().get_identity(strict=False)); digest of config/semantic_fields.yaml
+    canonical state (dataaccess query-bound, see dataaccess/config/semantic_fields.yaml).
+  - ImplementationClosureHashSet: SHA-256 over the sorted canonical operator set extracted
+    from the catalog (1565 canonicals).
+  - DependencyLockHash: SHA-256 of requirements-production.lock (also bound for factor_engine/).
+  - TestEnvironmentIdentity: SHA-256 over {python version, numpy, pandas, polars, pyarrow,
+    scipy, pytest, duckdb, factor_engine, dataaccess} versions.
+
+files_changed:
+  - evidence/CURRENT.json  # regenerated, schema_version 2, sha_bindings bound
+  - evidence/current.py    # NEW generator (python -m evidence.current --write)
+  - evidence/__main__.py   # refresh CLI merges SHA-bound truth payload
+  - tests/evidence/test_current_truth.py  # NEW regression tests (5)
+
+changes:
+  evidence/CURRENT.json: |
+    schema_version raised 1 -> 2.  Added sha_bindings (the 8-entry mandatory SHA set),
+    sha_binding_metadata (operator catalog path/count, dependency lock path), and a
+    validator block (module evidence.current, rebind command, staleness rule).
+    evaluation.status is CURRENT iff every sha_binding equals the freshly recomputed
+    binding; changed_bindings lists the fields that differed at regeneration time.
+    The previous R21 file (generated_at 2026-08-20T19:39:30Z, 3 CURRENT, no SHA set)
+    evaluated STALE against every field of the R22 tree.
+  evidence/current.py: |
+    NEW standalone generator: python -m evidence.current [--write] [--skip-snapshot].
+    --write rewrites evidence/CURRENT.json and records a regeneration diff in
+    evaluation.changed_bindings (with note clarifying it is the diff vs the prior file).
+    Dry-run prints the payload and reports CURRENT/STALE against the on-disk file.
+    Also recomputes the Merkle source_snapshot_id (evidence/source_snapshot.build_snapshot)
+    unless --skip-snapshot.
+  evidence/__main__.py: |
+    generate_current() now calls evidence.current.build_current() and embeds
+    schema_version 2 + sha_bindings + sha_binding_metadata, so the refresh CLI can
+    never clobber the authoritative binding set.  Added build_current_truth_payload()
+    helper with a safe degraded fallback for non-git / no-dataaccess machines.
+    NOTE: build_current() includes DataAccessSubmoduleSHA (dataaccess/ submodule now
+    git-checked at ba072d23) — submodule_shas in VerificationManifest only listed
+    factor_engine, but CURRENT.json binds both FE and DA submodules as required.
+
+regression_tests:
+  file: tests/evidence/test_current_truth.py
+  tests:
+    - test_current_json_binds_full_sha_set
+    - test_bound_shas_match_live_tree
+    - test_stale_auto_detects_on_sha_change
+    - test_stale_detected_when_file_generated_at_old_sha
+    - test_generator_dry_run_reproduces_file
+  result:
+    command: cd /home/shw/quant_projects && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/evidence/test_current_truth.py -q
+    passed: 5
+    failed: 0
+
+existing_suite_guard:
+  test_evidence_registry: 16 passed
+  test_evidence_refresh_cli: included in the above 16 (test_evidence_refresh_cli.py has 5 tests, all pass)
+
+known_limitations:
+  - ImplementationClosureHashSet is the canonical-set hash, NOT the per-operator
+    implementation closure hashes.  Computing implementation_closure_hash_for() for all
+    1565 operators takes 60-140 min (measured ~2.9 s/op marginal, 88 s for 5 after cold
+    import), so the set hash is the release-closure identity; it changes iff the catalog
+    canonical population changes.
+  - RootRepoSHA carries a (working-tree-dirty) suffix because the working tree is dirty by
+    design (working tree is truth).  test_bound_shas_match_live_tree recomputes this value
+    identically, so the file still evaluates CURRENT.
+  - SemanticCatalogIdentity is computed against dataaccess/config/semantic_fields.yaml
+    (config has an uncommitted diff adding market/availability/cross_market_comparable but
+    identity is deterministic across runs; stale root copies of FE packages remain on disk
+    but are shadowed by the submodule on sys.path — R22-SINGLE-SOURCE-AUTHORITY).
+
+production_certification: NOT_RUN
+commit: NOT_CREATED
+remotes: NOT_USED

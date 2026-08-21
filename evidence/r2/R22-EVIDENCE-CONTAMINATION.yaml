@@ -1,0 +1,114 @@
+# R22-EVIDENCE-CONTAMINATION
+# Production evidence discovery must never read _test_certified/fixtures/tests/synthetic.
+# Date: 2026-08-21
+# Author: Writer ED (evidence contamination)
+
+id: R22-EVIDENCE-CONTAMINATION
+title: "Separate test-certified/synthetic evidence from production evidence discovery"
+type: evidence
+created: 2026-08-21
+author: Claude Code (Writer ED)
+
+# Summary
+summary: |
+  `evidence/r2/_test_certified/` contains 264 PASS-looking artifacts (q_version
+  4.1, pykx 2.6.0, executed=true, status=PASS) that look like real evidence but
+  are test fixtures, generated on demand by
+  `tests/q_backend/q_certified_compiler.py` so the Q region-executor tests can
+  exercise the production compile path without a live q runtime.  Production
+  evidence discovery now excludes every `_test_certified/` / `fixtures/` /
+  `tests/` / `synthetic/` subtree from recursive evidence scans.
+
+# Root cause
+root_cause: |
+  The test-certified fixtures were committed under `evidence/r2/_test_certified/`
+  and matched the same `.json`/`.py` discovery patterns as production evidence.
+  A generic recursive evidence loader (dirty-tree hash, TCB tree hash, source
+  snapshot, recipe source tree hash) would silently fold these synthetic PASS
+  artifacts into production evidence digests, contaminating provenance binding.
+
+# Fix
+fix: |
+  Added a single exclusion authority plus explicit recursive-scan exclusions:
+
+  - `backend/evidence_provenance.py`:
+    - `EVIDENCE_EXCLUDED_DIRS = {"_test_certified", "fixtures", "tests", "synthetic"}`
+    - `evidence_path_excluded(path, *, root=None)` — every path whose components
+      (relative to the hashed root) contain an excluded dir name is not
+      production evidence.  Root-relative so deliberate test-binding hashes
+      (e.g. `_tree_hash(tests/backend_parity)`, golden-data dirs used by
+      `test_source_hash` / `golden_data_hash`) keep working, while whole-repo
+      production discovery still skips them.
+    - `_tracked_tree_files(..., root)` now filters via `evidence_path_excluded`.
+  - `backend/recipe_evidence.py`: `_hash_tree` filters `factor_recipes` *.py with
+    the same predicate.
+  - `evidence/source_snapshot.py`: `EXCLUDE_DIRS` now includes `_test_certified`,
+    `fixtures`, `synthetic`.
+
+  Guard regression tests: `tests/evidence/test_evidence_contamination.py`
+  (9 tests) asserting production discovery returns zero artifacts from
+  `_test_certified/`, the exclusion predicate covers the required names, golden
+  / test-binding tree hashes are unaffected, and the source-snapshot walk skips
+  fixture subtrees.
+
+  Follow-on: removed the lone `ts_beta` declaration from
+  `QPhysicalImplementationRegistry._DECLARED_TARGETS` because the compiler has no
+  `ts_beta` lowering (it is quarantined — see
+  `test_q_compatibility_contract.py::test_ts_beta_is_quarantined_instead_of_returning_final_window_scalar`).
+  This restored the 66==66 declared/lowering equality and the
+  `Q_CAPABILITY_SINGLE_AUTHORITY` hard gate, and the committed assembly-scale
+  declaration was itself a false-positive declaration gap that the exclusion
+  would otherwise surface as a production capability mismatch.
+
+# Files
+files:
+  - path: backend/evidence_provenance.py
+    changes:
+      - Added EVIDENCE_EXCLUDED_DIRS + evidence_path_excluded().
+      - _tracked_tree_files now excludes test-certified/fixture/synthetic paths.
+  - path: backend/recipe_evidence.py
+    changes:
+      - _hash_tree skips excluded subtrees.
+  - path: evidence/source_snapshot.py
+    changes:
+      - EXCLUDE_DIRS += _test_certified, fixtures, synthetic.
+  - path: backend/q_backend/q_physical_implementation_registry.py
+    changes:
+      - Removed declared-but-unlowered ts_beta from _DECLARED_TARGETS.
+  - path: tests/q_backend/test_q_capability_evidence.py
+    changes:
+      - declared/lowering count 67 -> 66 (matches the compiler authority).
+  - path: tests/evidence/test_evidence_contamination.py
+    changes:
+      - New 9-test guard module.
+
+# Tests
+tests:
+  - python3 -m pytest tests/evidence/test_evidence_contamination.py -v -> 9 passed
+  - python3 -m pytest tests/test_evidence_registry.py tests/evidence/test_evidence_refresh_cli.py -q -> 16 passed
+  - python3 -m pytest tests/q_backend/test_q_capability_evidence.py tests/q_backend/test_q2_p0_001_005_gates.py tests/q_backend/test_q_compatibility_contract.py tests/q_backend/test_q_physical_region_executor.py -q -> 92 passed
+  - python3 -m pytest tests/q_backend/test_q_capability_evidence.py tests/q_backend/test_q2_p0_001_005_gates.py tests/q_backend/test_q_compatibility_contract.py tests/q_backend/test_q_physical_region_executor.py tests/backend/test_primitive_evidence_contract.py -q -> 97 passed
+
+# Verification
+verification:
+  production_discovery_test_certified_artifacts: 0
+  tracked_files_after_exclusion: 22074
+  tracked_files_before_exclusion: 29209
+  _test_certified_files_tracked_excluded: 264
+  serial: true
+  xdist: false
+  thread_env: "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1"
+
+# Limitations
+limitations: |
+  `evidence/r2/_test_certified/` remains on disk (and git-tracked) because the
+  Q region-executor tests regenerate the fixtures idempotently.  Discovery is
+  now guaranteed to skip it.  The committed primitive/factor evidence artifact
+  was already stale on this tree (239 validation errors: bridge_parameter_hash /
+  test_source_hash / golden_data_hash mismatches); those pre-existed this change
+  and are unrelated to exclusion (they also fail for explicit test-binding roofs
+  that are exclusion no-ops).  `tests/q_backend/test_q_backend.py` capability
+  tests fail because they expect the legacy manual native set while production
+  capability is now evidence-backed and fail-closed (validation_context missing
+  until a certified compiler fixture is installed) — pre-existing, not caused by
+  this change.

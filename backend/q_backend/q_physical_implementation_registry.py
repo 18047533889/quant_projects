@@ -338,7 +338,7 @@ class QPhysicalImplementationRegistry:
         "floor", "greater", "greater_equal", "last", "lag", "less", "less_equal",
         "log", "log1p", "max", "mean", "median", "min", "multiply", "negate",
         "not_equal", "pct_change", "power", "product", "rank", "round", "sign",
-        "sma", "sqrt", "std", "subtract", "sum", "ts_beta", "ts_corr",
+        "sma", "sqrt", "std", "subtract", "sum", "ts_corr",
         "ts_count", "ts_cov", "ts_cummax", "ts_cummin", "ts_cumprod", "ts_cumsum",
         "ts_diff", "ts_max", "ts_mean", "ts_min", "ts_returns", "ts_std", "ts_sum",
         "var", "wma", "where", "clip",

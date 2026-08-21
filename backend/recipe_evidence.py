@@ -41,6 +41,12 @@ def _hash_tree(root: Path) -> str:
     for path in sorted(root.rglob("*.py")):
         if "__pycache__" in path.parts:
             continue
+        # R22-EVIDENCE-CONTAMINATION: never hash test-certified / fixture /
+        # synthetic subtrees as production evidence.
+        from backend.evidence_provenance import evidence_path_excluded
+
+        if evidence_path_excluded(path, root=root):
+            continue
         digest.update(str(path.relative_to(root)).encode())
         digest.update(path.read_bytes())
     return digest.hexdigest()

@@ -17,6 +17,41 @@ FE_ROOT = Path(__file__).resolve().parents[1]
 CASE_REGISTRY_JSON = FE_ROOT / "evidence" / "primitive_case_registry.json"
 VERIFIED_JSON = FE_ROOT / "evidence" / "primitive_verified.json"
 
+#: R22-EVIDENCE-CONTAMINATION: test-certified fixture artifacts live inside the
+#: evidence tree but are NOT production evidence.  They are generated on demand
+#: by ``tests/q_backend/q_certified_compiler.py`` with a synthetic git sha and a
+#: PASS status so Q region-executor tests can exercise the production compile
+#: path without a live q runtime.  They must never feed production evidence
+#: discovery (dirty-tree / TCB / golden hashes), so every recursive evidence
+#: tree walk excludes these directory names.  Production evidence lives in
+#: ``evidence/r2/`` as committed YAML/JSON, never under these fixture dirs.
+EVIDENCE_EXCLUDED_DIRS: frozenset[str] = frozenset(
+    {"_test_certified", "fixtures", "tests", "synthetic"}
+)
+
+
+def evidence_path_excluded(path: Path, *, root: Path | None = None) -> bool:
+    """Return True when *path* is a test-certified / fixture / synthetic artifact.
+
+    Production evidence discovery must never recursively read these subtrees:
+    they contain PASS-looking artifacts (q_version 4.1, pykx 2.6.0,
+    executed=true) that are test fixtures, not production evidence.
+
+    Exclusion is evaluated **relative to the hash root** so deliberate
+    test-binding hashes keep working: ``_tree_hash(FE_ROOT / "tests" /
+    "backend_parity", ...)`` hashes ``tests/backend_parity/…`` files (relative
+    components contain no excluded dir), while a whole-tree production discovery
+    scan (root = FE_ROOT) sees ``tests/backend_parity`` as an intermediate
+    component and skips it.
+    """
+    base = (root or FE_ROOT).resolve()
+    try:
+        relative = path.resolve().relative_to(base)
+    except ValueError:
+        # Path escapes the hashed root: fail closed for discovery safety.
+        return True
+    return any(part in EVIDENCE_EXCLUDED_DIRS for part in relative.parts)
+
 
 def current_commit_sha() -> str:
     try:
@@ -357,7 +392,18 @@ def _tree_hash(root: Path, patterns: tuple[str, ...] = ("*.py", "*.json", "*.csv
 
 
 def _tracked_tree_files(root: Path, patterns: tuple[str, ...]) -> set[Path]:
-    """Return only version-controlled semantic inputs below ``root``."""
+    """Return only version-controlled semantic inputs below ``root``.
+
+    R22-EVIDENCE-CONTAMINATION: test-certified / fixture / synthetic artifacts
+    (notably ``evidence/r2/_test_certified/``) are excluded from recursive
+    discovery so they can never pollute production evidence hashes.
+    """
+    def _allowed(path: Path) -> bool:
+        # Relative to the hashed root so explicit test-binding tree hashes
+        # (e.g. ``tests/backend_parity``) keep working while whole-repo
+        # production discovery still skips test/fixture/synthetic subtrees.
+        return not evidence_path_excluded(path, root=root)
+
     try:
         repo_root = FE_ROOT.parent.resolve()
         relative_root = root.resolve().relative_to(repo_root)
@@ -371,7 +417,9 @@ def _tracked_tree_files(root: Path, patterns: tuple[str, ...]) -> set[Path]:
             for item in raw.decode("utf-8").split("\0")
             if item
             for path in [(repo_root / item).resolve()]
-            if path.is_file() and any(path.match(pattern) for pattern in patterns)
+            if path.is_file()
+            and any(path.match(pattern) for pattern in patterns)
+            and _allowed(path)
         }
     except (OSError, subprocess.SubprocessError, UnicodeError, ValueError):
         files: set[Path] = set()
@@ -379,7 +427,7 @@ def _tracked_tree_files(root: Path, patterns: tuple[str, ...]) -> set[Path]:
             files.update(
                 path
                 for path in root.rglob(pattern)
-                if "__pycache__" not in path.parts
+                if "__pycache__" not in path.parts and _allowed(path)
             )
         return files
 

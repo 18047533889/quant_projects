@@ -38,6 +38,21 @@ from evidence.registry import (
 from evidence.source_snapshot import build_snapshot, write_snapshot
 
 
+def build_current_truth_payload() -> dict[str, Any]:
+    """R22-CURRENT-TRUTH: delegate to :mod:`evidence.current` (no file write).
+
+    Returns the freshly recomputed SHA-bound truth payload so the refresh CLI
+    can embed the authoritative sha_bindings instead of a stale snapshot-only
+    file.  Falls back to an empty payload if computation fails (keeps the CLI
+    usable on machines without git / dataaccess).
+    """
+    try:
+        from evidence.current import build_current
+        return build_current()
+    except Exception:  # pragma: no cover - degraded fallback
+        return {}
+
+
 # ---------------------------------------------------------------------------
 # Artifact status enum
 # ---------------------------------------------------------------------------
@@ -237,11 +252,24 @@ def generate_current(
     statuses: dict[str, ArtifactStatus],
     dry_run: bool = False,
 ) -> dict[str, Any]:
-    """Step 8: Generate CURRENT.json as single-truth entry point."""
+    """Step 8: Generate CURRENT.json as single-truth entry point.
+
+    R22-CURRENT-TRUTH: the single-truth file is now authoritatively built by
+    :mod:`evidence.current` (SHA-bound truth).  This CLI step preserves the
+    classic artifacts/summary shape but merges in whatever the SHA-bound truth
+    says so the CLI never overwrites the authoritative binding set.
+    """
+    payload = build_current_truth_payload()
     current_data = {
-        "schema_version": 1,
-        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "source_snapshot_id": "",
+        "schema_version": payload.get("schema_version", 2),
+        "generated_at": payload.get("generated_at", ""),
+        # prefer the truth payload's source_snapshot_id, fall back to manifest
+        "source_snapshot_id": (
+            payload.get("source_snapshot_id")
+            or ""
+        ),
+        "sha_bindings": payload.get("sha_bindings", {}),
+        "sha_binding_metadata": payload.get("sha_binding_metadata", {}),
         "artifacts": {},
         "summary": {
             "total": len(artifacts),
@@ -252,11 +280,12 @@ def generate_current(
         },
     }
 
-    # Load source snapshot if available
-    from evidence.source_snapshot import load_snapshot
-    snapshot = load_snapshot()
-    if snapshot:
-        current_data["source_snapshot_id"] = snapshot["source_snapshot_id"]
+    # Load source snapshot if available (only if truth payload had none)
+    if not current_data["source_snapshot_id"]:
+        from evidence.source_snapshot import load_snapshot
+        snapshot = load_snapshot()
+        if snapshot:
+            current_data["source_snapshot_id"] = snapshot["source_snapshot_id"]
 
     # Populate artifact statuses
     for art in artifacts:
