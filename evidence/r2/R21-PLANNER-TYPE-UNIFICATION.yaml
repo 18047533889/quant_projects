@@ -1,0 +1,121 @@
+# R21-PLANNER-TYPE-UNIFICATION Evidence
+# Writer DA: Eliminate the dual Physical Planner type systems
+# Date: 2026-08-21
+# Git SHA: c15fbcb7c719a2277e8b2c72f83d654612a49323 (working tree is truth)
+
+task:
+  id: R21-PLANNER-TYPE-UNIFICATION
+  mission: "Eliminate the dual Physical Planner type systems — planner/backend_region.py AND planning/backend_region.py."
+  status: COMPLETED_LOCAL
+  timestamp: "2026-08-21"
+  git_sha: c15fbcb7c719a2277e8b2c72f83d654612a49323
+  commit: "R21 batch 17: planner type unification (Writer DA, committed)"
+
+problem:
+  "planning/backend_region.py defined its own PhysicalBackend/Representation/
+  StateContract/BackendRegion with incompatible enum values
+  (POLARS_LAZY/POLARS_EAGER/Q_TABLE/ARROW_COMPUTE/NUMBA_CPU) versus the
+  planner/backend_region.py physical ABI (PANDAS_NUMPY/POLARS_PANEL/
+  POLARS_LONG/DUCKDB_SQL/CLICKHOUSE_SQL/Q_KDB). The dual type systems caused
+  cross-module type confusion: a BackendRegion produced by planning code could
+  not be consumed by planner/runtime code, and planning enum values (e.g.
+  NUMBA_CPU, ARROW_COMPUTE) leaked into physical planning as if they were
+  execution backends."
+
+root_cause:
+  "1. planning/backend_region.py duplicated the physical ABI with different
+     enum values instead of re-exporting the single authority.
+  2. POLARS_LAZY / POLARS_EAGER / Q_TABLE were backend identities that did not
+     exist on the canonical PhysicalBackend; Q_TABLE collided with a
+     Representation value.
+  3. NUMBA_CPU was modeled as a backend, but Numba is an Accelerator
+     (backend.contracts.Accelerator.NUMBA_CPU, ExecutionKind.NUMBA_CPU_KERNEL).
+  4. ARROW_COMPUTE was modeled as a backend, but Arrow is an interchange
+     Representation (Representation.ARROW_TABLE)."
+
+fix:
+  "1. planning/backend_region.py is now a re-export shim of
+     planner.backend_region (the single physical ABI authority). No physical
+     types are defined there; everything is imported from planner.backend_region.
+     PhysicalProperty alias (MB-P2-002 name) maps to PhysicalProperties so
+     planning/transfer_edge.py and planning consumers keep working.
+  2. planning/backend_selector.py: removed the NUMBA_CPU BackendCharacteristics
+     entry and the JIT cost-model branch in _evaluate_costs; POLARS_EAGER and
+     POLARS_LAZY characteristic entries now key on the canonical
+     POLARS_PANEL/POLARS_LONG; conversion cost matrix updated to unified enums;
+     the Numba JIT cost capability fields (cold_jit_ms/warm_ms/
+     cache_hit_probability) remain optional BackendCharacteristics fields
+     (defaulted to 0.0) for future accelerator-aware cost modeling.
+  3. planning/hybrid_execution_planner.py: backend_map/repr_map and candidate
+     backend list now use only unified PhysicalBackend members; BackendRegion/
+     TransferEdge construction uses the single-authority dataclass fields
+     (estimated_compute_ms / estimated_memory_bytes).
+  4. planning/region_optimizer.py: _infer_representation maps only unified
+     backends (PANDAS_NUMPY/POLARS_PANEL/POLARS_LONG/DUCKDB_SQL/
+     CLICKHOUSE_SQL/Q_KDB); BackendRegion construction adapted to the
+     single-authority dataclass.
+  5. planning/physical_region_plan.py: region byte/memory field reads adapted
+     to the unified BackendRegion (estimated_memory_bytes, streaming_capable,
+     required_properties None-safe)."
+  constraints:
+    - "KEPT IT SMALL: no refactor beyond the re-export shim and the minimal
+       enum/candidate alignment; planning.backend_region module kept (re-export)."
+    - "LOCAL ONLY: working tree is truth; no git checkout/restore/stash/reset."
+
+owned_files:
+  - planning/backend_region.py
+  - planning/backend_selector.py
+  - planning/hybrid_execution_planner.py
+  - planning/region_optimizer.py
+  - planning/physical_region_plan.py
+  - scripts/demo_intelligent_routing.py
+  - tests/planning/test_backend_selector.py
+  - tests/planning/test_planner_optimization_benchmark.py
+  - tests/planning/test_planner_type_unification.py
+  - tests/backend/test_r21_numba_cost_model.py
+  - evidence/r2/R21-PLANNER-TYPE-UNIFICATION.yaml
+
+tests_created:
+  file: tests/planning/test_planner_type_unification.py
+  test_classes:
+    - TestImportsResolve        # planner + planning backend_region both import; ExecutionAxis re-export identity
+    - TestNoDualAbi             # PhysicalBackend/Representation/StateContract/BackendRegion/PhysicalProperty are the SAME class
+    - TestNumbaAndArrowNotBackends  # NUMBA_CPU / ARROW_COMPUTE not on PhysicalBackend; Numba=Accelerator; Arrow=Representation
+  total_tests: 13
+
+commands_run:
+  - "PYTHONPATH=. OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 .venv/bin/python -m pytest tests/planning/test_planner_type_unification.py -v -q -> 13 passed (serial, no xdist)"
+  - "same env: pytest tests/planning/test_planner_type_unification.py tests/backend/test_r21_numba_cost_model.py tests/planning/test_backend_selector.py -q -> 40 passed"
+  - "same env: pytest tests/test_q_physical_backend.py tests/test_resource_fixes.py tests/multibackend/test_p0_001_006.py tests/multibackend_integration/test_region_optimizer.py tests/multibackend_integration/test_backend_execution.py -q -> 51 passed"
+  - "same env: import smoke -> planner.backend_region + planning.backend_region identity; runtime.multibackend.batch_global_optimizer / batch_transfer_optimizer / native_buffer_store / runtime.engine / planning.* all import OK"
+
+gates:
+  type_unification: "13 passed"
+  numba_cost_model: "6 passed (Numba = Accelerator, NOT backend)"
+  backend_selector: "21 passed"
+  q_physical_backend_resource_fixes: "passed"
+  p0_001_006_region_optimizer_backend_execution: "passed"
+  broad_regression: "51 passed (subset)"
+  representation_transfer_cost_estimation: "NOT_RUN (pre-existing TypeError in test suite calling estimate_transfer_cost_ms with estimated_memory_bytes; planner ABI parameter is estimated_bytes — unrelated to this change)"
+  benchmark_complex_dag: "NOT_RUN (pre-existing hang in test_dp_pruning_effectiveness / test_complex_dag_optimization at 100-node DP)"
+  ci: "NOT_RUN"
+  production: "NOT_RUN"
+
+known_limitations:
+  - "tests/multibackend_integration/test_representation_transfer.py and
+     tests/multibackend_integration/test_end_to_end.py call the planner ABI
+     with stale signatures (estimated_memory_bytes / missing transform arg).
+     These are pre-existing call-site mismatches with the planner ABI, NOT part
+     of the type-unification re-export shim; they fail on the same errors at
+     the recorded HEAD SHA and are out of scope for this small change."
+  - "tests/planning/test_planner_optimization_benchmark.py has pre-existing
+     hangs in TestRegionOptimizerBenchmark (test_dp_pruning_effectiveness,
+     test_complex_dag_optimization); the fast subset
+     (TestBackendSelectorBenchmark + TestCostModelBenchmark) passes."
+  - "No production gate / CI / full-suite run in this local-only change."
+  - "NUMBA_CPU cost-model tests were rewritten to assert the corrected
+     invariant (Numba = Accelerator) and to keep the TTDC integration check
+     without depending on a NUMBA_CPU PhysicalBackend."
+
+status: LOCAL_FOCUSED_TESTED
+production_certification: NOT_RUN

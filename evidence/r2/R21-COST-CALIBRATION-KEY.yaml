@@ -1,0 +1,129 @@
+# R21-COST-CALIBRATION-KEY — 校准 key 绑定完整身份 + 时钟/持久化修复
+# Generated: 2026-08-21
+
+id: R21-COST-CALIBRATION-KEY
+slice: R21-COST-CALIBRATION-KEY — bind cost calibration key to full identity; fix clock/persistence
+campaign: CostModel calibration (R21; LOCAL ONLY, working tree is truth)
+timestamp: "2026-08-21"
+status: COMPLETED_LOCAL
+role: Writer DH (cost calibration)
+head_sha: "working-tree"
+
+owned_files:
+  - runtime/multibackend/cost_model_calibrator.py      # full-identity CalibrationKey + UTC wall-clock + atomic write + process lock + run-mode namespace
+  - runtime/resource_calibration_store.py              # ShapeCalibration.updated_at_ms → UTC wall-clock; atomic write + process lock for save(); restored updated_at_ms on load
+  - tests/runtime/test_r21_cost_calibration_key.py     # 16 regression tests (serial, no xdist, thread env restored)
+  - evidence/r2/R21-COST-CALIBRATION-KEY.yaml          # this file
+  - factor_engine/runtime/multibackend/cost_model_calibrator.py  # submodule mirror (identical)
+  - factor_engine/runtime/resource_calibration_store.py          # submodule mirror (identical)
+
+problem:
+  "CostModel calibration key was only (backend, operator, shape) — measurements
+  from different physical implementations (PI-ID), builds, machines (CPU model /
+  cores / threads), backend versions, representations, dtypes, or markets silently
+  shared one calibration model.  Persistent calibration timestamps were
+  time.monotonic() (boot-relative), meaningless across processes/restarts.
+  Calibration persistence used a bare open/write with no atomicity or process
+  lock, so concurrent writers could tear/corrupt the file."
+
+root_cause:
+  "runtime/multibackend/cost_model_calibrator.py keyed _observations/_models on
+  (backend, operator, shape_key) tuples and stamped observations/models with
+  time.monotonic()*1000 (MB-P1-017).  _save_to_disk did json.dump(open(path,'w'))
+  with no tmp+rename and no lock.  runtime/resource_calibration_store.py also
+  wrote ShapeCalibration.updated_at_ms = time.monotonic()*1000 and save() wrote
+  parquet/json directly to the target path."
+
+fix:
+  "1. New frozen CalibrationKey binds 12 dimensions: pi_id, build, cpu_model,
+  cores, threads, backend_version, representation, dtype, market + backend,
+  operator, shape_key.  to_key() = stable '|' string; digest() = full 256-bit
+  SHA-256.  _build_calibration_key() resolves identities: PI-ID via
+  OperatorRegistry + backend.operator_capability._declared_physical_spec
+  (best-effort, 'unknown' on failure), build via factor_engine==version[@git
+  sha], CPU model/cores via platform + runtime.resource_governor
+  effective_cpu_slots, threads from POLARS_MAX_THREADS / DUCKDB_THREADS /
+  OMP_NUM_THREADS (then cores), backend version from the imported module,
+  market from FACTOR_ENGINE_MARKET env or storage.trading_calendar.infer_market.
+  2. Calibration schema_version bumped to 2; old v1 files (triple-key +
+  monotonic timestamps) are not loaded (fail-closed).
+  3. All persisted timestamps are UTC wall-clock: CostObservation.timestamp_ms,
+  CalibratedCostModel.last_updated_ms, ShapeCalibration.updated_at_ms (now
+  restored on ResourceCalibrationStore load).  time.monotonic() remains only for
+  in-process throttle and lock timeout (never persisted).
+  4. Atomic write + process lock: _save_to_disk writes to .tmp then os.replace,
+  guarded by O_EXCL .lock file (skip-on-busy, fail-closed).  ResourceCalibrationStore.save
+  uses the same _CalibrationAtomicWrite context (parquet or JSON fallback).  Lock
+  contention on save raises RuntimeError (calibration is performance data; the
+  cost calibrator's _save_to_disk skips without raising).
+  5. research/production calibration namespace isolation:
+  default_calibration_path() = ~/.cache/factor_engine/calibration/<run_mode>/
+  cost_calibration.json (FACTOR_ENGINE_CACHE_DIR override honored)."
+
+commands_run:
+  - "OPENBLAS/OMP/MKL/POLARS=1 .venv/bin/python -m pytest tests/runtime/test_r21_cost_calibration_key.py -q -> 16 passed"
+  - "OPENBLAS/OMP/MKL/POLARS=1 .venv/bin/python -m pytest tests/runtime/test_r21_cost_calibration_key.py tests/multibackend/ tests/r38/test_task_calibration_truth.py tests/runtime/test_calibration_fixes_p0_019_020_027.py tests/runtime/test_calibration_governor_integration.py tests/r36/test_r36_hard_gates_2026_08.py -q -> 93 passed (serial, no xdist)"
+
+results:
+  key_dimensions:
+    - "pi_id (PhysicalImplementationID, best-effort resolve)"
+    - "build (factor_engine==version[@git sha])"
+    - "cpu_model"
+    - "cores (effective_cpu_slots)"
+    - "threads (POLARS_MAX_THREADS/DUCKDB_THREADS/OMP_NUM_THREADS then cores)"
+    - "backend_version"
+    - "representation"
+    - "dtype"
+    - "market"
+    - "backend / operator / shape_key (legacy triple)"
+  schema_version: 2
+  timestamp_source: "UTC wall-clock (datetime.now(timezone.utc)) — persisted only"
+  monotonic_remaining: "in-process update throttle + lock timeout only, never persisted"
+  persistence: "atomic write (.tmp + os.replace) + O_EXCL process lock (.lock)"
+  namespace_isolation:
+    research: "~/.cache/factor_engine/calibration/research/cost_calibration.json"
+    production: "~/.cache/factor_engine/calibration/production/cost_calibration.json"
+  tests:
+    total: 16
+    passed: 16
+    failed: 0
+    skipped: 0
+  regression_coverage:
+    - "different PI-ID -> different calibration key (observations not shared)"
+    - "threads env var (POLARS_MAX_THREADS) change -> different key"
+    - "representation / dtype / market change -> different key"
+    - "backend version / CPU model / cores / build bound into key"
+    - "key backend lowercased + stable digest (full 256-bit)"
+    - "CostObservation.timestamp_ms is UTC wall-clock (epoch ms, not monotonic)"
+    - "persisted model last_updated_ms is UTC wall-clock"
+    - "ResourceCalibrationStore persisted updated_at_ms is UTC wall-clock and restored on load"
+    - "save leaves no .tmp/.lock leftover; schema v2 round trip"
+    - "old schema (v1) file rejected (not loaded)"
+    - "process lock busy -> fail-closed RuntimeError (no silent overwrite)"
+    - "research/production default calibration paths are distinct"
+
+guards_in_tests:
+  - "test_key_binds_pi_id"
+  - "test_key_binds_threads_env"
+  - "test_key_binds_representation_dtype_market"
+  - "test_key_binds_backend_version_and_cpu"
+  - "test_cost_observation_timestamp_is_wall_clock"
+  - "test_persisted_model_timestamp_is_wall_clock"
+  - "test_resource_shape_calibration_timestamp_is_wall_clock"
+  - "test_save_round_trip_schema_v2"
+  - "test_old_schema_file_rejected"
+  - "test_process_lock_busy_fails_closed"
+  - "test_default_calibration_path_run_mode_namespaced"
+
+notes:
+  - "KEEP IT SMALL: key + timestamp fix only.  No new call sites were wired into
+    the scheduler — the cost calibrator remains standalone (as before)."
+  - "Existing operator _physical_spec declarations still carry legacy label
+    strings for implementation_source_hash (not real SHA-256), so PI-ID resolve
+    returns 'unknown' for most operators; the key binds 'unknown' deterministically
+    and still separates by backend/operator/shape.  When the closure hash backfill
+    lands, PI-IDs automatically become distinct in the key."
+  - "Serial pytest only; no xdist.  Thread env vars set in test file header
+    (OPENBLAS/OMP/MKL/POLARS=1) and the threads test restores all candidate env
+    vars afterward so later tests in the same session are unaffected."
+  - "No full-dataset runs; synthetic in-memory observations only."

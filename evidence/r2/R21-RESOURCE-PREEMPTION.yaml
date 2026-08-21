@@ -1,0 +1,97 @@
+---
+id: R21-RESOURCE-PREEMPTION
+title: "Token preemption cancels running tasks; real memory budget + negative-token validation"
+date: 2026-08-21
+status: PASS
+owner: Writer DF (resource preemption)
+head_sha: "working-tree"
+---
+
+# Problem
+
+1. `ConcurrentTokenManager._try_preempt` removed the victim reservation from the
+   dict but never told the running task it had been preempted, so the task kept
+   running while its tokens were gone.
+2. Default memory budget in `ConcurrentTokenManager` was
+   `adaptive_config.hard_memory_limit_bytes * 4` (32GB vs 8GB), oversubscribing
+   memory in containers/constrained hosts.
+3. `cpu_budget=8` / `io_budget=4` were hardcoded defaults, ignoring cgroup CPU
+   quota / cpuset / affinity.
+4. Negative `cpu_tokens` / `memory_bytes` (and negative budgets) were silently
+   accepted/clamped instead of rejected.
+
+# Fix
+
+`runtime/resource_governor.py`:
+- Added `ResourceBudget` dataclass + `detect_resource_budget()` that probe
+  cgroup CPU quota (`cpu.max`), cpuset (`cpuset.cpus.effective` /
+  `cpuset.cpus`), sched affinity, host RAM, and the strictest memory limit
+  (cgroup v2 > v1 > SLURM > RLIMIT > host RAM) at startup.
+- Added `_cpuset_effective_cpus()` (comma/range list parser).
+- Added `resolve_token_budget()` helper that resolves CPU/IO/memory budgets to
+  real detected resources and rejects non-positive values with `ValueError`.
+
+`runtime/multibackend/concurrent_token_manager.py`:
+- Defaults now come from `_default_token_budgets()` (real detection via
+  `effective_cpu_slots` / `effective_memory_limit_bytes`); memory budget is
+  **never** x4 of hard limit anymore.
+- `cpu_budget` / `io_budget` / `memory_budget_bytes` constructor args became
+  `None`-defaulted; negative/zero/boolean values raise `ValueError`.
+- Negative `cpu_tokens` / `io_tokens` / `memory_bytes` in `acquire_tokens` raise
+  `ValueError` instead of being silently clamped.
+- Preemption now carries a `RevocationToken`; `preempt_tokens()` bumps a
+  `revoked_generation` and marks the victim `TokenReservation.generation = -1`.
+  `is_revoked()` is the checkpoint check: a revoked reservation / a
+  `RevocationToken` / `None` all mean "stop". Automatic preemption inside
+  `_try_preempt` also bumps the generation and marks the victim.
+- `TokenManagerMetrics` gained `preempted` and `revoked_generation` counters.
+
+# Scope
+
+- Only `runtime/resource_governor.py` + `runtime/multibackend/concurrent_token_manager.py`.
+- No scheduler/backend behavior changes; the checkpoint stop path is exercised by
+  tests calling `is_revoked()`.
+
+# Files
+
+- `runtime/resource_governor.py`
+- `runtime/multibackend/concurrent_token_manager.py`
+- `tests/runtime/test_r21_resource_preemption.py`
+
+focused_tests:
+  command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
+    MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 .venv/bin/python -m pytest
+    tests/runtime/test_r21_resource_preemption.py -v
+  result: 6 passed (2026-08-21, 0.23s)
+  coverage:
+  - memory budget = detected hard limit, never x4
+  - direct preemption returns RevocationToken; checkpoint sees revoked
+  - auto-preempt path also bumps generation and revokes the victim
+  - negative tokens/budgets raise ValueError
+  - ResourceBudget detects cpuset/quota/cores/RAM at startup
+  - resolve_token_budget rejects negative and probes real resources
+
+serial_regression_gate:
+  command: cd /home/shw/quant_projects && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
+    MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 .venv/bin/python -m pytest
+    tests/runtime/test_r21_resource_preemption.py tests/runtime/test_memory_region_limits.py
+    tests/runtime/test_execution_resources.py tests/test_adaptive_config.py
+    tests/test_resource_fixes.py tests/r27/test_resource_broker.py -q
+  result: 71 passed (2026-08-21, serial, no xdist)
+
+compile_gate:
+  command: cd /home/shw/quant_projects && .venv/bin/python -m py_compile
+    runtime/resource_governor.py runtime/multibackend/concurrent_token_manager.py
+  result: PASS
+
+known_limitations:
+- The full `tests/runtime/` suite (628 items) ran; 38 pre-existing failures remain
+  (dual-write reconcile / production event staging / dq gates etc.) that are
+  unrelated to this change and reproduce independently of token/resource work.
+- No live scheduler loop is wired to call `is_revoked()` yet; the checkpoint
+  contract is exercised via unit tests. Wiring scheduler checkpoints is a
+  follow-up.
+- factor_engine/ submodule mirrors the two updated runtime files.
+production_certification: NOT_RUN
+commit: NOT_CREATED
+remotes: NOT_USED

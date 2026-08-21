@@ -24,6 +24,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from runtime.resource_shape import ResourceShapeKey, hardware_fingerprint
@@ -445,6 +446,11 @@ class ResourceCalibrationStore:
             cal.elapsed_obs = _obs(row.get("elapsed_obs"))
             cal.output_obs = _obs(row.get("output_obs"))
             cal.spill_obs = _obs(row.get("spill_obs"))
+            # R21-COST-CALIBRATION-KEY：恢复持久化校准时间戳（UTC wall-clock）。
+            try:
+                cal.updated_at_ms = float(row.get("updated_at_ms", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                cal.updated_at_ms = 0.0
 
     def summary(self) -> dict[str, Any]:
         with self._lock:
