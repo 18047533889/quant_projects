@@ -1,0 +1,81 @@
+---
+id: R21-CSE-CACHE-IDENTITY
+title: "CSE cache binds full semantic identity + LRU/pinning fail-closed fixes"
+date: 2026-08-21
+status: PASS
+owner: Writer DD (CSE cache identity)
+head_sha: "working-tree"
+---
+
+# Problem
+
+`runtime/multibackend/cse_cache_optimizer.py` (MB-P1-022) used a bare string as
+the cache key. Two campaigns with the same shared-node id but different
+DataSnapshot / Universe / Market / DecisionClock / params / PhysicalImplementation
+/ SemanticContract could wrongly reuse a cached value. Additional memory-governance
+bugs:
+
+1. `size_bytes=0` default silently bypassed the memory cap (unbounded caching).
+2. Updating an existing key appended a second copy to `_lru_order`, leaving
+   duplicate LRU items and distorting size accounting.
+3. All-pinned + over-capacity silently `break` out of the eviction loop, breaking
+   the hard memory limit.
+4. LIRS was claimed ("lru" | "lfu" | "lirs") but not implemented — it silently fell
+   back to LRU.
+
+# Fix
+
+`runtime/multibackend/cse_cache_optimizer.py`:
+
+1. Added frozen `CSECacheKey` binding 8 semantic dimensions:
+   `logical_node`, `bound_params`, `data_source`, `universe`, `market`,
+   `decision_clock`, `physical_impl`, `semantic_contract`. `to_key()` = canonical
+   JSON (sort_keys), `digest()` = full 256-bit SHA-256. `get/put/pin/unpin` now
+   normalize str (back-compat as bare `logical_node`) or require `CSECacheKey`.
+2. `put()` rejects `size_bytes=None/<=0` with `CacheCapacityExceeded` — unknown
+   sizes fail closed, never silently unbounded.
+3. `put()` on an existing key removes the old key from `_lru_order` before
+   re-append — no duplicate LRU entries, correct size accounting.
+4. `put()`/`evict_by_memory_pressure()` raise `CacheCapacityExceeded` when no
+   evictable (unpinned, pre-existing) entry remains — all-pinned or single-entry
+   over cap is backpressure, never a silent `break`. The just-inserted entry is
+   `protected` from eviction so we never silently drop the item being stored.
+5. `UnsupportedEvictionPolicy` raised at construction for any policy other than
+   `lru`/`lfu` (including `lirs`) — fail closed, never silent LRU fallback.
+   `_evict_one` also fails closed if ever called with an unsupported policy.
+
+`CacheCapacityExceeded` and `UnsupportedEvictionPolicy` added in this module;
+`CacheCapacityExceeded` subclasses `runtime.resource_errors.ResourceGovernanceError`
+(fail-closed, no cross-backend fallback).
+
+# Tests
+
+`tests/runtime/test_r21_cse_cache_identity.py` (14 regression tests, serial):
+
+- Same node id + different semantic dimension (each of 7 dims) → miss, no reuse.
+- Full key deterministic; digest full 256-bit; distinct dims never collide.
+- size_bytes 0 / None / negative → CacheCapacityExceeded; positive → ok.
+- Update existing key → exactly one `_lru_order` entry, size accounts once.
+- All-pinned + over-capacity → CacheCapacityExceeded (memory pressure too).
+- Unpin → eviction works again.
+- lirs / unknown policy → UnsupportedEvictionPolicy at construction.
+
+# Tests Run
+
+```bash
+$ .venv/bin/python -m pytest tests/runtime/test_r21_cse_cache_identity.py -q
+14 passed in 0.21s
+
+$ .venv/bin/python -m pytest tests/runtime/test_r20_concurrency_cache.py tests/runtime/test_cache_key_collision.py -q
+31 passed in 2.39s
+
+$ .venv/bin/python -m pytest tests/cache/ -q
+22 passed in 0.79s
+```
+
+# Limitations / NOT_RUN
+
+- LIRS is intentionally NOT implemented (fail-closed). Wiring the optimizer into
+  `SharedBufferStore` / `AdaptiveBatchScheduler` is a follow-up, not done here.
+- No full-dataset runs; synthetic in-memory values only.
+- Serial pytest only; no xdist.
