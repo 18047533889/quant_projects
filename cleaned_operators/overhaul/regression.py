@@ -305,7 +305,10 @@ def _ols_residual_1d(
     if weights is not None:
         mask &= np.isfinite(weights) & (weights > 0)
     coefficients = len(features) + (1 if add_intercept else 0)
-    required = max(coefficients + 1, 3) if min_obs is None else int(min_obs)
+    # R22: default minimum observations = parameters + 1 (exactly 1 DOF —
+    # the smallest sample that keeps the fit identifiable).  The old hard
+    # ``max(..., 3)`` floor wrongly rejected 2-observation no-intercept fits.
+    required = coefficients + 1 if min_obs is None else int(min_obs)
     if required <= coefficients:
         raise ValueError("min_obs must exceed fitted coefficient count")
     if mask.sum() < required:
