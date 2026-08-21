@@ -1,0 +1,94 @@
+# R21-QE-SEALED-SPLIT: QE sealed-test / split-reference gap close (audit Q5)
+id: R21-QE-SEALED-SPLIT
+title: "QE sealed-test / split-reference contract with fail-closed overlap guard"
+status: implemented
+date: 2026-08-22
+audit: R21-LEAKAGE-PIT-AUDIT.yaml Q5
+
+# Problem
+description: |
+  The LEAKAGE/PIT audit (evidence/r2/R21-LEAKAGE-PIT-AUDIT.yaml Q5) found that
+  factor_optimizer has `freeze_for_sealed_test` rejecting overlapping sealed
+  plans (factor_optimizer/search/runner.py:249-254, _sealed_test_disjoint at
+  718-738), but quant_evaluator had NO sealed/snapshot/split concept at all:
+  EvaluationRequest/EvaluationBundle carried no snapshot_ref/split_ref, so a QE
+  evaluation could be pointed at a label split overlapping the factor/label
+  information boundary with nothing stopping it.  grep for sealed in
+  quant_evaluator/build/lib/quant_evaluator/ was empty.
+
+# Fix
+fix: |
+  Added a minimal, backward-compatible sealed-test/split contract to QE:
+
+  1. contracts/sealed_split.py (new):
+     - `SealedSplitRef` (frozen dataclass): split_id + the data window it
+       covers (`start_time`/`end_time` inclusive, or `as_of` point-in-time),
+       optional metadata.  Window required; inverted/empty windows rejected at
+       construction; `to_dict`/`from_dict` JSON-friendly round-trip.
+     - `check_sealed_split_overlap(split_ref, decision_times,
+       label_start_times, label_end_times, factor_times=None)`:
+       fail-closed overlap guard.  `split_ref=None` returns immediately
+       (no check = backward compatible).  When provided, ANY of these raises
+       `SealedSplitOverlapError` instead of silently evaluating:
+       - factor or label decision time at/after the split start (`t >= start`
+         is an overlap; the sealed segment must be strictly after ALL
+         decision times, matching FO _sealed_test_disjoint);
+       - label window ending after the split end (`label_end > end` =
+         forward-label reach into the sealed segment);
+       - factor time coordinates at/after the split start (when the
+         FactorBatch carries explicit time_axis.values);
+       - unorderable reference/label times (cannot be proven disjoint ->
+         fail closed), or an empty/inverted window (rejected at
+         construction).
+  2. contracts/errors.py: new `SealedSplitOverlapError(TimingContractError,
+     ValueError)` - typed error, catchable as ValueError or the QE timing
+     taxonomy.  Exported from contracts/__init__.py.
+  3. api/requests.py: `EvaluationRequest.split_ref` and
+     `EvaluationBundle.split_ref` optional fields (default None = no check),
+     preserving all existing construction sites (fields appended with
+     defaults).  EvaluationRequest gains to_dict/from_dict that carry
+     split_ref.
+  4. runtime/evaluator.py: public `evaluate` facade wires the guard in for
+     both paths (EvaluationRequest carries split_ref; direct facade accepts
+     keyword-only `split_ref=`), and the returned EvaluationBundle mirrors
+     the split_ref so the sealed evaluation traces back to its split.
+
+# Files modified
+files:
+  - path: quant_evaluator/build/lib/quant_evaluator/contracts/sealed_split.py
+    change: "new module: SealedSplitRef + check_sealed_split_overlap (fail-closed gate)"
+  - path: quant_evaluator/build/lib/quant_evaluator/contracts/errors.py
+    change: "added SealedSplitOverlapError(TimingContractError, ValueError)"
+  - path: quant_evaluator/build/lib/quant_evaluator/contracts/__init__.py
+    change: "export SealedSplitOverlapError, SealedSplitRef, check_sealed_split_overlap"
+  - path: quant_evaluator/build/lib/quant_evaluator/api/requests.py
+    change: "EvaluationRequest.split_ref + to_dict/from_dict; EvaluationBundle.split_ref"
+  - path: quant_evaluator/build/lib/quant_evaluator/runtime/evaluator.py
+    change: "evaluate facade: split_ref kwarg, guard wiring, bundle mirror"
+  - path: quant_evaluator/tests/test_sealed_split_overlap.py
+    change: "new: 21 tests covering backward compat, pass, overlap rejection, round-trips"
+
+# Regression tests
+tests:
+  - path: quant_evaluator/tests/test_sealed_split_overlap.py
+    test_runs:
+      - "cd /home/shw/quant_projects/quant_evaluator && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=/home/shw/quant_projects/quant_evaluator/build/lib /home/shw/quant_projects/.venv/bin/python -m pytest tests/test_sealed_split_overlap.py -q --tb=short -> 21 passed"
+      - "cd /home/shw/quant_projects/quant_evaluator && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=/home/shw/quant_projects/quant_evaluator/build/lib /home/shw/quant_projects/.venv/bin/python -m pytest tests/ -q --tb=short -> 127 passed, 2 skipped"
+
+# Evidence
+evidence:
+  - contract: "EvaluationRequest.split_ref (default None = no check); EvaluationBundle.split_ref mirror"
+    expected: "existing callers unchanged; new field optional and backward compatible"
+    actual: "106 pre-existing tests still pass; total suite 127 passed, 2 skipped"
+  - contract: "SealedSplitRef window strictly after all decision times + label ends"
+    expected: "overlapping split raises typed SealedSplitOverlapError"
+    actual: "test_split_window_overlapping_decision_times_raises / test_split_window_containing_all_data_raises / test_factor_time_at_split_start_raises raise"
+  - contract: "forward-label reach (label_end > split end) rejected"
+    expected: "raises SealedSplitOverlapError"
+    actual: "test_label_forward_reach_into_split_raises raises"
+  - contract: "unorderable / malformed reference fails closed"
+    expected: "raises, never silently disarms the gate"
+    actual: "test_unorderable_reference_times_fail_closed raises; inverted/empty/both-forms rejected at construction"
+  - contract: "to_dict/from_dict + pickle round-trips preserve split_ref"
+    expected: "lossless"
+    actual: "dict/pickle round-trips pass for SealedSplitRef, EvaluationRequest, EvaluationBundle"
