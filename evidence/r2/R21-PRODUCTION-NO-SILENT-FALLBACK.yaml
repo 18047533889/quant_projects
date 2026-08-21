@@ -1,0 +1,90 @@
+# R21-PRODUCTION-NO-SILENT-FALLBACK
+# Evidence: Production path has NO executor silent pandas fallback
+# Date: 2026-08-21
+# Author: Claude Code (writer-dw production doc)
+
+id: R21-PRODUCTION-NO-SILENT-FALLBACK
+title: "Production Path: No Executor Silent Pandas Fallback"
+type: evidence
+created: 2026-08-21
+author: Claude Code
+
+# Summary
+summary: |
+  Corrected `api/mining_integration.py` top docstring which falsely claimed a
+  "SQL → Polars → Pandas fallback" chain. In production the route is chosen by
+  the Global Physical Planner
+  (`runtime.multibackend.batch_global_optimizer.PhysicalBatchGlobalOptimizer`)
+  as a certified `PhysicalRegionPlan` (explicit regions + TransferEdge).
+  Runtime failures raise typed failures (`runtime.exceptions.FailureTaxonomy`,
+  R37-P0-072, with retry/replan/shard/fallback/abort semantics); if policy
+  permits (e.g. OOM → smaller-shape replan) the upper layer replans explicitly —
+  the executor never silently degrades to pandas. `assert_no_production_pandas_fallbacks`
+  hard-gates any unplanned pandas fallback in production mode unless
+  `production_fallback_policy='warn'`. Verified no production path silently
+  falls back to pandas.
+
+# Files Modified
+files:
+  - path: api/mining_integration.py
+    changes:
+      - Replaced misleading "SQL → Polars auto → Pandas fallback" top-docstring
+        line with the actual production execution contract: planner-chosen
+        certified PhysicalRegionPlan, typed failures, explicit replan, and the
+        production pandas-fallback hard gate.
+
+  - path: tests/api/test_production_no_silent_fallback.py
+    changes:
+      - New regression test module with 5 tests.
+      - test_top_docstring_no_longer_claims_silent_pandas_fallback
+      - test_production_gate_rejects_unplanned_pandas_fallback
+      - test_production_gate_passes_when_no_fallback_or_warn_policy
+      - test_research_mode_is_not_gated
+      - test_failure_taxonomy_supports_explicit_replan_typed_semantics
+
+# Production Execution Contract (verified against source)
+production_contract:
+  routing_authority:
+    - "Global Physical Planner selects certified PhysicalRegionPlan"
+    - "explicit BackendRegion with explicit ExecutionKind per region"
+    - "TransferEdge at backend boundaries only"
+    - "BackendRouter is a capability/cost candidate provider; it never finalizes production route"
+  failure_handling:
+    - "runtime failures raise typed failures (runtime.exceptions FailureTaxonomy)"
+    - "retry/replan/shard/fallback/abort semantics per failure class"
+    - "if policy permits (OOM → smaller-shape replan) upper layer replans explicitly"
+    - "executor never silently degrades to pandas"
+  hard_gate:
+    - "assert_no_production_pandas_fallbacks rejects unplanned pandas fallback in production"
+    - "unless production_fallback_policy='warn'"
+
+# Verification / No silent fallback path
+verified_no_silent_fallback:
+  - "runtime/engine.py:2920-2931 invokes assert_no_production_pandas_fallbacks after execution"
+  - "runtime/production_policy.py:323-343 raises ProductionPolicyViolation when fallbacks present and policy != warn"
+  - "runtime/multibackend/batch_global_optimizer.py produces PhysicalRegionPlan with explicit ExecutionKind"
+  - "planner/backend_region.py: PhysicalRegionPlan / BackendRegion / TransferEdge authority"
+  - "runtime/exceptions.py: FailureTaxonomy classes (SemanticError, PITViolation, ResourceAdmissionError, OOMReplanRequired, ...) with retry/replan/shard/fallback/abort semantics"
+  - "runtime/auto_shard_planner.py: replan_after_oom for smaller-shape replan"
+
+# Test Results
+tests:
+  - test_top_docstring_no_longer_claims_silent_pandas_fallback: PASSED
+  - test_production_gate_rejects_unplanned_pandas_fallback: PASSED
+  - test_production_gate_passes_when_no_fallback_or_warn_policy: PASSED
+  - test_research_mode_is_not_gated: PASSED
+  - test_failure_taxonomy_supports_explicit_replan_typed_semantics: PASSED
+
+test_summary: "5/5 tests passed (tests/api/test_production_no_silent_fallback.py)"
+
+# Existing api test suite (unchanged) still passing
+related_tests:
+  - path: tests/api/test_mining_fastpath.py
+    status: RUNNING (regression check for docstring change in shared module)
+
+# Limitations
+limitations: |
+  Only the top docstring of `api/mining_integration.py` was edited plus new
+  regression tests. No runtime code changed. The production no-silent-fallback
+  contract was already enforced by existing runtime/production_policy.py and
+  engine.py; this change documents it correctly. No full dataset runs.

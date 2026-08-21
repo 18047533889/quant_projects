@@ -17,7 +17,9 @@ def _loaded():
 def test_production_fastpath_dsl_accepts_ts_mean(_loaded):
     from api.mining_integration import validate_production_fastpath_dsl
 
-    ok, msg = validate_production_fastpath_dsl("ts_mean(col('close'), 5)")
+    ok, msg = validate_production_fastpath_dsl(
+        "ts_mean(col('close'), 5)", market="ashare"
+    )
     assert ok, msg
 
 
@@ -38,7 +40,7 @@ def test_validate_manifest_fastpath_when_env(monkeypatch):
     ok, msg = validate_manifest_for_execution(
         market="us",
         expression_type="dsl",
-        formula="ts_mean(close, 3)",
+        formula="ts_mean(field('close'), 3)",
     )
     assert ok is True, msg
 
@@ -114,14 +116,16 @@ def test_validate_formula_in_mining_allowlist(_loaded):
     from api.mining_integration import validate_formula_in_mining_allowlist
 
     ok, msg = validate_formula_in_mining_allowlist(
-        "rank(ts_mean(col('close'), 3))",
+        "rank(ts_mean(field('close'), 3))",
         tier="production_fastpath",
+        market="ashare",
     )
     assert ok, msg
 
     ok_bad, msg_bad = validate_formula_in_mining_allowlist(
         "ewm_corr(col('close'), col('volume'), 5)",
         tier="production_fastpath",
+        market="ashare",
     )
     assert ok_bad is False
     assert "ewm_corr" in msg_bad

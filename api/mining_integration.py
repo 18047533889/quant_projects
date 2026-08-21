@@ -8,8 +8,22 @@
 
 执行策略（A 股 / 美股统一）
 ----------------------------
-**A 股与美股均走 factor_engine runtime**（``cleaned_operators`` + 混合后端）；
-默认 ``backend.type=auto`` / hybrid：**SQL 子树下推 → Polars auto（``POLARS_PRODUCTION_SAFE``）→ Pandas fallback**。
+**A 股与美股均走 factor_engine runtime**（``cleaned_operators`` + 混合后端）。
+生产执行路由由 **Global Physical Planner**
+（``runtime.multibackend.batch_global_optimizer.PhysicalBatchGlobalOptimizer``）
+选择一份 **certified ``PhysicalRegionPlan``**（显式 region + ``TransferEdge``），
+``BackendRouter`` 仅提供 capability/cost 候选，**不 finalize 生产路由**。
+
+生产路径**无 executor 静默降级**：
+
+- 每个 region 带显式 ``ExecutionKind``，按 certified ``PhysicalRegionPlan`` 执行；
+- 运行时失败抛**类型化失败**（``runtime.exceptions`` 的 ``FailureTaxonomy``，
+  R37-P0-072，含 retry/replan/shard/fallback/abort 语义）；
+- 若策略允许（如 OOM → smaller-shape replan），由上层**显式 replan**，
+  绝不由 executor 悄悄降级到 pandas；
+- ``assert_no_production_pandas_fallbacks`` 在 production 模式下 hard-gate 任何
+  unplanned pandas fallback（除非 ``production_fallback_policy='warn'``）。
+
 仅数据源与 canonical 字段不同（A 股 parquet 常在 ``data/a_share/lqtp_data/``）。
 ``lqtp_dsl`` / ``platforms.lqtp`` 为历史 LQTP 平台路径，**新 campaign 不再依赖**。
 """
@@ -132,9 +146,14 @@ def validate_production_dsl(formula: str, *, market: str) -> tuple[bool, str]:
 
 
 def validate_production_fastpath_dsl(
-    formula: str, *, strict: bool | None = None, market: str | None = None
+    formula: str, *, strict: bool | None = None, market: str
 ) -> tuple[bool, str]:
     """production fast path 公式校验：语法 + 高性能 backend 允许。
+
+    R21-FASTPATH-MARKET: ``market`` 现在是必填参数。与
+    ``validate_production_dsl`` 统一 —— 不再允许 ``None`` 缺省为 A 股，
+    显式传 ``None`` 或省略会直接失败。US 公式绝不能用默认 A-share
+    registry 校验。
 
     Parameters
     ----------
@@ -142,16 +161,20 @@ def validate_production_fastpath_dsl(
         DSL 公式字符串。
     strict : bool | None
         传给 ``check_production_fastpath_formula_ops``；``None`` 用模块默认。
-    market : str | None
-        R40 #86: 透传给 ``validate_production_dsl`` —— production 校验必须带
-        真实 market（US 公式绝不能用默认 A-share registry 校验）。``None``
-        时按 ``validate_production_dsl`` 的缺省（ashare）处理。
+    market : str
+        ``ashare`` / ``us``。必填（``Market.ASHARE`` / ``Market.US`` 或等价
+        字符串）。省略或传 ``None`` 会抛 ``TypeError`` / ``ValueError``。
 
     Returns
     -------
     tuple[bool, str]
         ``(True, "OK")`` 或 ``(False, 违规说明)``。
     """
+    if market is None:
+        raise ValueError(
+            "market is required for production fastpath validation (R21-FASTPATH-MARKET)"
+        )
+    market = str(market).strip().lower()
     ok, msg = validate_production_dsl(formula, market=market)
     if not ok:
         return False, msg
@@ -1507,9 +1530,13 @@ def validate_formula_in_mining_allowlist(
     formula: str,
     *,
     tier: str | None = None,
+    market: str,
     max_domains: int = 2,
 ) -> tuple[bool, str]:
     """校验公式算子是否在指定 tier allowlist 内。
+
+    R21-FASTPATH-MARKET: ``market`` 为必填参数，生产层校验（fastpath /
+    production）会透传给 ``validate_production_dsl`` —— 无 A 股缺省。
 
     Parameters
     ----------
@@ -1518,6 +1545,8 @@ def validate_formula_in_mining_allowlist(
     tier : str | None
         ``research`` | ``production`` | ``production_fastpath``；
         默认读 ``FACTOR_ENGINE_MINING_ALLOWLIST_TIER``。
+    market : str
+        ``ashare`` / ``us``。必填（省略或 ``None`` 会抛错）。
 
     Returns
     -------
@@ -1561,9 +1590,9 @@ def validate_formula_in_mining_allowlist(
     if domain_errors:
         return False, "; ".join(domain_errors)
     if tier_key in _FASTPATH_VALIDATION_TIERS:
-        return validate_production_fastpath_dsl(text)
+        return validate_production_fastpath_dsl(text, market=market)
     if tier_key == "production":
-        return validate_production_dsl(text)
+        return validate_production_dsl(text, market=market)
     return True, "OK"
 
 

@@ -1,0 +1,60 @@
+task_id: R21-Q-OUTPUT-DTYPE
+finding: q_output_contract_value_dtype_hardcoded_float64_and_blanket_allow_nulls
+base_sha: UNKNOWN
+current_head: UNCOMMITTED_CURRENT_TREE
+dirty_count_before_evidence: 85
+commit_sha: UNCOMMITTED_CURRENT_TREE
+owned_files:
+  - backend/q_backend/q_errors.py
+  - backend/q_backend/q_backend.py
+  - tests/q_backend/test_q_output_contract_grain_and_nulls.py
+  - evidence/r2/R21-Q-OUTPUT-DTYPE.yaml
+modified_files:
+  - backend/q_backend/q_errors.py
+  - backend/q_backend/q_backend.py
+  - tests/q_backend/test_q_output_contract_grain_and_nulls.py
+  - evidence/r2/R21-Q-OUTPUT-DTYPE.yaml
+status: CLOSED_LOCAL
+implementation:
+  - "QOutputContract.value dtype is now derived from the canonical semantic kind
+    (IRNode.semantic_attrs[\"semantic_kind\"], vocabulary ir.types.SemanticType)
+    via the new authority semantic_kind_to_output_dtype() instead of hardcoded
+    float64: EventBool/MaskBool/ConditionBool -> bool, StateSigned/GroupKey/
+    FiscalPeriodId/StatusCode/CategoryCode -> int64, KnowledgeTimestamp/
+    EffectiveTimestamp/RevisionTimestamp -> datetime64[ns], else float64."
+  - "Null policy is derived from the semantic kind too (semantic_null_policy()):
+    condition/event/mask panels allow structural nulls (NaN == absent event,
+    policy any_allowed); numeric/categorical outputs allow only rolling-warmup
+    NaN (warmup_ok); timestamp-role outputs forbid nulls (strict).  This
+    replaces the blanket allow_nulls=True."
+  - "QOutputContract gains derived fields warmup_nulls_allowed /
+    structural_nulls_allowed / output_null_policy."
+  - "QBackend._build_output_contract now reads semantic_attrs[\"semantic_kind\"]
+    (with sibling-attr fallback) and forwards the derived dtype + null policy."
+  - "Incidental fix while running adjacent regression: QBackend.execute moved the
+    q-runtime availability check behind the PhysicalRegionPlan branch so a
+    production whole-tree PlanNode raises QPhysicalRegionNotImplemented without
+    requiring a live q process
+    (test_production_whole_tree_execution_remains_disabled)."
+focused_tests:
+  command: cd /home/shw/quant_projects && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/q_backend/test_q_output_contract_grain_and_nulls.py -q -p no:xdist
+  result: 21 passed
+adjacent_regression:
+  command: cd /home/shw/quant_projects && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/q_backend/test_q_adapter_null_contract.py tests/q_backend/test_q_compatibility_contract.py tests/q_backend/test_q_plan_node_abi.py -q -p no:xdist
+  result: 41 passed (incl. test_production_whole_tree_execution_remains_disabled, previously failing before the runtime-availability check was moved behind the PhysicalRegionPlan branch)
+syntax_compile:
+  command: python3 -m py_compile backend/q_backend/q_errors.py backend/q_backend/q_backend.py
+  result: PASS
+git_diff_check:
+  result: PASS
+known_limitations:
+  - Actual q runtime process execution was not exercised (research path only).
+  - semantic_kind_to_output_dtype is a forward-looking derived authority; the
+    canonical semantic-kind vocabulary lives in ir.types.SemanticType and the
+    derived map covers the kinds that exist in that vocabulary today.
+  - Categorical / StatusCode / CategoryCode kinds are not yet members of the
+    SemanticType enum; the map already handles them so the q backend stays
+    stable when they are added.
+production_certification: NOT_RUN
+commit: NOT_CREATED
+remotes: NOT_USED

@@ -1,0 +1,82 @@
+# R21 ClickHouse independent runtime certification evidence
+# Generated: 2026-08-21
+# Git SHA: working-tree
+
+id: R21-CLICKHOUSE-RUNTIME-CERT
+title: "ClickHouse independent runtime certification harness (fail-closed NOT_RUN)"
+date: 2026-08-21
+status: IMPLEMENTED
+owner: Writer DS (ClickHouse runtime cert)
+git_sha: "working-tree"
+scope: "backend/duckdb_pushdown_backend.py (ClickHousePushdownBackend) runtime boundary"
+
+# Problem
+# --------
+# ClickHousePushdownBackend subclasses DuckDBPushdownBackend and shares the SQL
+# compiler IR / emitter / executor chain, but had no independent runtime
+# certification. DuckDB parity (55-operator triple-parity suite,
+# R21-DUCKDB-TIER1-CERT) proves DuckDB semantics only. There is no live
+# ClickHouse server in this workspace (clickhouse-connect not installed, ports
+# 8123/9000 refused, no CLICKHOUSE_* env/config), so any claim of ClickHouse
+# parity derived from DuckDB would be unsubstantiated. DuckDB parity !=
+# ClickHouse parity.
+
+# Fix
+# ----
+# Added backend/clickhouse_runtime_cert.py — an independent per-canonical
+# ClickHouse runtime certification harness:
+#
+# 1. Per-canonical runtime checks (CLICKHOUSE_RUNTIME_CHECKS, 17 canonicals):
+#    NULL / NaN / Inf (is_nan, protected_div), window frame (ts_rank, ts_median,
+#    ts_mean), rank tie (rank, cs_rank, group_rank), quantile (cs_quantile,
+#    group_percentile), DateTime64/timezone (ts_delay), decimal (divide),
+#    group ordering (group_mean, group_rank).
+# 2. Fail-closed availability detection (probe_client): returns a live client
+#    only when (a) clickhouse-connect is installed, (b)
+#    CLICKHOUSE_ENABLE_CONNECT_PROBE is explicitly enabled, and (c) a TCP probe
+#    to a non-localhost host succeeds. No network is attempted otherwise.
+# 3. Independent status: run_clickhouse_runtime_cert() returns status NOT_RUN
+#    per canonical when no live server exists. It never reads DuckDB evidence
+#    sets (DUCKDB_REAL_SQL_VERIFIED etc.), so a DuckDB PASS can never be
+#    inherited as a ClickHouse PASS.
+# 4. When a live client is injected/present, each canonical is PASS/FAIL and the
+#    overall status is PASS or PARTIAL — but this path cannot run in this
+#    workspace (no server), so it stays NOT_RUN.
+
+files:
+  - path: backend/clickhouse_runtime_cert.py
+    change: NEW cert harness (fail-closed availability detection + per-canonical checks)
+  - path: tests/backend/test_clickhouse_runtime_cert.py
+    change: NEW regression tests (3 fail-closed + 1 canonical-coverage)
+
+tests:
+  - path: tests/backend/test_clickhouse_runtime_cert.py
+    tests:
+      - test_cert_harness_detects_no_server_and_marks_not_run: PASSED
+      - test_cert_harness_never_inherits_duckdb_pass: PASSED
+      - test_probe_client_returns_none_without_live_server: PASSED
+      - test_cert_canonicals_cover_required_semantics: PASSED
+
+evidence:
+  - scenario: run_clickhouse_runtime_cert() with no live server
+    expected: status NOT_RUN for every canonical
+    actual: "status=NOT_RUN, client_available=False, 17/17 canonicals NOT_RUN"
+  - scenario: DuckDB evidence sets monkeypatched to claim all canonicals PASS
+    expected: harness still returns NOT_RUN (no DuckDB inheritance)
+    actual: "status=NOT_RUN, all canonicals NOT_RUN"
+  - scenario: probe_client() default (no CLICKHOUSE_ENABLE_CONNECT_PROBE)
+    expected: None
+    actual: "None (clickhouse-connect missing, ports 8123/9000 refused)"
+
+limitations:
+  - "No live ClickHouse server in this workspace: the live-server execution path (status PASS/PARTIAL) is NOT_RUN and untested; only fail-closed behavior is verified."
+  - "clickhouse-connect is not installed; CLICKHOUSE_ENABLE_CONNECT_PROBE=1 + real server required to exercise the live path."
+  - "CLICKHOUSE_SQL_PRODUCTION_SAFE remains empty; this harness is certification infrastructure, not an admission gate."
+
+review:
+  reviewer: auto
+  status: PASS
+  notes:
+    - "Serial pytest with thread env vars set (OPENBLAS/OMP/MKL/POLARS_MAX_THREADS=1)."
+    - "No network attempted during tests; probes are SELECT-only (no DDL/DML)."
+    - "Sibling tests: test_clickhouse_adapter / test_clickhouse_executor / test_clickhouse_identity_regression all pass."

@@ -51,7 +51,8 @@ def test_fastpath_market_passthrough(monkeypatch):
     assert captured["market"] == "us"
 
 
-def test_fastpath_market_none_defaults(monkeypatch):
+def test_fastpath_market_none_rejected(monkeypatch):
+    """R21-FASTPATH-MARKET: market=None is a hard failure — no A-share default."""
     captured = {}
 
     def fake_prod_dsl(formula, *, market=None):
@@ -62,9 +63,9 @@ def test_fastpath_market_none_defaults(monkeypatch):
         "api.mining_integration.validate_production_dsl", fake_prod_dsl
     )
     _stub_fastpath_gate(monkeypatch)
-    ok, msg = validate_production_fastpath_dsl("close", market=None)
-    assert ok is True
-    assert captured["market"] is None  # 透传 None，由 validate_production_dsl 缺省 ashare
+    with pytest.raises(ValueError, match="market is required"):
+        validate_production_fastpath_dsl("close", market=None)
+    assert not captured  # validate_production_dsl 不应被调用
 
 
 def test_manifest_for_execution_threads_market(monkeypatch):

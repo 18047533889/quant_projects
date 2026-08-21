@@ -7,8 +7,14 @@ from typing import Any, Mapping
 
 import numpy as np
 import pandas as pd
+import pytest
 
-from backend.q_backend.q_errors import QOutputContract, QOutputContractViolation
+from backend.q_backend.q_errors import (
+    QOutputContract,
+    QOutputContractViolation,
+    semantic_kind_to_output_dtype,
+    semantic_null_policy,
+)
 from backend.q_backend.q_backend import QBackend
 
 
@@ -96,3 +102,92 @@ def test_q_output_contract_rejects_missing_required_column() -> None:
         raise AssertionError("Expected QOutputContractViolation")
     except QOutputContractViolation as exc:
         assert "Missing required columns" in str(exc)
+
+
+# ---------------------------------------------------------------------------
+# R21-Q-OUTPUT-DTYPE: value dtype + null policy derived from canonical semantic
+# kind (Event→bool, State/Group→int64, timestamp-role→datetime, else float64).
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    ("semantic_kind", "expected_dtype", "expected_policy"),
+    [
+        # Sparse condition/event/mask panels: boolean value, structural nulls
+        # allowed (NaN == absent event).
+        ("EventBool", "bool", "any_allowed"),
+        ("MaskBool", "bool", "any_allowed"),
+        ("ConditionBool", "bool", "any_allowed"),
+        # State / categorical / group / period codes: integer backing, only
+        # rolling-warmup nulls allowed.
+        ("StateSigned", "int64", "warmup_ok"),
+        ("GroupKey", "int64", "warmup_ok"),
+        ("FiscalPeriodId", "int64", "warmup_ok"),
+        ("StatusCode", "int64", "warmup_ok"),
+        ("CategoryCode", "int64", "warmup_ok"),
+        # Timestamp-role outputs: datetime, no nulls permitted.
+        ("KnowledgeTimestamp", "datetime64[ns]", "strict"),
+        ("EffectiveTimestamp", "datetime64[ns]", "strict"),
+        ("RevisionTimestamp", "datetime64[ns]", "strict"),
+        # Numeric-derived / generic: float64, rolling-warmup nulls only.
+        (None, "float64", "warmup_ok"),
+        ("PriceContinuous", "float64", "warmup_ok"),
+        ("ReturnDecimal", "float64", "warmup_ok"),
+    ],
+)
+def test_semantic_kind_derives_dtype_and_null_policy(
+    semantic_kind: str | None,
+    expected_dtype: str,
+    expected_policy: str,
+) -> None:
+    assert semantic_kind_to_output_dtype(semantic_kind) == expected_dtype
+    warmup, structural, policy = semantic_null_policy(semantic_kind)
+    assert policy == expected_policy
+    if expected_policy == "any_allowed":
+        assert warmup is True and structural is True
+    elif expected_policy == "strict":
+        assert warmup is False and structural is False
+    else:
+        assert warmup is True and structural is False
+
+
+def test_build_output_contract_derives_value_dtype_and_null_policy() -> None:
+    backend = _make_valid_series_backend()
+
+    event_contract = backend._build_output_contract(
+        _MinimalExecutionContext(semantic_attrs={"semantic_kind": "EventBool"})
+    )
+    assert event_contract.expected_dtypes["value"] == "bool"
+    assert event_contract.warmup_nulls_allowed is True
+    assert event_contract.structural_nulls_allowed is True
+    assert event_contract.output_null_policy == "any_allowed"
+    assert event_contract.allow_nulls is True
+
+    state_contract = backend._build_output_contract(
+        _MinimalExecutionContext(semantic_attrs={"semantic_kind": "StateSigned"})
+    )
+    assert state_contract.expected_dtypes["value"] == "int64"
+    assert state_contract.warmup_nulls_allowed is True
+    assert state_contract.structural_nulls_allowed is False
+    assert state_contract.output_null_policy == "warmup_ok"
+    assert state_contract.allow_nulls is True
+
+    ts_contract = backend._build_output_contract(
+        _MinimalExecutionContext(
+            semantic_attrs={"semantic_kind": "EffectiveTimestamp"}
+        )
+    )
+    assert ts_contract.expected_dtypes["value"] == "datetime64[ns]"
+    assert ts_contract.warmup_nulls_allowed is False
+    assert ts_contract.structural_nulls_allowed is False
+    assert ts_contract.output_null_policy == "strict"
+    assert ts_contract.allow_nulls is False
+
+
+def test_build_output_contract_defaults_to_float64_when_no_semantic_kind() -> None:
+    backend = _make_valid_series_backend()
+    contract = backend._build_output_contract(_MinimalExecutionContext(semantic_attrs={}))
+    assert contract.expected_dtypes["value"] == "float64"
+    assert contract.output_null_policy == "warmup_ok"
+    assert contract.warmup_nulls_allowed is True
+    assert contract.structural_nulls_allowed is False
+    assert contract.allow_nulls is True
