@@ -32,6 +32,26 @@ def compiler_generation() -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _stable_key(key: Any) -> str:
+    """Serialize a Mapping key with a type tag so distinct types never collide.
+
+    ``str(key)`` alone would collapse ``1`` and ``"1"`` (and ``1.0``) into the
+    same key, silently merging semantically distinct candidates. Tagging the
+    type keeps correctness-identity tools faithful to the original key.
+    """
+    if key is None:
+        return "none"
+    if isinstance(key, bool):
+        return f"bool:{key}"
+    if isinstance(key, int):
+        return f"int:{key}"
+    if isinstance(key, float):
+        return f"float:{key}"
+    if isinstance(key, str):
+        return f"str:{key}"
+    return f"{type(key).__name__}:{key}"
+
+
 def _stable_value(value: Any) -> Any:
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
@@ -39,8 +59,8 @@ def _stable_value(value: Any) -> Any:
         return [_stable_value(item) for item in value]
     if isinstance(value, Mapping):
         return {
-            str(key): _stable_value(item)
-            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+            _stable_key(key): _stable_value(item)
+            for key, item in sorted(value.items(), key=lambda pair: _stable_key(pair[0]))
         }
     raise TypeError(f"unsupported candidate semantic value: {type(value).__name__}")
 

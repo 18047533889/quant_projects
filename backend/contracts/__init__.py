@@ -21,12 +21,24 @@ if TYPE_CHECKING:
 
 __all__ = [
     "BackendFamily",
+    "PhysicalBackend",
     "BackendKind",
+    "Representation",
     "ExecutionKind",
     "CapabilityLevel",
     "PhysicalImplementationID",
     "PhysicalImplementationSpec",
     "Accelerator",
+    # Canonical string vocabulary + validation
+    "CANONICAL_BACKEND_STRINGS",
+    "BACKEND_FAMILY_CANONICAL",
+    "PHYSICAL_BACKEND_CANONICAL",
+    "REPRESENTATION_CANONICAL",
+    "EXECUTION_KIND_CANONICAL",
+    "ACCELERATOR_CANONICAL",
+    "canonical_backend_string",
+    "validate_backend_string",
+    "is_canonical_backend_string",
 ]
 
 
@@ -39,12 +51,61 @@ class BackendFamily(str, Enum):
 
 
 class BackendKind(str, Enum):
-    """Physical backend execution engines."""
+    """Physical backend execution engines (legacy alias of :class:`PhysicalBackend`).
+
+    Kept for backward compatibility with existing consumers. New code should
+    prefer :class:`PhysicalBackend`, which is the single canonical authority for
+    physical backend identifiers (R21-BACKEND-VOCABULARY).
+    """
     PANDAS_NUMPY = "pandas_numpy"
     POLARS = "polars"
     DUCKDB_SQL = "duckdb_sql"
     CLICKHOUSE_SQL = "clickhouse_sql"
     Q_KDB = "q_kdb"
+
+
+class PhysicalBackend(str, Enum):
+    """Canonical physical backend execution engines (single authority).
+
+    This is the authoritative vocabulary for physical backend identifiers.
+    ``BackendKind`` is retained as a backward-compatible alias so existing
+    consumers keep working; new code must use :class:`PhysicalBackend`.
+
+    Canonical strings (each member's ``.value`` is the only accepted spelling):
+        pandas_numpy   — certified pandas/numpy reference implementation
+        polars         — Polars native expression / columnar execution
+        duckdb_sql     — DuckDB SQL lowering
+        clickhouse_sql — ClickHouse SQL lowering
+        q_kdb          — Q/KDB physical execution backend
+    """
+    PANDAS_NUMPY = "pandas_numpy"
+    POLARS = "polars"
+    DUCKDB_SQL = "duckdb_sql"
+    CLICKHOUSE_SQL = "clickhouse_sql"
+    Q_KDB = "q_kdb"
+
+
+class Representation(str, Enum):
+    """Data representation / layout layer for a backend execution.
+
+    Distinguishes the physical layout a backend operates on, independent of the
+    execution engine. This is the canonical vocabulary for representation
+    identifiers (R21-BACKEND-VOCABULARY).
+
+    Canonical strings:
+        wide_panel   — wide panel layout (rows=instruments, cols=dates)
+        long         — long/tidy layout (one row per instrument-date)
+        lazy         — deferred / lazy evaluation graph (not yet materialized)
+        eager        — eager / materialized execution
+        sql          — SQL relational representation
+        table        — generic tabular representation (e.g. Q/KDB table)
+    """
+    WIDE_PANEL = "wide_panel"
+    LONG = "long"
+    LAZY = "lazy"
+    EAGER = "eager"
+    SQL = "sql"
+    TABLE = "table"
 
 
 class Accelerator(str, Enum):
