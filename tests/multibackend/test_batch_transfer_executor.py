@@ -235,3 +235,29 @@ class TestSemanticPreservation:
             _assert_semantic_preservation(
                 before, after, TransferTransform.PANDAS_TO_POLARS
             )
+
+    def test_timezone_mismatch_flagged(self):
+        before = SemanticSnapshot.from_dataframe(
+            pd.DataFrame(
+                {"t": pd.date_range("2024-01-01", periods=3, tz="Asia/Shanghai")}
+            )
+        )
+        after = SemanticSnapshot.from_dataframe(
+            pd.DataFrame({"t": pd.date_range("2024-01-01", periods=3)})
+        )
+        with pytest.raises(SemanticMismatchError):
+            _assert_semantic_preservation(
+                before, after, TransferTransform.PANDAS_TO_POLARS
+            )
+
+    def test_grain_mismatch_flagged(self):
+        before_df = pd.DataFrame({"a": [1, 2, 3]})
+        before_df.attrs = {"grain": "daily"}
+        after_df = pd.DataFrame({"a": [1, 2, 3]})
+        after_df.attrs = {"grain": "minute"}
+        before = SemanticSnapshot.from_dataframe(before_df)
+        after = SemanticSnapshot.from_dataframe(after_df)
+        with pytest.raises(SemanticMismatchError):
+            _assert_semantic_preservation(
+                before, after, TransferTransform.PANDAS_TO_POLARS
+            )

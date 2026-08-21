@@ -82,6 +82,25 @@ class TestBindPiidTelemetry:
         assert region.spill_bytes == 512
         assert region.transfer_bytes == 96
 
+    def test_bind_source_residency_requires_real_source(self) -> None:
+        # R22 P0: source_residency must never be fabricated.  A region with no
+        # dataset keeps the default "" (fail-closed).
+        region = RegionTelemetry(
+            region_id="R1", backend="polars", representation="polars_native", node_count=1
+        )
+        region.bind_source_residency(dataset="", snapshot_id="snap-1")
+        assert region.source_residency == ""
+        # A region with a real source carries a stable "backend:dataset" string.
+        region.bind_source_residency(dataset="ashare_1d", snapshot_id="snap-1", market="A")
+        assert region.source_residency == "polars:ashare_1d:snap-1:A"
+
+    def test_bind_batch_source_residency_requires_real_source(self) -> None:
+        batch = BatchExecutionTelemetry(batch_id="B1")
+        batch.bind_batch_source_residency(dataset="", snapshot_id="snap-1")
+        assert batch.source_residency == ""
+        batch.bind_batch_source_residency(dataset="ashare_1d", snapshot_id="snap-1", market="A")
+        assert batch.source_residency == "ashare_1d:snap-1:A"
+
     def test_region_to_dict_contains_all_required_fields(self) -> None:
         region = bind_piid_telemetry(
             _region(),

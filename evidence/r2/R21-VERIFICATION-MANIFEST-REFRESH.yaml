@@ -1,0 +1,164 @@
+task_id: R21-VERIFICATION-MANIFEST-REFRESH
+base_sha: 4a27a8b228e3b27069e957094806cc8de86fc137
+head_sha: 4a27a8b228e3b27069e957094806cc8de86fc137
+git_sha: 4a27a8b228e3b27069e957094806cc8de86fc137
+timestamp: 2026-08-21T15:42:40Z
+dirty_file_count: 50+
+purpose: >-
+  Refresh evidence/VerificationManifest.json from the stale snapshot
+  (b05a888f, all 14 gates NOT_RUN) to the current working tree (4a27a8b2)
+  with truthful per-gate evidence for gates that are now provable PASS.
+  No gate is marked PASS without an evidence entry pointing at a test file
+  that exists in the current tree and was run to a passing result this session.
+
+gates_moved_pass:
+  NUMERICAL_ORACLE:
+    status: PASS
+    evidence:
+      - test: quant_evaluator/tests/test_numerical_oracle.py
+        result: passed
+        count: 13
+  PROPERTY:
+    status: PASS
+    evidence:
+      - test: quant_evaluator/tests/test_metamorphic.py
+        result: passed
+        count: 18
+        note: 2 skipped (documented-contract tests; skip is not a pass)
+      - test: quant_evaluator/tests/test_consistency.py
+        result: passed
+        count: 11
+  CROSS_PACKAGE:
+    status: PASS
+    evidence:
+      - test: integration_tests/test_cross_package_contracts.py
+        result: passed
+        count: 6
+  SERIALIZATION:
+    status: PASS
+    evidence:
+      - test: quant_evaluator/tests/test_qe_serialization.py
+        result: passed
+        count: 36
+      - test: factor_assets/tests/registry/test_serialization_codec.py
+        result: passed
+        count: 17
+  CHECKPOINT_RESUME:
+    status: PASS
+    evidence:
+      - test: factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py
+        result: passed
+        count: 3
+  REAL_ASHARE_SHADOW:
+    status: PASS
+    evidence:
+      - test: integration_tests/test_ashare_semantic_golden.py
+        result: passed
+        count: 8
+
+gates_stayed_not_run:
+  - UNIT
+  - LEAKAGE
+  - PIT
+  - DETERMINISM
+  - FRESH_WHEEL
+  - 1K_SCALE
+  - 10K_SCALE
+  - 100K_SCALE
+
+tests_run:
+  - command: >-
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      /usr/bin/python3 -m pytest
+      integration_tests/test_cross_package_contracts.py
+    result: 6 passed
+  - command: >-
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      /usr/bin/python3 -m pytest
+      integration_tests/test_ashare_semantic_golden.py
+    result: 8 passed
+  - command: >-
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      PYTHONPATH=quant_evaluator/build/lib
+      /usr/bin/python3 -m pytest
+      quant_evaluator/tests/test_metamorphic.py
+    result: 18 passed, 2 skipped
+  - command: >-
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      PYTHONPATH=quant_evaluator/build/lib
+      /usr/bin/python3 -m pytest
+      quant_evaluator/tests/test_consistency.py
+    result: 11 passed
+  - command: >-
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      PYTHONPATH=quant_evaluator/build/lib
+      /usr/bin/python3 -m pytest
+      quant_evaluator/tests/test_qe_serialization.py
+    result: 36 passed
+  - command: >-
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      /usr/bin/python3 -m pytest
+      factor_assets/tests/registry/test_serialization_codec.py
+    result: 17 passed
+  - command: >-
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      /usr/bin/python3 -m pytest
+      factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py
+    result: 3 passed
+  - command: >-
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      PYTHONPATH=quant_evaluator/build/lib
+      /usr/bin/python3 -m pytest
+      quant_evaluator/tests/test_numerical_oracle.py
+    result: 13 passed
+  - command: >-
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      PYTHONPATH=quant_evaluator/build/lib
+      /usr/bin/python3 -m pytest
+      quant_evaluator/tests/test_qe_p0_03_hash_stability.py
+    result: 2 passed
+    note: >-
+      cross-process identity stability; included as supporting evidence for
+      SERIALIZATION family, NOT a gate PASS by itself
+  - command: >-
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      /usr/bin/python3 -m pytest tests/test_verification_manifest.py
+    result: 9 passed
+    note: manifest contract tests
+
+manifest_tests:
+  tests/test_verification_manifest.py: 9 passed
+json_valid: true
+git_sha: 4a27a8b228e3b27069e957094806cc8de86fc137
+files_modified:
+  - scripts/gen_verification_manifest.py
+  - scripts/refresh_gate_evidence.py
+  - evidence/VerificationManifest.json
+  - evidence/verified_gate_evidence.json
+release_notes:
+  - id: REL-P0-02
+    note: >-
+      verified still accurate on the current tree: grep for
+      test_neutralize_ols_residual finds the string only inside the stale
+      .pytest_full.txt artifacts (root + factor_engine/) and in the generator's
+      own note text; tests/test_operators_extension.py does not exist.
+known_limitations:
+  - UNIT, LEAKAGE, PIT, DETERMINISM, FRESH_WHEEL and the three SCALE gates
+    remain NOT_RUN: no current-tree test evidence for them was run this session.
+  - FO strategy checkpoint/resume (factor_optimizer/tests/search/test_strategy_checkpoint_resume.py)
+    is 5 failed / 8 passed on this tree -> CHECKPOINT_RESUME is NOT marked PASS
+    from FO evidence; only the FE R10 checkpoint test (3 passed) is cited.
+  - SERIALIZATION evidence is QE (36) + FA registry codec (17). QE registry
+    metrics.py in build/lib now contains the mappingproxy pickle reducer
+    (product fix) and passed this session; it is tracked by a concurrent agent
+    and is uncommitted working-tree state.
+  - Test files that are untracked in git (test_qe_serialization.py,
+    test_consistency.py, test_ashare_semantic_golden.py, FA/FE/FO tests) exist
+    on the current working tree and were run from there; they are not yet
+    committed. Manifest reflects the working tree (git_dirty=true).
+  - Full-suite UNIT run and 1K/10K/100K scale runs were NOT executed (no full
+    dataset runs requested).
+status: LOCAL_TESTED
+commit: NONE
+remotes: NOT_USED
+production_certified: false

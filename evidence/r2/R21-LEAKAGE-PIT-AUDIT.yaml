@@ -1,0 +1,192 @@
+id: R21-LEAKAGE-PIT-AUDIT
+task: R21-LEAKAGE-PIT-AUDIT
+title: "Read-only audit of LEAKAGE and PIT release gates across platform packages"
+status: done
+audit_date: "2026-08-21"
+audit_mode: read_only
+runner_python: /home/shw/quant_projects/.venv/bin/python
+
+questions:
+
+  - id: Q1
+    title: "FO LabelBundle timestamp semantics / PIT-embargoed labels"
+    verdict: PARTIAL
+    answer: >
+      A PIT-aware LabelBundle EXISTS in factor_optimizer/factor_optimizer/contracts/splits.py
+      (class LabelBundle, lines 91-105; fields label_start_time / label_end_time /
+      label_horizon).  It is wired into validate_split_plan: label_bundle.label_horizon
+      takes precedence over SplitPlan.label_horizon when computing the train->test and
+      train->validation leakage lookback (splits.py:243-247, 255-268, 273-284), and
+      SplitPlan also carries embargo / validation_embargo (lines 37-53).  The docstring
+      itself (lines 3-7) states the boundary is STRUCTURAL plus OPTIONAL temporal: it
+      does NOT sandbox evaluator access to data or prove PIT correctness - a trusted QE
+      adapter remains responsible for enforcing the plan during evaluation.
+    evidence:
+      - "factor_optimizer/factor_optimizer/contracts/splits.py:91-105 (class LabelBundle)"
+      - "factor_optimizer/factor_optimizer/contracts/splits.py:243-247 (label_bundle.label_horizon precedence)"
+      - "factor_optimizer/factor_optimizer/contracts/splits.py:255-313 (purge/embargo/validation_embargo rejection)"
+      - "factor_optimizer/factor_optimizer/contracts/splits.py:3-7 (structural-only caveat)"
+    tests:
+      - "factor_optimizer/tests/search/test_split_safety.py:115-151 (embargo violation/pass tests)"
+      - "factor_optimizer/tests/search/test_split_safety.py:82-108 (purge + label_horizon rejection)"
+    test_runs:
+      - "cd factor_optimizer && pytest tests/search/test_split_safety.py tests/search/test_sealed_test_hardening.py -> 61 passed"
+    gaps:
+      - "NO FO test constructs a LabelBundle (grep LabelBundle( in factor_optimizer/tests is empty) and NO test exercises label_bundle timestamp precedence or validation_embargo (grep validation_embargo in tests is empty)."
+      - "The label_bundle timestamp fields (label_start_time/label_end_time) are NOT compared against time_index at all - only label_bundle.label_horizon is used; real timestamps are not consumed by the leakage arithmetic."
+      - "No test proves 'labels cannot leak into search-time evaluation' at the evaluator level - the contract itself documents it does not sandbox evaluation."
+
+  - id: Q2
+    title: "FP leakage property tests (CausalPrefixInvariance, SplitFitIsolation)"
+    verdict: PASS
+    answer: >
+      The leakage property tests now EXIST (added concurrently by the writer while this
+      audit ran - confirmed present after a mid-audit re-check):
+      tests/contracts/test_leakage_properties.py with test_causal_prefix_invariance,
+      test_split_fit_isolation_per_row, test_split_fit_isolation_windowed, and
+      test_past_only_invariance.  All 4 properties pass.  The property names appear in
+      the test module only - no production-class stubs exist, but the assertions run
+      against the real package transforms (factor_preprocess.transforms.cross_sectional.cs_rank
+      and factor_preprocess.transforms.rolling.rolling_mean).
+    evidence:
+      - "factor_preprocess/tests/contracts/test_leakage_properties.py:1-28 (docstring listing the 3 properties)"
+      - "factor_preprocess/tests/contracts/test_leakage_properties.py:67-88 (test_causal_prefix_invariance)"
+      - "factor_preprocess/tests/contracts/test_leakage_properties.py:96-110 (test_split_fit_isolation_per_row)"
+      - "factor_preprocess/tests/contracts/test_leakage_properties.py:112-148 (test_split_fit_isolation_windowed)"
+      - "factor_preprocess/tests/contracts/test_leakage_properties.py:156-174 (test_past_only_invariance)"
+    test_runs:
+      - "cd factor_preprocess && pytest tests/contracts/ -q -> 26 passed (incl. test_leakage_properties.py 4 tests)"
+    gaps:
+      - "CausalPrefixInvariance / SplitFitIsolation are documented only as test-module naming; no class/enum named CausalPrefixInvariance exists in source (not required for a property test)."
+
+  - id: Q3
+    title: "FE PIT availability semantics tests (pit_contract.py / stateful_contract.py)"
+    verdict: PASS
+    answer: >
+      pit_contract.py (factor_engine/pit_contract.py) implements strict PIT availability:
+      four_layer_pit_allowed (tri-state UNKNOWN-never-True, production requires PROVEN_TRUE
+      on every layer), pit_asof_join/select_visible_row_bundles enforcing
+      market_visible_at <= decision_at with available_policy defaulting to
+      next_trading_day, production rejections for next_trading_day-without-calendar and
+      same_day-on-date-only-precision, and validate_fundamental_events rejecting
+      available_at < period_end (PIT leakage risk).  Tests asserting no-use-of-future-info
+      exist and PASS: tests/pit/ (test_availability_precision_metadata.py,
+      test_selector_semantic_modes.py), tests/storage/test_pit_next_trading_day_policy.py,
+      tests/storage/test_r10_pit_closure.py, tests/operators/test_round6_alignment_pit_2026_08.py
+      (incl. test_pit_asof_join_default_is_conservative, test_purged_time_split_never_straddles_boundary),
+      tests/operators/r30/test_production_admission_requires_pit_safe.py,
+      tests/r35/test_kalman_pit_variance_lookahead.py (incl. test_kalman_innovation_z_dimensionless_pit_violation,
+      test_absolute_mode_unaffected_by_future), and tests/operators/test_r7_field_contract_gates.py
+      (four-layer PIT combined eligibility).  stateful_contract.py is a checkpoint
+      serialization/schema contract (as_of timestamps, input fingerprints, fail-closed
+      non-finite handling) - it is a state-restore boundary, not a PIT/leakage contract;
+      stateful tests (53 tests across 5 files) all pass.
+    evidence:
+      - "factor_engine/pit_contract.py:79-116 (four_layer_pit_allowed)"
+      - "factor_engine/pit_contract.py:312-470 (pit_asof_join market_visible_at <= decision_at)"
+      - "factor_engine/pit_contract.py:380-389 (production next_trading_day requires calendar)"
+      - "factor_engine/pit_contract.py:232-233 (available_at precedes period_end => PIT leakage risk)"
+      - "factor_engine/stateful_contract.py:1-24 (checkpoint contract, not a PIT contract)"
+    test_runs:
+      - "cd factor_engine && pytest tests/pit/ tests/storage/test_pit_next_trading_day_policy.py tests/storage/test_r10_pit_closure.py tests/operators/test_round6_alignment_pit_2026_08.py -> 64 passed"
+      - "cd factor_engine && pytest tests/operators/test_stateful_pack_2026_08.py tests/operators/test_stateful_incremental_store.py tests/runtime/test_full_history_replay_contract_v2.py tests/runtime/test_r10_stateful_checkpoint_2026_08.py tests/runtime/test_round13_incremental_invalidation_2026_08.py -> 53 passed"
+      - "cd factor_engine && pytest tests/r35/test_kalman_pit_variance_lookahead.py tests/operators/r30/test_production_admission_requires_pit_safe.py tests/operators/test_r7_field_contract_gates.py tests/operators/test_layer_governance.py -> 47 passed, 1 failed (test_artifact_snapshot_digest_coherent, stale doc snapshot 1436 vs live 1624)"
+    gaps:
+      - "tests/fundamental/ shows 11 failures unrelated to the PIT gate itself: test_all_canonical_semantic_pit_certificate (canonical audit row count 1436 != live 1624 - stale audit artifact) and test_fiscal_batch1_batch2 (8 tests, undeclared keyword parameter 'min_periods' on fiscal_accrual_quality - a hidden-keyword rejection, so these are NEW regressions a writer must fix)."
+      - "test_source_pit_and_artifacts.py::test_artifact_snapshot_digest_coherent fails (docs/R25_CANONICAL_SNAPSHOT.json count 1436 != live registry 1624)."
+
+  - id: Q4
+    title: "FA assembly data_snapshot_ref fail-closed on time-overlap"
+    verdict: PARTIAL
+    answer: >
+      FactorSetAssembler.assemble REQUIRES data_snapshot_ref and fails closed when it is
+      missing (factor_assets/assembly/engine.py:363-368).  It is threaded into
+      FactorSetArtifact.snapshot_ref and into policy_hash.  But the assembly engine is
+      deliberately METADATA-ONLY (engine.py:308-316): it carries no label snapshot field,
+      no factor-snapshot/label-snapshot pair, and NO time-overlap check between any
+      factor snapshot and any label snapshot.  There is no label_snapshot_ref anywhere in
+      factor_assets (grep label_snapshot across factor_assets finds nothing), so the
+      fail-closed guarantee the audit question asks about does not exist in this package.
+    evidence:
+      - "factor_assets/assembly/engine.py:363-368 (fail-closed: data_snapshot_ref is mandatory)"
+      - "factor_assets/assembly/engine.py:482-493 (snapshot_ref flows to artifact)"
+      - "factor_assets/contracts/factor_set.py:55-79 (FactorSetSpec.data_snapshot_ref only; no label snapshot field)"
+      - "factor_assets/contracts/factor_set.py:90-110 (FactorSetArtifact carries single snapshot_ref)"
+    tests:
+      - "factor_assets/tests/assembly/test_engine.py:375-386 (test_missing_data_snapshot_ref_fails_closed)"
+      - "factor_assets/tests/assembly/test_engine.py:546 (test_assembly_requires_data_snapshot_ref)"
+    test_runs:
+      - "cd factor_assets && pytest tests/assembly/test_engine.py -q -> 31 passed"
+    gaps:
+      - "No time-overlap rejection between factor snapshot and label snapshot: the engine has NO label snapshot reference at all and no temporal validation.  A writer must add a label-snapshot contract and a fail-closed overlap check (or document the metadata-only boundary as NOT covering temporal separation)."
+
+  - id: Q5
+    title: "QE sealed-test path rejects sealed plans overlapping search data"
+    verdict: PARTIAL
+    answer: >
+      The rejection lives in factor_optimizer (not quant_evaluator): SearchSession.freeze_for_sealed_test
+      rejects a sealed test_mask that overlaps the search-time train/validation masks via
+      _sealed_test_disjoint (factor_optimizer/factor_optimizer/search/runner.py:249-254, 718-738),
+      and the search-time split plan is recorded on SearchConfig._search_split_plan at
+      SearchRunner construction (runner.py:836-841) and survives checkpoint round-trips
+      (runner.py:438, 656-658, 741-793).  consume_sealed_test additionally requires an
+      EvaluationProtocol bound to mask-identical plans.  test_sealed_test_hardening.py
+      (29 tests) covers overlap rejection, unequal-length fail-closed, non-bool mask
+      fail-closed, checkpoint round-trip preservation and corruption rejection; the file
+      passes.  BUT quant_evaluator itself has NO sealed-test concept: grep for sealed in
+      quant_evaluator/build/lib/quant_evaluator/ is empty, and QE's EvaluationRequest /
+      EvaluationBundle carry no snapshot_ref or split_ref, so there is no QE-side gate
+      tying a sealed evaluation to a data snapshot.  The only QE-side temporal guards are
+      the LabelBundle causal-chain validation (decision_time <= signal_available_time <=
+      execution_time <= label_start_time < label_end_time) and streaming-evaluator strict
+      monotonic time-coordinate rejection - useful but not a search-vs-sealed overlap gate.
+    evidence:
+      - "factor_optimizer/factor_optimizer/search/runner.py:234-278 (freeze_for_sealed_test overlap guard)"
+      - "factor_optimizer/factor_optimizer/search/runner.py:718-738 (_sealed_test_disjoint)"
+      - "factor_optimizer/factor_optimizer/search/runner.py:836-841 (search plan recorded on config)"
+      - "factor_optimizer/factor_optimizer/search/runner.py:438 + 656-658 (search plan survives checkpoint)"
+      - "factor_optimizer/tests/search/test_sealed_test_hardening.py:141-165 + 363-449 (disjointness + round-trip tests)"
+      - "quant_evaluator/build/lib/quant_evaluator/contracts/label_bundle.py:63-106 (causal chain validation)"
+      - "quant_evaluator/build/lib/quant_evaluator/runtime/streaming_evaluator.py:411-418 (monotonic time rejection)"
+    test_runs:
+      - "cd factor_optimizer && pytest tests/search/test_sealed_test_hardening.py -q -> 32 passed (file has 32 test_ methods; combined run with test_split_safety.py = 61 passed)"
+      - "cd quant_evaluator && pytest tests/ -q -> 100 passed, 2 skipped"
+    gaps:
+      - "No QE-side sealed-plan gate: QE has no sealed-test/overlap/snapshot_ref concept; a writer must add snapshot/split refs to QE's EvaluationRequest/EvaluationBundle (integration_tests TEST-06 already documents this) and a sealed-test guard if the release gate requires the evaluator itself to fail closed."
+      - "FO tests/search/test_runner.py has 2 failures (resume tests): test_search_runner_resume_continues_from_checkpoint (ValueError: resume requires a search strategy...) and test_search_runner_resume_rejects_finished_or_mismatched_session (expected 'finished session' regex, got strategy error).  Both stem from the newer 'resume requires strategy' guard racing older tests that use bare SearchSession.from_dict - a writer should update these tests."
+
+  - id: Q6
+    title: "Cross-package integration tests prove factor->label temporal separation"
+    verdict: NOT_FOUND
+    answer: >
+      No integration test proves factor->label temporal separation (factor at t uses only
+      info <= t) across packages.  integration_tests/test_cross_package_contracts.py
+      (6 tests: TEST-01..06) asserts artifact REFS (identity/snapshot/split/order/lineage)
+      but contains NO temporal or leakage assertion between factor values and label
+      windows - it explicitly documents that the full end-to-end compute->evaluate chain
+      is NOT wired yet.  integration_tests/test_ashare_semantic_golden.py (8 tests) covers
+      data-contract PIT semantics (financial PIT=PubDate, UpdateTime not PIT, dividend
+      effective-time-only strict reject, look-ahead rejection) at the source-contract
+      level, but does not assert factor-value vs label-window separation.  Both files pass.
+    evidence:
+      - "integration_tests/test_cross_package_contracts.py:14-27 (chain not wired; refs asserted only)"
+      - "integration_tests/test_cross_package_contracts.py:388-462 (TEST-06 snapshot ref across 5 packages, no temporal assertion)"
+      - "integration_tests/test_ashare_semantic_golden.py:158-270 (PIT data-contract semantics, not factor/label separation)"
+    test_runs:
+      - "cd integration_tests && pytest test_ashare_semantic_golden.py -q -> 8 passed"
+      - "cd /home/shw/quant_projects && pytest integration_tests/test_cross_package_contracts.py -q -> 4 passed, 2 skipped"
+    gaps:
+      - "No cross-package test wires FE factor compute -> QE label evaluation and asserts factor-at-t uses only info <= t.  A writer must add an end-to-end temporal-separation test (e.g. compute factor on a PIT-censored panel, evaluate against forward labels, assert no look-ahead contamination)."
+
+summary:
+  overall: PARTIAL
+  pass: [Q2, Q3]
+  partial: [Q1, Q4, Q5]
+  not_found: [Q6]
+  top_gaps_for_writers:
+    - "FO: add tests exercising LabelBundle timestamps (label_start_time/label_end_time) and validation_embargo in validate_split_plan; note LabelBundle real timestamps are NOT used by the leakage arithmetic (only its label_horizon fallback)."
+    - "FA: add a label-snapshot contract and a fail-closed time-overlap check between factor snapshot and label snapshot in assembly (or explicitly scope the metadata-only boundary as not covering temporal separation)."
+    - "QE: add snapshot_ref/split_ref (and optionally a sealed-test overlap gate) to EvaluationRequest/EvaluationBundle; currently QE has no sealed/snapshot concept."
+    - "Integration: add a cross-package factor->label temporal-separation test (factor at t uses only info <= t); none exists."
+    - "FE (pre-existing, not part of this audit's core verdicts): fix stale audit artifacts failing 11 fundamental/PIT-certificate tests (docs/R25_CANONICAL_SNAPSHOT.json 1436 vs live 1624; fiscal_accrual_quality undeclared 'min_periods')."
+    - "FO: update 2 stale resume tests in tests/search/test_runner.py that race the newer 'resume requires a search strategy' guard."

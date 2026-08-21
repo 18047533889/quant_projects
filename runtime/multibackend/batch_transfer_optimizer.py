@@ -71,6 +71,8 @@ class SemanticSnapshot:
         tz = tuple(
             getattr(df[col].dtype, "tz", None) for col in df.columns
         )
+        grain = getattr(df, "attrs", {}).get("grain", None)
+        source_snapshot = getattr(df, "attrs", {}).get("source_snapshot")
         return SemanticSnapshot(
             num_rows=int(df.shape[0]),
             num_cols=int(df.shape[1]),
@@ -78,6 +80,8 @@ class SemanticSnapshot:
             dtypes=tuple(str(df[col].dtype) for col in df.columns),
             null_counts=null_counts,
             timezone=tuple(tz),
+            grain=grain,
+            source_snapshot=source_snapshot,
         )
 
     @staticmethod
@@ -95,6 +99,13 @@ class SemanticSnapshot:
         tz = tuple(
             (getattr(field.type, "tz", None)) for field in table.schema
         )
+        metadata = table.schema.metadata or {}
+        grain = None
+        source_snapshot = None
+        if b"grain" in metadata:
+            grain = metadata[b"grain"].decode("utf-8")
+        if b"source_snapshot" in metadata:
+            source_snapshot = metadata[b"source_snapshot"].decode("utf-8")
         return SemanticSnapshot(
             num_rows=table.num_rows,
             num_cols=table.num_columns,
@@ -102,6 +113,8 @@ class SemanticSnapshot:
             dtypes=tuple(str(t) for t in table.schema.types),
             null_counts=null_counts,
             timezone=tuple(tz),
+            grain=grain,
+            source_snapshot=source_snapshot,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -113,6 +126,7 @@ class SemanticSnapshot:
             "null_counts": list(self.null_counts) if self.null_counts else None,
             "timezone": list(self.timezone) if self.timezone else None,
             "grain": self.grain,
+            "source_snapshot": dict(self.source_snapshot) if self.source_snapshot else None,
         }
 
 
@@ -136,6 +150,37 @@ def _assert_semantic_preservation(
         # Arrow→pandas 等 dtype 表示可能合法变化（如 int32↔int64），但
         # 更广的 dtype 改变（category/object ↔ numeric）视为失败。
         _assert_dtypes_compatible(before.dtypes, after.dtypes, transform)
+
+    # Null count preservation
+    if before.null_counts is not None and after.null_counts is not None:
+        if before.null_counts != after.null_counts:
+            raise SemanticMismatchError(
+                f"{transform.value}: null counts changed "
+                f"{before.null_counts} -> {after.null_counts}"
+            )
+
+    # Timezone preservation
+    if before.timezone is not None and after.timezone is not None:
+        if before.timezone != after.timezone:
+            raise SemanticMismatchError(
+                f"{transform.value}: timezone changed "
+                f"{before.timezone} -> {after.timezone}"
+            )
+
+    # Grain preservation
+    if before.grain is not None and after.grain is not None:
+        if before.grain != after.grain:
+            raise SemanticMismatchError(
+                f"{transform.value}: grain changed "
+                f"{before.grain!r} -> {after.grain!r}"
+            )
+
+    # Source snapshot preservation
+    if before.source_snapshot is not None and after.source_snapshot is not None:
+        if before.source_snapshot != after.source_snapshot:
+            raise SemanticMismatchError(
+                f"{transform.value}: source_snapshot changed"
+            )
 
 
 def _assert_dtypes_compatible(

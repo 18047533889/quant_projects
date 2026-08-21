@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "gates": [
+    {
+      "name": "UNIT",
+      "description": "Unit tests pass across the package surface (passed == total run, no unexpected skips/errors).",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "NUMERICAL_ORACLE",
+      "description": "Outputs match a trusted reference oracle (pandas/canonical semantics) within tolerance.",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "PROPERTY",
+      "description": "Property/metamorphic invariants hold (idempotence, monotonicity, round-trip, shape preservation).",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "CROSS_PACKAGE",
+      "description": "Cross-package contracts hold: factor_engine -> factor_preprocess -> factor_optimizer -> factor_assets -> quant_evaluator.",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "LEAKAGE",
+      "description": "No look-ahead / PIT / label / temporal leakage in factors and labels.",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "PIT",
+      "description": "Point-in-time availability semantics verified.",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "DETERMINISM",
+      "description": "Same inputs + same pinned environment yield bit-identical outputs across runs/threads.",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "SERIALIZATION",
+      "description": "Factor/plan/runtime objects survive pickling / format round-trips losslessly.",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "CHECKPOINT_RESUME",
+      "description": "Long pipeline can checkpoint and resume from the last successful step.",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "FRESH_WHEEL",
+      "description": "Package installs from a freshly built wheel and passes import/smoke.",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "1K_SCALE",
+      "description": "Correctness/performance hold at 1K-row scale.",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "10K_SCALE",
+      "description": "Correctness/performance hold at 10K-row scale.",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "100K_SCALE",
+      "description": "Correctness/performance hold at 100K-row scale.",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "REAL_ASHARE_SHADOW",
+      "description": "Shadow run against real A-share data reproduces expected behavior (universe/time window pinned).",
+      "default_status": "NOT_RUN"
+    }
+  ]
+}

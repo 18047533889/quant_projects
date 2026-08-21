@@ -305,6 +305,7 @@ def test_execute_root_with_path_uses_real_snapshot_and_records_provenance(
         "materialization_count": 0,
         "resident_reuse_count": 0,
         "python_to_q_bytes": 0,
+        "source_residency": "",
     }
     assert "backend_path_summary" in path
 

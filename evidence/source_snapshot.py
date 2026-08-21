@@ -47,6 +47,11 @@ EXCLUDE_DIRS: frozenset[str] = frozenset({
     "logs",
     "temp",
     "data",
+    # R22-EVIDENCE-CONTAMINATION: test-certified / fixture / synthetic subtrees
+    # are never production evidence; recursive source scans must skip them.
+    "_test_certified",
+    "fixtures",
+    "synthetic",
 })
 
 EXCLUDE_SUFFIXES: frozenset[str] = frozenset({".pyc", ".py.pre_lazy_opt"})

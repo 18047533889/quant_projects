@@ -1,0 +1,69 @@
+task_id: R21-FRESH-WHEEL-GATE
+finding: fresh_wheel_release_gate_all_packages_pass
+base_sha: UNCOMMITTED_CURRENT_TREE
+current_head: UNCOMMITTED_CURRENT_TREE
+dirty_count_before_evidence: 306
+commit_sha: UNCOMMITTED_CURRENT_TREE
+owned_files:
+  - quant_evaluator/pyproject.toml
+  - factor_optimizer/pyproject.toml
+  - factor_preprocess/pyproject.toml
+status: CLOSED_LOCAL
+gate_type: FRESH_WHEEL_RELEASE
+build_env:
+  builder_python: /home/shw/quant_projects/.venv/bin/python  # Python 3.10.12
+  builder_pip: 26.1.2
+  build_wheels_dir: /tmp/fresh_wheels
+  fresh_venv_python: /usr/bin/python3  # system python, 3.10.12
+  fresh_venv_pip: 26.2.1 (upgraded from 22.0.2)
+  fresh_venv_path: /tmp/fresh_venv
+  build_isolation: quant_evaluator/factor_assets/factor_preprocess/factor_engine used --no-build-isolation; factor_optimizer required isolation (hatchling backend, present in pip build env)
+limitations:
+  - factor_engine wheel ships top-level modules (cleaned_operators, api, backend, planner, ...) not a "factor_engine" import; import gate exercised via `import cleaned_operators` + OperatorRegistry.
+  - factor_engine load_all(include_research=True) requires optional polars; installed polars into the fresh venv (no version pin). Without polars, load_all raises on inactive static-surface canonicals (not a wheel defect; documented optional-dep surface).
+  - Optional extras NOT installed in fresh venv: numba (QE fast, FP fast), matplotlib/jinja2 (QE reporting), duckdb (FE full), bottleneck, TA-Lib. Core imports + smoke do not require them.
+  - numba .pyc/.nbc artifacts were NOT included in rebuilt QE wheel (regenerated at runtime).
+wheels:
+  - package: quant_evaluator
+    distribution: quant_evaluator-0.0.1a1
+    wheel: /tmp/fresh_wheels/quant_evaluator-0.0.1a1-py3-none-any.whl
+    sha256: a9f7db9203852b159db1e6020471b28f599eb5bc1236f5f4f130f3fdd12f1208
+    fresh_venv_smoke: PASS
+    smoke_command: import quant_evaluator; FactorBatch+LabelBundle; compute_daily_ic(method=spearman); compute_mean_ic -> finite mean IC
+    note: source tree was missing contracts/metrics/runtime files in working tree; restored from gitignored build/lib snapshot (pre-truncation), removed __pycache__/nested-dir artifacts, rebuilt wheel cleanly.
+  - package: factor_engine
+    distribution: factor-engine-0.3.1
+    wheel: /tmp/fresh_wheels/factor_engine-0.3.1-py3-none-any.whl
+    sha256: cea9aeac8b2bf004304ce84bd395f8e5978a8bd0f5f0d3883275d6553a5d8d57
+    fresh_venv_smoke: PASS
+    smoke_command: import cleaned_operators; OperatorRegistry.load_all(include_research=True) -> 1624 operators; OperatorRegistry.get('ts_mean') -> TSMean
+    note: built with custom backend _build_backend.py (excludes tests); wheel has no top-level factor_engine package by design.
+  - package: factor_optimizer
+    distribution: factor-optimizer-0.1.0
+    wheel: /tmp/fresh_wheels/factor_optimizer-0.1.0-py3-none-any.whl
+    sha256: e6fa7eb0073b66d10edeb84dd1ed1aba4dc325a7b5e6dc8fd6acbbb0a6cf8078
+    fresh_venv_smoke: PASS
+    smoke_command: from factor_optimizer.search.strategies import SearchSpace, ParameterSpace, RandomSearch; build 3-param space; RandomSearch.propose() returns params dict
+    note: pyproject restored from history (readme field removed because README.md absent; build requires hatchling isolation).
+  - package: factor_preprocess
+    distribution: factor-preprocess-0.1.0
+    wheel: /tmp/fresh_wheels/factor_preprocess-0.1.0-py3-none-any.whl
+    sha256: 67ac096e39b0f3e6b99815c16efcc7313321932799b53ef546d3f6c21399924c
+    fresh_venv_smoke: PASS
+    smoke_command: from factor_preprocess.contracts.feature_bundle import FeatureBundle, AxisRef, ChannelRef; construct TNF layout bundle
+    note: pyproject restored from history (readme field removed because README.md absent).
+  - package: factor_assets
+    distribution: factor_assets-0.1.0
+    wheel: /tmp/fresh_wheels/factor_assets-0.1.0-py3-none-any.whl
+    sha256: 77da25c647a2c7eab9da4b6fc67c6671833c2032d25394134f84b0a667c8d7a8
+    fresh_venv_smoke: PASS
+    smoke_command: import factor_assets; FactorSetArtifact + FactorMembership construct; create_repository() -> AssetRepository
+    note: pyproject present; built via setup.py compatibility (setuptools).
+fresh_venv_install:
+  - /tmp/fresh_venv/bin/pip install /tmp/fresh_wheels/*.whl  # dependency order resolved by pip
+  - installed all runtime deps from PyPI: numpy 2.2.6, pandas 2.3.3, scipy 1.15.3, statsmodels 0.14.6, PyWavelets 1.8.0, pyarrow 25.0.1, PyYAML 6.0.3, dataclasses-json, psutil, marshmallow, etc.
+  - polars installed additionally for factor_engine optional backends
+  - /tmp/fresh_venv/bin/pip check -> No broken requirements found
+python_versions_used:
+  build: 3.10.12 (/home/shw/quant_projects/.venv/bin/python)
+  fresh_venv: 3.10.12 (/usr/bin/python3)

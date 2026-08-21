@@ -1,0 +1,128 @@
+# R21-QE-SCALE-GATES — 1K/10K/100K scale-correctness release gates
+# Generated: 2026-08-22
+
+id: R21-QE-SCALE-GATES
+slice: R21-QE-SCALE-GATES — scale-correctness suite for the 1K/10K/100K_SCALE release gates
+campaign: QE scale gates (R21; LOCAL ONLY, working tree is truth)
+timestamp: "2026-08-22"
+status: COMPLETED_LOCAL
+role: Writer QE (scale gates)
+
+git_sha: "working-tree"  # repo HEAD 4a27a8b228e3b27069e957094806cc8de86fc137; no commit; working tree is truth
+
+owned_files:
+  - quant_evaluator/tests/test_scale_gates.py
+  - evidence/r2/R21-QE-SCALE-GATES.yaml
+
+problem:
+  "The 1K/10K/100K_SCALE release gates had no correctness suite: nothing asserted
+  that the same metric computed at 1K, 10K, and 100K rows agrees with the
+  reference kernel and with itself when the panel is subsampled consistently.
+  Scale gates risk being treated as performance benchmarks (wall-clock) rather
+  than as correctness gates (values must converge), and a rank-based kernel or
+  per-time/per-asset metric that silently changed under universe growth would
+  ship."
+
+tests_added:
+  file: quant_evaluator/tests/test_scale_gates.py
+  test_names:
+    - test_ic_rank_consistent_at_1k_10k_100k
+    - test_turnover_scale_consistency
+    - test_rank_turnover_reference_parity_at_100k
+    - test_quantile_returns_scale_consistency
+    - test_streaming_scale_parity
+    - test_100k_runs_without_error
+  count: 6
+
+scale_definition:
+  row_counts:
+    "1K": "T=100 x N=10  = 1000 rows"
+    "10K": "T=100 x N=100 = 10000 rows"
+    "100K": "T=100 x N=1000 = 100000 rows"
+  data: "synthetic numpy random only, FIXED seed 20260821 (+ scale offset), no datasets touched"
+  procedure: "identical per-cross-section metric procedure at every scale"
+
+pass_counts:
+  with_pythonpath: 6 passed in 0.92s
+  without_pythonpath: 6 passed in 0.92s
+  bootstrap_self_contained: true
+  env: "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1"
+  runtime_sec: 0.92
+
+bootstrap_note: |
+  build/lib/quant_evaluator/contracts/errors.py (and metrics/ic.py) were found
+  stale at the start of this task (errors.py was an 11-line stub missing the
+  error taxonomy imported by build/lib/quant_evaluator/contracts/__init__.py,
+  breaking every bootstrap).  A completed sibling agent restored them verbatim
+  from the shipped wheel.  Verified: errors.py now contains the full
+  QuantEvaluatorError taxonomy (95 lines), and all test modules (including the
+  pre-existing test_metamorphic.py / test_consistency.py) collect and pass.
+  The scale-gates file therefore uses the standard bootstrap pattern from
+  test_metamorphic.py and is self-contained WITHOUT PYTHONPATH.
+
+commands_run:
+  - "cd /home/shw/quant_projects/quant_evaluator && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=/home/shw/quant_projects/quant_evaluator/build/lib /home/shw/quant_projects/.venv/bin/python -m pytest tests/test_scale_gates.py -q --tb=short -> 6 passed in 0.92s"
+  - "cd /home/shw/quant_projects/quant_evaluator && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 /home/shw/quant_projects/.venv/bin/python -m pytest tests/test_scale_gates.py -q --tb=short (NO PYTHONPATH) -> 6 passed in 0.92s"
+  - "cd /home/shw/quant_projects && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=/home/shw/quant_projects/quant_evaluator/build/lib /home/shw/quant_projects/.venv/bin/python -m pytest quant_evaluator/tests/test_scale_gates.py -q --tb=short -> 6 passed in 0.91s"
+
+gate_math:
+  ic_rank_scale_consistency: |
+    IC is per-time: compute_daily_ic (reference) computes one Spearman IC per
+    (t, f) cross-section on pairwise-finite observations; mean-of-time is the
+    average of T per-time estimates.  At 1K (N=10) per-time Spearman sd ~ 0.33,
+    mean sd ~ 0.033; at 100K (N=1000) mean sd ~ 0.003.  Gate: |mean_scale -
+    mean_100K| <= 3 x (sd_scale / sqrt(T)), a statistical tolerance for inputs
+    that differ by scale (fresh iid draws at each scale).
+  turnover_scale_consistency: |
+    Canonical turnover metrics/turnover.compute_turnover_series on explicit
+    sum-1 weights is per-asset and EXACTLY scale-invariant: duplicating every
+    asset with its weight divided by k preserves each asset's weight trajectory,
+    so 0.5*sum|w_t - w_{t-1}| is bit-for-bit unchanged.  Gate: rtol=1e-12 exact
+    parity of the full series at 1K vs 10K and 1K vs 100K (NaN weights included).
+  quantile_returns_scale_consistency: |
+    compute_quantile_returns (reference, n_quantiles=5, min_assets=10).  At 1K
+    (N=10) each quantile has ~2 members < min_assets=10 -> all-NaN (documented
+    kernel contract, pinned by the gate).  At 10K/100K every cell is finite and
+    the grand mean (T x 5 cells) is a sampling estimate of the population label
+    mean.  Gate: |grand_mean_10K - grand_mean_100K| <= 3 x (cell sd / sqrt(500)).
+  streaming_parity: |
+    StreamingEvaluator + streaming_ic_updater (sufficient statistics per chunk,
+    internal splitter reconstructing (time_slice, factor_slice) IC blocks) over
+    the 10K panel must equal reference batch compute_daily_ic (Pearson) to
+    ~1e-16 and must be invariant to chunk layout (chunk_size_time in 10/7/25).
+  runs_and_finite: |
+    100K-row NaN-masked reference IC (Spearman) + quantile returns + rank
+    turnover must all complete and return finite aggregates; bounds the gate to
+    'runs and is correct', not a wall-clock benchmark.  Observed ~0.035 s.
+
+test_evidence:
+  pytest_output: |
+    quant_evaluator/tests/test_scale_gates.py::test_ic_rank_consistent_at_1k_10k_100k PASSED [ 16%]
+    quant_evaluator/tests/test_scale_gates.py::test_turnover_scale_consistency PASSED [ 33%]
+    quant_evaluator/tests/test_scale_gates.py::test_rank_turnover_reference_parity_at_100k PASSED [ 50%]
+    quant_evaluator/tests/test_scale_gates.py::test_quantile_returns_scale_consistency PASSED [ 66%]
+    quant_evaluator/tests/test_scale_gates.py::test_streaming_scale_parity PASSED [ 83%]
+    quant_evaluator/tests/test_scale_gates.py::test_100k_runs_without_error PASSED [100%]
+    6 passed in 0.92s
+
+known_limitations:
+  - "The fast rank-based turnover kernel (kernels/fast.fast_turnover_estimate)
+    is NOT per-asset scale-invariant under universe growth (ranks are
+    cross-sectional: rankdata over N assets gives per-asset weights that shrink
+    as N grows).  The per-asset turnover gate therefore uses the canonical
+    weight-based kernel compute_turnover_series; the rank-based kernel is
+    covered at 100K by test_rank_turnover_reference_parity_at_100k (finite,
+    bounded [0, 1], reference parity)."
+  - "Quantile returns at 1K (N=10) are all-NaN by the documented min_assets=10
+    contract; the 1K-vs-larger comparison is therefore a contract pin (all-NaN
+    at 1K, finite at 10K/100K) rather than a value comparison.  A scale
+    definition with N>=50 at 1K would exercise the value comparison but would
+    no longer be a 1K-row panel."
+  - "IC mean-of-time uses a statistical tolerance (3x sampling error of the
+    noisier scale) because inputs differ by scale (fresh iid draws).  The
+    duplication-construction for IC/quantile-returns is bit-exact across scales
+    and was verified during exploration (np.repeat duplication leaves Spearman
+    IC exactly invariant), but the committed gate uses fresh draws to exercise
+    the subsample-consistency semantics."
+  - "No full dataset runs; synthetic data only.  Total runtime < 1 s, far under
+    the 30 s budget."

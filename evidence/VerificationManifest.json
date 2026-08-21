@@ -1,0 +1,256 @@
+{
+  "schema_version": 1,
+  "manifest_id": "rel-v1:2026-08-21T15:43:13.046884+00:00",
+  "timestamp": "2026-08-21T15:43:13.046884+00:00",
+  "host": "qs-data-ingest-hk-01",
+  "source_snapshot": {
+    "git_sha": "4a27a8b228e3b27069e957094806cc8de86fc137",
+    "git_dirty": true,
+    "submodule_shas": {
+      "factor_engine": "26ed66472dccc33b02f2919d2685199491fba035"
+    },
+    "git_repo": true
+  },
+  "packages": {
+    "factor_engine": {
+      "tree_sha256": "eae9079098307cff2ea52ad0bf6fe667f6bb0b3c51de7c86565eac6ac57edc3e",
+      "wheel_sha256": null,
+      "git_sha": "26ed66472dccc33b02f2919d2685199491fba035",
+      "git_dirty": true
+    },
+    "quant_evaluator": {
+      "tree_sha256": "30b61eb9c38b803fbb57cac25a6c54111d2add01dd314dbba44b0189c6c5daa3",
+      "wheel_sha256": {
+        "wheel": "quant_evaluator-0.0.1a1-py3-none-any.whl",
+        "sha256": "00c6516d00cbb35406c8954acd02f6d4fd39819706931a7228bcd3465aff47f8"
+      }
+    },
+    "factor_optimizer": {
+      "tree_sha256": "b0827933eb54e462c7203e77c3de81f83f348b7e023260884f92fc37c6d6b98d",
+      "wheel_sha256": {
+        "wheel": "factor_optimizer-0.1.0-py3-none-any.whl",
+        "sha256": "42bf01eaf86b16e1139155e3ea27e61e9121f2e6b6fa68bbb352cc76ff4a6259"
+      }
+    },
+    "factor_assets": {
+      "tree_sha256": "64ca3e735604fe1977b95b7fc0b1a0299c3b97414faaf2531a6f63b040b2ddd8",
+      "wheel_sha256": {
+        "wheel": "factor_assets-0.1.0-py3-none-any.whl",
+        "sha256": "1a075027e6f73ab5c567d7bc39a8beb1fcf5825516ffd48ce14c6a615fcbb034"
+      }
+    },
+    "factor_preprocess": {
+      "tree_sha256": "965df125f2edc1d6194214d4b85b3043982bb37d95f77129b6f744c33cb48d7e",
+      "wheel_sha256": {
+        "wheel": "factor_preprocess-0.1.0-py3-none-any.whl",
+        "sha256": "667dd80ff99d914ba342f8b0a3f53a83181b8696c7de68fe345d8e6725056160"
+      }
+    }
+  },
+  "environment": {
+    "python_version": "3.10.12",
+    "platform": "Linux-5.15.0-171-generic-x86_64-with-glibc2.35",
+    "dependencies": {
+      "numpy": "2.2.6",
+      "pandas": "2.3.3",
+      "polars": "1.42.1",
+      "pyarrow": "25.0.0",
+      "scipy": "1.15.3",
+      "pytest": "9.1.1",
+      "duckdb": "1.5.4",
+      "factor_engine": "0.3.1",
+      "dataaccess": "NOT_INSTALLED"
+    },
+    "hash": "dcab69f70cc819b6b2e2f93759faf1f5ebeab3872d0d98c68e3e7970aff7bd68"
+  },
+  "executed_commands": [
+    {
+      "argv": [
+        "scripts/gen_verification_manifest.py"
+      ],
+      "cwd": "/home/shw/quant_projects",
+      "exit_code": 0,
+      "note": "manifest generator"
+    }
+  ],
+  "pytest_counts": null,
+  "benchmarks": [
+    {
+      "source": "factor_engine/benchmarks/backend_cost_baseline.json",
+      "schema_version": 1,
+      "generated_by": "seed_defaults",
+      "sizes": {
+        "small": {
+          "dates": 100,
+          "instruments": 500
+        },
+        "medium": {
+          "dates": 1000,
+          "instruments": 3000
+        },
+        "large": {
+          "dates": 3000,
+          "instruments": 5000
+        }
+      }
+    }
+  ],
+  "gates": [
+    {
+      "name": "UNIT",
+      "description": "Unit tests pass across the package surface (passed == total run, no unexpected skips/errors).",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "name": "NUMERICAL_ORACLE",
+      "description": "Outputs match a trusted reference oracle (pandas/canonical semantics) within tolerance.",
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "quant_evaluator/tests/test_numerical_oracle.py",
+          "result": "passed",
+          "count": 13,
+          "run_at": "2026-08-21T15:42:37.636791+00:00"
+        }
+      ]
+    },
+    {
+      "name": "PROPERTY",
+      "description": "Property/metamorphic invariants hold (idempotence, monotonicity, round-trip, shape preservation).",
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "quant_evaluator/tests/test_metamorphic.py",
+          "result": "passed",
+          "count": 18,
+          "run_at": "2026-08-21T15:42:37.636791+00:00"
+        },
+        {
+          "test": "quant_evaluator/tests/test_consistency.py",
+          "result": "passed",
+          "count": 11,
+          "run_at": "2026-08-21T15:42:37.636791+00:00"
+        }
+      ]
+    },
+    {
+      "name": "CROSS_PACKAGE",
+      "description": "Cross-package contracts hold: factor_engine -> factor_preprocess -> factor_optimizer -> factor_assets -> quant_evaluator.",
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "integration_tests/test_cross_package_contracts.py",
+          "result": "passed",
+          "count": 6,
+          "run_at": "2026-08-21T15:42:37.636791+00:00"
+        }
+      ]
+    },
+    {
+      "name": "LEAKAGE",
+      "description": "No look-ahead / PIT / label / temporal leakage in factors and labels.",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "name": "PIT",
+      "description": "Point-in-time availability semantics verified.",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "name": "DETERMINISM",
+      "description": "Same inputs + same pinned environment yield bit-identical outputs across runs/threads.",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "name": "SERIALIZATION",
+      "description": "Factor/plan/runtime objects survive pickling / format round-trips losslessly.",
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "quant_evaluator/tests/test_qe_serialization.py",
+          "result": "passed",
+          "count": 36,
+          "run_at": "2026-08-21T15:42:37.636791+00:00"
+        },
+        {
+          "test": "factor_assets/tests/registry/test_serialization_codec.py",
+          "result": "passed",
+          "count": 17,
+          "run_at": "2026-08-21T15:42:37.636791+00:00"
+        }
+      ]
+    },
+    {
+      "name": "CHECKPOINT_RESUME",
+      "description": "Long pipeline can checkpoint and resume from the last successful step.",
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py",
+          "result": "passed",
+          "count": 3,
+          "run_at": "2026-08-21T15:42:37.636791+00:00"
+        }
+      ]
+    },
+    {
+      "name": "FRESH_WHEEL",
+      "description": "Package installs from a freshly built wheel and passes import/smoke.",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "name": "1K_SCALE",
+      "description": "Correctness/performance hold at 1K-row scale.",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "name": "10K_SCALE",
+      "description": "Correctness/performance hold at 10K-row scale.",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "name": "100K_SCALE",
+      "description": "Correctness/performance hold at 100K-row scale.",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "name": "REAL_ASHARE_SHADOW",
+      "description": "Shadow run against real A-share data reproduces expected behavior (universe/time window pinned).",
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "integration_tests/test_ashare_semantic_golden.py",
+          "result": "passed",
+          "count": 8,
+          "run_at": "2026-08-21T15:42:37.636791+00:00"
+        }
+      ]
+    }
+  ],
+  "release_notes": [
+    {
+      "id": "REL-P0-02",
+      "note": ".pytest_full.txt artifacts in the pushed snapshot are stale. They reference tests/test_operators_extension.py:148 test_neutralize_ols_residual, which no longer exists in the current tree (grep finds the string only inside the stale artifact itself, not in any source file). Recommendation: stop treating .pytest_full.txt as release truth. Checked at manifest generation: tests/test_operators_extension.py does not exist in the current tree.",
+      "artifacts": [
+        {
+          "path": ".pytest_full.txt",
+          "bytes": 1867,
+          "mtime": "2026-08-20T14:48:51.678888+00:00"
+        },
+        {
+          "path": "factor_engine/.pytest_full.txt",
+          "bytes": 1867,
+          "mtime": "2026-08-20T17:14:36.245802+00:00"
+        }
+      ]
+    }
+  ]
+}

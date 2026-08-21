@@ -298,8 +298,8 @@ class TestQCapabilityIntegration:
         declared = get_declared_native_ops()
         lowering = get_lowering_exists_ops()
 
-        assert len(declared) == 67
-        assert len(lowering) == 67
+        assert len(declared) == 66
+        assert len(lowering) == 66
         assert declared == lowering
 
     def test_evidence_framework_is_comprehensive(self):

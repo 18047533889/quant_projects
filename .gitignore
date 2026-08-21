@@ -58,3 +58,6 @@ modeling/modeling_adapters.egg-info/
 ashare_lqtp_kit/
 dataaccess/
 factor_engine/
+
+# claude worktrees
+.claude/worktrees/

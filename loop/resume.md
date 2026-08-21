@@ -2,20 +2,24 @@
 
 ## Active Blockers
 
-(None yet)
+(None)
 
 ## Findings from Last Session
 
+- **Bare `python` is NOT on PATH** in this shell — use `/home/shw/quant_projects/.venv/bin/python` (verified `.venv/bin/python` imports polars/numpy). Backgrounded bash runs must use the venv path.
+- **QE numerical oracle collection error**: repo-root `quant_evaluator/` stub shadows `build/lib/quant_evaluator` under pytest; `test_numerical_oracle.py` only prepended build/lib to sys.path, so `quant_evaluator.contracts.factor_batch` resolves to the stub. Fix = full sys.modules bootstrap from `test_metamorphic.py`.
+- **FO checkpoint/resume 5 failures**: (1) `SearchSpace.to_array` does `float(point['c'])` on a choice param ('b') → ValueError; (2) `SearchRunner.resume` raises "cannot resume a finished session" for a fully-budgeted legacy session — test semantics need a defined contract. Fix agent dispatched.
+- **VerificationManifest stale**: manifest_id rel-v1:2026-08-21T12:58:18 was generated at git_sha b05a888f (current 4a27a8b2), ALL 14 gates NOT_RUN. Refresh agent dispatched with real gate evidence.
 - ClickHouse SQL execution should not share a concrete backend class with DuckDB.
 - `build_backend('clickhouse_sql')` previously relied on runtime attribute injection to convey adapter identity; this creates a fragile boundary for certificates and telemetry.
-- The compiler IR / emitter / executor chain is still safe to share; only the adapter runtime boundary needs separation.
 - Cross-dialect certificate rejection requires both the certificate and runtime event to declare a dialect; event-only dialect is not rejected by current validation logic.
 - Production execution is planner-certified-plan only (no executor silent pandas fallback); documented in `api/mining_integration.py` top docstring.
 
 ## Next Steps
 
-- Consider promoting adapter metadata defaults into a small `SqlPushdownAdapterSpec` dataclass if additional SQL engines are added later.
-- If DuckDB/ClickHouse runtime divergence grows, extract adapter-owned query-budget/connection settings into adapter methods.
+- Await the 10 dispatched agents; review their reports, then commit+push the accumulated approved changes.
+- After each commit, update VerificationManifest source_snapshot git_sha (4a27a8b2 → new sha) via the manifest refresh script.
+- Continue to the next audit sweep (DETERMINISM, LEAKAGE, PIT, CHECKPOINT_RESUME gates) once current batch lands.
 
 ## Session Log
 

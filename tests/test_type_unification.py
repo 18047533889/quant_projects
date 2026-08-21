@@ -50,15 +50,16 @@ def test_accelerator_enum():
 
 def test_physical_implementation_spec_has_accelerator_and_kernel_signature():
     """Test that PhysicalImplementationSpec has accelerator and kernel_signature fields."""
+    _SHA = "0123456789abcdef" * 4  # 64-char lowercase hex SHA-256
     spec = PhysicalImplementationSpec(
         canonical="test_op",
         backend="pandas_numpy",
         execution_kind=ExecutionKind.NATIVE_EXPR,
-        implementation_source_hash="abc123",
+        implementation_source_hash=_SHA,
         emitter_identity="test_emitter",
         kernel_identity="test_kernel",
-        parameter_domain_hash="def456",
-        semantic_contract_hash="ghi789",
+        parameter_domain_hash=_SHA,
+        semantic_contract_hash=_SHA,
     )
 
     # Check default values
@@ -70,13 +71,14 @@ def test_physical_implementation_spec_has_accelerator_and_kernel_signature():
         canonical="test_op",
         backend="pandas_numpy",
         execution_kind=ExecutionKind.NUMBA_CPU_KERNEL,
-        implementation_source_hash="abc123",
+        implementation_source_hash=_SHA,
         emitter_identity="test_emitter",
         kernel_identity="test_kernel",
         accelerator=Accelerator.NUMBA_CPU,
         kernel_signature="(float64[:], float64[:]) -> float64[:]",
-        parameter_domain_hash="def456",
-        semantic_contract_hash="ghi789",
+        parameter_domain_hash=_SHA,
+        semantic_contract_hash=_SHA,
+        implementation_closure_hash=_SHA,
     )
 
     assert spec_with_accel.accelerator == Accelerator.NUMBA_CPU

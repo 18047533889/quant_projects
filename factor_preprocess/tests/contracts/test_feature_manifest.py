@@ -115,6 +115,25 @@ def test_bundle_snapshots_caller_channels_mapping():
     assert bundle.channels["raw"].feature_ids == ("f1", "f2")
 
 
+def test_bundle_snapshots_caller_values_array():
+    values = np.arange(24.0).reshape(2, 3, 4)
+    bundle = FeatureBundle(
+        bundle_id="b1",
+        time_axis=_time_axis(),
+        asset_axis=_asset_axis(),
+        channels=_channels(["f1", "f2"], ["f3", "f4"]),
+        values=values,
+        layout="TNF",
+    )
+    # Caller mutates the source ndarray after construction; the bundle's
+    # snapshot must be unaffected (FP-P0-02 deep snapshot).
+    values[0, 0, 0] = 999.0
+    values[1, 2, 3] = -999.0
+    np.testing.assert_array_equal(bundle.values[0, 0, 0], 0.0)
+    np.testing.assert_array_equal(bundle.values[1, 2, 3], 23.0)
+    assert not bundle.values.flags.writeable
+
+
 # ============================================================================
 # FP-P0-03 — shape validation
 # ============================================================================
@@ -351,6 +370,45 @@ def test_fitted_state_correct_provided_hash_accepted():
         learned_params_hash=auto.learned_params_hash,
     )
     assert provided.learned_params_hash == auto.learned_params_hash
+
+
+def test_fitted_state_hash_changes_when_params_mutate():
+    # The hash must be derived from parameter CONTENT, not from object
+    # identity: mutating the source container after construction (which the
+    # frozen snapshot decouples from the state) must change the hash.
+    params = {"mu": np.array([1.0, 2.0, 3.0])}
+    state_a = FittedState(
+        state_id="s1",
+        transform_name="cs_rank",
+        transform_version="1.0.0",
+        fit_start_time=datetime(2024, 1, 1),
+        fit_end_time=datetime(2024, 1, 2),
+        learned_params=params,
+    )
+    params["mu"][1] = 999.0  # mutate the caller-owned array
+    state_b = FittedState(
+        state_id="s2",
+        transform_name="cs_rank",
+        transform_version="1.0.0",
+        fit_start_time=datetime(2024, 1, 1),
+        fit_end_time=datetime(2024, 1, 2),
+        learned_params={"mu": np.array([1.0, 2.0, 3.0])},
+    )
+    # state_a's hash reflects the ORIGINAL content; mutating the caller's
+    # array afterwards must not change state_a's already-derived hash.
+    params["mu"][1] = 123.0
+    assert state_a.learned_params_hash == state_b.learned_params_hash
+    # A genuinely different parameter array hashes differently.
+    params2 = {"mu": np.array([1.0, 9.0, 3.0])}
+    state_c = FittedState(
+        state_id="s3",
+        transform_name="cs_rank",
+        transform_version="1.0.0",
+        fit_start_time=datetime(2024, 1, 1),
+        fit_end_time=datetime(2024, 1, 2),
+        learned_params=params2,
+    )
+    assert state_a.learned_params_hash != state_c.learned_params_hash
 
 
 def test_fitted_state_provenance_fields_present():

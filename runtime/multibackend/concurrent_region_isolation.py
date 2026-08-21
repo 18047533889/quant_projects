@@ -304,15 +304,31 @@ class ConcurrentRegionIsolationManager:
                 _logger.warning(f"Region {region_id} already exists")
                 return self._regions[region_id]
 
-            # Calculate limit
-            if limit_bytes is None:
+            if limit_bytes is not None:
+                # Explicit caller limits are admitted against the TOTAL memory
+                # budget, never silently oversold: an explicit limit that alone
+                # exceeds the total, or that pushes the aggregate claim past the
+                # total, is a hard error (fail-closed).
+                claimed = sum(p._limit_bytes for p in self._regions.values())
+                if limit_bytes > self._total_memory_bytes:
+                    raise ValueError(
+                        f"Region {region_id}: explicit limit {limit_bytes} "
+                        f"exceeds total memory {self._total_memory_bytes}"
+                    )
+                if claimed + limit_bytes > self._total_memory_bytes:
+                    raise ValueError(
+                        f"Region {region_id}: explicit limit {limit_bytes} "
+                        f"would oversell total {self._total_memory_bytes} "
+                        f"(already claimed {claimed})"
+                    )
+            else:
                 # Fair share: total / (current_regions + 1)
                 region_count = len(self._regions) + 1
                 fair_share = self._total_memory_bytes // region_count
 
                 # Do not oversell: a default limit must fit within the
                 # remaining budget after existing regions have claimed
-                # their share. Explicit caller limits are left untouched.
+                # their share.
                 remaining_budget = self._total_memory_bytes - sum(
                     p._limit_bytes for p in self._regions.values()
                 )

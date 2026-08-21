@@ -1,0 +1,144 @@
+audit: R21-PLATFORM-AUDIT
+role: reviewer/auditor (read-only)
+date: 2026-08-21
+scope: factor_assets (FA) + quant_evaluator (QE) P0 closure items
+
+# NOTE on QE importable source: build/lib/quant_evaluator is the real source.
+# It has NO tests/ dir. QE tests live at repo-root quant_evaluator/tests/ and
+# bootstrap build/lib via sys.modules injection (test_consistency.py:59-81).
+
+items:
+
+  - id: FA-P0-1
+    title: production Leiden fail-closed + ClusterLineageRegistry
+    verdict: PASS
+    evidence:
+      - factor_assets/clustering/families.py:642-648 (LeidenClustering raises NotImplementedError when igraph missing; no silent fallback)
+      - factor_assets/clustering/families.py:466-478 (toy ModularityClustering raises unless allow_toy_algorithm=True)
+      - factor_assets/clustering/families.py:83-305 (ClusterLineageRegistry exists; record_change/record_snapshot/lineage_of/history_of/jaccard_with_parent; lineage-traceable)
+      - factor_assets/clustering/families.py:117-168 (record_change requires parent_cluster for SPLIT/MERGE, else ValueError)
+      - factor_assets/tests/test_leiden_clustering.py:65-96 (fail-closed tests; igraph absent here)
+
+  - id: FA-P0-2
+    title: ANN honesty EXACT_FLAT + build_hash
+    verdict: PASS
+    evidence:
+      - factor_assets/similarity/ann.py:87-99 (IndexType.EXACT_FLAT distinct from HNSW/IVF/ANNOY)
+      - factor_assets/similarity/ann.py:266-274 (ExactNearestNeighbor is IndexFlatIP; docstring explicitly "NOT an approximate (ANN) index")
+      - factor_assets/similarity/ann.py:147-162 (ANNIndexArtifact carries build_hash; __post_init__ requires it)
+      - factor_assets/similarity/ann.py:175-193 (compute_build_hash uses hashlib.sha256 over all fields)
+      - factor_assets/similarity/ann.py:445-460 (FaissANNIndex deprecated alias warns; honest naming)
+      - factor_assets/tests/similarity/test_ann_naming_recall.py:142-154 (exact not approximate; build_hash tests at 179-203)
+
+  - id: FA-P0-3
+    title: MMR O(K^2)-free incremental/heap
+    verdict: PASS
+    evidence:
+      - factor_assets/assembly/engine.py:137-224 (_MaxHeapEntry + _lazy_greedy_mmr lazy-greedy max-heap; stale-entry refresh only at pop)
+      - factor_assets/assembly/engine.py:585-598 (diverse policy delegates to _lazy_greedy_mmr)
+      - factor_assets/tests/selection/test_diverse_scale.py:175-192 (structural heap check + 10k < 4x 5k scaling guard)
+      - NOTE: assembly-level _mmr_score (engine.py:104-134) has no pairwise graph, family-proxy only; heap covers greedy selection.
+
+  - id: FA-P0-4
+    title: factor-count conservation ledger
+    verdict: PASS
+    evidence:
+      - factor_assets/assembly/engine.py:227-305 (_Disposition KEEP/SHADOW/REJECT/ERROR; AssemblyDispositionLedger.assert_conserved raises on INPUT != KEEP+SHADOW+REJECT+ERROR)
+      - factor_assets/assembly/engine.py:436-506 (assemble records every candidate; reclassifies max_factors cut to REJECT at 494-506)
+      - factor_assets/tests/test_factor_count_conservation.py (assert_conserved tests)
+
+  - id: FA-P0-5
+    title: deterministic tie-breaking clustering/selection
+    verdict: PASS
+    evidence:
+      - factor_assets/clustering/families.py:372,493,672,721,1010 (all iteration over sorted(self.graph.nodes))
+      - factor_assets/clustering/families.py:611-653 (Leiden fixed random_seed=42)
+      - factor_assets/clustering/families.py:228-253 (_find_containing_parent breaks ties by Jaccard then cluster id)
+      - factor_assets/assembly/engine.py:538 (manual = sorted by factor_id); :546-547 (two stable passes: timestamp desc, factor_id asc)
+      - factor_assets/assembly/engine.py:155-156 (_MaxHeapEntry strict total order on (key, uid))
+      - factor_assets/tests/test_leiden_clustering.py:115-120 (determinism test), factor_assets/tests/assembly/test_engine.py:329 (assembly hash deterministic/content-sensitive)
+      - RESIDUAL: SparseCorrelationGraph.neighbors/to_edge_list order follows input-edge insertion, NOT sorted (graph/sparse.py:111-121,175-186); graph construction preserves iteration order. Same input edges => same output (deterministic), but dict-iteration-independent only because insertions are in caller order.
+
+  - id: FA-P0-6
+    title: conditional novelty ResultIdentityNoveltyAssessor fail-closed
+    verdict: PASS
+    evidence:
+      - factor_assets/novelty/conditional.py:210-276 (ResultIdentityNoveltyAssessor exists; assess_novelty returns is_novel via result identity)
+      - factor_assets/novelty/conditional.py:249-265 (equivalent found in pool => is_novel=False; else is_novel=True at 267-276)
+      - factor_assets/novelty/conditional.py:32-38 (NoveltyResult validates factor_id/score/method; no silent unknown-identity path)
+      - factor_assets/tests/test_conditional_novelty.py:254-323 (TestResultIdentityNoveltyAssessor)
+
+  - id: QE-P0-7
+    title: single MetricSpec authority
+    verdict: FAIL
+    evidence:
+      - PASS side: registry/metrics.py:92-143 is the only registry used by runtime (runtime/evaluator.py:43 imports CANONICAL_METRIC_ALIASES/get_metric; registry/__init__.py:7-15 re-exports registry.metrics)
+      - FAIL side: metrics/catalog.py:1-331 defines a SECOND MetricSpec (metrics/catalog.py:30-43) + Domain enum + CATALOG + get_metric_spec/list_all_metric_ids (metrics/catalog.py:49-67, 294-331); it is NOT a re-export of registry.metrics and is NOT imported by any other module in build/lib (grep: zero references outside catalog.py itself)
+      - Also metrics/catalog.py defines its own duplicate MetricSpec dataclass with DIFFERENT field names (domain/metric_id/required_inputs/output_type), risk of confusion. It should be removed or re-export registry.metrics.
+      - factor_assets/tests: none relevant
+
+  - id: QE-P0-8
+    title: RankIC/Pearson DAG requires + ic_method
+    verdict: PASS
+    evidence:
+      - registry/metrics.py:198-210 (CANONICAL_METRIC_ALIASES: ic.rank.* -> rank_ic_series/rank_ic/ic_median/ic_std/ic_ir/hac_tstat/hac_pvalue; ic.pearson.* -> pearson_ic_series/mean_ic/ic_std/ic_ir)
+      - registry/metrics.py:319-332 (rank_ic = time-mean of daily SPEARMAN; alias ic.rank.mean)
+      - registry/metrics.py:363-374 (ic_median), 378-394 (hac_pvalue), 416-424 (hac_tstat) all declare ic_method="spearman"
+      - registry/metrics.py:214-263 (mean_ic/ic_std/ic_ir requires=["ICSeriesArtifact"], default pearson)
+      - registry_adapters.py:265-280 (compute_rank_ic_value uses method="spearman"), 251-262 (pearson)
+      - runtime/evaluator.py:982-1016 (facade wrapper builds IC series from spec.ic_method)
+      - RESIDUAL (minor): ic.rank.ir -> ic_ir and ic.rank.std -> ic_std are spearman-family aliases but ic_ir/ic_std/mean_ic specs do NOT declare ic_method="spearman" (they default pearson). The wrapper builds a Pearson IC series for these aliases, but rank_ic/std/ir stats are conventionally computed over Spearman IC. Facade behavior is internally consistent (adapter computes its own series) but the alias family mixes methods.
+
+  - id: QE-P0-9
+    title: SHA-256 not builtin hash() for identity
+    verdict: PASS
+    evidence:
+      - contracts/_hashutil.py:54-66 (stable_content_hex uses hashlib.sha256; canonicalize handles arrays/dicts), 73-80 (stable_hash reduces digest to hash int)
+      - contracts/metric_artifacts.py:153-170 (MetricArtifact.__hash__ = stable_hash(stable_content_hex(...)))
+      - runtime/evaluator.py:674-680,727-767 (array/content hashing via hashlib.sha256)
+      - chart_spec.py:37-45 (SHA-256 content hash)
+      - No raw builtin hash() used for identity anywhere in build/lib (grep clean); registry/metrics.py clean.
+      - quant_evaluator/tests/test_qe_p0_03_hash_stability.py:129-152 (cross-PYTHONHASHSEED subprocess identity test) — PASSES (2 passed)
+
+  - id: QE-P0-10
+    title: batch==streaming==chunked==cache==parallel consistency
+    verdict: PASS
+    evidence:
+      - quant_evaluator/tests/test_consistency.py:1-444 exists (repo-root tests; build/lib has no tests/ dir — see note)
+      - Runs GREEN: 11 passed (0.53s) with PYTHONPATH=build/lib
+      - Covers: batch==streaming IC/coverage (175-249), chunked==nonchunked concat (266-300), cache hit==miss + content-keyed (307-359), serial==parallel + numba kernel (377-443)
+
+  - id: QE-P0-11
+    title: render-only reporting NOT_COMPUTED/UNAVAILABLE
+    verdict: PASS (with one FAIL sub-item)
+    evidence:
+      - PASS: reporting/tear_sheet.py:47-49 (NOT_COMPUTED/UNAVAILABLE sentinels), :151-165 (_placeholder_panel renders NOT_COMPUTED, never 0.0), :722-728 (absent artifact -> placeholder)
+      - PASS: reporting/chart_spec.py:13-45 (ChartSpec data dict + SHA-256 content hash, no metric computation)
+      - FAIL sub-item: reporting/library_reports.py:85-104 builds summary_stats with .get(key, 0.0) defaults and emits 0.0 for missing values (e.g. mean_ic_mean: float(np.mean(ic_means)) if ic_means else 0.0 at :94; also :99-103); NO NOT_COMPUTED sentinel. Missing data is rendered as 0.0.
+      - FAIL sub-item: reporting/tear_sheet.py:606-627 (variance_cvar_bar and skewness_kurtosis_bar) render float defaults (0.0) from EvaluationResult fields with no NOT_COMPUTED guard.
+      - Note: reporting/__init__.py:44-47 marks library_reports as not available (NotImplementedError).
+
+  - id: QE-P0-12
+    title: numerical oracle 13 tests pass
+    verdict: FAIL
+    evidence:
+      - quant_evaluator/tests/test_numerical_oracle.py exists with 13 tests
+      - Runtime: 3 FAILED / 10 PASSED (4.55s)
+      - The 3 failures are TEST-BUGS, not kernel bugs (all three are oracle expectation errors):
+      - test_rank_ic_with_ties_matches_hand_computed_spearman (line 186): the test's hand-built rank vectors rx/ry (lines 176-177) are WRONG. It assigns factor value 5 rank 9.0 and return value 8 rank 8.0, but correct average-tie ranks are 7.0/7.0 (there are values 3,4 in between). Correct full-panel Spearman = scipy = kernel = 0.9964973622679556; test oracle 0.9894797752097305. Kernel is CORRECT (matches scipy.stats.spearmanr exactly).
+      - test_pearson_ic_matches_hand_computed_correlation (line 221): embeds the 5-asset tie-heavy panel into 12 assets; the embedded sub-panel's Pearson is NOT preserved by the full-panel correlation (unlike Spearman ranks, Pearson is scale/rank sensitive). Kernel returns full-panel Pearson 0.9880037996214396 which is mathematically correct; test wrongly expects the sub-panel value 0.9798191986792546. The tiny-panel assertion (line 205, _pearson on the 5 assets) is itself correct and passes.
+      - test_hac_tstat_close_to_statsmodels_within_loose_tolerance (line 368): tolerance too tight (1e-6). QE Newey-West with no small-sample correction differs from statsmodels cov_hac at ~9.2e-5 in this fixture (kernel matches the manual NW lag-1 formula EXACTLY, verified to 1e-12). The manual-lag1 test (line 326-346) PASSES. statsmodels comparison should be loosened or QE should apply the same finite-sample correction.
+      - The fix agent should correct the two oracle math errors and relax the statsmodels tolerance (or add the NW finite-sample correction to the kernel).
+
+summary:
+  PASS: 9 (FA-P0-1..6, QE-P0-8, QE-P0-9, QE-P0-10)
+  FAIL: 2 (QE-P0-7, QE-P0-12)
+  PARTIAL/FAIL-sub: QE-P0-11 (reporting sentinels not fully honored)
+  NOT_FOUND: 0
+
+gaps_for_writer_agents (by severity):
+  1. HIGH: QE-P0-7 — remove or re-export duplicate metric catalog in metrics/catalog.py (second MetricSpec/Domain/CATALOG source of truth).
+  2. HIGH: QE-P0-12 — fix 3 test oracles in test_numerical_oracle.py (rank vectors, embedded-panel Pearson expectation, statsmodels HAC tolerance).
+  3. MED: QE-P0-11 — reporting/library_reports.py:85-104 uses 0.0 defaults; tear_sheet.py:606-627 renders 0.0 for absent data. Switch to NOT_COMPUTED sentinels.
+  4. LOW/MED: QE-P0-8 — ic_ir/ic_std/mean_ic specs default ic_method=pearson while aliases ic.rank.ir/ic.rank.std/ic.rank.mean are Spearman-family; consider explicit ic_method="spearman" on those specs for consistency.
+  5. LOW: FA-P0-5 — SparseCorrelationGraph.neighbors/to_edge_list preserve insertion order (graph/sparse.py:111-121,175-186); deterministic for same input, but not explicitly sorted. Optionally sort adjacency lists for order-independence.

@@ -1,14 +1,20 @@
 """SearchRunner: orchestrate mutation search with budget and plateau stopping."""
 
+import json
 import numbers
 import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from math import isfinite
 from types import MappingProxyType
-from typing import Any, Callable, Dict, List, Literal, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from factor_optimizer.capabilities import ExecutionMode, require_production_capability
+from factor_optimizer.contracts.objective import (
+    OBJECTIVE_DIRECTIONS,
+    ObjectiveDirection,
+    ObjectiveSpec,
+)
 from factor_optimizer.contracts.search_budget import BudgetTracker, SearchBudget
 from factor_optimizer.contracts.trial import Trial, TrialStatus
 from factor_optimizer.contracts.splits import (
@@ -21,6 +27,7 @@ from factor_optimizer.contracts.splits import (
 )
 from factor_optimizer.search.multifidelity import FidelityTier, MultiFidelityScheduler
 from factor_optimizer.search.plateau import PlateauConfig, PlateauDetector
+from factor_optimizer.search.strategies import SearchStrategy
 
 
 @dataclass
@@ -45,7 +52,19 @@ class SearchConfig:
     # Direction of the search objective. "maximize" (default) keeps the
     # historical `score > best` incumbent rule; "minimize" inverts it
     # (strictly lower score wins, e.g. loss/error objectives).
-    objective_direction: Literal["maximize", "minimize"] = "maximize"
+    #
+    # FO-P0-06: The authoritative description of the objective is the
+    # ``objective_spec`` contract below.  This bare field is retained as a
+    # backward-compatible convenience: callers that construct
+    # ``SearchConfig(budget=..., objective_direction="minimize")`` keep
+    # working, and the field is reconciled into the spec at construction.
+    # The spec is the single authority — ``objective_spec.direction`` is what
+    # the runner uses, and if both are supplied and disagree the config is
+    # rejected rather than silently drifting.  ``None`` (the default) means
+    # "not supplied"; it is resolved to the spec's direction during
+    # ``__post_init__``.
+    objective_direction: Optional[ObjectiveDirection] = None
+    objective_spec: Optional[ObjectiveSpec] = None
 
     def __post_init__(self):
         if isinstance(self.execution_mode, str):
@@ -69,9 +88,37 @@ class SearchConfig:
             not isfinite(self.evaluation_cost_units) or self.evaluation_cost_units < 0
         ):
             raise ValueError("evaluation_cost_units must be finite and >= 0")
-        if self.objective_direction not in ("maximize", "minimize"):
-            raise ValueError(
-                "objective_direction must be 'maximize' or 'minimize'"
+        if self.objective_direction is not None:
+            if self.objective_direction not in OBJECTIVE_DIRECTIONS:
+                raise ValueError(
+                    "objective_direction must be 'maximize' or 'minimize'"
+                )
+        # The spec is the authority for direction.  If both the spec and the
+        # legacy field are given, they must agree; the field is then dropped
+        # so the spec cannot drift from it.  If only the field is given, it is
+        # promoted to a spec over the default metric ("score").
+        if self.objective_spec is not None:
+            if not isinstance(self.objective_spec, ObjectiveSpec):
+                raise TypeError(
+                    "objective_spec must be an ObjectiveSpec (or None)"
+                )
+            if (
+                self.objective_direction is not None
+                and self.objective_direction != self.objective_spec.direction
+            ):
+                raise ValueError(
+                    "objective_spec.direction and objective_direction disagree; "
+                    f"spec says {self.objective_spec.direction!r}, "
+                    f"field says {self.objective_direction!r}"
+                )
+            # Normalize: the bare field is now derived from the authoritative
+            # spec so the two can never drift after construction.
+            self.objective_direction = self.objective_spec.direction
+        else:
+            if self.objective_direction is None:
+                self.objective_direction = "maximize"
+            self.objective_spec = ObjectiveSpec.from_direction(
+                self.objective_direction
             )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -85,7 +132,7 @@ class SearchConfig:
             "evaluation_cost_units": self.evaluation_cost_units,
             "execution_mode": self.execution_mode.value,
             "require_evaluation_protocol": self.require_evaluation_protocol,
-            "objective_direction": self.objective_direction,
+            "objective_spec": self.objective_spec.to_dict(),
         }
 
     @classmethod
@@ -93,6 +140,13 @@ class SearchConfig:
         """Deserialize search configuration."""
         values = dict(data)
         values["budget"] = SearchBudget.from_dict(values["budget"])
+        # Checkpoint round-trips (and any dict that carries the spec) restore
+        # the authoritative spec.  The legacy bare field is reconstructed from
+        # the spec so configs built via to_dict/from_dict remain comparable.
+        if "objective_spec" in values:
+            values["objective_spec"] = ObjectiveSpec.from_dict(
+                values["objective_spec"]
+            )
         return cls(**values)
 
 
@@ -117,6 +171,7 @@ class SearchSession:
     sealed_test_masks: Optional[Dict[str, List[bool]]] = None
     sealed_test_consumed: bool = False
     sealed_test_results: List[Dict[str, Any]] = field(default_factory=list)
+    strategy: Optional[SearchStrategy] = None
 
     def __setattr__(self, name: str, value: Any) -> None:
         # Sealed-test state is append-only through freeze/consume; direct
@@ -169,7 +224,7 @@ class SearchSession:
         if not finite:
             raise ValueError("best score must be a finite non-boolean number")
         if self.best_score is None or _is_improvement(
-            score, self.best_score, self.config.objective_direction
+            score, self.best_score, self.config.objective_spec.direction
         ):
             self.best_score = score
             self.best_trial_id = trial_id
@@ -337,6 +392,37 @@ class SearchSession:
         """Return session duration in seconds."""
         end = self.finished_at or datetime.now()
         return (end - self.started_at).total_seconds()
+
+    # -- checkpoint / resume ---------------------------------------------------
+
+    def checkpoint(self, path: str) -> None:
+        """Write a full checkpoint (strategy + RNG + budget) to *path*.
+
+        The payload embeds the session's config, budget tracker, trials, and the
+        complete stochastic state of its ``strategy`` (Python RNG, NumPy RNG,
+        history, iteration count, and strategy-specific fields).  A session
+        resumed from this checkpoint reproduces the exact same proposal
+        trajectory as an uninterrupted one.
+        """
+        payload = self.to_dict()
+        if self.strategy is not None:
+            payload["strategy"] = self.strategy.to_checkpoint_dict()
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, indent=2, sort_keys=True)
+
+    @classmethod
+    def resume(cls, path: str) -> "SearchSession":
+        """Load and restore a session checkpoint written by ``checkpoint``.
+
+        Returns a live, quiescent ``SearchSession`` (unfinished) with its
+        strategy's RNG state fully restored, ready for ``SearchRunner.resume``.
+        """
+        with open(path, "r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+        session = cls.from_dict(payload)
+        if "strategy" in payload:
+            session.strategy = SearchStrategy.from_checkpoint_dict(payload["strategy"])
+        return session
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize session state for a quiescent checkpoint."""
@@ -727,6 +813,7 @@ class SearchRunner:
         evaluation_fn: Callable[[Trial, int], Dict[str, Any]],
         plateau_detector: Optional[Callable[[List[float]], bool]] = None,
         trial_validator: Optional[Callable[[Trial], Dict[str, Any]]] = None,
+        strategy: Optional[SearchStrategy] = None,
     ):
         if config.execution_mode is ExecutionMode.PRODUCTION:
             require_production_capability()
@@ -753,6 +840,7 @@ class SearchRunner:
         self.evaluation_fn = evaluation_fn
         self.plateau_detector = plateau_detector
         self.trial_validator = trial_validator
+        self.strategy = strategy
         # Lazily-built default PlateauDetector (package semantics).
         self._default_plateau_detector: Optional[PlateauDetector] = None
         if isinstance(evaluation_fn, EvaluationProtocol):
@@ -768,6 +856,7 @@ class SearchRunner:
             session_id=session_id,
             config=self.config,
             budget_tracker=BudgetTracker(budget=self.config.budget),
+            strategy=self.strategy,
         )
         return self._run_session(session)
 
@@ -775,14 +864,21 @@ class SearchRunner:
         """Resume a quiescent, unfinished session with matching configuration."""
         if not isinstance(session, SearchSession):
             raise TypeError("session must be a SearchSession")
-        if session.is_finished():
-            raise ValueError("cannot resume a finished session")
         if session.budget_tracker.evaluations_reserved or session.budget_tracker.cost_reserved:
             raise ValueError("cannot resume with active evaluation reservations")
         if any(not trial.is_terminal() for trial in session.trials + session.duplicate_trials):
             raise ValueError("cannot resume with non-terminal trials")
         if session.config.to_dict() != self.config.to_dict():
             raise ValueError("session configuration does not match runner configuration")
+        if session.strategy is None and self.strategy is not None:
+            # Legacy checkpoint (SearchSession.from_dict) restored without a
+            # strategy: keep working by adopting the runner's strategy.
+            session.strategy = self.strategy
+        if session.strategy is None:
+            raise ValueError(
+                "resume requires a search strategy attached to the session "
+                "(call SearchSession.resume(path), not bare SearchSession.from_dict)"
+            )
         return self._run_session(session)
 
     def create_train_evaluation_context(self) -> "TrainEvaluationContext":
@@ -957,6 +1053,10 @@ class SearchRunner:
                 if len(recent_scores) > self.config.plateau_window:
                     recent_scores.pop(0)
                 session.update_best(trial.trial_id, score)
+                if session.strategy is not None:
+                    session.strategy.record(
+                        trial.metadata.get("params", {}), float(score)
+                    )
 
         if not session.is_finished():
             session.finish(reason="manual_stop")

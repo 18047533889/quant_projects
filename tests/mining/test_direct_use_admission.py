@@ -27,18 +27,23 @@ from backend.operator_capability import (
 _INVENTORY = "backend.operator_capability.enumerate_physical_inventory"
 
 
+_SHA = "0123456789abcdef" * 4  # 64-char lowercase hex SHA-256
+
+
 def _admitted_record(canonical: str = "ts_mean") -> PhysicalInventoryRecord:
     """One fully-admitted physical inventory row for a canonical."""
     spec = PhysicalImplementationSpec(
         canonical=canonical,
         backend="pandas_numpy",
         execution_kind=ExecutionKind.REFERENCE,
-        implementation_source_hash="abc123",
-        parameter_domain_hash="def456",
-        semantic_contract_hash="ghi789",
+        implementation_source_hash=_SHA,
+        parameter_domain_hash=_SHA,
+        semantic_contract_hash=_SHA,
         emitter_identity="test_emitter",
+        implementation_closure_hash=_SHA,
     )
     assert spec.physical_implementation_id is not None
+    assert str(spec.physical_implementation_id).startswith("pi:v3:")
     return PhysicalInventoryRecord(
         canonical=canonical,
         registry_slot="pandas_numpy",
@@ -213,3 +218,31 @@ class TestDirectUseMiningOperatorsAdmission:
                     f"Operator {op.canonical} is in eligible list "
                     f"but production_admitted is {op.production_admitted}"
                 )
+
+
+class TestOperatorFamilyId:
+    """R22: operator_family_id resolution — same family same id, different different."""
+
+    def test_same_family_returns_same_id(self) -> None:
+        """Same-family canonicals resolve to the same family id."""
+        from mining.direct_use import operator_family_id
+
+        # ts_mean / ts_return are both in the "trend" economic family (R18-068)
+        # and neither is captured by a semantic redundancy group, so both must
+        # resolve to the same id.
+        assert operator_family_id("ts_mean") == "trend"
+        assert operator_family_id("ts_return") == "trend"
+        assert operator_family_id("ts_mean") == operator_family_id("ts_return")
+
+    def test_different_family_returns_different_id(self) -> None:
+        """Different-family canonicals resolve to different family ids."""
+        from mining.direct_use import operator_family_id
+
+        # ts_ema is in the "smoothed_price" semantic redundancy group (R18-069),
+        # which wins over the trend economic family — so it must differ from
+        # ts_mean even though both are trend-like economically.
+        assert operator_family_id("ts_ema") == "smoothed_price"
+        assert operator_family_id("ts_mean") != operator_family_id("ts_ema")
+        # cs_rank is a cross-sectional operator: never in the trend family.
+        assert "trend" not in operator_family_id("cs_rank")
+        assert operator_family_id("cs_rank") != operator_family_id("ts_mean")

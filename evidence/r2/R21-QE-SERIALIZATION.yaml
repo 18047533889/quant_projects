@@ -1,0 +1,76 @@
+review: QE-P0
+title: QE MappingProxy serialization/persistence fix (MappingProxyType not picklable)
+component: quant_evaluator
+date: 2026-08-21
+
+summary: >
+  QE artifacts and registry state were not fully serializable: the registry's
+  CANONICAL_METRIC_ALIASES is a types.MappingProxyType (read-only), which the
+  stdlib pickle cannot serialize ("TypeError: cannot pickle 'mappingproxy'
+  object"). StreamingEvaluationResult also defaulted its `provenance` field to
+  a per-instance empty MappingProxyType, so even an empty result was
+  unpicklable. Fixed by (1) registering a copyreg.pickle reducer for
+  mappingproxy that converts to a plain dict on the way out and restores a
+  read-only mappingproxy on the way back, (2) switching the streaming result
+  provenance default to a plain dict plus __getstate__/__setstate__ guards,
+  and (3) completing to_dict/from_dict on the four artifact_types classes
+  (QuantileReturnArtifact lacked to_dict; none had from_dict).
+
+state_before:
+  - "build/lib/quant_evaluator/registry/metrics.py:198 CANONICAL_METRIC_ALIASES was a bare MappingProxyType — pickle.dumps failed with TypeError"
+  - "build/lib/quant_evaluator/runtime/streaming_evaluator.py:162 StreamingEvaluationResult.provenance defaulted to lambda: MappingProxyType({}) — an empty result was unpicklable"
+  - "build/lib/quant_evaluator/contracts/artifact_types.py: only ICSeriesArtifact had to_dict; QuantileReturnArtifact/ProbePortfolioArtifact/ExposureArtifact had NO to_dict; none of the four had from_dict"
+  - "contracts/metric_artifacts.py already had complete to_dict/from_dict for all 5 MetricArtifact subclasses (no change needed)"
+
+changes:
+  - file: build/lib/quant_evaluator/registry/metrics.py
+    detail: >
+      Kept CANONICAL_METRIC_ALIASES as a read-only MappingProxyType backed by a
+      module-level plain dict (_CANONICAL_METRIC_ALIASES_DATA), and registered
+      a copyreg.pickle reducer (_pickle_aliases -> _reconstruct_read_only_aliases)
+      that pickles any mappingproxy as a plain dict and restores a read-only
+      mappingproxy on load. Read-only semantics preserved after round-trip.
+      Added `import copyreg`.
+  - file: build/lib/quant_evaluator/runtime/streaming_evaluator.py
+    detail: >
+      StreamingEvaluationResult.provenance default changed from
+      `lambda: MappingProxyType({})` to a plain dict; added __getstate__ that
+      normalizes any MappingProxyType provenance to dict on the way out and
+      __setstate__ that restores state. (MappingProxyType of arbitrary tuples
+      in provenance also now round-trips via the copyreg reducer.)
+  - file: build/lib/quant_evaluator/contracts/artifact_types.py
+    detail: >
+      Added to_dict + from_dict classmethods to QuantileReturnArtifact,
+      ProbePortfolioArtifact, and ExposureArtifact; added from_dict to
+      ICSeriesArtifact. All four artifact types now round-trip through
+      to_dict/from_dict preserving identity (==, stable hash, payload,
+      provenance).
+
+tests:
+  - file: tests/test_qe_serialization.py
+    result: "36 passed (standalone); 80 passed overall (with consistency/metamorphic/numerical_oracle/hash_stability)"
+    coverage:
+      - MetricArtifact pickle round-trip for all 5 subclasses (scalar/series/vector/matrix/distribution) across every pickle protocol, asserting identity + payload + provenance + stable hash
+      - CANONICAL_METRIC_ALIASES mappingproxy pickle round-trip (all protocols), read-only preserved, and embedded-in-dict / embedded-in-result pickle
+      - MetricSpec pickle round-trip (compute_fn intact)
+      - StreamingEvaluationResult pickle with default (now dict) provenance, embedded mappingproxy provenance, and real _stream_provenance (MappingProxyType of tuples)
+      - to_dict/from_dict round-trip for the four artifact_types classes and every MetricArtifact subclass; to_dict output JSON-serializable
+
+run_command: >
+  cd /home/shw/quant_projects/quant_evaluator &&
+  OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+  PYTHONPATH=/home/shw/quant_projects/quant_evaluator/build/lib
+  /home/shw/quant_projects/.venv/bin/python -m pytest
+  quant_evaluator/tests/test_qe_serialization.py -q --tb=short
+
+verification:
+  - "pickle.dumps(CANONICAL_METRIC_ALIASES) succeeds; restored object is a read-only mappingproxy with equal contents"
+  - "pickle.dumps(StreamingEvaluationResult()) succeeds (empty result, plain-dict provenance)"
+  - "pickle.dumps(StreamingEvaluationResult with provenance = MappingProxyType of tuples) succeeds"
+  - "pickle round-trip of every artifact preserves __eq__, __hash__, payload arrays, and provenance"
+  - "to_dict/from_dict round-trip of all 9 artifact classes preserves __eq__ and __hash__"
+
+pre_existing:
+  - "contracts/metric_artifacts.py already had full to_dict/from_dict (no change)"
+  - "artifact_types classes were already pickle-safe (numpy arrays + tuples + dicts); only to_dict/from_dict coverage was missing"
+  - "The prior subagent's edits are NOT present in build/lib or in a test file for this review; build/lib had zero git-tracked changes for this task (the only quant_evaluator working-tree deltas were pre-existing test-file edits from an earlier session)"

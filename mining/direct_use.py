@@ -1459,6 +1459,31 @@ def semantic_redundancy_group(canonical: str) -> str:
     return ""
 
 
+def operator_family_id(canonical: str) -> str:
+    """One canonical family id per operator for budget/quota/grouping.
+
+    Deterministic resolution order (exact win beats pattern):
+      1. explicit semantic redundancy group (R18-069)
+      2. economic effect family (R18-068)
+      3. monotonic transform class (R18-021)
+      4. canonical itself (degenerate, stable)
+
+    ``operator_family_id`` and ``group_source_first`` in ``mining/campaign.py``
+    are the two stable grouping surfaces; this one is family-budget oriented,
+    that one is dependency/source oriented.
+    """
+    group = semantic_redundancy_group(canonical)
+    if group:
+        return group
+    family = economic_effect_family(canonical)
+    if family and family != "unknown":
+        return family
+    mono = MONOTONIC_TRANSFORM_CLASS.get(canonical)
+    if mono:
+        return mono
+    return canonical
+
+
 def monotonic_transform_class(canonical: str) -> str:
     """R18-021: monotonic-equivalent class (dedup x/exp(x)/sigmoid(x)/rank(x))."""
     return MONOTONIC_TRANSFORM_CLASS.get(canonical, "")

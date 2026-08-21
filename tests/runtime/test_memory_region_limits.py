@@ -72,3 +72,46 @@ def test_rebalance_keeps_aggregate_within_total_memory() -> None:
         for rid in ("a", "b", "c")
     )
     assert total_limit <= 100_000
+
+
+def test_explicit_region_limit_is_admitted_within_total() -> None:
+    """An explicit caller limit is honored exactly and counted in the budget."""
+    mgr = ConcurrentRegionIsolationManager(total_memory_bytes=100_000)
+    pool_a = mgr.create_region("a", limit_bytes=30_000)
+    assert pool_a._limit_bytes == 30_000
+    assert pool_a.stats().limit_bytes == 30_000
+
+    # A second explicit limit that still fits is admitted.
+    pool_b = mgr.create_region("b", limit_bytes=60_000)
+    assert pool_b._limit_bytes == 60_000
+    total = sum(
+        mgr.get_region(rid).stats().limit_bytes  # type: ignore[union-attr]
+        for rid in ("a", "b")
+    )
+    assert total <= 100_000
+
+
+def test_explicit_region_limit_oversell_rejected() -> None:
+    """Explicit limits that oversell the total budget fail closed."""
+    mgr = ConcurrentRegionIsolationManager(total_memory_bytes=100_000)
+    mgr.create_region("a", limit_bytes=70_000)
+
+    # A single explicit limit larger than the total is a hard error.
+    try:
+        mgr.create_region("b", limit_bytes=120_000)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("explicit limit above total must raise ValueError")
+
+    # An explicit limit that pushes the aggregate past the total is a hard error.
+    try:
+        mgr.create_region("c", limit_bytes=40_000)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("aggregate oversell must raise ValueError")
+
+    # No region was created for the rejected admissions.
+    assert mgr.get_region("b") is None
+    assert mgr.get_region("c") is None

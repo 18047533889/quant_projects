@@ -1,0 +1,90 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quant_evaluator"
+version = "0.0.1a1"
+description = "Pure batch evaluator returning typed evidence bundles for factor evaluation"
+requires-python = ">=3.10"
+authors = [
+    {name = "Quant Platform", email = "noreply@example.com"}
+]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "pandas>=2.0",
+    "psutil>=5.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=3.0",
+    "build>=1.0.0",
+]
+fast = ["numba>=0.57.0"]
+polars = ["polars>=0.19.0"]
+arrow = ["pyarrow>=12.0.0"]
+stats = ["statsmodels>=0.14.0"]
+reporting = [
+    "matplotlib>=3.7",
+    "jinja2>=3.1",
+]
+full = [
+    "numba>=0.57.0",
+    "polars>=0.19.0",
+    "pyarrow>=12.0.0",
+    "statsmodels>=0.14.0",
+    "matplotlib>=3.7",
+    "jinja2>=3.1",
+]
+
+[tool.setuptools]
+packages = [
+    "quant_evaluator",
+    "quant_evaluator.api",
+    "quant_evaluator.adapters",
+    "quant_evaluator.backends",
+    "quant_evaluator.contracts",
+    "quant_evaluator.diagnosis",
+    "quant_evaluator.kernels",
+    "quant_evaluator.metrics",
+    "quant_evaluator.metrics.interactions",
+    "quant_evaluator.metrics.risk",
+    "quant_evaluator.metrics.stats",
+    "quant_evaluator.planner",
+    "quant_evaluator.registry",
+    "quant_evaluator.reporting",
+    "quant_evaluator.runtime",
+]
+
+[tool.setuptools.package-dir]
+"quant_evaluator" = "."
+"quant_evaluator.api" = "api"
+"quant_evaluator.adapters" = "adapters"
+"quant_evaluator.backends" = "backends"
+"quant_evaluator.contracts" = "contracts"
+"quant_evaluator.diagnosis" = "diagnosis"
+"quant_evaluator.kernels" = "kernels"
+"quant_evaluator.metrics" = "metrics"
+"quant_evaluator.metrics.interactions" = "metrics/interactions"
+"quant_evaluator.metrics.risk" = "metrics/risk"
+"quant_evaluator.metrics.stats" = "metrics/stats"
+"quant_evaluator.planner" = "planner"
+"quant_evaluator.registry" = "registry"
+"quant_evaluator.reporting" = "reporting"
+"quant_evaluator.runtime" = "runtime"
+
+[tool.setuptools.package-data]
+quant_evaluator = ["py.typed"]
+
+[tool.setuptools.exclude-package-data]
+"*" = ["tests", "tests.*", "benchmarks", "benchmarks.*", "*.pyc", "__pycache__", "test_*.py", "*_test.py"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]

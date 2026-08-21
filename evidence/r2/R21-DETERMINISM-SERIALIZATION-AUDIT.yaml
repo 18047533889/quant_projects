@@ -1,0 +1,257 @@
+schema_version: 1
+id: R21-DETERMINISM-SERIALIZATION-AUDIT
+slice: R21 Release Gates — DETERMINISM & SERIALIZATION (read-only audit)
+campaign: R21 Platform Release Gates Audit (Writer Audit)
+ticket: audit/task-determinism-serialization
+status: COMPLETED_LOCAL
+provenance:
+  head: 4a27a8b2 (HEAD shared dirty tree; working tree is truth)
+  repository_state: local_current_tree
+  timestamp: 2026-08-22T00:30:00Z
+  commit: NONE
+  remotes: NOT_USED
+  read_only: true
+  constraint: No production/test code modified. Build/lib QE files were
+    byte-verified against repo-root source (identical) and left untouched.
+source_truth:
+  quant_evaluator: quant_evaluator/build/lib/quant_evaluator/   # real importable source
+  factor_optimizer: factor_optimizer/factor_optimizer/
+  factor_assets: factor_assets/factor_assets/   # repo-root package dir
+  factor_preprocess: factor_preprocess/factor_preprocess/
+  venv_python: /home/shw/quant_projects/.venv/bin/python
+  thread_pinning: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 (used for every run below)
+
+verdicts:
+
+  # 1. DETERMINISM — quant_evaluator kernels
+  Q1_quant_evaluator_kernel_determinism:
+    verdict: PARTIAL
+    summary: >-
+      fast.py/numba_backend.py kernels are per-(t,f) cross-section independent
+      and deterministic; numba==fast parity is asserted at 1e-12/1e-14 and
+      valid-count bit-equality. BUT there is no test that runs the SAME kernel
+      twice in separate invocations and asserts bit-identical output, and no
+      dedicated determinism test file. The nearest proof is
+      test_consistency.py::test_numba_parallel_kernel_equals_fast_serial_kernel
+      and test_metamorphic.py::test_numba_and_fast_ic_parity (parity, not
+      run-twice determinism). 80/80 QE tests PASS under thread pinning
+      (2 skipped: bootstrapped-CI-only).
+    evidence:
+      - quant_evaluator/tests/test_consistency.py:429
+        (test_numba_parallel_kernel_equals_fast_serial_kernel — numba prange vs fast serial,
+         nan-aware 1e-12/1e-14 + np.array_equal counts)
+      - quant_evaluator/tests/test_metamorphic.py:541
+        (test_numba_and_fast_ic_parity — same contract)
+      - quant_evaluator/tests/test_numerical_oracle.py:406
+        (test_block_bootstrap_deterministic_under_fixed_rng — the ONLY true
+         same-input-twice determinism assertion in QE; byte-identical CI under fixed seed)
+      - quant_evaluator/tests/test_consistency.py:377
+        (test_serial_equals_parallel — serial vs ParallelBatchExecutor identical)
+      - kernels: build/lib/quant_evaluator/kernels/fast.py:14 (fast_ic_batch),
+        build/lib/quant_evaluator/kernels/numba_backend.py:26,144,629
+        (numba_* @njit(parallel=True, prange), deterministic per (t,f) writes)
+    gaps:
+      - No "same input -> two calls -> byte-identical" test for fast_ic_batch/numba_ic_batch.
+      - No determinism test file named determinism/deterministic/threads/seed
+        (grep over tests/ shows only thread-pinning env comments + bootstrap CI
+        tests which SKIP in this env).
+      - Multi-run cross-thread determinism of the numba prange kernels is asserted
+        only indirectly (parity with the serial kernel), not by repeated runs.
+
+  # 2. DETERMINISM — factor_optimizer strategies
+  Q2_factor_optimizer_strategy_determinism:
+    verdict: PASS (source) / FAIL (running tests)  → report as FAIL
+    summary: >-
+      SOURCE: Random/Grid/Bayesian/TPE all seed deterministically
+      (random.Random(seed) base + np.random.default_rng(seed) for TPE's KDE noise,
+      RandomSearch(space, seed) companion; no global np.random.* in propose paths —
+      TPE previously used np.random.normal global; fixed at b05a888f).
+      test_strategy_validation.py::test_numeric_strategies_deterministic PASSES
+      (101/101) proving same-seed -> identical 6-proposal trajectory for
+      Random/Bayesian/TPE. BUT the checkpoint/resume exact-trajectory suite
+      (test_strategy_checkpoint_resume.py) FAILS 4/10: 3 failures are the
+      checkpoint test using a categorical space for TPE/Bayesian (now rejected
+      fail-closed by FO-P0-03), 1 is RandomSearch session resume producing only
+      6 trials instead of 12. Also test_runner.py::test_search_runner_resume_continues_from_checkpoint
+      FAILS (resume of a bare SearchSession.from_dict now requires a strategy).
+      These are NEW uncommitted tests + source (untracked/modified since b05a888f);
+      source and tests are in active flux.
+    evidence:
+      - factor_optimizer/factor_optimizer/search/strategies.py:417,422 (base __init__,
+        random.Random(seed)); 952-953 (TPE np.random.default_rng(seed) + RandomSearch companion);
+        755 (Bayesian RandomSearch(space, seed)); 975 (noise via self.np_rng)
+      - factor_optimizer/tests/search/test_strategy_validation.py:252
+        (test_numeric_strategies_deterministic — same seed, 6 proposals, left==right; PASSES)
+      - factor_optimizer/tests/search/test_strategy_checkpoint_resume.py:239
+        (test_session_checkpoint_resume_exact_trajectory — FAILS)
+      - factor_optimizer/tests/search/test_runner.py:497
+        (test_search_runner_resume_continues_from_checkpoint — FAILS)
+    gaps:
+      - Checkpoint/resume exact-trajectory test currently RED. Root causes:
+        (a) TPE/Bayesian tests build a categorical space rejected at construction;
+        (b) SearchSession.checkpoint persists finished_at + a budget tracker at its
+        cap, so resume() of a finished/exhausted session adds zero proposals —
+        the test's 6+6=12 expectation cannot be met without clearing finished_at
+        and extending the budget, which the runner refuses via config equality.
+        A session checkpointed mid-run (before finish) is required for a valid
+        resume path.
+
+  # 3. DETERMINISM — factor_assets clustering + MMR selection
+  Q3_factor_assets_determinism:
+    verdict: PARTIAL
+    summary: >-
+      Connected-components tie-breaking is tested deterministic under node/edge
+      insertion order (test_cluster_lineage.py:113) and cluster-lineage snapshot
+      derivation is deterministic (test_cluster_lineage.py:87). MMR selection
+      tests prove the lazy-greedy heap produces the IDENTICAL ordering to the
+      reference sort-and-pop (test_diverse_scale.py:152,164), which implicitly
+      pins tie-breaking, and the pareto diverse subset matches its reference
+      (test_diverse_scale.py:299). Hierarchical clustering tests do NOT assert
+      same-input->same-output idempotence. Leiden deterministic test exists but
+      SKIPS (igraph not installed). No explicit "run twice -> identical output"
+      idempotence test for clustering or MMR. 62 passed + 2 skipped in the
+      clustering/serialization run; 167 passed in assembly+selection.
+    evidence:
+      - factor_assets/tests/test_cluster_lineage.py:113 (connected components deterministic tie-breaking)
+      - factor_assets/tests/test_cluster_lineage.py:87 (registry snapshot derivation deterministic)
+      - factor_assets/tests/selection/test_diverse_scale.py:152,164 (MMR optimized == reference ordering)
+      - factor_assets/tests/selection/test_diverse_scale.py:299 (pareto diverse == reference)
+      - factor_assets/tests/test_leiden_clustering.py:115 (test_leiden_deterministic_same_graph — SKIPPED, no igraph)
+      - source tie-breaking: factor_assets/clustering/families.py:369 (canonical factor order), 671
+    gaps:
+      - No idempotence test (same input run twice -> identical output) for clustering.
+      - MMR determinism is only "optimized == reference", not "same call twice" bit-identical
+        (though the reference equality effectively pins it).
+      - Leiden production determinism unproven in this env (igraph absent).
+
+  # 4. SERIALIZATION — factor_optimizer checkpoint/resume JSON round-trip
+  Q4_factor_optimizer_serialization:
+    verdict: FAIL (running tests)
+    summary: >-
+      SearchStrategyState carries rng_state + np_rng_state (PCG64, lossless JSON),
+      history, iteration_count, strategy_fields, extra_rng_states; the JSON tuple
+      tagging round-trips exactly. Per-strategy save/load_state and standalone
+      JSON checkpoint round-trip PASS for RandomSearch and GridSearch
+      (test_strategy_json_round_trip_exact[RandomSearch/GridSearch], PASSED) and
+      session checkpoint payload carries the strategy (test_session_checkpoint_payload_carries_strategy PASSED).
+      BUT the exact-trajectory session tests FAIL (see Q2), so no green test proves
+      the full SearchSession.checkpoint/resume JSON round-trip preserves the exact
+      trajectory end-to-end. The root cause is that checkpoint() writes a FINISHED
+      session (finished_at non-null, budget at cap), and resume() refuses to add
+      proposals to a finished/exhausted session.
+    evidence:
+      - factor_optimizer/factor_optimizer/search/strategies.py:314-359 (save_state/load_state),
+        386-... to_checkpoint_dict; runner.py:398-425 (checkpoint/resume),
+        863-884 (resume guards incl. "cannot resume a finished session")
+      - factor_optimizer/tests/search/test_strategy_checkpoint_resume.py:198
+        (test_strategy_json_round_trip_exact — Random/Grid PASS, Bayesian/TPE FAIL on categorical space)
+      - factor_optimizer/tests/search/test_strategy_checkpoint_resume.py:160
+        (test_strategy_state_capture_and_restore — PASSES when space is numeric)
+    gaps:
+      - Session-level exact-trajectory round-trip RED.
+      - checkpoint() snapshots a finished session — the resume path cannot extend it.
+
+  # 5. SERIALIZATION — factor_assets
+  Q5_factor_assets_serialization:
+    verdict: PARTIAL
+    summary: >-
+      tests/registry/test_serialization_codec.py proves a versioned deterministic
+      JSON codec (v2) for registry durable records: metadata/lineage/asset/event/
+      evidence round-trip losslessly, writers emit current version, v1 reads with
+      fail-closed defaults, unknown/future versions REJECTED (SchemaVersionError),
+      and same asset -> byte-identical JSON (test_deterministic). FactorSetArtifact
+      is pickleable (verified by probe: pickle round-trip == True) but has NO
+      to_dict/from_dict methods and NO pickle/dict test; FrozenCandidate to_dict/
+      from_dict round-trip is tested (test_frozen_candidate.py:89) and preserves
+      content_hash. Registry codec does NOT cover FactorSetArtifact/FactorSetSpec.
+    evidence:
+      - factor_assets/tests/registry/test_serialization_codec.py:58-103 (writers emit v2,
+        deterministic JSON, all-kind round trip)
+      - factor_assets/tests/registry/test_serialization_codec.py:131-175 (future/unknown version rejection)
+      - factor_assets/tests/optimizer/test_frozen_candidate.py:89-103 (to_dict/from_dict + content_hash)
+      - factor_assets/contracts/factor_set.py:90-141 (FactorSetArtifact — no to_dict/from_dict)
+      - probe: pickle.loads(pickle.dumps(FactorSetArtifact)) == True (no test asserts this)
+    gaps:
+      - No pickle or to_dict/from_dict round-trip test for FactorSetArtifact.
+      - Registry JSON codec omits FactorSetArtifact/FactorSetSpec.
+      - FactorSetArtifact itself has no to_dict/from_dict to be JSON-round-tripped.
+
+  # 6. SERIALIZATION — factor_preprocess FittedState content hash
+  Q6_factor_preprocess_content_hash:
+    verdict: PASS
+    summary: >-
+      FittedState.learned_params_hash is content-derived SHA-256 via a canonical
+      stable repr (_stable_repr sorts dict keys, canonical ndarray repr); auto-
+      derived when None, validated (mismatch REJECTED InvalidContractError) when
+      provided, insertion-order-insensitive, mutation-decoupled (frozen snapshot),
+      and provenance fields present. 18/18 test_feature_manifest tests PASS.
+      (A writer is concurrently fixing this area — present and green in the tree.)
+    evidence:
+      - factor_preprocess/factor_preprocess/contracts/state.py:55-82 (_stable_repr/_content_hash
+        SHA-256), 107-110 (learned_params_hash field), 148-157 (validation)
+      - factor_preprocess/tests/contracts/test_feature_manifest.py:303-372 (auto-derive,
+        order-insensitive, wrong-hash rejection, correct-hash acceptance)
+      - factor_preprocess/tests/contracts/test_feature_manifest.py:375-400 (mutation decoupling)
+      - run: 18 passed
+
+  # 7. DETERMINISM — cross-package pipeline
+  Q7_cross_package_determinism:
+    verdict: NOT_FOUND
+    summary: >-
+      integration_tests/ contains test_cross_package_contracts.py (INT-P1 contract
+      tests — identity/snapshot/order, NOT determinism) and test_ashare_semantic_golden.py
+      (data-access golden semantics, NOT determinism). There is NO test that runs a
+      small FE->FP->FO->FA->QE pipeline twice and compares outputs. The contract
+      test explicitly documents that the full end-to-end execution chain is NOT
+      wired into one runnable pipeline yet (test_cross_package_contracts.py:22-27).
+      The only cross-package identity determinism is FE's identity digest
+      (test_cross_package_contracts.py:98) — a per-package hash, not a pipeline run.
+      integration_tests run: 12 passed, 2 skipped.
+    evidence:
+      - integration_tests/test_cross_package_contracts.py:22-27 (pipeline not wired),
+        98 (identity digest deterministic), 388 (snapshot ref across packages)
+      - integration_tests/test_ashare_semantic_golden.py:62+ (golden semantics, no determinism)
+    gaps:
+      - No FE→FP→FO→FA→QE twice-run determinism test. Pipeline chain not wired.
+
+test_runs:
+  quant_evaluator:
+    command: >-
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      PYTHONPATH=quant_evaluator/build/lib venv/bin/python -m pytest
+      quant_evaluator/tests/{test_consistency,test_numerical_oracle,test_metamorphic,test_qe_serialization,test_qe_p0_03_hash_stability}.py
+    result: 80 passed, 2 skipped
+  factor_optimizer_strategy_validation:
+    command: pytest factor_optimizer/tests/search/test_strategy_validation.py test_objective_spec.py
+    result: 101 passed
+  factor_optimizer_checkpoint_resume:
+    command: pytest factor_optimizer/tests/search/test_strategy_checkpoint_resume.py
+    result: 6 passed, 4 failed (categorical-space construction + session-resume-only-6)
+  factor_optimizer_runner:
+    command: pytest factor_optimizer/tests/search/test_runner.py test_correctness_boundaries.py
+    result: 41 passed, 1 failed (test_search_runner_resume_continues_from_checkpoint)
+  factor_assets_clustering_serialization:
+    command: pytest factor_assets/tests/{test_cluster_lineage,test_leiden_clustering,test_clustering_hierarchical,test_clustering_families,test_clustering_lineage,registry/test_serialization_codec}.py
+    result: 62 passed, 2 skipped (leiden determinism skipped: igraph absent)
+  factor_assets_assembly_selection:
+    command: pytest factor_assets/tests/assembly/ factor_assets/tests/selection/
+    result: 167 passed
+  factor_preprocess_feature_manifest:
+    command: pytest factor_preprocess/tests/contracts/test_feature_manifest.py
+    result: 18 passed
+  integration_tests:
+    command: pytest integration_tests/
+    result: 12 passed, 2 skipped
+
+top_gaps:
+  - factor_optimizer: checkpoint/resume exact-trajectory suite RED (4 failures) +
+    test_runner resume-requires-strategy RED (1). New uncommitted code in flux.
+  - factor_optimizer: no green session-level JSON round-trip proving exact
+    trajectory preservation (only per-strategy Random/Grid PASS).
+  - quant_evaluator: no explicit run-twice bit-identical determinism test for
+    fast/numba kernels (only numba==fast parity + bootstrap CI determinism).
+  - factor_assets: no idempotence (same-input->same-output twice) test for
+    clustering; no FactorSetArtifact pickle/to_dict/from_dict round-trip test;
+    registry codec omits FactorSetArtifact.
+  - factor_assets: Leiden production determinism unproven in this env (igraph not installed).
+  - cross-package: no twice-run FE→FP→FO→FA→QE determinism test; pipeline not wired.

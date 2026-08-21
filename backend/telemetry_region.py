@@ -72,6 +72,29 @@ class RegionTelemetry:
     bound_params: dict[str, Any] | None = None
     shape: dict[str, Any] | None = None
     source_residency: str = ""
+
+    def bind_source_residency(self, *, dataset: str, snapshot_id: str = "", market: str = "") -> None:
+        """Bind the data-source residency this region executed on (R22 P0).
+
+        ``source_residency`` was previously a default-``""`` field that no
+        production execution path wrote.  A region that has a source (dataset /
+        snapshot / market) carries it here as the stable ``f"{backend}:{dataset}"``
+        string; a region with no identifiable source stays ``""`` (fail-closed:
+        only written when a source exists, never fabricated).  The backend is the
+        region's execution backend, so the value is a true residency claim and
+        always stable.
+        """
+        dataset = str(dataset or "").strip()
+        if not dataset:
+            return
+        parts = [str(getattr(self, "backend", "") or "").strip(), dataset]
+        snapshot = str(snapshot_id or "").strip()
+        if snapshot:
+            parts.append(snapshot)
+        market_str = str(market or "").strip()
+        if market_str:
+            parts.append(market_str)
+        self.source_residency = ":".join(p for p in parts if p)
     threads: int = 0
     actual_ttdc_ms: float = 0.0
     peak_rss_bytes: int = 0
@@ -209,6 +232,27 @@ class BatchExecutionTelemetry:
     bound_params: dict[str, Any] | None = None
     shape: dict[str, Any] | None = None
     source_residency: str = ""
+
+    def bind_batch_source_residency(self, *, dataset: str, snapshot_id: str = "", market: str = "") -> None:
+        """Bind the batch-level source residency (R22 P0).
+
+        Mirrors :meth:`RegionTelemetry.bind_source_residency`: only written
+        when a source (dataset) exists; never fabricated.  The backend is
+        ``""`` at batch level (a batch may span several backends), so the
+        residency string is ``dataset[:snapshot][:market]`` without a backend
+        prefix — the per-region records carry the ``backend:dataset`` form.
+        """
+        dataset = str(dataset or "").strip()
+        if not dataset:
+            return
+        parts = [dataset]
+        snapshot = str(snapshot_id or "").strip()
+        if snapshot:
+            parts.append(snapshot)
+        market_str = str(market or "").strip()
+        if market_str:
+            parts.append(market_str)
+        self.source_residency = ":".join(p for p in parts if p)
     threads: int = 0
     peak_rss_bytes: int = 0
     spill_bytes: int = 0

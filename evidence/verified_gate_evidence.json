@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "generated_by": "refresh_gate_evidence",
+  "git_sha": "4a27a8b228e3b27069e957094806cc8de86fc137",
+  "timestamp": "2026-08-21T15:42:37.636791+00:00",
+  "gates": [
+    {
+      "name": "CROSS_PACKAGE",
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "integration_tests/test_cross_package_contracts.py",
+          "result": "passed",
+          "count": 6,
+          "run_at": "2026-08-21T15:42:37.636791+00:00"
+        }
+      ]
+    },
+    {
+      "name": "REAL_ASHARE_SHADOW",
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "integration_tests/test_ashare_semantic_golden.py",
+          "result": "passed",
+          "count": 8,
+          "run_at": "2026-08-21T15:42:37.636791+00:00"
+        }
+      ]
+    },
+    {
+      "name": "PROPERTY",
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "quant_evaluator/tests/test_metamorphic.py",
+          "result": "passed",
+          "count": 18,
+          "run_at": "2026-08-21T15:42:37.636791+00:00",
+          "note": "2 skipped (documented contract tests; a skip is not a pass)"
+        },
+        {
+          "test": "quant_evaluator/tests/test_consistency.py",
+          "result": "passed",
+          "count": 11,
+          "run_at": "2026-08-21T15:42:37.636791+00:00"
+        }
+      ]
+    },
+    {
+      "name": "SERIALIZATION",
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "quant_evaluator/tests/test_qe_serialization.py",
+          "result": "passed",
+          "count": 36,
+          "run_at": "2026-08-21T15:42:37.636791+00:00"
+        },
+        {
+          "test": "factor_assets/tests/registry/test_serialization_codec.py",
+          "result": "passed",
+          "count": 17,
+          "run_at": "2026-08-21T15:42:37.636791+00:00"
+        }
+      ]
+    },
+    {
+      "name": "CHECKPOINT_RESUME",
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py",
+          "result": "passed",
+          "count": 3,
+          "run_at": "2026-08-21T15:42:37.636791+00:00"
+        }
+      ]
+    },
+    {
+      "name": "NUMERICAL_ORACLE",
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "quant_evaluator/tests/test_numerical_oracle.py",
+          "result": "passed",
+          "count": 13,
+          "run_at": "2026-08-21T15:42:37.636791+00:00"
+        }
+      ]
+    }
+  ]
+}

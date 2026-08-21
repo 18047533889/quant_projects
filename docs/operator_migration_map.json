@@ -1,8 +1,8 @@
 {
-  "count": 278,
+  "count": 277,
   "fingerprint": {
     "dirty": true,
-    "head": "19d2ff954b56f5dfd034d8ec8e8631af0ff271d4"
+    "head": "b05a888fd95d463509f77b2c17ba993a794177c1"
   },
   "map": {
     "ABS": {
@@ -461,14 +461,6 @@
       "kind": "alias",
       "replacement": "ts_ema"
     },
-    "ewm_corr": {
-      "kind": "alias",
-      "replacement": "ts_ewm_corr"
-    },
-    "ewm_cov": {
-      "kind": "alias",
-      "replacement": "ts_ewm_cov"
-    },
     "ewm_mean": {
       "kind": "alias",
       "replacement": "ts_ema"
@@ -872,6 +864,10 @@
     "standardize": {
       "kind": "alias",
       "replacement": "zscore"
+    },
+    "state_episode_duration": {
+      "kind": "alias",
+      "replacement": "state_age"
     },
     "state_since_reduce": {
       "kind": "alias",

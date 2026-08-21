@@ -239,6 +239,12 @@ def _physical_plan_telemetry(
         "materialization_count": materialization_count,
         "resident_reuse_count": 0,
         "python_to_q_bytes": 0,
+        # R22 P0: the data-source residency the root region executed on.  Only
+        # written when the region actually carries a source snapshot binding;
+        # otherwise it stays the default empty string (never fabricated).
+        "source_residency": str(
+            getattr(region, "source_snapshot", "") or ""
+        ),
     }
 
 

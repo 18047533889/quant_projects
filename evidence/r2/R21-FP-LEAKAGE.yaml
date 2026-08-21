@@ -1,0 +1,97 @@
+schema_version: 1
+task_id: R21-FP-LEAKAGE
+base_sha: 4a27a8b228e3b27069e957094806cc8de86fc137
+current_head: 4a27a8b228e3b27069e957094806cc8de86fc137
+commit_sha: UNCOMMITTED_CURRENT_TREE
+status: CLOSED_LOCAL
+production_certification: NOT_RUN
+owned_files:
+  - factor_preprocess/tests/contracts/test_leakage_properties.py
+  - factor_preprocess/tests/contracts/test_feature_manifest.py
+scope: factor_preprocess only
+implementation:
+  fp_p0_items:
+    - id: FP-P0-01
+      status: ALREADY_IMPLEMENTED
+      description: FeatureManifest rejects duplicate feature IDs at construction
+        (InvalidContractError, fail-closed). Verified in
+        contracts/feature_bundle.py (len(feature_ids) != len(set(feature_ids))),
+        covered by test_manifest_duplicate_feature_ids_rejected and
+        test_manifest_channel_qualified_keys_allowed.
+    - id: FP-P0-02
+      status: ALREADY_IMPLEMENTED
+      description: Deep snapshot on construction. FeatureManifest copies caller
+        dicts before MappingProxyType wrap; FeatureBundle snapshot-copies
+        values ndarray (writeable=False), channels mapping, and AxisRef
+        axis_values. Existing tests covered caller-dict and channels-mapping
+        mutation; added test_bundle_snapshots_caller_values_array to assert
+        mutating the source ndarray after construction leaves the bundle
+        unchanged.
+    - id: FP-P0-03
+      status: ALREADY_IMPLEMENTED
+      description: Shape validation fail-closed. FeatureManifest validates
+        offsets/sizes/overlap/tiling; FeatureBundle validates manifest
+        total_features == values feature dimension (raises InvalidContractError
+        instead of truncating/padding). Covered by existing tests
+        (test_bundle_manifest_values_dimension_mismatch_rejected and others).
+    - id: FP-P0-04
+      status: ALREADY_IMPLEMENTED
+      description: Feature-axis extraction for TNF layout. get_channel_values /
+        get_feature_values slice the trailing (feature) axis via
+        self.values[..., slice] / self.values[..., col_idx], distinct from the
+        asset and time axes. No separate helper function exists; the trailing-
+        axis indexing is the implementation. Covered by
+        test_tnf_layout_extracts_feature_axis_not_asset_axis (non-square
+        T=2/N=5/F=4, constant feature planes) and test_nf_layout_extracts_feature_axis.
+    - id: FP-P0-05
+      status: ALREADY_IMPLEMENTED
+      description: FittedState.learned_params_hash is content-derived: SHA-256
+        over a canonical stable repr of learned_params bytes (contracts/state.py
+        _content_hash/_stable_repr). None auto-derives; a provided hash is
+        validated and mismatches rejected. Not a UUID and not list-identity
+        hash. Existing tests covered identical content => equal hash and wrong
+        provided hash rejected; added test_fitted_state_hash_changes_when_params_mutate
+        asserting hash reflects content (mutation of the caller-owned source
+        array cannot corrupt an already-derived hash; genuinely different
+        params hash differently).
+  leakage_property_tests:
+    file: factor_preprocess/tests/contracts/test_leakage_properties.py
+    - test_causal_prefix_invariance:
+        causal transform rolling_mean(window=3, min_periods=3) on synthetic
+        panel; output at every t >= window computed on prefix [0..t] equals the
+        full-series output at t (no look-ahead), all (asset, t) rows.
+    - test_split_fit_isolation_per_row:
+        per-row cross-sectional cs_rank; rank on X_test alone equals rank on
+        full matrix restricted to test rows (leak-free).
+    - test_split_fit_isolation_windowed:
+        rolling_mean; first w test rows computed with train context (last w
+        train rows per asset) equal the last w test rows of the fit on
+        concatenated train+test.
+    - test_past_only_invariance:
+        rolling_mean; perturbing all rows with date > t0 (+1000) leaves output
+        at t0 unchanged for every asset.
+tests:
+  run_command: >-
+    cd /home/shw/quant_projects/factor_preprocess &&
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+    /home/shw/quant_projects/.venv/bin/python -m pytest tests/ -q --tb=short
+  total: 26
+  passed: 26
+  failed: 0
+  per_file:
+    tests/contracts/test_feature_manifest.py: 18 passed
+    tests/contracts/test_leakage_properties.py: 4 passed
+    tests/contracts/test_policy_unification.py: 4 passed
+limitations:
+  - Learned_params_hash canonicalization uses a repr-based stable serializer
+    (handles Mapping/ndarray/list/set/datetime); exotic non-builtin param
+    objects fall back to repr(value) and therefore only hash stably within the
+    same object model version.
+  - Rolling transforms operate per-asset on lagged windows; the prefix/split
+    properties are asserted for rolling_mean. Other windowed transforms
+    (rolling_std, ewma, missing_rate) share the same _groupwise_lagged_stat
+    helper but are not individually exercised.
+  - cs_rank uses scipy rankdata; property asserted on average-tie ranking.
+  - No production certification run; tests are local synthetic-data only.
+  - Evidence YAML filename is R21-FP-LEAKAGE per task; owned_files point at
+    factor_preprocess paths under the quant_projects working tree.

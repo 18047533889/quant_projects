@@ -35,14 +35,17 @@ def _admitted_record(canonical: str = "ts_mean"):
         PhysicalInventoryRecord,
     )
 
+    _SHA = "0123456789abcdef" * 4  # 64-char lowercase hex SHA-256
+
     spec = PhysicalImplementationSpec(
         canonical=canonical,
         backend="pandas_numpy",
         execution_kind=ExecutionKind.REFERENCE,
-        implementation_source_hash="abc123",
-        parameter_domain_hash="def456",
-        semantic_contract_hash="ghi789",
+        implementation_source_hash=_SHA,
+        parameter_domain_hash=_SHA,
+        semantic_contract_hash=_SHA,
         emitter_identity="test_emitter",
+        implementation_closure_hash=_SHA,
     )
     # Generate a physical_implementation_id if not present
     impl_id = spec.physical_implementation_id

@@ -1,0 +1,146 @@
+id: R21-FE-ZEROCOPY-AUDIT
+slice: R21-FE-ZEROCOPY-AUDIT — verify "FE zero-copy buffer ownership" hardening (read-only reviewer audit)
+campaign: FactorEngine hardening review
+git_sha: factor_engine@26ed664 (working tree is truth; no commit made by auditor)
+timestamp: "2026-08-22"
+status: COMPLETED_LOCAL
+
+review_item:
+  id: P1-FE-ZEROCOPY
+  claim: "FE must not silently alias/mutate caller-owned buffers; zero-copy sharing must be explicit and ownership documented (a buffer passed to an FE operator must be either owned/consumed explicitly or treated read-only)."
+
+scope:
+  - factor_engine/runtime/buffer_ref.py          # BufferRef.ownership field (default "shared")
+  - factor_engine/runtime/factor_block_ref.py    # FactorBlockRef / AxisBufferRef / BufferRef reuse
+  - factor_engine/runtime/readonly_overlay_map.py # R39-P0-PERF-013 read-only shared-cache overlay
+  - factor_engine/runtime/buffer_store.py         # GovernedBufferStore put/get/get_ref (CSE shared buffers)
+  - factor_engine/planner/output_slice.py         # R39-P0-PERF-017 zero-copy positional slice
+  - factor_engine/runtime/multibackend/duckdb_arrow_boundary.py # Arrow <-> DuckDB zero-copy
+  - factor_engine/runtime/multibackend/arrow_zerocopy_boundary.py # Arrow zero-copy transfer boundary
+  - factor_engine/cleaned_operators/vector_path.py                # representative operator kernels
+  - factor_engine/cleaned_operators/technical/chip_ops.py         # to_numpy(dtype=float) view usage
+  - factor_engine/cleaned_operators/advanced_information.py       # _rolling_apply_2d / transfer-entropy kernels
+  - factor_engine/backend/cleaned_bridge.py                        # kernel adapter (np.asarray(result) read-only)
+  - factor_engine/planner/dependency_graph.py (via tests/r27)     # shared read-only column != execution dependency
+
+what_exists:
+  - "BufferRef dataclass (runtime/buffer_ref.py) carries an explicit ``ownership: str = 'shared'`` field,
+     serialized in to_dict(); SourceBufferRef inherits it (execute_wave sets ownership='shared')."
+  - "FactorBlockRef (runtime/factor_block_ref.py) reuses BufferRef for values/validity with
+     ownership='shared'; index is shared by reference (object identity) — documented as zero-copy axis sharing."
+  - "ReadOnlyOverlayMap (runtime/readonly_overlay_map.py) enforces a read-only shared ``base``:
+     __setitem__ writes only to the per-root ``local`` overlay; __delitem__/pop/clear refuse to mutate
+     base-only keys (fail-closed KeyError) — a working read-only default for shared context state."
+  - "GovernedBufferStore (runtime/buffer_store.py) is the CSE shared-buffer store; get() returns the stored
+     object reference (no copy) and documents refcount/release semantics."
+  - "output_slice.py + runtime/batch_service._trim_batch_result implement a zero-copy positional trim
+     (result.iloc[start:stop]) that shares memory (verified by np.shares_memory in tests)."
+  - "duckdb_arrow_boundary / arrow_zerocopy_boundary implement Arrow zero-copy paths; same-representation
+     transfers return the same object reference."
+  - "No BufferOwnership enum (READ_ONLY / OWNED_MUTABLE / BORROWED_READ_ONLY) exists anywhere in the tree
+     (grep across factor_engine, tests, worktrees, evidence = 0 hits)."
+  - "No mutation guard / writeable flag enforcement exists on operator input buffers (grep for
+     setflags / .flags.writeable / WRITEABLE = 0 hits in operator/backend/runtime code)."
+  - "Audit trail of prior agent ab186f1d8c1704cff (subagent transcript, 1069 lines): the agent ran a
+     read-only audit of zero-copy/aliasing, empirically proved pandas ``df.to_numpy(dtype=float)`` on a
+     single-dtype float frame returns a VIEW that mutates the frame (shares_memory=True, frame mutated),
+     and was interrupted by repeated upstream API errors (524/400) BEFORE writing the BufferOwnership
+     enum, the mutation guard, or the three required tests. No Edit/Write tool calls, no heredoc writes,
+     no new test/ownership file were produced."
+
+verdict_per_subrequirement:
+  - documented_read_only_default: PARTIAL
+      # BufferRef.ownership field exists and defaults to "shared"; ReadOnlyOverlayMap provides a
+      # genuine read-only base. But there is no documented end-to-end policy saying "caller buffers
+      # are read-only unless ownership is explicitly transferred", and no enum with the semantics.
+  - no_mutation_test: FAIL
+      # No test proves a caller buffer passed to a factor operator is not mutated unless ownership was
+      # explicitly transferred. Closest existing coverage: deterministic re-run equivalence (e.g.
+      # tests/operators/test_advanced_ops_2026.py::test_advanced_ops_deterministic_and_shape_preserving
+      # runs each op twice and asserts identical output; tests/r47/test_r47_indicators_chip_panel.py
+      # same pattern), plus mutation-kill negative controls (tests/r37/*, tests/operators/r30/
+      # test_high_risk_mutation_tests.py) which prove output-sensitivity, not input-non-mutation.
+      # None of them snapshots the input ndarray and asserts np.shares_memory/frame-unchanged after
+      # a kernel run. The empirical aliasing risk is real: single-dtype float frames return a
+      # to_numpy view, and an in-place kernel write WOULD silently mutate the caller's buffer.
+  - fast_path_preserved: PARTIAL
+      # Zero-copy fast paths are present and preserved: output_slice.iloc view + np.shares_memory
+      # proof (tests/r39/test_perf_batch_service_2026_08.py::test_output_slice_zero_copy_positional_trim),
+      # FactorBlockRef index/values sharing by reference (tests/r39/test_perf_factor_block_ref_2026_08.py
+      # asserts np.shares_memory(loc, vals) and index is identity-shared), Arrow same-repr pass-through,
+      # ReadOnlyOverlayMap eliminating per-root dict clones. But the fast path is NOT gated by an
+      # ownership check: nothing distinguishes a read-only shared view from a caller-owned mutable
+      # buffer at kernel entry, so the fast path is safe only by the (audited) convention that kernels
+      # write to freshly allocated outputs. Independent kernel audit (vector_path._standardize uses
+      # (f1 - f1.mean())/s1 which allocates new arrays; chip_ops._age_cost_column writes only to local
+      # ``out`` dict; advanced_information._rolling_apply_2d writes to np.full output; cleaned_bridge
+      # np.asarray(result) is a read of the operator return) found no in-place input mutation in the
+      # sampled hot kernels — but that is audit-by-convention, not an enforced guard.
+
+test_run_summary:
+  - command: "pytest factor_engine/tests/ -k 'zero_copy or ownership or alias'"
+    result: "3 skipped, 21913 deselected, 11 collection ERRORS (pre-existing: duplicate operator
+             registrations, fixture import errors in test_polars_panel_group_misc_pit,
+             test_r21_numba_planner_candidates, test_fiscal_operators, test_intraday_state_space,
+             test_time_semantic, test_ts_advanced_batch1_polars_native, test_ts_nth_value_polars_causality,
+             test_backend_selector, test_planner_optimization_benchmark, test_fiscal_batch2,
+             test_ts_batch1_rank_if_direct). No zero-copy/ownership-titled test matched in the tree."
+  - command: "pytest factor_engine/tests/backend/test_polars_operator_ownership.py factor_engine/tests/r39/test_perf_factor_block_ref_2026_08.py factor_engine/tests/backend/test_adaptive_parallel_config.py factor_engine/tests/backend_sql/test_duckdb_performance_optimization.py"
+    result: "51 passed, 3 skipped (90.0s)"
+  - command: "pytest factor_engine/tests/backend/test_polars_operator_ownership.py factor_engine/tests/r39/test_perf_factor_block_ref_2026_08.py factor_engine/tests/r39/test_perf_batch_service_2026_08.py factor_engine/tests/backend_sql/test_duckdb_performance_optimization.py"
+    result: "47 passed, 3 skipped (85.2s)"
+  - command: "pytest factor_engine/tests/r37/test_property_mutation_gates.py"
+    result: "13 passed (82.1s)"
+  - command: "pytest factor_engine/tests/r27/test_dependency_graph_no_false_column.py factor_engine/tests/r38/test_stage_by_stage_parity_2026_08.py factor_engine/tests/r37/test_property_mutation_gates.py factor_engine/tests/operators/r30/test_high_risk_mutation_tests.py factor_engine/tests/r37/test_evidence_truth_negative_controls.py factor_engine/tests/operators/test_advanced_ops_2026.py factor_engine/tests/operators/test_r47_indicators_chip_panel.py"
+    result: "147 passed (97.9s)"
+  - interpretation: "Existing determinism/mutation/shared-readonly tests pass (211 total across the four
+     runs above), confirming no CURRENT operator silently mutates a shared input in the tested paths.
+     But there is no test that asserts the ownership contract directly."
+
+gaps_for_writer:
+  - id: GAP-1
+    severity: P1
+    gap: "No BufferOwnership enum / documented read-only default policy. Implement
+          BufferOwnership (READ_ONLY / OWNED_MUTABLE / BORROWED_READ_ONLY) or an equivalent documented
+          contract, and either a) a typed ownership field on BufferRef replacing the free string
+          'shared', and/or b) a documented policy in the operator/bridge docs: caller buffers are
+          read-only unless ownership is explicitly transferred. (Mirrors open ledger item R42-061 /
+          R42-106 typed ownership contract.)"
+  - id: GAP-2
+    severity: P1
+    gap: "No input-non-mutation test. Add a test that (a) builds a single-dtype float DataFrame,
+          passes it to a factor operator kernel, and asserts np.shares_memory view semantics and that
+          the caller's frame/array is byte-identical after the run; (b) proves zero-copy path ==
+          reference-copy path (same inputs -> identical results); (c) proves different execution order
+          -> identical outputs (stage-by-stage vs whole-root already exists in
+          tests/r38/test_stage_by_stage_parity_2026_08.py and can be the basis). The empirical
+          aliasing fact (df.to_numpy(dtype=float) returns a VIEW on single-dtype float frames) makes
+          this a genuine, non-vacuous guard."
+  - id: GAP-3
+    severity: P2
+    gap: "Fast path is unprotected. The zero-copy .iloc view and BufferRef shared index/values are
+          returned to callers without a writeable=False / readonly marker. Consider setting
+          np.flags.writeable=False on shared read-only views (or documenting the read-only contract)
+          so an accidental in-place kernel write fails loudly instead of corrupting downstream
+          factors."
+  - id: GAP-4
+    severity: P2
+    gap: "Gap-2's different-execution-order equivalence has a strong existing basis
+          (tests/r38/test_stage_by_stage_parity_2026_08.py, 3 tests) but is not linked to buffer
+          ownership. A writer should add a focused test that reorders two operators sharing one
+          input buffer and asserts identical outputs AND unchanged input."
+
+related_open_items:
+  - R42-061 "cache key 与 buffer ownership 要彻底统一" — ARCH/BOTH P1 ARCHITECTURE_BACKLOG (unresolved)
+  - R42-106 "BufferRef location: Any 缺 typed ownership contract" — TEST/ACC P0 ARCHITECTURE_BACKLOG (unresolved)
+
+overall_verdict: FAIL
+  # FAIL because the hardening is INCOMPLETE: the review item's core deliverables (BufferOwnership
+  # enum, explicit read-only default policy, mutation guard, and the three required tests) were never
+  # produced. The prior agent ab186f1d8c1704cff was interrupted by upstream API errors mid-audit
+  # before writing any code. What DOES exist (BufferRef.ownership field, ReadOnlyOverlayMap,
+  # zero-copy output slice with np.shares_memory proof, FactorBlockRef shared axis, 211 passing
+  # determinism/mutation tests) is a PARTIAL foundation that passes current-path behavior but does
+  # not satisfy the explicit-ownership/read-only-default requirement.
+
+independent_review_status: OPEN  # no reviewer closure recorded; this audit is the reviewer record
