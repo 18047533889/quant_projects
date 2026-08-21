@@ -139,6 +139,14 @@ class QBackend(Backend):
                     )
                 return self.execute_physical_plan(plan, ctx)
 
+            # Any non-physical PlanNode reaching production q execution is not
+            # planner-admitted; fail closed regardless of q runtime availability.
+            if not self._process_manager.is_available():
+                info = self._process_manager.check_availability()
+                raise BackendUnavailableError(
+                    f"q runtime unavailable in production mode: {info.status.value}. "
+                    f"Error: {info.error_message}"
+                )
             raise QPhysicalRegionNotImplemented(
                 "Production q execution requires a planner-admitted physical "
                 "region; whole-tree PlanNode self-routing is disabled"

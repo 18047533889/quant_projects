@@ -47,6 +47,7 @@ def _stage_payload(stage: str, git_sha: str, canonical: str, lowering_id: str) -
         "q_version": "4.1",
         "pykx_version": "2.6.0",
         "status": "PASS",
+        "stage": stage,
     }
     if stage == "compile":
         base["result"] = {"compiled": True, "compiled_cases": 1, "failure_count": 0}
@@ -82,7 +83,11 @@ def production_certified_compiler() -> QCompiler:
     )
     registry = QPhysicalImplementationRegistry(
         lowerings={},
-        declared_targets=QPhysicalImplementationRegistry._DECLARED_TARGETS,
+        declared_targets=frozenset(
+            name
+            for name in QPhysicalImplementationRegistry._DECLARED_TARGETS
+            if name in base.executable_lowerings()
+        ),
         validation_context=ctx,
     )
     for canonical, lowering_id in base.executable_lowerings().items():
@@ -91,7 +96,12 @@ def production_certified_compiler() -> QCompiler:
             filename = f"_test_certified_{canonical}_{stage}.json"
             payload = _stage_payload(stage, git_sha, canonical, lowering_id)
             path = EVIDENCE_ROOT / filename
-            path.write_text(json.dumps(payload))
+            # Write only if the on-disk artifact does not already match.  The
+            # evidence hash is a pure function of the payload, so a stale file
+            # is rewritten and an identical file is left untouched.
+            raw = json.dumps(payload).encode()
+            if not path.is_file() or path.read_bytes() != raw:
+                path.write_bytes(raw)
             artifacts[f"{stage}_evidence"] = QEvidenceArtifact(
                 path=filename, sha256=_sha256_bytes(path.read_bytes())
             )
@@ -114,6 +124,20 @@ def production_certified_compiler() -> QCompiler:
     return QCompiler(capability=__import__(
         "backend.q_backend.q_capability", fromlist=["QBackendCapability"]
     ).QBackendCapability(registry))
+
+
+def _ensure_evidence_file(canonical: str, stage: str, payload: dict) -> str:
+    """Write a PASSing evidence artifact and return its relative path.
+
+    Idempotent: identical payloads are left untouched; stale or missing files
+    are (re)written so the certified compiler always validates.
+    """
+    filename = f"_test_certified_{canonical}_{stage}.json"
+    path = EVIDENCE_ROOT / filename
+    raw = json.dumps(payload).encode()
+    if not path.is_file() or path.read_bytes() != raw:
+        path.write_bytes(raw)
+    return filename
 
 
 def _sha256_bytes(raw: bytes) -> str:

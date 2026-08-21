@@ -1,0 +1,40 @@
+task_id: R21-Q-PHYSICAL-REGION-EXECUTOR
+finding: q_physical_region_executor_resident_handle_output_contract
+base_sha: UNKNOWN
+current_head: UNCOMMITTED_CURRENT_TREE
+dirty_count_before_evidence: 85
+commit_sha: UNCOMMITTED_CURRENT_TREE
+owned_files:
+  - backend/q_backend/q_executor.py
+  - backend/q_backend/q_backend.py
+  - tests/q_backend/test_q_physical_region_executor.py
+  - tests/q_backend/q_certified_compiler.py
+  - evidence/r2/R21-Q-PHYSICAL-REGION-EXECUTOR.yaml
+modified_files:
+  - backend/q_backend/q_executor.py
+  - backend/q_backend/q_backend.py
+  - tests/q_backend/test_q_physical_region_executor.py
+  - tests/q_backend/q_certified_compiler.py
+status: CLOSED_LOCAL
+implementation:
+  - QBackend.execute_physical_region wires materialize_output=not return_resident_handle, so a q region intermediate stays Q-resident: QExecutionResult.output_df is empty and only the QResidentTableHandle is returned.
+  - QExecutor.execute_region materializes output only when materialize_output and not return_resident_handle (q_to_python_bytes=0 for resident results); resident metadata is read without a q-to-pandas round trip.
+  - QExecutor._load_inputs_to_q accepts pyarrow.Table inputs (Q_TO_ARROW cross-backend boundary) and converts them at the q boundary.
+  - Regression suite stubs a q runtime and drives the real QBackend.execute_physical_region production path via the certified compiler.
+focused_tests:
+  command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/q_backend/test_q_physical_region_executor.py -q
+  result: 5 passed
+adjacent_regression:
+  command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/q_backend/test_q_factory_integration.py tests/q_backend/test_q_plan_node_abi.py -q
+  result: 17 passed
+syntax_compile:
+  command: python3 -m py_compile backend/q_backend/q_executor.py backend/q_backend/q_backend.py
+  result: PASS
+git_diff_check:
+  result: PASS (only the target resident-handle contract and its regressions are modified)
+known_limitations:
+  - Broader q_backend suite has pre-existing failures unrelated to this slice (ts_beta capability gate, executor-recovery namespace expectations, benchmark suite).
+  - Actual q runtime process execution was not exercised; the executor path is verified with a stubbed q process manager.
+production_certification: NOT_RUN
+commit: NOT_CREATED
+remotes: NOT_USED

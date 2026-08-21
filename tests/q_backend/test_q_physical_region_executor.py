@@ -91,6 +91,12 @@ def _make_backend(
                 )(),
             },
         )()
+    # Production compile path requires the q compiler registry to be
+    # production-certified; use the certified compiler built from PASSing
+    # evidence artifacts (no live q runtime needed).
+    from tests.q_backend.q_certified_compiler import production_certified_compiler
+
+    backend._compiler = production_certified_compiler()
     return backend
 
 
@@ -118,9 +124,19 @@ class _FakeExecutor:
         self.calls.append((region_plan, input_data, kwargs))
         if self.fail:
             raise QDataUnavailableError("shim q execution failed")
+        if self.output_df is None:
+            output_df = _default_output_df()
+        else:
+            output_df = self.output_df
+        # Mirror real executor: when a resident handle is returned, the
+        # materialized output stays empty (no q→python round trip).
+        if kwargs.get("return_resident_handle"):
+            import pandas as pd
+
+            output_df = pd.DataFrame()
         return QExecutionResult(
             region_id=region_plan.region_id,
-            output_df=self.output_df or _default_output_df(),
+            output_df=output_df,
             execution_time_ms=1.0,
             rows_processed=2,
             success=True,
@@ -223,22 +239,19 @@ def test_execute_physical_region_accepts_arrow_input() -> None:
     """The q region boundary must accept Arrow tables, not pandas only."""
     from backend.q_backend.q_executor import QExecutor
 
-    q = type("RecordingQ", (), {})()
-    q.calls = []
+    class RecordingQ:
+        def __init__(self):
+            self.calls = []
 
-    def __call__(self, query):
-        if isinstance(query, str) and ":" in query:
-            return None
-        return ["mean"]
+        def __call__(self, query):
+            if isinstance(query, str) and ":" in query:
+                return None
+            return ["mean"]
 
-    q.__call__ = __call__
+        def __setitem__(self, key, value):
+            self.calls.append(("bind", key))
 
-    def __setitem__(self, key, value):
-        self.calls.append(("bind", key))
-
-    q.__setitem__ = __setitem__
-    q.__setattr__ = object.__setattr__
-
+    q = RecordingQ()
     adapter = type(
         "Adapter",
         (),
