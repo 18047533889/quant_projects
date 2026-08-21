@@ -1,0 +1,105 @@
+schema_version: 1
+task_id: R21-FA-SNAPSHOT-OVERLAP
+title: "FA factor-vs-label snapshot time-overlap contract (fail-closed)"
+base_sha: 1bce0a37e3e03cb2695e040ca96bf9f482758525
+current_head: 1bce0a37e3e03cb2695e040ca96bf9f482758525
+commit_sha: UNCOMMITTED_CURRENT_TREE
+status: CLOSED_LOCAL
+production_certification: NOT_RUN
+scope: factor_assets only
+audit_reference: evidence/r2/R21-LEAKAGE-PIT-AUDIT.yaml Q4 (PARTIAL - no label snapshot
+  ref, no factor-vs-label time-overlap check existed)
+
+implementation:
+  problem: >-
+    FactorSetAssembler.assemble failed closed on a MISSING data_snapshot_ref
+    (assembly/engine.py:363-368) but carried a single metadata-only snapshot_ref
+    with NO label snapshot reference and NO factor-vs-label snapshot time-overlap
+    check anywhere in factor_assets.  A factor snapshot computed at time t could
+    be combined with a label snapshot that uses information beyond t (label
+    look-ahead leakage) without any rejection.
+  decision: >-
+    Default = NO check (backward compatible) for legacy specs that declare no
+    label snapshot.  When a label snapshot IS declared, the contract is strict
+    and fail-closed: label_snapshot_ref requires both factor_as_of and
+    label_as_of, and label_as_of must be <= factor_as_of.  Equal boundaries are
+    allowed (same-day is fine).  A declared-but-uncheckable contract raises
+    rather than being silently skipped.  Malformed dates raise rather than
+    silently disabling the check.
+  api_added:
+    - "FactorSetSpec.label_snapshot_ref: Optional[str] = None (label snapshot provenance, optional for backward compatibility)"
+    - "FactorSetSpec.factor_as_of: Optional[str] = None (ISO date YYYY-MM-DD, point-in-time boundary of the factor snapshot)"
+    - "FactorSetSpec.label_as_of: Optional[str] = None (ISO date YYYY-MM-DD, point-in-time boundary of the label snapshot; must be <= factor_as_of)"
+    - "FactorSetArtifact.label_snapshot_ref / factor_as_of / label_as_of (record the checked boundaries on the artifact; None defaults for legacy construction)"
+    - "factor_assets.assembly._validate_snapshot_temporal_contract(spec) - the fail-closed check, called from FactorSetAssembler.assemble after the existing data_snapshot_ref check"
+  fail_closed_semantics:
+    - "label_snapshot_ref declared without factor_as_of or label_as_of -> InvalidContractError ('requires both factor_as_of and label_as_of')"
+    - "label_as_of > factor_as_of -> InvalidContractError ('label look-ahead leakage') - the core leak rejection"
+    - "empty/whitespace label_snapshot_ref -> InvalidContractError"
+    - "bare factor_as_of/label_as_of without label_snapshot_ref -> InvalidContractError (refusing to guess what snapshot a bare as-of refers to)"
+    - "malformed as-of date -> InvalidContractError ('must be an ISO date') - a typo can never silently disable the check"
+    - "missing data_snapshot_ref -> ValueError (pre-existing, unchanged)"
+    - "equal as_of boundaries -> allowed; label_as_of < factor_as_of -> allowed (label strictly inside factor window)"
+    - "legacy specs without label_snapshot_ref -> no check, exactly the pre-change behaviour"
+  error_type: >-
+    InvalidContractError (from factor_assets.errors, a ContractError/FactorAssetsError),
+    re-exported from factor_assets.assembly.  Raises are typed so callers can
+    catch ContractError or the base FactorAssetsError.
+  policy_hash: >-
+    label_snapshot_ref, factor_as_of, label_as_of were added to the policy_hash
+    semantic fields in FactorSetAssembler._policy_hash, so the temporal contract
+    is content-addressed (changing a boundary changes the policy hash).  Test
+    test_policy_hash_sensitive_to_label_snapshot_and_boundaries covers it.
+
+owned_files:
+  - factor_assets/contracts/factor_set.py
+  - factor_assets/assembly/engine.py
+  - factor_assets/assembly/__init__.py
+  - factor_assets/tests/assembly/test_snapshot_overlap.py
+
+tests:
+  run_command: >-
+    cd /home/shw/quant_projects/factor_assets &&
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+    /home/shw/quant_projects/.venv/bin/python -m pytest tests/assembly/ -q --tb=short
+  total: 48
+  passed: 48
+  failed: 0
+  detail: >-
+    31 pre-existing assembly tests (unchanged, all pass) + 17 new
+    tests/assembly/test_snapshot_overlap.py tests.
+  full_suite:
+    run_command: >-
+      cd /home/shw/quant_projects/factor_assets &&
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      /home/shw/quant_projects/.venv/bin/python -m pytest tests/ -q --tb=short
+    total: 820
+    passed: 774
+    failed: 0
+    skipped: 46
+    detail: >-
+      Full factor_assets suite: 774 passed, 46 skipped, 0 failed.  The 46
+      skipped are pre-existing skips (test_leiden_clustering 2ss + 44 other
+      optional-dependency skips); none are new.  No pre-existing failures were
+      observed; all 820 collected tests are accounted for.
+
+limitations:
+  - >-
+    Metadata-only check: factor_assets.assembly never computes factor values or
+    label values, so the contract verifies REFERENCE-LEVEL temporal separation
+    (declared snapshot boundaries must not overlap in the leaking direction).
+    Enforcement that the referenced snapshots actually materialized those
+    boundaries remains the responsibility of the snapshot producers/evaluator.
+  - >-
+    The check is opt-in for legacy callers (no label snapshot declared = no
+    check).  Callers who want the guarantee must declare label_snapshot_ref +
+    as-of boundaries; when declared it is strict.
+  - >-
+    A single factor_as_of/label_as_of date per assembly (a set-level boundary),
+    not per-factor or per-date-window; per-date horizon enforcement belongs to
+    downstream evaluation.
+  - >-
+    Base sha and current head are both the working tree HEAD 1bce0a3; changes
+    are uncommitted in the working tree per constraints (no commit was requested).
+
+verification: NOT_RUN
