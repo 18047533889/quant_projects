@@ -43,7 +43,16 @@ def _assert_semantic_production_evidence(canonical: str, run_mode: str) -> None:
 
 
 class BackendRouter:
-    """Select only eligible backends; Registry remains a storage/index service."""
+    """Select only eligible backends; Registry remains a storage/index service.
+
+    R21-ROUTING-AUTHORITY: this router is a capability/cost CANDIDATE PROVIDER
+    only.  It may propose a backend but never finalizes the production route.
+    The Global Physical Planner
+    (``runtime.multibackend.batch_global_optimizer.PhysicalBatchGlobalOptimizer``)
+    is the sole production routing authority.  ``select`` returns a
+    ``BackendSelection`` that callers may use as a candidate; the production
+    path must route through the planner.
+    """
 
     @staticmethod
     def select(

@@ -165,6 +165,14 @@ class PhysicalBatchGlobalOptimizer:
     - Transfer costs at backend boundaries
     - Parent backend affinity (child->parent transfer costs)
     - Source scan sharing
+
+    R21-ROUTING-AUTHORITY: this optimizer is the SOLE production routing
+    authority.  ``BackendRouter``, ``get_best_backend`` and
+    ``IntelligentBackendSelector`` are capability/cost CANDIDATE PROVIDERS
+    only — they may propose a backend but never finalize the production route.
+    The production path (``runtime.batch_service``) routes through
+    ``optimize_batch_global`` and executes the admitted ``PhysicalRegionPlan``
+    without per-operator rerouting.
     """
 
     def __init__(

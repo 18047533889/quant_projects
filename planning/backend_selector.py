@@ -193,6 +193,12 @@ class IntelligentBackendSelector:
         3. 内存约束检查 → 强制 streaming/分块
         4. 成本模型评估 → 选择最优（compute + transfer + memory_risk）
         5. Transfer affinity → 父子节点 backend 亲和性调整
+
+    R21-ROUTING-AUTHORITY: this selector is a capability/cost CANDIDATE
+    PROVIDER only.  It may propose a backend but never finalizes the production
+    route.  The Global Physical Planner
+    (``runtime.multibackend.batch_global_optimizer.PhysicalBatchGlobalOptimizer``)
+    is the sole production routing authority.
     """
 
     def __init__(
@@ -673,6 +679,12 @@ def select_optimal_backend_for_node(
     performance_priority: str = "balanced",
 ) -> RoutingDecision:
     """便捷函数：为单个节点选择最优 backend。
+
+    R21-ROUTING-AUTHORITY: this is a capability/cost CANDIDATE PROVIDER only.
+    It may propose a backend but never finalizes the production route.  The
+    Global Physical Planner
+    (``runtime.multibackend.batch_global_optimizer.PhysicalBatchGlobalOptimizer``)
+    is the sole production routing authority.
 
     Args:
         estimated_rows: 估计行数

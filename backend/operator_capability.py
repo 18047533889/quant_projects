@@ -1252,6 +1252,14 @@ def get_best_backend(
     current evidence.  SQL is normally selected at the plan/subtree layer, but
     explicit ``prefer='sql'`` remains supported.  ``registry`` is an
     injectable OperatorRegistry for tests (defaults to the global one).
+
+    R21-ROUTING-AUTHORITY: this function is a capability/cost CANDIDATE
+    PROVIDER only.  It may propose a backend but never finalizes the production
+    route.  The Global Physical Planner
+    (``runtime.multibackend.batch_global_optimizer.PhysicalBatchGlobalOptimizer``)
+    is the sole production routing authority.  When a caller supplies an
+    explicit ``prefer`` (a whole-plan route already chosen by the planner), the
+    candidate is returned as-is and the caller is responsible for honoring it.
     """
     import os
 
