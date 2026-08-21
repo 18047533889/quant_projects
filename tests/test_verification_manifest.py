@@ -2,7 +2,7 @@
 """REL-P0-01 — VerificationManifest contract tests.
 
 Asserts the release evidence manifest at evidence/VerificationManifest.json:
-  1. contains all 14 required gates by name,
+  1. contains all 15 required gates by name,
   2. no gate status is silently blank / empty,
   3. every required package has a non-empty source-tree hash,
   4. core snapshot fields are present and non-empty.
@@ -34,7 +34,8 @@ REQUIRED_GATES = (
     "1K_SCALE",
     "10K_SCALE",
     "100K_SCALE",
-    "REAL_ASHARE_SHADOW",
+    "ASHARE_SEMANTIC_CONTRACT_GOLDEN",
+    "ASHARE_REAL_DATA_SHADOW",
 )
 
 VALID_STATUSES = {"PASS", "FAIL", "NOT_RUN", "BLOCKED"}
@@ -61,7 +62,7 @@ def manifest() -> dict:
         pytest.fail(f"evidence/VerificationManifest.json is not valid JSON: {exc}")
 
 
-def test_manifest_has_all_14_gates(manifest: dict) -> None:
+def test_manifest_has_all_15_gates(manifest: dict) -> None:
     gates = manifest.get("gates")
     assert gates is not None, "manifest.gates is missing"
     assert isinstance(gates, list), "manifest.gates must be a list"

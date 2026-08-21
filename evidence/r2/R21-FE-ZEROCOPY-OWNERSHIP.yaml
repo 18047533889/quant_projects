@@ -1,0 +1,92 @@
+id: R21-FE-ZEROCOPY-OWNERSHIP
+slice: R21-FE-ZEROCOPY-OWNERSHIP — implement typed buffer ownership contract + zero-copy hardening (GAP-1..4 of R21-FE-ZEROCOPY-AUDIT)
+campaign: FactorEngine hardening implementation
+git_sha: working tree is truth (no commit made by writer)
+timestamp: "2026-08-22"
+status: COMPLETED_LOCAL
+
+audit_basis:
+  id: R21-FE-ZEROCOPY-AUDIT
+  overall_verdict: FAIL  # enum + policy + mutation guard + tests were never delivered
+  gaps_addressed:
+    - GAP-1 (P1) BufferOwnership enum / documented read-only default policy
+    - GAP-2 (P1) input-non-mutation test + zero-copy==copy parity + execution-order parity
+    - GAP-3 (P2) writeable=False on shared read-only views (loud failure)
+    - GAP-4 (P2) focused two-operator reorder test sharing one input buffer
+
+policy:
+  - "caller buffers are READ_ONLY unless ownership is explicitly transferred"
+  - "zero-copy sharing of a caller buffer MUST be READ_ONLY"
+  - "an accidental in-place write on a shared read-only view raises numpy ValueError
+     (loud) instead of silently corrupting the caller's frame"
+
+implementation:
+  - file: factor_engine/runtime/ownership.py  # NEW
+    items:
+      - "BufferOwnership(str, enum.Enum): READ_ONLY='shared' / OWNED_MUTABLE='owned_mutable'
+         / BORROWED_READ_ONLY='borrowed_read_only' (str-based -> JSON-serializable)."
+      - "make_readonly_shared_view(value): zero-copy np.ndarray .view() with
+         flags.writeable=False (GAP-3 guard); non-array values unchanged."
+  - file: factor_engine/runtime/buffer_ref.py
+    items:
+      - "BufferRef.ownership: BufferOwnership = BufferOwnership.READ_ONLY (was free
+         string ownership: str = 'shared'); READ_ONLY.value == 'shared' so default
+         unchanged."
+      - "BufferRef.to_dict() emits ownership.value -> legacy JSON byte-compatible
+         ('shared' for the default)."
+      - "SourceWaveExecutor._execute_wave sets ownership=BufferOwnership.READ_ONLY
+         (was 'shared')."
+      - "Module docstring documents the read-only-default policy."
+  - file: factor_engine/runtime/factor_block_ref.py
+    items:
+      - "values_ref.ownership = BORROWED_READ_ONLY (zero-copy borrow of caller
+         buffer) and values_ref.location is make_readonly_shared_view(values) ->
+         WRITEABLE=False shared view (GAP-3)."
+      - "validity_ref.ownership = OWNED_MUTABLE (freshly allocated NaN/Inf mask)."
+      - "build_factor_block docstring/comment updated: shared caller buffers MUST be
+         read-only; in-place kernel writes fail loudly."
+
+tests:
+  - file: factor_engine/tests/r21_zero_copy_ownership_2026_08.py  # NEW
+    cases:
+      - name: test_buffer_ownership_enum_typed_members
+        covers: GAP-1  # enum members + str-enum + default READ_ONLY + to_dict 'shared'
+      - name: test_buffer_ref_typed_ownership_roundtrip_to_dict
+        covers: GAP-1  # OWNED_MUTABLE/BORROWED_READ_ONLY serialize to their .value
+      - name: test_factor_block_ref_uses_typed_ownership
+        covers: GAP-1/GAP-3  # values BORROWED_READ_ONLY, validity OWNED_MUTABLE
+      - name: test_standardize_kernel_does_not_mutate_caller_buffer
+        covers: GAP-2a  # _standardize vector path; input byte-identical after
+      - name: test_panel_operator_does_not_mutate_caller_frame
+        covers: GAP-2a  # ts_mean over to_numpy(dtype=float) VIEW; frame unchanged
+      - name: test_shared_vs_copied_buffer_identical_results
+        covers: GAP-2b  # shared (zero-copy) vs explicit copy -> bit-identical
+      - name: test_reordered_operators_share_one_input_buffer_identical_and_input_unchanged
+        covers: GAP-4  # two ops share one 'close' buffer (run_many CSE); swapped
+                        # order -> identical outputs AND byte-identical input
+      - name: test_stage_by_stage_parity_same_shared_buffer
+        covers: GAP-2c  # stage-by-stage == whole-root via shared buffer (r38 basis)
+      - name: test_shared_readonly_view_rejects_inplace_write
+        covers: GAP-3  # WRITEABLE=False view raises ValueError; caller intact
+      - name: test_factor_block_ref_shared_values_view_writeable_false
+        covers: GAP-3  # FactorBlockRef shared values view read-only; arrow/parquet ok
+      - name: test_readonly_guard_fails_loudly_on_single_dtype_frame_view
+        covers: GAP-3  # df.to_numpy(dtype=float) VIEW guarded -> loud ValueError
+
+run_summary:
+  - command: "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 .venv/bin/python -m pytest factor_engine/tests/r21_zero_copy_ownership_2026_08.py -q --tb=short"
+    result: "11 passed (85.2s)"
+  - command: "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 .venv/bin/python -m pytest factor_engine/tests/r39/test_perf_batch_service_2026_08.py factor_engine/tests/r38/test_stage_by_stage_parity_2026_08.py factor_engine/tests/r37/test_property_mutation_gates.py -q --tb=short"
+    result: "28 passed (84.8s)  # r39 12 + r38 3 + r37 13"
+  - command: "pytest --collect-only on the four files"
+    result: "39 tests collected (11 new + 28 existing)"
+  - note: "Pre-existing broader-suite collection errors (11) are untouched and were
+            not chased (per task instruction)."
+
+verification_notes:
+  - "np.shares_memory proof retained: shared paths are genuine zero-copy views."
+  - "The single-dtype float frame hazard (df.to_numpy(dtype=float) returns a VIEW)
+     is now guarded: shared views are WRITEABLE=False, so an accidental in-place
+     kernel write fails loudly instead of mutating the caller's frame."
+  - "Serialization compatibility: BufferRef().to_dict()['ownership'] == 'shared'
+     byte-identical to the pre-hardening free-string default."

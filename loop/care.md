@@ -10,6 +10,21 @@ This file is read first by any agent before starting work.
 4. **Evidence is mandatory** for operator/backend/planner changes. See `evidence/r2/` for format.
 5. **No full datasets.** Smoke tests and small synthetic data only.
 
+## Transient API Errors (400 / 524 / gateway) — MANDATORY recovery
+
+Subagents WILL hit upstream API errors (HTTP 400 "上游服务暂时不可用", 524 Cloudflare timeout, 5xx). This is EXPECTED, not a reason to stop.
+
+**When a subagent dies on a transient API error:**
+- Resume it via SendMessage with the agent ID + a short "continue where you left off" message. Do this EVERY time, however many times it happens.
+- Before resuming, back off ~120 seconds (the gateway's retry_after) so the upstream has recovered.
+- The message must re-state the current task step so the agent can continue without losing context.
+- Do NOT treat a transient API error as task failure. The task is only done when the agent reports a real result (tests run / files written / evidence produced).
+
+**What subagents themselves should do on 400/524:**
+- Do not stop. Sleep ~120s (time.sleep), then retry the operation that failed.
+- Prefer Read/Edit/Write tools over shell inspection when the shell returns odd output.
+- Keep going through retries until the work completes.
+
 ## Read First (in order)
 
 1. `loop/care.md` ← you are here

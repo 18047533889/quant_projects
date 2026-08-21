@@ -67,8 +67,13 @@
       "default_status": "NOT_RUN"
     },
     {
-      "name": "REAL_ASHARE_SHADOW",
-      "description": "Shadow run against real A-share data reproduces expected behavior (universe/time window pinned).",
+      "name": "ASHARE_SEMANTIC_CONTRACT_GOLDEN",
+      "description": "Semantic-contract golden suite for A-share data semantics (bp Return, backward Close*Factor, PIT PubDate, fail-closed industry source, percent normalization, effective-time-only dividend, IsSuspend from StockDailyBar). Can PASS from contract/golden helpers.",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "ASHARE_REAL_DATA_SHADOW",
+      "description": "Real-data shadow: A-share semantics reproduced against REAL pinned parquet rows (data/a_share/lqtp_data mirror). Requires actual local A-share data; any skip/NEEDS-WIRING/synthetic-only evidence is NOT a pass.",
       "default_status": "NOT_RUN"
     }
   ]

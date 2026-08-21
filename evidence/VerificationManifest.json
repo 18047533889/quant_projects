@@ -1,39 +1,40 @@
 {
   "schema_version": 1,
-  "manifest_id": "rel-v1:2026-08-21T15:43:13.046884+00:00",
-  "timestamp": "2026-08-21T15:43:13.046884+00:00",
+  "manifest_id": "rel-v1:2026-08-21T18:17:07.585561+00:00",
+  "timestamp": "2026-08-21T18:17:07.585561+00:00",
   "host": "qs-data-ingest-hk-01",
   "source_snapshot": {
-    "git_sha": "4a27a8b228e3b27069e957094806cc8de86fc137",
+    "git_sha": "267d4b5695b41738a6bcfe5ae3e364fcf6228cc7",
     "git_dirty": true,
     "submodule_shas": {
-      "factor_engine": "26ed66472dccc33b02f2919d2685199491fba035"
+      "factor_engine": "fc3e5f32f199177512231ec8791d3f8da0fcc803",
+      "dataaccess": "afda9f47b76df677893bf4cf516c0f9cc825190c"
     },
     "git_repo": true
   },
   "packages": {
     "factor_engine": {
-      "tree_sha256": "eae9079098307cff2ea52ad0bf6fe667f6bb0b3c51de7c86565eac6ac57edc3e",
+      "tree_sha256": "d3ee74bcfe5bb37ea93e18dfbee28b7ae7f875f30f6bc5e9deba01f86a59b39f",
       "wheel_sha256": null,
-      "git_sha": "26ed66472dccc33b02f2919d2685199491fba035",
+      "git_sha": "fc3e5f32f199177512231ec8791d3f8da0fcc803",
       "git_dirty": true
     },
     "quant_evaluator": {
-      "tree_sha256": "30b61eb9c38b803fbb57cac25a6c54111d2add01dd314dbba44b0189c6c5daa3",
+      "tree_sha256": "a17cc4f982bccf33db84f175d8585faa614397c5d077fe5b7524b10a0fbad810",
       "wheel_sha256": {
         "wheel": "quant_evaluator-0.0.1a1-py3-none-any.whl",
         "sha256": "00c6516d00cbb35406c8954acd02f6d4fd39819706931a7228bcd3465aff47f8"
       }
     },
     "factor_optimizer": {
-      "tree_sha256": "b0827933eb54e462c7203e77c3de81f83f348b7e023260884f92fc37c6d6b98d",
+      "tree_sha256": "e12e8ab7a55052ba2383e442e4a13b28ccdb3b4263f93bf7ac8f76a630b6860a",
       "wheel_sha256": {
         "wheel": "factor_optimizer-0.1.0-py3-none-any.whl",
         "sha256": "42bf01eaf86b16e1139155e3ea27e61e9121f2e6b6fa68bbb352cc76ff4a6259"
       }
     },
     "factor_assets": {
-      "tree_sha256": "64ca3e735604fe1977b95b7fc0b1a0299c3b97414faaf2531a6f63b040b2ddd8",
+      "tree_sha256": "c1b9dc081235cd67253bad1a70d96022c5c4912a27f92d1db9d6c27f95ad53f4",
       "wheel_sha256": {
         "wheel": "factor_assets-0.1.0-py3-none-any.whl",
         "sha256": "1a075027e6f73ab5c567d7bc39a8beb1fcf5825516ffd48ce14c6a615fcbb034"
@@ -45,6 +46,12 @@
         "wheel": "factor_preprocess-0.1.0-py3-none-any.whl",
         "sha256": "667dd80ff99d914ba342f8b0a3f53a83181b8696c7de68fe345d8e6725056160"
       }
+    },
+    "dataaccess": {
+      "tree_sha256": "572ce3a81c333a0827fea4ee5d1f25df60ad1c8703c9bd90ad5d38f1369876a8",
+      "wheel_sha256": null,
+      "git_sha": "afda9f47b76df677893bf4cf516c0f9cc825190c",
+      "git_dirty": false
     }
   },
   "environment": {
@@ -59,9 +66,9 @@
       "pytest": "9.1.1",
       "duckdb": "1.5.4",
       "factor_engine": "0.3.1",
-      "dataaccess": "NOT_INSTALLED"
+      "dataaccess": "0.10.2"
     },
-    "hash": "dcab69f70cc819b6b2e2f93759faf1f5ebeab3872d0d98c68e3e7970aff7bd68"
+    "hash": "9776c1c7ed397c72e9e9e19c6cd23c6fac3e2ce4990c06f4ffc04dd40e12fb48"
   },
   "executed_commands": [
     {
@@ -111,7 +118,7 @@
           "test": "quant_evaluator/tests/test_numerical_oracle.py",
           "result": "passed",
           "count": 13,
-          "run_at": "2026-08-21T15:42:37.636791+00:00"
+          "run_at": "2026-08-21T18:17:07.545098+00:00"
         }
       ]
     },
@@ -124,13 +131,13 @@
           "test": "quant_evaluator/tests/test_metamorphic.py",
           "result": "passed",
           "count": 18,
-          "run_at": "2026-08-21T15:42:37.636791+00:00"
+          "run_at": "2026-08-21T18:17:07.545098+00:00"
         },
         {
           "test": "quant_evaluator/tests/test_consistency.py",
           "result": "passed",
           "count": 11,
-          "run_at": "2026-08-21T15:42:37.636791+00:00"
+          "run_at": "2026-08-21T18:17:07.545098+00:00"
         }
       ]
     },
@@ -143,7 +150,7 @@
           "test": "integration_tests/test_cross_package_contracts.py",
           "result": "passed",
           "count": 6,
-          "run_at": "2026-08-21T15:42:37.636791+00:00"
+          "run_at": "2026-08-21T18:17:07.545098+00:00"
         }
       ]
     },
@@ -174,13 +181,13 @@
           "test": "quant_evaluator/tests/test_qe_serialization.py",
           "result": "passed",
           "count": 36,
-          "run_at": "2026-08-21T15:42:37.636791+00:00"
+          "run_at": "2026-08-21T18:17:07.545098+00:00"
         },
         {
           "test": "factor_assets/tests/registry/test_serialization_codec.py",
           "result": "passed",
           "count": 17,
-          "run_at": "2026-08-21T15:42:37.636791+00:00"
+          "run_at": "2026-08-21T18:17:07.545098+00:00"
         }
       ]
     },
@@ -193,7 +200,7 @@
           "test": "factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py",
           "result": "passed",
           "count": 3,
-          "run_at": "2026-08-21T15:42:37.636791+00:00"
+          "run_at": "2026-08-21T18:17:07.545098+00:00"
         }
       ]
     },
@@ -222,15 +229,28 @@
       "evidence": []
     },
     {
-      "name": "REAL_ASHARE_SHADOW",
-      "description": "Shadow run against real A-share data reproduces expected behavior (universe/time window pinned).",
+      "name": "ASHARE_SEMANTIC_CONTRACT_GOLDEN",
+      "description": "Semantic-contract golden suite for A-share data semantics (bp Return, backward Close*Factor, PIT PubDate, fail-closed industry source, percent normalization, effective-time-only dividend, IsSuspend from StockDailyBar). Can PASS from contract/golden helpers.",
       "status": "PASS",
       "evidence": [
         {
           "test": "integration_tests/test_ashare_semantic_golden.py",
           "result": "passed",
           "count": 8,
-          "run_at": "2026-08-21T15:42:37.636791+00:00"
+          "run_at": "2026-08-21T18:17:07.545098+00:00"
+        }
+      ]
+    },
+    {
+      "name": "ASHARE_REAL_DATA_SHADOW",
+      "description": "Real-data shadow: A-share semantics reproduced against REAL pinned parquet rows (data/a_share/lqtp_data mirror). Requires actual local A-share data; any skip/NEEDS-WIRING/synthetic-only evidence is NOT a pass.",
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "integration_tests/test_real_ashare_shadow.py",
+          "result": "passed",
+          "count": 4,
+          "run_at": "2026-08-21T18:17:07.545098+00:00"
         }
       ]
     }

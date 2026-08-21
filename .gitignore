@@ -39,6 +39,7 @@ ENV/
 # Data directories
 data/
 raw_data_layer/
+workspace_data/
 
 # Docs build
 docs/build/

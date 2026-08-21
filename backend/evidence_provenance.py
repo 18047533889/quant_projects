@@ -520,7 +520,13 @@ def semantic_hashes_for(canonical: str) -> dict[str, str]:
 
 
 def parameter_domain_hash_for(canonical: str) -> str:
-    """Recompute the exact signature-domain digest stored in evidence."""
+    """Recompute the exact signature-domain digest stored in evidence.
+
+    R23 P0-10: the digest additionally binds the numeric policy that drives the
+    signature generator (constraint tables, sign tables, operator precedence,
+    dtype mapping), so a numeric-policy change alters the parameter domain hash
+    and therefore the implementation closure hash.
+    """
     from backend.operator_evidence_schema import compute_implementation_hash
     import sys
 
@@ -537,6 +543,7 @@ def parameter_domain_hash_for(canonical: str) -> str:
     sig = signature_for(canonical)
     if sig is None:
         return ""
+    numeric_policy = numeric_policy_digest()
     return compute_implementation_hash(
         json.dumps(
             {
@@ -546,6 +553,7 @@ def parameter_domain_hash_for(canonical: str) -> str:
                     (p.name, p.constraint, p.status, p.input_index, p.choices)
                     for p in sig.params
                 ],
+                "numeric_policy": numeric_policy,
             },
             sort_keys=True,
         )
@@ -563,7 +571,9 @@ def implementation_closure_hash_for(canonical: str) -> str:
     * transitive helper sources discovered through the operator module,
     * emitter / kernel identity sources,
     * production parameter signature (ParamSpec snapshot),
-    * numerical semantic policies.
+    * numerical semantic policies,
+    * numeric helper closure (each helper's code + AST + identity),
+    * numeric policy (constraints, signs, precedence, dtype map).
 
     The returned digest is always a 64-character lowercase hex SHA-256 so
     ``PhysicalImplementationSpec`` can consume it directly.
@@ -685,6 +695,30 @@ def implementation_closure_hash_for(canonical: str) -> str:
         "semantic_text": semantic_text,
     }
     return compute_payload_hash(payload)
+
+
+@lru_cache(maxsize=32)
+def implementation_closure_hash_set(canonicals: tuple[str, ...]) -> str:
+    """Aggregate the per-canonical implementation closure hashes into one digest.
+
+    R23 P0-10: the release-level ImplementationClosureHashSet must change
+    whenever *any* physical implementation detail changes, not just when the
+    canonical name population changes.  Each canonical contributes the full
+    closure digest from ``implementation_closure_hash_for`` (source/AST,
+    helper closure, emitter / kernel identity, parameter domain, numeric
+    policy); the sorted per-canonical digests are aggregated together with the
+    sorted canonical set into a single SHA-256.  Any numeric-helper change is
+    therefore reflected through the affected canonical's closure digest.
+    """
+    sorted_canonicals = sorted(set(canonicals))
+    per_canonical = {
+        c: implementation_closure_hash_for(c) for c in sorted_canonicals
+    }
+    return compute_payload_hash({
+        "closure_version": 2,
+        "canonicals": sorted_canonicals,
+        "implementation_closure_hashes": per_canonical,
+    })
 
 
 def implementation_hashes_for(canonical: str) -> dict[str, str]:

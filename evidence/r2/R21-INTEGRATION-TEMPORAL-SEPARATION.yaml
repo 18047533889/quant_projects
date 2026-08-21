@@ -1,0 +1,143 @@
+schema_version: 1
+task_id: R21-INTEGRATION-TEMPORAL-SEPARATION
+title: >-
+  End-to-end factor -> label temporal-separation integration tests (LEAKAGE
+  gate) -- closes R21-LEAKAGE-PIT-AUDIT Q6 (NOT_FOUND)
+audit_ref: evidence/r2/R21-LEAKAGE-PIT-AUDIT.yaml#Q6
+status: CLOSED_LOCAL
+production_certification: NOT_RUN
+base_sha: UNCOMMITTED_CURRENT_TREE
+current_head: UNCOMMITTED_CURRENT_TREE
+commit_sha: UNCOMMITTED_CURRENT_TREE
+owned_files:
+  - integration_tests/test_temporal_separation.py
+scope: integration_tests only (+ this evidence file)
+
+summary: >-
+  Added 3 end-to-end temporal-separation tests that prove a factor computed for
+  evaluation at date t uses ONLY data available at or before t, and that a label
+  bundle whose horizon extends beyond t is rejected at the boundary that exists.
+  All 3 pass; the full integration suite (17 tests) passes with no regressions.
+
+audit_finding_resolved: >-
+  Q6: "Cross-package integration tests prove factor->label temporal separation" --
+  verdict NOT_FOUND.  integration_tests/ asserted refs and source-level PIT
+  semantics only; no test computed a factor at t and asserted no information
+  after t is used.  This file adds exactly that gate.
+
+tests:
+  file: integration_tests/test_temporal_separation.py
+  total: 3
+  passed: 3
+  failed: 0
+  run_command: >-
+    cd /home/shw/quant_projects &&
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+    /home/shw/quant_projects/.venv/bin/python -m pytest
+    integration_tests/test_temporal_separation.py -q --tb=short
+  per_test:
+    - id: INT-T1
+      name: test_factor_computed_at_t_uses_only_data_le_t
+      what: >-
+        Compute ts_mean(close, 5) through the REAL FactorEngine (pandas
+        backend, research mode) on a synthetic 16-day x 12-asset panel; then
+        perturb every row strictly AFTER t=2026-01-09 by an ASSET-DEPENDENT
+        +1e6 * (asset_idx+1) offset and recompute.  The factor value AT t must
+        be bit-identical (structural equality, NaN==NaN), and the QE per-day
+        Pearson IC AT t evaluated on those factor rows must be bit-identical.
+        IC rows strictly AFTER t must move (contrast guard, so the test cannot
+        pass on a no-op perturbation).
+      result: PASS
+      end_to_end_legs:
+        - "FE: FactorEngine.run returns MultiIndex Series (timestamp, instrument)"
+        - "QE: Evaluator.evaluate(pearson_ic_series) on FactorBatch built from the FE rows"
+    - id: INT-T2
+      name: test_factor_prefix_invariance
+      what: >-
+        CausalPrefixInvariance fed end-to-end across FE -> FP -> QE.  Factor
+        value at t computed from the FULL panel must equal the value at t
+        computed from the PREFIX [0..t] only:
+        (a) FE leg: FactorEngine ts_mean(close,5) full vs prefix, value at t
+        bit-identical;
+        (b) FP leg: factor_preprocess.transforms.rolling.rolling_mean(window=5)
+        on the long panel, value at t full vs prefix bit-identical;
+        (c) QE leg: per-day IC at t evaluated on full-panel factor rows equals
+        IC evaluated on prefix-only factor rows (prefix padded with NaN past t).
+      result: PASS
+    - id: INT-T3
+      name: test_label_horizon_beyond_t_is_rejected
+      what: >-
+        A factor at t combined with a label bundle whose window reaches past t
+        must be rejected.  Asserted at the REAL fail-closed boundaries:
+        (a) FO factor_optimizer.contracts.splits.validate_split_plan rejects a
+        train segment ending at t whose label horizon reaches into the test
+        segment ("forward-label overlap") -- via SplitPlan.label_horizon=3 and
+        via a FO LabelBundle(label_horizon=3) plus plan-level label_horizon=3;
+        a purge=2 plan that fully absorbs the 3-day label window is accepted;
+        (b) QE LabelBundle causal-chain validation rejects a label window that
+        STARTS before its decision_time (label knowable before the signal) and
+        rejects a non-monotonic decision axis;
+        (c) the missing QE evaluation-boundary guard is PINNED as a documented
+        wiring gap (see gaps below): a causal-chain-valid bundle whose
+        label_end_time extends PAST the last evaluated factor row constructs
+        and evaluates today.
+      result: PASS
+
+regression:
+  run_command: >-
+    cd /home/shw/quant_projects &&
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+    /home/shw/quant_projects/.venv/bin/python -m pytest integration_tests/
+    -q --tb=short
+  total: 17
+  passed: 17
+  failed: 0
+  pre_existing: none
+
+wiring_gaps:
+  - id: GAP-1
+    owner: factor_optimizer
+    file: factor_optimizer/factor_optimizer/contracts/splits.py
+    lines: 209-212
+    severity: MEDIUM
+    description: >-
+      FO _validate_temporal_leakage early-returns when SplitPlan.label_horizon
+      == purge == embargo == validation_embargo == 0 (splits.py:210-211) BEFORE
+      it consults label_bundle.  A FO LabelBundle with label_horizon=3 (real
+      timestamps in label_start_time/label_end_time) does NOT by itself trigger
+      the leakage arithmetic; the bundle's label_horizon only takes effect when
+      a plan-level temporal field is non-zero.  A bundle alone therefore cannot
+      express forward-label leakage into a test segment -- the label_bundle
+      timestamp fields are compared only through the label_horizon fallback,
+      never directly (matches audit Q1 finding "real timestamps are not consumed
+      by the leakage arithmetic").  The integration test asserts the enforced
+      path (bundle + plan-level label_horizon=3) and documents this gap.
+  - id: GAP-2
+    owner: quant_evaluator
+    severity: HIGH
+    description: >-
+      QE has NO evaluation-boundary guard tying label_end_time to the factor
+      evaluation window (matches audit Q1/Q5/Q6 findings: QE's
+      EvaluationRequest/EvaluationBundle carry no snapshot_ref/split_ref and no
+      sealed-test or label-boundary concept).  A causal-chain-valid QE
+      LabelBundle whose label_end_time extends PAST the last evaluated factor
+      row constructs and evaluates successfully today.  INT-T3 pins this vector:
+      a 10-day label window on a 16-day panel (last label_end_time 2026-01-25 >
+      last factor row 2026-01-16) is accepted.  A writer should add a
+      label-boundary validation to QE LabelBundle/EvaluationRequest (e.g.
+      label_end_time <= evaluation boundary) and flip the INT-T3 gap-pin to
+      assert the rejection.
+
+runtime_notes:
+  - >-
+    FactorEngine construction spends ~80s once per process on a cold
+    operator-registry bootstrap (backend certification / polars capability
+    classification).  The test module builds ONE engine with a swappable
+    in-memory panel via a module-scoped pytest fixture (_fe_run_factor); every
+    subsequent run is <1s.  Module wall time ~83s (single warmup + 3 tests),
+    full integration suite ~83s.  Synthetic panels only (16 days x 12 assets);
+    no full datasets.
+  - >-
+    QE per-day Pearson IC uses min_obs=10 (metrics/ic.py _pearson_correlation);
+    the panel uses 12 assets so daily IC is defined and the after-t IC contrast
+    is meaningful.

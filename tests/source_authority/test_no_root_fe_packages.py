@@ -40,13 +40,14 @@ FE_PACKAGES = [
 def test_no_root_fe_package(package_name):
     """Root level must not have FactorEngine packages."""
     package_dir = ROOT / package_name
-    # The directory should not exist OR should be empty/not a Python package
+    # The directory should not exist OR should be empty/not a Python package.
+    # Fail-closed: a root duplicate package shadows factor_engine authority.
     if package_dir.exists():
-        # Check it's not a Python package (no __init__.py)
         init_file = package_dir / "__init__.py"
-        pytest.skip(
-            f"Root {package_name}/ exists - pending deletion. "
-            f"Has __init__.py: {init_file.exists()}"
+        raise AssertionError(
+            f"Root duplicate package {package_name}/ exists at {package_dir} "
+            f"(has __init__.py: {init_file.exists()}) - "
+            f"root duplicate package 遮蔽了 FE authority"
         )
 
 

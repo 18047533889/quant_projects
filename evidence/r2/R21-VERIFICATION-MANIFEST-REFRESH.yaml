@@ -49,12 +49,27 @@ gates_moved_pass:
       - test: factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py
         result: passed
         count: 3
-  REAL_ASHARE_SHADOW:
+  ASHARE_SEMANTIC_CONTRACT_GOLDEN:
     status: PASS
     evidence:
       - test: integration_tests/test_ashare_semantic_golden.py
         result: passed
         count: 8
+        note: >-
+          semantic-contract golden suite (GOLDEN-A01..A08).  Exercises real
+          dataaccess helpers + golden numbers; never fabricates a data read.
+  ASHARE_REAL_DATA_SHADOW:
+    status: PASS
+    evidence:
+      - test: integration_tests/test_real_ashare_shadow.py
+        result: passed
+        count: 4
+        note: >-
+          REAL pinned A-share mirror present (data/a_share/lqtp_data/
+          StockDailyBar 2024-01-02..04).  4 real-parquet assertions: Return=bp
+          vs Close/PreClose, backward continuity Close*Factor, TurnoverRatio
+          percent band, IsSuspend bool+present.  Mirror absent -> the suite
+          SKIPS and this gate must NOT be cited as PASS.
 
 gates_stayed_not_run:
   - UNIT
@@ -65,7 +80,6 @@ gates_stayed_not_run:
   - 1K_SCALE
   - 10K_SCALE
   - 100K_SCALE
-
 tests_run:
   - command: >-
       OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
@@ -77,6 +91,15 @@ tests_run:
       /usr/bin/python3 -m pytest
       integration_tests/test_ashare_semantic_golden.py
     result: 8 passed
+    note: ASHARE_SEMANTIC_CONTRACT_GOLDEN (GOLDEN-A01..A08)
+  - command: >-
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      /usr/bin/python3 -m pytest
+      integration_tests/test_real_ashare_shadow.py
+    result: 4 passed
+    note: >-
+      ASHARE_REAL_DATA_SHADOW (real pinned mirror present; mirror absent ->
+      the suite skips and the gate stays NOT_RUN/FAIL)
   - command: >-
       OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
       PYTHONPATH=quant_evaluator/build/lib
@@ -145,6 +168,10 @@ release_notes:
 known_limitations:
   - UNIT, LEAKAGE, PIT, DETERMINISM, FRESH_WHEEL and the three SCALE gates
     remain NOT_RUN: no current-tree test evidence for them was run this session.
+  - ASHARE_REAL_DATA_SHADOW PASS is bound to the presence of the pinned local
+    A-share mirror (data/a_share/lqtp_data).  On a machine without that 2 GB
+    mirror, integration_tests/test_real_ashare_shadow.py skips and the gate must
+    be re-evaluated to NOT_RUN/FAIL -- a skip is never a PASS.
   - FO strategy checkpoint/resume (factor_optimizer/tests/search/test_strategy_checkpoint_resume.py)
     is 5 failed / 8 passed on this tree -> CHECKPOINT_RESUME is NOT marked PASS
     from FO evidence; only the FE R10 checkpoint test (3 passed) is cited.

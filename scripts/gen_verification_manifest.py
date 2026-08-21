@@ -43,6 +43,8 @@ from pathlib import Path
 # Paths
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 EVIDENCE_DIR = REPO_ROOT / "evidence"
 OUTPUT_PATH = EVIDENCE_DIR / "VerificationManifest.json"
 GATES_CONFIG_PATH = REPO_ROOT / "config" / "gates.json"
@@ -54,6 +56,7 @@ PACKAGES: tuple[str, ...] = (
     "factor_optimizer",
     "factor_assets",
     "factor_preprocess",
+    "dataaccess",
 )
 
 # Optional: JSON file of pre-verified per-gate evidence that a re-run should
@@ -71,7 +74,8 @@ _PROVABLE_GATE_NAMES: frozenset[str] = frozenset({
     "CROSS_PACKAGE",
     "SERIALIZATION",
     "CHECKPOINT_RESUME",
-    "REAL_ASHARE_SHADOW",
+    "ASHARE_SEMANTIC_CONTRACT_GOLDEN",
+    "ASHARE_REAL_DATA_SHADOW",
 })
 
 # Top-level dirs ignored when hashing a package source tree (never release code).
@@ -154,6 +158,60 @@ def _is_excluded_dir(name: str) -> bool:
     return name.endswith(".egg-info") or name.endswith(".dist-info")
 
 
+def _dist_version(name: str) -> str:
+    """Installed version of a package, with a fallback for dist-name mismatches.
+
+    ``dataaccess`` is shipped as the dist ``data-access`` (importable as
+    ``dataaccess``), so a bare importlib.metadata lookup would report
+    NOT_INSTALLED even when installed.  R23: resolve the ``data-access`` dist
+    so the manifest pins the installed dataaccess release.
+    """
+    try:
+        import importlib.metadata as md
+        return md.version(name)
+    except Exception:
+        pass
+    if name == "dataaccess":
+        try:
+            import importlib.metadata as md
+            return md.version("data-access")
+        except Exception:
+            return "NOT_INSTALLED"
+    return "NOT_INSTALLED"
+
+
+def _release_identity() -> dict:
+    """Single source of truth for root/FE/DA git SHAs: evidence.current.
+
+    R23: the manifest no longer computes its own root/submodule SHAs.  It
+    delegates to ``evidence.current`` (R22-CURRENT-TRUTH) so the
+    VerificationManifest's ReleaseIdentity (root / factor_engine / dataaccess)
+    can never drift from CURRENT.json's sha_bindings.  Degrades to local git
+    calls only if evidence.current is unavailable (non-git / no dataaccess).
+    """
+    try:
+        from evidence.current import root_repo_sha, submodule_sha
+        root = root_repo_sha()
+        return {
+            "git_sha": root.split(" ")[0],
+            "git_dirty": root.endswith("(working-tree-dirty)"),
+            "factor_engine": submodule_sha("factor_engine"),
+            "dataaccess": submodule_sha("dataaccess"),
+        }
+    except Exception as exc:  # pragma: no cover - degraded fallback
+        print(
+            f"warning: evidence.current identity unavailable ({exc}); "
+            "falling back to local git calls",
+            file=sys.stderr,
+        )
+        return {
+            "git_sha": _git_sha(REPO_ROOT),
+            "git_dirty": _git_dirty(REPO_ROOT),
+            "factor_engine": _git_sha(REPO_ROOT / "factor_engine"),
+            "dataaccess": _git_sha(REPO_ROOT / "dataaccess"),
+        }
+
+
 def package_tree_hash(pkg: str) -> str | None:
     """SHA256 over a stable serialization of the package source tree.
 
@@ -199,15 +257,8 @@ def package_wheel_sha256(pkg: str) -> dict | None:
 def env_hash() -> dict:
     py = platform.python_version()
     versions: dict[str, str] = {}
-    try:
-        import importlib.metadata as md
-        for name in _ENV_PACKAGES:
-            try:
-                versions[name] = md.version(name)
-            except Exception:
-                versions[name] = "NOT_INSTALLED"
-    except Exception:
-        pass
+    for name in _ENV_PACKAGES:
+        versions[name] = _dist_version(name)
     blob = json.dumps({"python": py, "packages": versions}, sort_keys=True)
     return {
         "python_version": py,
@@ -245,7 +296,8 @@ def load_gates() -> list[dict]:
         "UNIT", "NUMERICAL_ORACLE", "PROPERTY", "CROSS_PACKAGE",
         "LEAKAGE", "PIT", "DETERMINISM", "SERIALIZATION",
         "CHECKPOINT_RESUME", "FRESH_WHEEL", "1K_SCALE", "10K_SCALE",
-        "100K_SCALE", "REAL_ASHARE_SHADOW",
+        "100K_SCALE", "ASHARE_SEMANTIC_CONTRACT_GOLDEN",
+        "ASHARE_REAL_DATA_SHADOW",
     )
     for name in all_gates:
         if name not in known:
@@ -424,9 +476,10 @@ def build_manifest() -> dict:
     gates = load_gates()
     gates = apply_verified_evidence(gates)
 
-    # --- source snapshot ----------------------------------------------------
-    git_sha = _git_sha(REPO_ROOT)
-    git_dirty = _git_dirty(REPO_ROOT)
+    # --- source snapshot (ReleaseIdentity from evidence.current) ------------
+    identity = _release_identity()
+    git_sha = identity["git_sha"]
+    git_dirty = identity["git_dirty"]
 
     packages: dict[str, dict] = {}
     for pkg in PACKAGES:
@@ -436,7 +489,7 @@ def build_manifest() -> dict:
             "wheel_sha256": package_wheel_sha256(pkg),
         }
         if (pkg_root / ".git").exists():
-            entry["git_sha"] = _git_sha(pkg_root)
+            entry["git_sha"] = identity.get(pkg) or _git_sha(pkg_root)
             entry["git_dirty"] = _git_dirty(pkg_root)
         if (pkg_root / ".gitmodules").exists():
             entry["is_git_submodule"] = True
@@ -490,7 +543,7 @@ def build_manifest() -> dict:
                 pkg: packages[pkg].get("git_sha") for pkg in PACKAGES
                 if packages[pkg].get("git_sha")
             },
-            "git_repo": _git_sha(REPO_ROOT) is not None,
+            "git_repo": git_sha is not None,
         },
         "packages": packages,
         "environment": env_hash(),

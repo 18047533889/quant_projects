@@ -170,17 +170,33 @@ def semantic_catalog_identity() -> str:
     return key
 
 
-def test_environment_identity() -> str:
-    versions: dict[str, str] = {}
+def _dist_version(name: str) -> str:
+    """Installed version of a package, with a fallback for dist-name mismatches.
+
+    ``dataaccess`` is shipped as the dist ``data-access`` (importable as
+    ``dataaccess``), so a bare importlib.metadata lookup by module name would
+    report NOT_INSTALLED even when it is installed and pinned to a release
+    HEAD.  R23: resolve the ``data-access`` dist so the environment identity
+    reflects the pinned install.
+    """
     try:
         import importlib.metadata as md
-        for name in _ENV_PACKAGES:
-            try:
-                versions[name] = md.version(name)
-            except Exception:
-                versions[name] = "NOT_INSTALLED"
+        return md.version(name)
     except Exception:
         pass
+    if name == "dataaccess":
+        try:
+            import importlib.metadata as md
+            return md.version("data-access")
+        except Exception:
+            return "NOT_INSTALLED"
+    return "NOT_INSTALLED"
+
+
+def test_environment_identity() -> str:
+    versions: dict[str, str] = {}
+    for name in _ENV_PACKAGES:
+        versions[name] = _dist_version(name)
     blob = json.dumps(
         {"python": platform.python_version(), "packages": versions},
         sort_keys=True,

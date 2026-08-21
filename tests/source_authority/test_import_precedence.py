@@ -75,7 +75,10 @@ def test_current_default_resolves_to_root():
             mod = importlib.import_module("backend")
             mod_file = getattr(mod, "__file__", None)
         except ImportError:
-            pytest.skip("Cannot import backend (missing deps)")
+            raise AssertionError(
+                "Cannot import backend - "
+                "root duplicate package 遮蔽了 FE authority"
+            )
 
     if mod_file:
         # Currently resolves to root - this documents the problem

@@ -52,12 +52,30 @@ _GATES: list[dict] = [
         ],
     },
     {
-        "name": "REAL_ASHARE_SHADOW",
+        "name": "ASHARE_SEMANTIC_CONTRACT_GOLDEN",
         "evidence": [
             {
                 "test": "integration_tests/test_ashare_semantic_golden.py",
                 "result": "passed",
                 "count": 8,
+            },
+        ],
+    },
+    {
+        "name": "ASHARE_REAL_DATA_SHADOW",
+        "evidence": [
+            {
+                "test": "integration_tests/test_real_ashare_shadow.py",
+                "result": "passed",
+                "count": 4,
+                "note": (
+                    "REAL pinned A-share mirror present "
+                    "(data/a_share/lqtp_data/StockDailyBar 2024-01-02..04). "
+                    "4 real-parquet assertions: Return=bp vs Close/PreClose, "
+                    "backward continuity Close*Factor, TurnoverRatio percent "
+                    "band, IsSuspend bool+present. If the mirror is absent "
+                    "this test SKIPS and the gate must NOT be cited as PASS."
+                ),
             },
         ],
     },
