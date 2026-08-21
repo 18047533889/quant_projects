@@ -145,6 +145,44 @@ def test_real_compiler_accepts_explicit_region_inputs_and_canonical_params() -> 
 def test_production_whole_tree_execution_remains_disabled() -> None:
     backend = QBackend.__new__(QBackend)
     backend._production_mode = True
+    # q runtime is unavailable in this environment: fail closed with
+    # BackendUnavailableError before the planner-admission gate.
+    backend._process_manager = type(
+        "PM",
+        (),
+        {
+            "is_available": lambda self=True: False,
+            "check_availability": lambda self=True: type(
+                "Info",
+                (),
+                {
+                    "status": SimpleNamespace(value="UNAVAILABLE"),
+                    "error_message": "PyKX not installed",
+                },
+            )(),
+        },
+    )()
+    plan = PlanNode(op="column", attrs={"name": "close"}, node_id="root")
+
+    from backend.operator_capability import BackendUnavailableError
+
+    with pytest.raises(BackendUnavailableError, match="q runtime unavailable"):
+        backend.execute(plan, None)
+
+
+def test_production_whole_tree_requires_planner_admission_when_q_available() -> None:
+    backend = QBackend.__new__(QBackend)
+    backend._production_mode = True
+    backend._process_manager = type(
+        "PM",
+        (),
+        {
+            "is_available": lambda self=True: True,
+            "check_availability": lambda self=True: type(
+                "Info", (), {"status": "AVAILABLE", "error_message": None}
+            )(),
+        },
+    )()
     plan = PlanNode(op="column", attrs={"name": "close"}, node_id="root")
 
     with pytest.raises(QPhysicalRegionNotImplemented, match="whole-tree"):

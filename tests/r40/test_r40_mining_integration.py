@@ -68,6 +68,13 @@ def test_fastpath_market_none_rejected(monkeypatch):
     assert not captured  # validate_production_dsl 不应被调用
 
 
+def test_fastpath_market_omitted_typeerror(monkeypatch):
+    """R21-FASTPATH-MARKET: omitting market entirely is a TypeError (no default)."""
+    _stub_fastpath_gate(monkeypatch)
+    with pytest.raises(TypeError, match="market"):
+        validate_production_fastpath_dsl("close")
+
+
 def test_manifest_for_execution_threads_market(monkeypatch):
     captured = {}
 

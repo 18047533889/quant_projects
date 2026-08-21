@@ -32,8 +32,15 @@ tests_run:
   py_compile: PASS
 regression_tests:
   - "test_fastpath_market_none_rejected (tests/r40/test_r40_mining_integration.py): market=None raises ValueError and validate_production_dsl is never called."
+  - "test_fastpath_market_omitted_typeerror (tests/r40/test_r40_mining_integration.py): omitting market is a TypeError — signature has no default."
+  - "test_fastpath_market_none_rejected (tests/api/test_mining_fastpath.py): fastpath validator rejects market=None — no A-share default."
+  - "test_fastpath_market_omitted_typeerror (tests/api/test_mining_fastpath.py): omitting market is a TypeError — no default in signature."
   - "test_production_fastpath_dsl_accepts_ts_mean (tests/api/test_mining_fastpath.py): explicit market=\"ashare\" still passes."
   - "test_validate_formula_in_mining_allowlist (tests/api/test_mining_fastpath.py): fastpath tier now passes explicit market."
+  - "test_fastpath_market_passthrough (tests/r40/test_r40_mining_integration.py): market=\"us\" threads through to validate_production_dsl."
+tests_run_detail:
+  - "tests/r40/test_r40_mining_integration.py: 7 passed."
+  - "tests/api/test_mining_fastpath.py non-loading regression set: 11 passed (focused)."
 remotes: NOT_USED
 production_certified: false
 known_limitations:

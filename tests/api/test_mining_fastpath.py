@@ -33,6 +33,22 @@ def test_fastpath_allowlists_json_shape(_loaded):
     assert payload["counts"]["production_fastpath"] <= payload["counts"]["production"]
 
 
+def test_fastpath_market_none_rejected(monkeypatch):
+    """R21-FASTPATH-MARKET: fastpath validator rejects market=None — no A-share default."""
+    from api.mining_integration import validate_production_fastpath_dsl
+
+    with pytest.raises(ValueError, match="market is required"):
+        validate_production_fastpath_dsl("ts_mean(col('close'), 5)", market=None)
+
+
+def test_fastpath_market_omitted_typeerror(monkeypatch):
+    """R21-FASTPATH-MARKET: omitting market is a TypeError — signature has no default."""
+    from api.mining_integration import validate_production_fastpath_dsl
+
+    with pytest.raises(TypeError, match="market"):
+        validate_production_fastpath_dsl("ts_mean(col('close'), 5)")
+
+
 def test_validate_manifest_fastpath_when_env(monkeypatch):
     from api.mining_integration import validate_manifest_for_execution
 

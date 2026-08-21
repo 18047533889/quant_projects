@@ -24,7 +24,7 @@ from backend.q_backend.q_physical_implementation_registry import (
     compute_q_implementation_hash,
 )
 
-EVIDENCE_ROOT = Path(__file__).resolve().parents[2] / "evidence" / "r2"
+EVIDENCE_ROOT = Path(__file__).resolve().parents[2] / "evidence" / "r2" / "_test_certified"
 
 
 def _git_sha() -> str:
@@ -93,17 +93,10 @@ def production_certified_compiler() -> QCompiler:
     for canonical, lowering_id in base.executable_lowerings().items():
         artifacts = {}
         for stage in ("compile", "runtime", "parity", "null_semantics"):
-            filename = f"_test_certified_{canonical}_{stage}.json"
             payload = _stage_payload(stage, git_sha, canonical, lowering_id)
-            path = EVIDENCE_ROOT / filename
-            # Write only if the on-disk artifact does not already match.  The
-            # evidence hash is a pure function of the payload, so a stale file
-            # is rewritten and an identical file is left untouched.
-            raw = json.dumps(payload).encode()
-            if not path.is_file() or path.read_bytes() != raw:
-                path.write_bytes(raw)
             artifacts[f"{stage}_evidence"] = QEvidenceArtifact(
-                path=filename, sha256=_sha256_bytes(path.read_bytes())
+                path=_ensure_evidence_file(canonical, stage, payload),
+                sha256=_sha256_bytes(json.dumps(payload).encode()),
             )
         registry.register(
             QPhysicalImplementation(
