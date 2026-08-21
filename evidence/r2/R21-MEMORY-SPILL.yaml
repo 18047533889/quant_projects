@@ -1,0 +1,76 @@
+# R21-MEMORY-SPILL
+# Evidence: Region limit overselling and rebalance inconsistency fix
+# Date: 2026-08-21
+# Author: Claude Code (Writer DG — memory spill)
+
+task_id: R21-MEMORY-SPILL
+finding: region_limit_overselling_rebalance_inconsistency
+base_sha: UNCOMMITTED_CURRENT_TREE
+current_head: LOCAL_TREE
+commit_sha: LOCAL_TREE
+timestamp: '2026-08-21T00:00:00Z'
+status: CLOSED_LOCAL
+owned_files:
+- runtime/multibackend/concurrent_region_isolation.py
+- tests/runtime/test_memory_region_limits.py
+- evidence/r2/R21-MEMORY-SPILL.yaml
+modified_files:
+- runtime/multibackend/concurrent_region_isolation.py
+- tests/runtime/test_memory_region_limits.py
+
+problem:
+- 'ConcurrentRegionMemoryPool oversells: default new-region limits were computed as
+  total / (region_count + 1) without checking the remaining budget. With total=100_000,
+  creating a, b, c produced limits 100_000 + 50_000 + 33_333 = 183_333 > total.
+  The first region takes the full budget, the second takes half, and the first never
+  shrinks, so the sum of limits exceeds the available memory.'
+- 'rebalance_limits() only wrote pool._limit_bytes (private attribute) and left
+  RegionMemoryStats.limit_bytes at the stale value. The public stats view (stats(),
+  global_stats()["regions"][rid]["limit_bytes"], utilization denominator) kept the old
+  limit, so enforcement and reporting diverged: after a 1_000_000 rebalance the pool
+  enforced 500_000 while stats still reported 1_000_000.'
+
+implementation:
+- 'runtime/multibackend/concurrent_region_isolation.py create_region(): default limits
+  are now clamped to the remaining budget (total - sum of existing region limits).
+  Explicit caller-supplied limits are left untouched. This guarantees default limits
+  never oversell.'
+- 'runtime/multibackend/concurrent_region_isolation.py rebalance_limits(): now updates
+  BOTH pool._limit_bytes and pool._stats.limit_bytes atomically under the pool lock,
+  keeping enforcement and the public RegionMemoryStats view consistent.'
+- 'tests/runtime/test_memory_region_limits.py: 3 regression tests covering the
+  rebalance accounting consistency and the no-oversell invariant.'
+
+regression_repro:
+  old_logic_create_region:
+    total: 100_000
+    observed_limits: {a: 100000, b: 50000, c: 33333}
+    sum: 183333
+    oversell: true
+  old_logic_rebalance:
+    total: 1_000_000
+    pool._limit_bytes: 500000
+    stats().limit_bytes: 1000000
+    stale: true
+
+focused_tests:
+  command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1
+    python3 -m pytest tests/runtime/test_memory_region_limits.py -v
+  result: 3 passed (2026-08-21, 0.11s)
+  coverage:
+  - test_rebalance_updates_stats_limit_bytes: rebalance updates BOTH pool._limit_bytes
+    and RegionMemoryStats.limit_bytes
+  - test_new_region_default_limits_do_not_oversell: sum of default limits never
+    exceeds total memory
+  - test_rebalance_keeps_aggregate_within_total_memory: rebalance aggregate limits
+    stay within total memory
+
+serial_regression_gate:
+  command: cd /home/shw/quant_projects && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
+    MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/runtime/test_memory_region_limits.py
+    -q
+  result: 3 passed (2026-08-21, serial, no xdist)
+compile_gate:
+  command: python3 -m py_compile runtime/multibackend/concurrent_region_isolation.py
+    tests/runtime/test_memory_region_limits.py
+  result: PASSED

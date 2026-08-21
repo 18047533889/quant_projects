@@ -308,7 +308,15 @@ class ConcurrentRegionIsolationManager:
             if limit_bytes is None:
                 # Fair share: total / (current_regions + 1)
                 region_count = len(self._regions) + 1
-                limit_bytes = self._total_memory_bytes // region_count
+                fair_share = self._total_memory_bytes // region_count
+
+                # Do not oversell: a default limit must fit within the
+                # remaining budget after existing regions have claimed
+                # their share. Explicit caller limits are left untouched.
+                remaining_budget = self._total_memory_bytes - sum(
+                    p._limit_bytes for p in self._regions.values()
+                )
+                limit_bytes = min(fair_share, max(remaining_budget, 0))
 
             pool = ConcurrentRegionMemoryPool(
                 region_id=region_id,
@@ -363,7 +371,11 @@ class ConcurrentRegionIsolationManager:
             return self._regions.get(region_id)
 
     def rebalance_limits(self) -> None:
-        """Rebalance memory limits across active regions (fair share)."""
+        """Rebalance memory limits across active regions (fair share).
+
+        Updates both the pool's private limit and the public
+        ``RegionMemoryStats.limit_bytes`` so accounting stays consistent.
+        """
         with self._lock:
             if not self._regions:
                 return
@@ -371,7 +383,9 @@ class ConcurrentRegionIsolationManager:
             fair_share = self._total_memory_bytes // len(self._regions)
 
             for pool in self._regions.values():
-                pool._limit_bytes = fair_share
+                with pool._lock:
+                    pool._limit_bytes = fair_share
+                    pool._stats.limit_bytes = fair_share
 
             _logger.info(
                 f"Rebalanced {len(self._regions)} regions to "
