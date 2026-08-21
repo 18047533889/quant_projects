@@ -52,6 +52,36 @@ def _freeze(value: Any) -> Any:
     return value
 
 
+def _stable_repr(value: Any) -> str:
+    """Deterministic canonical string form of a value for content hashing."""
+    if isinstance(value, Mapping):
+        return "{" + ",".join(
+            f"{_stable_repr(k)}:{_stable_repr(v)}" for k, v in sorted(
+                value.items(), key=lambda kv: _stable_repr(kv[0])
+            )
+        ) + "}"
+    if isinstance(value, np.ndarray):
+        return (
+            f"nd:{value.dtype.str}:{value.shape}:"
+            + _stable_repr(value.ravel().tolist())
+        )
+    if isinstance(value, (list, tuple)):
+        return "[" + ",".join(_stable_repr(item) for item in value) + "]"
+    if isinstance(value, (set, frozenset)):
+        return "<" + ",".join(sorted(_stable_repr(item) for item in value)) + ">"
+    if isinstance(value, (bool, int, float, str)) or value is None:
+        return repr(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return repr(value)
+
+
+def _content_hash(value: Any) -> str:
+    """SHA-256 hex digest derived from the actual content of ``value``."""
+    import hashlib
+    return hashlib.sha256(_stable_repr(value).encode("utf-8")).hexdigest()
+
+
 @dataclass(frozen=True)
 class FittedState:
     """
@@ -74,7 +104,15 @@ class FittedState:
 
     # Learned parameters
     learned_params: Dict[str, Any] = field(default_factory=dict)
+    # Content-derived hash of learned_params. Recomputed from the actual
+    # learned_params; a provided value is validated against the recomputation
+    # and any mismatch is rejected (FP-P0-05).
     learned_params_hash: Optional[str] = None
+
+    # Content-derived provenance (FP-P0-05)
+    implementation_hash: Optional[str] = None  # hash of transform implementation/version
+    data_snapshot_ref: Optional[str] = None    # hash or ref of the fit-time data snapshot
+    split_ref: Optional[str] = None            # reference to the train/test split used
 
     # Provenance
     config_hash: Optional[str] = None
@@ -106,6 +144,17 @@ class FittedState:
         object.__setattr__(self, "feature_ids", tuple(self.feature_ids))
         object.__setattr__(self, "feature_order", tuple(self.feature_order))
         object.__setattr__(self, "learned_params", _freeze(self.learned_params))
+
+        # FP-P0-05: learned_params_hash must be derived from the actual
+        # learned_params content. None is rejected; a provided hash is
+        # validated against the recomputed value.
+        actual_hash = _content_hash(self.learned_params)
+        if self.learned_params_hash is None:
+            object.__setattr__(self, "learned_params_hash", actual_hash)
+        elif self.learned_params_hash != actual_hash:
+            raise InvalidContractError(
+                "learned_params_hash does not match learned_params content"
+            )
 
     def is_compatible_with(self, factor_ids: List[str]) -> bool:
         """Check if factors match the positional fitted feature contract."""

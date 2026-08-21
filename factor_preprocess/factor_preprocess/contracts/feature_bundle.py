@@ -9,6 +9,9 @@ from types import MappingProxyType
 from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 
+from factor_preprocess.errors import InvalidContractError
+from factor_preprocess.contracts.state import _freeze
+
 
 def _freeze_value(value: Any) -> Any:
     """
@@ -26,7 +29,8 @@ def _freeze_value(value: Any) -> Any:
     elif isinstance(value, list):
         return tuple(value)
     elif isinstance(value, dict):
-        return MappingProxyType(value)
+        # Deep snapshot: copy before wrapping (see FP-P0-02).
+        return MappingProxyType(dict(value))
     return value
 
 
@@ -94,8 +98,60 @@ class FeatureManifest:
             Number of columns per channel
         """
         self._feature_ids: Tuple[str, ...] = tuple(feature_ids)
-        self._channel_offsets: MappingProxyType[str, int] = MappingProxyType(channel_offsets)
-        self._channel_sizes: MappingProxyType[str, int] = MappingProxyType(channel_sizes)
+        # Snapshot-copy caller dicts before wrapping so later mutation of the
+        # caller's dict cannot leak into this manifest (deep snapshot).
+        self._channel_offsets: MappingProxyType[str, int] = MappingProxyType(dict(channel_offsets))
+        self._channel_sizes: MappingProxyType[str, int] = MappingProxyType(dict(channel_sizes))
+
+        # FP-P0-01: duplicate feature IDs would silently collapse to the last
+        # column. Reject them unless they are channel-qualified (RAW::x vs
+        # RANK::x) and therefore distinct.
+        if len(self._feature_ids) != len(set(self._feature_ids)):
+            raise InvalidContractError(
+                f"Duplicate feature IDs in manifest: "
+                f"{[fid for fid in set(self._feature_ids) if self._feature_ids.count(fid) > 1]}"
+            )
+
+        # FP-P0-03: shape/layout validation.
+        if not self._channel_offsets:
+            raise InvalidContractError("FeatureManifest requires at least one channel")
+        if set(self._channel_offsets) != set(self._channel_sizes):
+            raise InvalidContractError(
+                "channel_offsets and channel_sizes must have the same channel set"
+            )
+
+        max_end = 0
+        for ch in self._channel_offsets:
+            offset = self._channel_offsets[ch]
+            size = self._channel_sizes[ch]
+            if offset < 0:
+                raise InvalidContractError(
+                    f"Channel '{ch}' offset must be >= 0, got {offset}"
+                )
+            if size <= 0:
+                raise InvalidContractError(
+                    f"Channel '{ch}' size must be > 0, got {size}"
+                )
+            max_end = max(max_end, offset + size)
+
+        # Channels must not overlap each other.
+        occupied = {}
+        for ch in sorted(self._channel_offsets, key=lambda c: self._channel_offsets[c]):
+            offset = self._channel_offsets[ch]
+            size = self._channel_sizes[ch]
+            for col in range(offset, offset + size):
+                if col in occupied:
+                    raise InvalidContractError(
+                        f"Channel '{ch}' overlaps channel '{occupied[col]}' at column {col}"
+                    )
+                occupied[col] = ch
+
+        # Feature dimension must be fully accounted for by the channels.
+        if max_end != len(self._feature_ids):
+            raise InvalidContractError(
+                f"Max channel end {max_end} does not match feature count "
+                f"{len(self._feature_ids)} (offset+size must tile exactly)"
+            )
 
         # Build reverse lookup: feature_id -> column index
         self._feature_to_col: Dict[str, int] = {}
@@ -200,10 +256,14 @@ class FeatureBundle:
 
     Immutability guarantees:
     - values: ndarray is snapshot-copied and frozen (writeable=False)
-    - channels: wrapped in MappingProxyType
+    - channels: wrapped in MappingProxyType (copied first, see FP-P0-02)
     - source_factor_ids, fitted_state_refs: converted to tuples
     - AxisRef.axis_values: snapshot-copied and frozen
     - ChannelRef.feature_ids: converted to tuple
+
+    Layout: 'NF' = [asset, feature]; 'TNF' = [time, asset, feature].
+    The feature axis is always the trailing axis, so channel/feature
+    extraction slices the last axis (see FP-P0-04).
     """
     bundle_id: str
 
@@ -216,7 +276,9 @@ class FeatureBundle:
 
     # Values (snapshot-copied if ndarray, writeable=False)
     values: Any  # Shape depends on layout
-    layout: str = "wide"  # "wide", "long", "block"
+    # Layout of the values array: 'NF' = [feature, ...]; 'TNF' = [time, asset, feature].
+    # Any other value (e.g. 'wide') leaves extraction unchanged for back-compat.
+    layout: str = "NF"
     dtype: str = "float64"
 
     # Source factor metadata (immutable tuple)
@@ -252,9 +314,22 @@ class FeatureBundle:
             raise ValueError("FeatureBundle must have at least one channel")
 
         # Validate layout
-        valid_layouts = {"wide", "long", "block"}
+        valid_layouts = {"NF", "TNF", "wide", "long", "block"}
         if self.layout not in valid_layouts:
             raise ValueError(f"layout must be one of {valid_layouts}")
+
+        # FP-P0-03: validate manifest against the values feature dimension.
+        if self.manifest is not None:
+            if not isinstance(self.values, np.ndarray) or self.values.ndim < 1:
+                raise InvalidContractError(
+                    "manifest requires values to be an ndarray with a feature axis"
+                )
+            feature_dim = self.values.shape[-1]
+            if self.manifest.total_features != feature_dim:
+                raise InvalidContractError(
+                    f"manifest.total_features={self.manifest.total_features} does not match "
+                    f"values feature dimension {feature_dim}"
+                )
 
         # Freeze values: snapshot ndarray then set writeable=False
         if isinstance(self.values, np.ndarray):
@@ -276,7 +351,12 @@ class FeatureBundle:
                     # Convert dict to ChannelRef if needed
                     frozen_channels[name] = ChannelRef(**ref)
             object.__setattr__(self, 'channels', MappingProxyType(frozen_channels))
-        elif not isinstance(self.channels, MappingProxyType):
+        elif isinstance(self.channels, MappingProxyType):
+            # Deep snapshot: snapshot-copy before wrapping so later mutation of
+            # the caller's mapping cannot leak into the bundle (FP-P0-02).
+            snapshot = dict(self.channels)
+            object.__setattr__(self, 'channels', MappingProxyType(snapshot))
+        else:
             # Convert whatever we got to MappingProxyType
             object.__setattr__(self, 'channels', MappingProxyType(dict(self.channels)))
 
@@ -286,9 +366,22 @@ class FeatureBundle:
         if isinstance(self.fitted_state_refs, list):
             object.__setattr__(self, 'fitted_state_refs', tuple(self.fitted_state_refs))
 
-        # Auto-generate manifest for wide layout if not provided
-        if self.manifest is None and self.layout == "wide":
+        # Auto-generate manifest for NF/TNF layouts if not provided
+        if self.manifest is None and self.layout in ("NF", "TNF"):
             self._auto_generate_manifest()
+            # Auto-generated manifest may expose a mismatch (e.g. fewer feature
+            # channels than values columns). Surface it as a contract error.
+            if self.manifest is not None:
+                if not isinstance(self.values, np.ndarray) or self.values.ndim < 1:
+                    raise InvalidContractError(
+                        "manifest requires values to be an ndarray with a feature axis"
+                    )
+                feature_dim = self.values.shape[-1]
+                if self.manifest.total_features != feature_dim:
+                    raise InvalidContractError(
+                        f"manifest.total_features={self.manifest.total_features} does not match "
+                        f"values feature dimension {feature_dim}"
+                    )
 
     def _auto_generate_manifest(self):
         """Auto-generate FeatureManifest for wide layout."""
@@ -350,7 +443,10 @@ class FeatureBundle:
             raise KeyError(f"Channel '{channel_name}' not found")
 
         slice_obj = self.manifest.get_channel_slice(channel_name)
-        return self.values[:, slice_obj]
+        # FP-P0-04: the feature axis is always the last axis regardless of
+        # layout. Use trailing-axis indexing so a [T,N,F] array does not get
+        # sliced along the asset axis.
+        return self.values[..., slice_obj]
 
     def get_feature_values(self, feature_id: str) -> np.ndarray:
         """
@@ -375,7 +471,8 @@ class FeatureBundle:
             raise KeyError("No manifest available for feature extraction")
 
         col_idx = self.manifest.get_column_index(feature_id)
-        return self.values[:, col_idx]
+        # Feature axis is always the last axis (see FP-P0-04).
+        return self.values[..., col_idx]
 
     def is_immutable(self) -> bool:
         """

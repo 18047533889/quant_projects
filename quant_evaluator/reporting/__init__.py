@@ -8,14 +8,22 @@ and library-level reporting capabilities.
 from quant_evaluator.reporting.chart_spec import ChartSpec
 from quant_evaluator.reporting.artifacts import ChartArtifactStore, ArtifactInfo
 
+# Tear-sheet metric artifact model, evaluation container, and full
+# institutional panel registry
+from quant_evaluator.reporting.tear_sheet import (
+    MetricArtifact,
+    metric_artifact,
+    NOT_COMPUTED,
+    UNAVAILABLE,
+    INSTITUTIONAL_PANELS,
+    EvaluationResult,
+    generate_tear_sheet,
+)
+
 # Backward compat alias
 ArtifactStore = ChartArtifactStore
 
 # Lazy imports to avoid circular dependencies
-def generate_tear_sheet(*args, **kwargs):
-    from quant_evaluator.reporting.tear_sheet import generate_tear_sheet as _fn
-    return _fn(*args, **kwargs)
-
 def generate_library_report(*args, **kwargs):
     raise NotImplementedError("library_reports module not available")
 
@@ -46,6 +54,12 @@ __all__ = [
     "ArtifactStore",
     "ChartArtifactStore",
     "ArtifactInfo",
+    "MetricArtifact",
+    "metric_artifact",
+    "NOT_COMPUTED",
+    "UNAVAILABLE",
+    "INSTITUTIONAL_PANELS",
+    "EvaluationResult",
     "generate_tear_sheet",
     "generate_library_report",
     "compare_libraries",

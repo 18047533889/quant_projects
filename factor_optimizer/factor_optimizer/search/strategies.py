@@ -380,6 +380,8 @@ class TPESearch(SearchStrategy):
         gamma: Fraction of observations treated as "good" (best gamma * n).
         n_candidates: Number of candidate points sampled per proposal.
         seed: RNG seed for reproducibility.
+        maximize: If True, higher scores are "good" (e.g. RankIC); if False,
+            lower scores are "good". Defaults to False (minimize).
     """
 
     def __init__(
@@ -389,11 +391,15 @@ class TPESearch(SearchStrategy):
         gamma: float = 0.25,
         n_candidates: int = 24,
         seed: Optional[int] = None,
+        maximize: bool = False,
     ):
         super().__init__(space, seed)
         self.n_initial = n_initial
         self.gamma = gamma
         self.n_candidates = n_candidates
+        self.maximize = maximize
+        # Dedicated NumPy RNG so all stochastic ops are reproducible from seed.
+        self.np_rng = np.random.default_rng(seed)
         self._random = RandomSearch(space, seed)
 
     def record(self, params: Dict[str, Any], score: float) -> None:
@@ -416,7 +422,7 @@ class TPESearch(SearchStrategy):
         centres = vals
         chosen_idx = self.rng.choices(range(len(centres)), k=n)
         chosen = centres[chosen_idx]
-        noise = np.random.normal(0, bandwidth, size=n)
+        noise = self.np_rng.normal(0, bandwidth, size=n)
         result = chosen + noise
         result = np.clip(result, low, high)
         return result
@@ -444,8 +450,15 @@ class TPESearch(SearchStrategy):
         if len(self._history) < self.n_initial:
             return self._random.propose(trial_id)
 
-        # Sort observations by score (ascending -- lower score is "worse")
-        sorted_hist = sorted(self._history, key=lambda t: t[1])
+        # Sort observations by score and split into "good" / "bad" partitions.
+        # The "good" group is always the best-scoring ones, which depends on
+        # the objective direction: highest scores when maximizing, lowest when
+        # minimizing.
+        sorted_hist = sorted(
+            self._history,
+            key=lambda t: t[1],
+            reverse=self.maximize,
+        )
         n_good = max(1, int(math.ceil(self.gamma * len(sorted_hist))))
         good = sorted_hist[:n_good]
         bad = sorted_hist[n_good:]
