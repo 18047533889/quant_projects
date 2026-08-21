@@ -13,7 +13,11 @@ _QUANT_ROOT = _FE_ROOT.parent
 # ``data_access`` is installed as an editable package in the project venv.
 # Do not add its source directory directly: that shadows the factor_engine
 # ``tests`` package when the monorepo is collected from its root.
-for _path in (str(_FE_ROOT), str(_QUANT_ROOT)):
+# Insert factor_engine/ BEFORE quant_projects root: root contains a stale copy
+# of FactorEngine packages (planner/, backend/, ...) and, when both are inserted
+# at position 0, whichever is inserted last wins.  Root first, FE second, so FE
+# ends up at the front and shadows the root copies.
+for _path in (str(_QUANT_ROOT), str(_FE_ROOT)):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 

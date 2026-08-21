@@ -1,0 +1,67 @@
+id: R22-SINGLE-SOURCE-AUTHORITY
+title: Fix import resolution so FactorEngine packages resolve to factor_engine/ submodule
+status: done
+date: 2026-08-21
+role: Writer DW2-fix (import resolution)
+scope: tests/source_authority/, tests/conftest.py
+summary: >
+  One failing source_authority test: `test_import_resolves_to_factor_engine[planner]`
+  resolved to the ROOT copy of planner/logical_plan.py (which lacks
+  DuplicateLogicalNodeIdentityError, present only in factor_engine/planner/
+  logical_plan.py). Root cause was twofold: (1) the fixture deleted only
+  sys.modules["planner"] but not already-cached submodules such as
+  "planner.logical_plan", so relative imports in factor_engine/planner/__init__.py
+  re-used the stale root-copy submodule; (2) the global conftest inserted both
+  factor_engine and the quant_projects root at sys.path position 0, and the root
+  (inserted last) won. Both are now fixed.
+files_changed:
+  - tests/source_authority/test_import_resolution.py
+  - tests/conftest.py
+changes:
+  test_import_resolution.py: |
+    # BEFORE: only removed the top-level cached module
+    if module_name in sys.modules:
+        del sys.modules[module_name]
+
+    # AFTER: also purge every cached submodule under the prefix
+    prefix = module_name + "."
+    for cached_name in [m for m in sys.modules if m == module_name or m.startswith(prefix)]:
+        del sys.modules[cached_name]
+  conftest.py: |
+    # BEFORE: FE inserted first, ROOT inserted second -> both at position 0, root wins
+    for _path in (str(_FE_ROOT), str(_QUANT_ROOT)):
+        if _path not in sys.path:
+            sys.path.insert(0, _path)
+
+    # AFTER: ROOT inserted first, FE inserted second -> FE ends up at the front
+    for _path in (str(_QUANT_ROOT), str(_FE_ROOT)):
+        if _path not in sys.path:
+            sys.path.insert(0, _path)
+rationale: >
+  sys.path.insert(0, x) puts x at the front, so the LAST inserted wins. Inserting
+  the quant_projects root first and factor_engine second yields
+  [factor_engine, root, ...], making factor_engine the single source of truth for
+  FactorEngine packages and letting the root stale copies remain inert. The test
+  cache purge now covers submodules ("planner.logical_plan", "backend.*", ...) so
+  a stale root-copy submodule cached earlier in the session cannot shadow the
+  factor_engine package via relative imports.
+verification:
+  pytest_command: "cd /home/shw/quant_projects && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/source_authority/ -q"
+  result: PASS
+  passed: 19
+  failed: 0
+  skipped: 25
+  summary: "19 passed, 25 skipped in 0.41s"
+  timestamp: 2026-08-21T00:00:00Z
+  serial: true
+  xdist: false
+  import_resolution_check: |
+    With new conftest ordering (factor_engine first on sys.path):
+      planner -> /home/shw/quant_projects/factor_engine/planner/__init__.py
+      backend -> /home/shw/quant_projects/factor_engine/backend/__init__.py
+      from planner.logical_plan import DuplicateLogicalNodeIdentityError  -> OK
+    Both confirm factor_engine/ submodule is the single source authority.
+limitations: >
+  Root-level stale copies of FactorEngine packages (planner/, backend/, ...) still
+  exist on disk under /home/shw/quant_projects. They are now shadowed by the
+  factor_engine submodule on sys.path, but deletion is a separate cleanup task.
