@@ -52,6 +52,37 @@ NON_FACTOR_PRODUCTION_CANONICALS: frozenset[str] = frozenset({
     # bars are not ticks and the VPIN literature is contested.  It must never be a
     # default production-admission subject (spec §16).
     "micro_bvc_vpin",
+    # R23-P0-PIT18: the point-in-time revision/restatement family derives from
+    # revision events whose provenance (whether the revision was knowable at
+    # signal time) is UNPROVEN — P0 blocker, cannot be production-admission
+    # subjects.  Listed here so ``factor_production_targets`` never promotes
+    # them (R22-116..117: PROMOTE, don't re-denylist — the deny list is reserved
+    # for genuinely-forbidden items, not evidence-gated exclusions).
+    "fin_days_since_expectation_revision",
+    "fin_days_since_update",
+    "fin_expectation_revision",
+    "fin_expectation_revision_count",
+    "fin_expectation_revision_magnitude",
+    "fin_expectation_revision_pct",
+    "fin_expectation_revision_speed",
+    "fin_restated_flag",
+    "fin_revision_count",
+    "fin_revision_delta",
+    "fin_revision_direction",
+    "fin_revision_magnitude",
+    "fin_revision_pct",
+    "fin_staleness",
+    # R23-P0-PIT11: 7 expectation/surprise operators whose expectation is only
+    # knowable AFTER an earnings event — the label is knowable before the
+    # signal.  Also excluded from production-admission subjects for the same
+    # fail-closed reason.
+    "fin_actual_expectation_divergence",
+    "fin_beat_streak",
+    "fin_miss_streak",
+    "fin_surprise",
+    "fin_surprise_event_percentile",
+    "fin_surprise_event_zscore",
+    "fin_surprise_zscore",
 })
 
 FULL_HISTORY_REPLAY_CANONICALS: frozenset[str] = frozenset({

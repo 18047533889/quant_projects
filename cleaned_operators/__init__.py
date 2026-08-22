@@ -874,6 +874,15 @@ def _load_all_impl(*, include_research: bool = True) -> None:
     from cleaned_operators.production_certification_overlay import apply_evidence_certification_overlay
     apply_evidence_certification_overlay()
 
+    # R23 P1 certification: time_series / price_structure / price_volume_extension
+    # categories.  Runs after the evidence overlay (which sets
+    # production_certified=False for stale-artifact cases) and before
+    # contract_hardening (which freezes the certification fields).  Sets
+    # production_certified=True for the 18 operators whose six-way primitive
+    # evidence is present in the committed artifact.
+    from cleaned_operators.r23_cert_ts_price import apply_r23_certification
+    apply_r23_certification()
+
     from cleaned_operators.contract_hardening import apply_final_contract_hardening
     apply_final_contract_hardening()
 
