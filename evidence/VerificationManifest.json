@@ -1,33 +1,33 @@
 {
   "schema_version": 1,
-  "manifest_id": "rel-v1:2026-08-21T19:08:10.894740+00:00",
-  "timestamp": "2026-08-21T19:08:10.894740+00:00",
+  "manifest_id": "rel-v1:2026-08-22T06:25:27.070721+00:00",
+  "timestamp": "2026-08-22T06:25:27.070721+00:00",
   "host": "qs-data-ingest-hk-01",
   "source_snapshot": {
-    "git_sha": "940750b8edf91ba973833465032c26e4d46a3008",
+    "git_sha": "9ba0c3a03d60210e280d13df4474adca59583c5b",
     "git_dirty": true,
     "submodule_shas": {
-      "factor_engine": "fc3e5f32f199177512231ec8791d3f8da0fcc803",
-      "dataaccess": "afda9f47b76df677893bf4cf516c0f9cc825190c"
+      "factor_engine": "fba4d00b3188c07c24653ae1562918eb0af84c4c",
+      "dataaccess": "05ab62715fec3dda71d8ffde3388411f9cf28910"
     },
     "git_repo": true
   },
   "packages": {
     "factor_engine": {
-      "tree_sha256": "9ea86c4eee26df0b009c7f775869c8d9e9758b68ddc518cfeb68a9572506394e",
+      "tree_sha256": "749e1493cf42e8462a7a574763ce4133c459a6dc75e3e9ce09884d7868e8c920",
       "wheel_sha256": null,
-      "git_sha": "fc3e5f32f199177512231ec8791d3f8da0fcc803",
+      "git_sha": "fba4d00b3188c07c24653ae1562918eb0af84c4c",
       "git_dirty": true
     },
     "quant_evaluator": {
-      "tree_sha256": "66aeb309d1f33d3de5c09a883fa88d2fba556907c674766f15b43c9943fc76e2",
+      "tree_sha256": "bb32b9672899ebd3ca19df1fdcaaa7b046077faa37cf750a7c7c4db27cdd620d",
       "wheel_sha256": {
         "wheel": "quant_evaluator-0.0.1a1-py3-none-any.whl",
         "sha256": "00c6516d00cbb35406c8954acd02f6d4fd39819706931a7228bcd3465aff47f8"
       }
     },
     "factor_optimizer": {
-      "tree_sha256": "a54aa0d7051fbb8c82341ec08ce1f4a088b2d72c52638fc4b5935cd38df0e8d5",
+      "tree_sha256": "188c4e35038b7869251219dcded5d9b321a6680ae5503876e297d26e13faff52",
       "wheel_sha256": {
         "wheel": "factor_optimizer-0.1.0-py3-none-any.whl",
         "sha256": "42bf01eaf86b16e1139155e3ea27e61e9121f2e6b6fa68bbb352cc76ff4a6259"
@@ -41,17 +41,17 @@
       }
     },
     "factor_preprocess": {
-      "tree_sha256": "965df125f2edc1d6194214d4b85b3043982bb37d95f77129b6f744c33cb48d7e",
+      "tree_sha256": "c83f047b10918f874be0990cb58b86ba28f185e6875421671823edaa9770c2b6",
       "wheel_sha256": {
         "wheel": "factor_preprocess-0.1.0-py3-none-any.whl",
         "sha256": "667dd80ff99d914ba342f8b0a3f53a83181b8696c7de68fe345d8e6725056160"
       }
     },
     "dataaccess": {
-      "tree_sha256": "49416c9bdf1c631c7e9b2a0108b3648ee896999249c066f16208fc1ef8ac3bf6",
+      "tree_sha256": "33f63f9568725a93ef5c7a2cb484aec2e951e769e8c2408d2d30b0f63dd511fe",
       "wheel_sha256": null,
-      "git_sha": "afda9f47b76df677893bf4cf516c0f9cc825190c",
-      "git_dirty": true
+      "git_sha": "05ab62715fec3dda71d8ffde3388411f9cf28910",
+      "git_dirty": false
     }
   },
   "environment": {
@@ -106,8 +106,35 @@
     {
       "name": "UNIT",
       "description": "Unit tests pass across the package surface (passed == total run, no unexpected skips/errors).",
-      "status": "NOT_RUN",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "factor_engine/tests/test_capability_registry.py",
+          "command_hash": "11781a719097f012fb6a51a495a5873394cde778710733996885948398e40ea4",
+          "exit_code": 0,
+          "passed": 23,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "tests": 23,
+          "duration_sec": 2.185,
+          "executed_at": "2026-08-22T06:16:40.577450+00:00",
+          "run_at": "2026-08-22T06:16:40.577450+00:00"
+        },
+        {
+          "test": "factor_engine/tests/test_concurrency_safety.py",
+          "command_hash": "c5c409e2d93d15191edced9f39a430ec14d6fee8382f32ba5cbdd8dca3ac4041",
+          "exit_code": 0,
+          "passed": 16,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "tests": 16,
+          "duration_sec": 103.353,
+          "executed_at": "2026-08-22T06:18:23.930366+00:00",
+          "run_at": "2026-08-22T06:18:23.930366+00:00"
+        }
+      ]
     },
     {
       "name": "NUMERICAL_ORACLE",
@@ -116,16 +143,16 @@
       "evidence": [
         {
           "test": "quant_evaluator/tests/test_numerical_oracle.py",
-          "command_hash": "251cf43d13fbefdae49e489ddca88c816a7e3d3c8a25bcbdde3d89f83a83166d",
+          "command_hash": "f78a495c9f6145053e55c28196323de7306353e695b220d3fb9ca2ef0c658c7e",
           "exit_code": 0,
           "passed": 13,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 13,
-          "duration_sec": 5.466,
-          "executed_at": "2026-08-21T19:07:55.218039+00:00",
-          "run_at": "2026-08-21T19:07:55.218039+00:00"
+          "duration_sec": 5.686,
+          "executed_at": "2026-08-22T06:16:15.088039+00:00",
+          "run_at": "2026-08-22T06:16:15.088039+00:00"
         }
       ]
     },
@@ -136,29 +163,29 @@
       "evidence": [
         {
           "test": "quant_evaluator/tests/test_metamorphic.py",
-          "command_hash": "57069da479c8911c764496f557d55b9d42d154383bbdc2889b094a0537bdab5f",
+          "command_hash": "1a395946735fad8c14e5facb05fe994fc7ad753e901f057944995bd1ae6e3e72",
           "exit_code": 0,
           "passed": 18,
           "failed": 0,
           "errors": 0,
           "skipped": 2,
           "tests": 20,
-          "duration_sec": 1.385,
-          "executed_at": "2026-08-21T19:07:56.603593+00:00",
-          "run_at": "2026-08-21T19:07:56.603593+00:00"
+          "duration_sec": 14.214,
+          "executed_at": "2026-08-22T06:16:29.302392+00:00",
+          "run_at": "2026-08-22T06:16:29.302392+00:00"
         },
         {
           "test": "quant_evaluator/tests/test_consistency.py",
-          "command_hash": "465d7eacbd7f803f0b5e447361d0bb98a98bdc13d2dd8d79fd02260e5ee98b80",
+          "command_hash": "8fed9bdfa03477d97f0b70748b8745fbd749909041877bde32a6638dbdd96415",
           "exit_code": 0,
           "passed": 11,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 11,
-          "duration_sec": 1.466,
-          "executed_at": "2026-08-21T19:07:58.069858+00:00",
-          "run_at": "2026-08-21T19:07:58.069858+00:00"
+          "duration_sec": 1.392,
+          "executed_at": "2026-08-22T06:16:30.694872+00:00",
+          "run_at": "2026-08-22T06:16:30.694872+00:00"
         }
       ]
     },
@@ -169,16 +196,16 @@
       "evidence": [
         {
           "test": "integration_tests/test_cross_package_contracts.py",
-          "command_hash": "ebab73411f918cd831bf71829f0d1fa5223c33c773d0579a43bf29a83274a1bc",
+          "command_hash": "ec1f2c63f6b6adb2a3655fdfeb3745a62900388c175f222659dd61094ac291cc",
           "exit_code": 0,
           "passed": 4,
           "failed": 0,
           "errors": 0,
           "skipped": 2,
           "tests": 6,
-          "duration_sec": 1.428,
-          "executed_at": "2026-08-21T19:07:59.498028+00:00",
-          "run_at": "2026-08-21T19:07:59.498028+00:00"
+          "duration_sec": 1.457,
+          "executed_at": "2026-08-22T06:16:32.152407+00:00",
+          "run_at": "2026-08-22T06:16:32.152407+00:00"
         }
       ]
     },
@@ -207,29 +234,29 @@
       "evidence": [
         {
           "test": "quant_evaluator/tests/test_qe_serialization.py",
-          "command_hash": "2e4bdc02d78122b410fd23f6bfe7946e48d4e80ce87cbcfa3c2ed1379a2500b1",
+          "command_hash": "982f949c27e72e4b21663ebee20ea704490ebe7ea0a4769506831917db5612a5",
           "exit_code": 0,
           "passed": 36,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 36,
-          "duration_sec": 0.961,
-          "executed_at": "2026-08-21T19:08:03.952382+00:00",
-          "run_at": "2026-08-21T19:08:03.952382+00:00"
+          "duration_sec": 0.976,
+          "executed_at": "2026-08-22T06:16:36.722056+00:00",
+          "run_at": "2026-08-22T06:16:36.722056+00:00"
         },
         {
           "test": "factor_assets/tests/registry/test_serialization_codec.py",
-          "command_hash": "0d806d77fa5e3d5ae33071f9e1ebf84ed570a6336bcc1a7bdec8f5578432fe1c",
+          "command_hash": "51c368c8c1500896f9db587ddba551182e6f806b7f614781d97a9a9cce4f111a",
           "exit_code": 0,
           "passed": 17,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 17,
-          "duration_sec": 0.273,
-          "executed_at": "2026-08-21T19:08:04.225464+00:00",
-          "run_at": "2026-08-21T19:08:04.225464+00:00"
+          "duration_sec": 0.276,
+          "executed_at": "2026-08-22T06:16:36.998148+00:00",
+          "run_at": "2026-08-22T06:16:36.998148+00:00"
         }
       ]
     },
@@ -240,16 +267,16 @@
       "evidence": [
         {
           "test": "factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py",
-          "command_hash": "5ffaf65ccc8e69be54a521839d945702bf97c4cdeffbe8ef498476c3e55c47ab",
+          "command_hash": "cecdbe0a9d4ecb80307ce24acd70af24075191cbf01a075ff9d893999cc42b41",
           "exit_code": 0,
           "passed": 3,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 3,
-          "duration_sec": 1.45,
-          "executed_at": "2026-08-21T19:08:05.675447+00:00",
-          "run_at": "2026-08-21T19:08:05.675447+00:00"
+          "duration_sec": 1.393,
+          "executed_at": "2026-08-22T06:16:38.391676+00:00",
+          "run_at": "2026-08-22T06:16:38.391676+00:00"
         }
       ]
     },
@@ -284,16 +311,16 @@
       "evidence": [
         {
           "test": "integration_tests/test_ashare_semantic_golden.py",
-          "command_hash": "3590b39d75554fd4a332792533c5f15a63a1218beeaaa3a51e0c98668e8a4785",
+          "command_hash": "f16aa3e0be80e70c8fb930df393e481e22ac1ccf9e33764be06a6264abfcf597",
           "exit_code": 0,
           "passed": 8,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 8,
-          "duration_sec": 1.663,
-          "executed_at": "2026-08-21T19:08:01.161287+00:00",
-          "run_at": "2026-08-21T19:08:01.161287+00:00"
+          "duration_sec": 1.841,
+          "executed_at": "2026-08-22T06:16:33.994227+00:00",
+          "run_at": "2026-08-22T06:16:33.994227+00:00"
         }
       ]
     },
@@ -304,16 +331,16 @@
       "evidence": [
         {
           "test": "integration_tests/test_real_ashare_shadow.py",
-          "command_hash": "7b5180203e426e74ac935e8e5db926885b3b0c65702f5186121d0b931e81e48c",
+          "command_hash": "f23c7ee1912d8d5098cbf74067ad7c08d74d93e18670f4de431ffd37a3ef4bf5",
           "exit_code": 0,
           "passed": 4,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 4,
-          "duration_sec": 1.83,
-          "executed_at": "2026-08-21T19:08:02.991155+00:00",
-          "run_at": "2026-08-21T19:08:02.991155+00:00"
+          "duration_sec": 1.751,
+          "executed_at": "2026-08-22T06:16:35.745453+00:00",
+          "run_at": "2026-08-22T06:16:35.745453+00:00"
         }
       ]
     }

@@ -1,0 +1,80 @@
+# -*- coding: utf-8 -*-
+"""R23-P0-PIT11-FAILCLOSED: evidence for PIT11 expectation post-event leak fail-closed.
+
+R23 audit close-out: 7 financial expectation/surprise operators are marked as
+P0 blocker ``PIT11_EXPECTATION_POST_EVENT_LEAK`` with final status
+``CERTIFIED_CONTEXTUAL``.  Their values are only knowable AFTER an earnings
+event, so placing them as production factor terminals is a label-leak vector
+(the label is knowable before the signal).
+
+Mechanism
+---------
+Each canonical is added to ``PRODUCTION_DENIED_CANONICALS`` in
+``cleaned_operators/operator_spec.py``.  The DirectUse gate chain:
+
+  _is_production_denied(canonical) -> True    (deny gate)
+  production_admitted                          = certification ∧ cost ∧ sources ∧ NOT denied
+  production_terminal_usable                   = terminal_usable ∧ production_admitted
+  directly_usable                              = mining_visible ∧ production_admitted
+
+All three production-facing fields are False for every leak canonical.
+
+Canonicals
+----------
+- fin_actual_expectation_divergence
+- fin_beat_streak
+- fin_miss_streak
+- fin_surprise
+- fin_surprise_event_percentile
+- fin_surprise_event_zscore
+- fin_surprise_zscore
+
+References
+----------
+- docs/R23_PER_CANONICAL_AUDIT.json (each canonical: final_status=CERTIFIED_CONTEXTUAL,
+  blocker=PIT11_EXPECTATION_POST_EVENT_LEAK, severity=P0)
+- docs/R23_OPERATOR_REMEDIATION_PLAN.md (PIT11 section, 7 operators)
+- tests/mining/test_pit11_failclosed.py (assertion test)
+- cleaned_operators/operator_spec.py (PRODUCTION_DENIED_CANONICALS static deny set)
+- mining/direct_use.py (_is_production_denied, build_direct_use_operator gate chain)
+"""
+
+PIT11_CANONICALS:
+  - fin_actual_expectation_divergence
+  - fin_beat_streak
+  - fin_miss_streak
+  - fin_surprise
+  - fin_surprise_event_percentile
+  - fin_surprise_event_zscore
+  - fin_surprise_zscore
+
+audit:
+  reference: docs/R23_PER_CANONICAL_AUDIT.json
+  blocker: PIT11_EXPECTATION_POST_EVENT_LEAK
+  severity: P0
+  final_status: CERTIFIED_CONTEXTUAL
+
+mechanism:
+  gate: production_denied
+  location: cleaned_operators/operator_spec.py:PRODUCTION_DENIED_CANONICALS
+  chain:
+    - _is_production_denied(canonical) -> True
+    - production_admitted = certification ∧ cost ∧ sources ∧ NOT denied -> False
+    - production_terminal_usable = terminal_usable ∧ production_admitted -> False
+    - directly_usable = mining_visible ∧ production_admitted -> False
+
+verification:
+  test_file: tests/mining/test_pit11_failclosed.py
+  test_class: TestPit11ExpectationPostEventLeakFailClosed
+  assertion_count: 37  # 7 canonicals × 5 assertions + 2 structural
+
+  gate_results:
+    production_admitted: False
+    production_terminal_usable: False
+    directly_usable: False
+    terminal_usable: True        # semantic role is intact (DIRECT_ALPHA)
+    composition_usable: True
+    mining_visible: True
+
+  fail_closed: True
+  reason: "Expectations/surprises only knowable AFTER an earnings event — label leak vector in production terminal placement"

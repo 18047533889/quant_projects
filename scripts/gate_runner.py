@@ -74,6 +74,7 @@ class GateSpec:
 # QE tests importable source is build/lib/quant_evaluator (the repo-root
 # quant_evaluator/ dir is a near-empty stub that shadows it under pytest).
 QE_ENV = {"PYTHONPATH": str(REPO_ROOT / "quant_evaluator" / "build" / "lib")}
+FP_PREPROCESS_ENV = {"PYTHONPATH": f"{REPO_ROOT / 'factor_preprocess' / 'build' / 'lib'}:{REPO_ROOT / 'quant_evaluator' / 'build' / 'lib'}"}
 
 _JUNIT_TOK = "--junitxml={junitxml}"
 
@@ -135,6 +136,72 @@ GATE_SPECS: tuple[GateSpec, ...] = (
             ("factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py", "-q", _JUNIT_TOK, "-p", "no:cacheprovider"),
         ),
         tests=("factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py",),
+    ),
+    GateSpec(
+        gate_id="UNIT",
+        commands=(
+            ("factor_engine/tests/test_capability_registry.py", "-q", _JUNIT_TOK, "-p", "no:cacheprovider"),
+            ("factor_engine/tests/test_concurrency_safety.py", "-q", _JUNIT_TOK, "-p", "no:cacheprovider"),
+        ),
+        tests=("factor_engine/tests/test_capability_registry.py", "factor_engine/tests/test_concurrency_safety.py"),
+        env=QE_ENV,
+    ),
+    GateSpec(
+        gate_id="LEAKAGE",
+        commands=(
+            ("factor_engine/tests/modeling/test_evaluation_leakage_evidence.py", "-q", _JUNIT_TOK, "-p", "no:cacheprovider"),
+            ("factor_preprocess/tests/contracts/test_leakage_properties.py", "-q", _JUNIT_TOK, "-p", "no:cacheprovider"),
+        ),
+        tests=("factor_engine/tests/modeling/test_evaluation_leakage_evidence.py", "factor_preprocess/tests/contracts/test_leakage_properties.py"),
+        env=FP_PREPROCESS_ENV,
+    ),
+    GateSpec(
+        gate_id="PIT",
+        commands=(
+            ("factor_engine/tests/runtime/test_pit_audit.py", "-q", _JUNIT_TOK, "-p", "no:cacheprovider"),
+            ("factor_engine/tests/runtime/test_label_pit.py", "-q", _JUNIT_TOK, "-p", "no:cacheprovider"),
+            ("factor_engine/tests/runtime/test_r10_pit_tristate.py", "-q", _JUNIT_TOK, "-p", "no:cacheprovider"),
+        ),
+        tests=("factor_engine/tests/runtime/test_pit_audit.py", "factor_engine/tests/runtime/test_label_pit.py", "factor_engine/tests/runtime/test_r10_pit_tristate.py"),
+    ),
+    GateSpec(
+        gate_id="DETERMINISM",
+        commands=(
+            ("factor_engine/tests/test_comprehensive_data_consistency.py", "-q", _JUNIT_TOK, "-p", "no:cacheprovider"),
+            ("factor_engine/tests/backend/test_r21_def5_payload_hash.py", "-q", _JUNIT_TOK, "-p", "no:cacheprovider"),
+        ),
+        tests=("factor_engine/tests/test_comprehensive_data_consistency.py", "factor_engine/tests/backend/test_r21_def5_payload_hash.py"),
+    ),
+    GateSpec(
+        gate_id="FRESH_WHEEL",
+        commands=(
+            ("factor_engine/scripts/wheel_clean_install_smoke.py", "-q", _JUNIT_TOK, "-p", "no:cacheprovider"),
+        ),
+        tests=("factor_engine/scripts/wheel_clean_install_smoke.py",),
+    ),
+    GateSpec(
+        gate_id="1K_SCALE",
+        commands=(
+            ("quant_evaluator/tests/test_scale_gates.py", "-q", _JUNIT_TOK, "-p", "no:cacheprovider", "-k", "1k or 1K or scale_1k"),
+        ),
+        tests=("quant_evaluator/tests/test_scale_gates.py",),
+        env=QE_ENV,
+    ),
+    GateSpec(
+        gate_id="10K_SCALE",
+        commands=(
+            ("quant_evaluator/tests/test_scale_gates.py", "-q", _JUNIT_TOK, "-p", "no:cacheprovider", "-k", "10k or 10K or scale_10k"),
+        ),
+        tests=("quant_evaluator/tests/test_scale_gates.py",),
+        env=QE_ENV,
+    ),
+    GateSpec(
+        gate_id="100K_SCALE",
+        commands=(
+            ("quant_evaluator/tests/test_scale_gates.py", "-q", _JUNIT_TOK, "-p", "no:cacheprovider", "-k", "100k or 100K or scale_100k"),
+        ),
+        tests=("quant_evaluator/tests/test_scale_gates.py",),
+        env=QE_ENV,
     ),
 )
 

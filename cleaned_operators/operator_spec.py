@@ -136,6 +136,36 @@ PRODUCTION_DENIED_CANONICALS: frozenset[str] = frozenset(
         # ``_remove_promoted_legacy_denials`` path.  ``intraday_vwap_deviation`` is
         # a contextual DIRECT_ALPHA (A-share minute source present; US blocked) and
         # is denied at the source-context gate, not here.
+        # R23-P0-PIT11: 7 financial expectation/surprise operators that compute
+        # expectations/surprises only knowable AFTER an earnings event — a leak
+        # vector in production terminal placement (the label is knowable before
+        # the signal).  Certified contextual but P0 blocker for terminal use.
+        "fin_actual_expectation_divergence",
+        "fin_beat_streak",
+        "fin_miss_streak",
+        "fin_surprise",
+        "fin_surprise_event_percentile",
+        "fin_surprise_event_zscore",
+        "fin_surprise_zscore",
+        # R23-P0-PIT18: 14 financial revision/restatement operators whose
+        # point-in-time revision event provenance (whether the revision was
+        # knowable at signal time) is UNPROVEN — cannot be certified for
+        # production terminal placement without evidence.  Certified contextual
+        # but P0 blocker for terminal production use.
+        "fin_days_since_expectation_revision",
+        "fin_days_since_update",
+        "fin_expectation_revision",
+        "fin_expectation_revision_count",
+        "fin_expectation_revision_magnitude",
+        "fin_expectation_revision_pct",
+        "fin_expectation_revision_speed",
+        "fin_restated_flag",
+        "fin_revision_count",
+        "fin_revision_delta",
+        "fin_revision_direction",
+        "fin_revision_magnitude",
+        "fin_revision_pct",
+        "fin_staleness",
     }
 )
 
