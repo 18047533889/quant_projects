@@ -883,6 +883,15 @@ def _load_all_impl(*, include_research: bool = True) -> None:
     from cleaned_operators.r23_cert_ts_price import apply_r23_certification
     apply_r23_certification()
 
+    # R23 P1 certification: cross_sectional + ashare categories.  Runs after the
+    # ts_price certification and before contract_hardening (which freezes the
+    # certification fields).  Sets production_certified=True for the 21
+    # cross_sectional operators whose six-way primitive evidence is present in
+    # the committed artifact.  No ashare operator has six-way evidence, so none
+    # are certified.
+    from cleaned_operators.r23_cert_cs_ashare import apply_r23_certification
+    apply_r23_certification()
+
     from cleaned_operators.contract_hardening import apply_final_contract_hardening
     apply_final_contract_hardening()
 

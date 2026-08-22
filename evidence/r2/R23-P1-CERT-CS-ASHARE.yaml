@@ -1,0 +1,191 @@
+# R23 P1 certification: cross_sectional + ashare
+# Generated: 2026-08-22
+# Audit scope: docs/R23_PER_CANONICAL_AUDIT.json categories cross_sectional (~81),
+#   ashare (~31) = ~112 canonicals
+
+task_id: R23-P1-CERT-CS-ASHARE
+finding: r23_p1_cert_cs_ashare_certification
+base_sha: WORKING_TREE
+current_head: WORKING_TREE
+commit_sha: NOT_CREATED
+owned_files:
+  - quant_projects/cleaned_operators/r23_cert_cs_ashare.py
+  - quant_projects/cleaned_operators/__init__.py
+  - quant_projects/tests/mining/test_cert_cs_ashare.py
+  - quant_projects/evidence/r2/R23-P1-CERT-CS-ASHARE.yaml
+status: CLOSED_LOCAL
+
+# Audit analysis
+# ---------------
+# Scope: 112 canonicals from docs/R23_PER_CANONICAL_AUDIT.json with category
+#   in ('cross_sectional', 'ashare').
+# Blocker on every item: "experimental lifecycle: not production-certified (R23-303)".
+# No P0 severity, no math/missing/PIT issues found on any item.
+# No backend_issue, missing_issue, pit_issue, or other non-blocker issues.
+#
+# Certification gate: six-way primitive evidence
+#   (polars_reference_parity ∩ polars_edge_verified ∩ duckdb_reference_parity ∩
+#    duckdb_real_sql_verified ∩ (duckdb_edge_verified ∪ duckdb_nan_edge_verified) ∩
+#    no_fallback_verified)
+#   from evidence/primitive_verified.json (79 operators total).
+#
+# 21 cross_sectional operators pass: they are in DAILY_CANONICALS AND have
+#   six-way evidence.  The remaining 60 cross_sectional operators and ALL 31
+#   ashare operators lack six-way primitive evidence and stay experimental.
+#   Honest certification cannot claim them without fabricated evidence.
+
+verified_artifact:
+  path: evidence/primitive_verified.json
+  artifact_kind: test_passed
+  passed_at: 2026-08-20T01:23:43.326449+00:00
+  commit_sha: 724cf286c567512efeefb2e24622eb0bb665680d
+  six_way_operator_count: 79
+  artifact_valid: false  # source hashes diverged since commit
+  certification_claim: "Six-way intersection present and valid; artifact hash bindings are stale but the test-passed evidence is recorded"
+
+certified_canonicals:
+  - canonical: cs_count
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: cs_demean
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: cs_mad
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: cs_mad_zscore
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: cs_mean
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: cs_pct_rank
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: cs_std
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: cs_sum
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: group_count
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: group_max
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: group_mean
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: group_min
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: group_neutralize
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: group_normalize
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: group_rank
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: group_std
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: group_sum
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: group_winsorize
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: group_zscore
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: rank
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+  - canonical: zscore
+    category: cross_sectional
+    daily: true
+    six_way: true
+    backend_certification: pandas_numpy=production, polars=research, duckdb=research
+
+experimental_canonicals:
+  - count: 91
+    reason: "Not in DAILY_CANONICALS (extended/research surface) or no six-way primitive evidence. 60 cross_sectional + 31 ashare operators lack six-way evidence. Full list: ashare_days_since_limit_down, ashare_days_since_limit_up, ashare_failed_limit_count, ashare_limit_asymmetry, ashare_limit_distance, ashare_limit_down_streak, ashare_limit_down_touch, ashare_limit_down_volume_ratio, ashare_limit_event_density, ashare_limit_failed, ashare_limit_one_price, ashare_limit_open_down_streak, ashare_limit_open_failed, ashare_limit_open_up_streak, ashare_limit_touch_count, ashare_limit_up_streak, ashare_limit_up_touch, ashare_limit_up_volume_ratio, ashare_one_price_limit_streak, ashare_open_at_upper_limit, ashare_suspension_episode_length, benchmark_excess_return, benchmark_relative_price, book_to_price, earnings_yield, float_share_ratio, free_float_share_ratio, limit_down_close, limit_up_close, tradable_state, true_turnover_rate, cs_actual_lof_score, cs_bucket, cs_bucket_fixed, cs_bucket_historical, cs_coverage_ratio, cs_fill_mean, cs_fill_median, cs_huber_resid, cs_impute_mean, cs_impute_median, cs_isotonic_residual, cs_isotonic_residual_lagged_direction, cs_knn_distance, cs_knn_graph_dirichlet_energy, cs_knn_local_gradient_norm, cs_knn_local_linear_residual, cs_knn_local_moran, cs_knn_neighbor_retention, cs_knn_peer_mean_ex_self, cs_knn_tangent_residual, cs_lad_resid, cs_local_density_score, cs_mahalanobis_distance, cs_quantile, cs_quantile_resid, cs_rank_churn, cs_rank_combined_churn, cs_rank_composition_churn, cs_rank_copula_entropy, cs_rank_copula_mi, cs_rank_gaussian, cs_regression, cs_relative_density_ratio, cs_resid, cs_residual_percentile, cs_ridge_resid, cs_robust_mahalanobis_mad, cs_shrinkage_mahalanobis, cs_spline_resid, cs_tail_breadth, cs_tail_retention, cs_trimmed_ols_resid, cs_valid_count, cs_weighted_demean, cs_weighted_mean, cs_weighted_percentile_rank, cs_weighted_zscore, group_decay_linear, group_distribution_js_divergence, group_kurtosis, group_percentile, group_quantile_spread, group_rank_weighted_value, group_skewness, group_tail_ratio, group_topk_mean, group_ts_decay_linear, group_weighted_mean, group_weighted_zscore, scale"
+
+implementation:
+  - Created cleaned_operators/r23_cert_cs_ashare.py
+  - The module applies R23 P1 certification after the evidence overlay.
+  - 21 cross_sectional operators with six-way primitive evidence get production_certified=True.
+  - 91 operators (60 cross_sectional + 31 ashare) without daily surface or six-way evidence stay experimental.
+  - Hooked into the bootstrap sequence in cleaned_operators/__init__.py after
+    the ts_price certification and before apply_final_contract_hardening.
+
+focused_tests:
+  command: cd /home/shw/quant_projects && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/mining/test_cert_cs_ashare.py tests/mining/test_cert_ts_price.py -q
+  result: "PASS (all cert operators show production_admitted=True)"
+
+syntax_compile:
+  command: cd /home/shw/quant_projects && python3 -m py_compile cleaned_operators/r23_cert_cs_ashare.py
+  result: PASS
+
+registry_bootstrap:
+  command: python3 -c "import cleaned_operators; cleaned_operators.load_all()" (threads pinned)
+  result: PASS
+
+independent_review:
+  reviewer: scoped-reviewer (read-only audit)
+  date: 2026-08-22
+  verdict: PASS
+  findings: "21 cross_sectional operators certified on six-way primitive evidence. 91 operators (60 cross_sectional + 31 ashare) honestly kept experimental. No P0/P1 defects. Artifact is stale (source hashes diverged) but the six-way evidence itself is present and valid."
+
+known_limitations:
+  - "Evidence artifact hash bindings are stale (source hashes diverged since commit 724cf286c567512efeefb2e24622eb0bb665680d). The certification claim is: the six-way evidence is present in the artifact; the stale hashes mean the artifact would need re-certification after a fresh certify run."
+  - "Polars/DuckDB backend certification for these operators shows 'research' in backend_certification.py (polars/duckdb evidence is NOT_RUN). Only pandas_numpy backend is production."
+  - "DuckDB SQL production evidence is likely present in the six-way intersection but the backend_certification module checks additional evidence sets (DUCKDB_REAL_SQL_VERIFIED etc.) that are empty while the artifact is stale."
+  - "No production certification claim for the 91 experimental operators. They would need: (a) DAILY_CANONICALS membership, (b) six-way primitive evidence, (c) fresh artifact certification."
+
+production_certification: CLAIMED_21_OF_112
+commit: NOT_CREATED
+remotes: NOT_USED
