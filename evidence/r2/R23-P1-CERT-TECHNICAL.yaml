@@ -1,0 +1,422 @@
+# R23 P1 certification sprint — technical_signal category
+# Date: 2026-08-22
+# Assessment: NONE of the 46 technical_signal canonicals can be production-certified
+# in this session because the factor_operator_verified.json evidence artifact is stale
+# (source tree hashes don't match the recorded artifact).
+#
+# Certification path: A fresh factor-operator evidence run must be executed to
+# regenerate factor_operator_verified.json with current source-tree hashes. Until then,
+# pandas_reference_production_safe() returns False for every canonical, the evidence
+# overlay sets backend_meta["pandas_numpy"]["production_certified"] = False, and
+# reconcile_operator_certification() downgrades status to "experimental".
+#
+# Root cause: factor_operator_verified.json was recorded against commit
+# b7677d54733c4df48b4e65b939f7ae8aefd6c43f (2026-08-11). Current HEAD is
+# 9ba0c3a03d60210e280d13df4474adca59583c5b. Every execution-semantic tree hash
+# diverged (operator implementations, IR, planner, backend, etc.), so the evidence
+# artifact is no longer valid (fail-closed).
+
+schema_version: "r23.p1.technical_signal"
+assessment_date: "2026-08-22"
+assessor: "R23 P1 certification agent"
+current_head: "9ba0c3a03d60210e280d13df4474adca59583c5b"
+evidence_artifact_commit: "b7677d54733c4df48b4e65b939f7ae8aefd6c43f"
+evidence_artifact_stale: true
+evidence_validation_errors:
+  - "execution-semantic source hashes are stale"
+  - "operator set mismatch (current surface diverged from recorded)"
+
+# =============================================================================
+# Per-canonical assessment
+# =============================================================================
+canonicals:
+  # Each canonical has:
+  #   - Real pandas_numpy AND polars implementation (both backends present)
+  #   - No P0 issues (no revision/PIT/missing-source issues of severity P0)
+  #   - pit_safe=True in operator policy (structural causality)
+  #   - shape_preserving=True
+  #   - factor_operator_verified.json evidence: runtime_execution, shape,
+  #     determinism, prefix_causality all verified
+  #   - sfc=False (not intentionally experimental)
+  #   - BLOCKER: evidence artifact is stale -> pandas_reference_production_safe=False
+  #             -> production_certified=False -> status=experimental
+
+  - canonical: ADX
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: ATR_WILDER
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: CMO
+    category: technical_signal
+    backends: [pandas_numpy, polars, sql]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: DEMA
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: DMI_minus
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: DMI_plus
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: DX
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: KAMA
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: KeltnerLower
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: KeltnerMid
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: KeltnerPosition
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: KeltnerUpper
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: MACD_hist
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: MACD_line
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: MACD_signal
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: NATR
+    category: technical_signal
+    backends: [pandas_numpy, polars, sql]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: PPO
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: PPO_hist
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: PPO_signal
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: PSAR
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: PVO
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: PVO_hist
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: PVO_signal
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: RSI_WILDER
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: Supertrend
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: SupertrendDirection
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: TEMA
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: TSI
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: TSI_signal
+    category: technical_signal
+    backends: [pandas_numpy, polars]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: UltimateOscillator
+    category: technical_signal
+    backends: [pandas_numpy, polars, sql]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: VortexMinus
+    category: technical_signal
+    backends: [pandas_numpy, polars, sql]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: VortexPlus
+    category: technical_signal
+    backends: [pandas_numpy, polars, sql]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: bollinger_pct_b
+    category: technical_signal
+    backends: [pandas_numpy, polars, sql]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: bollinger_width
+    category: technical_signal
+    backends: [pandas_numpy, polars, sql]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: choppiness_index
+    category: technical_signal
+    backends: [pandas_numpy, polars, sql]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: donchian_lower
+    category: technical_signal
+    backends: [pandas_numpy, polars, sql]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: donchian_mid
+    category: technical_signal
+    backends: [pandas_numpy, polars, sql]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: donchian_position
+    category: technical_signal
+    backends: [pandas_numpy, polars, sql]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: donchian_upper
+    category: technical_signal
+    backends: [pandas_numpy, polars, sql]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: efficiency_ratio
+    category: technical_signal
+    backends: [pandas_numpy, polars, sql]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: ichimoku_cloud_position
+    category: technical_signal
+    backends: [pandas_numpy, polars, sql]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: ichimoku_cloud_width
+    category: technical_signal
+    backends: [pandas_numpy, polars, sql]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: ichimoku_kijun
+    category: technical_signal
+    backends: [pandas_numpy, polars, sql]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: ichimoku_senkou_a
+    category: technical_signal
+    backends: [pandas_numpy, polars, sql]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: ichimoku_senkou_b
+    category: technical_signal
+    backends: [pandas_numpy, polars, sql]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+  - canonical: ichimoku_tenkan
+    category: technical_signal
+    backends: [pandas_numpy, polars, sql]
+    blocked_by: "experimental lifecycle: not production-certified (R23-303)"
+    honest_diagnosis: "evidence artifact stale — needs fresh factor-operator evidence run"
+    certifiable_now: false
+    what_needed: "re-run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json"
+
+# =============================================================================
+# Summary
+# =============================================================================
+summary:
+  total_technical_signal: 46
+  certifiable_now: 0
+  remaining_experimental: 46
+  blocker: "factor_operator_verified.json evidence artifact stale (source tree hashes diverged)"
+  evidence_artifact_commit: "b7677d54733c4df48b4e65b939f7ae8aefd6c43f"
+  current_head: "9ba0c3a03d60210e280d13df4474adca59583c5b"
+  remediation: "Run certify_factor_operator_evidence.py to regenerate factor_operator_verified.json with current source-tree hashes, then re-run this certification sprint"
