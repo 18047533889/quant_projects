@@ -1,0 +1,104 @@
+review: QE-P0
+title: QE MetricArtifact deep-immutability, ndarray ownership, lossless serialization, hash codec hardening
+component: quant_evaluator
+date: 2026-08-22
+
+summary: >
+  Hardened the QE MetricArtifact contracts against four P0 red-team findings.
+  (1) QE-P0-01 deep immutability: provenance is now a recursively-immutable
+  FrozenMapping (MappingProxyType-wrapped dict) so top-level and nested
+  mutation FAIL, and __hash__ is stable under attempted mutation. (2) QE-P0-02
+  snapshot array ownership: _freeze_array copies the caller's buffer by default
+  (np.array(copy=True, order="C")) so mutating the original ndarray afterwards
+  never changes the artifact; a zero-copy escape exists only via the explicit
+  ImmutableBufferRef capability. (3) QE-P0-03 artifact_kind class authority:
+  artifact_kind is derived from the subclass; ScalarMetricArtifact cannot be
+  constructed as "vector" (ValueError). (4) QE-P0-04 lossless serialization:
+  to_dict/from_dict now use a canonical ndarray codec (dtype + shape + base64
+  payload bytes) instead of the lossy tolist()/np.asarray round-trip, preserving
+  dtype, shape, endianness, NaN/Inf bit patterns, and datetime64 axes exactly.
+  (5) QE-P0-06 hash codec hardening: _hashutil.canonicalize rejects object-dtype
+  ndarrays, rejects non-string mapping keys, removed the default=repr fallback
+  (unsupported objects raise TypeError), and added explicit codecs for
+  datetime/date/timedelta, Decimal, Enum, bytes, and numpy scalars.
+
+state_before:
+  - "contracts/metric_artifacts.py: _freeze_array used np.asarray(value) (no copy -> caller alias retained); provenance stored as a plain dict copy (nested dicts/lists/sets still mutable); artifact_kind was a caller-supplied field with no class authority; to_dict used values.tolist() and from_dict used np.asarray (lossy dtype/NaN round-trip)"
+  - "contracts/_hashutil.py: canonicalize used str(k) mapping keys (non-string keys silently coerced), had default=repr fallback (process-dependent), and had no explicit codecs for datetime/Decimal/Enum/bytes; object-dtype ndarrays were hashed by an unstable representation"
+  - "contracts/artifact_types.py: same _freeze_array alias bug, plain-dict provenance, lossy tolist()/np.asarray serialization"
+
+changes:
+  - file: build/lib/quant_evaluator/contracts/_hashutil.py
+    detail: >
+      canonicalize is now fail-closed: object-dtype ndarrays raise TypeError;
+      non-string mapping keys raise TypeError; the default=repr fallback is
+      removed (unsupported objects raise TypeError); explicit codecs added for
+      datetime/date/timedelta, Decimal, Enum, bytes, and numpy scalars. Array
+      dtype serialized via dtype.str (endianness-preserving). stable_content_hex
+      no longer passes default=repr to json.dumps.
+  - file: build/lib/quant_evaluator/contracts/_ndarray_codec.py (new)
+    detail: >
+      Lossless ndarray codec: encode_ndarray -> {__ndarray__, dtype, shape,
+      data_b64}; decode_ndarray reconstructs a read-only array from the raw
+      bytes. encode_value/decode_value additionally cover datetime/date/
+      timedelta, Decimal, Enum, bytes, and numpy scalars for provenance and
+      time_index round-trips.
+  - file: build/lib/quant_evaluator/contracts/metric_artifacts.py
+    detail: >
+      Added FrozenMapping (recursively-immutable MappingProxyType-wrapped dict)
+      and ImmutableBufferRef (explicit zero-copy ownership capability).
+      provenance is stored as FrozenMapping; _freeze_array copies by default
+      (np.array(copy=True, order="C")) and marks read-only; artifact_kind is
+      class-authoritative (subclass __artifact_kind__; mismatch raises
+      ValueError, omitted defaults to class kind); to_dict/from_dict use the
+      lossless ndarray codec. FrozenMapping implements __getstate__/__setstate__
+      so it survives pickle across all protocols.
+  - file: build/lib/quant_evaluator/contracts/artifact_types.py
+    detail: >
+      _freeze_array copies by default; provenance stored as FrozenMapping;
+      to_dict/from_dict use the lossless ndarray codec for values/time_index and
+      encode_value/decode_value for provenance.
+
+tests:
+  - file: tests/test_qe_artifact_hardening.py (new)
+    result: "30 passed"
+    coverage:
+      - QE-P0-01: provenance recursively immutable (top-level, nested dict, nested list, nested set all raise); hash stable under attempted mutation; created_from/time_index are tuples
+      - QE-P0-02: array copied not aliased (mutating original leaves artifact unchanged); ownership for all payload fields; ImmutableBufferRef zero-copy escape
+      - QE-P0-03: artifact_kind derived from subclass; scalar cannot be constructed as vector; omitted defaults to class kind
+      - QE-P0-04: codec preserves dtype+values for float32/float64/int8/int64/uint16/datetime64[ns]/datetime64[D]; NaN/Inf bit-exact; empty arrays; non-contiguous input; artifact to_dict/from_dict dtype-preserving; datetime64 axis; provenance value codecs
+      - QE-P0-06: object-dtype ndarray rejected; non-string key rejected; unsupported object rejected (no repr fallback); explicit codecs for datetime/date/timedelta/Decimal/bytes/Enum/numpy scalar
+  - file: tests/test_qe_p0_03_hash_stability.py
+    result: "2 passed"
+    coverage: >
+      Extended the cross-PYTHONHASHSEED subprocess digest to cover the new codec
+      surfaces (datetime/date/timedelta/Decimal/bytes/Enum/numpy scalar,
+      float32/int8/datetime64 arrays) — all byte-identical across seeds.
+  - file: tests/test_qe_serialization.py
+    result: "38 passed"
+    coverage: >
+      Existing pickle round-trip (all protocols), mappingproxy pickle, and
+      to_dict/from_dict round-trip tests still pass with the new FrozenMapping
+      provenance and lossless codec.
+
+run_command: >
+  cd /home/shw/quant_projects/quant_evaluator &&
+  OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+  PYTHONPATH=/home/shw/quant_projects/quant_evaluator/build/lib
+  /home/shw/quant_projects/.venv/bin/python -m pytest
+  tests/test_qe_serialization.py tests/test_qe_p0_03_hash_stability.py
+  tests/test_qe_artifact_hardening.py -q --tb=short
+
+verification:
+  - "artifact.provenance['x']=... raises TypeError; nested dict/list/set mutation raises"
+  - "hash(artifact) unchanged after attempted mutation (mutation raises)"
+  - "mutating the caller's original ndarray after construction leaves the artifact unchanged (copy-on-write default)"
+  - "ImmutableBufferRef provides the only zero-copy escape; buffer still read-only"
+  - "ScalarMetricArtifact(artifact_kind='vector') raises ValueError"
+  - "to_dict/from_dict round-trip preserves dtype, shape, NaN/Inf bit patterns, and datetime64 axes exactly"
+  - "canonicalize rejects object-dtype ndarrays, non-string keys, and unsupported objects (no repr fallback)"
+  - "cross-PYTHONHASHSEED digests identical for all new codec surfaces"
+
+pre_existing:
+  - "tests/test_axis_refs_and_registry_seal.py (11 tests) fails because a CONCURRENT agent is mid-implementation of QE-P0-05 (factor_axis/time_axis/quantile_axis/matrix_axis fields) and QE-P0-07 (sealed registry) — the MetricArtifact classes do not yet accept the factor_axis keyword. These are unrelated to this task's changes; the rest of the suite (157 tests) passes."
+  - "2 pre-existing skips in test_metamorphic.py (no zscore/dropna kernel exists yet — documented-contract tests)"

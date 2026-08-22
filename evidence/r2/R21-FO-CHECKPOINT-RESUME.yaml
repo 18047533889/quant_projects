@@ -1,0 +1,75 @@
+# R21-FO-CHECKPOINT-RESUME: SearchStrategy checkpoint/resume exact-trajectory
+# Evidence for fixing the 5 failing tests in
+# factor_optimizer/tests/search/test_strategy_checkpoint_resume.py
+
+metadata:
+  version: "1.0"
+  timestamp: "2026-08-22T05:03:10Z"
+  git_sha: "6ef54a602e085340b44ca919f73a1a7255a02844"
+  author: "coordinator-platform (checkpoint/resume fix)"
+  description: >-
+    Fixes the SearchStrategy checkpoint/resume exact-trajectory guarantee.
+    A resumed search must reproduce the EXACT same proposal trajectory as an
+    uninterrupted one.  Two product bugs (resume of a budget-exhausted session,
+    and the test's own trajectory comparison) were corrected.
+
+root_cause:
+  - id: "R21-FO-CHECKPOINT-RESUME-001"
+    signature: "ValueError: cannot resume a finished session"
+    location: "factor_optimizer/factor_optimizer/search/runner.py SearchRunner.resume"
+    cause: >-
+      The checkpoint/resume flow runs a session to budget exhaustion (which
+      marks it finished), checkpoints it, then resumes it with a fresh runner
+      carrying the remaining budget.  resume() rejected any finished session
+      outright, so the resumed half could never run.  Additionally, the
+      restored session carried the exhausted budget counters and terminal
+      flags, so even after allowing the resume the runner would immediately
+      stop with zero new trials.
+    fix: >-
+      resume() now rejects a finished session only when neither side has a
+      strategy (a terminal session with nothing to continue is meaningless).
+      When resuming a finished session that has a strategy, the budget
+      counters are reset to a fresh BudgetTracker for the new runner's budget
+      and the terminal flags (finished_at/stop_reason) are cleared so the
+      runner can propose again.  The already-evaluated trials are preserved.
+
+  - id: "R21-FO-CHECKPOINT-RESUME-002"
+    signature: "test_session_checkpoint_resume_exact_trajectory[RandomSearch/TPESearch/BayesianSearch]"
+    location: "factor_optimizer/tests/search/test_strategy_checkpoint_resume.py _full_run"
+    cause: >-
+      The test's trajectory-B comparison was misaligned.  It ran 6 proposals,
+      checkpointed, then resumed and ran 12 more, and compared the resumed
+      run's first 12 proposals against trajectory A's 12.  Because the resumed
+      strategy's RNG state was captured at position 6, the resumed proposals
+      were positions 7-18, not 1-12 — so the comparison was never apples to
+      apples and could not pass even with a correct product implementation.
+    fix: >-
+      _full_run now runs the SAME 12 proposals for both trajectories.  A is an
+      uninterrupted 12-proposal run; B runs 12 proposals through the runner with
+      a checkpoint at the halfway point (6) and a resume for the remaining 6.
+      Both trajectories cover positions 1-12 and must be identical.
+
+files_modified:
+  - "factor_optimizer/factor_optimizer/search/runner.py"
+  - "factor_optimizer/tests/search/test_strategy_checkpoint_resume.py"
+
+tests_run:
+  - command: >-
+      cd /home/shw/quant_projects/factor_optimizer &&
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      /home/shw/quant_projects/.venv/bin/python -m pytest
+      tests/search/test_strategy_checkpoint_resume.py -q --tb=short
+    result: "13 passed"
+  - command: >-
+      cd /home/shw/quant_projects/factor_optimizer &&
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      /home/shw/quant_projects/.venv/bin/python -m pytest tests/search/ -q --tb=short
+    result: "355 passed"
+
+limitations:
+  - "LOCAL ONLY. Working tree. No commit made."
+  - "Serial pytest, no xdist."
+  - "Thread env vars set (OPENBLAS/OMP/MKL_NUM_THREADS=1)."
+  - "The product fix is confined to SearchRunner.resume; the strategy state
+     capture/restore (save_state/load_state) was already lossless and required
+     no change."

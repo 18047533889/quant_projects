@@ -1,0 +1,16 @@
+Found 9 known vulnerabilities in 4 packages
+Name       Version ID              Fix Versions
+---------- ------- --------------- ------------
+aiohttp    3.14.1  PYSEC-2026-3545 3.14.3
+aiohttp    3.14.1  PYSEC-2026-3546 3.14.2
+aiohttp    3.14.1  PYSEC-2026-3547 3.14.2
+pip        26.1.2  PYSEC-2026-3721 26.2
+setuptools 75.8.0  PYSEC-2025-49   78.1.1
+setuptools 75.8.0  PYSEC-2025-49   78.1.1
+setuptools 75.8.0  PYSEC-2026-3447 83.0.0
+setuptools 75.8.0  PYSEC-2026-3447 83.0.0
+wheel      0.45.1  CVE-2026-24049  0.46.2
+
+Name        Skip Reason
+----------- ---------------------------------------------------------------------------
+data-access Dependency not found on PyPI and could not be audited: data-access (0.10.2)

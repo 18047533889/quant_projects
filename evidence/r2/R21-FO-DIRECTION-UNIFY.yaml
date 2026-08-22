@@ -1,0 +1,48 @@
+actions_taken:
+  unified_direction_authority:
+    change: "ObjectiveSpec is now the ONLY direction authority. SearchStrategy subclasses no longer own an independent maximize flag or hard-code maximize. Strategies receive a StrategyContext (derived from the ObjectiveSpec) and translate to a single internal convention: utility = direction_sign * raw_metric; all optimizer internals maximize utility."
+    files:
+    - factor_optimizer/factor_optimizer/search/strategies.py
+    - factor_optimizer/factor_optimizer/search/runner.py
+    details:
+      StrategyContext: "New frozen dataclass carrying the ObjectiveSpec; exposes direction, direction_sign (+1 maximize / -1 minimize), to_utility()."
+      base_SearchStrategy: "Now accepts objective_spec/context; owns _context and _direction_sign; exposes .direction and .objective_spec derived from the spec."
+      BayesianSearch: "record() stores utility (direction_sign * raw_metric) in _y; EI/UCB use max(self._y) over utility, so the surrogate always maximizes utility. No hard-coded maximize."
+      TPESearch: "record() stores utility in _history; the good partition is always the highest-utility observations (sorted reverse=True). Legacy maximize flag reconciled against the spec and rejected on disagreement."
+      runner_guard: "SearchRunner.__init__ rejects a strategy whose .direction disagrees with config.objective_spec.direction, making runner/strategy direction mismatch impossible."
+      backward_compat: "Direct construction without spec/context defaults to maximize (matching the runner default); TPE legacy maximize flag still works and cannot disagree with a supplied spec."
+  central_proposal_counter:
+    change: "FO-P1-02: base SearchStrategy owns ONE proposal_sequence counter; every emitted proposal increments exactly once via _next_proposal_index(). Removed per-strategy _iteration drift. save_state/load_state restore it."
+    files:
+    - factor_optimizer/factor_optimizer/search/strategies.py
+  deterministic_trial_identity:
+    change: "FO-P1-01: trial_id is now a sha256 over (search_session_content_id, strategy_id, proposal_index, canonical params, parent lineage) via _make_trial_id(). uuid4 removed from scientific trial identity. execution_attempt_id kept separate for operational UUIDs."
+    files:
+    - factor_optimizer/factor_optimizer/search/strategies.py
+  int_bounds_and_validate_point:
+    change: "FO-P1-03: ParameterSpace kind='int' rejects non-integral low/high at construction (ValueError). Added SearchSpace.validate_point(point) checking exact key set, types, bounds, log-domain, finite numeric."
+    files:
+    - factor_optimizer/factor_optimizer/search/strategies.py
+  lazy_grid_search:
+    change: "FO-P1-04: GridSearch no longer materializes the full Cartesian product. It stores per-parameter grid values + mixed-radix cardinalities, computes total_combinations, samples a deterministic subset of combination indices, and decodes them lazily via _decode()."
+    files:
+    - factor_optimizer/factor_optimizer/search/strategies.py
+  tests:
+    added:
+    - factor_optimizer/tests/search/test_direction_authority.py
+    updated:
+    - factor_optimizer/tests/search/test_strategy_checkpoint_resume.py
+    - factor_optimizer/tests/search/test_strategy_validation.py
+evidence:
+  test_suite: "cd /home/shw/quant_projects/factor_optimizer && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 /home/shw/quant_projects/.venv/bin/python -m pytest tests/search/ -q --tb=short"
+  result: "385 passed in 37.00s"
+  baseline_before_fix: "6 failed, 332 passed (pre-existing checkpoint/resume + runner resume failures)"
+  pre_existing_failures_fixed:
+  - test_runner.py::test_search_runner_resume_continues_from_checkpoint
+  - test_runner.py::test_search_runner_resume_rejects_finished_or_mismatched_session
+  - test_strategy_checkpoint_resume.py::test_strategy_state_capture_and_restore
+  - test_strategy_checkpoint_resume.py::test_session_checkpoint_resume_exact_trajectory[RandomSearch]
+  - test_strategy_checkpoint_resume.py::test_session_checkpoint_resume_exact_trajectory[TPESearch]
+  - test_strategy_checkpoint_resume.py::test_session_checkpoint_resume_exact_trajectory[BayesianSearch]
+  new_regression_tests: 30
+  determinism_preserved: "seeded RNG reproducibility verified for Random/Grid/Bayesian/TPE; checkpoint/resume exact-trajectory tests pass"

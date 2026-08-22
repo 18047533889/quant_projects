@@ -240,7 +240,7 @@ def test_valid_spaces_still_propose():
         assert 0 <= params["n"] <= 10
 
     grid = GridSearch(NUMERIC_SPACE, grid_points=3)
-    for _ in range(len(grid._grid)):
+    for _ in range(grid.total_combinations):
         params = grid.propose().metadata["params"]
         assert isinstance(params, dict) and "x" in params
 

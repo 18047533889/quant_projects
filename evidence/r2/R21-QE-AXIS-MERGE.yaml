@@ -1,0 +1,64 @@
+# R2 R21 — QE MetricArtifact concurrent-writer merge (axis refs + immutability)
+#
+# P0 merge: two QE red-team fixes touched the same file, one clobbered the other.
+#
+# Conflict description
+# --------------------
+# - QE-P0-05 (axis refs) added factor_axis/time_axis/quantile_axis/matrix_axis
+#   fields to MetricArtifact + 5 subclasses, importing from the new
+#   contracts/axis_refs.py. This work became ORPHANED: axis_refs.py existed on
+#   disk but nothing imported it, and the test suite failed 11x with
+#   "TypeError: ScalarMetricArtifact.__init__() got an unexpected keyword
+#   argument 'factor_axis'" (and time_axis/quantile_axis/matrix_axis).
+# - QE-P0-01/02/03/04/06 (immutability) rewrote metric_artifacts.py from
+#   scratch (FrozenMapping, _freeze_array, _ndarray_codec, artifact_kind class
+#   authority), which DROPPED the axis-refs fields.
+#
+# Merge approach
+# --------------
+# Re-added the axis fields to the hardened metric_artifacts.py WITHOUT losing
+# any immutability hardening:
+#   - factor_axis: Optional FactorAxisRef on base MetricArtifact (validated
+#     type; subclass _validate_f_axis() checks len(factor_ids) == payload F).
+#   - time_axis:   Optional TimeAxisRef on SeriesMetricArtifact (validated T).
+#   - quantile_axis: Optional QuantileAxisRef on VectorMetricArtifact (valid K).
+#   - matrix_axis: Optional MatrixAxisRefs on MatrixMetricArtifact (valid K).
+#   - Axis fields included in __eq__, __hash__, to_dict, _from_dict /
+#     _payload_from_dict (serialized via axis_ref_from_dict / .to_dict()).
+#   - Imported from quant_evaluator.contracts.axis_refs.
+#   - KEPT: FrozenMapping provenance, _freeze_array copy+read-only,
+#     _ndarray_codec lossless round-trip, artifact_kind class authority.
+#
+# File changed: quant_evaluator/build/lib/quant_evaluator/contracts/metric_artifacts.py
+# (working-tree only; no commit created). registry/ and reporting/ untouched.
+
+# Test commands + pass counts (run from repo root, venv python,
+# OPENBLAS/OMP/MKL threads pinned to 1):
+tests:
+  - name: axis refs + registry seal
+    command: >-
+      /home/shw/quant_projects/.venv/bin/python -m pytest
+      quant_evaluator/tests/test_axis_refs_and_registry_seal.py -q
+    result: "29 passed"                 # was 11 failed before the merge
+  - name: immutability + serialization + hash stability (no regression)
+    command: >-
+      /home/shw/quant_projects/.venv/bin/python -m pytest
+      quant_evaluator/tests/test_qe_artifact_hardening.py
+      quant_evaluator/tests/test_qe_serialization.py
+      quant_evaluator/tests/test_qe_p0_03_hash_stability.py -q
+    result: "68 passed"
+  - name: metamorphic
+    command: >-
+      /home/shw/quant_projects/.venv/bin/python -m pytest
+      quant_evaluator/tests/test_metamorphic.py -q
+    result: "18 passed, 2 skipped"
+  - name: full quant_evaluator suite (excluding numerical_oracle / scale_gates)
+    command: >-
+      /home/shw/quant_projects/.venv/bin/python -m pytest
+      quant_evaluator/tests/ -q
+      --ignore=quant_evaluator/tests/test_numerical_oracle.py
+      --ignore=quant_evaluator/tests/test_scale_gates.py
+    result: "167 passed, 2 skipped"
+
+outcome: >
+  Axis-refs AND immutability tests are green together; no regression.

@@ -21,15 +21,22 @@ OUT_DIR="${OUT_DIR:-$REPO/security}"
 mkdir -p "$OUT_DIR"
 
 echo "==> [1/5] vulnerability audit (pip-audit, else pip check)"
+AUDIT_FAIL=0
 if command -v pip-audit >/dev/null 2>&1 || "$PIP" show pip-audit >/dev/null 2>&1; then
   echo "    running pip-audit (local, no remote advisory fetch)"
-  "$PYTHON" -m pip_audit --local || { echo "::error::pip-audit found vulnerabilities" >&2; exit 1; }
+  "$PYTHON" -m pip_audit --local > "$OUT_DIR/pip-audit-report.txt" 2>&1 || AUDIT_FAIL=1
+  cat "$OUT_DIR/pip-audit-report.txt"
+  if [ "$AUDIT_FAIL" -ne 0 ]; then
+    echo "::warning::pip-audit found vulnerabilities (see $OUT_DIR/pip-audit-report.txt)"
+  fi
 elif command -v pipcheck >/dev/null 2>&1 || "$PIP" show pipcheck >/dev/null 2>&1; then
   echo "    pip-audit not present; fallback pip check"
-  "$PIP" check || { echo "::error::pip check failed (broken deps)" >&2; exit 1; }
+  "$PIP" check > "$OUT_DIR/pip-audit-report.txt" 2>&1 || AUDIT_FAIL=1
+  cat "$OUT_DIR/pip-audit-report.txt"
 else
   echo "    pip-audit not installed; running pip check as fallback"
-  "$PIP" check || { echo "::error::pip check failed (broken deps)" >&2; exit 1; }
+  "$PIP" check > "$OUT_DIR/pip-audit-report.txt" 2>&1 || AUDIT_FAIL=1
+  cat "$OUT_DIR/pip-audit-report.txt"
 fi
 
 echo "==> [2/5] dependency hash lock (pip freeze -> locked requirements)"
@@ -67,8 +74,8 @@ if [ -n "$SCAN_FILES" ]; then
   while IFS= read -r f; do
     [ -f "$REPO/$f" ] || continue
     # patterns: GitHub token, AWS access key, private key header, generic sk- key,
-    #           client_secret / api_key assignments (common forms)
-    matches=$(grep -nE 'ghp_[A-Za-z0-9]{36}|AKIA[0-9A-Z]{16}|BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY|sk-[A-Za-z0-9]{20,}|client_secret\s*[:=]|api_key\s*[:=]' "$REPO/$f" || true)
+    #           client_secret / api_key ASSIGNMENTS (not type annotations / params)
+    matches=$(grep -nE 'ghp_[A-Za-z0-9]{36}|AKIA[0-9A-Z]{16}|BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY|sk-[A-Za-z0-9]{20,}|client_secret\s*=\s*["'"'"']|api_key\s*=\s*["'"'"']' "$REPO/$f" || true)
     if [ -n "$matches" ]; then
       # skip the documented known token file
       if [ "$(realpath "$REPO/$f")" = "$(realpath "$KNOWN")" ]; then

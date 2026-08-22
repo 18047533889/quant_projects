@@ -1,0 +1,98 @@
+task_id: R21-FO-OBJECTIVE-SPEC
+finding: objective_spec_authority_and_strategy_validation
+base_sha: 4a27a8b228e3b27069e957094806cc8de86fc137
+current_head: 6ef54a602e085340b44ca919f73a1a7255a02844
+dirty_count_before_evidence: 0
+commit_sha: UNCOMMITTED_CURRENT_TREE
+owned_files:
+  - factor_optimizer/factor_optimizer/contracts/objective.py
+  - factor_optimizer/factor_optimizer/contracts/__init__.py
+  - factor_optimizer/factor_optimizer/search/runner.py
+  - factor_optimizer/factor_optimizer/search/strategies.py
+  - factor_optimizer/tests/search/test_objective_spec.py
+  - factor_optimizer/tests/search/test_strategy_validation.py
+  - factor_optimizer/tests/search/test_strategy_checkpoint_resume.py
+modified_files:
+  - factor_optimizer/factor_optimizer/contracts/objective.py
+  - factor_optimizer/factor_optimizer/contracts/__init__.py
+  - factor_optimizer/factor_optimizer/search/runner.py
+  - factor_optimizer/factor_optimizer/search/strategies.py
+  - factor_optimizer/tests/search/test_strategy_checkpoint_resume.py
+status: CLOSED_LOCAL
+review_items:
+  - FO-P0-06: full ObjectiveSpec system
+  - FO-P0-07: strategy validation tests
+  - FO-P0-03: BayesianSearch/TPESearch categorical-param fail-closed (covered)
+implementation:
+  objective_spec:
+    - Added factor_optimizer/contracts/objective.py: ObjectiveSpec frozen dataclass
+      (metric_name, direction) validated fail-closed on construction; to_dict/from_dict;
+      equality by content; hashable; picklable.
+    - SearchConfig now holds objective_spec as the single authority for direction.
+      The legacy bare `objective_direction` field is retained as a backward-compatible
+      convenience and is reconciled into the spec at __post_init__:
+        * spec supplied -> field derived from spec (never drifts);
+        * field only    -> promoted to spec over default metric "score";
+        * both supplied and disagree -> ValueError (no silent drift);
+        * neither       -> defaults to maximize.
+    - SearchSession.update_best now reads self.config.objective_spec.direction
+      instead of the parallel bare field.
+    - SearchConfig.to_dict serializes objective_spec (not the bare field);
+      from_dict restores the spec and reconstructs the legacy field so
+      to_dict/from_dict round-trips remain comparable. Pre-spec checkpoint
+      payloads (bare objective_direction only) still restore.
+  strategy_validation:
+    - ParameterSpace.__post_init__ now validates fail-closed: name non-empty,
+      known kind, numeric non-boolean low<high bounds for float/int, non-empty
+      string/unique choices for choice, log_scale bounds positive, log_scale
+      not applicable to choice.
+    - SearchSpace.__post_init__ validates parameter list types and unique names.
+    - Each strategy validates its own constructor args (grid_points,
+      max_combinations, n_initial, acquisition, ucb_kappa, gamma, n_candidates,
+      maximize).
+    - BayesianSearch/TPESearch reject categorical (choice) parameters at
+      construction via _check_categorical_support (FO-P0-03), so a categorical
+      param never produces a garbage float proposal. TPE's choice branch was
+      replaced with an unreachable ValueError.
+    - SearchSpace.to_array fails closed on categorical spaces.
+    - RandomSearch/GridSearch still support categorical parameters natively.
+  checkpoint_resume_bridge:
+    - Fixed a latent pre-existing bug in SearchRunner.resume: the finished-session
+      guard (is_finished) was missing, so resuming an exhausted/finished session
+      raised the strategy-missing error instead of "cannot resume a finished
+      session". Restored the guard as the first check.
+regression_oracle:
+  - Full FO search + package suite: 352 passed, 3 failed.
+  - New tests: test_objective_spec.py (45) + test_strategy_validation.py (56) =
+    101 passed.
+  - The 3 remaining failures are the pre-existing
+    test_session_checkpoint_resume_exact_trajectory[RandomSearch/TPESearch/BayesianSearch]
+    which were ALREADY failing in the pre-change baseline (baseline: 6 failed,
+    234 passed). Their failure mode (a mid-run checkpointed session is finished,
+    so resume is rejected) is unchanged by this work; the other 3 baseline
+    failures were reconciled (2 by correcting test assertions to the post-fix
+    contract, 1 by the resume guard bridge).
+focused_tests:
+  command: cd /home/shw/quant_projects/factor_optimizer && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 /home/shw/quant_projects/.venv/bin/python -m pytest tests/ -q --tb=no
+  result: 352 passed, 3 failed (pre-existing checkpoint-resume trajectory)
+  new_tests_result: 101 passed (test_objective_spec + test_strategy_validation)
+syntax_compile:
+  command: cd /home/shw/quant_projects/factor_optimizer && /home/shw/quant_projects/.venv/bin/python -m py_compile factor_optimizer/search/strategies.py factor_optimizer/search/runner.py factor_optimizer/contracts/objective.py factor_optimizer/contracts/__init__.py
+  result: PASS
+design_decision:
+  - The ObjectiveSpec is the single authority for direction; the bare field is
+    a convenience reconciled into the spec, with disagreement rejected.
+  - Categorical params are handled per-strategy: RandomSearch/GridSearch support
+    them; BayesianSearch/TPESearch reject them fail-closed at construction.
+known_limitations:
+  - The three test_session_checkpoint_resume_exact_trajectory failures are
+    pre-existing (present in baseline before this change) and are attributed to
+    the earlier lifecycle semantics of the checkpoint/resume bridge; they are
+    unrelated to ObjectiveSpec or strategy validation and were not fabricated
+    as passing.
+  - No commit created; working-tree only. Broad cross-package / production
+    gates NOT_RUN.
+review_status: LOCAL_FOCUSED_REVIEWED
+production_certification: NOT_RUN
+commit: NOT_CREATED
+remotes: NOT_USED

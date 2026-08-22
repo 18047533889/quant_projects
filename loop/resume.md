@@ -2,7 +2,7 @@
 
 ## Active Blockers
 
-(None)
+- **⚠️ LIVE GitHub PAT leaked (2026-08-22, found by CI security scan):** token `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` is embedded in (1) `.claude/skills/github-push/SKILL.md` — tracked and already pushed to both remotes (commit 91b62620) — and (2) both git remotes (`origin`, `hkust-origin`) via `x-access-token:...@` URLs. **Should be revoked** in GitHub settings (it's a `ghp_` PAT) and replaced with a credential helper / scoped token. Coordinator did NOT modify remote URLs or the skill file (user decision).
 
 ## Findings from Last Session
 

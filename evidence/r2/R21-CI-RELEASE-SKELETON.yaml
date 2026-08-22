@@ -1,0 +1,102 @@
+schema_version: 1
+id: R21-CI-RELEASE-SKELETON
+slice: R21 P0-H — real CI/release skeleton + P1 security/supply-chain tooling
+campaign: R21 Release Gates (CI skeleton)
+status: COMPLETED_LOCAL
+git_sha: 6ef54a602e085340b44ca919f73a1a7255a02844
+timestamp: "2026-08-22T05:05:08Z"
+working_tree: dirty (pre-existing uncommitted changes; no commit made by this task)
+submodule_pins:
+  factor_engine: fc3e5f32f199177512231ec8791d3f8da0fcc803
+  dataaccess: afda9f47b76df677893bf4cf516c0f9cc825190c
+
+files_created:
+  - .github/workflows/release_gates.yml
+  - scripts/ci_fresh_wheel_run.sh
+  - scripts/security_audit.sh
+  - docs/R21_CI_RELEASE_PLAN.md
+  - evidence/r2/R21-CI-RELEASE-SKELETON.yaml
+  - security/cyclonedx_packages.json
+  - security/requirements-lock-hashes.txt
+  - security/requirements-frozen.txt
+  - security/pip-audit-report.txt
+
+workflow:
+  file: .github/workflows/release_gates.yml
+  jobs: [required_gates, release_guards, release_sign_off]
+  stages: 17
+  stage_list:
+    - 01_source_authority
+    - 02_unit
+    - 03_numerical_oracle
+    - 04_property_metamorphic
+    - 05_leakage
+    - 06_pit
+    - 07_determinism
+    - 08_serialization
+    - 09_checkpoint_resume
+    - 10_cross_package
+    - 11_fresh_wheel
+    - 12_scale_1k
+    - 13_scale_10k
+    - 14_scale_100k
+    - 15_real_ashare_shadow
+    - 16_security_supply_chain
+    - 17_evidence_current_check
+  thread_pinning: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+  runner_assumption: self-hosted runner with repo checked out + working .venv (Python 3.10)
+  evidence_current_check: python -m evidence.current --write + status assert (CURRENT, stale==0, failed==0) -> non-zero exit on STALE -> job FAILS
+  fail_on_required_gate: true (matrix job fails on any stage non-zero exit)
+  no_pass_no_release: release_sign_off gated on required_gates no-failure + release_guards success
+  dirty_source_no_release: release_guards runs git status --porcelain and fails on dirty tree
+
+stages_run_locally:
+  # Only the two script-backed gates were executed locally (they are the
+  # self-contained, runnable parts of the skeleton). The 15 pytest stages are
+  # NOT_RUN — they require the full self-hosted runner + real data and were not
+  # executed in this task.
+  - stage: 11_fresh_wheel
+    status: PASS
+    command: bash scripts/ci_fresh_wheel_run.sh
+    result: "19 passed (import/smoke) + 4 passed (wheel contract) + 6 wheel metadata checks; DONE (green)"
+    note: "Wheels built for factor_engine, quant_evaluator, factor_optimizer, factor_assets, factor_preprocess, dataaccess; clean venv; only built wheels + filtered locked deps installed; no repo-root sys.path (asserted)."
+  - stage: 16_security_supply_chain
+    status: PASS
+    command: bash scripts/security_audit.sh
+    result: "pip-audit ran (9 known vulns in 4 pkgs: aiohttp/pip/setuptools/wheel — WARNING, not failing); 109 hash-pinned requirements; secret scan clean (only known documented token); bandit ran (1 High / 2793 Medium / 78475 Low — WARNING, not failing); SBOM stub 113 components"
+    note: "pip-audit and bandit findings are reported as warnings, not gate failures, in this skeleton. data-access not on PyPI (skipped by pip-audit)."
+
+stages_not_run:
+  status: NOT_RUN
+  reason: "Require the self-hosted runner with the full .venv + real data; not executed in this task. Do not claim PASS for unrun stages."
+  stages:
+    - 01_source_authority
+    - 02_unit
+    - 03_numerical_oracle
+    - 04_property_metamorphic
+    - 05_leakage
+    - 06_pit
+    - 07_determinism
+    - 08_serialization
+    - 09_checkpoint_resume
+    - 10_cross_package
+    - 12_scale_1k
+    - 13_scale_10k
+    - 14_scale_100k
+    - 15_real_ashare_shadow
+    - 17_evidence_current_check
+
+security_tooling:
+  pip_audit: installed (2.10.1) into .venv; report at security/pip-audit-report.txt
+  bandit: installed (1.9.4) into .venv; findings reported as warnings
+  cyclonedx_python_lib: installed (11.12.0); SBOM stub schema-conformant
+  secret_scan: tracked files only; .claude/skills/github-push/SKILL.md token is a KNOWN documented item (never copied into new files)
+  sbom: security/cyclonedx_packages.json — STUB (CycloneDX 1.5, 113 components, licenses unknown, no dependency graph)
+  hash_lock: security/requirements-lock-hashes.txt — starter (SDIST-anchor sha256 per name==version); real artifact-hash lock is a follow-up
+
+limitations:
+  - "The 15 pytest stages are NOT_RUN — only the two script-backed gates (fresh_wheel, security) were executed locally."
+  - "pip-audit and bandit findings are warnings, not gate failures, in this skeleton; a production gate should decide whether to fail on them."
+  - "requirements-production.lock contains '==missing' placeholders and a stale data-access==0.2.0 / bogus yaml==6.0.3; the fresh-wheel script filters these. A real lock is a follow-up."
+  - "Protected-main required checks are a deployment prerequisite, not a code artifact; the workflow runs but does not block merges until configured."
+  - "No commit was made (working tree is truth; task constraint)."

@@ -101,8 +101,8 @@ def test_bundle_snapshots_caller_channels_mapping():
     channels = _channels(["f1", "f2"], ["f3", "f4"])
     bundle = FeatureBundle(
         bundle_id="b1",
-        time_axis=_time_axis(),
-        asset_axis=_asset_axis(),
+        time_axis=_time_axis(n=2),
+        asset_axis=_asset_axis(n=3),
         channels=channels,
         values=np.arange(24.0).reshape(2, 3, 4),
         layout="TNF",
@@ -119,8 +119,8 @@ def test_bundle_snapshots_caller_values_array():
     values = np.arange(24.0).reshape(2, 3, 4)
     bundle = FeatureBundle(
         bundle_id="b1",
-        time_axis=_time_axis(),
-        asset_axis=_asset_axis(),
+        time_axis=_time_axis(n=2),
+        asset_axis=_asset_axis(n=3),
         channels=_channels(["f1", "f2"], ["f3", "f4"]),
         values=values,
         layout="TNF",
@@ -190,7 +190,7 @@ def test_bundle_manifest_values_dimension_mismatch_rejected():
         FeatureBundle(
             bundle_id="b1",
             time_axis=_time_axis(),
-            asset_axis=_asset_axis(),
+            asset_axis=_asset_axis(n=5),
             channels=channels,
             values=values,
             layout="NF",

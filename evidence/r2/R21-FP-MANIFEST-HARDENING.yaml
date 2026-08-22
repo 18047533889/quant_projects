@@ -1,0 +1,104 @@
+task_id: R21-FP-MANIFEST-HARDENING
+base_sha: null
+implementation_commit_sha: null
+integrated_commit_sha: null
+git_sha: null
+generation_timestamp: 2026-08-22T00:00:00Z
+git_dirty: true
+dirty_file_count: null
+owned_files:
+  - factor_preprocess/factor_preprocess/contracts/feature_bundle.py
+  - factor_preprocess/factor_preprocess/contracts/state.py
+  - factor_preprocess/tests/contracts/test_tiling_channels_axes.py
+  - factor_preprocess/tests/contracts/test_feature_manifest.py
+  - evidence/r2/R21-FP-MANIFEST-HARDENING.yaml
+implementation_files:
+  - factor_preprocess/factor_preprocess/contracts/feature_bundle.py
+  - factor_preprocess/factor_preprocess/contracts/state.py
+  - factor_preprocess/tests/contracts/test_tiling_channels_axes.py
+  - factor_preprocess/tests/contracts/test_feature_manifest.py
+modified_files:
+  - factor_preprocess/factor_preprocess/contracts/feature_bundle.py
+  - factor_preprocess/factor_preprocess/contracts/state.py
+  - factor_preprocess/tests/contracts/test_tiling_channels_axes.py
+  - factor_preprocess/tests/contracts/test_feature_manifest.py
+canonicals_touched: []
+backends_touched: []
+status: CLOSED_LOCAL
+implementation_status: PRESENT
+focused_validation:
+  command: >-
+    cd /home/shw/quant_projects/factor_preprocess &&
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+    /home/shw/quant_projects/.venv/bin/python -m pytest tests/ -q --tb=short
+  result: 52 passed
+syntax_validation:
+  command: >-
+    /home/shw/quant_projects/.venv/bin/python -m py_compile
+    factor_preprocess/factor_preprocess/contracts/feature_bundle.py
+    factor_preprocess/factor_preprocess/contracts/state.py
+  result: PASS
+diff_check:
+  command: git diff --check
+  result: PASS
+real_check:
+  command: null
+  exit_code: 0
+  result: PASS
+  validation_context: working tree only; no commit performed per task constraints
+  findings: []
+artifacts:
+  generated_json_regenerated: false
+  production_surface_count: NOT_PROVEN
+  production_certification: NOT_RUN
+  broad_gates: NOT_RUN
+  yaml_validation: PASS
+provenance:
+  commit: NONE
+  remotes: NONE
+known_limitations:
+  - local current-tree evidence only; no commit performed (task constraint)
+  - no production-readiness claim follows
+fixes:
+  FP-P0-01:
+    defect: >-
+      FeatureManifest tiling allowed holes (columns {0,2} for F=3 passed) because
+      only no-overlap + max_end==F were enforced.
+    fix: >-
+      Added exact-tiling check: occupied columns must equal {0..width-1}.
+      Holed tiling, hole-at-start, and non-contiguous layouts are rejected.
+  FP-P0-02:
+    defect: >-
+      Auxiliary channels (missing/freshness/exposure) could be advertised but the
+      auto manifest only mapped channel_type="feature", so get_channel_values
+      could not address a metadata-only channel.
+    fix: >-
+      Unified ColumnManifest design: FeatureManifest.from_channels builds a
+      manifest over ALL channels; total_width is the physical feature-axis width
+      (sum of all channel sizes). has_missing_channel / has_freshness_channel /
+      has_exposure_channel must agree with actual channels (fail-closed). Every
+      advertised channel is addressable via get_channel_values.
+  FP-P0-03:
+    defect: >-
+      AxisRef vs tensor shape was unenforced: TNF/NF ndim, axis lengths, and
+      duplicate axis labels were not validated.
+    fix: >-
+      FeatureBundle._validate_shape enforces TNF->ndim==3, NF->ndim==2,
+      T==len(time_axis), N==len(asset_axis), F==manifest width. Duplicate axis
+      labels rejected unless allow_duplicate_axis_labels=True.
+  FP-P0-04:
+    defect: >-
+      FittedState.state_id was an arbitrary caller string in production.
+    fix: >-
+      In production=True, state_id is SHA256-derived over (transform identity,
+      implementation hash, learned params hash, data snapshot, split, universe,
+      calendar, fit coordinate hash, feature order, policy hash). Caller-supplied
+      state_id is rejected; provenance fields are required (fail-closed).
+  FP-P0-05:
+    defect: >-
+      Empty feature_ids -> "compatible with anything" applied to stateful
+      transforms (fail-open).
+    fix: >-
+      Added StateKind.STATELESS / StateKind.FITTED. A FITTED transform with empty
+      feature contract raises at construction and is_compatible_with raises
+      (fail-closed). STATELESS with empty contract remains OK (explicit).

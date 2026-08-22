@@ -57,6 +57,10 @@ class AxisRef:
         elif isinstance(self.axis_values, list):
             object.__setattr__(self, 'axis_values', tuple(self.axis_values))
 
+    def __len__(self) -> int:
+        """Number of labels on this axis."""
+        return len(self.axis_values)
+
 
 @dataclass(frozen=True)
 class ChannelRef:
@@ -71,12 +75,22 @@ class ChannelRef:
             object.__setattr__(self, 'feature_ids', tuple(self.feature_ids))
 
 
+# Valid auxiliary channel types (FP-P0-02).
+_AUX_CHANNEL_TYPES = {"missing", "freshness", "exposure"}
+
+
 class FeatureManifest:
     """
-    Column index mapping for multi-channel layouts.
+    Unified column index mapping for multi-channel layouts (FP-P0-02).
 
-    Maps feature_ids to column indices in the values array,
-    enabling proper multi-feature channel support.
+    Maps every channel (feature, missing, freshness, exposure) to a column
+    slice in the values array, so every advertised channel is addressable via
+    ``get_channel_values``. ``feature_ids`` is the union of the feature-type
+    channels; ``total_width`` is the sum of ALL channel sizes (the physical
+    feature-axis width).
+
+    FP-P0-01: channels must tile the feature axis exactly with no holes and
+    no overlap.
     """
 
     def __init__(
@@ -84,6 +98,7 @@ class FeatureManifest:
         feature_ids: List[str],
         channel_offsets: Dict[str, int],
         channel_sizes: Dict[str, int],
+        _allow_aux_channels: bool = False,
     ):
         """
         Initialize feature manifest.
@@ -91,11 +106,15 @@ class FeatureManifest:
         Parameters
         ----------
         feature_ids : List[str]
-            Ordered list of all feature IDs across channels
+            Ordered list of feature IDs (feature-type channels only).
         channel_offsets : Dict[str, int]
-            Starting column index for each channel
+            Starting column index for each channel.
         channel_sizes : Dict[str, int]
-            Number of columns per channel
+            Number of columns per channel.
+        _allow_aux_channels : bool
+            Internal: when True, the manifest may carry auxiliary channels
+            (missing/freshness/exposure) whose columns are not features, so
+            ``total_width`` may exceed ``len(feature_ids)``.
         """
         self._feature_ids: Tuple[str, ...] = tuple(feature_ids)
         # Snapshot-copy caller dicts before wrapping so later mutation of the
@@ -146,11 +165,23 @@ class FeatureManifest:
                     )
                 occupied[col] = ch
 
-        # Feature dimension must be fully accounted for by the channels.
-        if max_end != len(self._feature_ids):
+        self._total_width = max_end
+
+        # Feature dimension must be fully accounted for by the channels when
+        # this is a feature-only manifest (no auxiliary channels).
+        if not _allow_aux_channels and max_end != len(self._feature_ids):
             raise InvalidContractError(
                 f"Max channel end {max_end} does not match feature count "
                 f"{len(self._feature_ids)} (offset+size must tile exactly)"
+            )
+
+        # FP-P0-01: exact tiling — no holes. The no-overlap + max_end==F
+        # checks alone allow holes (e.g. columns {0,2} for F=3). The occupied
+        # columns must be exactly {0..width-1}.
+        if set(occupied) != set(range(max_end)):
+            raise InvalidContractError(
+                f"Channels must tile the feature axis exactly with no holes; "
+                f"occupied columns {sorted(occupied)} != {list(range(max_end))}"
             )
 
         # Build reverse lookup: feature_id -> column index
@@ -158,15 +189,47 @@ class FeatureManifest:
         for i, fid in enumerate(self._feature_ids):
             self._feature_to_col[fid] = i
 
+    @classmethod
+    def from_channels(cls, channels: Dict[str, ChannelRef]) -> "FeatureManifest":
+        """
+        Build a unified manifest from ALL channels (feature + auxiliary).
+
+        Every channel is assigned a contiguous slice; feature_ids is the union
+        of the feature-type channels. This is the physical contract for
+        multi-channel layouts (FP-P0-02).
+        """
+        feature_ids: List[str] = []
+        channel_offsets: Dict[str, int] = {}
+        channel_sizes: Dict[str, int] = {}
+        offset = 0
+        for name, ref in channels.items():
+            fids = tuple(ref.feature_ids)
+            channel_offsets[name] = offset
+            channel_sizes[name] = len(fids)
+            if ref.channel_type == "feature":
+                feature_ids.extend(fids)
+            offset += len(fids)
+        return cls(
+            feature_ids,
+            channel_offsets,
+            channel_sizes,
+            _allow_aux_channels=True,
+        )
+
     @property
     def feature_ids(self) -> Tuple[str, ...]:
-        """All feature IDs in order."""
+        """All feature IDs in order (feature-type channels only)."""
         return self._feature_ids
 
     @property
     def total_features(self) -> int:
-        """Total number of features."""
+        """Number of feature-type features."""
         return len(self._feature_ids)
+
+    @property
+    def total_width(self) -> int:
+        """Physical feature-axis width (sum of ALL channel sizes)."""
+        return self._total_width
 
     @property
     def channel_offsets(self) -> MappingProxyType[str, int]:
@@ -243,6 +306,7 @@ class FeatureManifest:
     def __repr__(self) -> str:
         return (
             f"FeatureManifest(features={self.total_features}, "
+            f"width={self._total_width}, "
             f"channels={list(self._channel_offsets.keys())})"
         )
 
@@ -263,7 +327,16 @@ class FeatureBundle:
 
     Layout: 'NF' = [asset, feature]; 'TNF' = [time, asset, feature].
     The feature axis is always the trailing axis, so channel/feature
-    extraction slices the last axis (see FP-P0-04).
+    extraction slices the last axis.
+
+    FP-P0-03: the values shape is validated against the axes and manifest:
+    - TNF -> ndim==3, T==len(time_axis), N==len(asset_axis), F==manifest width
+    - NF  -> ndim==2, N==len(asset_axis), F==manifest width
+    Duplicate axis labels are rejected unless ``allow_duplicate_axis_labels``.
+
+    FP-P0-02: ``has_missing_channel`` / ``has_freshness_channel`` /
+    ``has_exposure_channel`` must agree with the actual channels present, and
+    every advertised channel must be addressable via ``get_channel_values``.
     """
     bundle_id: str
 
@@ -276,7 +349,7 @@ class FeatureBundle:
 
     # Values (snapshot-copied if ndarray, writeable=False)
     values: Any  # Shape depends on layout
-    # Layout of the values array: 'NF' = [feature, ...]; 'TNF' = [time, asset, feature].
+    # Layout of the values array: 'NF' = [asset, feature]; 'TNF' = [time, asset, feature].
     # Any other value (e.g. 'wide') leaves extraction unchanged for back-compat.
     layout: str = "NF"
     dtype: str = "float64"
@@ -294,9 +367,13 @@ class FeatureBundle:
     transform_start_time: Optional[datetime] = None
     transform_end_time: Optional[datetime] = None
 
-    # Missingness metadata
+    # Missingness metadata (must agree with actual channels, FP-P0-02)
     has_missing_channel: bool = False
     has_freshness_channel: bool = False
+    has_exposure_channel: bool = False
+
+    # FP-P0-03: reject duplicate axis labels unless explicitly allowed.
+    allow_duplicate_axis_labels: bool = False
 
     # Provenance
     policy_id: Optional[str] = None
@@ -317,19 +394,6 @@ class FeatureBundle:
         valid_layouts = {"NF", "TNF", "wide", "long", "block"}
         if self.layout not in valid_layouts:
             raise ValueError(f"layout must be one of {valid_layouts}")
-
-        # FP-P0-03: validate manifest against the values feature dimension.
-        if self.manifest is not None:
-            if not isinstance(self.values, np.ndarray) or self.values.ndim < 1:
-                raise InvalidContractError(
-                    "manifest requires values to be an ndarray with a feature axis"
-                )
-            feature_dim = self.values.shape[-1]
-            if self.manifest.total_features != feature_dim:
-                raise InvalidContractError(
-                    f"manifest.total_features={self.manifest.total_features} does not match "
-                    f"values feature dimension {feature_dim}"
-                )
 
         # Freeze values: snapshot ndarray then set writeable=False
         if isinstance(self.values, np.ndarray):
@@ -366,49 +430,104 @@ class FeatureBundle:
         if isinstance(self.fitted_state_refs, list):
             object.__setattr__(self, 'fitted_state_refs', tuple(self.fitted_state_refs))
 
+        # FP-P0-02: has_missing/has_freshness/has_exposure must agree with the
+        # actual channels present (fail-closed).
+        actual_types = {ref.channel_type for ref in self.channels.values()}
+        expected_missing = "missing" in actual_types
+        expected_freshness = "freshness" in actual_types
+        expected_exposure = "exposure" in actual_types
+        if self.has_missing_channel != expected_missing:
+            raise InvalidContractError(
+                f"has_missing_channel={self.has_missing_channel} does not agree "
+                f"with actual channels (missing present: {expected_missing})"
+            )
+        if self.has_freshness_channel != expected_freshness:
+            raise InvalidContractError(
+                f"has_freshness_channel={self.has_freshness_channel} does not agree "
+                f"with actual channels (freshness present: {expected_freshness})"
+            )
+        if self.has_exposure_channel != expected_exposure:
+            raise InvalidContractError(
+                f"has_exposure_channel={self.has_exposure_channel} does not agree "
+                f"with actual channels (exposure present: {expected_exposure})"
+            )
+
         # Auto-generate manifest for NF/TNF layouts if not provided
         if self.manifest is None and self.layout in ("NF", "TNF"):
             self._auto_generate_manifest()
-            # Auto-generated manifest may expose a mismatch (e.g. fewer feature
-            # channels than values columns). Surface it as a contract error.
-            if self.manifest is not None:
-                if not isinstance(self.values, np.ndarray) or self.values.ndim < 1:
+
+        # FP-P0-03: validate manifest + axes against the values shape.
+        if self.manifest is not None:
+            self._validate_shape()
+
+    def _validate_shape(self):
+        """Validate values ndim/axis lengths against layout and manifest."""
+        if not isinstance(self.values, np.ndarray) or self.values.ndim < 1:
+            raise InvalidContractError(
+                "manifest requires values to be an ndarray with a feature axis"
+            )
+
+        width = self.manifest.total_width
+        if self.layout == "TNF":
+            if self.values.ndim != 3:
+                raise InvalidContractError(
+                    f"TNF layout requires values.ndim==3, got {self.values.ndim}"
+                )
+            t, n, f = self.values.shape
+            if f != width:
+                raise InvalidContractError(
+                    f"manifest width {width} does not match values feature "
+                    f"dimension {f}"
+                )
+            if t != len(self.time_axis):
+                raise InvalidContractError(
+                    f"TNF time axis length {t} != len(time_axis) {len(self.time_axis)}"
+                )
+            if n != len(self.asset_axis):
+                raise InvalidContractError(
+                    f"TNF asset axis length {n} != len(asset_axis) {len(self.asset_axis)}"
+                )
+        elif self.layout == "NF":
+            if self.values.ndim != 2:
+                raise InvalidContractError(
+                    f"NF layout requires values.ndim==2, got {self.values.ndim}"
+                )
+            n, f = self.values.shape
+            if f != width:
+                raise InvalidContractError(
+                    f"manifest width {width} does not match values feature "
+                    f"dimension {f}"
+                )
+            if n != len(self.asset_axis):
+                raise InvalidContractError(
+                    f"NF asset axis length {n} != len(asset_axis) {len(self.asset_axis)}"
+                )
+        else:
+            # Non-NF/TNF layouts: only check the feature dimension.
+            feature_dim = self.values.shape[-1]
+            if feature_dim != width:
+                raise InvalidContractError(
+                    f"manifest width {width} does not match values feature "
+                    f"dimension {feature_dim}"
+                )
+
+        # FP-P0-03: duplicate axis labels rejected unless explicitly allowed.
+        if not self.allow_duplicate_axis_labels:
+            for axis in (self.time_axis, self.asset_axis):
+                labels = list(axis.axis_values)
+                if len(labels) != len(set(labels)):
                     raise InvalidContractError(
-                        "manifest requires values to be an ndarray with a feature axis"
-                    )
-                feature_dim = self.values.shape[-1]
-                if self.manifest.total_features != feature_dim:
-                    raise InvalidContractError(
-                        f"manifest.total_features={self.manifest.total_features} does not match "
-                        f"values feature dimension {feature_dim}"
+                        f"Axis '{axis.axis_name}' has duplicate labels; "
+                        f"set allow_duplicate_axis_labels=True to permit"
                     )
 
     def _auto_generate_manifest(self):
-        """Auto-generate FeatureManifest for wide layout."""
+        """Auto-generate unified FeatureManifest from ALL channels."""
         if not isinstance(self.values, np.ndarray) or self.values.ndim < 2:
             return
 
-        # Build manifest from channels
-        feature_ids = []
-        channel_offsets = {}
-        channel_sizes = {}
-        offset = 0
-
-        for name, ref in self.channels.items():
-            if ref.channel_type == "feature":
-                fids = list(ref.feature_ids) if isinstance(ref.feature_ids, tuple) else ref.feature_ids
-                channel_offsets[name] = offset
-                channel_sizes[name] = len(fids)
-                feature_ids.extend(fids)
-                offset += len(fids)
-
-        if feature_ids:
-            manifest = FeatureManifest(
-                feature_ids=feature_ids,
-                channel_offsets=channel_offsets,
-                channel_sizes=channel_sizes,
-            )
-            object.__setattr__(self, 'manifest', manifest)
+        manifest = FeatureManifest.from_channels(dict(self.channels))
+        object.__setattr__(self, 'manifest', manifest)
 
     def get_channel(self, channel_name: str) -> Optional[ChannelRef]:
         """Retrieve a specific channel by name."""
@@ -443,9 +562,9 @@ class FeatureBundle:
             raise KeyError(f"Channel '{channel_name}' not found")
 
         slice_obj = self.manifest.get_channel_slice(channel_name)
-        # FP-P0-04: the feature axis is always the last axis regardless of
-        # layout. Use trailing-axis indexing so a [T,N,F] array does not get
-        # sliced along the asset axis.
+        # The feature axis is always the last axis regardless of layout. Use
+        # trailing-axis indexing so a [T,N,F] array does not get sliced along
+        # the asset axis.
         return self.values[..., slice_obj]
 
     def get_feature_values(self, feature_id: str) -> np.ndarray:
@@ -471,7 +590,7 @@ class FeatureBundle:
             raise KeyError("No manifest available for feature extraction")
 
         col_idx = self.manifest.get_column_index(feature_id)
-        # Feature axis is always the last axis (see FP-P0-04).
+        # Feature axis is always the last axis.
         return self.values[..., col_idx]
 
     def is_immutable(self) -> bool:

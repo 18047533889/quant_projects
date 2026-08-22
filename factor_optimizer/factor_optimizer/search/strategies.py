@@ -1,16 +1,18 @@
 """Search strategies: Random, Grid, Bayesian (GP), and TPE."""
 
+import hashlib
 import itertools
+import json
 import math
 import numbers
 import random
-import uuid
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
+from factor_optimizer.contracts.objective import ObjectiveSpec
 from factor_optimizer.contracts.trial import Trial, TrialStatus
 
 
@@ -45,6 +47,55 @@ class SearchStrategyState:
     iteration_count: int = 0
     strategy_fields: Dict[str, Any] = field(default_factory=dict)
     extra_rng_states: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class StrategyContext:
+    """Single direction authority handed to a strategy by the runner.
+
+    The runner derives this from the authoritative ``ObjectiveSpec`` so a
+    strategy can never disagree with the session's objective.  Internally the
+    strategy maximizes ``utility = direction_sign * raw_metric`` where
+    ``direction_sign`` is ``+1`` for ``maximize`` and ``-1`` for ``minimize``.
+    """
+
+    objective_spec: ObjectiveSpec
+
+    @property
+    def direction(self) -> str:
+        return self.objective_spec.direction
+
+    @property
+    def direction_sign(self) -> int:
+        return 1 if self.objective_spec.direction == "maximize" else -1
+
+    def to_utility(self, raw_metric: float) -> float:
+        """Map a raw metric to the internal utility convention (maximize)."""
+        return self.direction_sign * float(raw_metric)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"objective_spec": self.objective_spec.to_dict()}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "StrategyContext":
+        if not isinstance(data, dict) or "objective_spec" not in data:
+            raise ValueError("StrategyContext checkpoint missing 'objective_spec'")
+        return cls(objective_spec=ObjectiveSpec.from_dict(data["objective_spec"]))
+
+
+def _canonical_params(params: Dict[str, Any]) -> str:
+    """Stable, order-independent canonical serialization of a parameter dict.
+
+    Used as input to the deterministic trial identity so that two proposals
+    with the same parameter values hash identically regardless of dict
+    insertion order.
+    """
+    return json.dumps(
+        {k: params[k] for k in sorted(params)},
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
 
 
 def _jsonable(value: Any) -> Any:
@@ -189,6 +240,15 @@ class ParameterSpace:
                     f"{self.kind} parameter '{self.name}' requires low < high, "
                     f"got low={self.low!r}, high={self.high!r}"
                 )
+            if self.kind == "int":
+                # FO-P1-03: an int parameter's bounds must be integral.  A
+                # fractional bound would silently truncate/round in sampling
+                # and produce a range that disagrees with the declared bounds.
+                if float(self.low) != int(self.low) or float(self.high) != int(self.high):
+                    raise ValueError(
+                        f"int parameter '{self.name}' requires integral low/high "
+                        f"bounds, got low={self.low!r}, high={self.high!r}"
+                    )
             if self.log_scale:
                 if self.low <= 0:
                     raise ValueError(
@@ -347,6 +407,79 @@ class SearchSpace:
         keys = [p.name for p in self.parameters]
         return [dict(zip(keys, combo)) for combo in itertools.product(*per_param)]
 
+    def validate_point(self, point: Dict[str, Any]) -> None:
+        """Validate a proposed point against this space, fail-closed (FO-P1-03).
+
+        Checks, for every parameter:
+        - the exact key set matches the space (no missing, no extra keys);
+        - the value type matches the parameter kind;
+        - numeric values are finite and within ``[low, high]``;
+        - ``int`` values are integral;
+        - ``log_scale`` values are positive;
+        - ``choice`` values are one of the declared choices.
+
+        Raises ``ValueError`` on the first violation.
+        """
+        if not isinstance(point, dict):
+            raise ValueError("point must be a dict of parameter values")
+        expected = {p.name for p in self.parameters}
+        actual = set(point)
+        if actual != expected:
+            missing = sorted(expected - actual)
+            extra = sorted(actual - expected)
+            detail = []
+            if missing:
+                detail.append(f"missing keys: {missing}")
+            if extra:
+                detail.append(f"unexpected keys: {extra}")
+            raise ValueError("point keys do not match search space: " + "; ".join(detail))
+        for p in self.parameters:
+            value = point[p.name]
+            if p.kind == "float":
+                if isinstance(value, bool) or not isinstance(value, numbers.Real):
+                    raise ValueError(
+                        f"parameter '{p.name}' must be a real number, got {type(value).__name__}"
+                    )
+                fval = float(value)
+                if not math.isfinite(fval):
+                    raise ValueError(f"parameter '{p.name}' must be finite")
+                if fval < float(p.low) or fval > float(p.high):
+                    raise ValueError(
+                        f"parameter '{p.name}' value {fval!r} out of bounds "
+                        f"[{p.low}, {p.high}]"
+                    )
+                if p.log_scale and fval <= 0:
+                    raise ValueError(
+                        f"log_scale parameter '{p.name}' must be positive, got {fval!r}"
+                    )
+            elif p.kind == "int":
+                if isinstance(value, bool) or not isinstance(value, numbers.Real):
+                    raise ValueError(
+                        f"parameter '{p.name}' must be an integer, got {type(value).__name__}"
+                    )
+                if float(value) != int(value):
+                    raise ValueError(
+                        f"parameter '{p.name}' must be integral, got {value!r}"
+                    )
+                ival = int(value)
+                if ival < int(p.low) or ival > int(p.high):
+                    raise ValueError(
+                        f"parameter '{p.name}' value {ival!r} out of bounds "
+                        f"[{p.low}, {p.high}]"
+                    )
+                if p.log_scale and ival <= 0:
+                    raise ValueError(
+                        f"log_scale parameter '{p.name}' must be positive, got {ival!r}"
+                    )
+            elif p.kind == "choice":
+                if value not in p.choices:
+                    raise ValueError(
+                        f"parameter '{p.name}' value {value!r} is not one of "
+                        f"the declared choices {p.choices}"
+                    )
+            else:  # pragma: no cover - guarded at construction
+                raise ValueError(f"unknown parameter kind: {p.kind}")
+
     def to_array(self, point: Dict[str, Any]) -> np.ndarray:
         """Convert a named parameter dict to a 1-D numpy array (float64).
 
@@ -414,14 +547,88 @@ class SearchStrategy(ABC):
     categorical parameters fail-closed at construction (FO-P0-03).
     """
 
-    def __init__(self, space: SearchSpace, seed: Optional[int] = None):
+    def __init__(
+        self,
+        space: SearchSpace,
+        seed: Optional[int] = None,
+        objective_spec: Optional[ObjectiveSpec] = None,
+        context: Optional[StrategyContext] = None,
+    ):
         if not isinstance(space, SearchSpace):
             raise TypeError("space must be a SearchSpace")
         self.space = space
         self.seed = seed
         self.rng = random.Random(seed)
         self._history: List[Tuple[Dict[str, Any], float]] = []
-        self._iteration: int = 0
+        # FO-P1-02: ONE central proposal counter owned by the base strategy.
+        # Every emitted proposal increments it exactly once; per-strategy
+        # ``_iteration`` drift is removed.  Checkpoint/resume restores it.
+        self._proposal_sequence: int = 0
+        # FO-P0-03: single direction authority.  The strategy's direction is
+        # derived from the ObjectiveSpec (via StrategyContext), never from an
+        # independent per-strategy ``maximize`` flag.  When constructed
+        # directly (backward-compatible), the default spec is maximize.
+        if context is not None:
+            if not isinstance(context, StrategyContext):
+                raise TypeError("context must be a StrategyContext (or None)")
+            self._context = context
+        else:
+            spec = objective_spec if objective_spec is not None else ObjectiveSpec.from_direction("maximize")
+            if not isinstance(spec, ObjectiveSpec):
+                raise TypeError("objective_spec must be an ObjectiveSpec (or None)")
+            self._context = StrategyContext(objective_spec=spec)
+        self._direction_sign = self._context.direction_sign
+
+    @property
+    def objective_spec(self) -> ObjectiveSpec:
+        """The authoritative objective spec driving this strategy's direction."""
+        return self._context.objective_spec
+
+    @property
+    def direction(self) -> str:
+        """The strategy's objective direction, always derived from the spec."""
+        return self._context.direction
+
+    @property
+    def proposal_sequence(self) -> int:
+        """Number of proposals emitted so far (single central counter)."""
+        return self._proposal_sequence
+
+    def _next_proposal_index(self) -> int:
+        """Increment the central counter and return the new proposal index.
+
+        Every emitted proposal calls this exactly once, so the counter is the
+        single source of truth for proposal ordering across all strategies.
+        """
+        self._proposal_sequence += 1
+        return self._proposal_sequence
+
+    def _make_trial_id(
+        self,
+        strategy_id: str,
+        params: Dict[str, Any],
+        parent_lineage: Optional[Sequence[str]] = None,
+    ) -> str:
+        """Derive a deterministic scientific trial identity (FO-P1-01).
+
+        The identity is a sha256 over (search_session_content_id,
+        strategy_id, proposal_index, canonical params, parent lineage) so the
+        same proposal in the same session always yields the same trial_id —
+        no uuid4 nondeterminism.  Operational UUIDs (retries, executions) are
+        kept separate as ``execution_attempt_id``.
+        """
+        session_cid = getattr(self, "_search_session_content_id", None) or ""
+        lineage = list(parent_lineage) if parent_lineage else []
+        payload = "|".join(
+            [
+                str(session_cid),
+                strategy_id,
+                str(self._proposal_sequence),
+                _canonical_params(params),
+                "|".join(str(item) for item in lineage),
+            ]
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
 
     def _check_categorical_support(self, strategy_name: str) -> None:
         """Fail closed if this space holds categorical parameters this
@@ -475,7 +682,7 @@ class SearchStrategy(ABC):
                 else None
             ),
             history=[(dict(params), score) for params, score in self._history],
-            iteration_count=self._iteration_count(),
+            iteration_count=self._proposal_sequence,
             strategy_fields=self._state_fields(),
             extra_rng_states=self._extra_rng_states(),
         )
@@ -501,18 +708,11 @@ class SearchStrategy(ABC):
         self._history = [(dict(params), float(score)) for params, score in state.history]
         if getattr(self, "_X", None) is not None:
             self._X = [np.asarray(row, dtype=np.float64) for row in self._X]
-        self._set_iteration_count(state.iteration_count)
+        self._proposal_sequence = int(state.iteration_count)
         self._restore_state_fields(state.strategy_fields)
         self._restore_extra_rng_states(state.extra_rng_states)
 
     # -- extension points (defaults are no-ops) --------------------------------
-
-    def _iteration_count(self) -> int:
-        """Number of proposals emitted so far (overridden per strategy)."""
-        return 0
-
-    def _set_iteration_count(self, count: int) -> None:
-        """Restore the proposal counter (overridden per strategy)."""
 
     def _state_fields(self) -> Dict[str, Any]:
         """Strategy-specific JSON-safe state to checkpoint (overridden)."""
@@ -582,6 +782,10 @@ class SearchStrategy(ABC):
         space = SearchSpace.from_checkpoint_dict(ctor["space"])
         kwargs = dict(ctor)
         kwargs["space"] = space
+        # Restore the single direction authority from the checkpoint so a
+        # resumed strategy keeps the exact same objective direction.
+        if "context" in kwargs:
+            kwargs["context"] = StrategyContext.from_dict(kwargs["context"])
         return strategy_cls(**kwargs)
 
     @classmethod
@@ -605,27 +809,34 @@ class RandomSearch(SearchStrategy):
     categorical ``choice`` parameters (sampled uniformly).
     """
 
-    def __init__(self, space: SearchSpace, seed: Optional[int] = None):
-        super().__init__(space, seed)
+    def __init__(
+        self,
+        space: SearchSpace,
+        seed: Optional[int] = None,
+        objective_spec: Optional[ObjectiveSpec] = None,
+        context: Optional[StrategyContext] = None,
+    ):
+        super().__init__(space, seed, objective_spec=objective_spec, context=context)
         # RandomSearch natively supports categorical choice parameters.
 
     def propose(self, trial_id: Optional[str] = None) -> Trial:
         params = self.space.sample(self.rng)
+        self._next_proposal_index()
         return Trial(
-            trial_id=trial_id or f"random-{uuid.uuid4().hex[:12]}",
+            trial_id=trial_id or self._make_trial_id("random", params),
             mutation_id="random-search",
             status=TrialStatus.PROPOSED,
             metadata={"params": params, "strategy": "random"},
         )
 
-    def _iteration_count(self) -> int:
-        return self._iteration
-
-    def _set_iteration_count(self, count: int) -> None:
-        self._iteration = int(count)
-
     def _state_fields(self) -> Dict[str, Any]:
-        return {"ctor": {"space": self.space.to_checkpoint_dict(), "seed": self.seed}}
+        return {
+            "ctor": {
+                "space": self.space.to_checkpoint_dict(),
+                "seed": self.seed,
+                "context": self._context.to_dict(),
+            }
+        }
 
     def _restore_state_fields(self, fields: Dict[str, Any]) -> None:
         pass
@@ -636,17 +847,25 @@ class RandomSearch(SearchStrategy):
 # ---------------------------------------------------------------------------
 
 class GridSearch(SearchStrategy):
-    """Grid enumeration with optional grid reduction.
+    """Grid enumeration with optional lazy grid reduction (FO-P1-04).
 
     Parameters:
         space: Search space definition.
         grid_points: Number of grid points per numeric parameter (default 10).
-        max_combinations: If set, randomly sample this many points from the
-            full grid rather than enumerating everything.
+        max_combinations: If set, sample this many points from the full grid
+            rather than enumerating everything.
         seed: RNG seed for reproducibility.
 
     GridSearch supports categorical ``choice`` parameters by enumerating each
     choice as a grid value.
+
+    The full Cartesian product is NEVER materialized.  The grid is described
+    by its per-parameter cardinalities and a mixed-radix index space; proposals
+    are produced by decoding a combination index into concrete parameter
+    values.  When ``max_combinations`` is set, a deterministic subset of
+    combination indices is sampled (seeded) and decoded lazily, so a grid with
+    10^8 combinations and ``max_combinations=1000`` allocates only 1000
+    points, not the full product.
     """
 
     def __init__(
@@ -655,8 +874,10 @@ class GridSearch(SearchStrategy):
         grid_points: int = 10,
         max_combinations: Optional[int] = None,
         seed: Optional[int] = None,
+        objective_spec: Optional[ObjectiveSpec] = None,
+        context: Optional[StrategyContext] = None,
     ):
-        super().__init__(space, seed)
+        super().__init__(space, seed, objective_spec=objective_spec, context=context)
         self.grid_points = grid_points
         self._max_combinations = max_combinations
         if not isinstance(grid_points, int) or isinstance(grid_points, bool) or grid_points < 1:
@@ -667,31 +888,55 @@ class GridSearch(SearchStrategy):
             or max_combinations < 1
         ):
             raise ValueError("max_combinations must be a positive integer or None")
-        full_grid = self.space.grid(grid_points)
-        if max_combinations is not None and max_combinations < len(full_grid):
-            self._grid = self.rng.sample(full_grid, max_combinations)
+        # Per-parameter grid values (small: grid_points per numeric param, or
+        # the choice list).  The Cartesian product of these is NOT built.
+        self._per_param_values: List[List[Any]] = [
+            p.to_grid(grid_points) for p in self.space.parameters
+        ]
+        self._keys = [p.name for p in self.space.parameters]
+        # Mixed-radix cardinalities: the number of values per axis.
+        self._radices = [len(vals) for vals in self._per_param_values]
+        # Total number of combinations (the theoretical grid size).
+        self._total_combinations = 1
+        for radix in self._radices:
+            self._total_combinations *= radix
+        # Deterministic subset of combination indices to visit.
+        if max_combinations is not None and max_combinations < self._total_combinations:
+            self._indices = self.rng.sample(
+                range(self._total_combinations), max_combinations
+            )
         else:
-            self._grid = full_grid
+            self._indices = list(range(self._total_combinations))
         self._index = 0
 
+    @property
+    def total_combinations(self) -> int:
+        """The theoretical grid size (never materialized)."""
+        return self._total_combinations
+
+    def _decode(self, combo_index: int) -> Dict[str, Any]:
+        """Decode a mixed-radix combination index into concrete parameters."""
+        params: Dict[str, Any] = {}
+        remaining = combo_index
+        for key, radix, values in zip(self._keys, self._radices, self._per_param_values):
+            axis = remaining % radix
+            remaining //= radix
+            params[key] = values[axis]
+        return params
+
     def propose(self, trial_id: Optional[str] = None) -> Trial:
-        if self._index >= len(self._grid):
+        if self._index >= len(self._indices):
             raise StopIteration("grid exhausted")
-        params = self._grid[self._index]
+        combo_index = self._indices[self._index]
         self._index += 1
-        self._iteration += 1
+        self._next_proposal_index()
+        params = self._decode(combo_index)
         return Trial(
-            trial_id=trial_id or f"grid-{uuid.uuid4().hex[:12]}",
+            trial_id=trial_id or self._make_trial_id("grid", params),
             mutation_id="grid-search",
             status=TrialStatus.PROPOSED,
             metadata={"params": params, "strategy": "grid"},
         )
-
-    def _iteration_count(self) -> int:
-        return self._iteration
-
-    def _set_iteration_count(self, count: int) -> None:
-        self._iteration = int(count)
 
     def _state_fields(self) -> Dict[str, Any]:
         return {
@@ -700,6 +945,7 @@ class GridSearch(SearchStrategy):
                 "grid_points": self.grid_points,
                 "max_combinations": self._max_combinations,
                 "seed": self.seed,
+                "context": self._context.to_dict(),
             },
             "index": self._index,
         }
@@ -735,8 +981,10 @@ class BayesianSearch(SearchStrategy):
         acquisition: str = "ei",
         ucb_kappa: float = 2.576,
         seed: Optional[int] = None,
+        objective_spec: Optional[ObjectiveSpec] = None,
+        context: Optional[StrategyContext] = None,
     ):
-        super().__init__(space, seed)
+        super().__init__(space, seed, objective_spec=objective_spec, context=context)
         self.n_initial = n_initial
         self.acquisition = acquisition
         self.ucb_kappa = ucb_kappa
@@ -752,8 +1000,11 @@ class BayesianSearch(SearchStrategy):
         # a categorical parameter cannot be represented and would produce a
         # garbage float proposal.  Fail closed at construction.
         self._check_categorical_support("BayesianSearch")
-        self._random = RandomSearch(space, seed)
+        # The companion RandomSearch shares the same single direction authority.
+        self._random = RandomSearch(space, seed, context=self._context)
         self._X: List[np.ndarray] = []
+        # FO-P0-03: ``_y`` stores UTILITY (direction_sign * raw_metric), so the
+        # GP always maximizes utility regardless of the objective direction.
         self._y: List[float] = []
         self._length_scale = 1.0
         self._noise = 1e-6
@@ -761,7 +1012,8 @@ class BayesianSearch(SearchStrategy):
     def record(self, params: Dict[str, Any], score: float) -> None:
         super().record(params, score)
         self._X.append(self.space.to_array(params))
-        self._y.append(score)
+        # Store utility so the surrogate's "best" is always the max utility.
+        self._y.append(self._context.to_utility(score))
         self._update_kernel()
 
     def _update_kernel(self) -> None:
@@ -848,26 +1100,29 @@ class BayesianSearch(SearchStrategy):
         return best_x
 
     def propose(self, trial_id: Optional[str] = None) -> Trial:
-        # Not enough data yet -- random initialization
+        # Not enough data yet -- random initialization.  Sample from the
+        # companion RandomSearch's RNG (so its state is checkpointed) but build
+        # the Trial here so the central counter increments exactly once and the
+        # trial identity is derived from this strategy.
         if len(self._X) < self.n_initial:
-            self._iteration += 1
-            return self._random.propose(trial_id)
+            params = self.space.sample(self._random.rng)
+            self._next_proposal_index()
+            return Trial(
+                trial_id=trial_id or self._make_trial_id("bayesian", params),
+                mutation_id="bayesian-search",
+                status=TrialStatus.PROPOSED,
+                metadata={"params": params, "strategy": "bayesian"},
+            )
 
         best_x = self._optimize_acquisition()
-        self._iteration += 1
+        self._next_proposal_index()
         params = self.space.from_array(best_x)
         return Trial(
-            trial_id=trial_id or f"bayes-{uuid.uuid4().hex[:12]}",
+            trial_id=trial_id or self._make_trial_id("bayesian", params),
             mutation_id="bayesian-search",
             status=TrialStatus.PROPOSED,
             metadata={"params": params, "strategy": "bayesian"},
         )
-
-    def _iteration_count(self) -> int:
-        return self._iteration
-
-    def _set_iteration_count(self, count: int) -> None:
-        self._iteration = int(count)
 
     def _state_fields(self) -> Dict[str, Any]:
         return {
@@ -877,6 +1132,7 @@ class BayesianSearch(SearchStrategy):
                 "acquisition": self.acquisition,
                 "ucb_kappa": self.ucb_kappa,
                 "seed": self.seed,
+                "context": self._context.to_dict(),
             },
             "X": [row.tolist() for row in self._X],
             "y": list(self._y),
@@ -916,8 +1172,15 @@ class TPESearch(SearchStrategy):
         gamma: Fraction of observations treated as "good" (best gamma * n).
         n_candidates: Number of candidate points sampled per proposal.
         seed: RNG seed for reproducibility.
-        maximize: If True, higher scores are "good" (e.g. RankIC); if False,
-            lower scores are "good". Defaults to False (minimize).
+        maximize: Backward-compatible convenience.  If True, higher scores are
+            "good"; if False, lower scores are "good".  Defaults to False
+            (minimize) for historical compatibility.  When ``objective_spec``
+            or ``context`` is also supplied, ``maximize`` must agree with it;
+            the spec/context is the single direction authority (FO-P0-03).
+        objective_spec: The authoritative ObjectiveSpec (single direction
+            authority).  When supplied, the strategy's direction is derived
+            from it and ``maximize`` cannot disagree.
+        context: A StrategyContext carrying the authoritative ObjectiveSpec.
     """
 
     def __init__(
@@ -927,13 +1190,10 @@ class TPESearch(SearchStrategy):
         gamma: float = 0.25,
         n_candidates: int = 24,
         seed: Optional[int] = None,
-        maximize: bool = False,
+        maximize: Optional[bool] = None,
+        objective_spec: Optional[ObjectiveSpec] = None,
+        context: Optional[StrategyContext] = None,
     ):
-        super().__init__(space, seed)
-        self.n_initial = n_initial
-        self.gamma = gamma
-        self.n_candidates = n_candidates
-        self.maximize = maximize
         if not isinstance(n_initial, int) or isinstance(n_initial, bool) or n_initial < 0:
             raise ValueError("n_initial must be a non-negative integer")
         if not isinstance(gamma, numbers.Real) or isinstance(gamma, bool):
@@ -942,18 +1202,55 @@ class TPESearch(SearchStrategy):
             raise ValueError("gamma must be a number in (0, 1]")
         if not isinstance(n_candidates, int) or isinstance(n_candidates, bool) or n_candidates < 1:
             raise ValueError("n_candidates must be a positive integer")
-        if not isinstance(maximize, bool):
+        if maximize is not None and not isinstance(maximize, bool):
             raise ValueError("maximize must be a boolean")
+        # Resolve the single direction authority.  The spec/context wins; the
+        # legacy ``maximize`` flag is reconciled against it and rejected if it
+        # disagrees, so the strategy can never drift from the objective.
+        if context is not None:
+            if not isinstance(context, StrategyContext):
+                raise TypeError("context must be a StrategyContext (or None)")
+            eff_context = context
+        elif objective_spec is not None:
+            if not isinstance(objective_spec, ObjectiveSpec):
+                raise TypeError("objective_spec must be an ObjectiveSpec (or None)")
+            eff_context = StrategyContext(objective_spec=objective_spec)
+        else:
+            # Backward-compatible default: the ObjectiveSpec defaults to
+            # maximize (matching the runner's default), unless the legacy
+            # ``maximize`` flag is explicitly supplied.
+            if maximize is None:
+                direction = "maximize"
+            else:
+                direction = "maximize" if maximize else "minimize"
+            eff_context = StrategyContext(
+                objective_spec=ObjectiveSpec.from_direction(direction)
+            )
+        if maximize is not None:
+            spec_dir = eff_context.direction
+            if (maximize and spec_dir != "maximize") or (
+                not maximize and spec_dir != "minimize"
+            ):
+                raise ValueError(
+                    "maximize and objective_spec/context disagree; the "
+                    "objective spec is the single direction authority"
+                )
+        super().__init__(space, seed, context=eff_context)
+        self.n_initial = n_initial
+        self.gamma = gamma
+        self.n_candidates = n_candidates
         # FO-P0-03 / FO-P0-07: TPE's Parzen-estimator kernels require numeric
         # parameters.  Reject categorical parameters fail-closed at
         # construction rather than producing garbage proposals.
         self._check_categorical_support("TPESearch")
         # Dedicated NumPy RNG so all stochastic ops are reproducible from seed.
         self.np_rng = np.random.default_rng(seed)
-        self._random = RandomSearch(space, seed)
+        self._random = RandomSearch(space, seed, context=self._context)
 
     def record(self, params: Dict[str, Any], score: float) -> None:
-        super().record(params, score)
+        # Store UTILITY (direction_sign * raw_metric) so the "good" partition
+        # is always the highest-utility observations regardless of direction.
+        self._history.append((dict(params), self._context.to_utility(score)))
 
     def _kde_sample(
         self,
@@ -998,18 +1295,19 @@ class TPESearch(SearchStrategy):
 
     def propose(self, trial_id: Optional[str] = None) -> Trial:
         if len(self._history) < self.n_initial:
-            self._iteration += 1
-            return self._random.propose(trial_id)
+            params = self.space.sample(self._random.rng)
+            self._next_proposal_index()
+            return Trial(
+                trial_id=trial_id or self._make_trial_id("tpe", params),
+                mutation_id="tpe-search",
+                status=TrialStatus.PROPOSED,
+                metadata={"params": params, "strategy": "tpe"},
+            )
 
-        # Sort observations by score
-        # The "good" group is always the best-scoring ones, which depends on
-        # the objective direction: highest scores when maximizing, lowest when
-        # minimizing.
-        sorted_hist = sorted(
-            self._history,
-            key=lambda t: t[1],
-            reverse=self.maximize,
-        )
+        # History stores UTILITY (direction_sign * raw_metric), so the "good"
+        # group is always the highest-utility observations — the strategy
+        # always maximizes utility regardless of the objective direction.
+        sorted_hist = sorted(self._history, key=lambda t: t[1], reverse=True)
         n_good = max(1, int(math.ceil(self.gamma * len(sorted_hist))))
         good = sorted_hist[:n_good]
         bad = sorted_hist[n_good:]
@@ -1064,18 +1362,13 @@ class TPESearch(SearchStrategy):
                 best_score = score
                 best_params = candidate
 
+        self._next_proposal_index()
         return Trial(
-            trial_id=trial_id or f"tpe-{uuid.uuid4().hex[:12]}",
+            trial_id=trial_id or self._make_trial_id("tpe", best_params),
             mutation_id="tpe-search",
             status=TrialStatus.PROPOSED,
             metadata={"params": best_params, "strategy": "tpe"},
         )
-
-    def _iteration_count(self) -> int:
-        return self._iteration
-
-    def _set_iteration_count(self, count: int) -> None:
-        self._iteration = int(count)
 
     def _state_fields(self) -> Dict[str, Any]:
         return {
@@ -1085,7 +1378,7 @@ class TPESearch(SearchStrategy):
                 "gamma": self.gamma,
                 "n_candidates": self.n_candidates,
                 "seed": self.seed,
-                "maximize": self.maximize,
+                "context": self._context.to_dict(),
             },
         }
 

@@ -24,6 +24,9 @@ _BUILD_LIB = Path(__file__).resolve().parents[1] / "build" / "lib"
 #: Code run inside each subprocess.  Prints a JSON digest keyed by the
 #: identity surface so the parent can compare cross-process.
 _SUBPROCESS_SNIPPET = r"""
+import datetime
+import decimal
+import enum
 import json
 import sys
 
@@ -31,6 +34,7 @@ import numpy as np
 
 sys.path.insert(0, "@BUILD_LIB@")
 
+from quant_evaluator.contracts._hashutil import canonicalize, stable_content_hex
 from quant_evaluator.contracts.artifact_types import (
     ExposureArtifact,
     ICSeriesArtifact,
@@ -49,6 +53,11 @@ from quant_evaluator.runtime.intermediates import CacheKey, compute_input_hash
 
 vals = np.arange(6.0).reshape(2, 3)
 matrix = np.arange(12.0).reshape(2, 2, 3)
+
+
+class _Color(enum.Enum):
+    RED = 1
+
 
 digest = {
     "ICSeriesArtifact": hash(ICSeriesArtifact(values=vals)),
@@ -97,6 +106,31 @@ digest = {
     ).content_hash,
     # Different payload must yield a different identity (content addressed).
     "ICSeriesArtifact_ones": hash(ICSeriesArtifact(values=np.ones((2, 3)))),
+    # QE-P0-06: new codec surfaces must be cross-process stable.
+    "codec_datetime": stable_content_hex(
+        tag="t", fields={"when": datetime.datetime(2024, 1, 1, 12, 0, 0)}
+    ),
+    "codec_date": stable_content_hex(
+        tag="t", fields={"day": datetime.date(2024, 1, 1)}
+    ),
+    "codec_timedelta": stable_content_hex(
+        tag="t", fields={"dt": datetime.timedelta(seconds=90)}
+    ),
+    "codec_decimal": stable_content_hex(
+        tag="t", fields={"amount": decimal.Decimal("1.5")}
+    ),
+    "codec_bytes": stable_content_hex(tag="t", fields={"blob": b"\x00\x01\x02"}),
+    "codec_enum": stable_content_hex(tag="t", fields={"c": _Color.RED}),
+    "codec_np_scalar": stable_content_hex(tag="t", fields={"x": np.float32(1.5)}),
+    "codec_float32_array": stable_content_hex(
+        tag="t", fields={"a": np.array([0.1, 0.2], dtype=np.float32)}
+    ),
+    "codec_int8_array": stable_content_hex(
+        tag="t", fields={"a": np.array([1, 2], dtype=np.int8)}
+    ),
+    "codec_datetime64": stable_content_hex(
+        tag="t", fields={"a": np.array(["2024-01-01"], dtype="datetime64[D]")}
+    ),
 }
 
 print(json.dumps(digest, sort_keys=True))

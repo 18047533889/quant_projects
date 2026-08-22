@@ -3,6 +3,7 @@ Fitted transform state contract.
 """
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 from typing import Any, Dict, List, Mapping, Optional
 
 import numpy as np
@@ -12,6 +13,13 @@ from factor_preprocess.errors import (
     InvalidContractError,
     TimingContractError,
 )
+
+
+class StateKind(Enum):
+    """Whether a transform requires fitted state."""
+
+    STATELESS = "stateless"
+    FITTED = "fitted"
 
 
 class _FrozenMapping(Mapping):
@@ -88,14 +96,25 @@ class FittedState:
     Immutable state from fitting a transform.
 
     Records fit window, learned parameters, and metadata for reproducibility.
+
+    FP-P0-04: in production mode (``production=True``) the ``state_id`` is
+    content-derived from the full provenance surface and caller-supplied
+    ``state_id`` values are rejected (fail-closed). Production also requires
+    the provenance fields (implementation_hash, data_snapshot_ref, split_ref,
+    universe_ref, calendar_ref, fit_coordinate_hash, policy_hash).
+
+    FP-P0-05: a ``StateKind.FITTED`` transform must carry a non-empty feature
+    contract. Empty ``feature_ids`` must NOT fail-open for stateful
+    transforms; ``is_compatible_with`` raises for a FITTED state with no
+    feature contract.
     """
-    state_id: str
     transform_name: str
     transform_version: str
-
-    # Fit window metadata (required for causality)
     fit_start_time: datetime
     fit_end_time: datetime
+    state_id: str = ""
+
+    state_kind: StateKind = StateKind.STATELESS
     fit_universe_ref: Optional[str] = None
 
     # Feature contract
@@ -106,13 +125,17 @@ class FittedState:
     learned_params: Dict[str, Any] = field(default_factory=dict)
     # Content-derived hash of learned_params. Recomputed from the actual
     # learned_params; a provided value is validated against the recomputation
-    # and any mismatch is rejected (FP-P0-05).
+    # and any mismatch is rejected.
     learned_params_hash: Optional[str] = None
 
-    # Content-derived provenance (FP-P0-05)
+    # Content-derived provenance
     implementation_hash: Optional[str] = None  # hash of transform implementation/version
     data_snapshot_ref: Optional[str] = None    # hash or ref of the fit-time data snapshot
     split_ref: Optional[str] = None            # reference to the train/test split used
+    universe_ref: Optional[str] = None         # universe used at fit time
+    calendar_ref: Optional[str] = None         # calendar used at fit time
+    fit_coordinate_hash: Optional[str] = None  # hash of the fit coordinates
+    policy_hash: Optional[str] = None          # hash of the governing policy
 
     # Provenance
     config_hash: Optional[str] = None
@@ -120,10 +143,12 @@ class FittedState:
     producer: str = "factor_preprocess"
     producer_version: str = "0.1.0"
 
+    # FP-P0-04: when True, state_id is content-derived and provenance fields
+    # are required (fail-closed).
+    production: bool = False
+
     def __post_init__(self):
         """Validate state on construction."""
-        if not self.state_id:
-            raise MissingInputError("FittedState.state_id cannot be empty")
         if not self.transform_name:
             raise MissingInputError("FittedState.transform_name cannot be empty")
 
@@ -141,13 +166,20 @@ class FittedState:
         if set(self.feature_order) != set(self.feature_ids):
             raise InvalidContractError("feature_order must contain exactly feature_ids")
 
+        # FP-P0-05: a FITTED transform must carry a non-empty feature contract.
+        # Empty feature_ids must NOT fail-open for stateful transforms.
+        if self.state_kind == StateKind.FITTED and not self.feature_ids:
+            raise InvalidContractError(
+                "FITTED state requires a non-empty feature contract (fail-closed)"
+            )
+
         object.__setattr__(self, "feature_ids", tuple(self.feature_ids))
         object.__setattr__(self, "feature_order", tuple(self.feature_order))
         object.__setattr__(self, "learned_params", _freeze(self.learned_params))
 
-        # FP-P0-05: learned_params_hash must be derived from the actual
-        # learned_params content. None is rejected; a provided hash is
-        # validated against the recomputed value.
+        # learned_params_hash must be derived from the actual learned_params
+        # content. None is rejected; a provided hash is validated against the
+        # recomputed value.
         actual_hash = _content_hash(self.learned_params)
         if self.learned_params_hash is None:
             object.__setattr__(self, "learned_params_hash", actual_hash)
@@ -156,9 +188,58 @@ class FittedState:
                 "learned_params_hash does not match learned_params content"
             )
 
+        # FP-P0-04: production provenance + content-derived state_id.
+        if self.production:
+            required = {
+                "implementation_hash": self.implementation_hash,
+                "data_snapshot_ref": self.data_snapshot_ref,
+                "split_ref": self.split_ref,
+                "universe_ref": self.universe_ref,
+                "calendar_ref": self.calendar_ref,
+                "fit_coordinate_hash": self.fit_coordinate_hash,
+                "policy_hash": self.policy_hash,
+            }
+            missing = [k for k, v in required.items() if not v]
+            if missing:
+                raise InvalidContractError(
+                    f"production FittedState requires provenance fields: {missing}"
+                )
+            if self.state_id:
+                raise InvalidContractError(
+                    "state_id is content-derived in production; "
+                    "caller-supplied state_id is rejected"
+                )
+            object.__setattr__(self, "state_id", self._derive_state_id())
+        elif not self.state_id:
+            raise MissingInputError("FittedState.state_id cannot be empty")
+
+    def _derive_state_id(self) -> str:
+        """Content-derived identity over the full provenance surface."""
+        components = {
+            "transform_name": self.transform_name,
+            "transform_version": self.transform_version,
+            "implementation_hash": self.implementation_hash,
+            "learned_params_hash": self.learned_params_hash,
+            "data_snapshot_ref": self.data_snapshot_ref,
+            "split_ref": self.split_ref,
+            "universe_ref": self.universe_ref,
+            "calendar_ref": self.calendar_ref,
+            "fit_coordinate_hash": self.fit_coordinate_hash,
+            "feature_order": tuple(self.feature_order),
+            "policy_hash": self.policy_hash,
+        }
+        return _content_hash(components)
+
     def is_compatible_with(self, factor_ids: List[str]) -> bool:
         """Check if factors match the positional fitted feature contract."""
+        if self.state_kind == StateKind.FITTED:
+            # Fail-closed: a FITTED state must have a feature contract.
+            if not self.feature_ids:
+                raise InvalidContractError(
+                    "FITTED state has no feature contract (fail-closed)"
+                )
+            return tuple(factor_ids) == self.feature_order
+        # STATELESS: no feature contract required.
         if not self.feature_ids:
-            # No feature contract, assume compatible
             return True
         return tuple(factor_ids) == self.feature_order

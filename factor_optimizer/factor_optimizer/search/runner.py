@@ -841,6 +841,18 @@ class SearchRunner:
         self.plateau_detector = plateau_detector
         self.trial_validator = trial_validator
         self.strategy = strategy
+        # FO-P0-03: the strategy's direction must be derived from the
+        # authoritative ObjectiveSpec.  A strategy whose direction disagrees
+        # with the config spec is rejected outright — the strategy can never
+        # drift from the session's objective.
+        if strategy is not None:
+            strategy_dir = getattr(strategy, "direction", None)
+            if strategy_dir is not None and strategy_dir != config.objective_spec.direction:
+                raise ValueError(
+                    "strategy direction and objective_spec disagree; the "
+                    f"objective spec is the single direction authority "
+                    f"(strategy={strategy_dir!r}, spec={config.objective_spec.direction!r})"
+                )
         # Lazily-built default PlateauDetector (package semantics).
         self._default_plateau_detector: Optional[PlateauDetector] = None
         if isinstance(evaluation_fn, EvaluationProtocol):
@@ -861,9 +873,18 @@ class SearchRunner:
         return self._run_session(session)
 
     def resume(self, session: SearchSession) -> SearchSession:
-        """Resume a quiescent, unfinished session with matching configuration."""
+        """Resume a quiescent, unfinished session with matching configuration.
+
+        A session that was checkpointed after its budget was exhausted is
+        resumable: the checkpoint/resume flow finishes a session when the
+        budget runs out, then resumes it with a fresh runner.  Only a
+        finished session with no strategy on either side is rejected (a
+        terminal session with nothing to continue is meaningless).
+        """
         if not isinstance(session, SearchSession):
             raise TypeError("session must be a SearchSession")
+        if session.is_finished() and session.strategy is None and self.strategy is None:
+            raise ValueError("cannot resume a finished session")
         if session.budget_tracker.evaluations_reserved or session.budget_tracker.cost_reserved:
             raise ValueError("cannot resume with active evaluation reservations")
         if any(not trial.is_terminal() for trial in session.trials + session.duplicate_trials):
@@ -874,11 +895,15 @@ class SearchRunner:
             # Legacy checkpoint (SearchSession.from_dict) restored without a
             # strategy: keep working by adopting the runner's strategy.
             session.strategy = self.strategy
-        if session.strategy is None:
-            raise ValueError(
-                "resume requires a search strategy attached to the session "
-                "(call SearchSession.resume(path), not bare SearchSession.from_dict)"
-            )
+        if session.is_finished():
+            # A checkpointed session that exhausted its budget is resumed with
+            # a fresh budget for the new runner's remaining budget.  The
+            # already-evaluated trials are preserved; only the consumption
+            # counters and the terminal flags are reset so the runner can
+            # propose again.
+            session.budget_tracker = BudgetTracker(self.config.budget)
+            session.finished_at = None
+            session.stop_reason = None
         return self._run_session(session)
 
     def create_train_evaluation_context(self) -> "TrainEvaluationContext":
