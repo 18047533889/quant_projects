@@ -64,19 +64,13 @@ PACKAGES: tuple[str, ...] = (
 # evidence injection (all gates stay NOT_RUN).
 VERIFIED_EVIDENCE_PATH = EVIDENCE_DIR / "verified_gate_evidence.json"
 
-# Gates that are proven by the UNIT pytest check and the manifest itself.
-# NOTE: this is a conservative list.  Nothing here is marked PASS for a gate
-# unless evidence below (or the current-tree run) actually proves it.
-_PROVABLE_GATE_NAMES: frozenset[str] = frozenset({
-    "UNIT",
-    "NUMERICAL_ORACLE",
-    "PROPERTY",
-    "CROSS_PACKAGE",
-    "SERIALIZATION",
-    "CHECKPOINT_RESUME",
-    "ASHARE_SEMANTIC_CONTRACT_GOLDEN",
-    "ASHARE_REAL_DATA_SHADOW",
-})
+# NOTE: the concept of a "provable set" has been removed.  Every gate with
+# honest machine-verified evidence (command_hash + exit_code==0 + failed==0
+# + errors==0 + tests>0) is upgraded to PASS.  Hard-coding a subset of gates
+# as "provable" was a mistake: it excluded LEAKAGE, PIT, DETERMINISM,
+# FRESH_WHEEL, 1K_SCALE, 10K_SCALE, 100K_SCALE from ever being promoted even
+# when the evidence file proved them.  The evidence validation below is the
+# only gatekeeper — it never fabricates PASS.
 
 # Top-level dirs ignored when hashing a package source tree (never release code).
 _EXCLUDE_DIR_NAMES: frozenset[str] = frozenset({
@@ -390,6 +384,12 @@ def apply_verified_evidence(gates: list[dict], verbose: bool = True) -> list[dic
 
     Any gate NOT covered by honest evidence stays NOT_RUN -- the manifest must
     not overclaim.
+
+    Note: historically only a hard-coded _PROVABLE_GATE_NAMES subset could be
+    upgraded to PASS; LEAKAGE, PIT, DETERMINISM, FRESH_WHEEL, 1K_SCALE,
+    10K_SCALE, 100K_SCALE were excluded even when the evidence proved them.
+    That exclusion has been removed: the machine-field validation below is the
+    only gatekeeper, applied uniformly to ALL gates.
     """
     entries = _load_verified_evidence()
     if entries is None:
@@ -400,10 +400,6 @@ def apply_verified_evidence(gates: list[dict], verbose: bool = True) -> list[dic
         try:
             g = _gate(gates, name)
         except KeyError:
-            continue
-        if name not in _PROVABLE_GATE_NAMES:
-            if verbose:
-                print(f"  [skip] gate {name}: not in provable set", file=sys.stderr)
             continue
         if g["status"] != "NOT_RUN":
             if verbose:

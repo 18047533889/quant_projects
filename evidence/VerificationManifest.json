@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "manifest_id": "rel-v1:2026-08-22T06:25:27.070721+00:00",
-  "timestamp": "2026-08-22T06:25:27.070721+00:00",
+  "manifest_id": "rel-v1:2026-08-22T06:31:04.261307+00:00",
+  "timestamp": "2026-08-22T06:31:04.261307+00:00",
   "host": "qs-data-ingest-hk-01",
   "source_snapshot": {
-    "git_sha": "9ba0c3a03d60210e280d13df4474adca59583c5b",
+    "git_sha": "661f833a8006889a73c7afd52feb2e0e72591fec",
     "git_dirty": true,
     "submodule_shas": {
-      "factor_engine": "fba4d00b3188c07c24653ae1562918eb0af84c4c",
+      "factor_engine": "dd46119a835c02e695eab07784029bee96f754af",
       "dataaccess": "05ab62715fec3dda71d8ffde3388411f9cf28910"
     },
     "git_repo": true
@@ -16,8 +16,8 @@
     "factor_engine": {
       "tree_sha256": "749e1493cf42e8462a7a574763ce4133c459a6dc75e3e9ce09884d7868e8c920",
       "wheel_sha256": null,
-      "git_sha": "fba4d00b3188c07c24653ae1562918eb0af84c4c",
-      "git_dirty": true
+      "git_sha": "dd46119a835c02e695eab07784029bee96f754af",
+      "git_dirty": false
     },
     "quant_evaluator": {
       "tree_sha256": "bb32b9672899ebd3ca19df1fdcaaa7b046077faa37cf750a7c7c4db27cdd620d",
@@ -212,20 +212,114 @@
     {
       "name": "LEAKAGE",
       "description": "No look-ahead / PIT / label / temporal leakage in factors and labels.",
-      "status": "NOT_RUN",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "factor_engine/tests/modeling/test_evaluation_leakage_evidence.py",
+          "command_hash": "1250e05895f32b4b8eb1cda6e4b57ac2e0403b3f81b470d0722ae471f92fc7ba",
+          "exit_code": 0,
+          "passed": 14,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "tests": 14,
+          "duration_sec": 81.381,
+          "executed_at": "2026-08-22T06:19:45.312186+00:00",
+          "run_at": "2026-08-22T06:19:45.312186+00:00"
+        },
+        {
+          "test": "factor_preprocess/tests/contracts/test_leakage_properties.py",
+          "command_hash": "1d70e313c5274fb71971c6c6befc093afa3e91ef68c9ea6b8084bdec26631dd2",
+          "exit_code": 0,
+          "passed": 4,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "tests": 4,
+          "duration_sec": 0.965,
+          "executed_at": "2026-08-22T06:19:46.277919+00:00",
+          "run_at": "2026-08-22T06:19:46.277919+00:00"
+        }
+      ]
     },
     {
       "name": "PIT",
       "description": "Point-in-time availability semantics verified.",
-      "status": "NOT_RUN",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "factor_engine/tests/runtime/test_pit_audit.py",
+          "command_hash": "95dfee3718734613c715db90f7408ea38ff688a567b2019424229f209485f154",
+          "exit_code": 0,
+          "passed": 3,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "tests": 3,
+          "duration_sec": 81.088,
+          "executed_at": "2026-08-22T06:21:07.366704+00:00",
+          "run_at": "2026-08-22T06:21:07.366704+00:00"
+        },
+        {
+          "test": "factor_engine/tests/runtime/test_label_pit.py",
+          "command_hash": "37e99c293732eb6578f39f99bace61e66df3eb06f128e64bdf1faee5d478cad2",
+          "exit_code": 0,
+          "passed": 4,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "tests": 4,
+          "duration_sec": 1.379,
+          "executed_at": "2026-08-22T06:21:08.746351+00:00",
+          "run_at": "2026-08-22T06:21:08.746351+00:00"
+        },
+        {
+          "test": "factor_engine/tests/runtime/test_r10_pit_tristate.py",
+          "command_hash": "8d10468463b8bb51346453b3acf2008c3cf0c13f753908615defc38fc96d946f",
+          "exit_code": 0,
+          "passed": 5,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "tests": 5,
+          "duration_sec": 1.387,
+          "executed_at": "2026-08-22T06:21:10.133712+00:00",
+          "run_at": "2026-08-22T06:21:10.133712+00:00"
+        }
+      ]
     },
     {
       "name": "DETERMINISM",
       "description": "Same inputs + same pinned environment yield bit-identical outputs across runs/threads.",
-      "status": "NOT_RUN",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "factor_engine/tests/test_comprehensive_data_consistency.py",
+          "command_hash": "280f819a963e112ce5507fa4c72bc32c7252ab8ebb5f5605f8132114ab69ad2b",
+          "exit_code": 0,
+          "passed": 12,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "tests": 12,
+          "duration_sec": 1.775,
+          "executed_at": "2026-08-22T06:21:11.909414+00:00",
+          "run_at": "2026-08-22T06:21:11.909414+00:00"
+        },
+        {
+          "test": "factor_engine/tests/backend/test_r21_def5_payload_hash.py",
+          "command_hash": "954e97bcb29fb435b24ce00a70d40be9f5f148e007e7bb22e98f732063b61a16",
+          "exit_code": 0,
+          "passed": 7,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "tests": 7,
+          "duration_sec": 1.411,
+          "executed_at": "2026-08-22T06:21:13.321055+00:00",
+          "run_at": "2026-08-22T06:21:13.321055+00:00"
+        }
+      ]
     },
     {
       "name": "SERIALIZATION",
@@ -289,20 +383,62 @@
     {
       "name": "1K_SCALE",
       "description": "Correctness/performance hold at 1K-row scale.",
-      "status": "NOT_RUN",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "quant_evaluator/tests/test_scale_gates.py",
+          "command_hash": "5c14a7a6347e06ef39c78bd42466a988ee60b825cb5f05ea55d0a33ead2a1b9d",
+          "exit_code": 0,
+          "passed": 1,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "tests": 1,
+          "duration_sec": 1.02,
+          "executed_at": "2026-08-22T06:21:15.705091+00:00",
+          "run_at": "2026-08-22T06:21:15.705091+00:00"
+        }
+      ]
     },
     {
       "name": "10K_SCALE",
       "description": "Correctness/performance hold at 10K-row scale.",
-      "status": "NOT_RUN",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "quant_evaluator/tests/test_scale_gates.py",
+          "command_hash": "c882e50ff6a031bb97bf7ae68f7f1aade348a455864c25b256c118475b75c346",
+          "exit_code": 0,
+          "passed": 1,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "tests": 1,
+          "duration_sec": 0.997,
+          "executed_at": "2026-08-22T06:21:16.702276+00:00",
+          "run_at": "2026-08-22T06:21:16.702276+00:00"
+        }
+      ]
     },
     {
       "name": "100K_SCALE",
       "description": "Correctness/performance hold at 100K-row scale.",
-      "status": "NOT_RUN",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "quant_evaluator/tests/test_scale_gates.py",
+          "command_hash": "d3b5bb02d651abe1d4dee290f7d2a8f51ef9d44fb51c499355c9ea0ac68adb3e",
+          "exit_code": 0,
+          "passed": 3,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "tests": 3,
+          "duration_sec": 1.069,
+          "executed_at": "2026-08-22T06:21:17.771393+00:00",
+          "run_at": "2026-08-22T06:21:17.771393+00:00"
+        }
+      ]
     },
     {
       "name": "ASHARE_SEMANTIC_CONTRACT_GOLDEN",
