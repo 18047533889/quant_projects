@@ -1,8 +1,8 @@
 {
   "schema_version": 2,
   "generated_by": "refresh_gate_evidence",
-  "git_sha": "2e3face355a5e860dd2dbcb85c8aa02ae17d377c",
-  "timestamp": "2026-08-22T16:36:09.533750+00:00",
+  "git_sha": "49b81f00dc6c7ec4ef32a056f171c35a416bcf3d",
+  "timestamp": "2026-08-22T16:46:42.662420+00:00",
   "gates": [
     {
       "name": "NUMERICAL_ORACLE",
@@ -11,7 +11,7 @@
         {
           "test": "quant_evaluator/tests/test_numerical_oracle.py",
           "result": "passed",
-          "command_hash": "62a4a8b44abf065f8788dadf6232470e9071a802df99657a1b3ee950acc0f8e3",
+          "command_hash": "bc51ef628c9f4b5dcb540f0bb72bed9afb4b909278b718f7dbadc0ab854fdba5",
           "exit_code": 0,
           "passed": 13,
           "failed": 0,
@@ -21,9 +21,9 @@
           "xpassed": 0,
           "tests": 13,
           "collected_tests": null,
-          "duration_sec": 5.388,
-          "executed_at": "2026-08-22T16:29:31.527427+00:00",
-          "run_at": "2026-08-22T16:29:31.527427+00:00"
+          "duration_sec": 5.37,
+          "executed_at": "2026-08-22T16:40:06.825749+00:00",
+          "run_at": "2026-08-22T16:40:06.825749+00:00"
         }
       ]
     },
@@ -34,7 +34,7 @@
         {
           "test": "quant_evaluator/tests/test_metamorphic.py",
           "result": "passed",
-          "command_hash": "04983a89f444e1f3f92394615dcf69f8cdfc2c00e879152b4516e55b30e33124",
+          "command_hash": "bc8fd6ac0b7424ec2f9724ad23b7c8df89d1c691426b7809f90e0974fa5843eb",
           "exit_code": 0,
           "passed": 18,
           "failed": 0,
@@ -44,14 +44,14 @@
           "xpassed": 0,
           "tests": 20,
           "collected_tests": null,
-          "duration_sec": 1.479,
-          "executed_at": "2026-08-22T16:29:33.006928+00:00",
-          "run_at": "2026-08-22T16:29:33.006928+00:00"
+          "duration_sec": 1.383,
+          "executed_at": "2026-08-22T16:40:08.209401+00:00",
+          "run_at": "2026-08-22T16:40:08.209401+00:00"
         },
         {
           "test": "quant_evaluator/tests/test_consistency.py",
           "result": "passed",
-          "command_hash": "4cda1d380203de20dcf3022758bd42868434b11d3c73acf3cbdc07a2af8c300d",
+          "command_hash": "1f4e5e3d69d75d8c129a8250ebdbb2359b1814b1cade2007b4d016d96d681114",
           "exit_code": 0,
           "passed": 11,
           "failed": 0,
@@ -61,9 +61,9 @@
           "xpassed": 0,
           "tests": 11,
           "collected_tests": null,
-          "duration_sec": 1.502,
-          "executed_at": "2026-08-22T16:29:34.509577+00:00",
-          "run_at": "2026-08-22T16:29:34.509577+00:00"
+          "duration_sec": 1.433,
+          "executed_at": "2026-08-22T16:40:09.642281+00:00",
+          "run_at": "2026-08-22T16:40:09.642281+00:00"
         }
       ]
     },
@@ -74,7 +74,7 @@
         {
           "test": "integration_tests/test_cross_package_contracts.py",
           "result": "passed",
-          "command_hash": "8af137e15990d0ecda00807124da159aaef07a2d73adf4fd42c72f9e42880bd4",
+          "command_hash": "1941620d47609a0aa98d0ba3f333f4b5f230624b0841db1220b2b239f637bad7",
           "exit_code": 0,
           "passed": 4,
           "failed": 0,
@@ -84,9 +84,9 @@
           "xpassed": 0,
           "tests": 6,
           "collected_tests": null,
-          "duration_sec": 1.445,
-          "executed_at": "2026-08-22T16:29:35.954975+00:00",
-          "run_at": "2026-08-22T16:29:35.954975+00:00"
+          "duration_sec": 1.435,
+          "executed_at": "2026-08-22T16:40:11.077520+00:00",
+          "run_at": "2026-08-22T16:40:11.077520+00:00"
         }
       ]
     },
@@ -97,7 +97,7 @@
         {
           "test": "integration_tests/test_ashare_semantic_golden.py",
           "result": "passed",
-          "command_hash": "4abbfe2012e6b81c26cdc9469bda0bd649aeb6e37a57f47296360cb5f669528a",
+          "command_hash": "7a371f829db0b321e123b7a6bb3217743eac27dcc61eb18b02e3a1e096c3deb4",
           "exit_code": 0,
           "passed": 8,
           "failed": 0,
@@ -107,9 +107,9 @@
           "xpassed": 0,
           "tests": 8,
           "collected_tests": null,
-          "duration_sec": 1.724,
-          "executed_at": "2026-08-22T16:29:37.679247+00:00",
-          "run_at": "2026-08-22T16:29:37.679247+00:00"
+          "duration_sec": 1.701,
+          "executed_at": "2026-08-22T16:40:12.778422+00:00",
+          "run_at": "2026-08-22T16:40:12.778422+00:00"
         }
       ]
     },
@@ -120,7 +120,7 @@
         {
           "test": "integration_tests/test_real_ashare_shadow.py",
           "result": "passed",
-          "command_hash": "69e2a2f6ae09be7115fe14137d8d2f30fc193c75c4f97695c68ad735e6f85483",
+          "command_hash": "e374edb8279068b66d97b8a9ea82390c3b36d030f0867a2ac81ee24300bb7e6e",
           "exit_code": 0,
           "passed": 4,
           "failed": 0,
@@ -130,9 +130,9 @@
           "xpassed": 0,
           "tests": 4,
           "collected_tests": null,
-          "duration_sec": 1.805,
-          "executed_at": "2026-08-22T16:29:39.484305+00:00",
-          "run_at": "2026-08-22T16:29:39.484305+00:00"
+          "duration_sec": 1.804,
+          "executed_at": "2026-08-22T16:40:14.582732+00:00",
+          "run_at": "2026-08-22T16:40:14.582732+00:00"
         }
       ]
     },
@@ -143,7 +143,7 @@
         {
           "test": "quant_evaluator/tests/test_qe_serialization.py",
           "result": "passed",
-          "command_hash": "37f5d9f0a5c399b15ff4ff0f716f6550338ecfc5d3d04e4b7a320a14c152fdc4",
+          "command_hash": "15c9c93aafec6d7c6a8d7aae567fea950c1dc32cfa8ce820b5ceb5b0821f0ae6",
           "exit_code": 0,
           "passed": 36,
           "failed": 0,
@@ -153,14 +153,14 @@
           "xpassed": 0,
           "tests": 36,
           "collected_tests": null,
-          "duration_sec": 1.045,
-          "executed_at": "2026-08-22T16:29:40.529884+00:00",
-          "run_at": "2026-08-22T16:29:40.529884+00:00"
+          "duration_sec": 1.006,
+          "executed_at": "2026-08-22T16:40:15.588862+00:00",
+          "run_at": "2026-08-22T16:40:15.588862+00:00"
         },
         {
           "test": "factor_assets/tests/registry/test_serialization_codec.py",
           "result": "passed",
-          "command_hash": "af05e882d6391ec69ad7f115e55cd6bb97350921b656dcbb89e09dd1edbfdfbe",
+          "command_hash": "315c761df54045fa9c55910762bb43aee67e2307f51e80342ba2f30aa0947975",
           "exit_code": 0,
           "passed": 17,
           "failed": 0,
@@ -170,9 +170,9 @@
           "xpassed": 0,
           "tests": 17,
           "collected_tests": null,
-          "duration_sec": 0.271,
-          "executed_at": "2026-08-22T16:29:40.800745+00:00",
-          "run_at": "2026-08-22T16:29:40.800745+00:00"
+          "duration_sec": 0.27,
+          "executed_at": "2026-08-22T16:40:15.858700+00:00",
+          "run_at": "2026-08-22T16:40:15.858700+00:00"
         }
       ]
     },
@@ -183,7 +183,7 @@
         {
           "test": "factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py",
           "result": "passed",
-          "command_hash": "efdb461c81314f35c5351c4082d80fdb6decfb430668127f260030682679ab05",
+          "command_hash": "3ddf17942d9dab8a28cee2c34297d48ac36d8ecc22a063b3f4b812516aa9755f",
           "exit_code": 0,
           "passed": 3,
           "failed": 0,
@@ -193,9 +193,9 @@
           "xpassed": 0,
           "tests": 3,
           "collected_tests": null,
-          "duration_sec": 1.437,
-          "executed_at": "2026-08-22T16:29:42.238315+00:00",
-          "run_at": "2026-08-22T16:29:42.238315+00:00"
+          "duration_sec": 1.441,
+          "executed_at": "2026-08-22T16:40:17.299699+00:00",
+          "run_at": "2026-08-22T16:40:17.299699+00:00"
         }
       ]
     },
@@ -206,7 +206,7 @@
         {
           "test": "factor_engine/tests/test_capability_registry.py",
           "result": "passed",
-          "command_hash": "a7ab0bfa3e9d557befcf8fb8914bc0cc10a7d43091bdfe2d49ae11ad247747ff",
+          "command_hash": "612f8886b4fe17d3d7b7f959a2304878d6ba33bc0e1c8582b2b71dc565403a50",
           "exit_code": 0,
           "passed": 23,
           "failed": 0,
@@ -216,14 +216,14 @@
           "xpassed": 0,
           "tests": 23,
           "collected_tests": null,
-          "duration_sec": 2.219,
-          "executed_at": "2026-08-22T16:29:44.457763+00:00",
-          "run_at": "2026-08-22T16:29:44.457763+00:00"
+          "duration_sec": 2.189,
+          "executed_at": "2026-08-22T16:40:19.488942+00:00",
+          "run_at": "2026-08-22T16:40:19.488942+00:00"
         },
         {
           "test": "factor_engine/tests/test_concurrency_safety.py",
           "result": "passed",
-          "command_hash": "1f5de34415f864912f483feb0c3ed41735c1e8a62358e233cbd235653a64bd6b",
+          "command_hash": "6ea4ec07125189f8769a28e75e964a07873066af842f5705743ebd70e28bb78f",
           "exit_code": 0,
           "passed": 16,
           "failed": 0,
@@ -233,9 +233,9 @@
           "xpassed": 0,
           "tests": 16,
           "collected_tests": null,
-          "duration_sec": 104.132,
-          "executed_at": "2026-08-22T16:31:28.590432+00:00",
-          "run_at": "2026-08-22T16:31:28.590432+00:00"
+          "duration_sec": 104.062,
+          "executed_at": "2026-08-22T16:42:03.551325+00:00",
+          "run_at": "2026-08-22T16:42:03.551325+00:00"
         }
       ]
     },
@@ -246,7 +246,7 @@
         {
           "test": "factor_engine/tests/modeling/test_evaluation_leakage_evidence.py",
           "result": "passed",
-          "command_hash": "2779e4934dd631cc855e7fa868b1f11c12d895771b48bcfa6d80aac27b95ac29",
+          "command_hash": "af84e2ad4669e1fc1e8751d52fd6e574864d6e79d14ce37a6b2bdcbfc1b38550",
           "exit_code": 0,
           "passed": 14,
           "failed": 0,
@@ -256,14 +256,14 @@
           "xpassed": 0,
           "tests": 14,
           "collected_tests": null,
-          "duration_sec": 82.469,
-          "executed_at": "2026-08-22T16:32:51.060346+00:00",
-          "run_at": "2026-08-22T16:32:51.060346+00:00"
+          "duration_sec": 82.23,
+          "executed_at": "2026-08-22T16:43:25.781584+00:00",
+          "run_at": "2026-08-22T16:43:25.781584+00:00"
         },
         {
           "test": "factor_preprocess/tests/contracts/test_leakage_properties.py",
           "result": "passed",
-          "command_hash": "a3fdbd63aa6ed86a0d6e90e8bdfdc685b43ba850a227414e02a0c8ec1b70b110",
+          "command_hash": "d60c0b5c1d83e48a584f47022d0685fd3cd5f4676abb50d4cab52667d65852f4",
           "exit_code": 0,
           "passed": 4,
           "failed": 0,
@@ -273,9 +273,9 @@
           "xpassed": 0,
           "tests": 4,
           "collected_tests": null,
-          "duration_sec": 1.019,
-          "executed_at": "2026-08-22T16:32:52.079997+00:00",
-          "run_at": "2026-08-22T16:32:52.079997+00:00"
+          "duration_sec": 0.984,
+          "executed_at": "2026-08-22T16:43:26.766059+00:00",
+          "run_at": "2026-08-22T16:43:26.766059+00:00"
         }
       ]
     },
@@ -286,7 +286,7 @@
         {
           "test": "factor_engine/tests/runtime/test_pit_audit.py",
           "result": "passed",
-          "command_hash": "63c1e878be1f938a94f33db63ef5597d55810f46cae4c73762fdaecd8b141a21",
+          "command_hash": "c805192189f28c1eb4c41b189bb538d58ff06cf7642177c1f827e51c22d601e7",
           "exit_code": 0,
           "passed": 3,
           "failed": 0,
@@ -296,14 +296,14 @@
           "xpassed": 0,
           "tests": 3,
           "collected_tests": null,
-          "duration_sec": 81.833,
-          "executed_at": "2026-08-22T16:34:13.913412+00:00",
-          "run_at": "2026-08-22T16:34:13.913412+00:00"
+          "duration_sec": 81.007,
+          "executed_at": "2026-08-22T16:44:47.773083+00:00",
+          "run_at": "2026-08-22T16:44:47.773083+00:00"
         },
         {
           "test": "factor_engine/tests/runtime/test_label_pit.py",
           "result": "passed",
-          "command_hash": "8e47a6b98a07c2f324d63f009d50ac925889a288dfef11a261ef48299d14e8b5",
+          "command_hash": "157cb6a3a918e0776760b5c613fa75302368fa182ee45d132e068615ceba2049",
           "exit_code": 0,
           "passed": 4,
           "failed": 0,
@@ -313,14 +313,14 @@
           "xpassed": 0,
           "tests": 4,
           "collected_tests": null,
-          "duration_sec": 1.475,
-          "executed_at": "2026-08-22T16:34:15.388696+00:00",
-          "run_at": "2026-08-22T16:34:15.388696+00:00"
+          "duration_sec": 1.448,
+          "executed_at": "2026-08-22T16:44:49.221622+00:00",
+          "run_at": "2026-08-22T16:44:49.221622+00:00"
         },
         {
           "test": "factor_engine/tests/runtime/test_r10_pit_tristate.py",
           "result": "passed",
-          "command_hash": "55bd01e1f4e5ddac646d5739f2b3795085fad3eca29227c166594834d72bed44",
+          "command_hash": "cb70bed8e1d86ea652ac878f527bfeda1c9bb566ca467139d98b9afad27c4278",
           "exit_code": 0,
           "passed": 5,
           "failed": 0,
@@ -330,9 +330,9 @@
           "xpassed": 0,
           "tests": 5,
           "collected_tests": null,
-          "duration_sec": 1.46,
-          "executed_at": "2026-08-22T16:34:16.849500+00:00",
-          "run_at": "2026-08-22T16:34:16.849500+00:00"
+          "duration_sec": 1.428,
+          "executed_at": "2026-08-22T16:44:50.650148+00:00",
+          "run_at": "2026-08-22T16:44:50.650148+00:00"
         }
       ]
     },
@@ -343,7 +343,7 @@
         {
           "test": "factor_engine/tests/test_comprehensive_data_consistency.py",
           "result": "passed",
-          "command_hash": "b11f4126475999ba700bbbbd5624eb1a8e6c80da7b67abdeda46fdfb8a8faf0b",
+          "command_hash": "d353b1459709930b6d9f1389ca67edddb14e6c9d376a5b71f80468c8c7d6a33c",
           "exit_code": 0,
           "passed": 12,
           "failed": 0,
@@ -353,14 +353,14 @@
           "xpassed": 0,
           "tests": 12,
           "collected_tests": null,
-          "duration_sec": 1.827,
-          "executed_at": "2026-08-22T16:34:18.676488+00:00",
-          "run_at": "2026-08-22T16:34:18.676488+00:00"
+          "duration_sec": 1.829,
+          "executed_at": "2026-08-22T16:44:52.479024+00:00",
+          "run_at": "2026-08-22T16:44:52.479024+00:00"
         },
         {
           "test": "factor_engine/tests/backend/test_r21_def5_payload_hash.py",
           "result": "passed",
-          "command_hash": "9065332b1a1af62f0b4cbc428974de57e5cbcd73c7f3b2d6a65607c1879123f5",
+          "command_hash": "d3618cde701a0e6f091bd727ef6df5e20cc1307f5e07454ab025603bde5ca5c3",
           "exit_code": 0,
           "passed": 7,
           "failed": 0,
@@ -370,9 +370,9 @@
           "xpassed": 0,
           "tests": 7,
           "collected_tests": null,
-          "duration_sec": 1.451,
-          "executed_at": "2026-08-22T16:34:20.127852+00:00",
-          "run_at": "2026-08-22T16:34:20.127852+00:00"
+          "duration_sec": 1.441,
+          "executed_at": "2026-08-22T16:44:53.919983+00:00",
+          "run_at": "2026-08-22T16:44:53.919983+00:00"
         }
       ]
     },
@@ -383,7 +383,7 @@
         {
           "test": "factor_engine/scripts/wheel_clean_install_smoke.py",
           "result": "passed",
-          "command_hash": "d39660eae139d6a2a0432b93348797f3aa9b02f01f4979fa450b8e5566c7e2f5",
+          "command_hash": "bde5f4935ae41d090141e32d5dac3a6ae7507873070aee0e4328cb1dac6bf880",
           "exit_code": 0,
           "passed": 1,
           "failed": 0,
@@ -393,9 +393,9 @@
           "xpassed": 0,
           "tests": 1,
           "collected_tests": null,
-          "duration_sec": 106.163,
-          "executed_at": "2026-08-22T16:36:06.290971+00:00",
-          "run_at": "2026-08-22T16:36:06.290971+00:00"
+          "duration_sec": 105.504,
+          "executed_at": "2026-08-22T16:46:39.424316+00:00",
+          "run_at": "2026-08-22T16:46:39.424316+00:00"
         }
       ]
     },
@@ -406,7 +406,7 @@
         {
           "test": "quant_evaluator/tests/test_scale_gates.py",
           "result": "passed",
-          "command_hash": "60a7c2704bf07234f62f4531a080c1e1a9a6e7d6d337fa7bfc4b081e0499a66e",
+          "command_hash": "cb9cafa791121743cc91c95c589e6b5f3d56586666879a9c65e92d6ac6e29489",
           "exit_code": 0,
           "passed": 1,
           "failed": 0,
@@ -416,9 +416,9 @@
           "xpassed": 0,
           "tests": 1,
           "collected_tests": null,
-          "duration_sec": 1.054,
-          "executed_at": "2026-08-22T16:36:07.345539+00:00",
-          "run_at": "2026-08-22T16:36:07.345539+00:00"
+          "duration_sec": 1.049,
+          "executed_at": "2026-08-22T16:46:40.473673+00:00",
+          "run_at": "2026-08-22T16:46:40.473673+00:00"
         }
       ]
     },
@@ -429,7 +429,7 @@
         {
           "test": "quant_evaluator/tests/test_scale_gates.py",
           "result": "passed",
-          "command_hash": "1dd7210f2487d429d774429303d302b138ef01f82fff537f6c8e015856c6db94",
+          "command_hash": "8b812a248faa6b60762594f56343823865b922881554b83d6eeef9a5ba5862f5",
           "exit_code": 0,
           "passed": 1,
           "failed": 0,
@@ -439,9 +439,9 @@
           "xpassed": 0,
           "tests": 1,
           "collected_tests": null,
-          "duration_sec": 1.062,
-          "executed_at": "2026-08-22T16:36:08.407852+00:00",
-          "run_at": "2026-08-22T16:36:08.407852+00:00"
+          "duration_sec": 1.052,
+          "executed_at": "2026-08-22T16:46:41.526497+00:00",
+          "run_at": "2026-08-22T16:46:41.526497+00:00"
         }
       ]
     },
@@ -452,7 +452,7 @@
         {
           "test": "quant_evaluator/tests/test_scale_gates.py",
           "result": "passed",
-          "command_hash": "8bb8c6c089724e4e7df2b97d31f236922f7515377b58de6fe790bf65f2926bba",
+          "command_hash": "4a0172718f03d9a2c773ee00b7999a0fee23268e9e8f5aae63eec7faa048e8e4",
           "exit_code": 0,
           "passed": 3,
           "failed": 0,
@@ -462,9 +462,9 @@
           "xpassed": 0,
           "tests": 3,
           "collected_tests": null,
-          "duration_sec": 1.124,
-          "executed_at": "2026-08-22T16:36:09.532409+00:00",
-          "run_at": "2026-08-22T16:36:09.532409+00:00"
+          "duration_sec": 1.134,
+          "executed_at": "2026-08-22T16:46:42.660993+00:00",
+          "run_at": "2026-08-22T16:46:42.660993+00:00"
         }
       ]
     }
