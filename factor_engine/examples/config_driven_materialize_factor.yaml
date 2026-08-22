@@ -1,0 +1,26 @@
+factor:
+  name: cleaned_day_aggs_rank_ts_mean_close_3_v1
+  expr: rank(ts_mean(col("close"), 3))
+  freq: 1d
+  universe: equities
+  description: cleaned parquet 单数据源的 3 日均价截面排名示例
+
+data_source:
+  type: data_access
+  dataset: us_stocks_sip_day_aggs
+  fields:
+    close: close
+  start_date: 2024-01-01
+  end_date: 2024-01-31
+
+backend:
+  type: auto
+
+engine:
+  enable_cache: true
+
+materialization:
+  lake_root: /tmp/factor_engine_demo_lake
+  factor_id: cleaned_day_aggs_rank_ts_mean_close_3_v1
+  description: 配置驱动计算到落盘示例
+  expression: rank(ts_mean(col("close"), 3))

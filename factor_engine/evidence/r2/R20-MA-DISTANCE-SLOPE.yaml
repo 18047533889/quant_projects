@@ -1,0 +1,128 @@
+task_id: R20-MA-DISTANCE-SLOPE
+finding: ma_family_distance_slope_crossover_direct_alpha_rehabilitation
+base_sha: 60bb18ba02278b4e5c72da7d0924b78e336776be
+current_head: 60bb18ba02278b4e5c72da7d0924b78e336776be
+commit_sha: UNCOMMITTED_CURRENT_TREE
+owned_files:
+  - factor_engine/cleaned_operators/technical/indicators_v2.py
+  - factor_engine/cleaned_operators/operator_surface.py
+  - factor_engine/mining/direct_use.py
+  - factor_engine/tests/operators/test_r20_ma_distance_slope_rehab.py
+  - factor_engine/evidence/r2/R20-MA-DISTANCE-SLOPE.yaml
+status: CLOSED_LOCAL
+implementation:
+  - Added seven causal, dimensionless MA-family canonicals (transforms of
+    EXISTING MAs — no new MA math):
+    ema_distance_pct / sma_distance_pct / dema_distance_pct /
+    tema_distance_pct ((close - MA) / close, strict-positive close masked),
+    kama_distance_pct ((close - registered KAMA) / close),
+    ma_slope_pct (EMA.diff() / close),
+    ema_crossover (sign((fast EMA - slow EMA) / close) in {-1, 0, +1};
+    documented bounded-regime semantic — the close normalization only
+    localizes the sign, magnitude lives in ema_distance_pct/PPO).
+  - Shared helper _ma_distance(close, ma) = (close - MA)/close.where(close>0):
+    a non-positive close bar is bad data -> NaN, never abs() (R5-38 rule).
+  - DEMA/TEMA reuse the existing indicators_v2 helpers (DEMA = 2*EMA -
+    EMA(EMA); TEMA = 3EMA - 3EMA(EMA) + EMA(EMA(EMA))) — helpers already
+    existed, none reimplemented.
+  - kama_distance_pct REUSES the registered indicators_v2.KAMA (the round-7
+    chain-pinned implementation that replaces composite_fastpath's KAMA) —
+    KAMA math is NOT reimplemented; ParamSpec contract mirrors the registered
+    KAMA spec (er_window _WIN_GE2, fast/slow _WIN_GE1) and inherits the same
+    fast<slow relational family.
+  - ParamSpecs: EMA-family windows _WIN_GE1 (DEMA/TEMA/KAMA fast/slow
+    precedent), sma_distance_pct window _WIN_GE2 (a real rolling window),
+    ema_crossover fast/slow _WIN_GE1 + _PPO_REL (fast_window < slow_window,
+    ValueError guard mirrors PPO).
+  - _RECURSIVE_EWM: ema/dema/tema_distance_pct, ma_slope_pct, ema_crossover
+    added (EMA-recursive state -> stateful/full_replay governance);
+    kama_distance_pct tagged via the hard-coded stateful set next to KAMA;
+    sma_distance_pct deliberately NOT (bounded rolling window state).
+  - operator_surface.py: names added to _TECHNICAL_V2_CANONICALS and to
+    DAILY_FACTOR_MIGRATED via a new _DAILY_MA_DISTANCE_PACK_2026_08 frozenset.
+  - mining/direct_use.py: ONLY the dimensionless names added to
+    _RELATIVE_ALPHA_OPS; raw MA levels (KAMA/DEMA/TEMA/ts_ema/ts_sma) stay in
+    _PRICE_LEVEL_INTERMEDIATE_OPS (untouched) and are excluded from promotion.
+  - Windows end at t (PIT): EMA-family ops verified prefix-invariant
+    (truncated panel == full-panel prefix, exact frame equality).
+  - Concurrent-writer note: a Donchian writer edited the same three source
+    files in parallel; all MA-family edits are anchored solely on
+    MA-family/new lines, never on donchian_*/psar_*/keltner_*/atr_* blocks.
+focused_tests:
+  command: cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/operators/test_r20_ma_distance_slope_rehab.py -q
+  result: 10 passed (after review fixes: +1 ema_family prefix-invariance test,
+    +relational-spec assertion, governance expectation corrected)
+  coverage:
+    - ema_distance_pct manual pandas EMA oracle + exact prefix-invariance
+    - sma_distance_pct manual rolling-mean oracle + warmup NaN boundaries
+    - dema/tema_distance_pct manual oracles recomputing DEMA/TEMA from an
+      independent EMA chain (not the module helpers) + cross-check against
+      the registered DEMA/TEMA canonicals
+    - kama_distance_pct oracle vs registered KAMA + warmup (er_window+1
+      contiguous prices) NaN boundaries
+    - ma_slope_pct manual oracle + sign (rising close -> strictly positive
+      dimensionless slope)
+    - ema_crossover independent sign oracle, warmup NaN before slow EMA's
+      first legal value, bounded {-1,0,+1} set, fast>=slow ValueError guard
+    - non-positive close masking across all 7 ops (NaN at the bad bar,
+      finite neighbours; TEMA warmup exception documented)
+    - ParamSpec presence/keys + _RECURSIVE_EWM membership split + relational
+      spec on ema_crossover
+    - _RELATIVE_ALPHA_OPS membership + raw MA exclusion (KAMA/DEMA/TEMA/
+      ts_ema/ts_sma not promoted)
+syntax_compile:
+  command: cd /home/shw/quant_projects/factor_engine && python3 -m py_compile cleaned_operators/technical/indicators_v2.py cleaned_operators/operator_surface.py mining/direct_use.py tests/operators/test_r20_ma_distance_slope_rehab.py
+  result: PASS
+registry_bootstrap:
+  command: OPENBLAS/OMP/MKL/POLARS threads=1 python3 -c "import cleaned_operators; cleaned_operators.load_all()"
+  result: PASS; all 7 canonicals resolve via
+    OperatorRegistry.get(name,'pandas_numpy') with the expected ParamSpec
+    keys; _RELATIVE_ALPHA_OPS contains all 7; DAILY_FACTOR_MIGRATED contains
+    all 7 (verified in the same process)
+integration:
+  command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/operators/test_r20_ma_distance_slope_rehab.py tests/operators/test_r20_donchian_direct_use_rehab.py tests/operators/test_r20_keltner_direct_use_rehab.py tests/operators/test_r20_psar_direct_use_rehab.py tests/operators/test_r20_atr_direct_use_rehab.py -q
+  result: 49 passed (all five R20 slices combined, 2026-08-19)
+  registry_recheck: load_all() PASS; 7 MA-family canonicals resolve, promoted;
+    raw KAMA/DEMA/TEMA/ts_ema/ts_sma excluded from promotion
+independent_review:
+  reviewer: scoped-reviewer (read-only subagent, diff + evidence YAML only)
+  date: 2026-08-19
+  verdict: PASS-with-findings
+  findings_and_resolution:
+    - F1 (P1) kama_distance_pct missing _RELATIONAL_SPECS entry — CLOSED:
+      added "kama_distance_pct": _PPO_REL (fast_window < slow_window prunes
+      the fast>=slow search nodes up front, mirroring "KAMA"'s own spec);
+      test asserts relational_specs presence.
+    - F2 (P2) prefix-invariance asserted only for ema_distance_pct — CLOSED:
+      new test_ema_family_prefix_invariance covers dema/tema/kama_distance_pct,
+      ma_slope_pct, ema_crossover (truncated iloc[:35] vs full prefix,
+      exact frame equality).
+    - F3 (P2) DAILY_FACTOR_MIGRATED verified only ad-hoc — ACCEPTED:
+      membership was mechanically verified in the registry_bootstrap gate
+      (load_all() would raise RuntimeError on exact-classification mismatch);
+      a dedicated committed membership test remains open as a future
+      cross-slice hardening item.
+  review_fixes:
+    tests_after_fixes: 10 passed (2 new/extended: relational-spec assertion +
+      ema_family prefix-invariance); governance test expectation corrected for
+      kama_distance_pct (tagged via the hard-coded stateful set next to KAMA,
+      not _RECURSIVE_EWM — same tags either way).
+independent_review_status: CLOSED_VERIFIED
+known_limitations:
+  - Polars/DuckDB/Numba backend parity for the 7 new canonicals is NOT_RUN.
+  - DirectUse matrix regeneration, backend gap matrix refresh, and full
+    registry/backend/root CI are NOT_RUN.
+  - ema_crossover sign() collapses exact fast==slow ties to 0.0 by design
+    (documented bounded semantic); no hysteresis/dead-zone variant provided.
+  - kama_distance_pct inherits every KAMA warmup/gap semantic (er_window+1
+    contiguous finite prices to re-derive the ER after a break) — documented
+    in the R30 §21 KAMA contract, unchanged here.
+  - sma_distance_pct window=1 degenerates to exactly 0 (SMA==close); blocked
+    at the ParamSpec level only for window<2 via _WIN_GE2 (window=1 allowed
+    on the EMA-family ops where EMA(1)==close gives 0 distance as well —
+    accepted, mirrors the DEMA/TEMA _WIN_GE1 family precedent).
+  - No production certification claim; terminal usability is limited to the
+    mining-layer relative-alpha classification added here.
+production_certification: NOT_RUN
+commit: NOT_CREATED
+remotes: NOT_USED

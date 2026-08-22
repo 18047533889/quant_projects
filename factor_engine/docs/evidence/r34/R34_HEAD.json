@@ -1,0 +1,32 @@
+{
+  "evidence_header": {
+    "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+    "dirty_tree_hash": "3782ef5bc4f4d542",
+    "operator_registry_hash": "494f0e5907ab1a2d",
+    "operator_surface_hash": "eaf532033179b3c4",
+    "operator_semantic_hash": "4b89849a152a15ba",
+    "field_catalog_hash": "06fbab355d9a4f08",
+    "dataaccess_contract_hash": "894aeb8e8e7c95fc",
+    "planner_hash": "517c4e4ecba609fb",
+    "backend_hash": "1606148cd3dec553",
+    "runtime_hash": "56b8f4344fc4e8ba",
+    "test_source_hash": "469ea7672386253a",
+    "golden_source_hash": "69ecb07ed0298bd9",
+    "dependency_lock_hash": "e813b58aea104b4d"
+  },
+  "component_hashes": {
+    "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+    "dirty_tree_hash": "3782ef5bc4f4d542",
+    "operator_registry_hash": "494f0e5907ab1a2d",
+    "operator_surface_hash": "eaf532033179b3c4",
+    "operator_semantic_hash": "4b89849a152a15ba",
+    "field_catalog_hash": "06fbab355d9a4f08",
+    "dataaccess_contract_hash": "894aeb8e8e7c95fc",
+    "planner_hash": "517c4e4ecba609fb",
+    "backend_hash": "1606148cd3dec553",
+    "runtime_hash": "56b8f4344fc4e8ba",
+    "test_source_hash": "469ea7672386253a",
+    "golden_source_hash": "69ecb07ed0298bd9",
+    "dependency_lock_hash": "e813b58aea104b4d"
+  }
+}

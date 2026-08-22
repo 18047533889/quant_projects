@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+build/
+dist/
+*.egg-info/
+tests/
+.env
+.env.*
+workspace_data/
+cache/
+logs/
+UNKNOWN.egg-info/
+UPSTREAM.json
+SYNC_REPORT.json

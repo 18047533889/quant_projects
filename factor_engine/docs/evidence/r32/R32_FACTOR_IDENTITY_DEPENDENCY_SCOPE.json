@@ -1,0 +1,7 @@
+{
+  "field_digest": "scoped_field_contract_hash (plan-only fields)",
+  "operator_digest": "scoped_operator_contract_hash (plan-only operators)",
+  "source_identity": "DSN URI sanitizer keeps scheme/host/db, redacts password",
+  "unrelated_field_invalidates_own_factor": false,
+  "unrelated_operator_invalidates_own_factor": false
+}

@@ -1,0 +1,45 @@
+task_id: POL2-P0-004
+base_sha: 96e1fdd009f0bd36052c7710ea5acd5cf5fdf45f
+git_sha: 19d2ff954b56f5dfd034d8ec8e8631af0ff271d4
+generation_timestamp: '2026-08-19T04:16:44Z'
+owned_files:
+  - cleaned_operators/polars_native/ts_batch1.py
+  - tests/backend/test_polars_ts_moment_kurt_r2.py
+  - evidence/r2/POL2-P0-004.yaml
+modified_files:
+  - tests/backend/test_polars_ts_moment_kurt_r2.py
+canonicals_touched:
+  - ts_moment
+  - ts_kurt
+backends_touched:
+  - polars
+review_status: reviewed
+finding: >-
+  No production defect reproduced. The authoritative native Polars implementations
+  compute each trailing window's own finite-observation mean; pandas references
+  use rolling central moments and rolling unbiased excess kurtosis. A nonstationary
+  regression fixture confirms prefix/rolling-window semantics and rejects global
+  mean behavior.
+production_edit: none
+oracle_tests:
+  - tests/backend/test_polars_ts_moment_kurt_r2.py::test_ts_moment_uses_current_trailing_mean_not_expanding_mean
+  - tests/backend/test_polars_ts_moment_kurt_r2.py::test_ts_kurt_uses_current_trailing_mean_not_global_mean
+tests_run:
+  - command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 pytest -p no:xdist -q tests/backend/test_polars_ts_moment_kurt_r2.py
+    result: 2 passed
+  - command: python3 compile(text, path, 'exec') for cleaned_operators/polars_native/ts_batch1.py and tests/backend/test_polars_ts_moment_kurt_r2.py
+    result: PASS
+broad_gates:
+  FULL_REPO_COMPILE: NOT_RUN
+  REGISTRY_BOOTSTRAP: NOT_RUN
+  REGISTRY_DUPLICATE_AUTHORITY: NOT_RUN
+  OPERATOR_ABI: NOT_RUN
+  NO_PRODUCTION_PLACEHOLDER: NOT_RUN
+  PANDAS_REFERENCE: NOT_RUN
+  POLARS_PARITY: NOT_RUN
+  POLARS_NO_FAKE_NATIVE: NOT_RUN
+  CI_FINAL_HEAD: NOT_RUN
+production_claim: false
+known_limitations:
+  - Full repository and broad backend gates were not run.
+  - Test-only working-tree files are uncommitted; evidence is bound to the recorded HEAD.

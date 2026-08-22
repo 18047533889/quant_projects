@@ -1,0 +1,27 @@
+# SIP 日 K + 财务比率 asof 复合因子（PR6 datasets）
+profile: prod
+
+factor:
+  name: us_sip_pe_rank
+  expr: rank(1 / col("pe"))
+
+data_source:
+  type: composite
+  anchor: price
+  anchor_column: close
+  aliases:
+    pe: ratios.price_to_earnings
+  sources:
+    price:
+      type: data_access
+      dataset: us_stocks_sip_day_aggs
+    ratios:
+      type: data_access
+      dataset: financials_ratios
+  joins:
+    ratios: asof_backward
+  start_date: "2024-01-02"
+  end_date: "2024-06-30"
+
+materialization:
+  factor_id: us_sip_pe_rank_v1

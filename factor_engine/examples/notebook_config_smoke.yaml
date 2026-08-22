@@ -1,0 +1,17 @@
+factor:
+  name: notebook_rank_ts_mean_3
+  expr: rank(ts_mean(col("close"), 3))
+  freq: 1d
+  universe: equities
+  description: Notebook config-driven smoke test.
+data_source:
+  type: data_access
+  dataset: us_stocks_sip_day_aggs
+  fields:
+    close: close
+  start_date: 2024-01-01
+  end_date: 2024-03-31
+backend:
+  type: pandas
+engine:
+  enable_cache: true

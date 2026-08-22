@@ -1,0 +1,150 @@
+{
+  "schema_version": "intraday_minute_parity.v1",
+  "generated_by": "scripts/certify_intraday_parity.py",
+  "generated_at": "2026-08-06T20:31:22.387446+00:00",
+  "session_tz": "Asia/Shanghai",
+  "fixture": {
+    "instruments": [
+      "A",
+      "B"
+    ],
+    "days": [
+      "2024-01-02",
+      "2024-01-03",
+      "2024-01-04"
+    ],
+    "bars_per_day": 240,
+    "utc_variant": true,
+    "rng_seed": 7
+  },
+  "operator_source_hash": "149f7b4069f1dcb99ec5bf75cf099a92ac402c3d3f86ceb774367cc1758c8e7c",
+  "test_file_hash": "3f7c5b5db7cda19c024fe616ac6c06604e793d6af084402d9ac708a6f7738770",
+  "helper_file_hash": "cc5ef52d02eaec5fc3499998efbe74c356bd6383b494b1eface5d1188f2d7f4b",
+  "backends": {
+    "intra_amihud": {
+      "polars": true,
+      "duckdb_sql": true,
+      "status": "certified"
+    },
+    "intra_bipower_variation": {
+      "polars": true,
+      "duckdb_sql": true,
+      "status": "certified"
+    },
+    "intra_concentration": {
+      "polars": true,
+      "duckdb_sql": true,
+      "status": "certified"
+    },
+    "intra_entropy": {
+      "polars": true,
+      "duckdb_sql": true,
+      "status": "certified"
+    },
+    "intra_extreme_bar_return": {
+      "polars": true,
+      "duckdb_sql": true,
+      "status": "certified"
+    },
+    "intra_high_time": {
+      "polars": true,
+      "duckdb_sql": false,
+      "status": "polars_only"
+    },
+    "intra_jump_ratio": {
+      "polars": true,
+      "duckdb_sql": true,
+      "status": "certified"
+    },
+    "intra_kyle_lambda_proxy": {
+      "polars": true,
+      "duckdb_sql": true,
+      "status": "certified"
+    },
+    "intra_low_time": {
+      "polars": true,
+      "duckdb_sql": false,
+      "status": "polars_only"
+    },
+    "intra_lunch_gap_return": {
+      "polars": true,
+      "duckdb_sql": false,
+      "status": "polars_only"
+    },
+    "intra_path_efficiency": {
+      "polars": true,
+      "duckdb_sql": true,
+      "status": "certified"
+    },
+    "intra_realized_semivariance": {
+      "polars": true,
+      "duckdb_sql": true,
+      "status": "certified"
+    },
+    "intra_realized_variance": {
+      "polars": true,
+      "duckdb_sql": true,
+      "status": "certified"
+    },
+    "intra_return_activity_corr": {
+      "polars": true,
+      "duckdb_sql": false,
+      "status": "polars_only"
+    },
+    "intra_segment_amount_share": {
+      "polars": true,
+      "duckdb_sql": false,
+      "status": "polars_only"
+    },
+    "intra_segment_realized_vol": {
+      "polars": true,
+      "duckdb_sql": false,
+      "status": "polars_only"
+    },
+    "intra_segment_return": {
+      "polars": true,
+      "duckdb_sql": true,
+      "status": "certified"
+    },
+    "intra_segment_volume_share": {
+      "polars": true,
+      "duckdb_sql": true,
+      "status": "certified"
+    },
+    "intra_segment_vwap_deviation": {
+      "polars": true,
+      "duckdb_sql": false,
+      "status": "polars_only"
+    },
+    "intra_signed_imbalance_proxy": {
+      "polars": true,
+      "duckdb_sql": true,
+      "status": "certified"
+    },
+    "intra_vwap_above_ratio": {
+      "polars": true,
+      "duckdb_sql": true,
+      "status": "certified"
+    },
+    "intra_vwap_cross_count": {
+      "polars": true,
+      "duckdb_sql": false,
+      "status": "polars_only"
+    },
+    "intra_limit_duration": {
+      "polars": true,
+      "duckdb_sql": false,
+      "status": "polars_only"
+    },
+    "intra_limit_first_hit_time": {
+      "polars": true,
+      "duckdb_sql": false,
+      "status": "polars_only"
+    },
+    "intra_limit_reopen_count": {
+      "polars": true,
+      "duckdb_sql": false,
+      "status": "polars_only"
+    }
+  }
+}

@@ -1,0 +1,173 @@
+task_id: R20-PAIRWISE-PARAMSPEC-REPAIR
+finding: pairwise_ewm_ts_ewm_corr_cov_param_spec_and_min_periods_repair
+base_sha: UNCOMMITTED_CURRENT_TREE
+current_head: UNCOMMITTED_CURRENT_TREE
+commit_sha: UNCOMMITTED_CURRENT_TREE
+owned_files:
+  - factor_engine/cleaned_operators/contract_hardening.py
+  - factor_engine/cleaned_operators/operator_policy.py
+  - factor_engine/cleaned_operators/layer_governance.py
+  - factor_engine/cleaned_operators/common/data_cleaning.py
+  - factor_engine/cleaned_operators/common/polars_ts_rolling.py
+  - factor_engine/cleaned_operators/polars_native/ts_batch1.py
+  - factor_engine/cleaned_operators/rolling_pack.py
+  - factor_engine/tests/operators/test_r20_pairwise_param_spec_repair.py
+  - factor_engine/evidence/r2/R20-PAIRWISE-PARAMSPEC-REPAIR.yaml
+status: CLOSED_LOCAL
+problem:
+  - ts_ewm_corr / ts_ewm_cov (renamed from ewm_corr / ewm_cov by
+    layer_governance._normalize_semantic_names at import time) had empty
+    param_specs on their Polars-native operator classes, letting span=1 and
+    non-integer span reach the kernels.
+  - The rolling-operator registration gate in polars_ts_rolling.py rejected
+    the pairwise TSEwmCorrNative / TSEwmCovNative classes (pairwise inputs do
+    not fit the single-panel rolling-operator pattern).
+  - operator_policy.py's active-surface filter (applied twice, ~lines 966 and
+    ~1093) dropped ts_ewm_corr/ts_ewm_cov policy entries because
+    _ACTIVE_POLICY_CANONICALS only contained the pre-rename ewm_corr name.
+  - ROOT CAUSE of the residual min_periods=1-vs-2 split-brain —
+    production_hardening.apply_production_hardening() overwrites
+    _EXPLICIT_POLICIES[canonical] for _scope_is_authoritative names (ts_
+    prefix) with patch min_periods derived from _MIN_PERIODS_FLOORS in
+    contract_hardening.py; ts_ewm_corr / ts_ewm_cov were absent from that map
+    so the floor fell back to 1 and clobbered the explicit min_periods=2
+    policy at load_all() time.
+implementation:
+  - contract_hardening.py — added ts_ewm_corr=2 and ts_ewm_cov=2 to
+    _MIN_PERIODS_FLOORS so the runtime hardening patch carries min_periods=2
+    instead of the fallback 1.  This is the authoritative root-cause fix.
+  - operator_policy.py — _PAIRWISE_EWM_POLICIES blocks applied unconditionally
+    AFTER both active-surface filters (first block also pins ewm_corr/ewm_cov
+    to min_periods=2 pre-rename; second block re-pins the ts_ewm_* canonicals
+    post-filter) with scope=ts, pit_safe=True, min_periods=2 aligned with
+    operator_policy's pairwise floor.
+  - common/polars_ts_rolling.py — ts_ewm_corr/ts_ewm_cov added to
+    _PAIRWISE_CANONICALS so the registration gate routes pairwise operators
+    instead of rejecting them; TSEwmCorrNative/TSEwmCovNative carry a window
+    ParamSpec (dtype int, min=2, ParamRole.HORIZON) and kernels enforce
+    strict_integer(window, minimum=2).
+  - polars_native/ts_batch1.py — EWMCorr (~line 2477) and EWMCov (~line 2521)
+    span ParamSpec min raised from 1 to 2 (ParamRole.HORIZON), aligning the
+    SQL/polars-native EWM family with the pairwise floor.
+  - common/data_cleaning.py — EWMCorr/EWMCov backend decorators now attach
+    param_specs (span, dtype int, min 2) instead of leaving empty contracts.
+  - rolling_pack.py — _PolarsUdf registration path now derives param_specs
+    from the pack policy so udf-wrapped rolling operators keep a machine-
+    readable parameter contract.
+  - layer_governance.py _enrich_catalog — falls back to
+    infer_operator_policy(None, canonical=canonical) when the registry lookup
+    returns None (ts_ewm_* has no pandas_numpy backend, so
+    OperatorRegistry.get(canonical, mode=any) previously missed them and
+    governance skipped scope enrichment).
+  - Removed the two vestigial module-level
+    _POLICY_REQUIRED_CANONICALS = None assignments left from debugging (dead
+    code; nothing reads the module attribute — policy_required_canonicals()
+    is computed lazily from operator_spec/operator_surface unions).
+focused_tests:
+  command: cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/operators/test_r20_pairwise_param_spec_repair.py -q
+  result: 13 passed (2026-08-20, after vestigial-line cleanup re-run, 73.09s)
+  coverage:
+    - param_specs existence + dtype int + min==2 for both canonicals
+      (span/window key handled across backends)
+    - span=1 rejected, span=1.5 (non-int) rejected for both
+    - span=2 valid — corr bounded in [-1, 1], cov finite
+    - identical-input corr stays within [-1-eps, 1+eps]
+    - NaN propagation — leading warmup rows are polars null (None), not NaN
+    - polars-backend registration + infer_operator_policy min_periods==2
+      for ts_ewm_corr and ts_ewm_cov (policy alignment, incl. post-load_all
+      hardening state)
+serial_regression_gate:
+  command: cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/operators/test_r20_spectral_direct_use_rehab.py tests/operators/test_r20_regression_direct_use_rehab.py tests/operators/test_r20_pairwise_param_spec_repair.py -q
+  result: 48 passed (2026-08-20, 74.11s, serial, no xdist)
+post_merge_verification:
+  command: cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/operators/test_r20_pairwise_param_spec_repair.py tests/operators/test_r20_spectral_direct_use_rehab.py tests/operators/test_r20_candlestick_direct_use_rehab.py tests/operators/test_r20_regression_direct_use_rehab.py -q
+  result: 58 passed (2026-08-20, after cross-writer merge verification + flaky-test repair, 74.22s, serial, no xdist)
+  notes: >
+    Cross-writer merge check (both R20 Writers edited layer_governance.py
+    concurrently) exposed an order-dependent flaky test:
+    test_ts_ewm_corr_span_2_valid used an unseeded np.random panel and an
+    exact |corr|<=1.0 bound — pandas ewm corr can exceed 1.0 by ~1e-16 on
+    unlucky draws. Repaired in the test module: seeded default_rng(21) +
+    1e-9 epsilon tolerance. Root-cause diagnosis (value slightly >1.0, not a
+    spec/registration regression) captured before the fix; pairwise module
+    alone always passed (13/13).
+compile_gate:
+  command: python3 -m py_compile on all owned source files
+  result: PASS (operator_policy.py re-verified after vestigial-line removal)
+known_limitations:
+  - SQL backend param_specs (ts_batch1.py span) are declared but SQL-side
+    span validation parity is covered only via the shared ParamSpec contract,
+    not a dedicated SQL execution test.
+  - pandas_numpy backend does not exist for ts_ewm_corr/ts_ewm_cov (only
+    polars + sql); the legacy ewm_corr/ewm_cov pandas_numpy entries coexist
+    in the registry as pre-rename implementations and were left untouched.
+  - DirectUse matrix regeneration, backend gap matrix refresh, and full
+    registry/backend/root CI are NOT_RUN.
+production_certification: NOT_RUN
+commit: NOT_CREATED
+remotes: NOT_USED
+independent_review:
+  verdict: FAIL (2026-08-20, scoped-reviewer)
+  findings:
+    - severity: P0
+      claim: param_specs carried string placeholders ("x"/"y") — every strict
+        param validation of pandas ewm_corr/ewm_cov crashed with
+        AttributeError: 'str' object has no attribute 'min' at base.py:765.
+      resolution: FIXED — data_cleaning.py EWMCorr/EWMCov param_specs now
+        contain only the span ParamSpec (x/y are frame params, not scalar
+        knobs); rolling_pack.py _PolarsUdf spec propagation additionally
+        filters non-ParamSpec values via isinstance.
+      verification: ewm_corr/ewm_cov calculate(x, y, span=2) OK; span=1
+        still rejected with OperatorParameterError; runtime param_specs
+        show only {'span': 'ParamSpec'}.
+    - severity: P1
+      claim: split-brain class NOT limited to ts_ewm_corr/ts_ewm_cov — the
+        fallback-1 hardening patch clobbered declared explicit min_periods>=2
+        for ~25 additional ts_* canonicals at load_all() time.
+      resolution: FIXED (general) — production_hardening.py
+        _min_periods_from_contract now returns the declared _EXPLICIT_POLICIES
+        min_periods (when >=2) after _MIN_PERIODS_FLOORS lookup and before
+        the fallback 1, so _policy_patch never clobbers a declared explicit
+        min_periods for authoritative-scope names.
+      verification: runtime sweep — all declared min_periods>=2 values now
+        preserved (ts_ewm_std/var=2, ts_active_information_storage=5,
+        ts_bicoherence_max=16, ts_dmd_*=12, ts_poly2_coeff/resid=3,
+        ts_trend_tstat=3, ...); regression guard — ts_zscore/ts_median/
+        ts_sma_cn (declared 1) still resolve 1.
+    - severity: P2
+      claims: (a) focused test never exercises the pandas ewm_corr path;
+        (b) _op() param_key probe masks naming regressions; (c)
+        test_ts_ewm_corr_identical_inputs uses unseeded np.random.randn(50)
+        with 1e-10 eps (flake risk); (d) ts_batch1.py span min 1->2 edits are
+        dormant (EWMCorr/EWMCov not in _LOAD_MODULES); (e) _enrich_catalog
+        skip count not logged.
+      resolution: OPEN — tracked as follow-up; none affect runtime
+        correctness of the P0/P1 fixes.
+  post_fix_gates:
+    compile: python3 -m py_compile data_cleaning.py rolling_pack.py production_hardening.py — PASS
+    focused: 13 passed (2026-08-20, 72.56s, serial)
+    combined_6_module: 109 passed 1 skipped (pairwise + event_state + bvc_vpin
+      + spectral + candlestick + regression; 2026-08-20, 73.87s, serial)
+  post_fix_status: REVIEW_FINDINGS_RESOLVED_PENDING_P2_FOLLOWUP
+p2_followup_resolution:
+  date: 2026-08-20
+  fixes_applied:
+    - "(a) new test_pandas_ewm_corr_cov_span_2_valid exercises the pandas
+       ewm_corr/ewm_cov calculate path and asserts every declared param_spec
+       is a real ParamSpec (the P0 class)."
+    - "(b) _span_key() helper replaces the silent span-else-window probe:
+       asserts exactly one of span/window is declared, no ambiguity, and the
+       key is present in param_names (naming drift now fails loudly)."
+    - "(c) test_ts_ewm_corr_identical_inputs seeded default_rng(37) + eps
+       widened 1e-10 -> 1e-9; all remaining unseeded np.random.randn uses in
+       the module replaced with seeded default_rng draws."
+  remaining_open:
+    - "(d) ts_batch1.py EWMCorr/EWMCov span min 1->2 edits are dormant (not
+       in _LOAD_MODULES) — harmless alignment, no runtime effect until the
+       module is loaded."
+    - "(e) _enrich_catalog skip count/warning log not added (cosmetic;
+       spectral Writer's skip is fail-closed and verified separately)."
+  gates:
+    focused: 14 passed (2026-08-20, 73.00s, serial — 1 new pandas-path test)
+    combined_6_module: 110 passed 1 skipped (2026-08-20, 74.30s, serial)
+  final_status: CLOSED_VERIFIED (P0+P1+P2a-c fixed; P2d/e cosmetic, tracked above)

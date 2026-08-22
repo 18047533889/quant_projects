@@ -1,0 +1,67 @@
+# Backend Scan Findings - Direct Scan Results
+
+## FAKE_NATIVE: .to_pandas() conversions (7 instances)
+
+### P1: Polars panel conversion
+File: /home/shw/quant_projects/factor_engine/backend/polars_panel.py
+Issue: return panel.to_pandas()
+Severity: P1 - Performance regression, not truly native
+
+### P1: Panel polars result conversion
+File: /home/shw/quant_projects/factor_engine/backend/panel_polars.py
+Issue: pdf = result.select([str(c) for c in out_cols]).to_pandas()
+Severity: P1 - Performance regression
+
+### P1: Long frame conversions (2 instances)
+File: /home/shw/quant_projects/factor_engine/backend/long_frame.py
+Issue: pdf = frame.to_pandas() if hasattr(frame, "to_pandas") else frame
+Issue: pdf = frame.to_pandas()
+Severity: P1 - Fake native implementation
+
+### P1: DuckDB optimizer integration
+File: /home/shw/quant_projects/factor_engine/backend/sql_pushdown/duckdb_optimizer_integration.py
+Issue: pdf = sid_df.to_pandas().set_index(["ts", "inst"])
+Severity: P1 - SQL backend falling back to pandas
+
+### P1: DuckDB performance module (2 instances)
+File: /home/shw/quant_projects/factor_engine/backend/sql_pushdown/duckdb_performance.py
+Issue: pdf = df.select([timestamp_col, instrument_col, value_col]).to_pandas()
+Issue: pdf = sid_df.to_pandas().set_index(["ts", "inst"])
+Severity: P1 - Performance module using slow path
+
+## NOT_IMPLEMENTED: Missing implementations (5 instances)
+
+### P2: Cleaned bridge fallback
+File: /home/shw/quant_projects/factor_engine/backend/cleaned_bridge.py
+Issue: raise NotImplementedError(f"cleaned operator not implemented: {op!r}")
+Severity: P2 - Expected fallback behavior
+
+### P0: Base backend abstract method
+File: /home/shw/quant_projects/factor_engine/backend/base.py
+Issue: raise NotImplementedError
+Severity: P0 - If called directly, crashes
+
+### P2: Pandas backend error handling
+File: /home/shw/quant_projects/factor_engine/backend/pandas_backend.py
+Issue: raise NotImplementedError(f"Unsupported op: {node.op}") from exc
+Severity: P2 - Expected error path
+
+## TODO/FIXME: Incomplete work (2 instances)
+
+### P2: Q backend test infrastructure
+File: /home/shw/quant_projects/factor_engine/backend/q_backend/q_capability_evidence.py
+Issue: # TODO: compile/runtime/parity passes need test infrastructure
+Issue: TODO: Add compile/runtime/parity verification.
+Severity: P2 - Q backend testing gaps
+
+## Summary
+
+Total issues found: 14
+- P0: 1 (base.py abstract method)
+- P1: 7 (all .to_pandas() conversions)
+- P2: 6 (expected error paths and TODOs)
+
+Critical findings:
+1. Multiple Polars/DuckDB implementations fall back to pandas
+2. Q backend lacks parity test infrastructure
+3. Base backend abstract method not properly implemented

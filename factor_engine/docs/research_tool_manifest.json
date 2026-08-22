@@ -1,0 +1,3838 @@
+{
+  "schema_version": "research_tool_manifest.v1",
+  "tool_count": 134,
+  "tools": {
+    "ACF": {
+      "aliases": [
+        "acf"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "ACF",
+      "description": "自相关系数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "window",
+        "lag"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "Mode": {
+      "aliases": [
+        "mode"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "Mode",
+      "description": "众数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "window"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "aggr_top_n": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "aggr_top_n",
+      "description": "自定义Top-N聚合",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "aggr_func",
+        "x",
+        "sort_col",
+        "top",
+        "asc"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "at_imax": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "at_imax",
+      "description": "列最大值索引",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "at_imin": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "at_imin",
+      "description": "列最小值索引",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "autocorr": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "autocorr",
+      "description": "自相关系数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "lag"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "bartlett_test": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "bartlett_test",
+      "description": "Bartlett方差齐性检验",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "y"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "blom_transform": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "blom_transform",
+      "description": "Blom变换（秩的逆正态CDF）",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "causal_linear_extrapolate": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "causal_linear_extrapolate",
+      "description": "仅使用最近两个历史有效点线性外推缺失值",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "research",
+      "surface": "research_tools"
+    },
+    "cdf_chi2": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "cdf_chi2",
+      "description": "卡方分布累积分布函数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "df"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "cdf_f": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "cdf_f",
+      "description": "F分布累积分布函数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "d1",
+        "d2"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "cdf_normal": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "cdf_normal",
+      "description": "正态分布累积分布函数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "mu",
+        "sigma"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "cdf_t": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "cdf_t",
+      "description": "t分布累积分布函数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "df"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "chi_square_test": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "chi_square_test",
+      "description": "卡方检验",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "y"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "complex": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "complex",
+      "description": "构造复数DataFrame",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "real",
+        "imag"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "conj": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "conj",
+      "description": "复数共轭",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "convolve": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "convolve",
+      "description": "卷积",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "y"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "corr_test": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "corr_test",
+      "description": "Pearson相关性检验",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "y"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "correlate": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "correlate",
+      "description": "互相关",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "y"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "count": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "count",
+      "description": "非空值计数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "cum_count": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "cum_count",
+      "description": "累积非空值计数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "cum_delta": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "cum_delta",
+      "description": "累积变化量 x - first(x)",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "cum_first": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "cum_first",
+      "description": "截至目前的首个有效值",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "cum_positive_streak": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "cum_positive_streak",
+      "description": "连续正值计数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "cum_prod": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "cum_prod",
+      "description": "累积乘积",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "cum_top_n_avg": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "cum_top_n_avg",
+      "description": "累积前 N 大均值",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "n"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "cum_top_n_sum": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "cum_top_n_sum",
+      "description": "累积前 N 大求和",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "n"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "cumulative_returns": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "cumulative_returns",
+      "description": "累计收益率",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "price"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "decimate": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "decimate",
+      "description": "降采样",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "factor"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "div_or_default": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": true,
+          "source": "gtja_compat"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "div_or_default",
+      "description": "NULL 或 |denom|<=epsilon 时返回 default",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "y",
+        "epsilon",
+        "default"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "downside_beta": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "downside_beta",
+      "description": "下行 Beta：仅在 benchmark_ret < 0 子样本上估计",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "ret",
+        "benchmark_ret",
+        "window"
+      ],
+      "status": "experimental",
+      "surface": "research_tools"
+    },
+    "dropna": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars_auto",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "dropna",
+      "description": "删除缺失值（返回非NaN索引）",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "research",
+      "surface": "research_tools"
+    },
+    "durbin_watson_test": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "durbin_watson_test",
+      "description": "Durbin-Watson自相关检验",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "residuals"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "eig": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "eig",
+      "description": "特征值分解",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "expanding_max": {
+      "aliases": [
+        "cum_max",
+        "cumulative_max"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "expanding_max",
+      "description": "扩展窗口最大值",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "expanding_mean": {
+      "aliases": [
+        "avg",
+        "cum_avg",
+        "cumulative_mean"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "expanding_mean",
+      "description": "扩展窗口均值",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "expanding_min": {
+      "aliases": [
+        "cum_min",
+        "cumulative_min"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "expanding_min",
+      "description": "扩展窗口最小值",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "expanding_std": {
+      "aliases": [
+        "cum_std"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "expanding_std",
+      "description": "扩展窗口标准差",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "expanding_sum": {
+      "aliases": [
+        "cum_sum",
+        "cumulative_sum"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "expanding_sum",
+      "description": "扩展窗口求和",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "expanding_zscore": {
+      "aliases": [
+        "cum_standardize"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "expanding_zscore",
+      "description": "累积Z-Score标准化",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "ffill": {
+      "aliases": [
+        "FillForward",
+        "cum_last",
+        "fillna_forward",
+        "last",
+        "last_not_null"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars_auto",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "ffill",
+      "description": "前向填充（用前值填充NaN）",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "fft": {
+      "aliases": [
+        "dft"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "fft",
+      "description": "快速傅里叶变换",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "fillna": {
+      "aliases": [
+        "FillNA"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars_auto",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "fillna",
+      "description": "缺失值填充（method: 'mean', 'median', 'zero', 'ffill'）",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "method"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "filter_bandpass": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "filter_bandpass",
+      "description": "带通滤波器",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "low",
+        "high"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "filter_highpass": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "filter_highpass",
+      "description": "高通滤波器",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "cutoff"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "filter_lowpass": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "filter_lowpass",
+      "description": "低通滤波器",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "cutoff"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "filter_notch": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "filter_notch",
+      "description": "陷波滤波器",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "freq",
+        "width"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "first_not_null": {
+      "aliases": [
+        "first"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "first_not_null",
+      "description": "扩展首个非空",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "geometric_mean": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "geometric_mean",
+      "description": "几何平均数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "granger_causality": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "granger_causality",
+      "description": "Granger因果检验",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "y",
+        "lag"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "harmonic_mean": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "harmonic_mean",
+      "description": "调和平均数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "ifft": {
+      "aliases": [
+        "idft"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "ifft",
+      "description": "逆快速傅里叶变换",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "ifnan": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "ifnan",
+      "description": "如果x为NaN则返回default",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "default"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "imag": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "imag",
+      "description": "取复数虚部",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "jarque_bera_test": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "jarque_bera_test",
+      "description": "Jarque-Bera正态性检验",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "kendall_corr_test": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "kendall_corr_test",
+      "description": "Kendall相关性检验",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "y"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "kpss_test": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "kpss_test",
+      "description": "KPSS平稳性检验",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "ks_test": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "ks_test",
+      "description": "KS检验",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "dist"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "lasso": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "lasso",
+      "description": "Lasso回归(L1正则化)，单参数时返回序列的L1正则化趋势，双参数时执行Lasso回归",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "window_or_y",
+        "window",
+        "alpha"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "levene_test": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "levene_test",
+      "description": "Levene方差齐性检验",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "y"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "lilliefors_test": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "lilliefors_test",
+      "description": "Lilliefors正态性检验",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "log_fill_invalid": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "basic_runtime"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "log_fill_invalid",
+      "description": "NULL/非法域填充 log(epsilon)",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "epsilon"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "lu_decompose": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "lu_decompose",
+      "description": "LU分解",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "mat_add": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "mat_add",
+      "description": "矩阵加法",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "a",
+        "b"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "mat_determinant": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "mat_determinant",
+      "description": "矩阵行列式",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "mat_inverse": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "mat_inverse",
+      "description": "矩阵求逆",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "mat_multiply": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "mat_multiply",
+      "description": "矩阵乘法",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "a",
+        "b"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "mat_rank": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "mat_rank",
+      "description": "矩阵秩",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "mat_subtract": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "mat_subtract",
+      "description": "矩阵减法",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "a",
+        "b"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "mat_transpose": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "mat_transpose",
+      "description": "矩阵转置",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "max_drawdown": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "max_drawdown",
+      "description": "最大回撤",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "returns"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "micro_amihud_hf": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "micro_amihud_hf",
+      "description": "Amihud illiquidity |return|/(close*volume)",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "close",
+        "volume"
+      ],
+      "status": "experimental",
+      "surface": "research_tools"
+    },
+    "micro_bipower_var": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "micro_bipower_var",
+      "description": "Realized bipower variation (pi/2)*(n/(n-1))*sum(|r_t||r_{t-1}|)",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "close"
+      ],
+      "status": "experimental",
+      "surface": "research_tools"
+    },
+    "micro_jump_indicator": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "micro_jump_indicator",
+      "description": "Jump indicator max(RV-BV,0) with corrected BV scale",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "close"
+      ],
+      "status": "experimental",
+      "surface": "research_tools"
+    },
+    "micro_kyle_lambda": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "micro_kyle_lambda",
+      "description": "LEGACY proxy: Cov(|ret|,vol)/Var(vol); not signed-flow Kyle lambda (see intraday_impact_beta)",
+      "hidden_from_default_mining": true,
+      "legacy_proxy": true,
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "close",
+        "volume"
+      ],
+      "preferred_replacements": [
+        "intraday_impact_beta",
+        "intraday_impact_asymmetry"
+      ],
+      "semantic_note": "legacy 代理: 数学语义不是其名字所指的严格测度(非 BVC VPIN / 非 signed-flow Kyle λ);保留以维持历史复现, 新研究请用 preferred_replacements",
+      "status": "experimental",
+      "surface": "research_tools"
+    },
+    "micro_mid_return": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "micro_mid_return",
+      "description": "Mid-price return from (high+low)/2",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "high",
+        "low"
+      ],
+      "status": "experimental",
+      "surface": "research_tools"
+    },
+    "micro_realized_vol": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": true,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "micro_realized_vol",
+      "description": "已实现波动率 sqrt rolling sum of squared returns (session-aware)",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "close"
+      ],
+      "status": "experimental",
+      "surface": "research_tools"
+    },
+    "micro_spread": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "micro_spread",
+      "description": "相对价差 (high-low)/close",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "high",
+        "low",
+        "close"
+      ],
+      "status": "experimental",
+      "surface": "research_tools"
+    },
+    "micro_trade_imbalance": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "micro_trade_imbalance",
+      "description": "Volume-weighted return sign imbalance",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "close",
+        "volume"
+      ],
+      "status": "experimental",
+      "surface": "research_tools"
+    },
+    "micro_vpin": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "micro_vpin",
+      "description": "LEGACY proxy: volume-weighted absolute-return toxicity proxy; not true VPIN (see micro_bvc_vpin)",
+      "hidden_from_default_mining": true,
+      "legacy_proxy": true,
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "close",
+        "volume"
+      ],
+      "preferred_replacements": [
+        "micro_bvc_vpin",
+        "intraday_bvc_imbalance"
+      ],
+      "semantic_note": "legacy 代理: 数学语义不是其名字所指的严格测度(非 BVC VPIN / 非 signed-flow Kyle λ);保留以维持历史复现, 新研究请用 preferred_replacements",
+      "status": "experimental",
+      "surface": "research_tools"
+    },
+    "nan_to_num": {
+      "aliases": [
+        "NAN_TO_NUM"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "nan_to_num",
+      "description": "NaN转数值",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "num"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "pacf": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "pacf",
+      "description": "偏自相关系数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "lag"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "pca": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "pca",
+      "description": "PCA降维",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "n_components"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "pdf_chi2": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "pdf_chi2",
+      "description": "卡方分布概率密度函数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "df"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "pdf_f": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "pdf_f",
+      "description": "F分布概率密度函数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "d1",
+        "d2"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "pdf_normal": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "pdf_normal",
+      "description": "正态分布概率密度函数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "mu",
+        "sigma"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "pdf_t": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "pdf_t",
+      "description": "t分布概率密度函数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "df"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "phase": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "phase",
+      "description": "复数相位（角度）",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "polar": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "polar",
+      "description": "极坐标转复数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "mag",
+        "phase"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "product": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "product",
+      "description": "列连乘积",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "protected_log": {
+      "aliases": [
+        "log_clip_domain"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "basic_runtime"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "protected_log",
+      "description": "安全对数：log(max(x, epsilon))",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "epsilon"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "protected_sqrt": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "basic_runtime"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "protected_sqrt",
+      "description": "安全平方根：sqrt(max(x, 0))",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "qr_decompose": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "qr_decompose",
+      "description": "QR分解",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "quantile_normal": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "quantile_normal",
+      "description": "正态分布分位数函数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "p",
+        "mu",
+        "sigma"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "quantile_t": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "quantile_t",
+      "description": "t分布分位数函数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "p",
+        "df"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "r_squared": {
+      "aliases": [
+        "R2"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "r_squared",
+      "description": "R-squared决定系数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "y",
+        "x",
+        "window"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "rank_transform": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "rank_transform",
+      "description": "秩变换",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "rankavg_transform": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "rankavg_transform",
+      "description": "平均秩变换",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "real": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "real",
+      "description": "取复数实部",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "regress": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "regress",
+      "description": "通用回归接口，支持指定返回值类型(slope/intercept/r_squared/residual)",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "y",
+        "x",
+        "window",
+        "retval"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "residual": {
+      "aliases": [
+        "Residual"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "residual",
+      "description": "小写residual回归残差均值",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "y",
+        "x",
+        "window"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "ridge": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "ridge",
+      "description": "Ridge回归(L2正则化)，单参数时返回序列的L2正则化趋势，双参数时执行Ridge回归",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "window_or_y",
+        "window",
+        "alpha"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "row_avg": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "row_avg",
+      "description": "对每行（每个日期截面）求均值",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "row_beta": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "row_beta",
+      "description": "对每行（每个日期截面）计算y对x的beta系数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "y",
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "row_corr": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "row_corr",
+      "description": "对每行（每个日期截面）计算y和x的相关系数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "y"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "row_count": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "row_count",
+      "description": "对每行（每个日期截面）计算非空值数量",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "row_kurt": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "row_kurt",
+      "description": "对每行（每个日期截面）求峰度",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "row_max": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "row_max",
+      "description": "对每行（每个日期截面）求最大值",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "row_median": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "row_median",
+      "description": "对每行（每个日期截面）求中位数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "row_min": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "row_min",
+      "description": "对每行（每个日期截面）求最小值",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "row_prod": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "row_prod",
+      "description": "对每行（每个日期截面）求乘积",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "row_skew": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "row_skew",
+      "description": "对每行（每个日期截面）求偏度",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "row_std": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "row_std",
+      "description": "对每行（每个日期截面）求标准差",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "row_sum": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "row_sum",
+      "description": "对每行（每个日期截面）求和",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "row_var": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "row_var",
+      "description": "对每行（每个日期截面）求方差",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "sem": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "sem",
+      "description": "均值标准误",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "spearman_corr_test": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "spearman_corr_test",
+      "description": "Spearman相关性检验",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "y"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "stationarity_test": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "stationarity_test",
+      "description": "ADF平稳性检验",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "std_agg": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "std_agg",
+      "description": "样本标准差",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "stdp": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "stdp",
+      "description": "总体标准差",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "sum_agg": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "sum_agg",
+      "description": "列求和",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "svd": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "svd",
+      "description": "SVD奇异值分解",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "ttest_one_sample": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "ttest_one_sample",
+      "description": "单样本t检验",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "mu"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "ttest_paired": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "ttest_paired",
+      "description": "配对t检验",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "y"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "ttest_two_samples": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "ttest_two_samples",
+      "description": "双样本t检验",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "y"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "tukey_transform": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "tukey_transform",
+      "description": "Tukey变换",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "unwrap": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "unwrap",
+      "description": "相位展开",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "van_der_waerden_transform": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "van_der_waerden_transform",
+      "description": "Van der Waerden变换",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "varp": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "varp",
+      "description": "总体方差",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "wavelet": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "wavelet",
+      "description": "小波变换",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "wavelet_type"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "wavelet_denoise": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "wavelet_denoise",
+      "description": "小波去噪",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "threshold"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "wavg": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "wavg",
+      "description": "加权平均",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "w",
+        "window"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "weighted_mean": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "weighted_mean",
+      "description": "加权平均数",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "weights"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "wsum": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "wsum",
+      "description": "加权求和",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "w",
+        "window"
+      ],
+      "status": "implemented",
+      "surface": "research_tools"
+    }
+  }
+}

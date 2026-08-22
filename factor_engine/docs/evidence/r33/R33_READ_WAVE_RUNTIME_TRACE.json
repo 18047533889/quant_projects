@@ -1,0 +1,20 @@
+{
+  "events": [
+    {
+      "columns": [
+        "close",
+        "volume"
+      ],
+      "consumer_count": 2,
+      "memory_bytes": 512,
+      "ms": 0.014,
+      "ok": true,
+      "reason": "",
+      "scan_bytes": 1024,
+      "wave_id": 0
+    }
+  ],
+  "waves_executed": 1,
+  "waves_failed": 0,
+  "waves_planned": 1
+}

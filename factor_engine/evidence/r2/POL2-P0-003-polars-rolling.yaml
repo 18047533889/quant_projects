@@ -1,0 +1,34 @@
+task_id: POL2-P0-003
+verification_scope: local_only
+current_head: 19d2ff954b56f5dfd034d8ec8e8631af0ff271d4
+working_tree_dirty_count_before_evidence_edit: 70
+code_changes: none
+active_authority:
+  - cleaned_operators/common/polars_ts_rolling.py
+reviewed_canonicals:
+  - ts_cov
+  - ts_regression_slope
+  - ts_regression_intercept
+  - ts_regression_resid
+  - ts_regression_r2
+backends_reviewed:
+  - polars
+oracle:
+  method: independent direct trailing-window finite-pair mean and centered-moment calculation
+  source: tests/backend/test_polars_ts_rolling_pairwise.py::_oracle
+  semantics: historical observations are recomputed per active trailing window; no expanding mean
+result: no_active_defect_reproduced
+focused_tests:
+  command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 pytest -q tests/backend/test_polars_ts_rolling_pairwise.py tests/backend/test_r2_p0_022_regression_parity.py tests/test_ts_batch1_corr_cov_direct.py -p no:xdist
+  result: 22 passed, 2 warnings
+syntax_compile: passed
+import_smoke: passed
+scoped_diff_check: passed
+protected_files_edited: false
+full_suite: NOT_RUN
+broad_gates: NOT_RUN
+production_certification: NOT_RUN
+known_limitations:
+  - Verification is local-only and limited to the focused rolling/oracle scope.
+  - Existing production-mode warnings report unsupported classification for some operators lacking an explicit PhysicalImplementationSpec; this task does not alter admission metadata.
+  - Existing unrelated dirty files were preserved.

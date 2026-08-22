@@ -1,0 +1,822 @@
+# ############################################################################
+# SemanticFieldCatalog —— 逻辑字段语义单一事实源
+#
+# 每个条目声明：逻辑字段 → 物理数据集 + 物理列，以及单位/时间语义/PIT·join
+# 策略/mining 权限。DataAccess 的 store.resolve_fields() 消费它；FactorEngine
+# 的 FIELD_REGISTRY 应改为消费或生成自这份 catalog，禁止两套定义长期漂移。
+#
+# 字段约定：
+#   dataset        datasets.yaml 里注册的数据集名（必填）
+#   physical_name 数据集内的物理列名（缺省 = 逻辑名）
+#   scale          source_unit → canonical_unit 的乘子；None/1.0 表示不归一化
+#   join_policy    exact / pit_asof_backward / latest_period ...
+#   _ 前缀的键是锚点模板，不会当字段。
+# ############################################################################
+
+_ratio_field: &ratio_field
+  source_unit: percent
+  canonical_unit: ratio
+
+# ---- 行情（价格/量，无单位归一化） ----
+
+close:
+  dataset: ashare_stock_daily
+  physical_name: Close
+  dtype: double
+  frequency: daily
+  grain: instrument
+  market: ashare
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+open:
+  dataset: ashare_stock_daily
+  physical_name: Open
+  dtype: double
+  frequency: daily
+  grain: instrument
+  market: ashare
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+high:
+  dataset: ashare_stock_daily
+  physical_name: High
+  dtype: double
+  frequency: daily
+  grain: instrument
+  market: ashare
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+low:
+  dataset: ashare_stock_daily
+  physical_name: Low
+  dtype: double
+  frequency: daily
+  grain: instrument
+  market: ashare
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+volume:
+  dataset: ashare_stock_daily
+  physical_name: Volume
+  dtype: int
+  frequency: daily
+  grain: instrument
+  market: ashare
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+amount:
+  dataset: ashare_stock_daily
+  physical_name: Amount
+  dtype: double
+  frequency: daily
+  grain: instrument
+  market: ashare
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+vwap:
+  dataset: ashare_stock_daily
+  physical_name: Vwap
+  dtype: double
+  frequency: daily
+  grain: instrument
+  market: ashare
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+# 收益率 bp → decimal（A股专属；alias 'ret' 在美股上下文解析到美股小数 ret）
+return_bp:
+  market: ashare
+  dataset: ashare_stock_daily
+  physical_name: Return
+  dtype: double
+  frequency: daily
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  source_unit: bp
+  canonical_unit: decimal
+  scale: 0.0001
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+  aliases: [ret, returns]
+
+# ---- 估值（日频，随行情 exact join） ----
+
+market_cap:
+  market: ashare
+  dataset: ashare_stock_valuation_daily
+  physical_name: MarketCap
+  dtype: double
+  frequency: daily
+  grain: instrument
+  dimension: money
+  currency: CNY
+  cross_market_comparable: false
+  requires_fx: true
+  availability: same_day
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+circulating_market_cap:
+  market: ashare
+  dataset: ashare_stock_valuation_daily
+  physical_name: CirculatingMarketCap
+  dtype: double
+  frequency: daily
+  grain: instrument
+  dimension: money
+  currency: CNY
+  cross_market_comparable: false
+  availability: same_day
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+pe_ratio:
+  market: ashare
+  dataset: ashare_stock_valuation_daily
+  physical_name: PeRatio
+  dtype: double
+  frequency: daily
+  grain: instrument
+  cross_market_comparable: false
+  availability: same_day
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+pb_ratio:
+  market: ashare
+  dataset: ashare_stock_valuation_daily
+  physical_name: PbRatio
+  dtype: double
+  frequency: daily
+  grain: instrument
+  cross_market_comparable: false
+  availability: same_day
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+# TurnoverRatio % → ratio（A股专属；美股无同构换手面板）
+turnover_ratio:
+  market: ashare
+  dataset: ashare_stock_valuation_daily
+  physical_name: TurnoverRatio
+  dtype: double
+  frequency: daily
+  grain: instrument
+  <<: *ratio_field
+  scale: 0.01
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+  aliases: [turnover]
+
+# ---- 指标（日频，含财报期引用；ROE % → ratio） ----
+
+eps:
+  market: ashare
+  dataset: ashare_stock_indicator
+  physical_name: Eps
+  dtype: double
+  frequency: daily
+  grain: instrument
+  cross_market_comparable: false
+  # #P0-15 与 ROE 同类：eps 是财务指标，编译成 financial PIT——
+  # knowledge=PubDate 可见、period=ReportPeriodEndDate、UpdateTime 修订、
+  # 下一交易日可用、latest_period 选择。不是随行情 exact join 的日频面板。
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: PubDate
+  time_representation: date_label
+  time_precision: date
+  pit_fidelity: knowledge_date_pit
+  effective_time: ReportPeriodEndDate
+  period_time: ReportPeriodEndDate
+  revision_order: [UpdateTime]
+  availability: next_trading_day
+  join_policy: pit_asof_backward
+  period_selection: latest_period
+  mining_allowed: true
+
+roe:
+  market: ashare
+  dataset: ashare_stock_indicator
+  physical_name: Roe
+  dtype: double
+  frequency: daily
+  grain: instrument
+  <<: *ratio_field
+  scale: 0.01
+  cross_market_comparable: false
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: PubDate
+  time_representation: date_label
+  time_precision: date
+  pit_fidelity: knowledge_date_pit
+  effective_time: ReportPeriodEndDate
+  period_time: ReportPeriodEndDate
+  # #P0-4 与同数据集 eps/net_profit 等财务指标一致：PubDate 可见、下一交易日可用。
+  availability: next_trading_day
+  join_policy: pit_asof_backward
+  mining_allowed: true
+
+# ---- 资产负债表（事件/时点表，PIT asof 对齐） ----
+# 注意：knowledge_time 用 PubDate（公告可见时点），不是 TradeDate（供应商记录日）。
+# FactorEngine 财务 PIT 严格用 PubDate 可见性 + 下一交易日可用；revision_order
+# 让同一 (instrument, PubDate) 的多版本在 join 前确定性去重（取 UpdateTime 最新）。
+
+total_assets:
+  market: ashare
+  dataset: ashare_stock_balance
+  physical_name: TotalAssets
+  dtype: double
+  frequency: quarterly
+  grain: instrument
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: PubDate
+  time_representation: date_label
+  time_precision: date
+  pit_fidelity: knowledge_date_pit
+  effective_time: ReportPeriodEndDate
+  period_time: ReportPeriodEndDate
+  revision_order: [UpdateTime]
+  flow_semantics: point_in_time_stock
+  availability: next_trading_day
+  join_policy: pit_asof_backward
+  mining_allowed: true
+
+total_liabilities:
+  market: ashare
+  dataset: ashare_stock_balance
+  physical_name: TotalLiability
+  dtype: double
+  frequency: quarterly
+  grain: instrument
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: PubDate
+  time_representation: date_label
+  time_precision: date
+  pit_fidelity: knowledge_date_pit
+  effective_time: ReportPeriodEndDate
+  period_time: ReportPeriodEndDate
+  revision_order: [UpdateTime]
+  flow_semantics: point_in_time_stock
+  availability: next_trading_day
+  join_policy: pit_asof_backward
+  mining_allowed: true
+
+# ---- 利润表 ----
+
+operating_revenue:
+  market: ashare
+  dataset: ashare_stock_income
+  physical_name: OperatingRevenue
+  dtype: double
+  frequency: quarterly
+  grain: instrument
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: PubDate
+  time_representation: date_label
+  time_precision: date
+  pit_fidelity: knowledge_date_pit
+  effective_time: ReportPeriodEndDate
+  period_time: ReportPeriodEndDate
+  revision_order: [UpdateTime]
+  flow_semantics: cumulative_ytd_flow
+  availability: next_trading_day
+  join_policy: pit_asof_backward
+  mining_allowed: true
+  aliases: [revenue]
+
+net_profit:
+  market: ashare
+  dataset: ashare_stock_income
+  physical_name: NetProfit
+  dtype: double
+  frequency: quarterly
+  grain: instrument
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: PubDate
+  time_representation: date_label
+  time_precision: date
+  pit_fidelity: knowledge_date_pit
+  effective_time: ReportPeriodEndDate
+  period_time: ReportPeriodEndDate
+  revision_order: [UpdateTime]
+  flow_semantics: cumulative_ytd_flow
+  availability: next_trading_day
+  join_policy: pit_asof_backward
+  mining_allowed: true
+  aliases: [net_income]
+
+# ---- 指数权重（成分股权重，精确日频；必须指定 IndexSymbol） ----
+
+index_weight:
+  market: ashare
+  dataset: ashare_index_constituent
+  physical_name: Weight
+  dtype: double
+  frequency: daily
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  required_filters: [IndexSymbol]
+  primary_key: [TradeDate, Symbol, IndexSymbol]
+  mining_allowed: true
+
+
+# ############################################################################
+# 美股字段（market: us）——单位与 A股不同，严禁复用 A股 scale：
+#   ret/dividend_yield/return_on_equity/return_on_assets 已是小数，不再 /100；
+#   price_to_* / 倍数类原样；adj_factor 为后复权乘数。
+# ############################################################################
+
+# ---- 美股日线（D1；Ret 小数，禁止再除） ----
+ret:
+  market: us
+  dataset: us_stock_daily
+  physical_name: Ret
+  dtype: double
+  frequency: daily
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+ret_intra:
+  market: us
+  dataset: us_stock_daily
+  physical_name: Ret_Intra
+  dtype: double
+  frequency: daily
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+ret_overnight:
+  market: us
+  dataset: us_stock_daily
+  physical_name: Ret_Overnight
+  dtype: double
+  frequency: daily
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+adj_factor:
+  market: us
+  dataset: us_stock_daily
+  physical_name: AdjFactor
+  dtype: double
+  frequency: daily
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+high_low_ratio:
+  market: us
+  dataset: us_stock_daily
+  physical_name: High_Low_Ratio
+  dtype: double
+  frequency: daily
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+# ---- 美股估值（X0 稀疏；比率已是小数，禁止再 /100） ----
+# #P0-23 X0 稀疏原始字段 mining_allowed=false：原始估值表不是完整日频横截面，
+# 逐股常有缺失，不能当默认因子挖掘字段。只有构建成明确的 serving daily panel 后，
+# 才对 serving 字段设 mining_allowed=true。
+dividend_yield:
+  market: us
+  dataset: us_stock_valuation_daily
+  physical_name: dividend_yield
+  dtype: double
+  frequency: daily
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: sparse_event
+  join_policy: exact
+  mining_allowed: false
+
+return_on_equity:
+  market: us
+  dataset: us_stock_valuation_daily
+  physical_name: return_on_equity
+  dtype: double
+  frequency: daily
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: sparse_event
+  join_policy: exact
+  mining_allowed: false
+
+return_on_assets:
+  market: us
+  dataset: us_stock_valuation_daily
+  physical_name: return_on_assets
+  dtype: double
+  frequency: daily
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: sparse_event
+  join_policy: exact
+  mining_allowed: false
+
+price_to_earnings:
+  market: us
+  dataset: us_stock_valuation_daily
+  physical_name: price_to_earnings
+  dtype: double
+  frequency: daily
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: sparse_event
+  join_policy: exact
+  mining_allowed: false
+
+price_to_book:
+  market: us
+  dataset: us_stock_valuation_daily
+  physical_name: price_to_book
+  dtype: double
+  frequency: daily
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: sparse_event
+  join_policy: exact
+  mining_allowed: false
+
+us_market_cap:
+  market: us
+  logical_name: market_cap
+  dataset: us_stock_valuation_daily
+  physical_name: market_cap
+  dtype: double
+  frequency: daily
+  grain: instrument
+  dimension: money
+  currency: USD
+  cross_market_comparable: false
+  requires_fx: true
+  time_role: event_time
+  temporal_model: sparse_event
+  join_policy: exact
+  mining_allowed: false
+
+# ---- 美股真实市值（derived，字典 §C23.2 / #P0-24） ----
+# X0 market_cap 只作为 sparse raw reference；挖掘/因子用 derived 日频市值
+# = us_stock_daily.Close × us_ticker_shares_snapshot.weighted_shares_outstanding。
+us_market_cap_daily:
+  market: us
+  logical_name: market_cap_daily
+  dtype: double
+  frequency: daily
+  grain: instrument
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  derived_expression: >-
+    us_stock_daily.Close *
+    us_ticker_shares_snapshot.weighted_shares_outstanding
+  derived_from: [us_stock_daily.Close, us_ticker_shares_snapshot.weighted_shares_outstanding]
+  # #P1-final closure 7：DerivedFieldCompiler 未实现执行链 → 明确 fail-closed。
+  # 不宣称 mining_allowed=true；Planner 遇到 derived 字段给清晰 ValidationError。
+  mining_allowed: false
+
+# ---- 美股财务（E2 事件；PIT=filing_date；必须 filter timeframe） ----
+revenue:
+  market: us
+  dataset: us_stock_income
+  physical_name: revenue
+  dtype: double
+  frequency: quarterly
+  grain: instrument
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: filing_date
+  time_representation: date_label
+  time_precision: date
+  pit_fidelity: vintage_pit
+  revision_availability_time: filing_date
+  effective_time: period_end
+  period_time: period_end
+  required_filters: [timeframe]
+  availability: next_session_open
+  flow_semantics: single_period_flow
+  join_policy: pit_asof_backward
+  mining_allowed: true
+
+# R24 P0-XM4 §20：consolidated vs attributable **不是同义词**，不能静默 alias。
+# US consolidated_net_income_loss vs net_income_loss_attributable_common_shareholders
+# 是两个概念。canonical concepts：
+#   net_income_consolidated   → consolidated_net_income_loss
+#   net_income_attributable   → net_income_loss_attributable_common_shareholders
+# `net_income` 显式指向 attributable common（旧语义保留），但不再有误导别名。
+net_income_consolidated:
+  market: us
+  dataset: us_stock_income
+  physical_name: consolidated_net_income_loss
+  dtype: double
+  frequency: quarterly
+  grain: instrument
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: filing_date
+  time_representation: date_label
+  time_precision: date
+  pit_fidelity: vintage_pit
+  revision_availability_time: filing_date
+  effective_time: period_end
+  period_time: period_end
+  required_filters: [timeframe]
+  availability: next_session_open
+  flow_semantics: single_period_flow
+  join_policy: pit_asof_backward
+  mining_allowed: true
+
+net_income_attributable:
+  market: us
+  dataset: us_stock_income
+  physical_name: net_income_loss_attributable_common_shareholders
+  dtype: double
+  frequency: quarterly
+  grain: instrument
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: filing_date
+  time_representation: date_label
+  time_precision: date
+  pit_fidelity: vintage_pit
+  revision_availability_time: filing_date
+  effective_time: period_end
+  period_time: period_end
+  required_filters: [timeframe]
+  availability: next_session_open
+  flow_semantics: single_period_flow
+  join_policy: pit_asof_backward
+  mining_allowed: true
+
+net_income:
+  market: us
+  dataset: us_stock_income
+  physical_name: net_income_loss_attributable_common_shareholders
+  dtype: double
+  frequency: quarterly
+  grain: instrument
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: filing_date
+  time_representation: date_label
+  time_precision: date
+  pit_fidelity: vintage_pit
+  revision_availability_time: filing_date
+  effective_time: period_end
+  period_time: period_end
+  required_filters: [timeframe]
+  availability: next_session_open
+  flow_semantics: single_period_flow
+  join_policy: pit_asof_backward
+  mining_allowed: true
+
+us_total_assets:
+  market: us
+  logical_name: total_assets
+  dataset: us_stock_balance
+  physical_name: total_assets
+  dtype: double
+  frequency: quarterly
+  grain: instrument
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: filing_date
+  time_representation: date_label
+  time_precision: date
+  pit_fidelity: vintage_pit
+  revision_availability_time: filing_date
+  effective_time: period_end
+  period_time: period_end
+  required_filters: [timeframe]
+  availability: next_session_open
+  flow_semantics: point_in_time_stock
+  join_policy: pit_asof_backward
+  mining_allowed: true
+
+us_total_liabilities:
+  market: us
+  logical_name: total_liabilities
+  dataset: us_stock_balance
+  physical_name: total_liabilities
+  dtype: double
+  frequency: quarterly
+  grain: instrument
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: filing_date
+  time_representation: date_label
+  time_precision: date
+  pit_fidelity: vintage_pit
+  revision_availability_time: filing_date
+  effective_time: period_end
+  period_time: period_end
+  required_filters: [timeframe]
+  availability: next_session_open
+  flow_semantics: point_in_time_stock
+  join_policy: pit_asof_backward
+  mining_allowed: true
+
+# ---- 美股市值中性：Close × weighted_shares_outstanding（字典 §C23.2） ----
+shares_outstanding:
+  market: us
+  dataset: us_ticker_shares_snapshot
+  physical_name: weighted_shares_outstanding
+  dtype: double
+  frequency: daily
+  grain: instrument
+  dimension: shares
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+# ---- 美股分红（E2 事件）----
+# R24 P0-XM1 §17：契约漂移修复——DA semantic field 必须与 cos_contract_us.py
+# 一致：knowledge_time=declaration_date（strict PIT）、effective_time=
+# ex_dividend_date（secondary）、missing declaration_date => unavailable（绝不
+# ex-date fallback）。旧逻辑（effective_time_only / exact / mining_allowed）已废止。
+# R24 P0-XM2 §18：cash_amount 币种不恒为 USD（HKD/EUR/CAD/GBP...）。COS 无统一
+# FX 表 → 禁止把 cash_amount 直接当 USD。拆成 local / usd 两个概念：
+#   cash_dividend_local ：value + currency（cross_market_comparable=false）
+#   cash_dividend_usd    ：仅 currency==USD 的行；其他币种 unavailable/filtered
+cash_dividend_local:
+  market: us
+  dataset: us_stock_dividend
+  physical_name: cash_amount
+  dtype: double
+  frequency: event
+  grain: instrument
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: declaration_date
+  effective_time: ex_dividend_date
+  period_time: ex_dividend_date
+  join_policy: pit_asof_backward
+  availability: next_session_open
+  time_representation: date_label
+  time_precision: date
+  currency_column: currency
+  cross_market_comparable: false
+  requires_fx: true
+  mining_allowed: false
+  duplicate_policy: error  # missing declaration_date => unavailable
+
+cash_dividend_usd:
+  market: us
+  dataset: us_stock_dividend
+  physical_name: cash_amount
+  dtype: double
+  frequency: event
+  grain: instrument
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: declaration_date
+  effective_time: ex_dividend_date
+  period_time: ex_dividend_date
+  join_policy: pit_asof_backward
+  availability: next_session_open
+  time_representation: date_label
+  time_precision: date
+  currency: USD
+  currency_column: currency
+  cross_market_comparable: true
+  mining_allowed: false
+  duplicate_policy: error
+  # 仅当 currency == USD；其他币种必须被过滤/不可用，绝不静默当 USD。
+
+# 兼容旧名 cash_dividend → local（value+currency）；语义不再暗示 USD。
+cash_dividend:
+  market: us
+  dataset: us_stock_dividend
+  physical_name: cash_amount
+  dtype: double
+  frequency: event
+  grain: instrument
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: declaration_date
+  effective_time: ex_dividend_date
+  period_time: ex_dividend_date
+  join_policy: pit_asof_backward
+  availability: next_session_open
+  time_representation: date_label
+  time_precision: date
+  currency_column: currency
+  cross_market_comparable: false
+  requires_fx: true
+  mining_allowed: false
+  aliases: [cash_dividend_local]
+
+
+# ---- R24 P1-XM7 §23：canonical adjusted_price_backward ----
+# A 股 Close*Factor 与美股 Close*AdjFactor 公式同类（backward adjustment
+# multiplier），但基期不同 / source 不同 / corporate action 覆盖不同 / US 有
+# clamped marker——**禁止**把 Factor / AdjFactor 直接统一成一个 raw column。
+# canonical concept 由 market provider 构造，物理列仍是各自市场的原始列。
+adjusted_price_backward:
+  market: any
+  dtype: double
+  frequency: daily
+  grain: instrument
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  dimension: price
+  derived_expression: >-
+    market provider constructs adjusted close (A: Close*Factor; US: Close*AdjFactor)
+  derived_from: []
+  mining_allowed: false

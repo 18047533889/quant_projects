@@ -1,0 +1,31 @@
+task_id: R2-P0-038
+base_sha: c35e732683897bd419a381969276648c506882ce
+source_commit_sha: 893fb95d8d2129194f075914b968d833f03c7862
+owned_files:
+  - dataaccess/r30/universe_snapshot.py
+  - dataaccess/tests/unit/test_r30_snapshots_2026_08.py
+modified_files:
+  - dataaccess/r30/universe_snapshot.py
+  - dataaccess/tests/unit/test_r30_snapshots_2026_08.py
+change: >-
+  Universe resolver failures no longer become an indistinguishable empty
+  universe. Existing DataAccessError subclasses propagate unchanged; other
+  resolver failures become SourceResolutionError with the original cause.
+focused_tests:
+  command: python3 -m pytest -q dataaccess/tests/unit/test_r30_snapshots_2026_08.py
+  result: 25 passed
+syntax_compile:
+  command: python3 compile() for changed Python files
+  result: passed
+import_smoke:
+  command: import data_access.r30.universe_snapshot and SourceResolutionError
+  result: passed
+known_limitations:
+  - stale/future revision rejection has no applicable existing UniverseSnapshot API and was not added
+  - R2-P0-039 PIT poison suite was not run
+  - full DataAccess suite and production readiness gates were not run
+  - unrelated dirty files in the parent workspace were not inspected or included
+production_readiness: NOT_RUN
+r2_p0_039_pit_poison_suite: NOT_RUN
+evidence_generated:
+  - dataaccess/.r2_p0_038_universe_calendar_revision_manifest.yaml

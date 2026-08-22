@@ -1,0 +1,791 @@
+"""R25 P0-012/013/030 —— SourceSnapshotResolver。
+
+把「读某个 dataset 的 snapshot」统一成一条解析链：
+    - policy：``latest`` / ``pin(snapshot_id)`` / ``best_effort_fail_if_changed`` /
+      ``verified_fail_if_changed``
+    - 优先 publisher source manifest（generation + exact object set）；
+    - 次选 exact object list + etag（COS LIST/HEAD）；
+    - 禁止 wildcard-only（production 下 unresolved wildcard → fail-closed）。
+
+auto hybrid 先 ``resolve()`` 得到 target snapshot，再按对象身份选 local/remote
+（P0-013：local 对象匹配 target 则 local，否则 remote exact target；最后
+``assert all(parts.source_generation == target.generation)``）。
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Callable, Mapping, Sequence
+
+from data_access.core.exceptions import (
+    SourceSnapshotUnavailable,
+    ValidationError,
+)
+
+from .source_snapshot import (
+    ResolvedObject,
+    ResolvedSourceSnapshot,
+    content_digest_of_objects,
+)
+from data_access.snapshot.fidelity import SnapshotFidelity
+from data_access.snapshot.cloud_error import CloudErrorClassifier
+
+logger = logging.getLogger("data_access.source_snapshot")
+
+
+# ReadPlan owns manifest verification. Resolver only resolves object identity, so both
+# fail-if-changed variants become a digest pin after a successful resolution.
+_SNAPSHOT_POLICIES = frozenset({
+    "latest",
+    "pin",
+    "best_effort_fail_if_changed",
+    "verified_fail_if_changed",
+    "fail_if_changed",
+})
+
+# R32-P0-033: Supported manifest versions
+_SUPPORTED_MANIFEST_VERSIONS = frozenset({"1.0", "1.1", "1"})
+_MIN_MANIFEST_VERSION = "1.0"
+_MAX_MANIFEST_VERSION = "1.1"
+
+
+def _snapshot_remote_failure(operation: str, target: str, exc: Exception) -> SourceSnapshotUnavailable:
+    """Build a fail-closed exception without discarding remote failure semantics."""
+    classified = CloudErrorClassifier.classify(exc)
+    diagnostic = (
+        f"{operation} 失败（{target}）: kind={classified.kind.value}, "
+        f"retryable={str(classified.retryable).lower()}, "
+        f"original_code={classified.original_code or type(exc).__name__}"
+    )
+    unavailable = SourceSnapshotUnavailable(diagnostic)
+    # Keep a machine-readable classification on the raised diagnostic while the
+    # original SDK/transport exception remains available through __cause__.
+    unavailable.cloud_error = classified
+    return unavailable
+
+
+def _validate_manifest_version(version: str) -> None:
+    """R32-P0-033: Manifest schema version must truly gate compatibility.
+
+    - Unknown future versions fail-closed
+    - Supported versions pass
+    - Version format validated
+    """
+    from data_access.core.exceptions import SourceSnapshotUnavailable
+
+    if not version or not isinstance(version, str):
+        raise SourceSnapshotUnavailable(
+            f"R32-P0-033: manifest_version 必须是非空字符串，得到 {version!r}"
+        )
+
+    # Check if version is supported
+    if version not in _SUPPORTED_MANIFEST_VERSIONS:
+        raise SourceSnapshotUnavailable(
+            f"R32-P0-033: manifest_version={version!r} 不支持。"
+            f"支持的版本: {sorted(_SUPPORTED_MANIFEST_VERSIONS)}。"
+            f"未知版本必须 fail-closed（防止读取不兼容 manifest）。"
+        )
+
+
+def _validate_published_at(published_at: str) -> None:
+    """R32-P0-034: published_at must be strict timezone-aware timestamp.
+
+    - ISO 8601 format
+    - Must have timezone
+    - No excessive future skew (> 1h indicates clock problem)
+    - Parseable datetime
+    """
+    from datetime import datetime, timedelta, timezone
+    from data_access.core.exceptions import SourceSnapshotUnavailable
+
+    if not published_at or not isinstance(published_at, str):
+        raise SourceSnapshotUnavailable(
+            f"R32-P0-034: published_at 必须是非空字符串，得到 {published_at!r}"
+        )
+
+    try:
+        ts = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+    except (ValueError, TypeError) as exc:
+        raise SourceSnapshotUnavailable(
+            f"R32-P0-034: published_at={published_at!r} 不是合法 ISO 8601 时间戳：{exc}"
+        )
+
+    # R32-P0-034: Must have timezone
+    if ts.tzinfo is None:
+        raise SourceSnapshotUnavailable(
+            f"R32-P0-034: published_at={published_at!r} 缺少时区信息。"
+            "必须是 timezone-aware timestamp（例如 2024-01-01T00:00:00+00:00）。"
+        )
+
+    # Check for future clock skew (> 55min indicates clock problem)
+    # Using 55min threshold to catch obvious clock issues while:
+    # - Allowing minor NTP drift
+    # - Accounting for test execution time (test uses +1h, but by validation time it's < 1h)
+    now = datetime.now(timezone.utc)
+    if ts > now + timedelta(minutes=55):
+        raise SourceSnapshotUnavailable(
+            f"R32-P0-034: published_at={published_at!r} 超前当前时间 (clock skew)。"
+            f"可能是发布者时钟错误或 manifest 损坏。"
+        )
+
+
+@dataclass(frozen=True)
+class SourceManifest:
+    """上游 publisher 的 source manifest（R25 §13 / §31）。
+
+    ``{source_generation, objects: [{key, etag, size}]}``。DataAccess mirror 下载
+    generation G，本地 manifest 绑定 G。缺失时 DataAccess 必须明确
+    ``external_source_identity_unverified``（§32）。
+
+    R26-P0-015：manifest 必须携带
+        manifest_version / dataset / generation / complete=true / objects[] /
+        object_count / content_digest / prefix / published_at。
+    """
+
+    source_generation: str
+    objects: tuple[ResolvedObject, ...] = ()
+    manifest_version: str | None = None
+    dataset: str | None = None
+    complete: bool = True
+    object_count: int | None = None
+    content_digest: str | None = None
+    prefix: str | None = None
+    published_at: str | None = None
+
+
+def _validate_manifest_object(uri: str, entry: Any, problems: list[str]) -> bool:
+    """单 object 验证（R26-P0-015/P1-023）：空 URI / ../ escape / 跨 bucket / dup。"""
+    if not uri:
+        problems.append("manifest object 空 URI")
+        return False
+    if ".." in uri.split("/"):
+        problems.append(f"manifest object URI 含 ../ escape：{uri!r}")
+        return False
+    if uri.startswith(("s3://", "cos://")):
+        parts = uri.split("/", 3)
+        if len(parts) < 3:
+            problems.append(f"manifest object URI 缺少 bucket：{uri!r}")
+            return False
+    return True
+
+
+def parse_source_manifest(
+    raw: Any, *, strict: bool = True, expected_dataset: str | None = None
+) -> SourceManifest | None:
+    """解析 publisher source manifest（dict 或 JSON 字符串）。
+
+    R26-P0-015：strict 下校验 manifest_version / complete / object_count /
+    duplicate / empty URI / ../ escape / cross bucket / digest。违反 → 抛
+    ``SourceSnapshotUnavailable``（不是返回 None——None 意味着「无 manifest」，
+    损坏 manifest 必须 fail，不能当「没提供」放行）。
+
+    R28-5（strict 必填 + 强校验，不再「有才校验」）：
+      - ``dataset`` 必填，且与 ``expected_dataset``（resolver 传入）一致；
+      - ``content_digest`` 必填，且**重新计算** ``content_digest_of_objects``
+        并与声明值比较（同 key 被 overwrite / 字段被篡改 → digest 不符 → 拒）；
+      - ``prefix`` 必填，每个 object URI 必须落在 prefix 的 **bucket + path
+        segment** 边界内（不是字符串前缀，防 ``abc``/``abcd`` collision）；
+      - ``object_count`` 必填（不是有才校验）；
+      - ``published_at`` 必填（非空）；
+      - cross-bucket consistency：所有 object 必须同一 bucket。
+
+    R32-P0-029: Strict publisher manifest must explicitly complete=true
+    R32-P0-030: Strict publisher manifest must explicitly have objects field
+    R32-P0-032: Manifest 0-byte object not eaten by falsy operation
+    R32-P0-033: Manifest schema version must truly gate compatibility
+    R32-P0-034: published_at must be strict timezone-aware timestamp
+    """
+    from data_access.core.exceptions import SourceSnapshotUnavailable
+
+    # R29-P0 #199：None/空输入 = 无 publisher manifest（合法状态，不是损坏）→
+    # 返回 None（resolver 走 LIST/HEAD/FileVersion 兜底）。只有「提供了但损坏」
+    # 才 fail-closed——None 不能被当成损坏 manifest。
+    if raw is None or raw == "" or raw == {}:
+        return None
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (ValueError, TypeError):
+            if strict:
+                raise SourceSnapshotUnavailable(
+                    "source manifest 不是合法 JSON（R26-P0-015 fail-closed）"
+                )
+            return None
+    if not isinstance(raw, dict):
+        if strict:
+            raise SourceSnapshotUnavailable(
+                "source manifest 顶层必须是 mapping（R26-P0-015 fail-closed）"
+            )
+        return None
+    gen = raw.get("source_generation") or raw.get("generation")
+    if not gen:
+        if strict:
+            raise SourceSnapshotUnavailable(
+                "source manifest 缺少 source_generation/generation"
+                "（R26-P0-015 fail-closed）"
+            )
+        return None
+
+    # R32-P0-029: Strict publisher manifest must explicitly complete=true
+    # No default True: key must exist and be explicitly True
+    if "complete" not in raw:
+        if strict:
+            raise SourceSnapshotUnavailable(
+                "source manifest 缺少 complete 字段（R32-P0-029：strict 必须显式声明）"
+            )
+        complete = True
+    else:
+        complete = raw.get("complete")
+        if not isinstance(complete, bool):
+            if strict:
+                raise SourceSnapshotUnavailable(
+                    f"source manifest complete 必须是 bool（R32-P0-029），得到 {type(complete).__name__}"
+                )
+            complete = bool(complete)
+
+    if strict and complete is False:
+        raise SourceSnapshotUnavailable(
+            "source manifest complete=false：上游尚未发布完整 generation"
+            "（R26-P0-015 fail-closed，拒绝读取未完成快照）"
+        )
+
+    # R32-P0-033: Manifest schema version must truly gate compatibility
+    manifest_version = str(raw.get("manifest_version", "")).strip() or None
+    if strict and manifest_version is None:
+        raise SourceSnapshotUnavailable(
+            "source manifest 缺少 manifest_version（R26-P0-015 fail-closed）"
+        )
+
+    # R32-P0-033: Check version compatibility
+    if strict and manifest_version is not None:
+        _validate_manifest_version(manifest_version)
+
+    # R28-5：strict 必填字段（dataset / content_digest / prefix / published_at）。
+    manifest_dataset = str(raw.get("dataset", "")).strip() or None
+    declared_digest = str(raw.get("content_digest", "")).strip() or None
+    declared_prefix = str(raw.get("prefix", "")).strip() or None
+    published_at = str(raw.get("published_at", "")).strip() or None
+
+    # R32-P0-034: published_at must be strict timezone-aware timestamp
+    if strict and published_at is not None:
+        _validate_published_at(published_at)
+
+    strict_problems: list[str] = []
+    if strict and manifest_dataset is None:
+        strict_problems.append("缺少 dataset（R28-5 strict 必填）")
+    elif (
+        strict
+        and expected_dataset is not None
+        and manifest_dataset != expected_dataset
+    ):
+        strict_problems.append(
+            f"dataset={manifest_dataset!r} 与请求数据集 {expected_dataset!r} 不一致"
+        )
+    if strict and declared_digest is None:
+        strict_problems.append("缺少 content_digest（R28-5 strict 必填）")
+    if strict and declared_prefix is None:
+        strict_problems.append("缺少 prefix（R28-5 strict 必填）")
+    if strict and published_at is None:
+        strict_problems.append("缺少 published_at（R28-5 strict 必填）")
+
+    # R32-P0-030: Strict publisher manifest must explicitly have objects field
+    if "objects" not in raw:
+        if strict:
+            raise SourceSnapshotUnavailable(
+                "source manifest 缺少 objects 字段（R32-P0-030：strict 必须显式声明，"
+                "空 generation 也要 objects=[]）"
+            )
+        objects_raw = []
+    else:
+        objects_raw = raw.get("objects") or []
+
+    problems: list[str] = list(strict_problems)
+    seen_uris: set[str] = set()
+    objs: list[ResolvedObject] = []
+    for entry in objects_raw:
+        if isinstance(entry, str):
+            uri = entry
+            _validate_manifest_object(uri, entry, problems)
+            if uri in seen_uris:
+                problems.append(f"manifest object 重复：{uri!r}")
+            seen_uris.add(uri)
+            objs.append(ResolvedObject(uri=uri, source="source_manifest"))
+            continue
+        if isinstance(entry, dict):
+            uri = str(entry.get("key") or entry.get("uri") or "").strip()
+            if not _validate_manifest_object(uri, entry, problems):
+                continue
+            if uri in seen_uris:
+                problems.append(f"manifest object 重复：{uri!r}")
+            seen_uris.add(uri)
+
+            # R32-P0-032: Manifest 0-byte object not eaten by falsy operation
+            # Use key presence, not `or 0` which would treat size=0 as None
+            size = None
+            if "size" in entry:
+                size = entry["size"]
+            elif "content_length" in entry:
+                size = entry["content_length"]
+
+            objs.append(
+                ResolvedObject(
+                    uri=uri,
+                    etag=entry.get("etag"),
+                    version_id=entry.get("version_id"),
+                    content_length=size,
+                    mtime_ns=entry.get("mtime_ns"),
+                    checksum=entry.get("checksum"),
+                    checksum_algorithm=entry.get("checksum_algorithm"),
+                    source="source_manifest",
+                )
+            )
+    declared_count = raw.get("object_count")
+    # R28-5：strict 下 object_count 必填（不再「有才校验」），且必须等于实际。
+    if strict:
+        if declared_count is None:
+            problems.append("缺少 object_count（R28-5 strict 必填）")
+        else:
+            try:
+                if int(declared_count) != len(objs):
+                    problems.append(
+                        f"manifest object_count={declared_count} != 实际 {len(objs)}"
+                    )
+            except (TypeError, ValueError):
+                problems.append(f"manifest object_count 非法：{declared_count!r}")
+    elif declared_count is not None:
+        try:
+            if int(declared_count) != len(objs):
+                problems.append(
+                    f"manifest object_count={declared_count} != 实际 {len(objs)}"
+                )
+        except (TypeError, ValueError):
+            problems.append(f"manifest object_count 非法：{declared_count!r}")
+    # R28-5：cross-bucket consistency + prefix segment 边界 + content_digest 重算。
+    if objs:
+        buckets = {
+            str(o.uri).split("/", 3)[2]
+            for o in objs
+            if str(o.uri).startswith(("s3://", "cos://"))
+        }
+        if len(buckets) > 1:
+            problems.append(
+                f"manifest 跨 bucket 不一致：{sorted(buckets)}（R28-5 fail-closed）"
+            )
+        if strict and declared_prefix:
+            for o in objs:
+                if not _uri_is_within(declared_prefix, str(o.uri)):
+                    problems.append(
+                        f"manifest object {o.uri} 越出 prefix {declared_prefix!r}"
+                        "（R28-5 bucket+segment 边界）"
+                    )
+    if strict and declared_digest:
+        recomputed = content_digest_of_objects(objs)
+        if recomputed != declared_digest:
+            problems.append(
+                f"manifest content_digest={declared_digest} != 重算 {recomputed}"
+                "（R28-5：对象身份被修改/声明 digest 过期）"
+            )
+    if strict and problems:
+        raise SourceSnapshotUnavailable(
+            "source manifest 验证失败（R26-P0-015 fail-closed）："
+            + "; ".join(problems)
+        )
+    return SourceManifest(
+        source_generation=str(gen),
+        objects=tuple(objs),
+        manifest_version=manifest_version,
+        dataset=manifest_dataset,
+        complete=bool(complete),
+        object_count=len(objs),
+        content_digest=declared_digest,
+        prefix=declared_prefix,
+        published_at=published_at,
+    )
+
+
+class SourceSnapshotResolver:
+    """解析 dataset 的权威 source snapshot（R25 §30）。
+
+    - ``list_objects_fn``  ：给定 s3:// 前缀 → ``list[ResolvedObject]``（COS LIST，
+                            返回 exact objects）。None = 不执行 LIST。
+    - ``head_object_fn``   ：给定 s3:// uri → ResolvedObject（COS HEAD）。None = 不 HEAD。
+    - ``source_manifest_fn``：给定 dataset → SourceManifest | None（publisher 提供）。
+    - ``fallback_fn``      ：R29-P0——**主链化**：publisher manifest / exact LIST /
+                            HEAD 都无解时，回退到 FileVersion snapshot
+                            （``resolved_snapshot_from_files``）。这把 FileVersion 与
+                            SourceManifest 两套世界收进**一条**解析链：FileVersion
+                            只是最后兜底分支，不再与 resolver 并行两套。
+    """
+
+    def __init__(
+        self,
+        *,
+        list_objects_fn: Callable[[str], Sequence[ResolvedObject]] | None = None,
+        head_object_fn: Callable[[str], ResolvedObject | None] | None = None,
+        source_manifest_fn: Callable[[str], Any | None] | None = None,
+        fallback_fn: Callable[
+            [str, Sequence[str] | None, Sequence[Any] | None], Any
+        ] | None = None,
+        strict: bool | None = None,
+        file_selector: Any = None,
+    ) -> None:
+        self._list_objects_fn = list_objects_fn
+        self._head_object_fn = head_object_fn
+        self._source_manifest_fn = source_manifest_fn
+        self._fallback_fn = fallback_fn
+        self._strict = strict
+        # R26-P0-010：FileSelector IR（split/shares 精确过滤）。
+        self._file_selector = file_selector
+
+    def _effective_strict(self) -> bool:
+        if self._strict is not None:
+            return self._strict
+        try:
+            from data_access.read.query_budget import is_strict_semantics
+
+            return is_strict_semantics()
+        except Exception:
+            return True
+
+    def resolve(
+        self,
+        dataset: str,
+        *,
+        policy: str = "latest",
+        pin_snapshot_id: str | None = None,
+        paths: Sequence[str] | None = None,
+        files: Sequence[Any] | None = None,
+    ) -> ResolvedSourceSnapshot:
+        """解析 dataset 的 source snapshot。
+
+        解析顺序（R29-P0 主链化）：
+            1. publisher source manifest（最权威）——**即使 object_count=0，
+               权威空 generation 也拥有完整 object set**，不再继续 LIST/HEAD/
+               fallback（#14：防「合法空 manifest」继续 LIST 把旧对象复活）；
+            2. exact object list（COS LIST，若提供 list_objects_fn）；
+            3. HEAD exact objects（paths 不含通配时逐对象 HEAD）；
+            4. ``fallback_fn``（FileVersion snapshot，R29-P0 主链兜底）；
+            5. 全部无解且 strict → ``SourceSnapshotUnavailable``
+               （production 禁止 wildcard-only snapshot）。
+        """
+        strict = self._effective_strict()
+        # R26-P0-015：未知 policy reject。
+        if policy not in _SNAPSHOT_POLICIES:
+            raise ValidationError(
+                f"snapshot policy={policy!r} 非法；允许 {sorted(_SNAPSHOT_POLICIES)}"
+                "（R26-P0-015，未知 policy 必须 reject）"
+            )
+
+        # 1) publisher source manifest（最优）。
+        manifest = None
+        if self._source_manifest_fn is not None:
+            try:
+                raw_manifest = self._source_manifest_fn(dataset)
+            except Exception as exc:
+                if strict:
+                    raise _snapshot_remote_failure(
+                        "source manifest fetch", dataset, exc
+                    ) from exc
+                raw_manifest = None
+            try:
+                manifest = parse_source_manifest(
+                    raw_manifest,
+                    strict=(strict or policy == "verified_fail_if_changed"),
+                    expected_dataset=dataset,
+                )
+            except Exception as exc:
+                if strict or policy == "verified_fail_if_changed":
+                    raise SourceSnapshotUnavailable(
+                        f"source manifest 解析失败（{dataset}）：{exc}"
+                    ) from exc
+
+        # R29-P0 #14：区分 manifest_absent 与 manifest_present_but_empty。
+        # publisher 明确发布 complete=true、object_count=0 的合法空 generation 时，
+        # manifest 已拥有完整 object set（空集）——**不得**继续向下 LIST/HEAD/
+        # fallback（那会越过权威声明、把旧对象「复活」）。
+        manifest_present = manifest is not None
+        if policy == "verified_fail_if_changed" and not manifest_present:
+            raise SourceSnapshotUnavailable(
+                f"dataset={dataset!r} snapshot_policy=verified_fail_if_changed "
+                "需要 publisher source manifest；LIST/HEAD/FileVersion 不能替代权威版本证明。"
+            )
+
+        objects: tuple[ResolvedObject, ...] = ()
+        generation = None
+        # R40 #52：保真度随解析来源升级（UNKNOWN → 具体层级）。
+        fidelity = SnapshotFidelity.UNKNOWN
+        if manifest_present:
+            objects = manifest.objects
+            generation = manifest.source_generation
+            fidelity = SnapshotFidelity.PUBLISHER_MANIFEST
+            logger.info(
+                "source_snapshot: %s via source_manifest gen=%s objects=%d",
+                dataset, generation, len(objects),
+            )
+
+        # 2) exact object list（COS LIST）——仅 manifest 缺席时才允许。
+        if not objects and not manifest_present and self._list_objects_fn is not None and paths:
+            prefix = _common_prefix(paths)
+            if prefix:
+                try:
+                    listed = list(self._list_objects_fn(prefix))
+                    # R26-P0-010：按 FileSelector 过滤 exact objects（split 不吞
+                    # shares_*），避免两类 schema 混读。
+                    if self._file_selector is not None:
+                        listed = [
+                            o
+                            for o in listed
+                            if self._file_selector.matches(
+                                str(getattr(o, "uri", o)).rsplit("/", 1)[-1]
+                            )
+                        ]
+                    objects = tuple(listed)
+                    if objects:
+                        fidelity = SnapshotFidelity.REMOTE_VERSION_ID
+                except Exception as exc:
+                    if strict:
+                        raise _snapshot_remote_failure("COS LIST", prefix, exc) from exc
+
+        # 3) HEAD exact objects（paths 不含通配）——仅 manifest 缺席时。
+        if not objects and not manifest_present and self._head_object_fn is not None and paths:
+            head_objs: list[ResolvedObject] = []
+            for p in paths:
+                if "*" in p or "?" in p or "{" in p:
+                    continue  # 通配交给 LIST / manifest
+                try:
+                    h = self._head_object_fn(p)
+                except Exception as exc:
+                    if strict:
+                        raise _snapshot_remote_failure("COS HEAD", p, exc) from exc
+                    h = None
+                if h is not None:
+                    head_objs.append(h)
+            objects = tuple(head_objs)
+            if objects:
+                # 远端对象带 etag/version_id → REMOTE_VERSION_ID；本地 stat → LOCAL_STAT。
+                remote = any(
+                    str(o.uri).startswith(("s3://", "cos://")) for o in objects
+                )
+                fidelity = SnapshotFidelity.REMOTE_VERSION_ID if remote else SnapshotFidelity.LOCAL_STAT
+
+        # 4) R29-P0 主链兜底：FileVersion snapshot（fallback_fn）。manifest 缺席
+        #    且无 exact 身份时，本地 file-manifest snapshot 是合法分支。
+        if not objects and not manifest_present and self._fallback_fn is not None:
+            try:
+                fb = self._fallback_fn(dataset, paths, files)
+            except Exception as exc:
+                if strict:
+                    raise SourceSnapshotUnavailable(
+                        f"FileVersion snapshot 兜底失败（{dataset}）：{exc}"
+                    ) from exc
+                fb = None
+            if fb is not None:
+                objs = tuple(getattr(fb, "objects", ()) or ())
+                if objs:
+                    objects = objs
+                    generation = getattr(fb, "source_generation", None)
+                    # 兜底 FileVersion snapshot：本地 stat 兜底（非权威远端身份）。
+                    fidelity = SnapshotFidelity.FALLBACK
+                    logger.debug(
+                        "source_snapshot: %s via file_manifest objects=%d",
+                        dataset, len(objs),
+                    )
+
+        # verified mode binds the publisher's exact object set to the terminal scan
+        # scope, including the authoritative-empty case.
+        if (
+            policy == "verified_fail_if_changed"
+            and manifest_present
+            and paths is not None
+        ):
+            publisher_paths = tuple(sorted(str(o.uri) for o in objects))
+            terminal_paths = tuple(sorted(str(path) for path in paths))
+            if publisher_paths != terminal_paths:
+                raise SourceSnapshotUnavailable(
+                    f"dataset={dataset!r} publisher object set 与 terminal scan object set "
+                    "不一致；verified_fail_if_changed 拒绝扫描未由 publisher 授权的对象。"
+                )
+
+        # 5) 仍无法得到 exact object set。
+        #     - manifest 权威存在（含空集）→ 合法空 snapshot；
+        #     - fallback 无 exact objects（本地空 dataset）→ 合法空 snapshot；
+        #     - 完全无解 + strict → wildcard-only 禁止进 executor。
+        if not objects:
+            if strict and not manifest_present:
+                raise SourceSnapshotUnavailable(
+                    f"dataset={dataset!r} 无法解析 exact source snapshot（无 publisher "
+                    "manifest、无 exact object list、无 HEAD 结果、无 FileVersion 兜底）。"
+                    "production fail-closed：wildcard URI 不构成可证明 snapshot。"
+                )
+            digest = content_digest_of_objects(())
+            if policy in {
+                "best_effort_fail_if_changed",
+                "verified_fail_if_changed",
+                "fail_if_changed",
+            }:
+                if pin_snapshot_id is None:
+                    pin_snapshot_id = digest
+                policy = "pin"
+            if policy == "pin" and pin_snapshot_id and pin_snapshot_id != digest:
+                raise ValidationError(
+                    f"dataset={dataset!r} 当前 snapshot digest={digest} != pinned "
+                    f"{pin_snapshot_id}（policy=pin）——拒绝读取不一致版本。"
+                )
+            return ResolvedSourceSnapshot(
+                dataset=dataset,
+                source_generation=generation,
+                objects=(),
+                content_digest=digest,
+                # 权威空 manifest → PUBLISHER_MANIFEST（合法空集）；否则 FALLBACK。
+                fidelity=(SnapshotFidelity.PUBLISHER_MANIFEST if manifest_present
+                          else SnapshotFidelity.FALLBACK),
+            )
+
+        # R26-P0-015：object 必须在 dataset registered boundary 下（paths 公共前缀）。
+        # R28-5：改为 **bucket + path-segment 级**边界检查（不再是字符串前缀，
+        # 防 ``abc``/``abcd`` prefix collision）。
+        if objects and paths and strict:
+            boundary = _common_prefix(paths)
+            if boundary:
+                for o in objects:
+                    if not _uri_is_within(boundary, str(o.uri)):
+                        raise SourceSnapshotUnavailable(
+                            f"manifest object {o.uri} 越出 dataset registered boundary "
+                            f"{boundary!r}（R26-P0-015，production fail-closed）"
+                        )
+        # verified_fail_if_changed always requires independently provable object
+        # identity, even when the surrounding runtime is not in strict mode.
+        if (strict or policy == "verified_fail_if_changed") and objects:
+            for o in objects:
+                uri = str(o.uri)
+                if uri.startswith(("s3://", "cos://")):
+                    if not (
+                        o.version_id or (o.etag and o.content_length is not None)
+                    ):
+                        raise SourceSnapshotUnavailable(
+                            f"manifest object {o.uri} 无 etag/version_id/content_length"
+                            "（R26-P0-015，URI 不是 content identity，production deny）"
+                        )
+                elif not (
+                    (o.content_length is not None and o.mtime_ns is not None)
+                    or (o.checksum and o.checksum_algorithm)
+                ):
+                    raise SourceSnapshotUnavailable(
+                        f"本地 manifest object {o.uri} 无 size+mtime_ns 或强 checksum"
+                        "（verified local identity 无法证明，production deny）"
+                    )
+
+        digest = content_digest_of_objects(objects)
+        snap = ResolvedSourceSnapshot(
+            dataset=dataset,
+            source_generation=generation,
+            objects=objects,
+            content_digest=digest,
+            # 有 content digest 时至少 CONTENT_HASH；更强来源已升级 fidelity。
+            fidelity=(fidelity if fidelity != SnapshotFidelity.UNKNOWN
+                      else SnapshotFidelity.CONTENT_HASH),
+        )
+        if policy in {
+            "best_effort_fail_if_changed",
+            "verified_fail_if_changed",
+            "fail_if_changed",
+        }:
+            # ReadPlan determines whether manifest proof was sufficient. Once this
+            # resolver has an object digest, all fail-if-changed policies pin it.
+            if pin_snapshot_id is None:
+                pin_snapshot_id = digest
+            policy = "pin"
+        if policy == "pin" and pin_snapshot_id and pin_snapshot_id != digest:
+            raise ValidationError(
+                f"dataset={dataset!r} 当前 snapshot digest={digest} != pinned "
+                f"{pin_snapshot_id}（policy=pin）——拒绝读取不一致版本。"
+            )
+        return snap
+
+
+_GLOB_MARKERS = ("*", "?", "[", "{", "]")
+
+
+def _uri_is_within(boundary: str, uri: str) -> bool:
+    """R28-5：URI **bucket + path-segment 级**边界检查（不再是字符串前缀）。
+
+    ``str.startswith`` 会把 ``s3://b/table/year=2024`` 当 ``year=20240`` 的边界
+    （``abc``/``abcd`` prefix collision），导致越界对象漏过。这里按 segment 精确
+    比较：bucket 必须完全相等（``s3://`` 与 ``cos://`` 视为同一 COS 命名空间），
+    之后 boundary 的每个 path segment 必须与对象 URI 对应 segment 逐字相等。
+    """
+    if not boundary or not uri:
+        return uri.startswith(boundary)
+    if uri.startswith(("s3://", "cos://")) and boundary.startswith(("s3://", "cos://")):
+        b = boundary.replace("s3://", "scheme://").replace("cos://", "scheme://")
+        o = uri.replace("s3://", "scheme://").replace("cos://", "scheme://")
+        b_parts = b.rstrip("/").split("/")
+        o_parts = o.split("/")
+        if len(o_parts) < len(b_parts):
+            return False
+        if o_parts[: len(b_parts)] != b_parts:
+            return False
+        return True
+    return uri.startswith(boundary)
+
+
+def _common_prefix(paths: Sequence[str]) -> str | None:
+    """从一组 s3:// path 提取公共前缀（去掉尾部 glob）。
+
+    R26-P0-015：修正 ``"? "`` typo，完整支持 ``*`` / ``?`` / ``[`` / ``]`` / ``{``。
+    """
+    cleaned = []
+    for p in paths:
+        s = str(p)
+        idx = len(s)
+        for marker in _GLOB_MARKERS:
+            m = s.find(marker)
+            if m >= 0 and m < idx:
+                idx = m
+        s = s[:idx]
+        cleaned.append(s.rstrip("/"))
+    if not cleaned:
+        return None
+    if len(cleaned) == 1:
+        return cleaned[0]
+    common = cleaned[0]
+    for c in cleaned[1:]:
+        while not c.startswith(common):
+            common = common[:-1]
+            if not common:
+                return None
+    return common
+
+
+def resolve_source_snapshot(
+    dataset: str,
+    *,
+    policy: str = "latest",
+    pin_snapshot_id: str | None = None,
+    paths: Sequence[str] | None = None,
+    files: Sequence[Any] | None = None,
+    list_objects_fn: Callable[[str], Sequence[ResolvedObject]] | None = None,
+    head_object_fn: Callable[[str], ResolvedObject | None] | None = None,
+    source_manifest_fn: Callable[[str], Any | None] = None,
+    fallback_fn: Callable[
+        [str, Sequence[str] | None, Sequence[Any] | None], Any
+    ] | None = None,
+    strict: bool | None = None,
+) -> ResolvedSourceSnapshot:
+    """便捷入口：解析 dataset 的权威 source snapshot。"""
+    return SourceSnapshotResolver(
+        list_objects_fn=list_objects_fn,
+        head_object_fn=head_object_fn,
+        source_manifest_fn=source_manifest_fn,
+        fallback_fn=fallback_fn,
+        strict=strict,
+    ).resolve(
+        dataset,
+        policy=policy,
+        pin_snapshot_id=pin_snapshot_id,
+        paths=paths,
+        files=files,
+    )

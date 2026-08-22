@@ -1,0 +1,233 @@
+{
+  "current_head": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+  "artifacts": {
+    "factor_operator_verified": {
+      "path": "evidence/factor_operator_verified.json",
+      "bound_sha": "0b659ecaecd8293fa42f4315e01cd3965a7bd513",
+      "bound": true,
+      "current_head": false
+    },
+    "primitive_verified": {
+      "path": "evidence/primitive_verified.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r28/R28_ARTIFACT_MANIFEST": {
+      "path": "docs/evidence/r28/R28_ARTIFACT_MANIFEST.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r28/R28_CANONICAL_TEST_COVERAGE": {
+      "path": "docs/evidence/r28/R28_CANONICAL_TEST_COVERAGE.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r28/R28_FORBIDDEN_OPERATOR_AUDIT": {
+      "path": "docs/evidence/r28/R28_FORBIDDEN_OPERATOR_AUDIT.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r28/R28_MODEL_CAUSALITY_MATRIX": {
+      "path": "docs/evidence/r28/R28_MODEL_CAUSALITY_MATRIX.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r28/R28_OPERATOR_INVENTORY": {
+      "path": "docs/evidence/r28/R28_OPERATOR_INVENTORY.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r28/R28_PER_CANONICAL_TEST_RESULTS": {
+      "path": "docs/evidence/r28/R28_PER_CANONICAL_TEST_RESULTS.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r28/R28_PYTEST_SUMMARY": {
+      "path": "docs/evidence/r28/R28_PYTEST_SUMMARY.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r28/R28_STATIC_LOOKAHEAD_SCAN": {
+      "path": "docs/evidence/r28/R28_STATIC_LOOKAHEAD_SCAN.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r30/R30_ARTIFACT_MANIFEST": {
+      "path": "docs/evidence/r30/R30_ARTIFACT_MANIFEST.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r30/R30_AVAILABILITY_CLOCK_AUDIT.csv": {
+      "path": "docs/evidence/r30/R30_AVAILABILITY_CLOCK_AUDIT.csv.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r30/R30_HARD_GATES": {
+      "path": "docs/evidence/r30/R30_HARD_GATES.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r30/R30_HEAD": {
+      "path": "docs/evidence/r30/R30_HEAD.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r30/R30_PER_CANONICAL_FINAL_REVIEW": {
+      "path": "docs/evidence/r30/R30_PER_CANONICAL_FINAL_REVIEW.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r30/R30_PRODUCTION_ADMISSION_AUDIT": {
+      "path": "docs/evidence/r30/R30_PRODUCTION_ADMISSION_AUDIT.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r30/R30_SOURCE_UNIVERSE_PIT_AUDIT": {
+      "path": "docs/evidence/r30/R30_SOURCE_UNIVERSE_PIT_AUDIT.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r30/R30_TOMBSTONE_MANIFEST": {
+      "path": "docs/evidence/r30/R30_TOMBSTONE_MANIFEST.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r31/R31_CURRENT_ARCHITECTURE": {
+      "path": "docs/evidence/r31/R31_CURRENT_ARCHITECTURE.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r31/R31_DEPENDENCY_COMPATIBILITY": {
+      "path": "docs/evidence/r31/R31_DEPENDENCY_COMPATIBILITY.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r31/R31_DUCKDB_CORE_PARITY": {
+      "path": "docs/evidence/r31/R31_DUCKDB_CORE_PARITY.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r31/R31_HARD_GATES": {
+      "path": "docs/evidence/r31/R31_HARD_GATES.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r32/R32_ARTIFACT_MANIFEST": {
+      "path": "docs/evidence/r32/R32_ARTIFACT_MANIFEST.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r32/R32_CALENDAR_FAILURE_POLICY": {
+      "path": "docs/evidence/r32/R32_CALENDAR_FAILURE_POLICY.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r32/R32_CATALOG_PRAGMA_AUDIT": {
+      "path": "docs/evidence/r32/R32_CATALOG_PRAGMA_AUDIT.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r32/R32_COLD_START_OPERATOR_SYNC": {
+      "path": "docs/evidence/r32/R32_COLD_START_OPERATOR_SYNC.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r32/R32_CSE_REACHABILITY_AUDIT": {
+      "path": "docs/evidence/r32/R32_CSE_REACHABILITY_AUDIT.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r32/R32_DR_RESTORE_TEST": {
+      "path": "docs/evidence/r32/R32_DR_RESTORE_TEST.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r32/R32_FACTOR_IDENTITY_DEPENDENCY_SCOPE": {
+      "path": "docs/evidence/r32/R32_FACTOR_IDENTITY_DEPENDENCY_SCOPE.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r32/R32_FACTOR_ID_SAFETY_TESTS": {
+      "path": "docs/evidence/r32/R32_FACTOR_ID_SAFETY_TESTS.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r32/R32_HARD_GATES": {
+      "path": "docs/evidence/r32/R32_HARD_GATES.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r32/R32_HEAD": {
+      "path": "docs/evidence/r32/R32_HEAD.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r32/R32_JOB_STATE_MACHINE_TESTS": {
+      "path": "docs/evidence/r32/R32_JOB_STATE_MACHINE_TESTS.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r32/R32_PRECISION_CERTIFICATE_VALIDATION": {
+      "path": "docs/evidence/r32/R32_PRECISION_CERTIFICATE_VALIDATION.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r32/R32_RECIPE_MIGRATION_AUDIT": {
+      "path": "docs/evidence/r32/R32_RECIPE_MIGRATION_AUDIT.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r35/R35_HEAD": {
+      "path": "docs/evidence/r35/R35_HEAD.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r36/R36_HEAD": {
+      "path": "docs/evidence/r36/R36_HEAD.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r37/R37_HEAD": {
+      "path": "docs/evidence/r37/R37_HEAD.json",
+      "bound_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "bound": true,
+      "current_head": true
+    }
+  }
+}

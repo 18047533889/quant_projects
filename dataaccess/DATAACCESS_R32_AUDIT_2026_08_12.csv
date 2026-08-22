@@ -1,0 +1,32 @@
+"""R32-P0-107/108/109/110/111 审计 CSV（2026-08-12 02:30 UTC）
+
+需求ID,需求描述,实现状态,测试状态,Wheel验证,备注
+R32-P0-107,CanonicalIdentityEncoder全仓唯一（list保序/set排序/无repr fallback）,✅ PROVEN,✅ 10/10 passed,✅ clean-install smoke,r30/_shared.py stable_digest/stable_digest_full
+R32-P0-108,关键identity≥128-bit,✅ PROVEN,✅ test_r32_p0_108,✅ len=64,stable_digest_full返回64字符sha256（256-bit）
+R32-P0-109,版本改为SCM/tag驱动,⚠️ PARTIAL,✅ test_r32_p0_109,⚠️ 0.11.0.dev0+untagged,pyproject.toml配置就位；dirty tree需clean commit+tag
+R32-P0-110,R30 package必须进wheel,✅ PROVEN,✅ test_r32_p0_110,✅ 12/12 packages,pyproject.toml已显式data_access.r30；wheel inventory OK
+R32-P0-111,build SHA在build-time固化,⚠️ PARTIAL,✅ test_r32_p0_111,⚠️ __commit_id__=None,_build_meta.py就位；dirty tree→setuptools-scm不写SHA
+
+工作树状态,git status --porcelain | wc -l,67,dirty,N/A,并发R30/R31+本次R32修改
+Wheel产物,data_access-0.11.0.dev0+untagged-py3-none-any.whl,1.6 MB,OK,✅ 含_build_info.py+r30/,setuptools-scm生成成功
+Clean-install,/tmp/da_r32_clean_install + venv,OK,✅ import smoke,✅ stable_digest/r30,version=0.11.0.dev0+untagged；build_sha=None
+测试覆盖,tests/unit/test_r32_identity_version_2026_08.py,10 tests,✅ 10 passed,100%,pytest -v
+
+NOT PROVEN项（需clean commit+tag）:
+- R32-P0-109: 版本号从tag生成（当前fallback_version生效；需tag dataaccess-v0.11.0）
+- R32-P0-111: build SHA固化（dirty tree→__commit_id__=None；需clean tree重新build）
+
+配置验证（已就位）:
+- setuptools-scm≥8.0 已声明（pyproject.toml [build-system] requires）
+- version_file = "data_access/_build_info.py" 已配置
+- tag_regex = "^dataaccess-v(?P<version>[0-9.]+)$" 已配置
+- fallback_version = "0.11.0.dev0+untagged" 已配置（当前生效）
+- _build_meta.build_sha() 优先读_build_info.__commit_id__（代码就位）
+
+完整验证步骤（需执行）:
+1. git add + commit（清理dirty状态）
+2. git tag dataaccess-v0.11.0
+3. python3 -m build --wheel --outdir dist/
+4. 验证_build_info.py: __version__='0.11.0', __commit_id__='<SHA>'
+5. clean-install验证: data_access.__build_sha__='<SHA>'（非None）
+"""

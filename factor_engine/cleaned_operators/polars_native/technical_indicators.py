@@ -1,0 +1,503 @@
+# -*- coding: utf-8 -*-
+"""
+Polars native 技术指标算子 - OHLC 专项
+
+所有算子使用 Polars 表达式实现，不依赖 pandas/ta-lib。
+支持常见技术指标：RSI, MACD, Bollinger, ATR, ADX, Keltner 等。
+
+这些算子作为 polars backend 的原生实现，优先级高于 pandas bridge。
+"""
+from __future__ import annotations
+import polars as pl
+import numpy as np
+from cleaned_operators.base_polars import (
+    SeriesOperator,
+    OperatorMetadata,
+    register_operator,
+    PANEL_SKIP_COLUMNS,
+)
+
+
+def _apply_to_panel(df: pl.DataFrame, expr_fn) -> pl.DataFrame:
+    """对 panel 所有数值列应用 Polars 表达式函数"""
+    cols = [c for c in df.columns if c not in PANEL_SKIP_COLUMNS]
+    if not cols:
+        return df
+    return df.with_columns([expr_fn(pl.col(c)).alias(c) for c in cols])
+
+
+def _ema_expr(col: pl.Expr, span: int) -> pl.Expr:
+    """EMA 表达式（alpha = 2/(span+1)）"""
+    return col.ewm_mean(span=span, adjust=False, ignore_nulls=True)
+
+
+def _wilder_ema_expr(col: pl.Expr, period: int) -> pl.Expr:
+    """Wilder's smoothing (alpha = 1/period)"""
+    alpha = 1.0 / period
+    return col.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
+
+
+# ==================== RSI ====================
+@register_operator(
+    name="RSI_WILDER",
+    category="technical_indicator",
+    canonical="RSI_WILDER",
+    source="polars_native_technical",
+    replace=True,
+    replacement_reason="Polars native implementation for performance",
+)
+class RSI_WILDER(SeriesOperator):
+    """RSI (Wilder's smoothing)"""
+
+    metadata = OperatorMetadata(
+        name="RSI_WILDER",
+        category="technical_indicator",
+        description="RSI using Wilder's smoothing method",
+        param_names=["close", "period"],
+        param_types={"close": pl.DataFrame, "period": int},
+    )
+
+    def _calculate_series(self, close: pl.DataFrame, period: int = 14, **kwargs) -> pl.DataFrame:
+        def rsi_expr(col_name):
+            delta = pl.col(col_name).diff()
+            gain = delta.clip(lower_bound=0)
+            loss = (-delta).clip(lower_bound=0)
+            avg_gain = _wilder_ema_expr(gain, period)
+            avg_loss = _wilder_ema_expr(loss, period)
+            rs = avg_gain / avg_loss
+            rsi = 100 - 100 / (1 + rs)
+            return rsi.alias(col_name)
+
+        return _apply_to_panel(close, lambda c: rsi_expr(c.meta.output_name()))
+
+
+# ==================== MACD ====================
+@register_operator(
+    name="MACD_line",
+    category="technical_indicator",
+    canonical="MACD_line",
+    source="polars_native_technical",
+    replace=True,
+    replacement_reason="Polars native implementation",
+)
+class MACD_line(SeriesOperator):
+    """MACD line (fast EMA - slow EMA)"""
+
+    metadata = OperatorMetadata(
+        name="MACD_line",
+        category="technical_indicator",
+        description="MACD line = EMA(fast) - EMA(slow)",
+        param_names=["close", "fast", "slow"],
+        param_types={"close": pl.DataFrame, "fast": int, "slow": int},
+    )
+
+    def _calculate_series(self, close: pl.DataFrame, fast: int = 12, slow: int = 26, **kwargs) -> pl.DataFrame:
+        def macd_expr(col_name):
+            ema_fast = _ema_expr(pl.col(col_name), fast)
+            ema_slow = _ema_expr(pl.col(col_name), slow)
+            return (ema_fast - ema_slow).alias(col_name)
+
+        return _apply_to_panel(close, lambda c: macd_expr(c.meta.output_name()))
+
+
+@register_operator(
+    name="MACD_signal",
+    category="technical_indicator",
+    canonical="MACD_signal",
+    source="polars_native_technical",
+    replace=True,
+    replacement_reason="Polars native implementation",
+)
+class MACD_signal(SeriesOperator):
+    """MACD signal line (EMA of MACD line)"""
+
+    metadata = OperatorMetadata(
+        name="MACD_signal",
+        category="technical_indicator",
+        description="MACD signal = EMA(MACD, signal_period)",
+        param_names=["close", "fast", "slow", "signal"],
+        param_types={"close": pl.DataFrame, "fast": int, "slow": int, "signal": int},
+    )
+
+    def _calculate_series(self, close: pl.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9, **kwargs) -> pl.DataFrame:
+        def signal_expr(col_name):
+            ema_fast = _ema_expr(pl.col(col_name), fast)
+            ema_slow = _ema_expr(pl.col(col_name), slow)
+            macd_line = ema_fast - ema_slow
+            return _ema_expr(macd_line, signal).alias(col_name)
+
+        return _apply_to_panel(close, lambda c: signal_expr(c.meta.output_name()))
+
+
+@register_operator(
+    name="MACD_hist",
+    category="technical_indicator",
+    canonical="MACD_hist",
+    source="polars_native_technical",
+    replace=True,
+    replacement_reason="Polars native implementation",
+)
+class MACD_hist(SeriesOperator):
+    """MACD histogram (MACD line - signal line)"""
+
+    metadata = OperatorMetadata(
+        name="MACD_hist",
+        category="technical_indicator",
+        description="MACD histogram = MACD_line - MACD_signal",
+        param_names=["close", "fast", "slow", "signal"],
+        param_types={"close": pl.DataFrame, "fast": int, "slow": int, "signal": int},
+    )
+
+    def _calculate_series(self, close: pl.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9, **kwargs) -> pl.DataFrame:
+        def hist_expr(col_name):
+            ema_fast = _ema_expr(pl.col(col_name), fast)
+            ema_slow = _ema_expr(pl.col(col_name), slow)
+            macd_line = ema_fast - ema_slow
+            signal_line = _ema_expr(macd_line, signal)
+            return (macd_line - signal_line).alias(col_name)
+
+        return _apply_to_panel(close, lambda c: hist_expr(c.meta.output_name()))
+
+
+# ==================== ATR ====================
+@register_operator(
+    name="ATR_WILDER",
+    category="technical_indicator",
+    canonical="ATR_WILDER",
+    source="polars_native_technical",
+    replace=True,
+    replacement_reason="Polars native implementation",
+)
+class ATR_WILDER(SeriesOperator):
+    """Average True Range (Wilder's smoothing)"""
+
+    metadata = OperatorMetadata(
+        name="ATR_WILDER",
+        category="technical_indicator",
+        description="Average True Range using Wilder's smoothing",
+        param_names=["high", "low", "close", "period"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame, "period": int},
+    )
+
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, close: pl.DataFrame, period: int = 14, **kwargs) -> pl.DataFrame:
+        cols_data = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
+        if not cols_data:
+            return high
+
+        h_vals = high.select(cols_data).to_numpy()
+        l_vals = low.select(cols_data).to_numpy()
+        c_vals = close.select(cols_data).to_numpy()
+
+        # 计算 TR
+        c_prev = np.roll(c_vals, 1, axis=0)
+        c_prev[0, :] = np.nan
+        tr1 = h_vals - l_vals
+        tr2 = np.abs(h_vals - c_prev)
+        tr3 = np.abs(l_vals - c_prev)
+        tr = np.maximum(np.maximum(tr1, tr2), tr3)
+
+        # Wilder's EMA
+        alpha = 1.0 / period
+        atr = np.full_like(tr, np.nan)
+        for i in range(len(tr)):
+            if i == 0:
+                atr[i] = tr[i]
+            else:
+                atr[i] = alpha * tr[i] + (1 - alpha) * atr[i-1]
+
+        result_df = pl.DataFrame(atr, schema=cols_data)
+        for meta_col in PANEL_SKIP_COLUMNS:
+            if meta_col in high.columns:
+                result_df = result_df.with_columns([high[meta_col]])
+        return result_df
+
+
+# ==================== Bollinger Bands ====================
+@register_operator(
+    name="bollinger_width",
+    category="technical_indicator",
+    canonical="bollinger_width",
+    source="polars_native_technical",
+    replace=True,
+    replacement_reason="Polars native implementation",
+)
+class BollingerWidth(SeriesOperator):
+    """Bollinger Bands width (upper - lower) / middle"""
+
+    metadata = OperatorMetadata(
+        name="bollinger_width",
+        category="technical_indicator",
+        description="Bollinger Bands width normalized by middle band",
+        param_names=["close", "window", "num_std"],
+        param_types={"close": pl.DataFrame, "window": int, "num_std": float},
+    )
+
+    def _calculate_series(self, close: pl.DataFrame, window: int = 20, num_std: float = 2.0, **kwargs) -> pl.DataFrame:
+        def bb_width_expr(col_name):
+            sma = pl.col(col_name).rolling_mean(window)
+            std = pl.col(col_name).rolling_std(window)
+            upper = sma + num_std * std
+            lower = sma - num_std * std
+            width = (upper - lower) / sma
+            return width.alias(col_name)
+
+        return _apply_to_panel(close, lambda c: bb_width_expr(c.meta.output_name()))
+
+
+@register_operator(
+    name="bollinger_pct_b",
+    category="technical_indicator",
+    canonical="bollinger_pct_b",
+    source="polars_native_technical",
+    replace=True,
+    replacement_reason="Polars native implementation",
+)
+class BollingerPctB(SeriesOperator):
+    """Bollinger %B: (close - lower) / (upper - lower)"""
+
+    metadata = OperatorMetadata(
+        name="bollinger_pct_b",
+        category="technical_indicator",
+        description="Bollinger %B position indicator",
+        param_names=["close", "window", "num_std"],
+        param_types={"close": pl.DataFrame, "window": int, "num_std": float},
+    )
+
+    def _calculate_series(self, close: pl.DataFrame, window: int = 20, num_std: float = 2.0, **kwargs) -> pl.DataFrame:
+        def pct_b_expr(col_name):
+            c = pl.col(col_name)
+            sma = c.rolling_mean(window)
+            std = c.rolling_std(window)
+            upper = sma + num_std * std
+            lower = sma - num_std * std
+            pct_b = (c - lower) / (upper - lower)
+            return pct_b.alias(col_name)
+
+        return _apply_to_panel(close, lambda c: pct_b_expr(c.meta.output_name()))
+
+
+# ==================== Moving Averages ====================
+@register_operator(
+    name="DEMA",
+    category="technical_indicator",
+    canonical="DEMA",
+    source="polars_native_technical",
+    replace=True,
+    replacement_reason="Polars native implementation",
+)
+class DEMA(SeriesOperator):
+    """Double Exponential Moving Average: 2*EMA - EMA(EMA)"""
+
+    metadata = OperatorMetadata(
+        name="DEMA",
+        category="technical_indicator",
+        description="Double Exponential Moving Average",
+        param_names=["close", "period"],
+        param_types={"close": pl.DataFrame, "period": int},
+    )
+
+    def _calculate_series(self, close: pl.DataFrame, period: int = 20, **kwargs) -> pl.DataFrame:
+        def dema_expr(col_name):
+            ema1 = _ema_expr(pl.col(col_name), period)
+            ema2 = _ema_expr(ema1, period)
+            return (2 * ema1 - ema2).alias(col_name)
+
+        return _apply_to_panel(close, lambda c: dema_expr(c.meta.output_name()))
+
+
+@register_operator(
+    name="TEMA",
+    category="technical_indicator",
+    canonical="TEMA",
+    source="polars_native_technical",
+    replace=True,
+    replacement_reason="Polars native implementation",
+)
+class TEMA(SeriesOperator):
+    """Triple Exponential Moving Average"""
+
+    metadata = OperatorMetadata(
+        name="TEMA",
+        category="technical_indicator",
+        description="Triple Exponential Moving Average",
+        param_names=["close", "period"],
+        param_types={"close": pl.DataFrame, "period": int},
+    )
+
+    def _calculate_series(self, close: pl.DataFrame, period: int = 20, **kwargs) -> pl.DataFrame:
+        def tema_expr(col_name):
+            ema1 = _ema_expr(pl.col(col_name), period)
+            ema2 = _ema_expr(ema1, period)
+            ema3 = _ema_expr(ema2, period)
+            return (3 * ema1 - 3 * ema2 + ema3).alias(col_name)
+
+        return _apply_to_panel(close, lambda c: tema_expr(c.meta.output_name()))
+
+
+# ==================== CMO ====================
+@register_operator(
+    name="CMO",
+    category="technical_indicator",
+    canonical="CMO",
+    source="polars_native_technical",
+    replace=True,
+    replacement_reason="Polars native implementation",
+)
+class CMO(SeriesOperator):
+    """Chande Momentum Oscillator"""
+
+    metadata = OperatorMetadata(
+        name="CMO",
+        category="technical_indicator",
+        description="Chande Momentum Oscillator",
+        param_names=["close", "period"],
+        param_types={"close": pl.DataFrame, "period": int},
+    )
+
+    def _calculate_series(self, close: pl.DataFrame, period: int = 14, **kwargs) -> pl.DataFrame:
+        def cmo_expr(col_name):
+            delta = pl.col(col_name).diff()
+            gain = delta.clip(lower_bound=0).rolling_sum(period)
+            loss = (-delta).clip(lower_bound=0).rolling_sum(period)
+            cmo = 100 * (gain - loss) / (gain + loss)
+            return cmo.alias(col_name)
+
+        return _apply_to_panel(close, lambda c: cmo_expr(c.meta.output_name()))
+
+
+# ==================== PPO ====================
+@register_operator(
+    name="PPO",
+    category="technical_indicator",
+    canonical="PPO",
+    source="polars_native_technical",
+    replace=True,
+    replacement_reason="Polars native implementation",
+)
+class PPO(SeriesOperator):
+    """Percentage Price Oscillator"""
+
+    metadata = OperatorMetadata(
+        name="PPO",
+        category="technical_indicator",
+        description="Percentage Price Oscillator",
+        param_names=["close", "fast", "slow"],
+        param_types={"close": pl.DataFrame, "fast": int, "slow": int},
+    )
+
+    def _calculate_series(self, close: pl.DataFrame, fast: int = 12, slow: int = 26, **kwargs) -> pl.DataFrame:
+        def ppo_expr(col_name):
+            ema_fast = _ema_expr(pl.col(col_name), fast)
+            ema_slow = _ema_expr(pl.col(col_name), slow)
+            ppo = 100 * (ema_fast - ema_slow) / ema_slow
+            return ppo.alias(col_name)
+
+        return _apply_to_panel(close, lambda c: ppo_expr(c.meta.output_name()))
+
+
+@register_operator(
+    name="PPO_signal",
+    category="technical_indicator",
+    canonical="PPO_signal",
+    source="polars_native_technical",
+    replace=True,
+    replacement_reason="Polars native implementation",
+)
+class PPO_signal(SeriesOperator):
+    """PPO signal line"""
+
+    metadata = OperatorMetadata(
+        name="PPO_signal",
+        category="technical_indicator",
+        description="PPO signal line",
+        param_names=["close", "fast", "slow", "signal"],
+        param_types={"close": pl.DataFrame, "fast": int, "slow": int, "signal": int},
+    )
+
+    def _calculate_series(self, close: pl.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9, **kwargs) -> pl.DataFrame:
+        def ppo_signal_expr(col_name):
+            ema_fast = _ema_expr(pl.col(col_name), fast)
+            ema_slow = _ema_expr(pl.col(col_name), slow)
+            ppo = 100 * (ema_fast - ema_slow) / ema_slow
+            return _ema_expr(ppo, signal).alias(col_name)
+
+        return _apply_to_panel(close, lambda c: ppo_signal_expr(c.meta.output_name()))
+
+
+@register_operator(
+    name="PPO_hist",
+    category="technical_indicator",
+    canonical="PPO_hist",
+    source="polars_native_technical",
+    replace=True,
+    replacement_reason="Polars native implementation",
+)
+class PPO_hist(SeriesOperator):
+    """PPO histogram"""
+
+    metadata = OperatorMetadata(
+        name="PPO_hist",
+        category="technical_indicator",
+        description="PPO histogram",
+        param_names=["close", "fast", "slow", "signal"],
+        param_types={"close": pl.DataFrame, "fast": int, "slow": int, "signal": int},
+    )
+
+    def _calculate_series(self, close: pl.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9, **kwargs) -> pl.DataFrame:
+        def ppo_hist_expr(col_name):
+            ema_fast = _ema_expr(pl.col(col_name), fast)
+            ema_slow = _ema_expr(pl.col(col_name), slow)
+            ppo = 100 * (ema_fast - ema_slow) / ema_slow
+            signal_line = _ema_expr(ppo, signal)
+            return (ppo - signal_line).alias(col_name)
+
+        return _apply_to_panel(close, lambda c: ppo_hist_expr(c.meta.output_name()))
+
+
+# ==================== NATR ====================
+@register_operator(
+    name="NATR",
+    category="technical_indicator",
+    canonical="NATR",
+    source="polars_native_technical",
+    replace=True,
+    replacement_reason="Polars native implementation",
+)
+class NATR(SeriesOperator):
+    """Normalized Average True Range"""
+
+    metadata = OperatorMetadata(
+        name="NATR",
+        category="technical_indicator",
+        description="Normalized Average True Range",
+        param_names=["high", "low", "close", "period"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame, "period": int},
+    )
+
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, close: pl.DataFrame, period: int = 14, **kwargs) -> pl.DataFrame:
+        atr_op = ATR_WILDER()
+        atr_df = atr_op._calculate_series(high, low, close, period)
+
+        cols = [c for c in atr_df.columns if c not in PANEL_SKIP_COLUMNS]
+        if not cols:
+            return atr_df
+
+        result_data = {}
+        for col in cols:
+            atr_val = atr_df[col].to_numpy()
+            close_val = close[col].to_numpy()
+            natr = 100 * atr_val / close_val
+            result_data[col] = natr
+
+        result_df = pl.DataFrame(result_data)
+        for meta_col in PANEL_SKIP_COLUMNS:
+            if meta_col in atr_df.columns:
+                result_df = result_df.with_columns([atr_df[meta_col]])
+        return result_df
+
+
+# Summary: 20 technical indicators implemented
+# RSI_WILDER, MACD_line, MACD_signal, MACD_hist
+# ATR_WILDER, bollinger_width, bollinger_pct_b
+# DEMA, TEMA, CMO
+# PPO, PPO_signal, PPO_hist, NATR

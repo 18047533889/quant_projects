@@ -1,0 +1,36 @@
+factor:
+  name: day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1
+  expr: rank(col("operating_cf"))
+  freq: 1d
+  universe: equities
+  description: 基本面现金流因子 - 经营活动现金流截面排名，数值越高表示内生现金创造能力越强
+
+data_source:
+  type: composite
+  anchor: price
+  anchor_column: close
+  aliases:
+    operating_cf: cash_flow.net_cash_from_operating_activities
+  sources:
+    price:
+      type: data_access
+      dataset: us_stocks_sip_day_aggs
+      start_date: 2016-01-01
+      end_date: 2025-12-31 23:59:59
+    cash_flow:
+      type: data_access
+      dataset: fundamentals_cash_flow_statement
+      start_date: 2016-01-01
+      end_date: 2025-12-31 23:59:59
+  joins:
+    cash_flow: asof_backward
+
+backend:
+  type: pandas
+
+engine:
+  enable_cache: true
+
+materialization:
+  lake_root: ~/quant_projects/data/factors/lake
+  factor_id: day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1

@@ -1,0 +1,206 @@
+{
+  "claims": [
+    {
+      "behavior_test_exists": "exists",
+      "claim_id": "R29 DA session cache",
+      "claim_text": "DataReadSession resolution cache is request-scoped, race-free",
+      "note": "pre-fix: mutates shared Store attribute (concurrent clobber)",
+      "real_runtime_entrypoint": "dataaccess/read/read_session.DataReadSession.__enter__",
+      "report": "R29 closure",
+      "status": "NOT_WIRED",
+      "wired": "false"
+    },
+    {
+      "behavior_test_exists": "none",
+      "claim_id": "R35 PCA shared state",
+      "claim_text": "model-family shared PCA state == canonical panel PCA semantics",
+      "note": "pre-fix: shared-block commonality != canonical 1-Var(resid)/Var(ret)",
+      "real_runtime_entrypoint": "backend.model_family_kernels PCABlock",
+      "report": "R35 acceptance",
+      "status": "WIRED",
+      "wired": "true"
+    },
+    {
+      "behavior_test_exists": "none",
+      "claim_id": "R35 fast linear",
+      "claim_text": "FastLinearWindowEngine is true sliding sufficient-statistics O(T p^2)",
+      "note": "pre-fix: per-row rescan O(T*window*p^2)",
+      "real_runtime_entrypoint": "backend.fast_linear_window._roll_grams",
+      "report": "R35 acceptance",
+      "status": "WIRED",
+      "wired": "true"
+    },
+    {
+      "behavior_test_exists": "none",
+      "claim_id": "R35 numba main chain",
+      "claim_text": "Certified Numba kernels dispatch inside the cleaned-operator main chain",
+      "note": "pre-fix: kernels benchmarked standalone; operators run numpy reference",
+      "real_runtime_entrypoint": "cleaned operator implementations",
+      "report": "R35 acceptance",
+      "status": "NOT_WIRED",
+      "wired": "false"
+    },
+    {
+      "behavior_test_exists": "none",
+      "claim_id": "R36 FE/DA one authority",
+      "claim_text": "FE and DA use the same host child-lease accounting",
+      "note": "pre-fix: cap-setter only, DA ReadPipeline uses its own governor",
+      "real_runtime_entrypoint": "HostResourceCoordinator.apply_da_envelope",
+      "report": "R36 FINAL ACCEPTANCE",
+      "status": "WIRED",
+      "wired": "true"
+    },
+    {
+      "behavior_test_exists": "exists",
+      "claim_id": "R36 OOM replan",
+      "claim_text": "OOM drives smaller-shape replan, same shape never retried",
+      "note": "pre-fix: MemoryError -> ERROR_PERMANENT (no replan)",
+      "real_runtime_entrypoint": "scheduler FAILED_FATAL path",
+      "report": "R36 FINAL ACCEPTANCE",
+      "status": "WIRED",
+      "wired": "true"
+    },
+    {
+      "behavior_test_exists": "exists",
+      "claim_id": "R36 auto-shard",
+      "claim_text": "AutoShard turns an oversized task into N executable shards + merge",
+      "note": "pre-fix: contract-peak-only (no shard children, no merge)",
+      "real_runtime_entrypoint": "scheduler._auto_shard_replan",
+      "report": "R36 FINAL ACCEPTANCE",
+      "status": "WIRED",
+      "wired": "true"
+    },
+    {
+      "behavior_test_exists": "exists",
+      "claim_id": "R36 calibration",
+      "claim_text": "CalibrationStore receives real elapsed/peak/output observations",
+      "note": "pre-fix: elapsed=monotonic timestamp, peak=predicted contract",
+      "real_runtime_entrypoint": "scheduler._record_task_calibration",
+      "report": "R36 FINAL ACCEPTANCE",
+      "status": "WIRED",
+      "wired": "true"
+    },
+    {
+      "behavior_test_exists": "none",
+      "claim_id": "R36 decision fields consumed",
+      "claim_text": "Every ResourceDecision field has a unique consumer",
+      "note": "pre-fix: target_concurrency/io/remote/cache/spill not consumed",
+      "real_runtime_entrypoint": "scheduler.run / materialize",
+      "report": "R36 FINAL ACCEPTANCE",
+      "status": "WIRED",
+      "wired": "true"
+    },
+    {
+      "behavior_test_exists": "none",
+      "claim_id": "R36 duckdb token truth",
+      "claim_text": "Backend thread tokens come from real lease/engine truth",
+      "note": "pre-fix: env/default guesses (4 duckdb / 2 polars)",
+      "real_runtime_entrypoint": "physical_lowerer._engine_threads_for",
+      "report": "R36 FINAL ACCEPTANCE",
+      "status": "NOT_WIRED",
+      "wired": "false"
+    },
+    {
+      "behavior_test_exists": "none",
+      "claim_id": "R36 dynamic sink",
+      "claim_text": "Sink queue budget shrinks/grows with pressure",
+      "note": "pre-fix: set once at construction, no set_target_bytes",
+      "real_runtime_entrypoint": "BoundedResultQueue",
+      "report": "R36 FINAL ACCEPTANCE",
+      "status": "WIRED",
+      "wired": "true"
+    },
+    {
+      "behavior_test_exists": "none",
+      "claim_id": "R36 dynamic wave",
+      "claim_text": "In-flight read waves repartition when memory pressure rises",
+      "note": "pre-fix: waves built once in plan(); not repartitioned",
+      "real_runtime_entrypoint": "scheduler._execute_read_waves",
+      "report": "R36 FINAL ACCEPTANCE",
+      "status": "WIRED",
+      "wired": "true"
+    },
+    {
+      "behavior_test_exists": "none",
+      "claim_id": "R36 fixed-cadence controller",
+      "claim_text": "ResourceController ticks on fixed time cadence, not scheduler loop count",
+      "note": "pre-fix: every scheduler loop ticks controller (loop-count driven)",
+      "real_runtime_entrypoint": "broker.resource_decision",
+      "report": "R36 FINAL ACCEPTANCE",
+      "status": "WIRED",
+      "wired": "true"
+    },
+    {
+      "behavior_test_exists": "none",
+      "claim_id": "R36 governed buffer put",
+      "claim_text": "Buffer put refusal is handled by callers (no silent return)",
+      "note": "pre-fix: bare bool ignored; raw dict fallback remains",
+      "real_runtime_entrypoint": "batch_service._materialize_shared_subplan",
+      "report": "R36 FINAL ACCEPTANCE",
+      "status": "WIRED",
+      "wired": "true"
+    },
+    {
+      "behavior_test_exists": "none",
+      "claim_id": "R36 host lease tree",
+      "claim_text": "FE/DA/service share one HostResourceCoordinator lease tree",
+      "note": "pre-fix: parent+child double count; CPU/IO/spill not enforced",
+      "real_runtime_entrypoint": "HostResourceCoordinator.request_lease",
+      "report": "R36 FINAL ACCEPTANCE",
+      "status": "NOT_WIRED",
+      "wired": "false"
+    },
+    {
+      "behavior_test_exists": "exists",
+      "claim_id": "R36 raw CSE bypass zero",
+      "claim_text": "No production raw shared_result_cache[sid]=value fallback",
+      "note": "pre-fix: raw fallback present, no run_mode guard",
+      "real_runtime_entrypoint": "batch_service._materialize_shared_subplan",
+      "report": "R36 FINAL ACCEPTANCE",
+      "status": "WIRED",
+      "wired": "true"
+    },
+    {
+      "behavior_test_exists": "none",
+      "claim_id": "R36 service broker",
+      "claim_text": "Service uses HostCoordinator job lease admission, not just fixed max_running",
+      "note": "pre-fix: count-based admission, no JobResourceEstimate->JobLease",
+      "real_runtime_entrypoint": "service/queue.BoundedJobQueue.submit",
+      "report": "R36 FINAL ACCEPTANCE",
+      "status": "WIRED",
+      "wired": "true"
+    },
+    {
+      "behavior_test_exists": "exists",
+      "claim_id": "R36 spill",
+      "claim_text": "Buffer spill writes, verifies, reloads or recomputes per policy",
+      "note": "pre-fix: spill == release (drop), no SpillStore",
+      "real_runtime_entrypoint": "GovernedBufferStore.spill",
+      "report": "R36 FINAL ACCEPTANCE",
+      "status": "NOT_WIRED",
+      "wired": "false"
+    }
+  ],
+  "head": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+  "issues_scope": [
+    "real-autoshard",
+    "oom-replan",
+    "calibration-truth",
+    "buffer-put-refusal",
+    "raw-cse-bypass",
+    "real-spill",
+    "host-lease-tree",
+    "fe-da-one-authority",
+    "service-joblease",
+    "fixed-cadence-controller",
+    "decision-consumers",
+    "dynamic-wave",
+    "dynamic-sink",
+    "backend-token-truth",
+    "fast-linear-sliding",
+    "numba-main-chain",
+    "pca-shared-state",
+    "da-session-cache"
+  ],
+  "phase": "after"
+}

@@ -1,0 +1,23 @@
+task_id: RIDGE2-P0-001
+status: CLOSED_LOCAL
+base_sha: 4714787b7fc57499cee637eecb5d1f3c56ad2fc8
+owned_files:
+  - cleaned_operators/common/statistics.py
+  - tests/operators/test_ridge_p0_001.py
+canonicals:
+  - Ridge
+backend: pandas/reference
+tests:
+  focused:
+    path: tests/operators/test_ridge_p0_001.py
+    passed: 3
+  py_compile: passed
+  diff_check: passed
+  import_smoke: NOT_RUN
+production_certification: NOT_RUN
+source_or_test_changes: none
+limitations:
+  - Verification covers the existing Ridge repair only; no source or test changes were made.
+  - Current tree is dirty and evidence is local-only without committed-SHA provenance for this verification.
+  - Focused tests emitted two pre-existing PhysicalImplementationSpec warnings from Polars backend classification.
+  - Four-backend parity, release provenance, and production readiness were not certified.

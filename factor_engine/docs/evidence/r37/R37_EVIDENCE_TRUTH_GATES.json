@@ -1,0 +1,304 @@
+{
+  "generated_by": "scripts/audit_r37_evidence_truth.py",
+  "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+  "passed": 8,
+  "not_run": 0,
+  "failed": 0,
+  "total": 8,
+  "negative_controls": {
+    "nc_freshness_old_sha_red": {
+      "fired": true,
+      "status": "FAIL",
+      "executed_cases": 2
+    },
+    "nc_semantic_tsmean_to_tssum": {
+      "fired": true,
+      "baseline_match": true,
+      "mutated_match": false,
+      "mutation": "ts_mean -> ts_sum"
+    },
+    "nc_pit_future_shift_rejected": {
+      "fired": true,
+      "detail": "close known at session_close (not session_open)"
+    },
+    "nc_literal_true_gate_caught": {
+      "fired": true,
+      "found": 1
+    },
+    "nc_deleted_cases_not_run": {
+      "fired": true,
+      "status": "NOT_RUN"
+    }
+  },
+  "gates": {
+    "R37_CURRENT_HEAD_BOUND": {
+      "gate_id": "R37_CURRENT_HEAD_BOUND",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
+      "evidence_files": [
+        "docs/evidence/r37/R37_HEAD.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R37_ALL_ARTIFACTS_CURRENT_HEAD": {
+      "gate_id": "R37_ALL_ARTIFACTS_CURRENT_HEAD",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [
+        "fresh:r37/R37_HEAD"
+      ],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {
+        "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+        "dirty_tree_hash": "f4f3b9e5b6fbef1f",
+        "operator_registry_hash": "5280571958b17231",
+        "operator_surface_hash": "eaf532033179b3c4",
+        "operator_semantic_hash": "4b89849a152a15ba",
+        "field_catalog_hash": "7b77fd6560edfb32",
+        "dataaccess_contract_hash": "bce8276c5628793e",
+        "planner_hash": "69b54e2140563154",
+        "backend_hash": "0137ff6afc834142",
+        "runtime_hash": "23effe5181a5beb0",
+        "test_source_hash": "9e00bbf080dc4b76",
+        "golden_source_hash": "69ecb07ed0298bd9",
+        "dependency_lock_hash": "e813b58aea104b4d"
+      },
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R37_COMPONENT_HASH_CURRENT": {
+      "gate_id": "R37_COMPONENT_HASH_CURRENT",
+      "status": "PASS",
+      "executed_cases": 11,
+      "failed_cases": 0,
+      "passed_cases": 11,
+      "case_ids": [
+        "operator_surface_hash",
+        "dataaccess_contract_hash",
+        "planner_hash",
+        "dependency_lock_hash",
+        "runtime_hash",
+        "backend_hash",
+        "test_source_hash",
+        "operator_registry_hash",
+        "operator_semantic_hash",
+        "golden_source_hash",
+        "field_catalog_hash"
+      ],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {
+        "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+        "dirty_tree_hash": "f4f3b9e5b6fbef1f",
+        "operator_registry_hash": "5280571958b17231",
+        "operator_surface_hash": "eaf532033179b3c4",
+        "operator_semantic_hash": "4b89849a152a15ba",
+        "field_catalog_hash": "7b77fd6560edfb32",
+        "dataaccess_contract_hash": "bce8276c5628793e",
+        "planner_hash": "69b54e2140563154",
+        "backend_hash": "0137ff6afc834142",
+        "runtime_hash": "23effe5181a5beb0",
+        "test_source_hash": "9e00bbf080dc4b76",
+        "golden_source_hash": "69ecb07ed0298bd9",
+        "dependency_lock_hash": "e813b58aea104b4d"
+      },
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R37_FIXTURE_HASH_CURRENT": {
+      "gate_id": "R37_FIXTURE_HASH_CURRENT",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [
+        "fixture:operator_golden"
+      ],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {
+        "/home/shw/quant_projects/factor_engine/tests/operator_golden": "69ecb07ed0298bd9"
+      },
+      "generated_at": "",
+      "details": {}
+    },
+    "R37_ZERO_HARDCODED_TRUE_GATES": {
+      "gate_id": "R37_ZERO_HARDCODED_TRUE_GATES",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
+      "evidence_files": [
+        "docs/evidence/r37/R37_AUDIT_NEGATIVE_CONTROL.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R37_ZERO_PRESENCE_ONLY_GATES": {
+      "gate_id": "R37_ZERO_PRESENCE_ONLY_GATES",
+      "status": "PASS",
+      "executed_cases": 5,
+      "failed_cases": 0,
+      "passed_cases": 5,
+      "case_ids": [
+        "no_presence_only:R37_CURRENT_HEAD_BOUND",
+        "no_presence_only:R37_ALL_ARTIFACTS_CURRENT_HEAD",
+        "no_presence_only:R37_COMPONENT_HASH_CURRENT",
+        "no_presence_only:R37_FIXTURE_HASH_CURRENT",
+        "no_presence_only:R37_ZERO_HARDCODED_TRUE_GATES"
+      ],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R37_AUDIT_NEGATIVE_CONTROL_PASS": {
+      "gate_id": "R37_AUDIT_NEGATIVE_CONTROL_PASS",
+      "status": "PASS",
+      "executed_cases": 5,
+      "failed_cases": 0,
+      "passed_cases": 5,
+      "case_ids": [
+        "nc_freshness_old_sha_red",
+        "nc_semantic_tsmean_to_tssum",
+        "nc_pit_future_shift_rejected",
+        "nc_literal_true_gate_caught",
+        "nc_deleted_cases_not_run"
+      ],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "negative_controls": {
+          "nc_freshness_old_sha_red": true,
+          "nc_semantic_tsmean_to_tssum": true,
+          "nc_pit_future_shift_rejected": true,
+          "nc_literal_true_gate_caught": true,
+          "nc_deleted_cases_not_run": true
+        }
+      }
+    },
+    "R37_LEGACY_STALE_DETECTED": {
+      "gate_id": "R37_LEGACY_STALE_DETECTED",
+      "status": "PASS",
+      "executed_cases": 37,
+      "failed_cases": 0,
+      "passed_cases": 37,
+      "case_ids": [
+        "factor_operator_verified",
+        "primitive_verified",
+        "r28/R28_ARTIFACT_MANIFEST",
+        "r28/R28_CANONICAL_TEST_COVERAGE",
+        "r28/R28_FORBIDDEN_OPERATOR_AUDIT",
+        "r28/R28_MODEL_CAUSALITY_MATRIX",
+        "r28/R28_OPERATOR_INVENTORY",
+        "r28/R28_PER_CANONICAL_TEST_RESULTS",
+        "r28/R28_PYTEST_SUMMARY",
+        "r28/R28_STATIC_LOOKAHEAD_SCAN",
+        "r30/R30_ARTIFACT_MANIFEST",
+        "r30/R30_AVAILABILITY_CLOCK_AUDIT.csv",
+        "r30/R30_HARD_GATES",
+        "r30/R30_HEAD",
+        "r30/R30_PER_CANONICAL_FINAL_REVIEW",
+        "r30/R30_PRODUCTION_ADMISSION_AUDIT",
+        "r30/R30_SOURCE_UNIVERSE_PIT_AUDIT",
+        "r30/R30_TOMBSTONE_MANIFEST",
+        "r31/R31_CURRENT_ARCHITECTURE",
+        "r31/R31_DEPENDENCY_COMPATIBILITY",
+        "r31/R31_DUCKDB_CORE_PARITY",
+        "r31/R31_HARD_GATES",
+        "r32/R32_ARTIFACT_MANIFEST",
+        "r32/R32_CALENDAR_FAILURE_POLICY",
+        "r32/R32_CATALOG_PRAGMA_AUDIT",
+        "r32/R32_COLD_START_OPERATOR_SYNC",
+        "r32/R32_CSE_REACHABILITY_AUDIT",
+        "r32/R32_DR_RESTORE_TEST",
+        "r32/R32_FACTOR_IDENTITY_DEPENDENCY_SCOPE",
+        "r32/R32_FACTOR_ID_SAFETY_TESTS",
+        "r32/R32_HARD_GATES",
+        "r32/R32_HEAD",
+        "r32/R32_JOB_STATE_MACHINE_TESTS",
+        "r32/R32_PRECISION_CERTIFICATE_VALIDATION",
+        "r32/R32_RECIPE_MIGRATION_AUDIT",
+        "r35/R35_HEAD",
+        "r36/R36_HEAD"
+      ],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "legacy_artifact_count": 37,
+        "stale_detected": [
+          "factor_operator_verified",
+          "primitive_verified",
+          "r28/R28_ARTIFACT_MANIFEST",
+          "r28/R28_CANONICAL_TEST_COVERAGE",
+          "r28/R28_FORBIDDEN_OPERATOR_AUDIT",
+          "r28/R28_MODEL_CAUSALITY_MATRIX",
+          "r28/R28_OPERATOR_INVENTORY",
+          "r28/R28_PER_CANONICAL_TEST_RESULTS",
+          "r28/R28_PYTEST_SUMMARY",
+          "r28/R28_STATIC_LOOKAHEAD_SCAN",
+          "r30/R30_ARTIFACT_MANIFEST",
+          "r30/R30_AVAILABILITY_CLOCK_AUDIT.csv",
+          "r30/R30_HARD_GATES",
+          "r30/R30_HEAD",
+          "r30/R30_PER_CANONICAL_FINAL_REVIEW",
+          "r30/R30_PRODUCTION_ADMISSION_AUDIT",
+          "r30/R30_SOURCE_UNIVERSE_PIT_AUDIT",
+          "r30/R30_TOMBSTONE_MANIFEST",
+          "r31/R31_CURRENT_ARCHITECTURE",
+          "r31/R31_DEPENDENCY_COMPATIBILITY",
+          "r31/R31_DUCKDB_CORE_PARITY",
+          "r31/R31_HARD_GATES",
+          "r32/R32_ARTIFACT_MANIFEST",
+          "r32/R32_CALENDAR_FAILURE_POLICY",
+          "r32/R32_CATALOG_PRAGMA_AUDIT",
+          "r32/R32_COLD_START_OPERATOR_SYNC",
+          "r32/R32_CSE_REACHABILITY_AUDIT",
+          "r32/R32_DR_RESTORE_TEST",
+          "r32/R32_FACTOR_IDENTITY_DEPENDENCY_SCOPE",
+          "r32/R32_FACTOR_ID_SAFETY_TESTS",
+          "r32/R32_HARD_GATES",
+          "r32/R32_HEAD",
+          "r32/R32_JOB_STATE_MACHINE_TESTS",
+          "r32/R32_PRECISION_CERTIFICATE_VALIDATION",
+          "r32/R32_RECIPE_MIGRATION_AUDIT",
+          "r35/R35_HEAD",
+          "r36/R36_HEAD"
+        ]
+      }
+    }
+  }
+}

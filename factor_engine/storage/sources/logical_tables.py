@@ -1,0 +1,100 @@
+# -*- coding: utf-8 -*-
+"""Authoritative A-share LQTP logical-table to data_access mapping.
+
+Keep policy beside the mapping so a newly mapped table cannot silently inherit an
+unsafe alignment rule.  ``dataset=None`` denotes a table supplied by the anchor
+or by a dedicated resolver rather than data_access.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Literal
+
+JoinPolicy = Literal[
+    "anchor", "exact", "exact_date", "asof_backward", "financial_pit",
+    "relation_pit", "effective_only", "minute_session", "special",
+]
+
+
+@dataclass(frozen=True)
+class LogicalTableContract:
+    dataset: str | None
+    join_policy: JoinPolicy
+    required_parameter: str | None = None
+    #: Phase 5 R14：``one_to_many`` 的 relation 表（一股多股东等）不能被静默标量化，
+    #: 必须显式指定 rank selector / aggregate 降维，否则 production fail-closed。
+    cardinality: str = "many_to_one"
+
+
+ASHARE_LOGICAL_TABLES: dict[str, LogicalTableContract] = {
+    "DailyBar": LogicalTableContract(None, "anchor"),
+    "StockDailyBar": LogicalTableContract(None, "anchor"),
+    "StockMinuteBar": LogicalTableContract("ashare_stock_minute", "minute_session"),
+    "MinuteBar": LogicalTableContract("ashare_stock_minute", "minute_session"),
+    "StockValuationDaily": LogicalTableContract("ashare_stock_valuation_daily", "exact"),
+    # Historical alias retained for old formulas.
+    "SizeDaily": LogicalTableContract("ashare_stock_valuation_daily", "exact"),
+    "StockCapitalDaily": LogicalTableContract("ashare_stock_capital_daily", "exact"),
+    "TurnoverBaseDaily": LogicalTableContract(None, "exact"),
+    "StockIndicator": LogicalTableContract("ashare_stock_indicator", "financial_pit"),
+    "StockBalance": LogicalTableContract("ashare_stock_balance", "financial_pit"),
+    "StockIncome": LogicalTableContract("ashare_stock_income", "financial_pit"),
+    "StockCashFlow": LogicalTableContract("ashare_stock_cashflow", "financial_pit"),
+    "StockDividend": LogicalTableContract("ashare_stock_dividend", "effective_only"),
+    "StockTopTenShareholder": LogicalTableContract(
+        "ashare_stock_topten_shareholder", "relation_pit", cardinality="one_to_many"
+    ),
+    "StockTopTenFloatShareholder": LogicalTableContract(
+        "ashare_stock_topten_float_shareholder", "relation_pit", cardinality="one_to_many"
+    ),
+    "StockIndustry": LogicalTableContract("ashare_stock_industry", "asof_backward", "IndustrySource"),
+    # Historical alias retained for old formulas.
+    "IndustryDaily": LogicalTableContract("ashare_stock_industry", "asof_backward", "IndustrySource"),
+    "StockStatus": LogicalTableContract("ashare_stock_status", "asof_backward"),
+    "StockList": LogicalTableContract("ashare_stock_list", "asof_backward"),
+    "IndexConstituent": LogicalTableContract("ashare_index_constituent", "exact", "IndexSymbol"),
+    "BenchmarkIndexDailyBar": LogicalTableContract("ashare_index_daily", "exact_date", "IndexSymbol"),
+    "IndexDailyBar": LogicalTableContract("ashare_index_daily", "exact_date", "IndexSymbol"),
+    "EtfDailyBar": LogicalTableContract("ashare_etf_daily", "exact"),
+    "ETFDailyBar": LogicalTableContract("ashare_etf_daily", "exact"),
+    "ETFList": LogicalTableContract("ashare_etf_list", "asof_backward"),
+    "IndexList": LogicalTableContract("ashare_index_list", "asof_backward"),
+    "Calendar": LogicalTableContract("ashare_calendar", "exact_date"),
+    "Intermediate": LogicalTableContract(None, "special"),
+    "DerivedField": LogicalTableContract(None, "special"),
+}
+
+TABLE_DATASETS: dict[str, str] = {
+    table: contract.dataset
+    for table, contract in ASHARE_LOGICAL_TABLES.items()
+    if contract.dataset is not None
+}
+
+
+# R24-058/059: US financial statement tables share the same statement table
+# names as A-share (StockBalance / StockIncome / StockCashFlow / StockIndicator)
+# but are market-scoped datasets.  Market-scoped field-contract registration
+# resolves US tables through this map.
+US_LOGICAL_TABLES: dict[str, LogicalTableContract] = {
+    "StockBalance": LogicalTableContract("us_stock_balance", "financial_pit"),
+    "StockIncome": LogicalTableContract("us_stock_income", "financial_pit"),
+    "StockCashFlow": LogicalTableContract("us_stock_cashflow", "financial_pit"),
+    "StockIndicator": LogicalTableContract("us_stock_indicator", "financial_pit"),
+    "StockValuationDaily": LogicalTableContract("us_stock_valuation_daily", "exact"),
+    "StockDailyBar": LogicalTableContract(None, "anchor"),
+    "StockDividend": LogicalTableContract("us_stock_dividend", "effective_only"),
+    "StockList": LogicalTableContract("us_stock_list", "asof_backward"),
+}
+
+
+def logical_table_contract(table: str, market: str = "ashare") -> LogicalTableContract:
+    """Resolve a logical-table contract (A-share authoritative; US via R24-058)."""
+    if str(market).strip().lower() == "us":
+        try:
+            return US_LOGICAL_TABLES[str(table)]
+        except KeyError as exc:
+            raise KeyError(f"unknown US logical table {table!r}") from exc
+    try:
+        return ASHARE_LOGICAL_TABLES[str(table)]
+    except KeyError as exc:
+        raise KeyError(f"unknown A-share logical table {table!r}") from exc

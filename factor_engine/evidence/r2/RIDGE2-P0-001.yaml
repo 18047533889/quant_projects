@@ -1,0 +1,39 @@
+task_id: RIDGE2-P0-001
+git_sha: 19d2ff954b56f5dfd034d8ec8e8631af0ff271d4
+current_head: 19d2ff954b56f5dfd034d8ec8e8631af0ff271d4
+generation_timestamp: 2026-08-19
+dirty_count_before_evidence_edit: 71
+commit_sha: UNCOMMITTED_CURRENT_TREE
+owned_files:
+  - cleaned_operators/common/statistics.py
+  - tests/operators/test_ridge_p0_001.py
+  - evidence/r2/RIDGE2-P0-001.yaml
+modified_files: []
+canonical_authority: cleaned_operators/common/statistics.py:Ridge
+backend: pandas/reference
+status: CLOSED_LOCAL
+changes_required: false
+probes:
+  dual_input_all_nan_column_preserved_and_finite_column_slope: PASS
+  positional_alpha_matched_oracle: PASS
+  malformed_alpha_raised_OperatorParameterError: PASS
+  all_nan_outputs_remained_nan: PASS
+focused_tests:
+  command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 pytest -q tests/operators/test_ridge_p0_001.py -p no:xdist
+  result: 3 passed, 2 warnings
+  warnings: 2 pre-existing PhysicalImplementationSpec warnings from the Polars backend classification path
+syntax_compile:
+  command: python3 -m py_compile cleaned_operators/common/statistics.py tests/operators/test_ridge_p0_001.py
+  result: PASS
+import_smoke:
+  command: python3 -c "from cleaned_operators.common.statistics import Ridge; assert Ridge.__name__ == 'Ridge'"
+  result: PASS
+scoped_diff_check:
+  result: PASS
+no_defect: true
+known_limitations:
+  - broad repository gates: NOT_RUN
+  - four-backend parity: NOT_RUN
+  - registry bootstrap and production certification: NOT_RUN
+  - existing unrelated dirty files were preserved
+production_certification: NOT_RUN

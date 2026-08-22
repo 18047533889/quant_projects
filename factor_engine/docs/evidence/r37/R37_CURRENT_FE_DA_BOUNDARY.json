@@ -1,0 +1,78 @@
+{
+  "fe_da_modules": {
+    "dataaccess_capabilities": {
+      "importable": false,
+      "error": "No module named 'dataaccess.capabilities'"
+    },
+    "dataaccess_resource_bridge": {
+      "importable": false,
+      "error": "No module named 'dataaccess.runtime.resource_bridge'"
+    },
+    "dataaccess_governor": {
+      "importable": true,
+      "classes": [
+        "GlobalResourceGovernor",
+        "ResourceReservation"
+      ],
+      "funcs": [
+        "duckdb_slot",
+        "enforce_single_worker_contract",
+        "get_global_governor",
+        "reset_global_governor"
+      ]
+    },
+    "fe_prepared_batch_session": {
+      "importable": true,
+      "classes": [],
+      "funcs": [
+        "_assert_no_native_certified_fallback",
+        "_attach_batch_backend_paths",
+        "_batch_source_bars_per_day",
+        "_clear_polars_long_shared_sid",
+        "_cluster_factors_by_cost",
+        "_execute_root_with_path",
+        "_execute_run_many_scheduler",
+        "_handle_result",
+        "_materialize_shared_subplan",
+        "_maybe_prepare_batch_data",
+        "_maybe_prepare_batch_warmup",
+        "_release_consumed_sids",
+        "_setup_cse_refcounts",
+        "_transition_telemetry",
+        "_trim_batch_result",
+        "choose_execution_mode",
+        "execute_run_many",
+        "execute_run_many_iter",
+        "execute_run_many_parallel",
+        "materialize_shared_nodes_parallel"
+      ]
+    },
+    "fe_batch_data_request": {
+      "importable": true,
+      "classes": [],
+      "funcs": [
+        "_assert_no_native_certified_fallback",
+        "_attach_batch_backend_paths",
+        "_batch_source_bars_per_day",
+        "_clear_polars_long_shared_sid",
+        "_cluster_factors_by_cost",
+        "_execute_root_with_path",
+        "_execute_run_many_scheduler",
+        "_handle_result",
+        "_materialize_shared_subplan",
+        "_maybe_prepare_batch_data",
+        "_maybe_prepare_batch_warmup",
+        "_release_consumed_sids",
+        "_setup_cse_refcounts",
+        "_transition_telemetry",
+        "_trim_batch_result",
+        "choose_execution_mode",
+        "execute_run_many",
+        "execute_run_many_iter",
+        "execute_run_many_parallel",
+        "materialize_shared_nodes_parallel"
+      ]
+    }
+  },
+  "capability_handshake": false
+}

@@ -1,0 +1,11 @@
+{
+  "block_dq_factors": [
+    "r1",
+    "z1"
+  ],
+  "block_rank_shape": [
+    2,
+    4
+  ],
+  "parity": "block rank == canonical per-factor (test suite proves)"
+}

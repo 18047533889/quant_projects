@@ -1,0 +1,18 @@
+...................................F...........................sssssssss [ 93%]
+ss...                                                                    [100%]
+=================================== FAILURES ===================================
+_________________________ test_neutralize_ols_residual _________________________
+tests/test_operators_extension.py:148: in test_neutralize_ols_residual
+    assert r.notna().any()
+E   assert np.False_
+E    +  where np.False_ = any()
+E    +    where any = timestamp   instrument\n2024-01-01  A             False\n            B             False\n2024-01-02  A             False\n            B             False\ndtype: bool.any
+E    +      where timestamp   instrument\n2024-01-01  A             False\n            B             False\n2024-01-02  A             False\n            B             False\ndtype: bool = notna()
+E    +        where notna = timestamp   instrument\n2024-01-01  A            NaN\n            B            NaN\n2024-01-02  A            NaN\n            B            NaN\ndtype: float64.notna
+=========================== short test summary info ============================
+FAILED tests/test_operators_extension.py::test_neutralize_ols_residual - assert np.False_
+ +  where np.False_ = any()
+ +    where any = timestamp   instrument\n2024-01-01  A             False\n            B             False\n2024-01-02  A             False\n            B             False\ndtype: bool.any
+ +      where timestamp   instrument\n2024-01-01  A             False\n            B             False\n2024-01-02  A             False\n            B             False\ndtype: bool = notna()
+ +        where notna = timestamp   instrument\n2024-01-01  A            NaN\n            B            NaN\n2024-01-02  A            NaN\n            B            NaN\ndtype: float64.notna
+1 failed, 65 passed, 11 skipped in 1.19s

@@ -1,0 +1,24 @@
+# ClickHouse 长表只读 + SQL 因子下推（需 CLICKHOUSE_* 环境变量）
+factor:
+  name: ch_rank_ts_mean_close_3
+  expr: rank(ts_mean(col("close"), 3))
+  freq: 1d
+  universe: equities
+  description: ClickHouse panel 表 - 3 日收盘价均线截面排名
+
+data_source:
+  type: clickhouse
+  table: panel_daily
+  timestamp_column: trade_date
+  instrument_column: ticker
+  fields:
+    close: close
+    open: open
+  start_date: "2024-01-01"
+  end_date: "2024-12-31"
+
+backend:
+  type: clickhouse_sql
+
+engine:
+  enable_cache: true

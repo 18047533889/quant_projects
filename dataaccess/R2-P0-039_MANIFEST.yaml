@@ -1,0 +1,37 @@
+schema_version: 1
+task_id: R2-P0-039
+scope: DataAccess PIT latest-period vintage selection
+status: CLOSED_LOCAL
+change:
+  empty_revision_order: preserve historical instrument/knowledge-time states at running maximum period
+  ambiguity: fail closed when same instrument/knowledge-time has multiple qualifying rows
+  explicit_revision_order: preserved declared revision ranking
+validation:
+  focused_regression: 1 passed
+  focused_file: 3 passed, 2 failed
+  focused_file_failures: existing strict-calendar fixtures raise CalendarUnavailableError before PIT selection
+  py_compile: PASSED
+  import_smoke: PASSED
+  scoped_diff_check: PASSED
+  independent_review: UNAVAILABLE_API_PROMPT_LENGTH
+  full_regression: NOT_RUN
+  full_compile: NOT_RUN
+  registry: NOT_RUN
+  parity: NOT_RUN
+  pit_poison_broad: NOT_RUN
+  ci: NOT_RUN
+  production_certification: NOT_RUN
+provenance:
+  repository_state: local_current_tree
+  head: 19d2ff954b56f5dfd034d8ec8e8631af0ff271d4
+  dirty_count: 89
+  modified_files:
+    - dataaccess/store.py
+    - dataaccess/tests/test_cos_pit_runtime.py
+  commit: NONE
+  remotes: NOT_USED
+  release_readiness: NOT_CLAIMED
+limitations:
+  - Full COS PIT runtime file has two pre-existing strict-calendar fixture failures.
+  - No real datasets or remote COS objects accessed.
+  - Full repository and production gates remain NOT_RUN.

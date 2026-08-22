@@ -1,0 +1,363 @@
+"""
+data_access.read.partition_planner —— 时间/分区 → 具体文件路径的裁剪
+
+职责
+    1. 解析 registry ``partitioning:`` 声明（时间分区 source/field/frequency/pattern）
+    2. 在把路径交给 DuckDB 之前，按 ``time_range`` 把 hive 通配（``date=*`` /
+       ``year=*`` / ``month=*``）和显式 pattern（``{date}.parquet``）展开成
+       具体文件路径，避免 ``**/*.parquet`` 全量 glob
+
+设计要点
+    1. 纯函数：输入 glob 列表 + time_range，输出展开后的路径列表。
+       不认识 / 无法裁剪的路径原样保留（回退 DuckDB 自身 glob）。
+    2. 与 Manifest 互补：partition_planner 做「路径模板级」裁剪，
+       manifest 做「文件级」min/max 裁剪。两者都在进 DuckDB 前完成。
+    3. hive 通配替换是通用安全操作：只把已知的 date=/year=/month= 目录段
+       换成具体值，绝不改动其它路径段。
+
+非职责
+    不读文件 footer；不做数据过滤（那是 DuckDB 的事）；不构建 manifest。
+
+维护人：quant 基础平台组    最后更新：2026-08-07
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from datetime import date, datetime
+from typing import Any, Sequence
+
+from data_access.core.exceptions import ValidationError
+
+
+_VALID_TIME_FREQUENCIES = frozenset({"daily", "monthly", "yearly"})
+_VALID_TIME_SOURCES = frozenset({"filename", "path"})
+
+
+@dataclass(frozen=True)
+class TimePartitionSpec:
+    """时间分区声明。``pattern`` 支持 {date}/{year}/{month} 占位符。
+
+    #9 typed object self-validating：构造即校验非法值，**绝不 fallback**。
+    """
+
+    source: str = "filename"       # "filename" | "path"
+    field: str = "date"
+    frequency: str = "daily"       # daily | monthly | yearly
+    pattern: str | None = None     # 如 "{date}.parquet"、"date={date}/data.parquet"
+
+    def __post_init__(self) -> None:
+        """#9 程序化 ``TimePartitionSpec(frequency="daliy")`` 之前绕过 YAML parser，
+        ``prune_paths_for_time_range`` 再按 ``is_valid`` 静默 fallback 成 daily——
+        typo 静默变成默认值（分区裁剪语义漂移）。现在非法值构造即报错。"""
+        if self.frequency not in _VALID_TIME_FREQUENCIES:
+            raise ValidationError(
+                f"TimePartitionSpec.frequency 必须是 "
+                f"{sorted(_VALID_TIME_FREQUENCIES)}，收到 {self.frequency!r}"
+            )
+        if self.source not in _VALID_TIME_SOURCES:
+            raise ValidationError(
+                f"TimePartitionSpec.source 必须是 {sorted(_VALID_TIME_SOURCES)}，"
+                f"收到 {self.source!r}"
+            )
+        if not self.field or not isinstance(self.field, str):
+            raise ValidationError(
+                f"TimePartitionSpec.field 必须是非空字符串，收到 {self.field!r}"
+            )
+
+    @property
+    def is_valid(self) -> bool:
+        # #9 __post_init__ 已保证实例合法；保留属性兼容旧调用方（恒 True）。
+        return True
+
+
+@dataclass(frozen=True)
+class PartitionSpec:
+    time: TimePartitionSpec | None = None
+    hive: tuple[str, ...] = ()     # hive 分区列（year/month/date...）
+
+    def __post_init__(self) -> None:
+        """#9 typed ``PartitionSpec`` 也 self-validating，与 TemporalJoinSpec 的
+        「对象自身即合法」原则一致：非法 time/hive 构造即报错，不依赖 parser。"""
+        if self.time is not None and not isinstance(self.time, TimePartitionSpec):
+            raise ValidationError(
+                f"PartitionSpec.time 必须是 TimePartitionSpec 或 None，"
+                f"收到 {type(self.time).__name__}"
+            )
+        for v in self.hive:
+            if not isinstance(v, str):
+                raise ValidationError(
+                    f"PartitionSpec.hive 元素必须是字符串，"
+                    f"收到 {type(v).__name__}: {v!r}"
+                )
+
+
+# #P0-final closure 3：唯一 ``partitioning:`` schema。loader 与 planner 读同一份
+# 结构——顶层 ``time``（source/field/frequency/pattern）+ ``hive`` / ``partition_columns``。
+# 旧 loader 曾允许的 ``columns/partition_by/bucket/granularity/time_column`` 不在
+# schema 内：写错必报错，**不再静默不裁剪然后全量扫文件**。
+_PARTITIONING_KEYS = frozenset({"time", "hive", "partition_columns"})
+_TIME_PARTITION_KEYS = frozenset({"source", "field", "frequency", "pattern"})
+
+
+def parse_partitioning(raw: Any, *, context: str = "partitioning") -> PartitionSpec | None:
+    """解析 YAML ``partitioning:`` 块 → typed ``PartitionSpec``。
+
+    - typed ``PartitionSpec`` 原样返回（registry 已保存 typed spec，对象自身即合法）；
+    - dict：``time`` + ``hive``/``partition_columns``；unknown key **fail-closed**；
+    - None/空 → None（不裁剪）。
+    """
+    if isinstance(raw, PartitionSpec):
+        return raw
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValidationError(
+            f"{context} 必须是 mapping，收到 {type(raw).__name__}"
+        )
+    unknown = sorted(set(raw) - _PARTITIONING_KEYS)
+    if unknown:
+        raise ValidationError(
+            f"{context} 含未知配置 key {unknown}；应为 {sorted(_PARTITIONING_KEYS)} 之一"
+        )
+    time_spec: TimePartitionSpec | None = None
+    time_raw = raw.get("time")
+    if time_raw is not None:
+        if not isinstance(time_raw, dict):
+            raise ValidationError(f"{context}.time 必须是 mapping")
+        t_unknown = sorted(set(time_raw) - _TIME_PARTITION_KEYS)
+        if t_unknown:
+            raise ValidationError(
+                f"{context}.time 含未知配置 key {t_unknown}；"
+                f"应为 {sorted(_TIME_PARTITION_KEYS)} 之一"
+            )
+        pattern = time_raw.get("pattern")
+        freq = str(time_raw.get("frequency", "daily")) or "daily"
+        if freq not in {"daily", "monthly", "yearly"}:
+            raise ValidationError(
+                f"{context}.time.frequency 必须是 daily/monthly/yearly，收到 {freq!r}"
+            )
+        time_spec = TimePartitionSpec(
+            source=str(time_raw.get("source", "filename")) or "filename",
+            field=str(time_raw.get("field", "date")) or "date",
+            frequency=freq,
+            pattern=str(pattern) if pattern else None,
+        )
+    hive_raw = raw.get("hive")
+    if hive_raw is None:
+        hive_raw = raw.get("partition_columns")
+    hive: tuple[str, ...] = ()
+    if hive_raw is not None:
+        if isinstance(hive_raw, (list, tuple)):
+            hive = tuple(str(c) for c in hive_raw if str(c))
+        elif isinstance(hive_raw, str) and hive_raw:
+            hive = (hive_raw,)
+        else:
+            raise ValidationError(
+                f"{context}.hive 必须是字符串/字符串列表，收到 {hive_raw!r}"
+            )
+    if time_spec is None and not hive:
+        return None
+    return PartitionSpec(time=time_spec, hive=hive)
+
+
+def parse_date(value: Any) -> date | None:
+    """解析 time_range 端点；无法解析返回 None。"""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()[:10]
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _iter_dates(start: date, end: date) -> list[date]:
+    from datetime import timedelta
+
+    if start > end:
+        return []
+    out: list[date] = []
+    cur = start
+    while cur <= end:
+        out.append(cur)
+        cur += timedelta(days=1)
+    return out
+
+
+def _date_segments(d: date, frequency: str) -> dict[str, str]:
+    return {
+        "date": d.isoformat(),
+        "year": f"{d.year:04d}",
+        "month": f"{d.month:02d}",
+        "day": f"{d.day:02d}",
+    }
+
+
+def _substitute_segment(path: str, key: str, value: str) -> str | None:
+    """把路径里形如 ``{key}=*`` 的 hive 段替换为 ``{key}={value}``。"""
+    needle = f"{key}=*"
+    if needle in path:
+        return path.replace(needle, f"{key}={value}", 1)
+    return None
+
+
+def _expand_pattern(pattern: str, segments: dict[str, str]) -> str:
+    out = pattern
+    for key, val in segments.items():
+        out = out.replace("{" + key + "}", val)
+    return out
+
+
+def prune_paths_for_time_range(
+    glob_paths: Sequence[str],
+    time_range: tuple[Any, Any] | None,
+    *,
+    partitioning: PartitionSpec | None = None,
+    time_column: str | None = None,
+) -> list[str]:
+    """按 time_range 裁剪 glob 路径列表。
+
+    - time_range 为空 → 原样返回。
+    - hive 通配（date=/year=/month=）→ 展开为具体值。
+    - partitioning.time.pattern → 按 pattern 展开每日/每月/每年路径。
+    无法裁剪的路径段原样保留。
+    """
+    if time_range is None:
+        return list(glob_paths)
+    start = parse_date(time_range[0])
+    end = parse_date(time_range[1])
+    # 只对闭区间做路径展开：开区间无法安全枚举未来/过去文件，
+    # 交由 manifest（文件级 min/max）或 DuckDB 谓词处理。
+    if start is None or end is None:
+        return list(glob_paths)
+
+    days = _iter_dates(start, end)
+    years = sorted({d.year for d in days})
+    months = sorted({(d.year, d.month) for d in days})
+
+    time_spec = partitioning.time if partitioning else None
+    frequency = time_spec.frequency if time_spec and time_spec.is_valid else "daily"
+
+    out: list[str] = []
+    for path in glob_paths:
+        # 1) hive 通配替换
+        replaced = _substitute_hive_wildcards(path, days, years, months, frequency)
+        # 2) 显式 pattern 展开（pattern 与路径尾部匹配时）
+        if time_spec and time_spec.pattern:
+            pattern_expanded = _expand_pattern_paths(
+                path, days, years, months, time_spec, frequency
+            )
+            if pattern_expanded is not None:
+                out.extend(pattern_expanded)
+                continue
+        if replaced is not None:
+            out.extend(replaced)
+        else:
+            out.append(path)
+    return _dedup(out)
+
+
+def _substitute_hive_wildcards(
+    path: str,
+    days: list[date],
+    years: list[int],
+    months: list[tuple[int, int]],
+    frequency: str,
+) -> list[str] | None:
+    """替换 date=*/year=*/month=* 通配；没有任何通配返回 None。"""
+    has_date = "date=*" in path
+    has_year = "year=*" in path
+    has_month = "month=*" in path
+    if not (has_date or has_year or has_month):
+        return None
+    out: list[str] = []
+    if has_date:
+        for d in days:
+            out.append(_substitute_segment(path, "date", d.isoformat()))
+    elif has_month and has_year:
+        for y, m in months:
+            p = _substitute_segment(path, "year", f"{y:04d}")
+            p = _substitute_segment(p, "month", f"{m:02d}")
+            out.append(p)
+    elif has_month:
+        # 没有 year 前缀的 month 段：按 (year, month) 里出现的 month 值替换
+        seen_months = sorted({m for _, m in months})
+        for m in seen_months:
+            out.append(_substitute_segment(path, "month", f"{m:02d}"))
+    elif has_year:
+        for y in years:
+            out.append(_substitute_segment(path, "year", f"{y:04d}"))
+    return [p for p in out if p is not None]
+
+
+def _expand_pattern_paths(
+    path: str,
+    days: list[date],
+    years: list[int],
+    months: list[tuple[int, int]],
+    time_spec: TimePartitionSpec,
+    frequency: str,
+) -> list[str] | None:
+    """显式 pattern 展开。pattern 是 glob 尾部时替换通配后的列表。"""
+    pattern = time_spec.pattern or ""
+    pattern_clean = pattern.rstrip("/")
+    # pattern 形如 "{date}.parquet" → 与 glob 的尾部比对
+    # 我们把 glob 里可能的通配段剥掉再比尾部，尽量保守：
+    # 只当 path 尾部与 pattern 的静态部分结构吻合时才展开。
+    if "{date}" not in pattern and "{year}" not in pattern and "{month}" not in pattern:
+        return None
+    out: list[str] = []
+    for d in days:
+        segs = _date_segments(d, frequency)
+        rendered = _expand_pattern(pattern, segs)
+        # 把 path 末尾的 glob 通配（如 **/*.parquet / *.parquet / data.parquet）
+        # 替换为 rendered。若 pattern 是纯文件名，替换路径最后一个 "/" 之后。
+        new_path = _replace_tail(path, rendered)
+        if new_path is not None:
+            out.append(new_path)
+    return out or None
+
+
+def _replace_tail(path: str, rendered: str) -> str | None:
+    """把 path 末尾的通配部分替换为 rendered。无法安全替换返回 None。"""
+    # 找最后一个 '/'；尾部是 filename/glob
+    idx = path.rfind("/")
+    head = path[: idx + 1]
+    tail = path[idx + 1 :]
+    if "*" not in tail and "?" not in tail:
+        # 没有通配的文件名（如 data.parquet）：若 pattern 是纯文件名则替换
+        return None
+    return head + rendered
+
+
+def _dedup(paths: Sequence[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for p in paths:
+        if p in seen:
+            continue
+        seen.add(p)
+        out.append(p)
+    return out
+
+
+def describe_partitioning(ds: Any) -> str:
+    """数据集的分区描述（日志/诊断用）。"""
+    partitioning = getattr(ds, "partitioning", None)
+    spec = parse_partitioning(partitioning)
+    if spec is None:
+        return "none"
+    parts: list[str] = []
+    if spec.time:
+        parts.append(
+            f"time({spec.time.source},{spec.time.field},{spec.time.frequency})"
+        )
+    if spec.hive:
+        parts.append("hive=" + ",".join(spec.hive))
+    return ";".join(parts)

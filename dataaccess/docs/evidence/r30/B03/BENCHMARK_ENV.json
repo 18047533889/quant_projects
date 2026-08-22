@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-08-11T17:45:13+0800",
+  "platform": "Linux-5.15.0-171-generic-x86_64-with-glibc2.35",
+  "machine": "x86_64",
+  "python": "3.10.12",
+  "cpu_count": 8,
+  "cpu_model": "INTEL(R) XEON(R) PLATINUM 8576C",
+  "ram_gb": 30.5,
+  "version": "0.10.2+build.a2dc3a1a7c3696f4196a125d7d5da1a6b6930ebc",
+  "commit_sha": "a2dc3a1a7c3696f4196a125d7d5da1a6b6930ebc",
+  "duckdb_version": "1.5.4",
+  "polars_version": "1.42.1",
+  "pyarrow_version": "25.0.0",
+  "pandas_version": "2.3.3",
+  "numpy_version": "2.2.6"
+}

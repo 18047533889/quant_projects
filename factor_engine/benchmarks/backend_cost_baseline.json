@@ -1,0 +1,326 @@
+{
+  "schema_version": 1,
+  "generated_by": "seed_defaults",
+  "sizes": {
+    "small": {
+      "dates": 100,
+      "instruments": 500
+    },
+    "medium": {
+      "dates": 1000,
+      "instruments": 3000
+    },
+    "large": {
+      "dates": 3000,
+      "instruments": 5000
+    }
+  },
+  "operators": {
+    "ts_mean": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 5.952,
+        "per_million_rows_ms": 2380.996,
+        "memory_factor": 1.0
+      },
+      "polars": {
+        "fixed_overhead_ms": 3.0,
+        "per_million_rows_ms": 25.0,
+        "memory_factor": 0.8
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 2.875,
+        "per_million_rows_ms": 1149.94,
+        "memory_factor": 1.0
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 10.0,
+        "per_million_rows_ms": 18.0,
+        "memory_factor": 0.5
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 7.432,
+        "per_million_rows_ms": 2972.646,
+        "memory_factor": 1.0
+      }
+    },
+    "ts_std": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 6.547,
+        "per_million_rows_ms": 2618.954,
+        "memory_factor": 1.0
+      },
+      "polars": {
+        "fixed_overhead_ms": 3.0,
+        "per_million_rows_ms": 30.0,
+        "memory_factor": 0.85
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 1.822,
+        "per_million_rows_ms": 728.851,
+        "memory_factor": 1.0
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 12.0,
+        "per_million_rows_ms": 22.0,
+        "memory_factor": 0.55
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 7.378,
+        "per_million_rows_ms": 2951.032,
+        "memory_factor": 1.0
+      }
+    },
+    "ts_zscore": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 7.503,
+        "per_million_rows_ms": 3001.042,
+        "memory_factor": 1.0
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 1.956,
+        "per_million_rows_ms": 782.339,
+        "memory_factor": 1.0
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 14.0,
+        "per_million_rows_ms": 26.0,
+        "memory_factor": 0.55
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 7.687,
+        "per_million_rows_ms": 3074.997,
+        "memory_factor": 1.0
+      }
+    },
+    "ts_corr": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 9.667,
+        "per_million_rows_ms": 3866.655,
+        "memory_factor": 1.0
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 3.346,
+        "per_million_rows_ms": 1338.52,
+        "memory_factor": 1.0
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 15.0,
+        "per_million_rows_ms": 35.0,
+        "memory_factor": 0.6
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 11.462,
+        "per_million_rows_ms": 4584.907,
+        "memory_factor": 1.0
+      }
+    },
+    "rank": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 6.958,
+        "per_million_rows_ms": 2783.091,
+        "memory_factor": 1.0
+      },
+      "polars": {
+        "fixed_overhead_ms": 3.0,
+        "per_million_rows_ms": 40.0,
+        "memory_factor": 0.9
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 1.867,
+        "per_million_rows_ms": 746.73,
+        "memory_factor": 1.0
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 12.0,
+        "per_million_rows_ms": 22.0,
+        "memory_factor": 0.5
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 8.804,
+        "per_million_rows_ms": 3521.645,
+        "memory_factor": 1.0
+      }
+    },
+    "zscore": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 6.43,
+        "per_million_rows_ms": 2571.866,
+        "memory_factor": 1.0
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 1.855,
+        "per_million_rows_ms": 741.99,
+        "memory_factor": 1.0
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 12.0,
+        "per_million_rows_ms": 24.0,
+        "memory_factor": 0.5
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 8.125,
+        "per_million_rows_ms": 3250.024,
+        "memory_factor": 1.0
+      }
+    },
+    "group_mean": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 26.323,
+        "per_million_rows_ms": 10529.184,
+        "memory_factor": 1.0
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 3.756,
+        "per_million_rows_ms": 1502.232,
+        "memory_factor": 1.0
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 14.0,
+        "per_million_rows_ms": 28.0,
+        "memory_factor": 0.55
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 8.573,
+        "per_million_rows_ms": 3429.275,
+        "memory_factor": 1.0
+      }
+    },
+    "group_zscore": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 30.662,
+        "per_million_rows_ms": 12264.753,
+        "memory_factor": 1.0
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 3.93,
+        "per_million_rows_ms": 1572.018,
+        "memory_factor": 1.0
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 14.0,
+        "per_million_rows_ms": 30.0,
+        "memory_factor": 0.55
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 9.319,
+        "per_million_rows_ms": 3727.642,
+        "memory_factor": 1.0
+      }
+    },
+    "vwap": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 7.585,
+        "per_million_rows_ms": 3034.074,
+        "memory_factor": 1.0
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 3.79,
+        "per_million_rows_ms": 1516.059,
+        "memory_factor": 1.0
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 15.0,
+        "per_million_rows_ms": 36.0,
+        "memory_factor": 0.6
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 9.971,
+        "per_million_rows_ms": 3988.35,
+        "memory_factor": 1.0
+      }
+    },
+    "log_returns": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 5.512,
+        "per_million_rows_ms": 2204.625,
+        "memory_factor": 1.0
+      },
+      "polars": {
+        "fixed_overhead_ms": 2.0,
+        "per_million_rows_ms": 18.0,
+        "memory_factor": 0.8
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 1.995,
+        "per_million_rows_ms": 798.197,
+        "memory_factor": 1.0
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 10.0,
+        "per_million_rows_ms": 15.0,
+        "memory_factor": 0.5
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 7.733,
+        "per_million_rows_ms": 3093.251,
+        "memory_factor": 1.0
+      }
+    },
+    "volatility": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 6.885,
+        "per_million_rows_ms": 2754.079,
+        "memory_factor": 1.0
+      },
+      "polars": {
+        "fixed_overhead_ms": 3.0,
+        "per_million_rows_ms": 28.0,
+        "memory_factor": 0.85
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 1.816,
+        "per_million_rows_ms": 726.41,
+        "memory_factor": 1.0
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 12.0,
+        "per_million_rows_ms": 22.0,
+        "memory_factor": 0.55
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 6.643,
+        "per_million_rows_ms": 2657.335,
+        "memory_factor": 1.0
+      }
+    },
+    "protected_div": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 6.613,
+        "per_million_rows_ms": 2645.149,
+        "memory_factor": 1.0
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 4.207,
+        "per_million_rows_ms": 1682.694,
+        "memory_factor": 1.0
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 10.0,
+        "per_million_rows_ms": 16.0,
+        "memory_factor": 0.5
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 9.836,
+        "per_million_rows_ms": 3934.225,
+        "memory_factor": 1.0
+      }
+    },
+    "where": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 5.665,
+        "per_million_rows_ms": 2265.958,
+        "memory_factor": 1.0
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 3.016,
+        "per_million_rows_ms": 1206.493,
+        "memory_factor": 1.0
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 10.0,
+        "per_million_rows_ms": 15.0,
+        "memory_factor": 0.5
+      }
+    }
+  }
+}

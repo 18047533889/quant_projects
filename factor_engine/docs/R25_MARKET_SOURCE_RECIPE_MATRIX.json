@@ -1,0 +1,191 @@
+{
+  "ashare": [
+    {
+      "table": "StockDailyBar",
+      "dataset": "ashare_stock_daily",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockMinuteBar",
+      "dataset": "ashare_stock_minute",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockValuationDaily",
+      "dataset": "ashare_stock_valuation_daily",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockCapitalDaily",
+      "dataset": "ashare_stock_capital_daily",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockIndicator",
+      "dataset": "ashare_stock_indicator",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockBalance",
+      "dataset": "ashare_stock_balance",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockIncome",
+      "dataset": "ashare_stock_income",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockCashFlow",
+      "dataset": "ashare_stock_cashflow",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockDividend",
+      "dataset": "ashare_stock_dividend",
+      "strict_pit_allowed": false
+    },
+    {
+      "table": "IndexDailyBar",
+      "dataset": "ashare_index_daily",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "IndexConstituent",
+      "dataset": "ashare_index_constituent",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "EtfDailyBar",
+      "dataset": "ashare_etf_daily",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "Calendar",
+      "dataset": "ashare_calendar",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockList",
+      "dataset": "ashare_stock_list",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "EtfList",
+      "dataset": "ashare_etf_list",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "IndexList",
+      "dataset": "ashare_index_list",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockIndustry",
+      "dataset": "ashare_stock_industry",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockStatus",
+      "dataset": "ashare_stock_status",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockTopTenShareholder",
+      "dataset": "ashare_stock_topten_shareholder",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockTopTenFloatShareholder",
+      "dataset": "ashare_stock_topten_float_shareholder",
+      "strict_pit_allowed": true
+    }
+  ],
+  "us": [
+    {
+      "table": "StockDailyBar",
+      "dataset": "us_stock_daily",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockList",
+      "dataset": "us_stock_list",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "SecurityMaster",
+      "dataset": "us_security_master_daily_snap",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "TickerSharesSnapshot",
+      "dataset": "us_ticker_shares_snapshot",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockIndicesComponents",
+      "dataset": "us_stock_indices_components",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "USStockCapitalSplitEvent",
+      "dataset": "us_stock_capital_split",
+      "strict_pit_allowed": false
+    },
+    {
+      "table": "USTickerSharesPITEvent",
+      "dataset": "us_stock_capital_shares",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockBalance",
+      "dataset": "us_stock_balance",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockIncome",
+      "dataset": "us_stock_income",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockCashFlow",
+      "dataset": "us_stock_cashflow",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockDividend",
+      "dataset": "us_stock_dividend",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "StockValuationDaily",
+      "dataset": "us_stock_valuation_daily",
+      "strict_pit_allowed": false
+    },
+    {
+      "table": "StockIndicator",
+      "dataset": "us_stock_indicator",
+      "strict_pit_allowed": false
+    },
+    {
+      "table": "FactNews",
+      "dataset": "us_fact_news",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "Calendar",
+      "dataset": "us_calendar",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "EarlyClose",
+      "dataset": "us_is_early_close",
+      "strict_pit_allowed": true
+    },
+    {
+      "table": "UniverseDaily",
+      "dataset": "us_universe_daily",
+      "strict_pit_allowed": true
+    }
+  ]
+}

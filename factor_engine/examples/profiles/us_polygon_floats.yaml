@@ -1,0 +1,38 @@
+# 美股 Polygon 日线 + 流通股 asof 复合模板（PR5 datasets）
+profile: prod
+
+factor:
+  name: us_liquidity_mom
+  expr: rank(ts_pct(col("close"), 10) / col("free_float_percent"))
+
+data_source:
+  type: composite
+  anchor: pv
+  anchor_column: close
+  sources:
+    pv:
+      type: data_access
+      dataset: daily_market_summary
+      fields:
+        open: o
+        high: h
+        low: l
+        close: c
+        volume: v
+        vwap: vw
+    floats:
+      type: data_access
+      dataset: stocks_floats
+      fields:
+        free_float: free_float
+        free_float_percent: free_float_percent
+  joins:
+    floats: asof_backward
+  aliases:
+    free_float: floats.free_float
+    free_float_percent: floats.free_float_percent
+  start_date: "2024-01-02"
+  end_date: "2024-06-30"
+
+materialization:
+  factor_id: us_liquidity_mom_v1

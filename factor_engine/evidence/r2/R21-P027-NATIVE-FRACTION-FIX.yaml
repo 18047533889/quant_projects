@@ -1,0 +1,62 @@
+---
+id: R21-P027-NATIVE-FRACTION-FIX
+title: "Native fraction per-backend fix — queries PhysicalImplementation instead of generic SQL capability"
+date: 2026-08-20
+status: PASS
+owner: Writer AW (native_fraction fix)
+head_sha: "c382b62b"
+---
+
+# Problem
+
+`plan_native_subgraph_fraction` in `backend/plan_cost_router.py` accepted a
+`backend` parameter but **ignored it** for capability checks. Regardless of the
+passed `backend` (pandas, polars, duckdb, clickhouse), the function always called
+`supports_sql(...)`, meaning:
+
+1. Polars backend reports SQL capability as native fraction — wrong.
+2. Pandas backend reports SQL capability as native fraction — wrong.
+3. The reported `native_fraction` does not reflect the *actual* chosen backend.
+
+This caused downstream cost estimates and batch routing to misestimate native
+coverage when the chosen backend was not SQL.
+
+# Fix
+
+Modified `backend/plan_cost_router.py`, function `plan_native_subgraph_fraction`:
+
+1. **Per-backend capability check**: Instead of always calling `supports_sql()`,
+   the function now queries `supports_pandas()`, `supports_polars()`, or
+   `supports_sql()` depending on the resolved backend.
+2. **No fallback to data_kind**: The function uses the explicitly passed `backend`
+   parameter rather than deriving capability from the data source kind.
+3. **Return backend key**: The returned dict now includes `"backend"` to identify
+   which backend was evaluated.
+4. **Unknown backend handling**: Unknown backends conservatively treat all operators
+   as unsupported (native_fraction = 0) instead of silently using SQL capability.
+
+# Files
+
+- `backend/plan_cost_router.py` — core fix
+- `tests/backend/test_native_fraction_fix.py` — 2 regression tests (created)
+- `evidence/r2/R21-P027-NATIVE-FRACTION-FIX.yaml` — this file (created)
+
+# Tests
+
+```
+tests/backend/test_native_fraction_fix.py::TestNativeFractionPolarsNotSQL::test_polars_backend_checks_polars_not_sql PASSED
+tests/backend/test_native_fraction_fix.py::TestNativeFractionPolarsNotSQL::test_duckdb_sql_backend_checks_sql PASSED
+tests/backend/test_native_fraction_fix.py::TestNativeFractionBackendInReturn::test_return_includes_backend_key PASSED
+tests/backend/test_native_fraction_fix.py::TestNativeFractionBackendInReturn::test_default_backend_is_duckdb_sql PASSED
+```
+
+# Verification
+
+Existing tests that exercise `plan_native_subgraph_fraction` pass:
+
+```
+tests/multibackend/test_p0_001_006.py (MB-P0-003) PASSED
+tests/r33/test_r33_hard_gates_2026_08.py::TestBatchRoute::test_native_subgraph_fraction PASSED
+```
+
+No pre-existing tests were broken.

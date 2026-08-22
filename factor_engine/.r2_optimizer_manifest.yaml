@@ -1,0 +1,35 @@
+task_id: p0-batch-global-optimizer-scalability
+base_sha: 708b02a3621dbadbeeb161d0b5b6c01fd6613378
+owned_files:
+  - runtime/multibackend/batch_global_optimizer.py
+  - tests/planner/test_batch_global_optimizer_p0.py
+modified_files:
+  - runtime/multibackend/batch_global_optimizer.py
+  - tests/planner/test_batch_global_optimizer_p0.py
+canonicals_touched: []
+backends_touched:
+  - pandas
+  - polars
+  - duckdb
+  - q
+implementation:
+  exact_search_max_ambiguous_nodes: 12
+  approximate_max_passes: 4
+  optimization_basis_values:
+    - dp_global_exact
+    - dp_global_approximate
+tests_run:
+  - tests/planner/test_batch_global_optimizer_p0.py
+tests_passed: 24
+tests_not_run:
+  - full repository compile
+  - registry bootstrap
+  - full backend parity
+  - PIT poison suite
+  - root CI
+known_limitations:
+  - approximate mode is bounded coordinate descent and is not globally optimal by proof
+  - DuckDB and Q production certification remain outside this focused task
+evidence_generated:
+  - .r2_optimizer_manifest.yaml
+independent_review: no verified correctness findings; stale optimization_basis comment corrected

@@ -1,0 +1,12 @@
+{
+  "cases": {
+    "time_shard": {
+      "dimension": "time",
+      "max_abs_diff": 0.0,
+      "parity": "PASS",
+      "shard_count": 2,
+      "spooled": 0
+    }
+  },
+  "head": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23"
+}

@@ -1,0 +1,54 @@
+# R21-P028-MAGIC-NUMBERS: Remove A-share magic numbers from US production routing
+
+## Summary
+
+Removed hardcoded A-share instrument counts (5500/3000) from US production routing. Unknown universe sizes now return typed UNKNOWN (0) instead of fake A-share numbers.
+
+## Files Modified
+
+1. **backend/plan_cost_router.py**
+   - `estimate_plan_rows()`: Empty filter returns 0 (not 1); unknown instruments return 0 (not 5500/3000)
+   - `_cost()`: Unknown instrument count defaults to 0 (not 3000)
+
+2. **planner/data_shape.py**
+   - `_conservative_default_shape()`: Uses 0 instruments (unknown) instead of 5500
+   - `_estimate_instruments_from_context()`: Returns 0 when unknown (not 5500)
+   - `_estimate_instruments_from_data_source()`: Returns 0 for unknown/empty filters
+
+3. **planner/data_shape_estimate.py**
+   - `estimate_instruments_from_universe()`: default parameter changed from 3000 to 0
+   - `estimate_shape_from_metadata()`: Uses default=0 instead of default=3000
+   - UNIVERSE_INSTRUMENT_PRIOR still contains A-share values (5500/3000) for explicit A-share universe requests
+
+## Key Changes
+
+### Empty Universe Behavior
+- **Before**: Empty instrument filter → rows=1
+- **After**: Empty instrument filter → rows=0
+
+### Unknown Instrument Count
+- **Before**: Unknown filter → instruments=5500 or 3000
+- **After**: Unknown filter → instruments=0 (UNKNOWN)
+
+### Cost Model Impact
+- Cost model sees 0 instruments → produces 0 for instrument-dependent costs
+- Date-only estimates preserved when date range is known
+- No fabricated A-share instrument counts pollute US production routing
+
+## Regression Tests
+
+Two regression tests created in `tests/test_magic_numbers_removal.py`:
+1. `test_empty_universe_yields_zero_rows` - Verifies empty filter returns 0 rows
+2. `test_unknown_instruments_yield_zero` - Verifies unknown filter returns 0 instruments
+
+## Test Results
+
+All 4 tests passed:
+- test_empty_universe_yields_zero_rows: PASSED
+- test_unknown_instruments_yield_zero: PASSED
+- test_empty_universe_data_shape: PASSED
+- test_unknown_instruments_data_shape: PASSED
+
+## Evidence
+
+Evidence file: `evidence/r2/R21-P028-MAGIC-NUMBERS.yaml`

@@ -1,0 +1,68 @@
+schema_version: 1
+task_id: R21-MATRIX-CONSOLIDATION-DIRECTUSE
+current_sha: f798b527004511d2fc9611ca1d09a49cc8783232
+generation_timestamp: '2026-08-20'
+status: COMPLETED_LOCAL
+production_certification: NOT_RUN
+current_roles:
+  direct_intermediate: 62
+  research_tool: 29
+  direct_event: 38
+  state: 15
+  global_state: 11
+  group_state: 22
+  move_internal: 26
+target:
+  estimated_new_direct_alpha_canonicals: 100-160
+  rule: preserve raw primitives; add causal dimensionless mineable siblings
+direct_use_split:
+  total_canonicals: 1624
+  mining_visible: 1565
+  composition_usable: 1565
+  terminal_usable: 1392
+  production_admitted: 0
+  directly_usable: 0
+p0_families:
+  - ATR/true-range normalized, surprise, and regime
+  - EMA/DEMA/TEMA/KAMA distance, slope, acceleration, and crossover
+  - Keltner/Donchian level-band width, compression, breakout, retest, and distance
+  - PSAR/Supertrend direction, distance, flip lifecycle, duration, and confirmation
+  - Ichimoku causal spread/cloud/cross/breakout without future timestamp displacement
+  - rolling VWAP distance, reclaim, slope, acceleration, and divergence
+  - support/resistance/pivot/swing distance, lifecycle, and structure
+  - causal prior Ridge/Quantile/OU model replacements
+  - PCA sign-stable/loading and reconstruction-anomaly families
+  - real intraday BVC/VPIN only when DataAccess minute contracts exist
+p1_frameworks:
+  EVENT: [age, count, density, streak, decay, cluster, past_response]
+  STATE: [age, duration, persistence, transition_count, transition_rate, confidence]
+  GLOBAL_STATE: [prior_beta, sensitivity, divergence, residual, conditional_signal]
+  GROUP_STATE: [peer_residual, within_group_rank, group_beta, relative_strength]
+  PRICE_LEVEL: [pct_distance, atr_distance, zscore, percentile, slope, acceleration]
+  IN_SAMPLE_MODEL: [prior_fit, forecast, forecast_error, innovation, coefficient_stability]
+never_raw_terminal:
+  - constant/identity/arg/protected_div
+  - raw trigonometric and hyperbolic primitives
+  - coalesce/ffill/source transforms
+  - raw ceil/floor/round/fix
+  - generic power/square/sqrt_abs/flex_min/flex_max
+certification_requirements:
+  - PIT-safe and prefix-invariant semantics
+  - explicit null/warmup/unit and bounded ParamSpec contracts
+  - independent pandas oracle plus golden/property/fuzz tests
+  - at least one certified physical implementation
+  - current implementation closure and semantic hashes
+  - backend parity and current-SHA evidence
+gates:
+  DIRECT_USE_AUTHORITY_AUDIT: NOT_RUN
+  REHABILITATION_IMPLEMENTATION: NOT_RUN
+  FUTURE_POISON: NOT_RUN
+  PREFIX_INVARIANCE: NOT_RUN
+  GOLDEN_PROPERTY_FUZZ: NOT_RUN
+  BACKEND_PARITY: NOT_RUN
+  DIRECT_MINING_CATALOG_EXPORT: NOT_RUN
+  PRODUCTION_CERTIFICATION: NOT_RUN
+limitations:
+  - Counts are from the machine-generated PHYSICAL_IMPLEMENTATION_MATRIX.md (measured at HEAD f798b527).
+  - Role promotion alone is forbidden and no operator is certified by this artifact.
+  - Consolidated from R21-MATRIX-REGEN-V2 authority; the generator is the single authority.

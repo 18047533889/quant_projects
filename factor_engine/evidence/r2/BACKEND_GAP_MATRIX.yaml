@@ -1,0 +1,50 @@
+schema_version: 1
+task_id: R21-MATRIX-CONSOLIDATION-BACKEND-GAP
+current_sha: f798b527004511d2fc9611ca1d09a49cc8783232
+generation_timestamp: '2026-08-20'
+status: CURRENT_HEAD_INVENTORY_ONLY
+production_certification: NOT_RUN
+sources:
+  registry: factor_engine/cleaned_operators/registry.py
+  manifest: factor_engine/docs/operator_manifest.json
+  matrix_generator: scripts/generate_physical_implementation_matrix.py
+inventory:
+  canonical_operators: 1624
+  backend_registrations:
+    pandas_numpy: 1622
+    polars: 1623
+    duckdb_sql: 394
+    clickhouse_sql: 394
+  backend_status:
+    implemented: 1624
+  backend_passed: 0
+  implementation_certified: 0
+  operator_certification: 0
+  backend_signature_consistent: 1622
+  edge_case_passed: 1565
+gaps:
+  pandas_reference: status=IMPLEMENTED; certification=NOT_RUN
+  polars: status=IMPLEMENTED; parity=NOT_RUN
+  sql: status=IMPLEMENTED; registered=394; real_sql_and_parity=NOT_RUN
+  cross_backend_production: status=NOT_CERTIFIED; gate=NOT_RUN
+  q_backend: status=NOT_CERTIFIED; integration_and_parity=NOT_RUN
+gates:
+  FULL_REPO_COMPILE: NOT_RUN
+  REGISTRY_BOOTSTRAP: NOT_RUN
+  REGISTRY_DUPLICATE_AUTHORITY: NOT_RUN
+  OPERATOR_ABI: NOT_RUN
+  NO_PRODUCTION_PLACEHOLDER: NOT_RUN
+  PANDAS_REFERENCE: NOT_RUN
+  POLARS_PARITY: NOT_RUN
+  POLARS_NO_FAKE_NATIVE: NOT_RUN
+  Q_CANONICAL_IR_ONLY: NOT_RUN
+  Q_OPERATOR_PINGPONG_ZERO: NOT_RUN
+  Q_NULL_TIME_PARITY: NOT_RUN
+  BACKEND_CAPABILITY_SINGLE_AUTHORITY: NOT_RUN
+  REGION_PLANNER_SINGLE_AUTHORITY: NOT_RUN
+  CI_FINAL_HEAD: NOT_RUN
+notes:
+  - Counts are from the machine-generated PHYSICAL_IMPLEMENTATION_MATRIX.md (measured at HEAD f798b527).
+  - Manifest has no current-head SHA binding; counts are inventory observations only.
+  - No production-ready claim is made.
+  - Consolidated from R21-MATRIX-REGEN-V2 authority; the generator is the single authority.

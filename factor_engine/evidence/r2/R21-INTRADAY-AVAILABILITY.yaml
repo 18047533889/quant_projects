@@ -1,0 +1,30 @@
+task_id: R21-INTRADAY-AVAILABILITY
+title: Intraday Profile Operator Availability Declarations
+timestamp: '2026-08-20T00:00:00Z'
+git_sha: LOCAL
+author: Writer AS
+status: PASS
+
+summary: |
+  Added `available_at="session_close"` and `same_session_usable=False` to all 27
+  intraday profile operators in `polars_intraday_profile.py`. Also added the
+  `available_at` and `same_session_usable` fields to `OperatorMetadata` in
+  `base_polars.py` to mirror the pandas `OperatorMetadata` contract.
+
+files_modified:
+  - cleaned_operators/base_polars.py
+  - cleaned_operators/common/polars_intraday_profile.py
+
+tests_run:
+  - tests/operators/test_intraday_availability.py
+tests_passed:
+  - tests/operators/test_intraday_availability.py
+tests_not_run: []
+
+limitations: |
+  All 27 operators are marked `session_close` / `same_session_usable=False`.
+  This is correct for operators that require the full session to compute (profiles,
+  tail events, range persistence, etc.). Operators like `intra_extreme_bar_return`
+  could arguably be `session_open` if they only needed the current bar, but since
+  they compute across the entire session column-wise, `session_close` is the safe
+  default.

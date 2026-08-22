@@ -1,0 +1,18 @@
+canonical,fix,status
+relation_category_share,strict-align + non-negative input + bounded_0_1,closed
+relation_category_signed_contribution,"signed contribution (may exceed [0,1])",closed
+relation_hhi,observed-top-k HHI + missing_semantic,closed
+holder_observed_topk_hhi,top-k denominator HHI (separate canonical),closed
+holder_company_ownership_hhi,company-total-shares denominator HHI,closed
+relation_entropy,missing_semantic fail-closed,closed
+relation_topk_sum,missing_semantic fail-closed,closed
+relation_peer_weighted_mean_ex_self,strict-align 3-panel,closed
+relation_weighted_change,strict-align 2-panel,closed
+event_cumulative_return_past,strict-align ret/event,closed
+event_abnormal_return_past,strict-align ret/benchmark/event,closed
+relation_overlap_ratio,strict-align current/previous,closed
+index_membership_age,gap-aware entry-age state machine (R24-036..038),closed
+group_signal_attraction_share,strict group align (no reindex),closed
+aggregate_holder_rows,declared ratio_unit; official rank; EntityStableId,closed
+relation_snapshot_change,bitemporal; decision-time visible vintages,closed
+top_ten_features_asof,snapshot age metadata + bounded staleness,closed

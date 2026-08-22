@@ -1,0 +1,907 @@
+{
+  "generated_by": "scripts/audit_r34_hard_gates.py",
+  "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+  "passed": 15,
+  "not_run": 32,
+  "failed": 3,
+  "total": 50,
+  "production_ready": false,
+  "gates": {
+    "R34_CURRENT_HEAD_BOUND": {
+      "gate_id": "R34_CURRENT_HEAD_BOUND",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
+      "evidence_files": [
+        "docs/evidence/r34/R34_HEAD.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R34_CLEAN_TREE_CERTIFICATION": {
+      "gate_id": "R34_CLEAN_TREE_CERTIFICATION",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
+      "evidence_files": [
+        "docs/evidence/r34/R34_EVIDENCE_TRUTH_GATES.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R34_ALL_ARTIFACTS_CURRENT_HEAD": {
+      "gate_id": "R34_ALL_ARTIFACTS_CURRENT_HEAD",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R34_ZERO_HARDCODED_TRUE_GATES": {
+      "gate_id": "R34_ZERO_HARDCODED_TRUE_GATES",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R34_ZERO_PRESENCE_ONLY_HARD_GATES": {
+      "gate_id": "R34_ZERO_PRESENCE_ONLY_HARD_GATES",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R34_ZERO_SOURCE_STRING_ONLY_HARD_GATES": {
+      "gate_id": "R34_ZERO_SOURCE_STRING_ONLY_HARD_GATES",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R34_AUDIT_NEGATIVE_CONTROL_PASS": {
+      "gate_id": "R34_AUDIT_NEGATIVE_CONTROL_PASS",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R34_ALL_PRODUCTION_CANONICALS_TYPED_SIGNATURE": {
+      "gate_id": "R34_ALL_PRODUCTION_CANONICALS_TYPED_SIGNATURE",
+      "status": "FAIL",
+      "executed_cases": 4,
+      "failed_cases": 1,
+      "passed_cases": 3,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "missing_typed": [
+          "ADX",
+          "ATR_WILDER",
+          "CMF",
+          "ChaikinOscillator",
+          "EaseOfMovement",
+          "ForceIndex",
+          "MACD_hist",
+          "MACD_line",
+          "MACD_signal",
+          "MFI"
+        ],
+        "count": 1240
+      }
+    },
+    "R34_ALL_PRODUCTION_CANONICALS_EDGE_DECLARED": {
+      "gate_id": "R34_ALL_PRODUCTION_CANONICALS_EDGE_DECLARED",
+      "status": "FAIL",
+      "executed_cases": 1,
+      "failed_cases": 1,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "undeclared_count": 1405,
+        "sample": [
+          "ADX",
+          "ALMA",
+          "ATR_WILDER",
+          "CMF",
+          "CMO",
+          "ChaikinOscillator",
+          "CoppockCurve",
+          "DEMA",
+          "DMI_minus",
+          "DMI_plus"
+        ]
+      }
+    },
+    "R34_ALL_PRODUCTION_CANONICALS_REQUIRED_EDGE_VERIFIED": {
+      "gate_id": "R34_ALL_PRODUCTION_CANONICALS_REQUIRED_EDGE_VERIFIED",
+      "status": "FAIL",
+      "executed_cases": 1,
+      "failed_cases": 1,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "incomplete_count": 1406,
+        "sample": [
+          "ADX",
+          "ALMA",
+          "ATR_WILDER",
+          "CMF",
+          "CMO",
+          "ChaikinOscillator",
+          "CoppockCurve",
+          "DEMA",
+          "DMI_minus",
+          "DMI_plus"
+        ]
+      }
+    },
+    "R34_ALL_PRODUCTION_CANONICALS_SEMANTIC_GOLDEN": {
+      "gate_id": "R34_ALL_PRODUCTION_CANONICALS_SEMANTIC_GOLDEN",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "本机独立 oracle 已覆盖核心滚动/截面族（见 R34_PARAMETER_DOMAIN_COVERAGE）；全 production canonical 独立 golden 目录为后续轮"
+      }
+    },
+    "R34_ALL_PRODUCTION_CANONICALS_TEMPORAL_PROOF": {
+      "gate_id": "R34_ALL_PRODUCTION_CANONICALS_TEMPORAL_PROOF",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "prefix-causality 已由既有证据层覆盖；R34 全量 temporal 独立重证留后续"
+      }
+    },
+    "R34_ZERO_DEFAULT_ONLY_DOMAIN_OVERCLAIM": {
+      "gate_id": "R34_ZERO_DEFAULT_ONLY_DOMAIN_OVERCLAIM",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
+      "evidence_files": [
+        "docs/evidence/r34/R34_PARAMETER_DOMAIN_COVERAGE.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "certified_ops": 11,
+        "not_certified": {}
+      }
+    },
+    "R34_PRODUCTION_PARAM_DOMAIN_SUBSET_OF_CERTIFIED_DOMAIN": {
+      "gate_id": "R34_PRODUCTION_PARAM_DOMAIN_SUBSET_OF_CERTIFIED_DOMAIN",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "核心 7 个 rolling 算子已认证 window∈{1..252}；全 production 算子的 certified⊇production 映射为后续轮"
+      }
+    },
+    "R34_INVALID_PARAM_REJECTION_PASS": {
+      "gate_id": "R34_INVALID_PARAM_REJECTION_PASS",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "非法参数拒绝（window=0/min_periods>window/ddof=2）专项测试留后续"
+      }
+    },
+    "R34_ZERO_GENERATED_MODEL_CONTRACT_PRODUCTION_ADMISSION": {
+      "gate_id": "R34_ZERO_GENERATED_MODEL_CONTRACT_PRODUCTION_ADMISSION",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "model_like_without_explicit": [],
+        "count": 0
+      }
+    },
+    "R34_ALL_PREDICTIVE_MODELS_EXPLICIT_TIMING": {
+      "gate_id": "R34_ALL_PREDICTIVE_MODELS_EXPLICIT_TIMING",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "errors": []
+      }
+    },
+    "R34_ALL_PREDICTIVE_MODELS_FUTURE_PERTURBATION_PASS": {
+      "gate_id": "R34_ALL_PREDICTIVE_MODELS_FUTURE_PERTURBATION_PASS",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "future-perturbation 测试套留后续"
+      }
+    },
+    "R34_MULTI_HORIZON_LABEL_MATURITY_PASS": {
+      "gate_id": "R34_MULTI_HORIZON_LABEL_MATURITY_PASS",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "multi-horizon label maturity 测试套留后续"
+      }
+    },
+    "R34_ALL_STATEFUL_BEHAVIOR_CLASSIFIED": {
+      "gate_id": "R34_ALL_STATEFUL_BEHAVIOR_CLASSIFIED",
+      "status": "PASS",
+      "executed_cases": 3,
+      "failed_cases": 0,
+      "passed_cases": 3,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "scan": [
+          {
+            "canonical": "ts_mean",
+            "detected_stateful": false,
+            "expect": false
+          },
+          {
+            "canonical": "ts_ema",
+            "detected_stateful": true,
+            "expect": true
+          },
+          {
+            "canonical": "ts_rank",
+            "detected_stateful": false,
+            "expect": false
+          }
+        ]
+      }
+    },
+    "R34_ALL_SEGMENTED_OPS_CHUNK_PARITY": {
+      "gate_id": "R34_ALL_SEGMENTED_OPS_CHUNK_PARITY",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "chunk/checkpoint parity 测试套留后续（detect_stateful_behavior 已提供行为检测）"
+      }
+    },
+    "R34_ALL_CHECKPOINT_OPS_RESTORE_PARITY": {
+      "gate_id": "R34_ALL_CHECKPOINT_OPS_RESTORE_PARITY",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "checkpoint restore parity 留后续"
+      }
+    },
+    "R34_ALL_INCREMENTAL_OPS_APPEND_PARITY": {
+      "gate_id": "R34_ALL_INCREMENTAL_OPS_APPEND_PARITY",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "incremental append parity 留后续"
+      }
+    },
+    "R34_HISTORICAL_CORRECTION_PARITY": {
+      "gate_id": "R34_HISTORICAL_CORRECTION_PARITY",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "DA 历史修正 parity 依赖真实 DA fixture，留后续"
+      }
+    },
+    "R34_BACKEND_CERTIFICATION_PARAMETER_AWARE": {
+      "gate_id": "R34_BACKEND_CERTIFICATION_PARAMETER_AWARE",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "Polars/DuckDB 参数域 parity 需重跑后端差分，留后续"
+      }
+    },
+    "R34_BACKEND_CERTIFICATION_EXECUTION_VARIANT_AWARE": {
+      "gate_id": "R34_BACKEND_CERTIFICATION_EXECUTION_VARIANT_AWARE",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "execution-variant 认证留后续"
+      }
+    },
+    "R34_PANDAS_REFERENCE_GOLDEN_PASS": {
+      "gate_id": "R34_PANDAS_REFERENCE_GOLDEN_PASS",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
+      "evidence_files": [
+        "docs/evidence/r34/R34_PARAMETER_DOMAIN_COVERAGE.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R34_POLARS_CERTIFIED_REGION_PARITY_PASS": {
+      "gate_id": "R34_POLARS_CERTIFIED_REGION_PARITY_PASS",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "Polars parity 重跑留后续"
+      }
+    },
+    "R34_DUCKDB_CERTIFIED_REGION_PARITY_PASS": {
+      "gate_id": "R34_DUCKDB_CERTIFIED_REGION_PARITY_PASS",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "DuckDB parity 重跑留后续"
+      }
+    },
+    "R34_BACKEND_NULL_NAN_INF_MASK_PARITY": {
+      "gate_id": "R34_BACKEND_NULL_NAN_INF_MASK_PARITY",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "三后端 null/nan/inf mask 对比留后续"
+      }
+    },
+    "R34_BATCH_ORDER_INVARIANCE": {
+      "gate_id": "R34_BATCH_ORDER_INVARIANCE",
+      "status": "PASS",
+      "executed_cases": 3,
+      "failed_cases": 0,
+      "passed_cases": 3,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "factor_cases": 3
+      }
+    },
+    "R34_RUN_MANY_EQUALS_RUN_ONE": {
+      "gate_id": "R34_RUN_MANY_EQUALS_RUN_ONE",
+      "status": "PASS",
+      "executed_cases": 3,
+      "failed_cases": 0,
+      "passed_cases": 3,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R34_DUPLICATE_FACTOR_ISOLATION": {
+      "gate_id": "R34_DUPLICATE_FACTOR_ISOLATION",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "重复因子隔离测试留后续"
+      }
+    },
+    "R34_CSE_SOURCE_SNAPSHOT_ISOLATION": {
+      "gate_id": "R34_CSE_SOURCE_SNAPSHOT_ISOLATION",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "CSE snapshot 隔离留后续"
+      }
+    },
+    "R34_CACHE_POISONING_ZERO": {
+      "gate_id": "R34_CACHE_POISONING_ZERO",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "cache poisoning 测试留后续"
+      }
+    },
+    "R34_WORKER_COUNT_NUMERIC_PARITY": {
+      "gate_id": "R34_WORKER_COUNT_NUMERIC_PARITY",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "worker 数数值 parity 留后续"
+      }
+    },
+    "R34_REAL_DA_SOURCE_PIT_GOLDEN": {
+      "gate_id": "R34_REAL_DA_SOURCE_PIT_GOLDEN",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "需要真实 DataAccess parquet/registry fixture，本机未配置，留后续"
+      }
+    },
+    "R34_FINANCIAL_RESTATEMENT_GOLDEN": {
+      "gate_id": "R34_FINANCIAL_RESTATEMENT_GOLDEN",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "财报 restatement PIT golden 需真实 DA fixture"
+      }
+    },
+    "R34_INDEX_ANNOUNCE_EFFECTIVE_GOLDEN": {
+      "gate_id": "R34_INDEX_ANNOUNCE_EFFECTIVE_GOLDEN",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "index announce/effective golden 需真实 DA fixture"
+      }
+    },
+    "R34_HOLDER_SNAPSHOT_GOLDEN": {
+      "gate_id": "R34_HOLDER_SNAPSHOT_GOLDEN",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "holder snapshot golden 需真实 DA fixture"
+      }
+    },
+    "R34_EVENT_EFFECTIVE_GOLDEN": {
+      "gate_id": "R34_EVENT_EFFECTIVE_GOLDEN",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "event effective golden 需真实 DA fixture"
+      }
+    },
+    "R34_MINUTE_SESSION_GOLDEN": {
+      "gate_id": "R34_MINUTE_SESSION_GOLDEN",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "minute session golden 需真实 DA fixture"
+      }
+    },
+    "R34_DATAEVENT_ATOMIC_BATCH_PUBLISH": {
+      "gate_id": "R34_DATAEVENT_ATOMIC_BATCH_PUBLISH",
+      "status": "PASS",
+      "executed_cases": 4,
+      "failed_cases": 0,
+      "passed_cases": 4,
+      "case_ids": [],
+      "evidence_files": [
+        "runtime/production_policy.py"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "note": "production 恒原子两阶段，env escape hatch 已删除（P0-039）"
+      }
+    },
+    "R34_FACTORBLOCK_DQ_PASS": {
+      "gate_id": "R34_FACTORBLOCK_DQ_PASS",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "R33 FactorBlock DQ 向量化留 R33 轮"
+      }
+    },
+    "R34_READ_AFTER_WRITE_PARITY": {
+      "gate_id": "R34_READ_AFTER_WRITE_PARITY",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "read-after-write 测试留后续"
+      }
+    },
+    "R34_PARTIAL_GENERATION_VISIBILITY_ZERO": {
+      "gate_id": "R34_PARTIAL_GENERATION_VISIBILITY_ZERO",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "partial generation visibility 测试留后续"
+      }
+    },
+    "R34_WRITE_FAILURE_ROLLBACK_PASS": {
+      "gate_id": "R34_WRITE_FAILURE_ROLLBACK_PASS",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "write failure injection 留后续"
+      }
+    },
+    "R34_R33_FAST_PLAN_ONLY_AFTER_CERTIFICATION": {
+      "gate_id": "R34_R33_FAST_PLAN_ONLY_AFTER_CERTIFICATION",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "R33 尚未执行完毕，fast-plan eligibility 门留 R33"
+      }
+    },
+    "R34_R33_OPTIMIZED_EQUALS_REFERENCE": {
+      "gate_id": "R34_R33_OPTIMIZED_EQUALS_REFERENCE",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "R33 optimized==reference 留 R33"
+      }
+    },
+    "R34_R33_TIME_TO_DURABLE_COMMIT_BENCH_CORRECTNESS_PASS": {
+      "gate_id": "R34_R33_TIME_TO_DURABLE_COMMIT_BENCH_CORRECTNESS_PASS",
+      "status": "NOT_RUN",
+      "executed_cases": 0,
+      "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "reason": "R33 perf bench 留 R33"
+      }
+    }
+  }
+}

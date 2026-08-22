@@ -1,0 +1,104 @@
+# R21-P023-FOUR-BACKEND-PLAN: PhysicalRegionPlan 4-Backend + Numba Kernel Upgrade
+# Generated: 2026-08-20
+# Git SHA: 44581f2800d347dae078339711b84cc0950955c9
+
+id: R21-P023-FOUR-BACKEND-PLAN
+slice: R21-P023-FOUR-BACKEND-PLAN — upgrade PhysicalRegionPlan to support 4 backends + Numba kernel
+campaign: PhysicalRegionPlan Upgrade (R21; LOCAL ONLY, working tree is truth)
+timestamp: "2026-08-20"
+status: COMPLETED_LOCAL
+
+owned_files:
+  - planner/physical_plan.py                  # updated ExecKind enum with 7 new members
+  - planner/backend_region.py                 # BackendRegion + TransferEdge identity/resource/cost fields
+  - backend/contracts/__init__.py             # updated ExecutionKind enum with 3 new members
+  - evidence/r2/R21-P023-FOUR-BACKEND-PLAN.yaml  # this file
+
+problem:
+  "ExecKind only had SQL/PYTHON/MATERIALIZED. PhysicalRegionPlan lacked support
+  for 4 distinct backends (Pandas/NumPy, Polars, DuckDB, ClickHouse) and
+  Numba CPU kernel execution. TransferEdge lacked materialization cost tracking
+  for Arrow/NumPy/Polars/SQL conversions."
+
+root_cause:
+  "1. ExecKind enum was too coarse - only 3 members for all execution backends.
+  2. Backend contracts lacked NUMBA_CPU_KERNEL, CLICKHOUSE_NATIVE_SQL, Q_NATIVE.
+  3. PhysicalRegionPlan had no mechanism to track per-backend implementation
+  identity, representation, sortedness, grain, availability, memory, liveness,
+  source identity, or parameter-domain identity."
+
+fix:
+  "1. Added 7 new ExecKind members to planner/physical_plan.py:
+     - PANDAS_NUMPY: pandas DataFrame + NumPy ufunc
+     - POLARS_NATIVE_EXPR: Polars expression engine
+     - POLARS_NUMPY_KERNEL: Polars column + NumPy kernel
+     - NUMBA_CPU_KERNEL: Numba JIT compiled CPU kernel
+     - DUCKDB_NATIVE_SQL: DuckDB native SQL execution
+     - CLICKHOUSE_NATIVE_SQL: ClickHouse native SQL execution
+     - Q_NATIVE: Q/kdb+ native execution
+  2. Added 3 new ExecutionKind members to backend/contracts/__init__.py:
+     - NUMBA_CPU_KERNEL
+     - CLICKHOUSE_NATIVE_SQL
+     - Q_NATIVE
+  3. Updated is_native_execution() to include new native backends.
+  4. BackendRegion (planner/backend_region.py) now carries:
+     implementation_id (PhysicalImplementationID binding), input_bytes,
+     output_bytes, liveness (eager/lazy/stream), parameter_domain_identity;
+     all exposed in to_dict(). Existing fields already cover representation,
+     sortedness (PhysicalProperties.sorted_by), grain, availability
+     (available_at), memory (estimated_memory_bytes), and source identity
+     (source_snapshot).
+  5. TransferEdge now carries materialization cost decomposition:
+     materialization_cost_arrow_ms / _numpy_ms / _polars_ms / _sql_ms,
+     exposed in to_dict()."
+
+commands_run:
+  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/planner/test_physical_region_plan_validation.py -q -> 27 passed (0.08s serial, no xdist)"
+  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/planner/test_physical_region_plan_contract.py -q -> 4 passed (0.07s serial, no xdist)"
+  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/planner/test_physical_region_plan_validation.py tests/planner/test_physical_region_plan_contract.py -q -> 31 passed (serial, no xdist)"
+
+results:
+  exec_kind_members:
+    planner/physical_plan.py:
+      before: 3 (SQL, PYTHON, MATERIALIZED)
+      after: 10 (+PANDAS_NUMPY, POLARS_NATIVE_EXPR, POLARS_NUMPY_KERNEL, NUMBA_CPU_KERNEL, DUCKDB_NATIVE_SQL, CLICKHOUSE_NATIVE_SQL, Q_NATIVE)
+    backend/contracts/__init__.py:
+      before: 16
+      after: 16 (+NUMBA_CPU_KERNEL, CLICKHOUSE_NATIVE_SQL, Q_NATIVE)
+
+  tests:
+    total: 31
+    passed: 31
+    failed: 0
+    skipped: 0
+
+  test_files:
+    - tests/planner/test_physical_region_plan_validation.py: 27 passed
+    - tests/planner/test_physical_region_plan_contract.py: 4 passed
+
+guards_in_tests:
+  - "test_physical_region_plan_validation.py: 27 passed (0.08s serial, no xdist)"
+  - "test_physical_region_plan_contract.py: 4 passed (0.07s serial, no xdist)"
+  - "All guards pass with current HEAD"
+
+known_limitations:
+  - PhysicalRegion plan model (backend_region.py) already has PhysicalBackend enum with 5 members
+  - No runtime executor changes in this slice - only enum/contract/dataclass definitions
+  - Backend-specific native kernel implementations are NOT_RUN (research-only)
+  - tests/planner/test_duckdb_region_optimization.py has 4 pre-existing failures on HEAD
+    (BackendRegion has never accepted a top-level sorted_by kwarg; the tests were
+    broken before this slice and are untouched by it — 10/14 pass)
+
+not_run:
+  - item: "tests/planner/test_duckdb_region_optimization.py 4 sorted_by failures (pre-existing on HEAD, not caused by this slice)"
+    status: NOT_RUN
+  - item: "Numba CPU kernel runtime implementation"
+    status: NOT_RUN
+  - item: "ClickHouse native SQL runtime implementation"
+    status: NOT_RUN
+  - item: "Q/kdb+ native runtime implementation"
+    status: NOT_RUN
+  - item: "Full planner integration with new ExecKind members"
+    status: NOT_RUN
+
+production_certification: NOT_RUN

@@ -1,0 +1,61 @@
+id: R21-CAMPAIGN-SNAPSHOT-PIN
+title: "MiningCampaignSnapshot truly pins ExecutionContext/DataAccess read identity"
+date: 2026-08-21
+status: PASS
+owner: Writer DE (campaign snapshot pinning)
+head_sha: "9b09d42a1c86dbad3d0cce7a5473e2126fdadf69"
+files:
+  - "factor_engine/mining/campaign.py"
+  - "factor_engine/tests/conftest.py"
+  - "factor_engine/tests/r42/test_r42_mining_campaign_foundations.py"
+  - "factor_engine/tests/r42/test_r21_campaign_snapshot_pin.py"
+---
+
+# Problem
+
+MiningCampaignSnapshot recorded metadata (source/universe/compiler identities)
+but MiningCampaignSession.run_many_iter() never injected the pinned identities
+into the ExecutionContext / data access path. evaluate_many_iter() could pass
+snapshot A while the engine actually read snapshot B, silently evaluating every
+candidate against the wrong data state. Compiled/failure maps were also keyed by
+factor.name, so two factors sharing a display name could alias each other's
+records.
+
+# Fix
+
+Code changes in factor_engine/mining/campaign.py:
+- source_identity_hex(data_source) and universe_identity_hex(data_source) provide
+  canonical read identities derived from the source's serializable
+  execution_spec plus its live snapshot_token (manifest token first, then
+  resolved DataAccess snapshot id) and from instrument_filter semantics
+  (ALL / EMPTY / LIST are distinct execution semantics).
+- MiningCampaignSession._require_pinned_identity() checks, before any
+  streaming, that the engine's real read identity matches the pinned
+  source_snapshot / universe_snapshot. A mismatch raises CampaignSnapshotPinError
+  (hard fail) before the engine yields a single result. run_many_iter() and
+  evaluate_many_iter() both gate on it.
+- compile_many() and the session compiled map are keyed by the semantic
+  CandidateID (candidate_semantic_hash) instead of factor.name; failures too.
+  session.compiled[candidate_hash] = (dag, analysis, factor_name).
+
+# Tests
+
+tests/r42/test_r21_campaign_snapshot_pin.py::test_run_many_iter_pins_engine_read_identity_before_streaming PASSED
+tests/r42/test_r21_campaign_snapshot_pin.py::test_run_many_iter_hard_fails_when_engine_reads_different_snapshot PASSED
+tests/r42/test_r21_campaign_snapshot_pin.py::test_compile_and_failure_maps_are_keyed_by_candidate_id_not_factor_name PASSED
+tests/r42/test_r42_mining_campaign_foundations.py (8) PASSED  # updated to semantic CandidateID contract
+
+# Limitations
+
+- The engine-side ExecutionContext itself is not yet constructed BY the session
+  with the pinned identities; the pin is enforced at the campaign layer by
+  verifying the engine's actual read identity before evaluation. A caller that
+  rebuilds the engine / data source must pass the same pinned snapshot.
+- Five pre-existing r42 failures (test_r42_testing_infrastructure /
+  test_r42_contextvar_and_aggregation / test_r42_sink_cache_051_059) fail on
+  HEAD as well (missing PhysicalRepresentation, writer_count,
+  _estimate_cache_values) and are unrelated to this change.
+- tests/conftest.py re-imports the editable mining package before the monorepo
+  root is put back on sys.path, so tests/ always resolves the factor_engine
+  copy of mining/campaign.py (the workspace root also has a mining/ package that
+  would otherwise shadow it).

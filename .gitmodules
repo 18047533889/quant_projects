@@ -1,9 +1,0 @@
-[submodule "factor_engine"]
-	path = factor_engine
-	url = https://github.com/18047533889/factor_engine.git
-[submodule "dataaccess"]
-	path = dataaccess
-	url = https://github.com/18047533889/data_access.git
-[submodule "vectorbt_qs"]
-	path = vectorbt_qs
-	url = https://github.com/18047533889/vectorbt_qs.git

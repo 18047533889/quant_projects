@@ -1,0 +1,23 @@
+services:
+  data-access:
+    build: .
+    ports:
+      - "8765:8765"
+    environment:
+      DATA_ACCESS_API_KEY: "${DATA_ACCESS_API_KEY:?set DATA_ACCESS_API_KEY from a secret manager or local .env}"
+      QUANT_PRODUCTION_MODE: "1"
+      DATA_ACCESS_API_MAX_CONCURRENCY: "4"
+      DATA_ACCESS_COS_CACHE_ROOT: /var/lib/dataaccess/cos-cache
+      DUCKDB_TEMP_DIRECTORY: /tmp/duckdb
+    volumes:
+      - dataaccess-cache:/var/lib/dataaccess
+      - dataaccess-tmp:/tmp/duckdb
+    read_only: true
+    tmpfs:
+      - /tmp:size=2g
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  dataaccess-cache:
+  dataaccess-tmp:

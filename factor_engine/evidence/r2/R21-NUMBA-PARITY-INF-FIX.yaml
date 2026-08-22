@@ -1,0 +1,88 @@
+# R21-NUMBA-PARITY-INF-FIX
+
+task_id: R21-NUMBA-PARITY-INF-FIX
+date: 2026-08-20
+author: Writer AP
+status: COMPLETE
+
+## Problem
+
+The `parity_check()` function in `backend/numba_kernel_registry.py` used a single
+`np.isfinite(ref) & np.isfinite(num)` mask to filter values before `np.allclose()`.
+This silently ignored mismatches in the +Inf / -Inf / NaN masks because:
+
+- Positions where either ref or numba was Inf were excluded from comparison.
+- If ref produced NaN at position X but numba produced Inf (or vice versa), the
+  position was excluded from `allclose` AND `nan_ok` only checked `isnan()` equality
+  (NaN vs Inf shows False, but the combined check still passed because the allclose
+  subset was correct).
+
+## Fix (backend/numba_kernel_registry.py)
+
+### 1. Inf parity check decomposed into explicit sub-masks
+
+```python
+ref_posinf = np.isposinf(ref)
+num_posinf = np.isposinf(num)
+ref_neginf = np.isneginf(ref)
+num_neginf = np.isneginf(num)
+ref_fin = np.isfinite(ref)
+num_fin = np.isfinite(num)
+```
+
+- `posinf_ok` = `np.array_equal(ref_posinf, num_posinf)`
+- `neginf_ok` = `np.array_equal(ref_neginf, num_neginf)`
+- `finite_mask_ok` = `np.array_equal(ref_fin, num_fin)`
+- `nan_ok` = `np.array_equal(np.isnan(ref), np.isnan(num))`
+- `dtype_ok` = `ref.dtype == num.dtype`
+- `shape_ok` = `ref.shape == num.shape`
+- `finite_match` = `np.allclose(ref[ref_fin], num[ref_fin])` only when `shape_ok`
+- Final `match = all of the above`
+
+The result dict now includes all sub-mask booleans for diagnostics.
+
+### 2. Shape guard before indexing
+
+When `shape_ok` is False, `finite_match` is set to False and we skip the
+allclose indexing to avoid IndexError.
+
+### 3. Registry dedup (DuplicateKernelRegistrationError)
+
+`NumbaKernelRegistry.register()` now checks whether the kernel_name already exists.
+- Same spec (idempotent re-registration): allowed silently.
+- Different spec: raises `DuplicateKernelRegistrationError`.
+
+## Regression tests (10 tests, all passing)
+
+File: `tests/backend_parity/test_numba_parity_inf_fix.py`
+
+| # | Class | Test | Purpose |
+|---|-------|------|---------|
+| 1 | TestInfMaskPositiveInf | test_posinf_mismatch_detected | ref NaN vs numba +Inf -> FAIL |
+| 2 | TestInfMaskPositiveInf | test_posinf_both_nan_passes | both NaN -> PASS |
+| 3 | TestInfMaskNegativeInf | test_neginf_mismatch_detected | ref NaN vs numba -Inf -> FAIL |
+| 4 | TestFiniteMask | test_finite_mask_mismatch_detected | ref NaN vs numba finite at pos0 -> FAIL |
+| 5 | TestFiniteMask | test_finite_mask_both_agree_passes | both agree -> PASS |
+| 6 | TestDtypeShape | test_dtype_mismatch_detected | float64 vs float32 -> FAIL |
+| 7 | TestDtypeShape | test_shape_mismatch_detected | different lengths -> FAIL |
+| 8 | TestDtypeShape | test_exact_parity_passes | identical -> PASS |
+| 9 | TestRegistryDedup | test_duplicate_different_spec_raises | different spec -> DuplicateKernelRegistrationError |
+| 10 | TestRegistryDedup | test_idempotent_same_spec_allows | same spec -> allowed |
+
+## Regression evidence
+
+All 29 existing numba kernel tests pass (no regression):
+- tests/r35/test_phase_f_numba_kernels.py (13 tests)
+- tests/backend/test_r21_numba_cpu_kernel.py (16 tests)
+
+## Files modified
+
+- `/home/shw/quant_projects/factor_engine/backend/numba_kernel_registry.py`
+  - `DuplicateKernelRegistrationError` exception class added
+  - `NumbaKernelRegistry.register()` dedup guard added
+  - `parity_check()` rewritten with explicit Inf/NaN/finite mask decomposition
+
+## Files created
+
+- `/home/shw/quant_projects/factor_engine/tests/backend_parity/test_numba_parity_inf_fix.py`
+- `/home/shw/quant_projects/factor_engine/evidence/r2/R21-NUMBA-PARITY-INF-FIX.yaml` (this file)

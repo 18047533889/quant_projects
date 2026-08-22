@@ -1,0 +1,18 @@
+
+# HTTP service local state
+.factor_engine_service/
+
+# R38 local test spill/spool
+_r38_spill_store/
+_r38_spool/
+cleaned_operators.zip
+
+# Build artifacts
+build/
+__pycache__/
+*.pyc
+*.nbc
+*.nbi
+
+dist/
+*.whl

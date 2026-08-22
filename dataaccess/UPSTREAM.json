@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/HKUST-QUANT-SOCIETY/data_access",
+  "upstream_ref_checked": "origin/sync/data-access-0.5.0",
+  "upstream_version_observed": "0.2.0",
+  "target_path": "dataaccess",
+  "target_version_observed": "0.3.0",
+  "note": "The local upstream ref does not contain the claimed 0.5.0 catalog/safety runtime. This file records the evidence instead of pretending a complete upstream sync occurred.",
+  "preserved_monorepo_extensions": ["quality", "deploy", "ops", "docs"],
+  "generated_by": "dataaccess baseline audit"
+}

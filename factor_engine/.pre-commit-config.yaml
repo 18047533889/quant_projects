@@ -1,0 +1,14 @@
+# Pre-commit hooks for FactorEngine
+# Install: pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  - repo: local
+    hooks:
+      - id: dataaccess-io-boundary
+        name: DataAccess I/O Boundary Check (FE-DA-P0-002)
+        entry: python3 scripts/check_dataaccess_io_boundary.py
+        language: system
+        pass_filenames: false
+        types: [python]
+        stages: [commit]

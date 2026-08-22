@@ -1,0 +1,163 @@
+id: R20-EXSELF-CS-DIRECTUSE
+slice: R20-EXSELF-CS-DIRECTUSE
+campaign: Operator Rehabilitation (Loop Engineering Writer)
+git_sha: working-tree  # no commit; working tree is truth (base 60bb18ba)
+timestamp: "2026-08-20"
+status: COMPLETED_LOCAL
+
+owned_files:
+  - cleaned_operators/technical/exself_cs_v1.py
+  - cleaned_operators/__init__.py          # _REVIEWED_EXTENSIONS load-chain wiring only
+  - tests/operators/test_r20_exself_cs_direct_use_rehab.py
+  - evidence/r2/R20-EXSELF-CS-DIRECTUSE.yaml
+
+survey_findings:
+  ex_self_family_neighbors:
+    - "cleaned_operators/group_ext.py group_ex_self_mean (+ polars twins in common/polars_group.py / common/polars_group_advanced.py / polars_native/group_batch1.py / auto_polars_all.py) — LOO group mean LEVEL (unit of x; R11 #135 comment says exactly this: not terminal-usable). NOT the x-minus-LOO-mean DIRECT-USE gap."
+    - "cleaned_operators/alpha_language_cross.py ~L316 group_ex_self_std — LOO std LEVEL (exact LOO); polars twins use full-group std as approximate proxy. NOT a standardized z."
+    - "cleaned_operators/alpha_language_cross.py ~L347 group_ex_self_mad — LOO MAD LEVEL. NOT (x-LOO median)/LOO MAD."
+    - "cleaned_operators/alpha_language_cross.py ~L388 group_ex_self_quantile — LOO quantile level. Different estimator."
+    - "cleaned_operators/group_ext.py L119 group_ex_self_weighted_mean (relation/ops.py L540) — LOO WEIGHTED mean level."
+    - "cleaned_operators/alpha_language_cross.py L431 relation_weighted_std_ex_self — LOO node-weighted std level."
+  self_inclusive_neighbors:
+    - "cleaned_operators/polars_native/group_batch1.py L929 group_zscore — FULL-GROUP z including self; zero-fills degenerate std via otherwise(0.0) — the exact self-inclusion bias + silent zero this family removes."
+    - "cleaned_operators/common/polars_cs_basic.py L90/L59/L123 cs_zscore / cs_rank / cs_demean — whole-cross-section, self included, no group dimension, no min_peers guard."
+    - "cleaned_operators/polars_native/group_batch1.py L418 group_neutralize — subtract full-group mean (self included)."
+    - "cleaned_operators/common/polars_group_advanced.py L815 group_peer_deviation_index — (x - FULL-GROUP median)/FULL-GROUP MAD, self included on both sides. Nearest neighbor to ex_self_mad_z; LOO variant did not exist."
+  other_domain_neighbors:
+    - "cleaned_operators/cross_section/peer_ops.py L108 group_peer_beta_deviation — x - LOO WEIGHTED mean, beta-panel-specific."
+    - "cleaned_operators/dynamic_knn.py L247 cs_knn_peer_mean_ex_self — kNN-similarity peer mean, not a group label."
+    - "intraday *_ex_self canonicals (realized_beta.py etc.) — intraday market-model estimators, different domain."
+  duplicate_audit_verdict: >
+    NONE of ex_self_mean_gap / ex_self_zscore / ex_self_rank_pct /
+    ex_self_mad_z existed as an exact semantic equivalent — all four
+    landed.  12+ neighbors audited with differentiation arguments above
+    (recorded in exself_cs_v1.py module docstring).  Existing ex-self
+    operators are all LEVEL outputs; the standardized/z/rank/mad_z LOO
+    variants and the LOO gap did not exist.
+
+landed_canonicals:
+  - name: ex_self_mean_gap
+    math: "x_i - (S_g - x_i)/(n_g - 1) via per-row running group sums (stable (n*mean-x)/(n-1), never a per-member re-scan); unit of x (documented gap canonical)"
+    params: {min_peers: ParamSpec(int, min=3, default=3, SUPPORT_POLICY)}
+    guards: "strict integer >= 3 (bools and 3.5-style floats rejected) == spec min; self NaN/±Inf -> NaN; < min_peers finite in-group peers EXCLUDING self -> NaN"
+  - name: ex_self_zscore
+    math: "(x - LOO mean) / LOO std, ddof=0 over the n-1 peers, from running sums: peer_S2 = S2-x^2, ss = peer_S2 - peer_sum^2/m with catastrophic-cancellation clamp (ss in (-1e-9*max(1,|peer_s2|), 0) -> 0, else fail-closed NaN)"
+    params: {min_peers: ParamSpec(int, min=3, default=3, SUPPORT_POLICY)}
+    guards: "LOO std == 0 (or broken ss) -> NaN never 0; same self/peer/min_peers policy as mean_gap"
+  - name: ex_self_rank_pct
+    math: "(|{p<x}| + 0.5*|{p==x}|) / m over the m finite in-group peers — average-rank convention, self excluded from numerator AND denominator; bounded [0,1]"
+    params: {min_peers: ParamSpec(int, min=3, default=3, SUPPORT_POLICY)}
+    guards: "same self/peer/min_peers policy; 0 = strictly below all peers, 1 = strictly above, ties split halfway"
+  - name: ex_self_mad_z
+    math: "(x - LOO median) / LOO MAD, exact per-member np.median over the peer set (no running-sum shortcut exists for medians); RAW MAD units, NO 1.4826 constant (matches group_peer_deviation_index)"
+    params: {min_peers: ParamSpec(int, min=3, default=3, SUPPORT_POLICY)}
+    guards: "LOO MAD == 0 -> NaN never 0; same self/peer/min_peers policy"
+
+skipped:
+  - "None — all four landed (duplicate audit found no genuine duplicates; see survey_findings)."
+
+family_contract:
+  causality: "purely cross-sectional per row t — output row t reads input row t only (pinned by mutation test: a mutation at (t, col) leaves every row t' != t bit-identical and moves only same-group same-row cells); prefix invariance asserted"
+  nan_policy: "NaN/±Inf peers EXCLUDED from the LOO statistics; NaN/±Inf self -> NaN output; < min_peers finite peers -> NaN; degenerate LOO std/MAD -> NaN never 0"
+  state: "stateless per-row estimator; strict PanelAxisMismatch alignment via align_panel_inputs(strict_axes=True); tags pit_safe/causal/typed_v2"
+
+promotion:
+  operator_surface: "module calls operator_surface.extend_extended_only({name}) at registration (peer_ops.py _mk precedent); production-mode OperatorRegistry.get works for all four"
+  load_all: "cleaned_operators/__init__.py _REVIEWED_EXTENSIONS + cleaned_operators.technical.exself_cs_v1 (loaded BEFORE finalize/freeze — required because the tests/operators conftest session fixture freezes the registry)"
+  direct_use: "NOT promoted into mining/direct_use.py _RELATIVE_ALPHA_OPS — ex_self_mean_gap is unit-bearing (gap, not dimensionless); left to the DirectUse matrix owner to adjudicate the family as a whole"
+
+commands_run:
+  - "OPENBLAS/OMP/MKL/POLARS threads=1 python3 -m pytest tests/operators/test_r20_exself_cs_direct_use_rehab.py -q -> 47 passed"
+  - "OPENBLAS/OMP/MKL/POLARS threads=1 python3 -m pytest tests/operators/test_r20_exself_cs_direct_use_rehab.py tests/operators/test_r20_pairwise_param_spec_repair.py -q -> 61 passed (serial gate, no xdist)"
+  - "threads=1 python3 -c load_all(); registry production-mode lookups + ParamSpec checks -> OK (all four registered, spec.min=3 dtype=int)"
+
+results:
+  new_tests: 47
+  new_tests_passed: 47
+  regression_tests: 14   # tests/operators/test_r20_pairwise_param_spec_repair.py
+  regression_tests_passed: 14
+  bootstrap: LOAD_CHAIN_OK  # _REVIEWED_EXTENSIONS wiring verified under the frozen-registry conftest
+
+test_oracle_coverage:
+  manual_oracles: "independent plain-python/pandas oracle _oracle_stat (mean_gap/zscore ddof=0/rank_pct average-rank/mad_z raw-MAD) sharing no code with the operator module; parametrized rtol=1e-9 match on a seeded 40x9 panel (5xA + 3xB + 1xC layout) and on an 18x12 NaN/±Inf panel"
+  contract_tests: >
+    exact NaN coverage (self NaN, self +Inf, self -Inf, NaN/Inf peers
+    excluded, min_peers gate with 3-member vs 4-member groups and a
+    NaN member dropping everyone's peer count below 3 at that row);
+    ValueError on min_peers in {2,1,0,-1,2.5,3.5}; degenerate identical
+    group -> z/mad_z NaN, mean_gap exactly 0, rank_pct exactly 0.5;
+    rank_pct bounds [0,1] + strict boundary 1.0/0.0 + tie split 1/6, 1.0,
+    2/3; causality mutation (rows != t bit-identical, different-group
+    same-row cells NaN-aware-identical, same-group cells move); prefix
+    invariance; group-label mutation leaves non-A columns identical;
+    ParamSpec min/dtype vs runtime guard equality; neighbor-canonicals
+    (12 names) still registered and not shadowed; group_zscore
+    zero-fill-vs-NaN separation pinned
+
+known_limitations:
+  - "O(rows*cols) python loops per row with per-member median recompute for mad_z — exact but not vectorized; fine for daily cross-sections."
+  - "ex_self_zscore peer-std convention is ddof=0 (population std of the peer set, matching np.std default and cs_zscore) — documented, not ddof=1."
+  - "ex_self_mad_z uses RAW MAD (no 1.4826 consistency constant) matching group_peer_deviation_index — values are ~1.4826x smaller than a Gaussian-consistent robust z."
+  - "ex_self_mean_gap carries x's unit (a gap canonical, not dimensionless) — deliberately landed but NOT auto-promoted to the dimensionless DirectUse alpha list."
+  - "Polars backend parity / production six-gate certification: NOT_RUN."
+  - "Full cleaned_operators suite beyond named regression files: NOT_RUN."
+
+production_certification: NOT_RUN
+independent_review:
+  reviewer: scoped-reviewer (background agent a34d8fbebdcfd173c, 2026-08-20)
+  verdict: PASS-with-findings
+  checks: "6/6 executed: paper algebra + 300-trial seeded brute-force vs all 4 kernels; NaN/±Inf/min_peers/degenerate/overflow probes; spec-vs-guard equality; mutation/prefix-invariance probes; all 12 neighbors read from disk + repo-wide LOO grep; oracle-independence read + serial pytest (61 passed)"
+  confirmed_clean: >
+    LOO mean-gap identity (1-ULP-absolute at 1e6 offsets = expected float
+    behavior); rank_pct exact incl. ties; mad_z exact; self NaN/±Inf->NaN
+    on every path, no abs()-laundering; min_peers gate incl.
+    NaN-member-drops-everyone; ParamSpec(int,min=3)==runtime guard; no
+    time-axis access anywhere; mutation test pins mathematically correct
+    same-group peer semantics; duplicate audit accurate (12 neighbors all
+    level/self-inclusive); sibling group_state_v1 correctly SKIPPED
+    peer_residual_z/within_group_rank_pct as exact duplicates; oracle
+    independent; _REVIEWED_EXTENSIONS wiring at __init__.py:375 pre-freeze.
+  findings:
+    - id: R20-EXSELF-P1
+      severity: P1
+      finding: >
+        ex_self_zscore running-sum variance (ss = S2 - S^2/m) catastrophically
+        cancellative at |mean|/sigma >= ~1e7 (probe: level 1e9, spread 1e-6
+        -> error ratio ~1e13; finite-but-wrong z ~1e-7 where oracle ~1.3, or
+        NaN by rounding sign — nondeterministic on the same row).  Clamp
+        covered only the negative branch.
+      resolution: FIXED — replaced with EXACT TWO-PASS peer variance (peer
+        mean, then sum((p-mean)^2)/(m)); non-negative by construction, no
+        clamp.  New oracle test test_zscore_high_level_low_dispersion
+        (level 1e9 / spread 1e-6) passes.
+    - id: R20-EXSELF-P2a
+      severity: P2
+      finding: overflow peers (±1e200) gave var=inf -> z=x/inf=exactly 0.0 — finite-0 emission disclaimed by the never-0 contract.
+      resolution: FIXED — two-pass kernel detects non-finite var and fails closed to NaN; new test test_zscore_overflow_peers_fail_closed_never_zero.
+    - id: R20-EXSELF-P2b
+      severity: P2
+      finding: absolute dispersion floor _EPS=1e-12 is scale-dependent (peer std < 1e-6 -> NaN even when well-posed); same for MAD floor.
+      resolution: DOCUMENTED — added "Known numeric limitations" block to the module docstring (pre-scale panels to O(1); DirectUse input domain is returns/standardized factors).
+    - id: R20-EXSELF-P2c
+      severity: P2
+      finding: test_group_zscore_zero_fill_separated never invoked group_zscore — vacuous w.r.t. the neighbor.
+      resolution: FIXED — test now calls the group_zscore polars backend on the same degenerate input (labels factorized for the common/group_polars row-wrapper path) and asserts 0.0 zero-FILL on its side vs NaN on ours.
+    - id: R20-EXSELF-P2d
+      severity: P2
+      finding: (pre-existing, out of scope) group_peer_deviation_index has two divergent implementations — polars (x-med)/MAD vs pandas multi-panel zscore aggregation.
+      resolution: RECORDED — not this slice's defect; flagged to campaign queue.
+  post_fix_gates:
+    - "threads=1 pytest tests/operators/test_r20_exself_cs_direct_use_rehab.py -q -> 49 passed (2 new tests + hardened separation test)"
+    - "threads=1 pytest exself + pairwise -q -> 63 passed"
+    - "threads=1 pytest 7-module R20 merge -q -> 159 passed 1 skipped (76.16s, serial, no xdist)"
+independent_review_status: CLOSED_VERIFIED
+merge_gate:
+  command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/operators/test_r20_exself_cs_direct_use_rehab.py tests/operators/test_r20_event_state_direct_use_rehab.py tests/operators/test_r20_bvc_vpin_direct_use_rehab.py tests/operators/test_r20_spectral_direct_use_rehab.py tests/operators/test_r20_candlestick_direct_use_rehab.py tests/operators/test_r20_regression_direct_use_rehab.py tests/operators/test_r20_pairwise_param_spec_repair.py -q
+  result: 159 passed 1 skipped (2026-08-20 post-review, 76.16s, serial, no xdist — 7-module R20 cross-writer merge after P1 two-pass fix + P2 hardening)
+  notes: >
+    Merge includes the concurrently-landed pairwise repair + its post-review
+    test hardening; writer's own 2-module gate (61 passed) independently
+    reproduced by orchestrator before this wider gate.  Post-review gates
+    re-run after the P1 two-pass variance fix: focused 49, 2-module 63,
+    7-module 159 passed 1 skipped.

@@ -5,13 +5,44 @@ backend-path = ["."]
 
 [project]
 name = "quant-projects"
-version = "0.1.0"
-description = "Quantitative research umbrella project (orchestration only; FactorEngine lives in factor_engine/ submodule)"
+version = "0.3.1"
+description = "Quantitative research umbrella project: factor engine, data access, and orchestration"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "PyYAML>=6.0",
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "packaging>=23.0",
+    "pyarrow>=14.0",
+    "scipy>=1.10",
+    "duckdb>=0.10",
+    "sqlglot>=25.0",
+    "psutil>=5.9",
+    "threadpoolctl>=3.1",
 ]
+
+[project.optional-dependencies]
+pandas = ["pandas>=2.0", "pyarrow>=14.0", "scipy>=1.10"]
+accel = ["bottleneck>=1.3", "numba>=0.58"]
+talib = ["TA-Lib>=0.4.28"]
+polars = ["polars>=0.20"]
+modin = ["modin>=0.28"]
+backtest = ["backtrader>=1.9.78.123"]
+data = ["data-access>=0.10.0"]
+performance = ["psutil>=5.9", "threadpoolctl>=3.1"]
+service = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "pydantic>=2.0"]
+validation = ["pydantic>=2.0"]
+client = ["httpx>=0.27", "pydantic>=2.0"]
+clickhouse = ["clickhouse-connect>=0.8"]
+sql = ["sqlglot>=25.0"]
+dev = ["pytest>=8.0", "pydantic>=2.0", "fastapi>=0.110", "httpx>=0.27", "build>=1.2", "twine>=5.0"]
+full = ["polars>=0.20", "duckdb>=0.10", "psutil>=5.9", "data-access>=0.10.0"]
+
+[project.scripts]
+factor-engine-serve = "factor_engine.service.app:main"
+data-access-server = "dataaccess.data_access.service.__main__:main"
+data-access-quality = "dataaccess.data_access.quality.cli:main"
 
 [tool.setuptools]
 py-modules = [
@@ -25,32 +56,95 @@ include = [
     "planning*",
     "modeling",
     "modeling.*",
+    "factor_engine.api*",
+    "factor_engine.backend*",
+    "factor_engine.cache*",
+    "factor_engine.cleaned_operators*",
+    "factor_engine.docs*",
+    "factor_engine.evidence*",
+    "factor_engine.expr*",
+    "factor_engine.factor_recipes*",
+    "factor_engine.fields*",
+    "factor_engine.ir*",
+    "factor_engine.market*",
+    "factor_engine.mining*",
+    "factor_engine.modeling",
+    "factor_engine.modeling.*",
+    "factor_engine.planner*",
+    "factor_engine.planning*",
+    "factor_engine.research_tools*",
+    "factor_engine.runtime*",
+    "factor_engine.security*",
+    "factor_engine.semantic*",
+    "factor_engine.service*",
+    "factor_engine.storage*",
+    "factor_engine.util*",
+    "factor_engine.validation*",
+    "dataaccess.data_access",
+    "dataaccess.data_access.core",
+    "dataaccess.data_access.registry",
+    "dataaccess.data_access.read",
+    "dataaccess.data_access.write",
+    "dataaccess.data_access.cos",
+    "dataaccess.data_access.service",
+    "dataaccess.data_access.clickhouse",
+    "dataaccess.data_access.quality",
+    "dataaccess.data_access.contract",
+    "dataaccess.data_access.security",
+    "dataaccess.data_access.runtime",
+    "dataaccess.data_access.snapshot",
+    "dataaccess.data_access.r30",
+    "dataaccess.data_access.export",
+    "dataaccess.data_access.telemetry",
 ]
 exclude = [
     "tests", "tests.*",
     "benchmarks", "benchmarks.*",
     "audit", "audit.*",
-    "factor_engine", "factor_engine.*",
-    "dataaccess", "dataaccess.*",
     "*.tests", "*.tests.*",
     "*.__pycache__",
 ]
 
+[tool.setuptools.package-dir]
+"dataaccess" = "dataaccess"
+"dataaccess.data_access" = "dataaccess"
+"dataaccess.data_access.core" = "dataaccess/core"
+"dataaccess.data_access.registry" = "dataaccess/registry"
+"dataaccess.data_access.read" = "dataaccess/read"
+"dataaccess.data_access.write" = "dataaccess/write"
+"dataaccess.data_access.cos" = "dataaccess/cos"
+"dataaccess.data_access.clickhouse" = "dataaccess/clickhouse"
+"dataaccess.data_access.quality" = "dataaccess/quality"
+"dataaccess.data_access.contract" = "dataaccess/contract"
+"dataaccess.data_access.security" = "dataaccess/security"
+"dataaccess.data_access.runtime" = "dataaccess/runtime"
+"dataaccess.data_access.snapshot" = "dataaccess/snapshot"
+"dataaccess.data_access.r30" = "dataaccess/r30"
+"dataaccess.data_access.export" = "dataaccess/export"
+"dataaccess.data_access.telemetry" = "dataaccess/telemetry"
+
 [tool.setuptools.package-data]
 "evidence" = ["*.json", "*.yaml"]
 "docs" = ["*.json", "*.yaml", "*.md"]
+"cleaned_operators" = ["docs/*"]
+dataaccess = ["config/*.yaml", "config/README.md", "docs/*.md"]
 
 [tool.setuptools.exclude-package-data]
-"*" = ["tests", "tests.*", "benchmarks", "benchmarks.*", "audit", "audit.*", "*.pyc", "__pycache__", "test_*.py", "*_test.py"]
-
-[project.optional-dependencies]
-dev = ["pytest>=8.0", "pydantic>=2.0"]
-data = ["data-access>=0.10.0"]
-full = ["data-access>=0.10.0"]
+"*" = [
+    "tests", "tests.*",
+    "benchmarks", "benchmarks.*",
+    "audit", "audit.*",
+    "scripts", "scripts.*",
+    "*.pyc", "__pycache__",
+    "test_*.py", "*_test.py",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-ra"
 markers = [
     "integration: 需本地 parquet 或 RUN_* 环境变量",
     "slow: 大面板 nightly 基准",
+    "modin: 需要安装 modin，默认 CI 不跑",
+    "perf: 轻量性能回归 smoke",
 ]

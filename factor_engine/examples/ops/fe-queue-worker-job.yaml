@@ -1,0 +1,54 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: factor-engine-queue-worker
+  labels:
+    app: factor-engine
+    component: queue-worker
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: factor-engine
+        component: queue-worker
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: worker
+          image: python:3.11-slim
+          workingDir: /opt/quant_projects/factor_engine
+          command:
+            - python3
+            - run_pipeline.py
+            - queue
+            - worker
+            - --queue-root
+            - /var/lib/factor_engine/queue
+            - --queue-max-retries
+            - "2"
+            - --poll-interval
+            - "5"
+            - --recover-stale
+            - --profile
+            - prod
+            - --strict-dq
+          env:
+            - name: PYTHONPATH
+              value: /opt/quant_projects:/opt/quant_projects/factor_engine
+            - name: FACTOR_ENGINE_RUN_MODE
+              value: production
+          volumeMounts:
+            - name: queue-data
+              mountPath: /var/lib/factor_engine/queue
+            - name: code
+              mountPath: /opt/quant_projects
+      volumes:
+        - name: queue-data
+          persistentVolumeClaim:
+            claimName: factor-engine-queue-pvc
+        - name: code
+          hostPath:
+            path: /opt/quant_projects
+            type: Directory

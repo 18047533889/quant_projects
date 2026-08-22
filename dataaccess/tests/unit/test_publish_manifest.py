@@ -1,0 +1,155 @@
+# -*- coding: utf-8
+"""publish manifest 与 revision dedup 单元测试。"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
+import pytest
+
+from data_access.read.adapters import arrow_table_to_multiindex_columns
+from data_access.read.key_policy import KeyPolicy
+from data_access.write.publish_manifest import read_publish_manifest, write_publish_manifest
+from data_access.read.read_contract import (
+    FileVersion,
+    SnapshotConflictError,
+    build_data_snapshot,
+    merge_sql_data_snapshots,
+)
+
+
+def test_write_publish_manifest_atomic(tmp_path: Path):
+    target = tmp_path / "published" / "f1"
+    target.mkdir(parents=True)
+    pq.write_table(pa.table({"x": [1]}), target / "data.parquet")
+
+    path = write_publish_manifest(
+        target,
+        staging_name="stg",
+        target_name="pub",
+        params={"factor_id": "f1"},
+        rows=1,
+        archive_path=None,
+        elapsed_ms=12.5,
+    )
+    assert path.exists()
+    manifest = read_publish_manifest(target)
+    assert manifest is not None
+    assert manifest["rows"] == 1
+    assert manifest["params"]["factor_id"] == "f1"
+    assert manifest["file_count"] == 1
+    assert manifest["manifest_version"] == 4
+    assert len(manifest["content_hash"]) == 64
+
+
+def test_read_publish_manifest_accepts_only_valid_v3_or_v4_identity(tmp_path: Path):
+    target = tmp_path / "published"
+    target.mkdir()
+    path = target / ".publish_manifest.json"
+
+    path.write_text(
+        json.dumps({"manifest_version": 3, "content_hash": "a" * 16}),
+        encoding="utf-8",
+    )
+    assert read_publish_manifest(target) is not None
+
+    for payload in (
+        {"manifest_version": 3, "content_hash": "a" * 64},
+        {"manifest_version": 4, "content_hash": "a" * 16},
+        {"manifest_version": 4, "content_hash": "g" * 64},
+        {"manifest_version": 5, "content_hash": "a" * 64},
+    ):
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        assert read_publish_manifest(target) is None
+
+
+def test_revision_column_dedup_keeps_latest():
+    tbl = pa.table(
+        {
+            "timestamp": pd.to_datetime(["2024-01-01", "2024-01-01"]),
+            "instrument": ["AAPL", "AAPL"],
+            "close": [100.0, 200.0],
+            "revision": [1, 3],
+        }
+    )
+    out = arrow_table_to_multiindex_columns(
+        tbl,
+        timestamp_column="timestamp",
+        instrument_column="instrument",
+        value_columns=["close"],
+        key_policy=KeyPolicy(
+            invalid_key="error",
+            duplicate_key="keep_last",
+            duplicate_resolution="revision",
+        ),
+    )
+    assert len(out["close"]) == 1
+    assert out["close"].iloc[0] == pytest.approx(200.0)
+
+
+def test_merge_sql_snapshots_differs_from_single():
+    a = build_data_snapshot(
+        dataset="ds_a",
+        registry_hash="reg",
+        schema={"x": "int"},
+        paths=["/tmp/a/*.parquet"],
+        params={"k": "a"},
+    )
+    b = build_data_snapshot(
+        dataset="ds_b",
+        registry_hash="reg",
+        schema={"y": "double"},
+        paths=["/tmp/b/*.parquet"],
+        params={"k": "b"},
+    )
+    merged = merge_sql_data_snapshots([a, b], registry_hash="reg")
+    assert merged.snapshot_id != a.snapshot_id
+    assert merged.snapshot_id != b.snapshot_id
+    assert "ds_a" in merged.dataset and "ds_b" in merged.dataset
+
+
+def test_merge_sql_snapshots_rejects_conflicting_identity_for_same_path():
+    common = "s3://bucket/shared.parquet"
+    a = build_data_snapshot(
+        dataset="ds_a",
+        registry_hash="reg",
+        schema={"x": "int"},
+        paths=[],
+        files=(FileVersion(path=common, etag="v1", content_length=10),),
+    )
+    b = build_data_snapshot(
+        dataset="ds_b",
+        registry_hash="reg",
+        schema={"y": "double"},
+        paths=[],
+        files=(FileVersion(path=common, etag="v2", content_length=10),),
+    )
+
+    with pytest.raises(SnapshotConflictError, match="conflicting FileVersion"):
+        merge_sql_data_snapshots([a, b], registry_hash="reg")
+
+
+def test_merge_sql_snapshots_allows_identical_shared_file_version():
+    shared = FileVersion(
+        path="s3://bucket/shared.parquet", etag="v1", content_length=10
+    )
+    a = build_data_snapshot(
+        dataset="ds_a",
+        registry_hash="reg",
+        schema={"x": "int"},
+        paths=[],
+        files=(shared,),
+    )
+    b = build_data_snapshot(
+        dataset="ds_b",
+        registry_hash="reg",
+        schema={"y": "double"},
+        paths=[],
+        files=(shared,),
+    )
+
+    merged = merge_sql_data_snapshots([a, b], registry_hash="reg")
+    assert merged.files == (shared,)
