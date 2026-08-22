@@ -909,6 +909,15 @@ def _load_all_impl(*, include_research: bool = True) -> None:
     from cleaned_operators.r23_cert_ts_regression import apply_r23_certification as _apply_r23_cert_ts_regression
     _apply_r23_cert_ts_regression()
 
+    # R23 P1 certification: candle_pattern / candle_geometry / chart_pattern /
+    # candle_state_space categories (tier 2, cost:2).  Same data-driven guard as
+    # the other R23 P1 passes.  Honest finding: no in-scope candle/chart operator
+    # has six-way primitive evidence in the artifact, so the certified set is
+    # empty and this is a safe no-op.  It stays wired so genuine future six-way
+    # evidence promotes automatically.
+    from cleaned_operators.r23_cert_candle import apply_r23_certification as _apply_r23_cert_candle
+    _apply_r23_cert_candle()
+
     from cleaned_operators.contract_hardening import apply_final_contract_hardening
     apply_final_contract_hardening()
 

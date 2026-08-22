@@ -1,0 +1,78 @@
+# -*- coding: utf-8 -*-
+"""R23-P1-CERT-TS-REGRESSION: evidence for the R23 P1 time-series regression /
+risk / volatility production certification.
+
+Scope / honesty
+---------------
+* time_series_regression   (~86 operators, tier 3 => cost:3)
+* time_series_risk         (~30 operators, tier 2 => cost:2)
+* time_series_volatility   (~10 operators, tier 2 => cost:2)
+
+HONEST FINDING
+--------------
+NO canonical in the three in-scope categories has six-way primitive evidence in
+``evidence/primitive_verified.json``.  The artifact's six-way intersection (79
+operators) covers only the time_series / price / cross_sectional / group /
+elementwise primitives already certified by the sibling R23 P1 passes.
+
+The 126 in-scope regression/risk/volatility operators each carry at most a
+5-gate factor-runtime record in ``factor_operator_verified.json``
+(runtime_execution, shape, determinism, prefix_kernel_causality,
+temporal_prefix) but are MISSING ``semantic_golden_verified`` and
+``source_contract_verified`` — they do NOT satisfy the six-way bar and remain
+blocked experimental (R23-303).
+
+Therefore the certified set is EMPTY: no regression/risk/volatility canonical is
+promoted to production.  No certification is fabricated.  The guard stays wired
+so genuine future six-way evidence promotes automatically.
+"""
+
+scope:
+  categories:
+    time_series_regression: tier3_cost3
+    time_series_risk: tier2_cost2
+    time_series_volatility: tier2_cost2
+
+evidence:
+  artifact: evidence/primitive_verified.json
+  six_way_keys:
+    - polars_reference_parity
+    - polars_edge_verified
+    - duckdb_reference_parity
+    - duckdb_real_sql_verified
+    - duckdb_edge_verified
+    - duckdb_nan_edge_verified
+    - no_fallback_verified
+  six_way_total: 79
+
+certified:
+  time_series_regression: 0
+  time_series_risk: 0
+  time_series_volatility: 0
+  total: 0
+
+not_certified_reasons:
+  time_series_regression: "no canonical in category has six-way evidence in artifact (all blocked R23-303)"
+  time_series_risk: "no canonical in category has six-way evidence in artifact (all blocked R23-303)"
+  time_series_volatility: "no canonical in category has six-way evidence in artifact (all blocked R23-303)"
+  artifact_evidence_note: "in-scope operators carry at most a 5-gate factor-runtime record (missing semantic_golden_verified + source_contract_verified) in factor_operator_verified.json"
+
+exclusions:
+  pit_denied: "not applicable — zero operators certified"
+  p0_severity: "not applicable — zero operators certified"
+
+mechanism:
+  module: cleaned_operators/r23_cert_ts_regression.py
+  gate: apply_r23_certification (after apply_evidence_certification_overlay + sibling R23 P1 passes, before contract_hardening)
+  cost_tag: "cost:3 (regression) / cost:2 (risk/volatility) so cost_contract_declared() admits if ever certified"
+  honest_noop: "R23_CERTIFIED_CANONICALS is empty; loop never runs"
+
+verification:
+  test_file: tests/mining/test_cert_ts_regression.py
+  gate_results:
+    production_admitted: "False for every in-scope operator (honest gate)"
+
+ref:
+  - docs/R23_PER_CANONICAL_AUDIT.json
+  - evidence/primitive_verified.json
+  - evidence/factor_operator_verified.json
