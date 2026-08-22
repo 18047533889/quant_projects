@@ -1,0 +1,33 @@
+{
+  "execution_mode": "accurate",
+  "init_cash": 10000000.0,
+  "slippage": 0.001,
+  "allow_partial": false,
+  "cash_sharing": true,
+  "call_seq": "auto",
+  "planner_engine": "numba",
+  "limit_check_mode": "execution",
+  "limit_price_rtol": 1e-05,
+  "limit_price_atol": 1e-08,
+  "signal_time": "close",
+  "execution_lag": 1,
+  "strict_symbols": true,
+  "lot_size": 100,
+  "costs": {
+    "commission": 0.001,
+    "stamp_tax": 0.0005,
+    "transfer_fee": 1e-05,
+    "minimum_commission": 5.0
+  },
+  "benchmark_index": "000852.SH",
+  "price_type": "open",
+  "freq": "1D",
+  "_profile": "standard_accurate_v1",
+  "_positions_path": "D:\\quantsociety\\whh_local_workspace\\benchmarks\\gtja191_alpha191_meanvar_hist\\results\\gtja191_alpha191_meanvar_hist_v1_1\\target_positions.parquet",
+  "_barra_root": "D:\\quantsociety\\whh_local_workspace\\v2_sbi_mvl_fullA",
+  "_data_root": "D:\\quantsociety\\whh_local_workspace\\lqtp_data",
+  "_start": "2024-01-02",
+  "_end": null,
+  "_workers": 8,
+  "_result_directory": "D:\\quantsociety\\whh_local_workspace\\vectorbt_qs\\examples\\output\\accurate_batch_test\\target_positions\\benchmark_index_000852.SH_price_type_open_cost.commission_0.001_freq_1D"
+}

@@ -1,0 +1,40 @@
+{
+  "run_0001": {
+    "init_cash": 10000000,
+    "benchmark_index": "000300.SH",
+    "execution_mode": "accurate",
+    "signal_time": "close",
+    "execution_lag": 1,
+    "price_type": "open",
+    "planner_engine": "numba",
+    "limit_check_mode": "execution",
+    "lot_size": 100,
+    "costs": {
+      "commission": 0.001,
+      "stamp_tax": 0.0005,
+      "transfer_fee": 1e-05,
+      "minimum_commission": 5.0
+    },
+    "slippage": 0.001,
+    "freq": "1D"
+  },
+  "run_0002": {
+    "init_cash": 10000000,
+    "benchmark_index": "000300.SH",
+    "execution_mode": "accurate",
+    "signal_time": "close",
+    "execution_lag": 1,
+    "price_type": "open",
+    "planner_engine": "numba",
+    "limit_check_mode": "execution",
+    "lot_size": 100,
+    "costs": {
+      "commission": 0.001,
+      "stamp_tax": 0.0005,
+      "transfer_fee": 1e-05,
+      "minimum_commission": 5.0
+    },
+    "slippage": 0.001,
+    "freq": "1W"
+  }
+}

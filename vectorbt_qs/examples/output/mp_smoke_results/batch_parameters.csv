@@ -1,0 +1,3 @@
+﻿run_id,positions,positions_path,start,end,workers,freq,status,error
+run_0001,target_positions,D:\quantsociety\whh_local_workspace\benchmarks\gtja191_alpha191_meanvar_hist\results\gtja191_alpha191_meanvar_hist_v1_1\target_positions.parquet,2024-01-02,2024-01-12,2,1D,success,
+run_0002,target_positions,D:\quantsociety\whh_local_workspace\benchmarks\gtja191_alpha191_meanvar_hist\results\gtja191_alpha191_meanvar_hist_v1_1\target_positions.parquet,2024-01-02,2024-01-12,2,1W,success,
