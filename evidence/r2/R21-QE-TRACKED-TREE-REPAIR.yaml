@@ -1,0 +1,71 @@
+title: "R21 QE Tracked Tree Repair"
+status: "PASS"
+date: "2026-08-22"
+reporter: "Claude Code (quant_projects worktree)"
+
+context:
+  bug: |
+    The tracked repo-root quant_evaluator/ was missing 3 files (axis_refs.py,
+    _ndarray_codec.py, sealed_split.py) that the git-ignored build/lib copy
+    required.  metric_artifacts.py imported axis_refs symbols that did not exist
+    in the tracked tree, causing ModuleNotFoundError on clean install.  The
+    tracked tree was also behind on immutability/ndarray-codec/sealed-split
+    hardening in 7 files: metric_artifacts.py, artifact_types.py, _hashutil.py,
+    errors.py, __init__.py (contracts), api/requests.py, runtime/evaluator.py.
+
+actions:
+  - "Copied 3 new files from build/lib to tracked tree:"
+    files:
+      - quant_evaluator/contracts/axis_refs.py
+      - quant_evaluator/contracts/_ndarray_codec.py
+      - quant_evaluator/contracts/sealed_split.py
+  - "Synced 7 differing files from build/lib to tracked tree:"
+    files:
+      - quant_evaluator/contracts/metric_artifacts.py
+      - quant_evaluator/contracts/artifact_types.py
+      - quant_evaluator/contracts/_hashutil.py
+      - quant_evaluator/contracts/errors.py
+      - quant_evaluator/contracts/__init__.py
+      - quant_evaluator/api/requests.py
+      - quant_evaluator/runtime/evaluator.py
+  - "Cleared __pycache__ directories in contracts/, registry/, api/, runtime/"
+
+verification:
+  standalone_imports:
+    command: "PYTHONPATH=/home/shw/quant_projects /home/shw/quant_projects/.venv/bin/python -c 'import quant_evaluator; import quant_evaluator.contracts.metric_artifacts as ma; ...'"
+    result: "ALL STANDALONE IMPORTS PASSED — all files loaded from tracked tree, no build/lib dependency"
+    markers_confirmed:
+      - FrozenMapping in metric_artifacts
+      - _ndarray_codec imports in metric_artifacts
+      - __artifact_kind__ class authority on all 5 subclasses
+      - FactorAxisRef / axis_ref_from_dict in axis_refs
+      - SealedSplitRef / check_sealed_split_overlap in sealed_split
+      - encode_value / decode_value in _ndarray_codec
+      - canonicalize in _hashutil (Decimal/Enum/datetime/bytes codecs)
+      - SealedSplitOverlapError in errors
+      - EvaluationRequest.split_ref in api.requests
+
+  test_suite:
+    - command: "pytest quant_evaluator/tests/test_axis_refs_and_registry_seal.py quant_evaluator/tests/test_qe_artifact_hardening.py quant_evaluator/tests/test_qe_serialization.py quant_evaluator/tests/test_qe_p0_03_hash_stability.py quant_evaluator/tests/test_metamorphic.py -q"
+      result: "115 passed, 2 skipped"
+    - command: "pytest quant_evaluator/tests/test_sealed_split_overlap.py -q"
+      result: "21 passed"
+
+git_status:
+  new_files_staged:
+    - quant_evaluator/contracts/axis_refs.py
+    - quant_evaluator/contracts/_ndarray_codec.py
+    - quant_evaluator/contracts/sealed_split.py
+  modified_files_working_tree:
+    - quant_evaluator/api/requests.py
+    - quant_evaluator/contracts/__init__.py
+    - quant_evaluator/contracts/_hashutil.py
+    - quant_evaluator/contracts/artifact_types.py
+    - quant_evaluator/contracts/errors.py
+    - quant_evaluator/contracts/metric_artifacts.py
+    - quant_evaluator/runtime/evaluator.py
+
+constraints_respected:
+  - "build/lib/ untouched (git-ignored working copy preserved)"
+  - "tests/ untouched"
+  - "No git commit created"

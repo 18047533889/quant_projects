@@ -9,9 +9,10 @@ it to the consumer kernel.
 
 Each artifact is a frozen, self-describing container: payload array, the
 coordinate metadata a consumer needs (time index / factor ids / correlation
-method / quantile count / exposure type), and provenance. Arrays are stored
-read-only where numpy allows it so artifacts cannot be mutated after
-construction.
+method / quantile count / exposure type), and provenance. Arrays are copied
+and marked read-only on construction (QE-P0-02 ownership), and ``provenance``
+is a recursively-immutable :class:`FrozenMapping` (QE-P0-01).  ``to_dict`` /
+``from_dict`` use the lossless ndarray codec (QE-P0-04).
 
 Shape conventions (F = number of factors, always the LAST axis):
     - ICSeriesArtifact:         values (T, F)
@@ -25,6 +26,8 @@ from typing import Any, Mapping, Tuple
 import numpy as np
 
 from quant_evaluator.contracts._hashutil import stable_content_hex, stable_hash
+from quant_evaluator.contracts._ndarray_codec import decode_value, encode_value
+from quant_evaluator.contracts.metric_artifacts import FrozenMapping
 
 __all__ = [
     "ICSeriesArtifact",
@@ -35,13 +38,9 @@ __all__ = [
 
 
 def _freeze_array(value: Any, name: str) -> np.ndarray:
-    """Coerce ``value`` to a read-only ndarray (lists/tuples accepted)."""
-    array = np.asarray(value)
-    try:
-        array.flags.writeable = False
-    except ValueError:
-        array = array.copy()
-        array.flags.writeable = False
+    """Coerce ``value`` to a read-only ndarray the artifact owns (copy-on-write)."""
+    array = np.array(value, copy=True, order="C")
+    array.flags.writeable = False
     return array
 
 
@@ -88,7 +87,7 @@ class ICSeriesArtifact:
                 f"ICSeriesArtifact.time_index length {len(self.time_index)} "
                 f"does not match T={values.shape[0]}"
             )
-        object.__setattr__(self, "provenance", dict(self.provenance))
+        object.__setattr__(self, "provenance", FrozenMapping(self.provenance))
 
     def __eq__(self, other: object) -> bool:
         if type(self) is not type(other):
@@ -121,26 +120,26 @@ class ICSeriesArtifact:
         )
 
     def to_dict(self) -> dict:
-        """Serialize to a JSON-friendly plain dict (array becomes a list)."""
+        """Serialize to a JSON-friendly plain dict (lossless ndarray codec)."""
         return {
-            "values": self.values.tolist(),
-            "time_index": list(self.time_index),
+            "values": encode_value(self.values),
+            "time_index": encode_value(self.time_index),
             "ic_method": self.ic_method,
             "factor_ids": list(self.factor_ids),
             "metric_id": self.metric_id,
-            "provenance": dict(self.provenance),
+            "provenance": encode_value(dict(self.provenance)),
         }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ICSeriesArtifact":
         """Deserialize from the payload produced by :meth:`to_dict`."""
         return cls(
-            values=np.asarray(data["values"]),
-            time_index=tuple(data.get("time_index", ())),
+            values=decode_value(data["values"]),
+            time_index=tuple(decode_value(data.get("time_index", ()))),
             ic_method=data.get("ic_method", "pearson"),
             factor_ids=tuple(data.get("factor_ids", ())),
             metric_id=data.get("metric_id", "ic.daily"),
-            provenance=dict(data.get("provenance", {})),
+            provenance=decode_value(data.get("provenance", {})),
         )
 
 
@@ -173,7 +172,7 @@ class QuantileReturnArtifact:
             )
         object.__setattr__(self, "values", values)
         object.__setattr__(self, "factor_ids", _freeze_tuple(self.factor_ids))
-        object.__setattr__(self, "provenance", dict(self.provenance))
+        object.__setattr__(self, "provenance", FrozenMapping(self.provenance))
 
     def __eq__(self, other: object) -> bool:
         if type(self) is not type(other):
@@ -204,24 +203,24 @@ class QuantileReturnArtifact:
         )
 
     def to_dict(self) -> dict:
-        """Serialize to a JSON-friendly plain dict (array becomes a list)."""
+        """Serialize to a JSON-friendly plain dict (lossless ndarray codec)."""
         return {
-            "values": self.values.tolist(),
+            "values": encode_value(self.values),
             "n_quantiles": self.n_quantiles,
             "factor_ids": list(self.factor_ids),
             "metric_id": self.metric_id,
-            "provenance": dict(self.provenance),
+            "provenance": encode_value(dict(self.provenance)),
         }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "QuantileReturnArtifact":
         """Deserialize from the payload produced by :meth:`to_dict`."""
         return cls(
-            values=np.asarray(data["values"]),
+            values=decode_value(data["values"]),
             n_quantiles=int(data["n_quantiles"]),
             factor_ids=tuple(data.get("factor_ids", ())),
             metric_id=data.get("metric_id", "quantile_returns"),
-            provenance=dict(data.get("provenance", {})),
+            provenance=decode_value(data.get("provenance", {})),
         )
 
 
@@ -254,7 +253,7 @@ class ProbePortfolioArtifact:
                 f"ProbePortfolioArtifact.time_index length {len(self.time_index)} "
                 f"does not match T={values.shape[0]}"
             )
-        object.__setattr__(self, "provenance", dict(self.provenance))
+        object.__setattr__(self, "provenance", FrozenMapping(self.provenance))
 
     def __eq__(self, other: object) -> bool:
         if type(self) is not type(other):
@@ -285,24 +284,24 @@ class ProbePortfolioArtifact:
         )
 
     def to_dict(self) -> dict:
-        """Serialize to a JSON-friendly plain dict (array becomes a list)."""
+        """Serialize to a JSON-friendly plain dict (lossless ndarray codec)."""
         return {
-            "values": self.values.tolist(),
-            "time_index": list(self.time_index),
+            "values": encode_value(self.values),
+            "time_index": encode_value(self.time_index),
             "factor_ids": list(self.factor_ids),
             "metric_id": self.metric_id,
-            "provenance": dict(self.provenance),
+            "provenance": encode_value(dict(self.provenance)),
         }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ProbePortfolioArtifact":
         """Deserialize from the payload produced by :meth:`to_dict`."""
         return cls(
-            values=np.asarray(data["values"]),
-            time_index=tuple(data.get("time_index", ())),
+            values=decode_value(data["values"]),
+            time_index=tuple(decode_value(data.get("time_index", ()))),
             factor_ids=tuple(data.get("factor_ids", ())),
             metric_id=data.get("metric_id", "probe_portfolio"),
-            provenance=dict(data.get("provenance", {})),
+            provenance=decode_value(data.get("provenance", {})),
         )
 
 
@@ -329,7 +328,7 @@ class ExposureArtifact:
             )
         object.__setattr__(self, "values", values)
         object.__setattr__(self, "factor_ids", _freeze_tuple(self.factor_ids))
-        object.__setattr__(self, "provenance", dict(self.provenance))
+        object.__setattr__(self, "provenance", FrozenMapping(self.provenance))
 
     def __eq__(self, other: object) -> bool:
         if type(self) is not type(other):
@@ -360,22 +359,22 @@ class ExposureArtifact:
         )
 
     def to_dict(self) -> dict:
-        """Serialize to a JSON-friendly plain dict (array becomes a list)."""
+        """Serialize to a JSON-friendly plain dict (lossless ndarray codec)."""
         return {
-            "values": self.values.tolist(),
+            "values": encode_value(self.values),
             "exposure_type": self.exposure_type,
             "factor_ids": list(self.factor_ids),
             "metric_id": self.metric_id,
-            "provenance": dict(self.provenance),
+            "provenance": encode_value(dict(self.provenance)),
         }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ExposureArtifact":
         """Deserialize from the payload produced by :meth:`to_dict`."""
         return cls(
-            values=np.asarray(data["values"]),
+            values=decode_value(data["values"]),
             exposure_type=data.get("exposure_type", "loadings"),
             factor_ids=tuple(data.get("factor_ids", ())),
             metric_id=data.get("metric_id", "exposure"),
-            provenance=dict(data.get("provenance", {})),
+            provenance=decode_value(data.get("provenance", {})),
         )

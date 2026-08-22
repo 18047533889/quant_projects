@@ -40,6 +40,17 @@ class SnapshotMismatchError(ContractError):
     pass
 
 
+class SealedSplitOverlapError(TimingContractError, ValueError):
+    """Sealed-test split window overlaps the factor/label information boundary.
+
+    Raised fail-closed (never silently ignored) when an evaluation request
+    carries a ``split_ref`` whose data window overlaps the information
+    boundary of the factor/label inputs it was evaluated against.  Inherits
+    from both ``TimingContractError`` (the QE timing taxonomy) and
+    ``ValueError`` (the standard library type callers pattern-match on).
+    """
+
+
 class CapabilityError(QuantEvaluatorError):
     """Requested capability is not available."""
     pass

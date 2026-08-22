@@ -18,6 +18,7 @@ from quant_evaluator.contracts.errors import (
     InvalidContractError,
     TimingContractError,
     SnapshotMismatchError,
+    SealedSplitOverlapError,
     CapabilityError,
     UnsupportedMetricError,
     OptionalDependencyMissing,
@@ -29,6 +30,7 @@ from quant_evaluator.contracts.errors import (
     NumericalFailure,
     OverflowOrNonFiniteError,
 )
+from quant_evaluator.contracts.sealed_split import SealedSplitRef, check_sealed_split_overlap
 
 __all__ = [
     "FactorBatch",
@@ -45,6 +47,7 @@ __all__ = [
     "InvalidContractError",
     "TimingContractError",
     "SnapshotMismatchError",
+    "SealedSplitOverlapError",
     "CapabilityError",
     "UnsupportedMetricError",
     "OptionalDependencyMissing",
@@ -55,4 +58,6 @@ __all__ = [
     "EvidenceUnavailableError",
     "NumericalFailure",
     "OverflowOrNonFiniteError",
+    "SealedSplitRef",
+    "check_sealed_split_overlap",
 ]

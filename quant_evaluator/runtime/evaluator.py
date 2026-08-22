@@ -900,6 +900,7 @@ def evaluate(
     metrics=None,
     where=None,
     evaluator=None,
+    split_ref=None,
 ):
     """Evaluate explicit factor and label contracts through the runtime.
 
@@ -907,11 +908,18 @@ def evaluate(
     and adapts only scalar values produced by existing metric kernels into the
     canonical :class:`EvaluationBundle` contract.  Unsupported requests fail
     closed rather than fabricating metric metadata.
+
+    ``split_ref`` (optional, keyword-only) binds the evaluation to a sealed
+    test split; when provided (directly or via an ``EvaluationRequest``), the
+    guard raises :class:`SealedSplitOverlapError` if the split window overlaps
+    the factor/label information boundary (R21 Q5 sealed-test gate).  The
+    default ``None`` performs no check, preserving every existing caller.
     """
     from datetime import datetime, timezone
     from uuid import uuid4
 
     from quant_evaluator.api.requests import EvaluationBundle, MetricValue
+    from quant_evaluator.contracts.sealed_split import check_sealed_split_overlap
     from quant_evaluator.diagnosis.factor import diagnose_all_factors
 
     request_metadata = {}
@@ -926,15 +934,32 @@ def evaluate(
             raise UnsupportedMetricError("EvaluationRequest.slices are not supported by public evaluate")
         request_metadata = dict(request.metadata)
         request_fields = {"tier": request.tier, "cost_budget": request.cost_budget}
+        split_ref = request.split_ref
     else:
         factor_batch = factors
         label_bundle = labels
         metric_ids = tuple(metrics or ("coverage",))
+        if split_ref is None:
+            split_ref = None
 
     if where is not None:
         raise UnsupportedMetricError("where slicing is not supported by public evaluate")
     if not isinstance(factor_batch, FactorBatch) or not isinstance(label_bundle, LabelBundle):
         raise TypeError("evaluate requires a FactorBatch and LabelBundle")
+    # R21 Q5 sealed-test gate: fail closed when a requested split overlaps
+    # the factor/label information boundary.  split_ref=None skips the check
+    # entirely (backward compatible with all existing callers).
+    check_sealed_split_overlap(
+        split_ref,
+        decision_times=tuple(label_bundle.decision_time),
+        label_start_times=tuple(label_bundle.label_start_time),
+        label_end_times=tuple(label_bundle.label_end_time),
+        factor_times=(
+            tuple(factor_batch.time_axis.values.tolist())
+            if factor_batch.time_axis.values is not None
+            else None
+        ),
+    )
     if label_bundle.values.ndim == 2 and label_bundle.values.shape[1] != factor_batch.num_assets:
         raise InvalidContractError(
             f"Label asset axis ({label_bundle.values.shape[1]}) does not match "
@@ -1066,4 +1091,5 @@ def evaluate(
         metric_versions={metric_id: "0.1" for metric_id in metric_ids},
         metadata=bundle_metadata,
         warnings=tuple(result.metadata.get("warnings", ())),
+        split_ref=split_ref,
     )

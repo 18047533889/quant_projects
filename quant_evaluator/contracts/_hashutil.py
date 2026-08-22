@@ -9,6 +9,16 @@ produce canonical SHA-256 digests over a stable serialization:
   digest covers the exact payload bytes regardless of process;
 - scalars / sequences fall back to a canonical JSON representation.
 
+QE-P0-06 (hash codec hardening): :func:`canonicalize` is **fail-closed**:
+
+- object-dtype ndarrays are rejected (``TypeError``) rather than silently
+  hashed by an unstable representation;
+- mapping keys must be ``str`` (non-string keys raise ``TypeError``);
+- the old ``default=repr`` fallback is removed — unsupported object types
+  raise ``TypeError`` instead of being reduced to a process-dependent repr;
+- explicit codecs are provided for ``datetime``/``date``/``timedelta``,
+  ``Decimal``, ``Enum``, ``bytes``, and numpy scalars.
+
 Exposed functions:
 
 - ``canonicalize(value) -> Any``     — JSON-friendly canonical form
@@ -20,6 +30,9 @@ Exposed functions:
 from typing import Any, Mapping
 
 import base64
+import datetime
+import decimal
+import enum
 import hashlib
 import json
 import sys
@@ -28,27 +41,59 @@ import numpy as np
 
 
 def canonicalize(value: Any) -> Any:
-    """Return a JSON-friendly canonical form of ``value``.
+    """Return a JSON-friendly canonical form of ``value`` (fail-closed).
 
     Arrays become ``{"__ndarray__": true, "dtype", "shape", "data_b64"}``.
-    numpy scalars are converted to Python scalars.  Mappings are keyed by
-    ``str(key)`` so mixed key types cannot produce unstable output.
+    numpy scalars are converted to Python scalars.  Mappings must have string
+    keys.  Unsupported object types raise ``TypeError`` rather than falling
+    back to ``repr`` (which is not stable across processes).
     """
     if isinstance(value, np.ndarray):
+        if value.dtype.hasobject:
+            raise TypeError(
+                "canonicalize: object-dtype ndarray is not supported (fail-closed)"
+            )
         array = np.ascontiguousarray(value)
         return {
             "__ndarray__": True,
-            "dtype": str(array.dtype),
+            "dtype": array.dtype.str,
             "shape": list(array.shape),
             "data_b64": base64.b64encode(array.tobytes()).decode("ascii"),
         }
     if isinstance(value, np.generic):
-        return value.item()
+        return canonicalize(value.item())
+    if isinstance(value, datetime.datetime):
+        tz = value.tzinfo.tzname(value) if value.tzinfo else None
+        return {"__datetime__": value.isoformat(), "tz": tz}
+    if isinstance(value, datetime.date):
+        return {"__date__": value.isoformat()}
+    if isinstance(value, datetime.timedelta):
+        return {"__timedelta__": value.total_seconds()}
+    if isinstance(value, decimal.Decimal):
+        return {"__decimal__": str(value)}
+    if isinstance(value, enum.Enum):
+        return {
+            "__enum__": [type(value).__module__, type(value).__qualname__, value.name],
+        }
+    if isinstance(value, bytes):
+        return {"__bytes__": base64.b64encode(value).decode("ascii")}
     if isinstance(value, Mapping):
-        return {str(k): canonicalize(v) for k, v in value.items()}
+        result = {}
+        for k, v in value.items():
+            if not isinstance(k, str):
+                raise TypeError(
+                    "canonicalize: mapping keys must be str, got "
+                    f"{type(k).__name__} (fail-closed)"
+                )
+            result[k] = canonicalize(v)
+        return result
     if isinstance(value, (list, tuple)):
         return [canonicalize(v) for v in value]
-    return value
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    raise TypeError(
+        f"canonicalize: unsupported type {type(value).__name__} (fail-closed)"
+    )
 
 
 def stable_content_hex(*, tag: str, fields: Mapping[str, Any]) -> str:
@@ -61,7 +106,6 @@ def stable_content_hex(*, tag: str, fields: Mapping[str, Any]) -> str:
         [tag, canonical],
         sort_keys=True,
         separators=(",", ":"),
-        default=repr,
     )
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 

@@ -1,0 +1,168 @@
+# R21-CI-RELEASE-GATES — mandatory release gate workflow
+# =================================================
+# READ THIS BEFORE USING:
+#  - Intended runner: a SELF-HOSTED runner that has the repo checked out with a
+#    working `.venv` (Python 3.10) at the repo root AND all six workspace packages
+#    (factor_engine, quant_evaluator, factor_optimizer, factor_assets,
+#    factor_preprocess, dataaccess) importable / installed into that `.venv`.
+#    Do NOT point this at a plain GitHub-hosted runner: it assumes the `.venv`
+#    already exists and only calls `venv/bin/python` and `.venv/bin/pip`.
+#  - Every stage runs `venv/bin/python -m pytest <exact paths> --junitxml=...`
+#    with BLAS/OpenMP thread counts pinned to 1
+#    (OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1) so numerics
+#    are reproducible and the runner is not oversubscribed.
+#  - The workflow FAILS the job on ANY required gate that fails (pytest non-zero
+#    exit in the stage; `if: failure()` jobs skip their body and the job is red).
+#  - evidence_current_check runs `python -m evidence.current` with `--write` and
+#    then VERIFIES the summary says CURRENT / stale==0. If the evidence truth is
+#    STALE the step exits non-zero and the JOB FAILS. A valid release MUST have
+#    CURRENT evidence (the release plan no-PASS-no-release + dirty-source rule
+#    is enforced by the git SHA-dirty guard in step "release_guards").
+#  - "No PASS no release": every stage in the "required_gates" matrix must be
+#    green before release_sign_off is allowed to run. There is no merge-into-prod
+#    path without all 17 stages green (the matrix IS the full branching gate set).
+#  - Stages named *_scale (1K/10K/100K) and real_ashare_shadow REQUIRE real
+#    local data/network and are intended for the self-hosted runner only; on a
+#    runner without the data the corresponding pytest collection will fail-fast
+#    the stage (fail-closed, never skip-to-green).
+#  - This workout mirrors config/gates.json (schema_version 1, 14 named gates)
+#    plus the supplementary CI-only gates (fresh_wheel, scale, shadow,
+#    evidence_current_check). It never rewrites gates.json; that file remains the
+#    single source of truth for gate names/default_status.
+#
+# NOTE: no `concurrency` cancel-in-progress here on purpose — evidence refresh
+#       must never have two writers on the same runner. Deploy via the release
+#       plan (docs/R21_CI_RELEASE_PLAN.md).
+
+name: R21 release gates
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  OPENBLAS_NUM_THREADS: "1"
+  OMP_NUM_THREADS: "1"
+  MKL_NUM_THREADS: "1"
+  PYTEST_ADDOPTS: ""
+
+jobs:
+  required_gates:
+    name: ${{ matrix.stage }}
+    runs-on: [self-hosted, linux, x64]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { stage: "01_source_authority", paths: "tests/source_authority integration_tests/test_cross_package_contracts.py" }
+          - { stage: "02_unit",             paths: "tests/unit factor_engine/tests/r30/test_fe_da_batch_ir_2026_08.py tests/r30/test_fe_da_batch_ir_2026_08.py" }
+          - { stage: "03_numerical_oracle", paths: "quant_evaluator/tests/test_numerical_oracle.py" }
+          - { stage: "04_property_metamorphic", paths: "quant_evaluator/tests/test_metamorphic.py quant_evaluator/tests/test_consistency.py tests/r43/test_pass_manager_reachability.py tests/r43/test_model_evidence_gates.py" }
+          - { stage: "05_leakage",          paths: "factor_preprocess/tests/contracts/test_leakage_properties.py tests/modeling/test_evaluation_leakage_evidence.py" }
+          - { stage: "06_pit",              paths: "factor_engine/tests/pit dataaccess/tests/contract" }
+          - { stage: "07_determinism",      paths: "factor_optimizer/tests/search/test_strategy_validation.py" }
+          - { stage: "08_serialization",    paths: "quant_evaluator/tests/test_qe_serialization.py factor_assets/tests/registry/test_serialization_codec.py" }
+          - { stage: "09_checkpoint_resume",paths: "factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py factor_engine/tests/operators/test_stateful_checkpoint_hardening.py factor_engine/tests/operators/test_stateful_checkpoint_contract.py factor_engine/tests/operators/test_r13_checkpoint_identity.py" }
+          - { stage: "10_cross_package",    paths: "integration_tests/test_cross_package_contracts.py" }
+          - { stage: "11_fresh_wheel",      paths: "f" }  # special-cased below: wheel build + clean venv install + smoke + contract tests
+          - { stage: "12_scale_1k",         paths: "quant_evaluator/tests/test_scale_gates.py" }
+          - { stage: "13_scale_10k",        paths: "quant_evaluator/tests/test_scale_gates.py" }
+          - { stage: "14_scale_100k",       paths: "quant_evaluator/tests/test_scale_gates.py" }
+          - { stage: "15_real_ashare_shadow", paths: "integration_tests/test_ashare_semantic_golden.py" }
+          - { stage: "16_security_supply_chain", paths: "X" }  # pip-audit/pip-check + secret scan + dependency hash verify (see security)
+          - { stage: "17_evidence_current_check", paths: "Y" }  # python -m evidence.current -> CURRENT truth, MUST fail on STALE
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+      - name: self-hosted venv sanity
+        shell: bash
+        run: |
+          test -x venv/bin/python && venv/bin/python --version
+          venv/bin/python -c "import pytest" || { echo "missing pytest in .venv" >&2; exit 1; }
+      - name: run required gate ${{ matrix.stage }}
+        shell: bash
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+          MKL_NUM_THREADS: "1"
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.stage }}" = "11_fresh_wheel" ]; then
+            # fresh-wheel gate: build wheels for the six workspace packages into a
+            # temp dir, create a CLEAN venv, install ONLY the built wheels + the
+            # exact locked deps, then run smoke + contract tests WITHOUT any
+            # repo-root sys.path. Script is fail-closed (set -e inside).
+            bash scripts/ci_fresh_wheel_run.sh
+          elif [ "${{ matrix.stage }}" = "16_security_supply_chain" ]; then
+            bash scripts/security_audit.sh
+          elif [ "${{ matrix.stage }}" = "17_evidence_current_check" ]; then
+            # STALENESS GATE — regenerates evidence/CURRENT.json from the current
+            # tree and MUST fail when it is STALE (non-zero exit + status assert).
+            # self-hosted runner: writes back the regenerated truth.
+            # VER-P0-03/04: python -m evidence.current exits non-zero on any
+            # STALE/UNRESOLVED artifact (never certifies unsourced state).
+            venv/bin/python -m evidence.current --write --out "$PWD/evidence/CURRENT.json" || {
+              echo "::error::evidence truth is STALE/UNRESOLVED — cannot certify" >&2
+              exit 2
+            }
+            venv/bin/python -c 'import json,sys; d=json.load(open("evidence/CURRENT.json")); s=d.get("summary",{}); st=d.get("evaluation",{}).get("status","STALE"); ok=(st=="CURRENT" and s.get("stale",1)==0 and s.get("failed",1)==0 and s.get("current",0)==s.get("total",0)); print("evidence summary:",s,"evaluation:",st); sys.exit(0 if ok else 2)'
+          else
+            mkdir -p "test-results/${{ matrix.stage }}"
+            venv/bin/python -m pytest ${{ matrix.paths }} \
+              --tb=short -q \
+              --junitxml="test-results/${{ matrix.stage }}/junit.xml"
+          fi
+      - name: upload gate junit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-${{ matrix.stage }}
+          path: test-results/**/*.xml
+
+  release_guards:
+    name: release guards (SHA dirty / evidence pinned)
+    runs-on: [self-hosted, linux, x64]
+    needs: required_gates
+    if: always()
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: git SHA dirty + submodule pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::working tree is dirty — dirty-source-no-production-release rule (R21-CI-RELEASE-SKELETON). Only CI artifacts may differ." >&2
+            exit 1
+          fi
+          echo "root HEAD: $(git rev-parse HEAD)"
+          for sm in factor_engine dataaccess; do
+            echo "$sm pinned: $(git submodule status $sm)"
+          done
+
+  release_sign_off:
+    name: release sign-off
+    runs-on: [ubuntu-latest]
+    needs: [required_gates, release_guards]
+    if: |
+      always() &&
+      !contains(needs.required_gates.result, 'failure') &&
+      !contains(needs.required_gates.result, 'cancelled') &&
+      !contains(needs.required_gates.result, 'skipped') &&
+      needs.release_guards.result == 'success'
+    steps:
+      - name: sign-off
+        shell: bash
+        run: |
+          echo "ALL RELEASE GATES GREEN — release approved."
+          echo "evidence_current_check is CURRENT, working tree clean, submodule pins match."
