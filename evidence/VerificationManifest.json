@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "manifest_id": "rel-v1:2026-08-21T18:17:07.585561+00:00",
-  "timestamp": "2026-08-21T18:17:07.585561+00:00",
+  "manifest_id": "rel-v1:2026-08-21T19:08:10.894740+00:00",
+  "timestamp": "2026-08-21T19:08:10.894740+00:00",
   "host": "qs-data-ingest-hk-01",
   "source_snapshot": {
-    "git_sha": "267d4b5695b41738a6bcfe5ae3e364fcf6228cc7",
+    "git_sha": "940750b8edf91ba973833465032c26e4d46a3008",
     "git_dirty": true,
     "submodule_shas": {
       "factor_engine": "fc3e5f32f199177512231ec8791d3f8da0fcc803",
@@ -14,27 +14,27 @@
   },
   "packages": {
     "factor_engine": {
-      "tree_sha256": "d3ee74bcfe5bb37ea93e18dfbee28b7ae7f875f30f6bc5e9deba01f86a59b39f",
+      "tree_sha256": "9ea86c4eee26df0b009c7f775869c8d9e9758b68ddc518cfeb68a9572506394e",
       "wheel_sha256": null,
       "git_sha": "fc3e5f32f199177512231ec8791d3f8da0fcc803",
       "git_dirty": true
     },
     "quant_evaluator": {
-      "tree_sha256": "a17cc4f982bccf33db84f175d8585faa614397c5d077fe5b7524b10a0fbad810",
+      "tree_sha256": "66aeb309d1f33d3de5c09a883fa88d2fba556907c674766f15b43c9943fc76e2",
       "wheel_sha256": {
         "wheel": "quant_evaluator-0.0.1a1-py3-none-any.whl",
         "sha256": "00c6516d00cbb35406c8954acd02f6d4fd39819706931a7228bcd3465aff47f8"
       }
     },
     "factor_optimizer": {
-      "tree_sha256": "e12e8ab7a55052ba2383e442e4a13b28ccdb3b4263f93bf7ac8f76a630b6860a",
+      "tree_sha256": "a54aa0d7051fbb8c82341ec08ce1f4a088b2d72c52638fc4b5935cd38df0e8d5",
       "wheel_sha256": {
         "wheel": "factor_optimizer-0.1.0-py3-none-any.whl",
         "sha256": "42bf01eaf86b16e1139155e3ea27e61e9121f2e6b6fa68bbb352cc76ff4a6259"
       }
     },
     "factor_assets": {
-      "tree_sha256": "c1b9dc081235cd67253bad1a70d96022c5c4912a27f92d1db9d6c27f95ad53f4",
+      "tree_sha256": "c69bdaa782e7766a8e7a47faa210d3fcdba5206f793e04d93b75be27b330db65",
       "wheel_sha256": {
         "wheel": "factor_assets-0.1.0-py3-none-any.whl",
         "sha256": "1a075027e6f73ab5c567d7bc39a8beb1fcf5825516ffd48ce14c6a615fcbb034"
@@ -48,10 +48,10 @@
       }
     },
     "dataaccess": {
-      "tree_sha256": "572ce3a81c333a0827fea4ee5d1f25df60ad1c8703c9bd90ad5d38f1369876a8",
+      "tree_sha256": "49416c9bdf1c631c7e9b2a0108b3648ee896999249c066f16208fc1ef8ac3bf6",
       "wheel_sha256": null,
       "git_sha": "afda9f47b76df677893bf4cf516c0f9cc825190c",
-      "git_dirty": false
+      "git_dirty": true
     }
   },
   "environment": {
@@ -116,9 +116,16 @@
       "evidence": [
         {
           "test": "quant_evaluator/tests/test_numerical_oracle.py",
-          "result": "passed",
-          "count": 13,
-          "run_at": "2026-08-21T18:17:07.545098+00:00"
+          "command_hash": "251cf43d13fbefdae49e489ddca88c816a7e3d3c8a25bcbdde3d89f83a83166d",
+          "exit_code": 0,
+          "passed": 13,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "tests": 13,
+          "duration_sec": 5.466,
+          "executed_at": "2026-08-21T19:07:55.218039+00:00",
+          "run_at": "2026-08-21T19:07:55.218039+00:00"
         }
       ]
     },
@@ -129,15 +136,29 @@
       "evidence": [
         {
           "test": "quant_evaluator/tests/test_metamorphic.py",
-          "result": "passed",
-          "count": 18,
-          "run_at": "2026-08-21T18:17:07.545098+00:00"
+          "command_hash": "57069da479c8911c764496f557d55b9d42d154383bbdc2889b094a0537bdab5f",
+          "exit_code": 0,
+          "passed": 18,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 2,
+          "tests": 20,
+          "duration_sec": 1.385,
+          "executed_at": "2026-08-21T19:07:56.603593+00:00",
+          "run_at": "2026-08-21T19:07:56.603593+00:00"
         },
         {
           "test": "quant_evaluator/tests/test_consistency.py",
-          "result": "passed",
-          "count": 11,
-          "run_at": "2026-08-21T18:17:07.545098+00:00"
+          "command_hash": "465d7eacbd7f803f0b5e447361d0bb98a98bdc13d2dd8d79fd02260e5ee98b80",
+          "exit_code": 0,
+          "passed": 11,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "tests": 11,
+          "duration_sec": 1.466,
+          "executed_at": "2026-08-21T19:07:58.069858+00:00",
+          "run_at": "2026-08-21T19:07:58.069858+00:00"
         }
       ]
     },
@@ -148,9 +169,16 @@
       "evidence": [
         {
           "test": "integration_tests/test_cross_package_contracts.py",
-          "result": "passed",
-          "count": 6,
-          "run_at": "2026-08-21T18:17:07.545098+00:00"
+          "command_hash": "ebab73411f918cd831bf71829f0d1fa5223c33c773d0579a43bf29a83274a1bc",
+          "exit_code": 0,
+          "passed": 4,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 2,
+          "tests": 6,
+          "duration_sec": 1.428,
+          "executed_at": "2026-08-21T19:07:59.498028+00:00",
+          "run_at": "2026-08-21T19:07:59.498028+00:00"
         }
       ]
     },
@@ -179,15 +207,29 @@
       "evidence": [
         {
           "test": "quant_evaluator/tests/test_qe_serialization.py",
-          "result": "passed",
-          "count": 36,
-          "run_at": "2026-08-21T18:17:07.545098+00:00"
+          "command_hash": "2e4bdc02d78122b410fd23f6bfe7946e48d4e80ce87cbcfa3c2ed1379a2500b1",
+          "exit_code": 0,
+          "passed": 36,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "tests": 36,
+          "duration_sec": 0.961,
+          "executed_at": "2026-08-21T19:08:03.952382+00:00",
+          "run_at": "2026-08-21T19:08:03.952382+00:00"
         },
         {
           "test": "factor_assets/tests/registry/test_serialization_codec.py",
-          "result": "passed",
-          "count": 17,
-          "run_at": "2026-08-21T18:17:07.545098+00:00"
+          "command_hash": "0d806d77fa5e3d5ae33071f9e1ebf84ed570a6336bcc1a7bdec8f5578432fe1c",
+          "exit_code": 0,
+          "passed": 17,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "tests": 17,
+          "duration_sec": 0.273,
+          "executed_at": "2026-08-21T19:08:04.225464+00:00",
+          "run_at": "2026-08-21T19:08:04.225464+00:00"
         }
       ]
     },
@@ -198,9 +240,16 @@
       "evidence": [
         {
           "test": "factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py",
-          "result": "passed",
-          "count": 3,
-          "run_at": "2026-08-21T18:17:07.545098+00:00"
+          "command_hash": "5ffaf65ccc8e69be54a521839d945702bf97c4cdeffbe8ef498476c3e55c47ab",
+          "exit_code": 0,
+          "passed": 3,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "tests": 3,
+          "duration_sec": 1.45,
+          "executed_at": "2026-08-21T19:08:05.675447+00:00",
+          "run_at": "2026-08-21T19:08:05.675447+00:00"
         }
       ]
     },
@@ -235,9 +284,16 @@
       "evidence": [
         {
           "test": "integration_tests/test_ashare_semantic_golden.py",
-          "result": "passed",
-          "count": 8,
-          "run_at": "2026-08-21T18:17:07.545098+00:00"
+          "command_hash": "3590b39d75554fd4a332792533c5f15a63a1218beeaaa3a51e0c98668e8a4785",
+          "exit_code": 0,
+          "passed": 8,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "tests": 8,
+          "duration_sec": 1.663,
+          "executed_at": "2026-08-21T19:08:01.161287+00:00",
+          "run_at": "2026-08-21T19:08:01.161287+00:00"
         }
       ]
     },
@@ -248,9 +304,16 @@
       "evidence": [
         {
           "test": "integration_tests/test_real_ashare_shadow.py",
-          "result": "passed",
-          "count": 4,
-          "run_at": "2026-08-21T18:17:07.545098+00:00"
+          "command_hash": "7b5180203e426e74ac935e8e5db926885b3b0c65702f5186121d0b931e81e48c",
+          "exit_code": 0,
+          "passed": 4,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "tests": 4,
+          "duration_sec": 1.83,
+          "executed_at": "2026-08-21T19:08:02.991155+00:00",
+          "run_at": "2026-08-21T19:08:02.991155+00:00"
         }
       ]
     }

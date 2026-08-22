@@ -1,0 +1,162 @@
+# R21-DA-IDENTITY-FIX: DataReadIdentity design bugs DA-P0-01..04 (P0 red-team)
+id: R21-DA-IDENTITY-FIX
+title: "DataReadIdentity design fixes: per-field availability / digest authority / fail-closed provenance / content-vs-execution identity"
+status: implemented
+date: 2026-08-22
+
+# Problem
+description: |
+  Red-team P0 audit of DataReadIdentity (dataaccess gitlink afda9f47) found four
+  design defects:
+
+  1. DA-P0-01: `_availability_grain(fields)` overwrote per-field availability/grain
+     in a loop — a multi-field read (price same_day, roe next_trading_day,
+     announcement knowledge_time) collapsed to ONE availability and became
+     order-dependent.
+  2. DA-P0-02: `DataReadIdentity.digest` was caller-overridable:
+     `if not self.digest: recompute` accepted `digest="whatever"` without
+     verification.
+  3. DA-P0-03: provenance failures were fail-open: `_revision_of()` returned None
+     on error, `_universe_snapshot_id()` returned None on except, calendar
+     identity could be None, source snapshot could be absent. In
+     production/PIT-strict these must FAIL CLOSED.
+  4. DA-P0-04: session/request_id polluted content identity: the digest included
+     session/request_id, so the same data/fields/time/universe/PIT/source read
+     today vs tomorrow had different identity — breaking cache reuse and
+     reproducibility.
+
+# Root cause
+root_cause: |
+  - DA-P0-01: `_availability_grain(fields)` was a fold that kept only the last
+    non-empty availability/grain seen, discarding per-field semantic visibility.
+  - DA-P0-02: digest was a plain mutable dataclass field with an
+    `if not self.digest` guard instead of `init=False` internal derivation.
+  - DA-P0-03: every provenance helper swallowed exceptions / absent capability
+    into `None` with no production/strict gate.
+  - DA-P0-04: `session`/`request_id` were part of the digest input tuple, so
+    execution context leaked into the reproducible content identity.
+
+# Fix
+fix: |
+  Rewrote `read/data_read_identity.py`:
+
+  1. **DA-P0-01** — replaced `_availability_grain` with a `ResolvedFieldIdentity`
+     dataclass (logical_name, physical_name, dataset, market, availability,
+     temporal_model, event_time, knowledge_time, grain, source_unit,
+     canonical_unit, scale, pit_fidelity, revision_policy). Every resolved field
+     is compiled to `ResolvedFieldIdentity`; the set is canonically sorted by
+     logical name and hashed as a whole. Mixed availability semantics
+     (same_day + next_trading_day + financial PIT knowledge_time) are all
+     retained; order-independence is guaranteed.
+  2. **DA-P0-02** — `digest` is now `field(init=False)`: always internally
+     derived in `__post_init__`. `from_dict()` (de)serialization recomputes the
+     digest and validates the supplied value — a bogus digest raises
+     `ValidationError`. Caller-provided `digest=` is rejected by the dataclass
+     (init=False).
+  3. **DA-P0-03** — provenance resolution now takes a `strict` flag (defaults to
+     the runtime-mode authority `is_strict_semantics()`). In production /
+     PIT-strict mode: revision unavailable → raise, calendar identity
+     unavailable → raise, required universe unavailable → raise, physical
+     source snapshot unavailable → raise. In research mode the read proceeds
+     with `provenance_status="unknown"` and explicit per-item `provenance_notes`.
+  4. **DA-P0-04** — split identity into `DataReadContentIdentity` (dataset,
+     fields, revision, source snapshot, calendar, universe, PIT, time range,
+     instrument selection, columns, provenance status — the content hash) and
+     `ReadExecutionIdentity` (request_id, session, executor, timestamp,
+     trace_id). `DataReadIdentity.digest` is now the CONTENT hash and never
+     includes execution identity; `DataReadIdentity.execution` records the
+     execution context separately.
+
+# Files modified
+files:
+  - path: read/data_read_identity.py
+    change: |
+      Rewrote module: ResolvedFieldIdentity + sorted-field hashing (DA-P0-01);
+      digest init=False internal derivation + from_dict validation (DA-P0-02);
+      fail-closed _revision_of/_calendar_identity/_universe_snapshot_id/
+      _source_snapshot_id with strict flag + provenance_status/notes (DA-P0-03);
+      DataReadContentIdentity vs ReadExecutionIdentity split (DA-P0-04).
+  - path: tests/unit/r21/test_r21_data_read_identity_2026_08.py
+    change: |
+      Updated digest-variants test: session no longer changes the content digest
+      (DA-P0-04); added columns=(a,) vs (a,b) digest-distinct assertions.
+  - path: tests/unit/r21/test_r21_da_p0_01_04_identity_fix_2026_08.py
+    change: |
+      New regression test file covering all four DA-P0 fixes.
+
+# Regression tests
+tests:
+  - path: tests/unit/r21/test_r21_da_p0_01_04_identity_fix_2026_08.py
+    tests:
+      - test_mixed_availability_all_fields_retained
+      - test_mixed_availability_hash_differs_from_collapsed
+      - test_mixed_availability_field_order_independent
+      - test_caller_supplied_digest_is_ignored
+      - test_deserialization_recomputes_and_validates_digest
+      - test_content_identity_deserialization_validates_digest
+      - test_production_missing_provenance_fails_closed
+      - test_production_missing_universe_fails_closed
+      - test_production_missing_source_snapshot_fails_closed
+      - test_research_missing_provenance_is_explicit_unknown
+      - test_research_without_universe_ok
+      - test_content_hash_identical_across_request_ids
+      - test_execution_identity_fields_recorded_separately
+      - test_session_does_not_change_content_digest
+
+# Evidence
+evidence:
+  - scenario: multi-field mixed availability retained
+    expected: same_day + next_trading_day + knowledge_time all present
+    actual: 3 ResolvedFieldIdentity entries; avails {price: same_day, roe: next_trading_day, announcement: knowledge_time}
+  - scenario: field order independence
+    expected: reversed declaration order -> same digest
+    actual: identical digest
+  - scenario: bogus caller digest
+    expected: rejected (init=False) / deserialization raises
+    actual: TypeError on digest= kwarg; ValidationError on from_dict mismatch
+  - scenario: production missing revision
+    expected: raise (fail closed)
+    actual: ValidationError "无法解析 dataset='daily' 的 revision"
+  - scenario: production missing required universe
+    expected: raise (fail closed)
+    actual: ValidationError "无法解析 required universe='hs300'"
+  - scenario: production missing physical source snapshot
+    expected: raise (fail closed)
+    actual: ValidationError "物理 source snapshot 不可得"
+  - scenario: research missing provenance
+    expected: no raise; explicit UNKNOWN status
+    actual: provenance_status="unknown", provenance_notes populated
+  - scenario: unpublised/legacy dataset (no manifest) revision
+    expected: stable object-set fallback token instead of UNKNOWN
+    actual: revision="demo:objects:1", provenance_status="available"
+  - scenario: identical content under different request_id
+    expected: same content hash; different execution identity
+    actual: same digest, same DataReadContentIdentity, distinct execution.request_id
+
+# Test run
+test_run:
+  command: |
+    cd /home/shw/quant_projects/dataaccess
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+      /home/shw/quant_projects/.venv/bin/python -m pytest tests/unit/r21/ -q --tb=short
+  result: "26 passed in 0.21s"
+  related:
+    - "pytest tests/test_da_p0_010_014_identity.py tests/test_build_identity_p0.py tests/unit/test_execution_identity_r2.py tests/unit/test_r2_query_cache_identity.py tests/unit/r21/ -> 76 passed"
+    - "pytest tests/unit/ (minus 2 broken r42 modules) -> 29 failed, 1392 passed; identical failure set to stashed baseline -> 0 new failures"
+
+# Baseline comparison
+baseline:
+  note: |
+    Full-suite failures (29 in tests/unit, 39 in tests/) are pre-existing on the
+    pinned SHA (verified by stashing my changes and re-running: identical failure
+    set). Two r42 test modules fail collection on HEAD independent of this change:
+    tests/unit/r42/test_r42_scan_cost_calibration.py (imports ScanCacheState,
+    absent from read/scan_cost.py) and tests/unit/test_r42_029_039_2026_08.py
+    (imports StorageKind, absent from core/engine.py).
+
+# Limitations
+limitations:
+  - "No full-dataset or integration runs performed."
+  - "Build path (store.read/read_result/read_joined) was not exhaustively
+     integration-tested; store._data_read_identity remains defensive
+     (returns None on exception, preserving prior behavior)."

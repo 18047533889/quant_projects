@@ -1,0 +1,175 @@
+schema_version: 1
+task_id: R21-FA-LOCAL-AUDIT
+title: "FA-P0-01..07 local code-level audit + fail-closed closure (git-ignored factor_assets)"
+base_sha: UNCOMMITTED_CURRENT_TREE
+current_head: UNCOMMITTED_CURRENT_TREE
+commit_sha: UNCOMMITTED_CURRENT_TREE
+status: CLOSED_LOCAL
+production_certification: NOT_RUN
+scope: factor_assets only (repo-root git-ignored; audited against real source at factor_assets/)
+
+context:
+  problem: >-
+    factor_assets is git-ignored at the repo root and cannot be code-reviewed
+    from the GitHub snapshot.  The external reviewer explicitly stated external
+    review cannot verify FA (P0 red-team item).  This audit was performed
+    against the real local source and each FA-P0-01..07 item was verified or
+    fixed fail-closed, with red-team closure tests added.
+  method: >-
+    Read-only source audit first (families.py, ann.py, engine.py,
+    conditional.py, lineage.py, sparse.py, policy.py, residual_novelty.py,
+    tests), then fail-closed fixes for confirmed gaps, then red-team closure
+    tests, then the full FA suite.
+
+items:
+  - id: FA-P0-01
+    title: production Leiden cannot be bypassed by toy clustering
+    verdict: PASS (strengthened)
+    evidence:
+      - factor_assets/clustering/families.py:611-613 (LeidenClustering.PRODUCTION=True, BACKEND=igraph, ALGORITHM=Leiden; real igraph community_leiden wrapper at cluster():711-719)
+      - factor_assets/clustering/families.py:642-648 (LeidenClustering ctor raises NotImplementedError when igraph missing — fail-closed, no silent fallback)
+      - factor_assets/clustering/families.py:431,459-478 (ModularityClustering.PRODUCTION=False; ctor raises RuntimeError unless allow_toy_algorithm=True)
+      - factor_assets/clustering/production.py (NEW): assert_production_clusterer/production_clusterer — toy or unknown clusterer passed as production is rejected with NotImplementedError; production_clusterer() returns LeidenClustering (fails closed when igraph absent)
+      - factor_assets/clustering/__init__.py:37-40,53-54 (gate exported)
+      - tests: tests/test_red_team_closure.py::test_p0_01_production_leiden_is_the_only_production_clusterer, test_p0_01_toy_clusterer_rejected_by_production_gate, test_p0_01_leiden_construction_fails_closed_without_igraph
+      - note: igraph is NOT installed in the venv on this box, so the fail-closed branch is live here (production Leiden unavailable -> NotImplementedError), exactly the state the tests document.
+
+  - id: FA-P0-02
+    title: ANN backend identity truthful (EXACT_FLAT exact, ANN approximate)
+    verdict: PASS
+    evidence:
+      - factor_assets/similarity/ann.py:87-99 (IndexType: EXACT_FLAT = "exact_flat" distinct from HNSW/IVF/ANNOY)
+      - factor_assets/similarity/ann.py:266-277 (ExactNearestNeighbor = FAISS IndexFlatIP brute-force, index_type = IndexType.EXACT_FLAT, "NOT an approximate (ANN) index")
+      - factor_assets/similarity/ann.py:445-460 (FaissANNIndex deprecated alias: warns and is documented as exact)
+      - factor_assets/similarity/ann.py:463-472 (AnnoyNNIndex genuinely approximate, index_type = IndexType.ANNOY)
+      - factor_assets/similarity/ann.py:646-697 (create_nn_index/create_ann_index map NNBackend.EXACT_FAISS/ANNBackend.FAISS -> ExactNearestNeighbor, never an ANN index)
+      - tests: tests/test_red_team_closure.py::test_p0_02_exact_flat_labeled_exact_ann_labeled_approximate, test_p0_02_exact_index_returns_true_top_k_under_adversarial_order (skipped here: faiss not installed; exact-path ImportError fail-closed asserted)
+      - note: faiss/annoy not installed in the venv; exact index construction fails closed with ImportError naming faiss, never masquerading as approximate.
+
+  - id: FA-P0-03
+    title: MMR greedy diversification is incremental, not dense O(K^2)
+    verdict: PASS (strengthened)
+    evidence:
+      - factor_assets/assembly/engine.py:215-234 (_MaxHeapEntry max-heap strict total order)
+      - factor_assets/assembly/engine.py:237-312 (_lazy_greedy_mmr lazy-greedy max-heap: O(N log N), stale-entry refresh only at pop; O(1) selected-family set)
+      - factor_assets/assembly/engine.py:258-263 (evaluation_counter instrumentation: every candidate MMR-key evaluation is counted; binary family-redundancy proxy bounds total evaluations by ~3N)
+      - factor_assets/assembly/engine.py:683-701 (_rank diverse policy delegates to _lazy_greedy_mmr)
+      - tests: tests/test_red_team_closure.py::test_p0_03_lazy_greedy_mmr_is_incremental_and_bounded (100k factors, evaluations <= 3N + 10, wall-clock bound), test_p0_03_assembly_diverse_end_to_end_100k (assembly-level 100k diverse run)
+      - existing: tests/selection/test_diverse_scale.py:175-183 (structural heap check), :186-235 (10k/5k < 4x timing)
+      - measured: 100k-candidate _lazy_greedy_mmr with counter: 299,992 evaluations vs 3N+10 = 300,010 bound (dense O(K^2) would need ~5e9), elapsed 2.42s single-threaded
+
+  - id: FA-P0-04
+    title: conditional novelty has the 7 statistical surfaces
+    verdict: FAIL -> FIXED (gap closed fail-closed)
+    gap: >-
+      conditional.py previously implemented only byte-level result-identity
+      equality (ResultIdentityNoveltyAssessor); there was no residual-IC /
+      ICIR / HAC-confidence / positive-ratio / stability / worst-slice /
+      incremental-quantile-spread surface anywhere in the novelty module.
+      Residual IC existed only in the optional QE adapter
+      (adapters/residual_novelty.py, ResidualICNoveltyProducer).  The
+      FA-P0-04 surface contract was absent.
+    fix:
+      - factor_assets/novelty/conditional.py:21-27 (CONDITIONAL_NOVELTY_SURFACES tuple of the 7 canonical surface names)
+      - factor_assets/novelty/conditional.py:53-115 (ConditionalNoveltyResult frozen dataclass: all 7 surfaces, finite + [0,1]-bounds fail-closed in __post_init__, deterministic to_mapping())
+      - factor_assets/novelty/conditional.py:117-220 (ConditionalNoveltyScorer: bounded [0,1] novelty score from the 7 surfaces; score_from_mapping returns None on any missing/non-finite surface — fail-closed)
+      - factor_assets/novelty/conditional.py (NoveltyResult gains optional surfaces: ConditionalNoveltyResult field)
+      - factor_assets/novelty/__init__.py (exports)
+      - tests: tests/test_red_team_closure.py::test_p0_04_conditional_novelty_exposes_seven_statistical_surfaces, test_p0_04_surface_validation_is_fail_closed, test_p0_04_novelty_result_carries_surfaces
+
+  - id: FA-P0-05
+    title: cluster lineage parent/split/merge/Jaccard/representative-continuity/cluster-version
+    verdict: PASS (strengthened)
+    evidence:
+      - factor_assets/clustering/families.py:41-72 (ClusterEvent CREATE/SPLIT/MERGE; ClusterLineage frozen record with cluster_id/parent_cluster/event/jaccard_overlap/representative_id/cluster_version/timestamp + NEW primary_parent_ratio with [0,1] validation)
+      - factor_assets/clustering/families.py:74-80 (_jaccard_overlap pure set function)
+      - factor_assets/clustering/families.py:117-179 (record_change requires parent for SPLIT/MERGE; computes Jaccard + primary-parent share; version bump)
+      - factor_assets/clustering/families.py:180-252 (record_snapshot derives split/create deterministically; _find_containing_parent breaks ties by Jaccard then cluster id)
+      - factor_assets/clustering/families.py:254-311 (NEW record_merge: deterministic primary parent = highest contribution ratio, ties by cluster id; validates parents and memberships; primary record appended last so lineage_of returns it)
+      - factor_assets/clustering/families.py:315-318 (canonical_factor = sorted(members)[0], representative continuity)
+      - tests: tests/test_red_team_closure.py::test_p0_05_lineage_split_merge_jaccard_continuity, test_p0_05_lineage_merge_deterministic_under_parent_reordering, test_p0_05_record_merge_validates_parents
+      - existing: tests/test_cluster_lineage.py (FA-P0-05 lineage tests, unchanged, still pass)
+
+  - id: FA-P0-06
+    title: count conservation INPUT = KEEP + SHADOW + REJECT + ERROR
+    verdict: PASS
+    evidence:
+      - factor_assets/assembly/engine.py:305-314 (_Disposition KEEP/SHADOW/REJECT/ERROR)
+      - factor_assets/assembly/engine.py:326-384 (AssemblyDispositionLedger: record_inputs/record/counts/unaccounted/assert_conserved raises on INPUT != KEEP+SHADOW+REJECT+ERROR)
+      - factor_assets/assembly/engine.py:498-553 (assemble records every candidate; admitted-but-capped reclassified to REJECT at 584-596)
+      - tests: tests/test_red_team_closure.py::test_p0_06_ledger_holds_exactly_under_adversarial_drop, test_p0_06_ledger_raises_when_factor_silently_dropped, test_p0_06_assembly_conservation_under_cap_adversarial
+      - existing: tests/test_factor_count_conservation.py (unchanged, still pass)
+
+  - id: FA-P0-07
+    title: deterministic tie-breaking derived from canonical identity
+    verdict: PASS
+    evidence:
+      - factor_assets/clustering/families.py:392 (ConnectedComponents iterates sorted(self.graph.nodes)); :493 (toy assigns sorted nodes); :670-673,721-724 (Leiden builds graph in canonical factor order, fixed random_seed=42); :315-318 (canonical representative = sorted(members)[0]); :268-276 (all_records sorted by (cluster_id, version))
+      - factor_assets/assembly/engine.py:215-234 (_MaxHeapEntry strict total order on (key, uid)); :237-312 (heap MMR identical ordering to sort-and-pop, deterministic factor_id tiebreak); :636-638 (manual = sorted by factor_id); :646-648 (two stable passes: timestamp desc, factor_id asc)
+      - factor_assets/assembly/engine.py:585-596 (max_factors cut applied to deterministically ranked list)
+      - tests: tests/test_red_team_closure.py::test_p0_07_same_input_twice_identical_selection, test_p0_07_reordered_input_identical_selection, test_p0_07_cluster_tie_break_is_canonical_not_insertion_order
+      - existing: tests/test_cluster_lineage.py::test_registry_snapshot_derivation_is_deterministic, test_connected_components_deterministic_tie_breaking
+
+owned_files:
+  - factor_assets/clustering/families.py
+  - factor_assets/clustering/production.py (NEW)
+  - factor_assets/clustering/__init__.py
+  - factor_assets/assembly/engine.py
+  - factor_assets/novelty/conditional.py
+  - factor_assets/novelty/__init__.py
+  - factor_assets/tests/test_red_team_closure.py (NEW)
+
+tests:
+  red_team:
+    run_command: >-
+      cd /home/shw/quant_projects/factor_assets &&
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      PYTHONPATH=/home/shw/quant_projects/quant_evaluator/build/lib:/home/shw/quant_projects
+      /home/shw/quant_projects/.venv/bin/python -m pytest tests/test_red_team_closure.py -q --tb=short
+    total: 19
+    passed: 18
+    skipped: 1
+    failed: 0
+    detail: >-
+      18 passed, 1 skipped (test_p0_02_exact_index_returns_true_top_k_under_adversarial_order
+      skipped because faiss is not installed; the exact-path fail-closed
+      ImportError is asserted before the skip).
+  full_suite:
+    run_command: >-
+      cd /home/shw/quant_projects/factor_assets &&
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      PYTHONPATH=/home/shw/quant_projects/quant_evaluator/build/lib:/home/shw/quant_projects
+      /home/shw/quant_projects/.venv/bin/python -m pytest tests/ -q --tb=short
+    total: 839
+    passed: 792
+    failed: 0
+    skipped: 47
+    detail: >-
+      Full factor_assets suite after the fixes: 792 passed, 47 skipped, 0 failed.
+      Baseline before any change (same command): 774 passed, 46 skipped, 0 failed.
+      The delta is exactly the 18 new passing red-team tests + 1 new skip
+      (faiss absent).  No pre-existing failures; the 46->47 skip delta is the
+      faiss-absent red-team skip.  PYTHONPATH additionally exposes
+      quant_evaluator/build/lib + repo root so the optional QE adapter tests
+      (tests/adapters/test_residual_novelty.py, 30 tests) run — they were
+      collected-and-passing in the baseline too.
+
+pre_existing_failures: none observed (baseline and post-fix runs both 0 failed)
+
+limitations:
+  - >-
+    igraph, faiss, annoy are not installed in the venv.  FA-P0-01 production
+    Leiden is therefore exercised only through its fail-closed branch
+    (NotImplementedError); the behavioural cluster() path is covered by the
+    existing test_leiden_clustering.py which skips when igraph is absent.  The
+    production gate still proves the toy can never be substituted.
+  - >-
+    FA-P0-04 surfaces are a contract/scoring layer; per-period residual-IC
+    series and HAC t-stats are produced by the optional QE adapter
+    (adapters/residual_novelty.py via quant_evaluator.metrics) and consumed by
+    selection/policy.py.  The scorer maps the 7 surfaces to a bounded score.
+  - >-
+    Working tree only (factor_assets is git-ignored); no commit was requested.
+    Evidence file is the only artifact written outside factor_assets.
+
+verification: LOCAL_TESTS_GREEN

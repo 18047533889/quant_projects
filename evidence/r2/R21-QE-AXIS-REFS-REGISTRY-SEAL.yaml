@@ -1,0 +1,55 @@
+id: R21-QE-AXIS-REFS-REGISTRY-SEAL
+campaign: QE P0 red-team closure (QE-P0-05, QE-P0-07)
+git_sha: working-tree  # no commit/push; working tree is truth
+timestamp: "2026-08-22"
+status: COMPLETED_LOCAL
+role: writer-fe (QE P0 closure)
+
+summary:
+  - "QE-P0-05: explicit axis refs now first-class on MetricArtifact payloads whose last dim is F; FactorAxisRef/TimeAxisRef/QuantileAxisRef/MatrixAxisRefs with to_dict/from_dict + pickle; shape mismatch fails closed."
+  - "QE-P0-07: metric catalog sealed authority — BUILDING -> SEALED lifecycle, read-only catalog view always, duplicate registration ValueError pre-seal / RuntimeError post-seal, RankIC/Pearson alias DAG verified single-spec, metric_version added to MetricSpec."
+
+owned_files:
+  - quant_evaluator/build/lib/quant_evaluator/contracts/axis_refs.py          # NEW (real importable source)
+  - quant_evaluator/build/lib/quant_evaluator/contracts/metric_artifacts.py   # factor_axis + time_axis/quantile_axis/matrix_axis
+  - quant_evaluator/build/lib/quant_evaluator/registry/metrics.py             # seal lifecycle + alias DAG + metric_version
+  - quant_evaluator/tests/test_axis_refs_and_registry_seal.py                 # NEW test file (29 tests)
+  - quant_evaluator/contracts/metric_artifacts.py                             # stub mirror sync (mirrors build/lib)
+  - quant_evaluator/registry/metrics.py                                       # stub mirror sync (mirrors build/lib)
+
+QE-P0-05 axis refs:
+  api:
+    - "contracts/axis_refs.py: FactorAxisRef(factor_ids: tuple[str,...], factor_versions: tuple[str|None,...]|None = None, factor_order_hash: str = '') — non-empty, unique ids; factor_order_hash defaults to the canonical SHA-256 of the id tuple and is validated when provided; property num_factors/order_hash."
+    - "TimeAxisRef(time_index: tuple[Any,...]|None = None, time_zone: str|None = None); QuantileAxisRef(quantile_labels: tuple[str,...]) — non-empty unique; MatrixAxisRefs(row: QuantileAxisRef, col: QuantileAxisRef) — same-length check."
+    - "Each has to_dict() (with a 'kind' tag) / from_dict(), plus lossless pickle (plain str/tuple/None fields). axis_ref_from_dict(dict|None) is the deserializer entry point."
+  artifacts:
+    - "MetricArtifact base gains factor_axis: FactorAxisRef|None = None; subclass __post_init__ calls _validate_factor_axis_against_f(F) — InvalidContractError when len(factor_ids) != F."
+    - "SeriesMetricArtifact adds time_axis (validated len == T when time_index provided); VectorMetricArtifact adds quantile_axis (validated == K); MatrixMetricArtifact adds matrix_axis (validated == K); DistributionMetricArtifact validates factor_axis against B...F."
+    - "factor_axis/time_axis/quantile_axis/matrix_axis are included in __eq__, __hash__ (stable content hash via contracts/_hashutil), to_dict/from_dict; axis identity survives a round-trip with provenance stripped."
+  backward_compat:
+    - "All axis fields default None; every pre-existing construction path and every pre-existing test (incl. test_qe_serialization.py artifacts with no axis args) is unchanged and green."
+
+QE-P0-07 registry seal:
+  lifecycle:
+    - "registry/metrics.py: _REGISTRY_STATE building|sealed; seal_metric_registry() replaces backing dict with a plain-dict snapshot (mappingproxy is not picklable) and flips state; register_metric raises RuntimeError after seal."
+    - "CATALOG is never a public mutable dict: no public CATALOG/METRIC_CATALOG symbol; read surface goes through MappingProxyType; catalog_snapshot() returns an immutable mapping; registry_state() reports the state."
+    - "Duplicate registration: ValueError pre-seal (unchanged), RuntimeError post-seal."
+  alias DAG verification:
+    - "Every canonical alias resolves to exactly one registered spec (resolve_alias -> get_metric)."
+    - "rank family (ic.rank.*: rank_ic_series/rank_ic/ic_median/ic_std/ic_ir/hac_tstat/hac_pvalue) declares ic_method='spearman' consistently (rank_ic and rank_ic_series now explicit spearman; ic_std/ic_ir declared spearman; ic_median/hac_tstat/hac_pvalue already were)."
+    - "pearson family (ic.pearson.*) declares ic_method='pearson': ic.pearson.mean -> pearson_ic (its OWN spec, same kernel as mean_ic — single DAG, two documented observation bases); ic.pearson.std and ic.pearson.ir -> pearson_ic_series (pearson method; both are time-series-derived stats); ic.pearson.daily -> pearson_ic_series. mean_ic keeps pearson default and remains the ic.pearson.mean-history spec."
+  metric_version:
+    - "MetricSpec gains metric_version: str = '1'; validated non-empty string in __post_init__; every registered spec defaults to '1'."
+
+tests:
+  - "quant_evaluator/tests/test_axis_refs_and_registry_seal.py — 29 tests: FactorAxisRef validation/order-hash stability; Time/Quantile/Matrix axis refs round-trip; artifact factor/time/quantile/matrix axis round-trips (to_dict/from_dict + pickle); shape-mismatch rejection; axis-identity-first-class (provenance stripped); registry seal lifecycle (duplicate pre-seal ValueError, post-seal RuntimeError, read-only snapshot); metric_version default; alias DAG single-spec + method-family consistency."
+  - "commands_run:"
+    - "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=build/lib python -m pytest tests/test_axis_refs_and_registry_seal.py -q --tb=short -> 29 passed"
+    - "Full QE suite (same env): 156 passed, 2 skipped (pre-existing skips: no zscore / no row-drop kernel; same 2 skips as the pre-change baseline), 2 pre-existing RuntimeWarnings in test_numerical_oracle (test-bug oracles, not kernel failures). Baseline before my changes: 127 passed, 2 skipped; the +29 are my new tests; no pre-existing failures."
+    - "py_compile of all touched modules: PASS; MetricSpec/catalog-snapshot pickle round-trips: PASS."
+
+notes:
+  - "Real importable source is build/lib/quant_evaluator (repo-root quant_evaluator/ is the pytest-shadowing stub). Both copies of contracts/metric_artifacts.py and registry/metrics.py are kept byte-identical."
+  - "A concurrent agent owns contracts/ (immutability/codec + sealed_split): I left contracts/errors.py, contracts/__init__.py (sealed_split wiring) untouched, and did NOT add my axis refs to contracts/__init__.py. contracts/axis_refs.py exists only in build/lib (new file, no stub mirror needed)."
+  - "metrics/catalog.py duplicate MetricSpec (QE-P0-7 finding) is a separate finding, NOT in this task's scope; registry/metrics.py is the authority the runtime imports (runtime/evaluator.py:43)."
+  - "ic.pearson.std/ir -> pearson_ic_series is a deliberate single-DAG repair: the ic.pearson.* family previously resolved to the spearman-family ic_std/ic_ir specs (mixed-method aliases, R21-PLATFORM-AUDIT QE-P0-8 RESIDUAL)."

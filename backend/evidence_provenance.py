@@ -11,7 +11,7 @@ import platform
 from functools import lru_cache
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 FE_ROOT = Path(__file__).resolve().parents[1]
 CASE_REGISTRY_JSON = FE_ROOT / "evidence" / "primitive_case_registry.json"
@@ -144,6 +144,23 @@ def compute_implementation_hash(source: str) -> str:
     Collision could certify wrong implementation. Use full 256-bit.
     """
     return hashlib.sha256(source.encode("utf-8")).hexdigest()
+
+
+def numeric_policy_digest() -> str:
+    """Digest of the active production numeric policy (R23 P0-10).
+
+    The numeric policy drives the signature generator's constraint tables, sign
+    tables, operator precedence and dtype mapping.  Binding it into
+    ``parameter_domain_hash_for`` means any numeric-policy change alters the
+    parameter domain hash and therefore the implementation closure hash.
+    Deterministic across processes: built from the R42 ``NumericPolicy``
+    identity (compute/accumulation/output dtype, determinism level, reduction
+    algorithm, division/overflow/underflow policies, degeneracy policy,
+    tolerance profile).
+    """
+    from backend.numeric_policy import NumericPolicy
+
+    return NumericPolicy.default().identity_hash()
 
 
 def emitter_hashes() -> dict[str, str]:
@@ -697,8 +714,7 @@ def implementation_closure_hash_for(canonical: str) -> str:
     return compute_payload_hash(payload)
 
 
-@lru_cache(maxsize=32)
-def implementation_closure_hash_set(canonicals: tuple[str, ...]) -> str:
+def implementation_closure_hash_set(canonicals: Iterable[str]) -> str:
     """Aggregate the per-canonical implementation closure hashes into one digest.
 
     R23 P0-10: the release-level ImplementationClosureHashSet must change
@@ -709,6 +725,10 @@ def implementation_closure_hash_set(canonicals: tuple[str, ...]) -> str:
     policy); the sorted per-canonical digests are aggregated together with the
     sorted canonical set into a single SHA-256.  Any numeric-helper change is
     therefore reflected through the affected canonical's closure digest.
+
+    Accepts any iterable of canonical names (callers pass lists from the
+    mining catalog).  The per-canonical closure digests are lru-cached inside
+    ``implementation_closure_hash_for``, so no set-level cache is needed here.
     """
     sorted_canonicals = sorted(set(canonicals))
     per_canonical = {

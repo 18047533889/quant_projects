@@ -330,9 +330,9 @@ def _set_gate(gates: list[dict], name: str, status: str, evidence: str) -> None:
 def _load_verified_evidence() -> list[dict] | None:
     """Read scripts/refresh_gate_evidence.py output (per-gate evidence).
 
-    Expected shape (see scripts/refresh_gate_evidence.py):
+    Expected shape (see scripts/gate_runner.py + scripts/refresh_gate_evidence.py):
         {
-          "schema_version": 1,
+          "schema_version": 2,
           "generated_by": "refresh_gate_evidence",
           "git_sha": "...",
           "timestamp": "...",
@@ -340,10 +340,23 @@ def _load_verified_evidence() -> list[dict] | None:
             {
               "name": "CROSS_PACKAGE",
               "status": "PASS",
-              "evidence": [{"test": "...", "result": "...", "count": 6, "run_at": "..."}]
+              "evidence": [{
+                "test": "...",
+                "command_hash": "<sha256 of argv>",
+                "exit_code": 0,
+                "passed": 6, "failed": 0, "errors": 0, "skipped": 0,
+                "tests": 6, "duration_sec": 1.2, "executed_at": "...",
+                "run_at": "...",
+              }]
             }
           ]
         }
+
+    NOTE (VER-P0-01): the per-gate ``status`` field in this file is NOT trusted.
+    A gate is upgraded to PASS here only when every evidence item carries real
+    machine fields (command_hash + exit_code == 0 + failed == 0 + errors == 0 +
+    tests > 0).  Any entry missing those fields is treated as NOT_RUN — never
+    PASS.
 
     Returns a list of gate entries, or None if the file is absent/unparsable.
     """
@@ -361,15 +374,22 @@ def _load_verified_evidence() -> list[dict] | None:
 def apply_verified_evidence(gates: list[dict], verbose: bool = True) -> list[dict]:
     """Fold current-tree verified evidence (from verified_gate_evidence.json) in.
 
-    For every gate entry in the evidence file:
-      - status must be "PASS" (FAIL is allowed too, but we do not auto-apply it;
-        an evidence-bearing PASS is applied only when the gate's status is still
-        NOT_RUN and the gate name is in _PROVABLE_GATE_NAMES).
-      - each evidence item must carry test/result/count/run_at and is appended
-        verbatim (the schema is the same shape the manifest already uses for
-        gate evidence entries).
-    Any gate NOT covered by evidence stays NOT_RUN -- this is deliberate:
-    the manifest must not overclaim.
+    VER-P0-01 (honesty): a gate is moved to PASS ONLY when every evidence item
+    carries real machine fields proving an actual executed run:
+
+        * ``command_hash``  — sha256 of the exact pytest argv (non-empty)
+        * ``exit_code``     — 0
+        * ``failed``        — 0
+        * ``errors``        — 0
+        * ``tests``         — > 0 (a gate that ran nothing is not a pass)
+
+    The ``result: "passed"`` string and per-gate ``status`` in the evidence file
+    are NOT trusted; they are advisory only.  An entry missing those machine
+    fields is treated as NOT_RUN — never PASS.  This is deliberate: the old
+    system could fabricate PASS from config alone; this one cannot.
+
+    Any gate NOT covered by honest evidence stays NOT_RUN -- the manifest must
+    not overclaim.
     """
     entries = _load_verified_evidence()
     if entries is None:
@@ -389,41 +409,78 @@ def apply_verified_evidence(gates: list[dict], verbose: bool = True) -> list[dic
             if verbose:
                 print(f"  [skip] gate {name}: status already {g['status']}", file=sys.stderr)
             continue
-        status = entry.get("status")
-        if status != "PASS":
-            if verbose:
-                print(f"  [skip] gate {name}: evidence status is {status!r}, not PASS", file=sys.stderr)
-            continue
         ev_items = entry.get("evidence") or []
         if not ev_items:
             if verbose:
                 print(f"  [skip] gate {name}: no evidence items", file=sys.stderr)
             continue
-        # Validate each evidence item minimally (test + result + count + run_at).
+        # VER-P0-01: only machine-verified evidence items are acceptable.  A
+        # ``result: "passed"`` string or a bare ``count`` does NOT count.
         ok_items: list[dict] = []
         for it in ev_items:
             if not isinstance(it, dict):
                 continue
-            if not (it.get("test") and it.get("result") and it.get("run_at")):
+            if not it.get("test"):
                 continue
-            cnt = it.get("count")
-            if cnt is None:
+            cmd_hash = it.get("command_hash")
+            exit_code = it.get("exit_code")
+            if not cmd_hash or not isinstance(exit_code, int):
+                if verbose:
+                    print(
+                        f"  [drop-item] gate {name}: evidence for {it.get('test')} "
+                        "missing command_hash/exit_code -> treated NOT_RUN",
+                        file=sys.stderr,
+                    )
+                continue
+            failed = it.get("failed")
+            errors = it.get("errors")
+            tests = it.get("tests")
+            if failed != 0 or errors != 0:
+                if verbose:
+                    print(
+                        f"  [drop-item] gate {name}: evidence for {it.get('test')} "
+                        f"has failed={failed} errors={errors} -> NOT a pass",
+                        file=sys.stderr,
+                    )
+                continue
+            if exit_code != 0:
+                if verbose:
+                    print(
+                        f"  [drop-item] gate {name}: evidence for {it.get('test')} "
+                        f"has exit_code={exit_code} != 0 -> NOT a pass",
+                        file=sys.stderr,
+                    )
+                continue
+            if not isinstance(tests, int) or tests <= 0:
+                if verbose:
+                    print(
+                        f"  [drop-item] gate {name}: evidence for {it.get('test')} "
+                        f"has tests={tests!r} (<=0) -> NOT a pass",
+                        file=sys.stderr,
+                    )
                 continue
             ok_items.append({
                 "test": str(it["test"]),
-                "result": str(it["result"]),
-                "count": int(cnt) if isinstance(cnt, bool) is False else cnt,
-                "run_at": str(it["run_at"]),
+                "command_hash": str(cmd_hash),
+                "exit_code": int(exit_code),
+                "passed": int(it["passed"]) if isinstance(it.get("passed"), int) else None,
+                "failed": int(failed),
+                "errors": int(errors),
+                "skipped": int(it["skipped"]) if isinstance(it.get("skipped"), int) else None,
+                "tests": int(tests),
+                "duration_sec": it.get("duration_sec"),
+                "executed_at": str(it.get("executed_at") or ""),
+                "run_at": str(it.get("run_at") or ""),
             })
         if not ok_items:
             if verbose:
-                print(f"  [skip] gate {name}: no valid evidence items", file=sys.stderr)
+                print(f"  [skip] gate {name}: no machine-verified evidence items", file=sys.stderr)
             continue
         g["status"] = "PASS"
         g["evidence"] = ok_items
         applied.append(f"{name}({len(ok_items)} evidence items)")
     if applied:
-        print(f"  gates moved PASS by current-tree evidence: {', '.join(applied)}")
+        print(f"  gates moved PASS by machine-verified evidence: {', '.join(applied)}")
     return gates
 
 def run_pytest_gate(gates: list[dict], command: str | None = None) -> dict | None:

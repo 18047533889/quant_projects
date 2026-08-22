@@ -1,0 +1,209 @@
+task_id: R21-VER-GATE-RUNNER
+git_sha: 267d4b5695b41738a6bcfe5ae3e364fcf6228cc7
+# NOTE: gates were executed on the working tree whose HEAD is the above SHA;
+# the working tree also carried uncommitted edits (dirty).  The evidence JSON
+# generated this session records git_sha 940750b8 (a working-tree HEAD produced
+# by an intervening concurrent commit); the machine fields below are the truth
+# that matters: command_hash + exit_code + counts from ACTUAL pytest runs.
+timestamp: 2026-08-22T02:20:00Z
+status: LOCAL_TESTED
+commit: NONE
+remotes: NOT_USED
+production_certified: false
+
+purpose: >-
+  VER-P0-01 (highest-priority red-team finding).  The old
+  scripts/refresh_gate_evidence.py hard-coded result="passed"/count=N for each
+  gate and main() only checked test_path.is_file() -- it never ran pytest, so
+  PASS could be fabricated from configuration.  This task rewrites the gate
+  evidence system so PASS is ONLY produced by ACTUALLY executing pytest and
+  reading back a structured JUnit XML result.  No count/result is written from
+  configuration anywhere.
+
+architecture:
+  scripts/gate_runner.py: >-
+    NEW.  GateSpec dataclass (gate_id, exact pytest argv list including
+    --junitxml={junitxml} and -p no:cacheprovider, expected test files,
+    timeout_sec, env, skip_policy, failure_policy).  GateRunner executes each
+    command via subprocess using .venv/bin/python -m pytest, with a timeout,
+    and parses the JUnit XML (xml.etree) into tests/failures/errors/skipped/
+    xfailed/xpassed; exit_code + duration recorded.  Status derivation is
+    strict: PASS <=> exit_code==0 AND junit.failures==0 AND junit.errors==0
+    AND junit.tests>0; anything else is FAIL (test failures/errors/non-zero
+    exit/timeout) or BLOCKED (tests==0 / junit missing AND nothing collected).
+    Every evidence entry carries command_hash (sha256 of the full argv),
+    exit_code, passed/failed/errors/skipped/xfailed/xpassed, duration_sec,
+    executed_at.  --co fallback counts collection only, can never upgrade a
+    gate to PASS.
+  scripts/refresh_gate_evidence.py: >-
+    REWRITTEN.  No hard-coded result/count anywhere.  It runs the GateRunner
+    over GATE_SPECS and writes evidence/verified_gate_evidence.json with the
+    machine fields verbatim from the runner.
+  scripts/gen_verification_manifest.py: >-
+    apply_verified_evidence() hardened: an evidence entry is acceptable for
+    PASS ONLY if it carries real machine fields (command_hash non-empty AND
+    exit_code==0 AND failed==0 AND errors==0 AND tests>0).  Entries missing
+    those fields, or with any failure/error/non-zero exit/empty run, are
+    treated as NOT_RUN -- never PASS.  The per-gate status/result strings in
+    the evidence file are NOT trusted.
+
+honesty_tests:
+  file: scripts/tests/test_gate_runner_honesty.py
+  command: >-
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+    .venv/bin/python -m pytest scripts/tests/test_gate_runner_honesty.py -q
+    --tb=short
+  result: 5 passed
+  cases:
+    - id: a
+      scenario: test file EXISTS but the test FAILS
+      assertion: status == FAIL, never PASS
+      passed: true
+    - id: b
+      scenario: gate points at a NON-EXISTENT test file
+      assertion: status != PASS (BLOCKED/FAIL)
+      passed: true
+    - id: c
+      scenario: test file EXISTS and the test PASSES
+      assertion: status == PASS
+      passed: true
+    - id: d
+      scenario: evidence artifact shape carries all machine fields
+      assertion: command_hash/exit_code/counts/duration/executed_at present
+      passed: true
+    - id: e
+      scenario: FABRICATED evidence (result="passed" + bare count, no
+        command_hash/exit_code) fed to apply_verified_evidence()
+      assertion: gate stays NOT_RUN, never PASS
+      passed: true
+
+manifest_contract_tests:
+  file: tests/test_verification_manifest.py
+  command: .venv/bin/python -m pytest tests/test_verification_manifest.py -q --tb=short
+  result: 9 passed
+
+gates_run_real:
+  timeout_sec: 600
+  interpreter: /home/shw/quant_projects/.venv/bin/python -m pytest
+  qe_pythonpath: /home/shw/quant_projects/quant_evaluator/build/lib
+  runs:
+    - gate: NUMERICAL_ORACLE
+      status: PASS
+      test: quant_evaluator/tests/test_numerical_oracle.py
+      exit_code: 0
+      passed: 13
+      failed: 0
+      errors: 0
+      skipped: 0
+      duration_sec: 5.39
+    - gate: PROPERTY
+      status: PASS
+      evidence:
+        - test: quant_evaluator/tests/test_metamorphic.py
+          exit_code: 0
+          passed: 18
+          failed: 0
+          errors: 0
+          skipped: 2
+          duration_sec: 1.40
+        - test: quant_evaluator/tests/test_consistency.py
+          exit_code: 0
+          passed: 11
+          failed: 0
+          errors: 0
+          skipped: 0
+          duration_sec: 1.40
+    - gate: CROSS_PACKAGE
+      status: PASS
+      test: integration_tests/test_cross_package_contracts.py
+      exit_code: 0
+      passed: 4
+      failed: 0
+      errors: 0
+      skipped: 2
+      duration_sec: 1.41
+    - gate: ASHARE_SEMANTIC_CONTRACT_GOLDEN
+      status: PASS
+      test: integration_tests/test_ashare_semantic_golden.py
+      exit_code: 0
+      passed: 8
+      failed: 0
+      errors: 0
+      skipped: 0
+      duration_sec: 1.69
+    - gate: ASHARE_REAL_DATA_SHADOW
+      status: PASS
+      test: integration_tests/test_real_ashare_shadow.py
+      exit_code: 0
+      passed: 4
+      failed: 0
+      errors: 0
+      skipped: 0
+      duration_sec: 1.78
+      note: >-
+        real pinned A-share mirror (data/a_share/lqtp_data) present; 4 real
+        parquet-shadow assertions ran.  skip_policy=fail_on_skip: a skipped
+        run would NOT be PASS.
+    - gate: SERIALIZATION
+      status: PASS
+      evidence:
+        - test: quant_evaluator/tests/test_qe_serialization.py
+          exit_code: 0
+          passed: 36
+          failed: 0
+          errors: 0
+          skipped: 0
+          duration_sec: 0.96
+        - test: factor_assets/tests/registry/test_serialization_codec.py
+          exit_code: 0
+          passed: 17
+          failed: 0
+          errors: 0
+          skipped: 0
+          duration_sec: 0.27
+    - gate: CHECKPOINT_RESUME
+      status: PASS
+      test: factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py
+      exit_code: 0
+      passed: 3
+      failed: 0
+      errors: 0
+      skipped: 0
+      duration_sec: 1.41
+
+gates_not_run:
+  - UNIT
+  - LEAKAGE
+  - PIT
+  - DETERMINISM
+  - FRESH_WHEEL
+  - 1K_SCALE
+  - 10K_SCALE
+  - 100K_SCALE
+
+no_fabrication_declaration: >-
+  Every PASS above was produced by an actual `python -m pytest ... --junitxml`
+  subprocess run whose JUnit XML was parsed for the counts.  No result/count was
+  written from configuration.  If a gate cannot run or fails, the runner reports
+  FAIL/BLOCKED/NOT_RUN -- never PASS.
+
+files_modified:
+  - scripts/gate_runner.py (new)
+  - scripts/refresh_gate_evidence.py (rewritten; no hard-coded counts)
+  - scripts/gen_verification_manifest.py (apply_verified_evidence honesty gate)
+  - scripts/tests/test_gate_runner_honesty.py (new; 5 regression tests)
+  - scripts/tests/__init__.py (new)
+  - evidence/verified_gate_evidence.json (regenerated by actual runs)
+  - evidence/VerificationManifest.json (regenerated; PASS only from machine fields)
+
+known_limitations:
+  - CROSS_PACKAGE has 2 skipped (documented-contract skips, not passes) but
+    exit_code==0 + failures==0 + errors==0 + tests==6 -> PASS per the strict
+    rule; the 2 skips are recorded in the skipped count so they cannot hide.
+  - PROPERTY has 2 skipped in test_metamorphic.py (documented-contract tests);
+    recorded in skipped count, not in passed.
+  - UNIT / LEAKAGE / PIT / DETERMINISM / FRESH_WHEEL / 1K / 10K / 100K gates
+    have no gate spec this session -> stay NOT_RUN (no overclaim).
+  - Evidence JSON git_sha is 940750b8 (working-tree HEAD at regeneration time;
+    an intervening concurrent commit).  The gate executions above were run
+    against this same dirty working tree.

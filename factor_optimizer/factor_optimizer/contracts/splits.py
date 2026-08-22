@@ -12,6 +12,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, Optional, Tuple, List
 
+import numpy as np
+
 
 class SplitType(Enum):
     TRAIN = "train"
@@ -92,17 +94,46 @@ class SearchEvaluationResult:
 class LabelBundle:
     """Bundle of label information for temporal leakage validation.
 
-    This provides real timestamps for labels instead of relying on integer
-    label_horizon. The label_start_time and label_end_time define the exact
-    temporal window that labels cover.
+    Real timestamps take precedence over the integer ``label_horizon``
+    fallback.  Scalar ``label_start_time`` / ``label_end_time`` remain for
+    backward compatibility (a single label window); the aligned per-sample
+    vectors ``label_start_times`` / ``label_end_times`` describe one label
+    window per sample and drive interval-based leakage validation.
 
-    If provided, label_start_time/label_end_time take precedence over
-    label_horizon for temporal leakage checks.
+    Aligned vector fields (all 1-D, one element per sample):
+
+    - ``sample_ids``: unique identity per sample (duplicate-free).
+    - ``decision_times``: the time at which each sample's decision/signal is
+      made.
+    - ``label_start_times``: the start (inclusive) of each sample's label
+      window.
+    - ``label_end_times``: the end (inclusive) of each sample's label window.
+    - ``label_availability_times``: the time at which each sample's label
+      becomes knowable/available.
+
+    When the vector fields are present they are mutually aligned and must
+    align with the plan masks.  If provided, the timestamp fields take
+    precedence over ``label_horizon`` for temporal leakage checks.
     """
 
-    label_start_time: Any
-    label_end_time: Any
+    label_start_time: Any = None
+    label_end_time: Any = None
     label_horizon: int = 0  # Fallback if timestamps not provided
+    sample_ids: Any = None
+    decision_times: Any = None
+    label_start_times: Any = None
+    label_end_times: Any = None
+    label_availability_times: Any = None
+
+    def has_timestamps(self) -> bool:
+        """True when aligned per-sample timestamp vectors are present."""
+        return not (
+            self.label_start_times is None
+            and self.label_end_times is None
+            and self.decision_times is None
+            and self.label_availability_times is None
+            and self.sample_ids is None
+        )
 
 
 @dataclass(frozen=True)
@@ -188,6 +219,190 @@ def validate_split_plan(split_plan: SplitPlan) -> Dict[str, Any]:
     return {"split_id": split_plan.split_id, "n_samples": lengths[0], "validated": True}
 
 
+def _coerce_timestamp_vector(values: Any, name: str, n: int) -> np.ndarray:
+    """Coerce an aligned 1-D timing field to a UTC-normalized datetime64 array.
+
+    Rejects (ValueError): missing/None, non-1D shapes, misaligned lengths,
+    NaT/None elements, and timezone ambiguity (mixed tz-aware / tz-naive, or
+    tz-aware values carrying a non-UTC offset that is not resolved).
+    """
+    if values is None:
+        raise ValueError(f"LabelBundle.{name} is required when timestamps are present")
+    if isinstance(values, (str, bytes)):
+        raise ValueError(f"LabelBundle.{name} must be a 1-D sequence, got a string")
+    try:
+        length = len(values)
+    except TypeError as exc:
+        raise ValueError(
+            f"LabelBundle.{name} must be a sized 1-D sequence"
+        ) from exc
+    if length != n:
+        raise ValueError(
+            f"LabelBundle.{name} length {length} must match the mask length {n}"
+        )
+    try:
+        import pandas as pd
+
+        series = pd.to_datetime(list(values))
+    except ImportError:  # pragma: no cover - pandas is a project dependency
+        raise
+    except ValueError as exc:
+        message = str(exc)
+        if "mix tz-aware" in message or "tz-aware" in message or "tz-naive" in message:
+            raise ValueError(
+                f"LabelBundle.{name} has a timezone ambiguity: mixed tz-aware and "
+                f"tz-naive values are not allowed ({message})"
+            ) from exc
+        raise ValueError(
+            f"LabelBundle.{name} must contain valid timestamps: {message}"
+        ) from exc
+    try:
+        if isinstance(series, pd.DatetimeIndex):
+            tz = series.tz
+        else:
+            tz = getattr(series.dt, "tz", None)
+    except AttributeError:
+        tz = None
+    if tz is not None:
+        try:
+            arr = np.asarray(series.tz_convert("UTC").tz_localize(None))
+        except Exception as exc:
+            raise ValueError(
+                f"LabelBundle.{name} must have an unambiguous UTC-resolvable "
+                f"timezone (ambiguous tz or unknown offset: {exc})"
+            ) from exc
+    else:
+        arr = np.asarray(series)
+    if arr.dtype.kind not in ("M", "m"):
+        raise ValueError(f"LabelBundle.{name} must be a datetime sequence")
+    if np.isnat(arr).any():
+        raise ValueError(f"LabelBundle.{name} must not contain NaT/None timestamps")
+    return arr
+
+
+def _validate_label_bundle_intervals(split_plan: SplitPlan, label_bundle: LabelBundle) -> None:
+    """Vectorized timestamp-based interval leakage validation.
+
+    The label window for a sample is ``[label_start_time, label_end_time]``.
+    A sample's label window must not overlap any sample outside its own
+    segment whose decision/availability time falls inside that window -- i.e.
+    the window must be empty of "future" (train/validation) signal points and
+    of test availability points.
+
+    Rejects (ValueError, typed): NaT, timezone ambiguity, misaligned lengths,
+    end < start, duplicate sample identity, unknown availability.
+    """
+    n_samples = len(split_plan.train_mask)
+    bundle = label_bundle
+
+    starts = _coerce_timestamp_vector(bundle.label_start_times, "label_start_times", n_samples)
+    ends = _coerce_timestamp_vector(bundle.label_end_times, "label_end_times", n_samples)
+    decisions = (
+        _coerce_timestamp_vector(bundle.decision_times, "decision_times", n_samples)
+        if bundle.decision_times is not None
+        else None
+    )
+    availability = (
+        _coerce_timestamp_vector(
+            bundle.label_availability_times, "label_availability_times", n_samples
+        )
+        if bundle.label_availability_times is not None
+        else None
+    )
+    if availability is None:
+        if decisions is None:
+            raise ValueError(
+                "LabelBundle availability is unknown: supply label_availability_times "
+                "or decision_times when timestamp vectors are present"
+            )
+        availability = decisions
+    if decisions is None:
+        decisions = starts.copy()
+    if len(starts) != len(ends) or len(ends) != len(decisions) or len(decisions) != len(availability):
+        raise ValueError(
+            "LabelBundle timestamp vectors must be mutually aligned (equal length)"
+        )
+
+    # end < start is a malformed label window.
+    if np.any(ends < starts):
+        bad = int(np.flatnonzero(ends < starts)[0])
+        raise ValueError(
+            f"LabelBundle label window at sample {bad} has end < start "
+            f"(start={starts[bad]!r}, end={ends[bad]!r})"
+        )
+
+    # Duplicate sample identity is ambiguous and rejected.
+    sample_ids = bundle.sample_ids
+    if sample_ids is not None:
+        try:
+            ids = list(sample_ids)
+        except TypeError as exc:
+            raise ValueError("LabelBundle.sample_ids must be a 1-D sequence") from exc
+        if len(ids) != n_samples:
+            raise ValueError(
+                f"LabelBundle.sample_ids length {len(ids)} must match the mask length {n_samples}"
+            )
+        seen = set()
+        dup = next((value for value in ids if value in seen or seen.add(value)), None)
+        if dup is not None:
+            raise ValueError(f"LabelBundle.sample_ids must be unique; duplicate {dup!r}")
+
+    masks = (
+        ("train", np.asarray(split_plan.train_mask, dtype=bool)),
+        ("validation", np.asarray(split_plan.validation_mask, dtype=bool)),
+        ("test", np.asarray(split_plan.test_mask, dtype=bool)),
+    )
+
+    # Classify each sample by its segment.  A sample's own availability point
+    # is a legal boundary, so each segment's availability set excludes its own
+    # label windows.
+    train_avail = availability[masks[0][1]]
+    val_avail = availability[masks[1][1]]
+    test_avail = availability[masks[2][1]]
+
+    # Compute the union of other-segment availability points that must not
+    # fall inside any label window of this segment.  Using a sorted union
+    # plus binary search keeps this vectorized (O(N log N)), never O(N^2).
+    def _count_foreign_inside(starts_arr, ends_arr, foreign: np.ndarray) -> int:
+        if foreign.size == 0:
+            return 0
+        foreign = np.sort(foreign)
+        left = np.searchsorted(foreign, starts_arr, side="left")
+        right = np.searchsorted(foreign, ends_arr, side="right") - 1
+        hits = right >= left
+        return int(hits.sum())
+
+    train_starts = starts[masks[0][1]]
+    train_ends = ends[masks[0][1]]
+    val_starts = starts[masks[1][1]]
+    val_ends = ends[masks[1][1]]
+    test_starts = starts[masks[2][1]]
+    test_ends = ends[masks[2][1]]
+
+    # Train label interval ∩ Validation availability must be empty.
+    n_train_val = _count_foreign_inside(train_starts, train_ends, val_avail)
+    # Train label interval ∩ Test availability must be empty.
+    n_train_test = _count_foreign_inside(train_starts, train_ends, test_avail)
+    # Validation label interval ∩ Test availability must be empty.
+    n_val_test = _count_foreign_inside(val_starts, val_ends, test_avail)
+
+    if n_train_val:
+        raise ValueError(
+            "LabelBundle leakage: a train label interval overlaps validation "
+            "availability (train labels leak into the validation segment)"
+        )
+    if n_train_test:
+        raise ValueError(
+            "LabelBundle leakage: a train label interval overlaps test "
+            "availability (train labels leak into the test segment)"
+        )
+    if n_val_test:
+        raise ValueError(
+            "LabelBundle leakage: a validation label interval overlaps test "
+            "availability (validation labels leak into the test segment)"
+        )
+
+
 def _validate_temporal_leakage(split_plan: SplitPlan, n_samples: int) -> None:
     """Fail-closed purge/embargo/label-horizon leakage check.
 
@@ -206,8 +421,25 @@ def _validate_temporal_leakage(split_plan: SplitPlan, n_samples: int) -> None:
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise ValueError(f"{name} must be a non-negative integer")
 
-    # If no temporal constraints requested, skip
-    if label_horizon == 0 and purge == 0 and embargo == 0 and validation_embargo == 0:
+    # If no temporal constraints requested, skip -- UNLESS a LabelBundle with
+    # real timestamps is present.  The bundle's label windows carry their own
+    # temporal semantics and MUST be validated even when every plan-level
+    # integer field is zero (FO-P0-01 regression: the previous code
+    # early-returned before consulting the bundle, silently admitting
+    # forward-label leakage into the test/validation segments).
+    if (
+        label_horizon == 0
+        and purge == 0
+        and embargo == 0
+        and validation_embargo == 0
+        and (label_bundle is None or not label_bundle.has_timestamps())
+    ):
+        return
+
+    # Timestamp-based interval validation takes PRECEDENCE over the integer
+    # horizon fallback whenever the bundle carries real timestamps.
+    if label_bundle is not None and label_bundle.has_timestamps():
+        _validate_label_bundle_intervals(split_plan, label_bundle)
         return
 
     time_index = split_plan.time_index

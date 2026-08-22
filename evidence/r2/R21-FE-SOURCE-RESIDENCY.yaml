@@ -1,0 +1,185 @@
+id: R21-FE-SOURCE-RESIDENCY
+title: >-
+  FE-P0-01/FE-P0-02/FE-P1-01 — eliminate duplicate importable FE source trees
+  (root-level stale copies + factor_engine/build/lib) and enforce canonical
+  source residency with a subprocess-isolated gate
+campaign: FactorEngine source residency / single source authority (red-team P0)
+status: LOCAL_CHANGES_PENDING_REVIEW
+git_sha: working tree is truth (no commit made by this agent; coordinator commits)
+timestamp: "2026-08-22"
+base_sha: UNCOMMITTED_CURRENT_TREE
+
+# The reviewer red-team finding: THREE importable copies of FE source coexist.
+# The prior fix ("sys.path precedence / import shadowing", R22-SINGLE-SOURCE-
+# AUTHORITY) was rejected as production-correct because it still loads the
+# root-level duplicates whenever the repo root precedes factor_engine/ on
+# sys.path, and factor_engine/build/lib remains importable when that dir is on
+# the path.  This task physically removes the build-artifact copy from git's
+# index, proves the canonical residency in a fresh subprocess, and documents
+# the root-level duplicate trees (which cannot be deleted yet).
+
+audit_basis:
+  id: FE-P0-01
+  verdict: >-
+    CONFIRMED — /home/shw/quant_projects/{backend,planner,cleaned_operators,
+    runtime,planning,mining,ir,expr,fields,market,modeling,semantic,storage,
+    util,validation,api,audit,cache,service,security,telemetry,
+    research_operators,research_tools,factor_recipes,export} all exist at the
+    repo ROOT with __init__.py and are importable; factor_engine/build/lib/*
+    exists on disk with __init__.py under every FE package.
+  id2: FE-P0-02
+  verdict: >-
+    Gate ADDED — factor_engine/tests/test_source_residency.py (32 tests)
+    asserts from a fresh isolated subprocess that factor_engine.<pkg> __file__
+    is under the CANONICAL factor_engine/ tree, and that a root-only path
+    resolves top-level names OUTSIDE the canonical tree (documenting the
+    load-bearing shadowing).  All 32 pass.
+  id3: FE-P1-01
+  verdict: >-
+    Index hygiene DONE in the factor_engine submodule: git rm -r --cached of
+    build/ (1217 files), __pycache__/ + *.pyc (2017), *.nbc (15), *.nbi (15);
+    total 3234 staged deletions, zero .py source staged outside build/;
+    .gitignore already contains build/, __pycache__/, *.py[cod] (via *.pyc),
+    *.nbc, *.nbi (plus dist/, *.whl).  Working dir untouched.
+
+duplicate_tree_inventory:
+  canonical:
+    path: factor_engine/backend, planner, cleaned_operators, runtime, planning,
+      mining, ir, expr, fields, market, modeling, semantic, storage, util,
+      validation, api, audit, cache, service, security, telemetry,
+      research_operators, research_tools, factor_recipes, export
+    gitlink: fc3e5f32f199177512231ec8791d3f8da0fcc803 (submodule
+      github.com/HKUST-QUANT-SOCIETY/factor_engine)
+    authority: true
+  root_duplicates:
+    path: /home/shw/quant_projects/{same package names}
+    importable: true (every dir has __init__.py)
+    mirror_of_canonical: false  # NOT byte-identical; separate tracked trees
+    staleness: >-
+      STALE historical copies.  Last commits: backend/runtime/mining
+      2026-08-22, planner/planning/api 2026-08-21, the rest 2026-08-20
+      (one bulk commit 91189335).  NOT byte-identical to the submodule:
+      e.g. backend/evidence_provenance.py is 36,834 B at ROOT (with the R23
+      P0-10 numeric_policy_digest edit, staged in the superproject) vs
+      26,807 B in the submodule (no digest).
+    importers: >-
+      638 .py files (tests/ 256, factor_engine/tests/ 253, scripts/,
+      integration_tests/) use top-level names; NONE import by root path.
+      Under tests/conftest.py the submodule factor_engine/ precedes the ROOT,
+      so bare imports resolve to the canonical tree.
+    deleted: false  # FLAGGED, not deleted (see rationale)
+  build_artifact:
+    path: factor_engine/build/lib/*
+    importable: true (on-disk __init__.py under every package; importable only
+      when factor_engine/build is on sys.path)
+    deleted_from_index: true  # git rm -r --cached; working dir KEPT
+    regenerated_by: pip wheel factor_engine/
+    load_bearing: >-
+      false for this suite — no test puts factor_engine/build on sys.path; the
+      residency gate's build/lib-only probe resolves to the ROOT backend, i.e.
+      build/lib never wins an import used by the suite.
+
+removed_vs_flagged:
+  removed: >-
+    git rm -r --cached (index-only; working tree untouched): factor_engine/build/**
+    (1217), factor_engine/__pycache__/ + *.pyc (2017), *.nbc (15), *.nbi (15).
+  left_and_flagged:
+    - >-
+      ROOT duplicate trees — importable but carry unique committed + staged
+      changes not in the submodule (R23 P0-10 numeric_policy_digest in
+      backend/evidence_provenance.py; tests/backend/ collection currently
+      errors with NameError: numeric_policy_digest when resolving to the
+      submodule copy).  Deleting would lose working-tree changes / break the
+      R23 evidence work.  DELETE ONLY AFTER that work is moved into the
+      submodule.
+    - factor_engine/build/lib (on disk) — kept (pip wheel regenerates it);
+      removed from git index; documented non-importable-in-preference.
+    - backend/evidence_provenance.py — staged R23 P0-10 target, must not be
+      deleted.
+
+residency_gate:
+  file: factor_engine/tests/test_source_residency.py
+  design: >-
+    Fresh subprocess per probe: python -I (isolated; empty PYTHONPATH; no cwd
+    on path via implied -P; venv site-packages kept so real imports work).
+    canonical probe: insert factor_engine/ dir + repo ROOT (ROOT required for
+    the factor_engine namespace package — no __init__.py in factor_engine/),
+    import factor_engine.<pkg>, assert __file__ == canonical/<pkg>/__init__.py.
+    root-only probe: insert ONLY repo ROOT, import top-level <pkg>, assert it
+    does NOT resolve under canonical (documents shadowing is load-bearing).
+    build/lib probe: insert ONLY build/lib, import backend, assert it resolves
+    OUTSIDE build/lib (currently to ROOT backend) => build/lib not load-bearing.
+  tests: 32 (15 canonical residency + 15 root-only inverse + build/lib + host
+    sys.path check)
+  result: 32 passed
+
+source_authority_suite:
+  command_1: >-
+    cd /home/shw/quant_projects/factor_engine &&
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+    /home/shw/quant_projects/.venv/bin/python -m pytest
+    tests/test_source_residency.py -q --tb=short
+  result_1: 32 passed
+  command_2: >-
+    cd /home/shw/quant_projects &&
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+    /home/shw/quant_projects/.venv/bin/python -m pytest
+    tests/source_authority/ -q --tb=short
+  result_2: "25 failed, 25 passed"
+  combined_run_note: >-
+    A single pytest command naming BOTH tests/ and factor_engine/tests/ fails
+    at collection with ImportPathMismatchError('tests.conftest', ...) because
+    the monorepo defines two distinct `tests` packages, each with its own
+    conftest and __init__.py.  Pre-existing structural clash; the gate is run
+    as two commands.
+  pre_existing_failures:
+    - >-
+      tests/source_authority/test_no_root_fe_packages.py::test_no_root_fe_package[
+      *] — 25 fail because the ROOT duplicate trees still exist.  This IS the
+      FE-P0-01 red-team finding; cannot pass until the ROOT trees are deleted.
+      test_root_pyproject_not_factor_engine passes (pyproject name =
+      "quant-projects").
+    - tests/backend/ collection (probe, not part of this task's gate): 40
+      errors at collection with NameError: numeric_policy_digest — resolves to
+      the SUBMODULE backend/evidence_provenance.py (no digest), confirming the
+      ROOT copy is the one carrying the staged R23 P0-10 work.
+
+files_changed:
+  - factor_engine/tests/test_source_residency.py  # NEW residency gate (32 tests)
+  - factor_engine/tests/conftest.py  # doc-comment only: combined-run note
+  - factor_engine/.gitignore  # already contained build/ __pycache__/ *.pyc *.nbc *.nbi (prior writer)
+  - docs/R21_SOURCE_RESIDENCY_AUDIT.md  # NEW audit (this task, deliverable)
+  - evidence/r2/R21-FE-SOURCE-RESIDENCY.yaml  # NEW evidence (this task)
+index_changes:
+  submodule_factor_engine:
+    staged_deletions_total: 3234
+    build: 1217
+    pycache_pyc: 2017
+    nbc_nbi: 30
+    source_py_deleted_outside_build: 0
+    working_dir_touched: false
+    gitignore_entries: [build/, __pycache__/, *.pyc, *.nbc, *.nbi, dist/, *.whl]
+  superproject: >-
+    no new adds/removes by this task; pre-existing working-tree edits
+    (backend/evidence_provenance.py, evidence/*, loop/care.md,
+    scripts/gen_verification_manifest.py, source_authority tests,
+    workspace_data sqlite staged deletions, untracked R21 files) untouched.
+
+limitations:
+  - >-
+    ROOT duplicate trees NOT deleted (flagged): they are importable and shadow
+    authority under root-first sys.path, but carry unique working-tree changes
+    (R23 P0-10).  Production-safe single source REQUIRES a follow-up that
+    moves those changes into the submodule, then deletes the ROOT trees.
+  - >-
+    factor_engine/build/lib remains on disk (regenerated by pip wheel); it is
+    made non-importable-in-preference (absent from every sys.path the suite
+    uses; gate proves it is not load-bearing) rather than deleted, per the
+    constraint "do not delete the working dir if tests need it".
+  - >-
+    A single-command combined pytest run of the two test trees is blocked by
+    the pre-existing tests/tests conftest ImportPathMismatchError.
+  - >-
+    The 25 test_no_root_fe_package failures are pre-existing (they document
+    the P0 finding) and are recorded separately; the residency gate and the
+    remaining 25 source_authority tests pass.

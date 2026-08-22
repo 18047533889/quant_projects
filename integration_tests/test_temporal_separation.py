@@ -28,9 +28,13 @@ These tests close that gap with SMALL SYNTHETIC data and the REAL packages:
     ``t`` must be rejected by the FO LabelBundle/split-plan validation.  The
     causal-chain boundary that DOES exist is exercised for real (FO
     ``validate_split_plan`` forward-label-overlap rejection; QE LabelBundle
-    causal-chain rejection of backward-reaching labels); the missing wiring
-    (QE has no guard tying ``label_end_time`` to the evaluation boundary) is
-    pinned and documented rather than fabricated into a pass.
+    causal-chain rejection of backward-reaching labels).  The FO early-return
+    wiring gap (a bundle with zero plan-level integer fields skipped
+    validation) is closed by FO-P0-01: a LabelBundle carrying aligned
+    per-sample timestamps is now validated even with all plan-level integers
+    zero.  The QE evaluation-boundary gap (no guard tying ``label_end_time``
+    to the evaluation boundary) is pinned and documented rather than
+    fabricated into a pass.
 
 Import layout: factor_engine is installed as FLAT editable modules (no
 top-level ``factor_engine`` package) and factor_preprocess / factor_optimizer
@@ -391,8 +395,11 @@ def test_label_horizon_beyond_t_is_rejected(_fe_run_factor):
 
     (a) FO ``validate_split_plan``: a train segment ending at ``t`` with a
         label horizon reaching INTO the test segment is rejected
-        (forward-label overlap) -- via ``SplitPlan.label_horizon`` and via a
-        FO ``LabelBundle`` with ``label_horizon`` (see the early-return note).
+        (forward-label overlap) -- via ``SplitPlan.label_horizon``, via a
+        FO ``LabelBundle`` with ``label_horizon``, AND via a FO
+        ``LabelBundle`` carrying aligned per-sample timestamp vectors with all
+        plan-level integer fields zero (FO-P0-01: the early-return gap is
+        closed; the bundle is never skipped).
 
     (b) QE ``LabelBundle`` causal-chain validation: a label window that starts
         BEFORE its decision time (the label is knowable before the signal) is
@@ -443,14 +450,11 @@ def test_label_horizon_beyond_t_is_rejected(_fe_run_factor):
                 label_horizon=3,
             )
         )
-    # Same rejection when the horizon arrives via a FO LabelBundle.  NOTE the
-    # real boundary today: ``_validate_temporal_leakage`` early-returns when
-    # ``SplitPlan.label_horizon == purge == embargo == validation_embargo == 0``
-    # BEFORE it consults the label_bundle (splits.py:210-211), so a bundle
-    # alone with a zero plan-level horizon silently skips the arithmetic.  The
-    # bundle's ``label_horizon`` only takes effect when the plan-level fields
-    # are non-zero.  We assert the enforced path (bundle + plan-level
-    # label_horizon=3) and document the early-return gap in the evidence file.
+    # Same rejection when the horizon arrives via a FO LabelBundle.  The
+    # legacy (pre-FO-P0-01) boundary: a scalar-field bundle's
+    # ``label_horizon`` only took effect when the plan-level fields were
+    # non-zero.  Assert the enforced path (bundle + plan-level
+    # label_horizon=3).
     fo_label_bundle = FOLabelBundle(
         label_start_time=time_index,
         label_end_time=tuple(
@@ -469,6 +473,29 @@ def test_label_horizon_beyond_t_is_rejected(_fe_run_factor):
                 time_index=time_index,
                 label_bundle=fo_label_bundle,
                 label_horizon=3,
+            )
+        )
+    # The early-return gap (GAP-1) is CLOSED: a bundle alone with all
+    # plan-level integer fields zero is now validated on its real timestamps.
+    # Scalar bundle fields (backward-compatible form) do not yet carry
+    # per-sample aligned vectors, so the timestamp-interval path is exercised
+    # with the aligned vector fields (FO-P0-01).
+    fo_label_bundle_vectors = FOLabelBundle(
+        label_start_times=time_index,
+        label_end_times=tuple(
+            pd.Timestamp(x) + pd.Timedelta(days=3) for x in time_index
+        ),
+        decision_times=time_index,
+    )
+    with pytest.raises(ValueError, match="label interval overlaps test"):
+        validate_split_plan(
+            SplitPlan(
+                split_id="s1",
+                train_mask=train_mask,
+                validation_mask=val_mask,
+                test_mask=test_mask,
+                metadata={},
+                label_bundle=fo_label_bundle_vectors,
             )
         )
     # A purged plan (train 0..t, purge=2, test at t+3) is accepted: the gap

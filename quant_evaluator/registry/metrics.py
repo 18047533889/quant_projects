@@ -7,7 +7,7 @@ Central registry of available metrics with status and tier metadata.
 from dataclasses import dataclass
 from enum import Enum
 from types import MappingProxyType
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Mapping, Optional
 import copyreg
 
 from quant_evaluator.metrics.ic import compute_ic_std, compute_mean_ic_value
@@ -79,6 +79,7 @@ class MetricSpec:
     requires: Optional[List[str]] = None
     min_periods: Optional[int] = None
     ic_method: str = "pearson"
+    metric_version: str = "1"
 
     def __post_init__(self):
         if self.requires is None:
@@ -88,10 +89,59 @@ class MetricSpec:
                 f"Metric '{self.name}' declares invalid ic_method "
                 f"{self.ic_method!r}; must be 'pearson' or 'spearman'"
             )
+        if not isinstance(self.metric_version, str) or not self.metric_version.strip():
+            raise ValueError(
+                f"Metric '{self.name}' declares invalid metric_version "
+                f"{self.metric_version!r}; must be a non-empty string"
+            )
 
 
-# Central metric catalog
+# Central metric catalog (QE-P0-07): sealed registry.
+#
+# Lifecycle: BUILDING -> SEALED.
+#   - BUILDING: ``register_metric`` accepts new MetricSpecs.  The live read
+#     surface (``get_metric`` / ``list_metrics`` / ``list_metrics_by_status`` /
+#     ``list_metrics_by_tier``) already goes through a read-only
+#     ``MappingProxyType`` view of the backing dict, so no caller can mutate
+#     the catalog even before the seal.
+#   - SEALED: ``seal_metric_registry()`` freezes the backing dict by replacing
+#     it with a plain dict copy (a mappingproxy is NOT picklable, and the
+#     registry must stay picklable) and flips the state flag.  Any further
+#     registration raises ``RuntimeError`` (fail closed) — the catalog is the
+#     single source of truth for production metrics and must not grow after
+#     seal.
+#   - Duplicate ``name`` registration always raises ``ValueError`` (before the
+#     seal) or ``RuntimeError`` (after the seal).  There is no silent
+#     overwrite path.
+_REGISTRY_STATE_BUILDING = "building"
+_REGISTRY_STATE_SEALED = "sealed"
+
+_REGISTRY_STATE: str = _REGISTRY_STATE_BUILDING
 _METRIC_CATALOG: Dict[str, MetricSpec] = {}
+_METRIC_CATALOG_VIEW: Mapping[str, MetricSpec] = MappingProxyType(_METRIC_CATALOG)
+
+
+def registry_state() -> str:
+    """Return the current registry lifecycle state: "building" or "sealed"."""
+    return _REGISTRY_STATE
+
+
+def seal_metric_registry() -> str:
+    """Seal the metric registry against further mutation.
+
+    Replaces the backing dict with an immutable plain-dict snapshot (so the
+    registry remains picklable — a ``MappingProxyType`` is not) and flips the
+    state to ``"sealed"``.  After sealing, ``register_metric`` raises
+    ``RuntimeError``.
+
+    Returns:
+        The new registry state (``"sealed"``).
+    """
+    global _REGISTRY_STATE, _METRIC_CATALOG, _METRIC_CATALOG_VIEW
+    _METRIC_CATALOG = dict(_METRIC_CATALOG)
+    _METRIC_CATALOG_VIEW = MappingProxyType(_METRIC_CATALOG)
+    _REGISTRY_STATE = _REGISTRY_STATE_SEALED
+    return _REGISTRY_STATE
 
 
 def register_metric(spec: MetricSpec) -> None:
@@ -105,11 +155,18 @@ def register_metric(spec: MetricSpec) -> None:
         ValueError: If metric name already registered, or if a STABLE metric
             has no ``compute_fn`` (a STABLE claim without a bound
             implementation is a fail-open capability lie).
+        RuntimeError: If the registry has been sealed (QE-P0-07).
     """
     if spec.status is MetricStatus.STABLE and spec.compute_fn is None:
         raise ValueError(
             f"Metric '{spec.name}' claims STABLE but has no compute_fn; "
             "register it as EXPERIMENTAL until an implementation is bound"
+        )
+    if _REGISTRY_STATE == _REGISTRY_STATE_SEALED:
+        raise RuntimeError(
+            f"Cannot register metric '{spec.name}': the metric registry is "
+            "sealed (QE-P0-07). Registry changes must be added before "
+            "seal_metric_registry() is called."
         )
     if spec.name in _METRIC_CATALOG:
         raise ValueError(f"Metric '{spec.name}' already registered")
@@ -129,9 +186,9 @@ def get_metric(name: str) -> MetricSpec:
     Raises:
         KeyError: If metric not found
     """
-    if name not in _METRIC_CATALOG:
+    if name not in _METRIC_CATALOG_VIEW:
         raise KeyError(f"Metric '{name}' not found in registry")
-    return _METRIC_CATALOG[name]
+    return _METRIC_CATALOG_VIEW[name]
 
 
 def list_metrics() -> List[str]:
@@ -141,7 +198,7 @@ def list_metrics() -> List[str]:
     Returns:
         Sorted list of metric names
     """
-    return sorted(_METRIC_CATALOG.keys())
+    return sorted(_METRIC_CATALOG_VIEW.keys())
 
 
 def list_metrics_by_status(status: MetricStatus) -> List[str]:
@@ -155,7 +212,7 @@ def list_metrics_by_status(status: MetricStatus) -> List[str]:
         Sorted list of metric names
     """
     return sorted(
-        name for name, spec in _METRIC_CATALOG.items()
+        name for name, spec in _METRIC_CATALOG_VIEW.items()
         if spec.status == status
     )
 
@@ -171,9 +228,19 @@ def list_metrics_by_tier(tier: MetricTier) -> List[str]:
         Sorted list of metric names
     """
     return sorted(
-        name for name, spec in _METRIC_CATALOG.items()
+        name for name, spec in _METRIC_CATALOG_VIEW.items()
         if spec.tier == tier
     )
+
+
+def catalog_snapshot() -> Mapping[str, MetricSpec]:
+    """Return the current catalog as an immutable mapping.
+
+    Always a fresh read-only snapshot: pre-seal it is a live view of the
+    backing dict, post-seal it is a copy of the sealed dict.  Either way the
+    caller receives a read-only mapping that cannot mutate the registry.
+    """
+    return _METRIC_CATALOG_VIEW
 
 
 def resolve_alias(metric_id: str) -> str:
@@ -213,9 +280,9 @@ _CANONICAL_METRIC_ALIASES_DATA: Dict[str, str] = {
     "ic.rank.hac_t": "hac_tstat",
     "ic.rank.hac_p": "hac_pvalue",
     "ic.pearson.daily": "pearson_ic_series",
-    "ic.pearson.mean": "mean_ic",
-    "ic.pearson.std": "ic_std",
-    "ic.pearson.ir": "ic_ir",
+    "ic.pearson.mean": "pearson_ic",
+    "ic.pearson.std": "pearson_ic_series",
+    "ic.pearson.ir": "pearson_ic_series",
 }
 CANONICAL_METRIC_ALIASES: Dict[str, str] = MappingProxyType(_CANONICAL_METRIC_ALIASES_DATA)
 
@@ -243,6 +310,56 @@ copyreg.pickle(MappingProxyType, _pickle_aliases)
 
 # Register core metrics
 register_metric(MetricSpec(
+    name="rank_ic",
+    display_name="Mean Rank IC",
+    description=(
+        "rank_ic has exactly ONE meaning: the time-mean of daily Spearman "
+        "rank IC between factor values and labels (canonical alias "
+        "ic.rank.mean)"
+    ),
+    status=MetricStatus.STABLE,
+    tier=MetricTier.CORE,
+    compute_fn=compute_rank_ic_value,
+    requires=["factor_batch", "label_bundle"],
+    min_periods=None,
+    ic_method="spearman",
+))
+
+register_metric(MetricSpec(
+    name="ic_std",
+    display_name="IC Standard Deviation",
+    description=(
+        "Standard deviation of the daily IC series per factor (canonical "
+        "aliases ic.rank.std and ic.pearson.std). The alias namespace is "
+        "Spearman-family, so the spec declares ic_method='spearman'; the "
+        "same kernel serves the Pearson alias."
+    ),
+    status=MetricStatus.STABLE,
+    tier=MetricTier.CORE,
+    compute_fn=compute_ic_std,
+    requires=["ICSeriesArtifact"],
+    min_periods=20,
+    ic_method="spearman",
+))
+
+register_metric(MetricSpec(
+    name="ic_ir",
+    display_name="IC Information Ratio",
+    description=(
+        "Mean IC divided by IC standard deviation per factor (canonical "
+        "aliases ic.rank.ir and ic.pearson.ir). The alias namespace is "
+        "Spearman-family, so the spec declares ic_method='spearman'; the "
+        "same kernel serves the Pearson alias."
+    ),
+    status=MetricStatus.STABLE,
+    tier=MetricTier.CORE,
+    compute_fn=compute_ic_ir_value,
+    requires=["ICSeriesArtifact"],
+    min_periods=20,
+    ic_method="spearman",
+))
+
+register_metric(MetricSpec(
     name="mean_ic",
     display_name="Mean IC",
     description=(
@@ -260,28 +377,7 @@ register_metric(MetricSpec(
     compute_fn=compute_mean_ic_value,
     requires=["ICSeriesArtifact"],
     min_periods=20,
-))
-
-register_metric(MetricSpec(
-    name="ic_std",
-    display_name="IC Standard Deviation",
-    description="Standard deviation of IC series",
-    status=MetricStatus.STABLE,
-    tier=MetricTier.CORE,
-    compute_fn=compute_ic_std,
-    requires=["ICSeriesArtifact"],
-    min_periods=20,
-))
-
-register_metric(MetricSpec(
-    name="ic_ir",
-    display_name="IC Information Ratio",
-    description="Mean IC divided by IC standard deviation",
-    status=MetricStatus.STABLE,
-    tier=MetricTier.CORE,
-    compute_fn=compute_ic_ir_value,
-    requires=["ICSeriesArtifact"],
-    min_periods=20,
+    ic_method="pearson",
 ))
 
 register_metric(MetricSpec(
@@ -314,21 +410,7 @@ register_metric(MetricSpec(
     compute_fn=compute_pearson_ic_value,
     requires=["factor_batch", "label_bundle"],
     min_periods=None,
-))
-
-register_metric(MetricSpec(
-    name="rank_ic",
-    display_name="Mean Rank IC",
-    description=(
-        "rank_ic has exactly ONE meaning: the time-mean of daily Spearman "
-        "rank IC between factor values and labels (canonical alias "
-        "ic.rank.mean)"
-    ),
-    status=MetricStatus.STABLE,
-    tier=MetricTier.CORE,
-    compute_fn=compute_rank_ic_value,
-    requires=["factor_batch", "label_bundle"],
-    min_periods=None,
+    ic_method="pearson",
 ))
 
 register_metric(MetricSpec(
@@ -343,6 +425,7 @@ register_metric(MetricSpec(
     compute_fn=compute_pearson_ic_series_value,
     requires=["factor_batch", "label_bundle"],
     min_periods=None,
+    ic_method="pearson",
 ))
 
 register_metric(MetricSpec(
@@ -357,6 +440,7 @@ register_metric(MetricSpec(
     compute_fn=compute_rank_ic_series_value,
     requires=["factor_batch", "label_bundle"],
     min_periods=None,
+    ic_method="spearman",
 ))
 
 register_metric(MetricSpec(

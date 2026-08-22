@@ -1,42 +1,29 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "generated_by": "refresh_gate_evidence",
-  "git_sha": "267d4b5695b41738a6bcfe5ae3e364fcf6228cc7",
-  "timestamp": "2026-08-21T18:17:07.545098+00:00",
+  "git_sha": "940750b8edf91ba973833465032c26e4d46a3008",
+  "timestamp": "2026-08-21T19:10:06.797939+00:00",
   "gates": [
     {
-      "name": "CROSS_PACKAGE",
+      "name": "NUMERICAL_ORACLE",
       "status": "PASS",
       "evidence": [
         {
-          "test": "integration_tests/test_cross_package_contracts.py",
+          "test": "quant_evaluator/tests/test_numerical_oracle.py",
           "result": "passed",
-          "count": 6,
-          "run_at": "2026-08-21T18:17:07.545098+00:00"
-        }
-      ]
-    },
-    {
-      "name": "ASHARE_SEMANTIC_CONTRACT_GOLDEN",
-      "status": "PASS",
-      "evidence": [
-        {
-          "test": "integration_tests/test_ashare_semantic_golden.py",
-          "result": "passed",
-          "count": 8,
-          "run_at": "2026-08-21T18:17:07.545098+00:00"
-        }
-      ]
-    },
-    {
-      "name": "ASHARE_REAL_DATA_SHADOW",
-      "status": "PASS",
-      "evidence": [
-        {
-          "test": "integration_tests/test_real_ashare_shadow.py",
-          "result": "passed",
-          "count": 4,
-          "run_at": "2026-08-21T18:17:07.545098+00:00"
+          "command_hash": "ad53ea5974262eade0f636cb0be851abfdd917e7cc90f0a33c3f8bcfdb693372",
+          "exit_code": 0,
+          "passed": 13,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "xfailed": 0,
+          "xpassed": 0,
+          "tests": 13,
+          "collected_tests": null,
+          "duration_sec": 5.361,
+          "executed_at": "2026-08-21T19:09:56.502361+00:00",
+          "run_at": "2026-08-21T19:09:56.502361+00:00"
         }
       ]
     },
@@ -47,15 +34,105 @@
         {
           "test": "quant_evaluator/tests/test_metamorphic.py",
           "result": "passed",
-          "count": 18,
-          "run_at": "2026-08-21T18:17:07.545098+00:00",
-          "note": "2 skipped (documented contract tests; a skip is not a pass)"
+          "command_hash": "f0d260b66a901b7b1af977737d652cf00ee810ab31b29064dc52016c1b51ffb1",
+          "exit_code": 0,
+          "passed": 18,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 2,
+          "xfailed": 0,
+          "xpassed": 0,
+          "tests": 20,
+          "collected_tests": null,
+          "duration_sec": 1.416,
+          "executed_at": "2026-08-21T19:09:57.919074+00:00",
+          "run_at": "2026-08-21T19:09:57.919074+00:00"
         },
         {
           "test": "quant_evaluator/tests/test_consistency.py",
           "result": "passed",
-          "count": 11,
-          "run_at": "2026-08-21T18:17:07.545098+00:00"
+          "command_hash": "a43dcaf80e7d341d4db1130386a59cae2801c4b88cee1f385d8e6b42cc841075",
+          "exit_code": 0,
+          "passed": 11,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "xfailed": 0,
+          "xpassed": 0,
+          "tests": 11,
+          "collected_tests": null,
+          "duration_sec": 1.391,
+          "executed_at": "2026-08-21T19:09:59.309918+00:00",
+          "run_at": "2026-08-21T19:09:59.309918+00:00"
+        }
+      ]
+    },
+    {
+      "name": "CROSS_PACKAGE",
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "integration_tests/test_cross_package_contracts.py",
+          "result": "passed",
+          "command_hash": "6862bd825f4304adcf3751fddbb8aa2471e832ed4a67f65d2ba2736bc05b59dd",
+          "exit_code": 0,
+          "passed": 4,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 2,
+          "xfailed": 0,
+          "xpassed": 0,
+          "tests": 6,
+          "collected_tests": null,
+          "duration_sec": 1.414,
+          "executed_at": "2026-08-21T19:10:00.723862+00:00",
+          "run_at": "2026-08-21T19:10:00.723862+00:00"
+        }
+      ]
+    },
+    {
+      "name": "ASHARE_SEMANTIC_CONTRACT_GOLDEN",
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "integration_tests/test_ashare_semantic_golden.py",
+          "result": "passed",
+          "command_hash": "7a531a68e06e82e800b61b7f3fd163222774a704106ebec3319e7e74734ee2bf",
+          "exit_code": 0,
+          "passed": 8,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "xfailed": 0,
+          "xpassed": 0,
+          "tests": 8,
+          "collected_tests": null,
+          "duration_sec": 1.656,
+          "executed_at": "2026-08-21T19:10:02.379761+00:00",
+          "run_at": "2026-08-21T19:10:02.379761+00:00"
+        }
+      ]
+    },
+    {
+      "name": "ASHARE_REAL_DATA_SHADOW",
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "integration_tests/test_real_ashare_shadow.py",
+          "result": "passed",
+          "command_hash": "d8d3e07432646695e9353511ab4fbbf5f8e50b6809acab5b04043fc3877770e9",
+          "exit_code": 0,
+          "passed": 4,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "xfailed": 0,
+          "xpassed": 0,
+          "tests": 4,
+          "collected_tests": null,
+          "duration_sec": 1.764,
+          "executed_at": "2026-08-21T19:10:04.143934+00:00",
+          "run_at": "2026-08-21T19:10:04.143934+00:00"
         }
       ]
     },
@@ -66,14 +143,36 @@
         {
           "test": "quant_evaluator/tests/test_qe_serialization.py",
           "result": "passed",
-          "count": 36,
-          "run_at": "2026-08-21T18:17:07.545098+00:00"
+          "command_hash": "6cf08ee6eb2f0847c6ddfaa0519dbd91ab2647fee31e2cb7798bcfe4f825c679",
+          "exit_code": 0,
+          "passed": 36,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "xfailed": 0,
+          "xpassed": 0,
+          "tests": 36,
+          "collected_tests": null,
+          "duration_sec": 0.974,
+          "executed_at": "2026-08-21T19:10:05.118336+00:00",
+          "run_at": "2026-08-21T19:10:05.118336+00:00"
         },
         {
           "test": "factor_assets/tests/registry/test_serialization_codec.py",
           "result": "passed",
-          "count": 17,
-          "run_at": "2026-08-21T18:17:07.545098+00:00"
+          "command_hash": "d0504e4b553e45e01e2cb47da20fa9915e2154aa7924c058a5fd803a4b0bbf9b",
+          "exit_code": 0,
+          "passed": 17,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "xfailed": 0,
+          "xpassed": 0,
+          "tests": 17,
+          "collected_tests": null,
+          "duration_sec": 0.275,
+          "executed_at": "2026-08-21T19:10:05.393546+00:00",
+          "run_at": "2026-08-21T19:10:05.393546+00:00"
         }
       ]
     },
@@ -84,20 +183,19 @@
         {
           "test": "factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py",
           "result": "passed",
-          "count": 3,
-          "run_at": "2026-08-21T18:17:07.545098+00:00"
-        }
-      ]
-    },
-    {
-      "name": "NUMERICAL_ORACLE",
-      "status": "PASS",
-      "evidence": [
-        {
-          "test": "quant_evaluator/tests/test_numerical_oracle.py",
-          "result": "passed",
-          "count": 13,
-          "run_at": "2026-08-21T18:17:07.545098+00:00"
+          "command_hash": "70eeb5455d9bcb46f7448fcf4c07bffccf2e4e042d33c5a6de0723fe615bb5a9",
+          "exit_code": 0,
+          "passed": 3,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "xfailed": 0,
+          "xpassed": 0,
+          "tests": 3,
+          "collected_tests": null,
+          "duration_sec": 1.403,
+          "executed_at": "2026-08-21T19:10:06.796480+00:00",
+          "run_at": "2026-08-21T19:10:06.796480+00:00"
         }
       ]
     }

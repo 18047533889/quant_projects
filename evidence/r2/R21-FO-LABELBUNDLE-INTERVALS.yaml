@@ -1,0 +1,187 @@
+schema_version: 1
+task_id: R21-FO-LABELBUNDLE-INTERVALS
+title: >-
+  FO LabelBundle timestamp-based interval leakage validation (FO-P0-01) --
+  closes GAP-1 of evidence/r2/R21-INTEGRATION-TEMPORAL-SEPARATION.yaml and
+  audit Q1 "real timestamps are not consumed by the leakage arithmetic"
+status: CLOSED_LOCAL
+production_certification: NOT_RUN
+base_sha: UNCOMMITTED_CURRENT_TREE
+current_head: UNCOMMITTED_CURRENT_TREE
+commit_sha: UNCOMMITTED_CURRENT_TREE
+audit_ref: evidence/r2/R21-LEAKAGE-PIT-AUDIT.yaml#Q1
+owned_files:
+  - factor_optimizer/factor_optimizer/contracts/splits.py
+  - factor_optimizer/tests/search/test_label_bundle_intervals.py
+  - integration_tests/test_temporal_separation.py
+scope: factor_optimizer only (+ integration_tests/test_temporal_separation.py)
+
+summary: >-
+  FO _validate_temporal_leakage early-returned when SplitPlan.label_horizon ==
+  purge == embargo == validation_embargo == 0 BEFORE consulting the LabelBundle,
+  so a bundle carrying real label timestamps could not express forward-label
+  leakage -- train/validation label intervals silently overlapping test (or
+  validation) availability passed validation.  This change makes timestamp-based
+  interval validation run whenever a LabelBundle with aligned per-sample
+  timestamp vectors is present, even with every plan-level integer field zero,
+  and validates the exact interval intersections vectorized (numpy searchsorted,
+  O(N log N), never O(N^2)).
+
+implementation:
+  problem: >-
+    splits.py:209-212 skipped ALL temporal-leakage validation when label_horizon
+    == purge == embargo == validation_embargo == 0.  The LabelBundle's real
+    label_start_time/label_end_time were only consulted as a label_horizon
+    fallback inside the integer-arithmetic path, so a bundle whose label windows
+    reach forward into the test (or validation) segment was silently accepted.
+  contract_shape:
+    - "LabelBundle gains aligned 1-D vector fields: sample_ids, decision_times,
+       label_start_times, label_end_times, label_availability_times (all optional;
+       scalar label_start_time/label_end_time/label_horizon retained for backward
+       compat)."
+    - "LabelBundle.has_timestamps() -> True when any aligned vector field is set."
+    - "_coerce_timestamp_vector(values, name, n): coerces an aligned 1-D field to
+       a UTC-normalized numpy datetime64 array; typed ValueError for None/non-sized,
+       misaligned length, NaT/None, tz ambiguity (mixed aware/naive or non-UTC
+       non-resolvable), and non-datetime content."
+    - "_validate_label_bundle_intervals(split_plan, bundle): vectorized interval
+       validation (see rules)."
+    - "_validate_temporal_leakage: early-return is now conditioned on the bundle
+       also lacking timestamps; when a bundle with timestamps is present it takes
+       PRECEDENCE over the integer horizon fallback and the interval validation
+       runs (and returns) before the integer arithmetic."
+  interval_rules:
+    - "Train label interval [label_start_times, label_end_times] intersect
+       Validation availability (label_availability_times or decision_times) must
+       be empty -> ValueError 'train label interval overlaps validation'."
+    - "Train label interval intersect Test availability must be empty ->
+       ValueError 'train label interval overlaps test'."
+    - "Validation label interval intersect Test availability must be empty ->
+       ValueError 'validation label interval overlaps test'."
+    - "availability == label_availability_times if supplied else decision_times;
+       if neither is supplied the availability is UNKNOWN and validation fails
+       closed ('availability is unknown')."
+    - "decision_times defaults to label_start_times when not supplied."
+    - "end < start at any sample -> ValueError 'end < start' (typed)."
+    - "duplicate sample_ids -> ValueError 'must be unique' (typed)."
+    - "misaligned vector lengths -> ValueError 'must be mutually aligned'."
+    - "vectorized via np.searchsorted on a sorted union of foreign availability
+       points (O(N log N)); no O(N^2) loops."
+  fail_closed_semantics:
+    - "A present LabelBundle with timestamps can NEVER be skipped by the plan-level
+       zero early-return (FO-P0-01 regression test)."
+    - "Timestamps take precedence over the integer label_horizon fallback; the
+       integer arithmetic remains the fallback only when no timestamps are
+       present."
+    - "A LabelBundle with timestamps but without decision_times or
+       label_availability_times is rejected (unknown availability), never silently
+       skipped."
+
+tests:
+  - file: factor_optimizer/tests/search/test_label_bundle_intervals.py
+    total: 14
+    passed: 14
+    failed: 0
+    run_command: >-
+      cd /home/shw/quant_projects/factor_optimizer &&
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      /home/shw/quant_projects/.venv/bin/python -m pytest
+      tests/search/test_label_bundle_intervals.py -q --tb=short
+    per_test:
+      - name: test_train_label_interval_overlapping_validation_availability_rejected
+        covers: train label interval ∩ validation availability empty
+      - name: test_train_label_interval_overlapping_test_availability_rejected
+        covers: train label interval ∩ test availability empty
+      - name: test_validation_label_interval_overlapping_test_availability_rejected
+        covers: validation label interval ∩ test availability empty
+      - name: test_clean_non_overlapping_timestamps_accepted
+        covers: clean non-overlapping timestamps accepted
+      - name: test_zero_plan_level_fields_with_overlapping_timestamps_still_rejected
+        covers: THE P0 regression -- all plan-level integers zero + overlapping timestamps -> rejected
+      - name: test_zero_plan_level_fields_train_interval_overlaps_test_availability
+        covers: P0 vector isolated -- train interval overlaps TEST availability with all plan-level integers zero
+      - name: test_timestamps_take_precedence_over_integer_horizon
+        covers: timestamp precedence over integer horizon fallback
+      - name: test_nat_timestamp_rejected
+        covers: NaT -> ValueError
+      - name: test_misaligned_lengths_rejected
+        covers: misaligned lengths -> ValueError
+      - name: test_end_before_start_rejected
+        covers: end < start -> ValueError
+      - name: test_timezone_ambiguity_rejected
+        covers: tz ambiguity (mixed aware/naive) -> ValueError
+      - name: test_duplicate_sample_ids_rejected
+        covers: duplicate sample identity -> ValueError
+      - name: test_unknown_availability_rejected
+        covers: unknown availability (no decision_times/availability) -> ValueError
+      - name: test_large_vectorized_case_completes_quickly
+        covers: 10k-sample vectorized case completes < 5s (no O(N^2) blowup)
+
+regression:
+  - file: factor_optimizer/tests/search/test_split_safety.py
+    result: "29 passed"
+  - file: factor_optimizer/tests/search/test_sealed_test_hardening.py
+    result: "32 passed"
+  - file: factor_optimizer/tests/search/ (full suite)
+    result: "346 passed, 6 failed"
+    pre_existing_failures:
+      - tests/search/test_runner.py::test_search_runner_resume_continues_from_checkpoint
+      - tests/search/test_runner.py::test_search_runner_resume_rejects_finished_or_mismatched_session
+      - tests/search/test_strategy_checkpoint_resume.py::test_strategy_state_capture_and_restore
+      - tests/search/test_strategy_checkpoint_resume.py::test_session_checkpoint_resume_exact_trajectory[RandomSearch]
+      - tests/search/test_strategy_checkpoint_resume.py::test_session_checkpoint_resume_exact_trajectory[TPESearch]
+      - tests/search/test_strategy_checkpoint_resume.py::test_session_checkpoint_resume_exact_trajectory[BayesianSearch]
+    note: >-
+      All 6 failures are identical to the pre-change baseline (332 passed / 6
+      failed before the change; 346 passed / 6 failed after, +14 new tests).
+      They are RNG-restore parity failures documented in loop/resume.md and
+      audit Q5, unrelated to this change.
+  - file: integration_tests/test_temporal_separation.py
+    result: "3 passed (INT-T1..T3)"
+    run_command: >-
+      cd /home/shw/quant_projects &&
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      /home/shw/quant_projects/.venv/bin/python -m pytest
+      integration_tests/test_temporal_separation.py -q --tb=short
+
+integration_test_update: >-
+  INT-T3 (test_label_horizon_beyond_t_is_rejected) previously PINNED the old
+  wiring gap: its FO section asserted only the enforced path (bundle +
+  plan-level label_horizon=3) and documented that a bundle alone with zero
+  plan-level fields silently skipped validation.  With GAP-1 closed, the test
+  now ALSO asserts the NEW behavior: a LabelBundle carrying aligned
+  label_start_times/label_end_times/decision_times with all plan-level integer
+  fields zero is rejected ("label interval overlaps test") by the
+  timestamp-interval path.  The QE-side evaluation-boundary gap (GAP-2,
+  label_end_time past the evaluation window) remains PINNED as acceptance and
+  is untouched.
+
+wiring_gaps:
+  - id: GAP-1
+    status: CLOSED
+    owner: factor_optimizer
+    file: factor_optimizer/factor_optimizer/contracts/splits.py
+    description: >-
+      The plan-level zero early-return no longer skips a LabelBundle with real
+      timestamps; timestamp interval validation is mandatory whenever the
+      bundle carries aligned vectors.
+  - id: GAP-2
+    status: OPEN
+    owner: quant_evaluator
+    severity: HIGH
+    description: >-
+      QE has no evaluation-boundary guard tying label_end_time to the factor
+      evaluation window.  A causal-chain-valid QE LabelBundle whose
+      label_end_time extends past the last evaluated factor row constructs and
+      evaluates today.  INT-T3 still pins this acceptance; a writer should add
+      the QE label-boundary guard and flip the pin to rejection.  Out of scope
+      for FO-P0-01.
+
+runtime_notes:
+  - "Synthetic vectors only; no full datasets.  The 10k-sample case is a
+     per-sample hour-spaced datetime vector with 30-minute label windows and a
+     30-minute inter-sample gap, chosen so no label window crosses any other
+     segment's availability point."
+  - "Vectorized interval intersection uses np.searchsorted on a sorted union of
+     the foreign segment's availability points; runtime is O(N log N), asserted
+     in test_large_vectorized_case_completes_quickly (< 5s wall for 10k)."

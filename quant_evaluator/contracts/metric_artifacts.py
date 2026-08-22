@@ -18,11 +18,18 @@ so artifacts cannot be mutated in place after validation.
 """
 
 from dataclasses import dataclass, field, fields as dataclass_fields
-from typing import Any, Dict, Mapping, Tuple
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 import numpy as np
 
 from quant_evaluator.contracts._hashutil import stable_content_hex, stable_hash
+from quant_evaluator.contracts.axis_refs import (
+    FactorAxisRef,
+    MatrixAxisRefs,
+    QuantileAxisRef,
+    TimeAxisRef,
+    axis_ref_from_dict,
+)
 from quant_evaluator.contracts.errors import InvalidContractError
 
 __all__ = [
@@ -99,6 +106,10 @@ class MetricArtifact:
         provenance: Mapping of provenance metadata (inputs, config hash,
             ...). Stored as an immutable plain-dict copy.
         created_from: Tuple of input names this artifact was derived from.
+        factor_axis: Optional :class:`FactorAxisRef` naming the F axis of
+            the payload.  When provided, its ``factor_ids`` length MUST equal
+            the payload's F (validated per subclass); the ids are unique by
+            construction of :class:`FactorAxisRef`.
     """
 
     metric_id: str
@@ -106,6 +117,7 @@ class MetricArtifact:
     artifact_kind: str
     provenance: Mapping[str, Any] = field(default_factory=dict)
     created_from: Tuple[str, ...] = ()
+    factor_axis: Optional[FactorAxisRef] = None
 
     def __post_init__(self) -> None:
         _check_metadata_string("metric_id", self.metric_id)
@@ -123,6 +135,22 @@ class MetricArtifact:
         object.__setattr__(self, "provenance", dict(self.provenance))
         object.__setattr__(self, "created_from", tuple(self.created_from))
         _check_string_tuple("created_from", self.created_from)
+        if self.factor_axis is not None and not isinstance(self.factor_axis, FactorAxisRef):
+            raise InvalidContractError(
+                "MetricArtifact.factor_axis must be a FactorAxisRef or None, got "
+                f"{type(self.factor_axis).__name__}"
+            )
+
+    def _validate_factor_axis_against_f(self, f: int) -> None:
+        """Fail closed when a provided factor_axis disagrees with the payload F."""
+        if self.factor_axis is None:
+            return
+        n = len(self.factor_axis.factor_ids)
+        if n != f:
+            raise InvalidContractError(
+                f"{type(self).__name__}.factor_axis declares {n} factor ids "
+                f"but the payload's last dimension is {f}"
+            )
 
     def __eq__(self, other: object) -> bool:
         """Value equality with elementwise ndarray comparison."""
@@ -148,6 +176,7 @@ class MetricArtifact:
             and self.artifact_kind == other.artifact_kind
             and dict(self.provenance) == dict(other.provenance)
             and tuple(self.created_from) == tuple(other.created_from)
+            and self.factor_axis == other.factor_axis
         )
 
     def __hash__(self) -> int:
@@ -160,6 +189,7 @@ class MetricArtifact:
             "artifact_kind": self.artifact_kind,
             "provenance": dict(self.provenance),
             "created_from": tuple(self.created_from),
+            "factor_axis": None if self.factor_axis is None else self.factor_axis.to_dict(),
         }
         for f in dataclass_fields(type(self)):
             if f.name in _base_field_names():
@@ -180,6 +210,7 @@ class MetricArtifact:
             "artifact_kind": self.artifact_kind,
             "provenance": dict(self.provenance),
             "created_from": list(self.created_from),
+            "factor_axis": None if self.factor_axis is None else self.factor_axis.to_dict(),
         }
         payload.update(self._payload_dict())
         return payload
@@ -207,6 +238,7 @@ class MetricArtifact:
             "artifact_kind": data["artifact_kind"],
             "provenance": dict(data.get("provenance", {})),
             "created_from": tuple(data.get("created_from", ())),
+            "factor_axis": axis_ref_from_dict(data.get("factor_axis")),
         }
         kwargs.update(cls._payload_from_dict(data))
         return cls(**kwargs)
@@ -231,6 +263,7 @@ class ScalarMetricArtifact(MetricArtifact):
             raise InvalidContractError(
                 f"ScalarMetricArtifact.values must be (F,), got shape {values.shape}"
             )
+        self._validate_factor_axis_against_f(int(values.shape[0]))
         object.__setattr__(self, "values", values)
 
     def _payload_dict(self) -> Dict[str, Any]:
@@ -243,12 +276,20 @@ class ScalarMetricArtifact(MetricArtifact):
 
 @dataclass(frozen=True, eq=False)
 class SeriesMetricArtifact(MetricArtifact):
-    """A time series per factor: values shape (T, F) plus a time index."""
+    """A time series per factor: values shape (T, F) plus a time index.
+
+    Optional :class:`TimeAxisRef` (``time_axis``) and
+    :class:`FactorAxisRef` (``factor_axis``) carry the axis identity
+    first-class.  When ``time_axis`` is provided its ``time_index`` length
+    must equal T, and ``factor_axis`` (when provided) must declare exactly F
+    factor ids.
+    """
 
     __artifact_kind__ = "series"
 
     values: np.ndarray = ()
     time_index: Tuple[Any, ...] = ()
+    time_axis: Optional[TimeAxisRef] = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -264,25 +305,50 @@ class SeriesMetricArtifact(MetricArtifact):
                 f"SeriesMetricArtifact.time_index length {len(self.time_index)} "
                 f"does not match T={values.shape[0]}"
             )
+        self._validate_factor_axis_against_f(int(values.shape[1]))
+        if self.time_axis is not None:
+            if not isinstance(self.time_axis, TimeAxisRef):
+                raise InvalidContractError(
+                    "SeriesMetricArtifact.time_axis must be a TimeAxisRef or None, "
+                    f"got {type(self.time_axis).__name__}"
+                )
+            if self.time_axis.time_index is not None and len(self.time_axis.time_index) != values.shape[0]:
+                raise InvalidContractError(
+                    f"SeriesMetricArtifact.time_axis declares "
+                    f"{len(self.time_axis.time_index)} time points but T={values.shape[0]}"
+                )
 
     def _payload_dict(self) -> Dict[str, Any]:
-        return {"values": self.values.tolist(), "time_index": list(self.time_index)}
+        return {
+            "values": self.values.tolist(),
+            "time_index": list(self.time_index),
+            "time_axis": None if self.time_axis is None else self.time_axis.to_dict(),
+        }
 
     @staticmethod
     def _payload_from_dict(data: Mapping[str, Any]) -> Dict[str, Any]:
         return {
             "values": np.asarray(data["values"]),
             "time_index": tuple(data.get("time_index", ())),
+            "time_axis": axis_ref_from_dict(data.get("time_axis")),
         }
 
 
 @dataclass(frozen=True, eq=False)
 class VectorMetricArtifact(MetricArtifact):
-    """A K-vector per factor (e.g. per-quantile returns): values (K, F)."""
+    """A K-vector per factor (e.g. per-quantile returns): values (K, F).
+
+    Optional :class:`QuantileAxisRef` (``quantile_axis``) and
+    :class:`FactorAxisRef` (``factor_axis``) carry the axis identity
+    first-class.  When ``quantile_axis`` is provided its label count must
+    equal K, and ``factor_axis`` (when provided) must declare exactly F
+    factor ids.
+    """
 
     __artifact_kind__ = "vector"
 
     values: np.ndarray = ()
+    quantile_axis: Optional[QuantileAxisRef] = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -291,23 +357,51 @@ class VectorMetricArtifact(MetricArtifact):
             raise InvalidContractError(
                 f"VectorMetricArtifact.values must be (K, F), got shape {values.shape}"
             )
+        self._validate_factor_axis_against_f(int(values.shape[1]))
+        if self.quantile_axis is not None:
+            if not isinstance(self.quantile_axis, QuantileAxisRef):
+                raise InvalidContractError(
+                    "VectorMetricArtifact.quantile_axis must be a QuantileAxisRef "
+                    f"or None, got {type(self.quantile_axis).__name__}"
+                )
+            if self.quantile_axis.num_quantiles != values.shape[0]:
+                raise InvalidContractError(
+                    f"VectorMetricArtifact.quantile_axis declares "
+                    f"{self.quantile_axis.num_quantiles} quantiles but K={values.shape[0]}"
+                )
         object.__setattr__(self, "values", values)
 
     def _payload_dict(self) -> Dict[str, Any]:
-        return {"values": self.values.tolist()}
+        return {
+            "values": self.values.tolist(),
+            "quantile_axis": (
+                None if self.quantile_axis is None else self.quantile_axis.to_dict()
+            ),
+        }
 
     @staticmethod
     def _payload_from_dict(data: Mapping[str, Any]) -> Dict[str, Any]:
-        return {"values": np.asarray(data["values"])}
+        return {
+            "values": np.asarray(data["values"]),
+            "quantile_axis": axis_ref_from_dict(data.get("quantile_axis")),
+        }
 
 
 @dataclass(frozen=True, eq=False)
 class MatrixMetricArtifact(MetricArtifact):
-    """A (K, K) matrix per factor (e.g. transition matrices): values (K, K, F)."""
+    """A (K, K) matrix per factor (e.g. transition matrices): values (K, K, F).
+
+    Optional :class:`MatrixAxisRefs` (``matrix_axis``) and
+    :class:`FactorAxisRef` (``factor_axis``) carry the axis identity
+    first-class.  When ``matrix_axis`` is provided its quantile count must
+    equal K, and ``factor_axis`` (when provided) must declare exactly F
+    factor ids.
+    """
 
     __artifact_kind__ = "matrix"
 
     values: np.ndarray = ()
+    matrix_axis: Optional[MatrixAxisRefs] = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -316,14 +410,34 @@ class MatrixMetricArtifact(MetricArtifact):
             raise InvalidContractError(
                 f"MatrixMetricArtifact.values must be (K, K, F), got shape {values.shape}"
             )
+        self._validate_factor_axis_against_f(int(values.shape[2]))
+        if self.matrix_axis is not None:
+            if not isinstance(self.matrix_axis, MatrixAxisRefs):
+                raise InvalidContractError(
+                    "MatrixMetricArtifact.matrix_axis must be a MatrixAxisRefs or "
+                    f"None, got {type(self.matrix_axis).__name__}"
+                )
+            if self.matrix_axis.num_quantiles != values.shape[0]:
+                raise InvalidContractError(
+                    f"MatrixMetricArtifact.matrix_axis declares "
+                    f"{self.matrix_axis.num_quantiles} quantiles but K={values.shape[0]}"
+                )
         object.__setattr__(self, "values", values)
 
     def _payload_dict(self) -> Dict[str, Any]:
-        return {"values": self.values.tolist()}
+        return {
+            "values": self.values.tolist(),
+            "matrix_axis": (
+                None if self.matrix_axis is None else self.matrix_axis.to_dict()
+            ),
+        }
 
     @staticmethod
     def _payload_from_dict(data: Mapping[str, Any]) -> Dict[str, Any]:
-        return {"values": np.asarray(data["values"])}
+        return {
+            "values": np.asarray(data["values"]),
+            "matrix_axis": axis_ref_from_dict(data.get("matrix_axis")),
+        }
 
 
 @dataclass(frozen=True, eq=False)
@@ -343,6 +457,7 @@ class DistributionMetricArtifact(MetricArtifact):
                 f"DistributionMetricArtifact.samples must be (B, F), "
                 f"got shape {samples.shape}"
             )
+        self._validate_factor_axis_against_f(int(samples.shape[1]))
         object.__setattr__(self, "samples", samples)
         object.__setattr__(self, "stat_names", tuple(self.stat_names))
         _check_string_tuple("stat_names", self.stat_names)

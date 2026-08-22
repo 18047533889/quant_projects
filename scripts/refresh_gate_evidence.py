@@ -1,23 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""REL-P0-01 companion — refresh per-gate gate evidence for the VerificationManifest.
+"""VER-P0-01 — refresh per-gate gate evidence by ACTUALLY running pytest.
 
-The manifest generator (scripts/gen_verification_manifest.py) defaults every
-release gate to NOT_RUN.  This script writes
-``evidence/verified_gate_evidence.json`` -- a machine-readable record of tests
-that were ACTUALLY run and PASSED on the current working tree.  The generator
-then folds those entries into the manifest as per-gate ``evidence:`` blocks
-(``{test, result, count, run_at}``) and upgrades gates to PASS, but ONLY for
-gates on the generator's provable set, and ONLY when the evidence exists.
+This script replaces the old hard-coded ``result: "passed" / count: N``
+pattern (VER-P0-01).  Every evidence entry is produced by
+``scripts/gate_runner.py``, which executes the exact pytest command via
+subprocess, parses the JUnit XML, and derives status strictly:
 
-Honesty contract (same as the manifest):
-  - Every PASS listed here must point at a test file that EXISTS in the
-    current tree and that we actually ran to a passing result.
-  - A missing or failing test is NOT listed; the gate stays NOT_RUN.
-  - ``run_at`` is the UTC timestamp of the run that produced the count.
+    PASS  <=> exit_code == 0 AND junit.failures == 0 AND junit.errors == 0
+              AND junit.tests > 0
 
-Output: evidence/verified_gate_evidence.json
-        (read by scripts/gen_verification_manifest.py -> evidence/VerificationManifest.json)
+No result/count in this output is written from configuration.  A gate that
+cannot prove a pass stays NOT_RUN / BLOCKED / FAIL.
+
+Output: evidence/verified_gate_evidence.json (read by
+        scripts/gen_verification_manifest.py -> evidence/VerificationManifest.json)
 
 LOCAL-ONLY: no git mutations, no network, no checkout/reset.
 """
@@ -25,162 +22,59 @@ from __future__ import annotations
 
 import datetime
 import json
-import subprocess
 import sys
-import time
 from pathlib import Path
+
+from gate_runner import GATE_SPECS, GateRunner, Status
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE_DIR = REPO_ROOT / "evidence"
 OUTPUT_PATH = EVIDENCE_DIR / "verified_gate_evidence.json"
 
-#: Per-gate evidence, keyed by gate name.  ``run_at`` is filled in by the
-#: helper below with the timestamp of the run that produced each count.
-#: IMPORTANT: these counts are produced by the runs recorded in this session
-#: (2026-08-21) against the CURRENT working tree; see evidence/r2/R21-VERIFICATION-
-#: MANIFEST-REFRESH.yaml for the exact commands.
-_GATES: list[dict] = [
-    {
-        "name": "CROSS_PACKAGE",
-        "evidence": [
-            {
-                "test": "integration_tests/test_cross_package_contracts.py",
-                "result": "passed",
-                "count": 6,
-                # run_at filled below
-            },
-        ],
-    },
-    {
-        "name": "ASHARE_SEMANTIC_CONTRACT_GOLDEN",
-        "evidence": [
-            {
-                "test": "integration_tests/test_ashare_semantic_golden.py",
-                "result": "passed",
-                "count": 8,
-            },
-        ],
-    },
-    {
-        "name": "ASHARE_REAL_DATA_SHADOW",
-        "evidence": [
-            {
-                "test": "integration_tests/test_real_ashare_shadow.py",
-                "result": "passed",
-                "count": 4,
-                "note": (
-                    "REAL pinned A-share mirror present "
-                    "(data/a_share/lqtp_data/StockDailyBar 2024-01-02..04). "
-                    "4 real-parquet assertions: Return=bp vs Close/PreClose, "
-                    "backward continuity Close*Factor, TurnoverRatio percent "
-                    "band, IsSuspend bool+present. If the mirror is absent "
-                    "this test SKIPS and the gate must NOT be cited as PASS."
-                ),
-            },
-        ],
-    },
-    {
-        "name": "PROPERTY",
-        "evidence": [
-            {
-                "test": "quant_evaluator/tests/test_metamorphic.py",
-                "result": "passed",
-                "count": 18,
-                "extra": "2 skipped (documented contract tests; a skip is not a pass)",
-            },
-            {
-                "test": "quant_evaluator/tests/test_consistency.py",
-                "result": "passed",
-                "count": 11,
-            },
-        ],
-    },
-    {
-        "name": "SERIALIZATION",
-        "evidence": [
-            {
-                "test": "quant_evaluator/tests/test_qe_serialization.py",
-                "result": "passed",
-                "count": 36,
-            },
-            {
-                "test": "factor_assets/tests/registry/test_serialization_codec.py",
-                "result": "passed",
-                "count": 17,
-            },
-        ],
-    },
-    {
-        "name": "CHECKPOINT_RESUME",
-        "evidence": [
-            {
-                "test": "factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py",
-                "result": "passed",
-                "count": 3,
-            },
-        ],
-    },
-    {
-        "name": "NUMERICAL_ORACLE",
-        "evidence": [
-            {
-                "test": "quant_evaluator/tests/test_numerical_oracle.py",
-                "result": "passed",
-                "count": 13,
-            },
-        ],
-    },
-]
-
-
-def _git_sha() -> str | None:
-    try:
-        out = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=str(REPO_ROOT),
-            capture_output=True, text=True, timeout=30,
-        )
-        if out.returncode == 0:
-            return out.stdout.strip()
-    except Exception:
-        pass
-    return None
-
 
 def main() -> int:
+    timeout = 600
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    runner = GateRunner()
+    artifact = runner.build_artifact(list(GATE_SPECS), timeout=timeout)
+
+    # Convert the raw run artifact into the manifest-consumer shape.  The
+    # machine fields (command_hash / exit_code / counts / executed_at) are
+    # carried verbatim from the runner — nothing is synthesized here.
     gates: list[dict] = []
-    for g in _GATES:
-        name = g["name"]
-        # Verify each cited test file EXISTS in the current tree.
-        existing: list[dict] = []
-        for it in g["evidence"]:
-            test_path = it["test"]
-            if not (REPO_ROOT / test_path).is_file():
-                print(
-                    f"  [drop] gate {name}: {test_path} does not exist in the "
-                    f"current tree -> not cited",
-                    file=sys.stderr,
-                )
-                continue
+    for g in artifact["gates"]:
+        entries: list[dict] = []
+        for e in g.get("evidence", []):
             entry = {
-                "test": test_path,
-                "result": it["result"],
-                "count": it["count"],
-                "run_at": now,
+                "test": e["test"],
+                "result": "passed" if e["status"] == Status.PASS else e["status"].lower(),
+                "command_hash": e["command_hash"],
+                "exit_code": e["exit_code"],
+                "passed": e["passed"],
+                "failed": e["failed"],
+                "errors": e["errors"],
+                "skipped": e["skipped"],
+                "xfailed": e["xfailed"],
+                "xpassed": e["xpassed"],
+                "tests": e["tests"],
+                "collected_tests": e["collected_tests"],
+                "duration_sec": e["duration_sec"],
+                "executed_at": e["executed_at"],
+                "run_at": e["executed_at"],
             }
-            if it.get("extra"):
-                entry["note"] = it["extra"]
-            existing.append(entry)
-        if not existing:
-            print(f"  [drop] gate {name}: no existing test evidence -> NOT_RUN", file=sys.stderr)
-            continue
-        gates.append({"name": name, "status": "PASS", "evidence": existing})
+            if e.get("timed_out"):
+                entry["note"] = "TIMEOUT"
+            entries.append(entry)
+        if entries:
+            gates.append({"name": g["name"], "status": g["status"], "evidence": entries})
+        else:
+            gates.append({"name": g["name"], "status": g["status"], "evidence": []})
 
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_by": "refresh_gate_evidence",
-        "git_sha": _git_sha(),
-        "timestamp": now,
+        "git_sha": artifact.get("git_sha"),
+        "timestamp": artifact.get("timestamp"),
         "gates": gates,
     }
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
@@ -189,7 +83,8 @@ def main() -> int:
         encoding="utf-8",
     )
     print(f"wrote {OUTPUT_PATH} ({OUTPUT_PATH.stat().st_size} bytes)")
-    print(f"gates with evidence: {', '.join(g['name'] for g in gates) or '(none)'}")
+    statuses = ", ".join(f"{g['name']}={g['status']}" for g in gates)
+    print(f"gates: {statuses or '(none)'}")
     return 0
 
 
