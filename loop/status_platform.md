@@ -3,31 +3,50 @@
 ## Current State
 
 ```
-coordinator: dispatching
-active_agents: 10
-last_update: 2026-08-21
+coordinator: reviewing results
+last_update: 2026-08-22
 ```
 
-## Active Items
+## Completed Items (R21 verification red-team round)
 
-- QE numerical oracle bootstrap fix (agent ac78043e)
-- FO checkpoint/resume 5-test fix (agent a8d639fc)
-- QE MappingProxy/serialization persistence (agent a2f58405)
-- FO ObjectiveSpec + strategy validation (agent a9bf0a31, resumed)
-- FA+QE P0 audit (agent a0bd9d70)
-- FP leakage + contracts hardening (agent ab83066c)
-- FE zero-copy ownership audit (agent a1dbcd8c)
-- VerificationManifest gate refresh (agent a97fc692)
-- FRESH_WHEEL install gate (agent a4bea68c)
-- QE scale-correctness gate tests (agent a328f1b5)
+The full red-team batch has landed:
 
-## Recent Activity
+| Area | Items | Status |
+|------|-------|--------|
+| VER-P0-01 | Gate runner (real pytest, no hardcoded PASS) | ✅ |
+| VER-P0-02 | Source binding (VER-P0-02 agent in flight) | 🔄 |
+| VER-P0-03/04 | CURRENT.json honesty (no self-certify) | ✅ |
+| FO-P0-01 | LabelBundle timestamp intervals | ✅ |
+| FO-P0-03 | Direction authority (ObjectiveSpec single authority) | ✅ |
+| FO-P0-06/07 | ObjectiveSpec system + strategy validation | ✅ |
+| FO checkpoint/resume | 5 failing tests → 385 FO search passed | ✅ |
+| FO-P1-01..04 | Counter, trial identity, int bounds, lazy grid | ✅ |
+| FA-P0-01..07 | Local audit (1 real gap fixed) | ✅ |
+| DA-P0-01..04 | DataReadIdentity | ✅ |
+| FE residency | 32p source residency gate | ✅ |
+| QE-P0-05/07 | Axis refs + registry seal | ✅ |
+| QE-P0-01/02/03/04/06 | Immutability + codec + artifact_kind | ✅ |
+| QE axis-merge | Reconciled concurrent-writer conflict | ✅ |
+| QE tracked-tree | Repaired repo-root QE tree (3 missing files) | ✅ |
+| FP-P0-01..05 | Manifest tiling + channels + axes + state | ✅ |
+| QE numerical oracle | 13p | ✅ |
+| FP leakage | 26p | ✅ |
+| QE serialization | 80p | ✅ |
+| QE scale gates | 6p | ✅ |
+| Fresh-wheel | 5 packages import/smoke | ✅ |
+| Manifest refresh | 6 gates PASS | ✅ |
+| CI/supply-chain | 17-stage workflow + security audit | ✅ |
+| R21 QE tracked-tree | 167 QE passed, standalone tracked-tree import | ✅ |
 
-- 2026-08-21: Re-verified baseline gates in current tree: cross-package 4p/2s, A-share golden 8p, manifest test 9p, QE consistency 11p, QE metamorphic 20p/2s, QE hash-stability 2p.
-- 2026-08-21: Identified stale VerificationManifest (all 14 gates NOT_RUN, stale sha) → dispatched refresh agent.
-- 2026-08-21: Identified QE numerical-oracle collection error (stub package shadows build/lib) and FO checkpoint/resume 5 failures → dispatched fix agents.
-- 2026-08-21: Reminder — use `/home/shw/quant_projects/.venv/bin/python` (bare `python` is not on PATH in this shell).
+## Recent Activity (2026-08-22)
+
+- Committed + pushed: QE tracked-tree repair, CI skeleton, submodule syncs
+- All 385 FO search tests pass
+- All 167 QE tests pass (2 skipped pre-existing)
+- All 52 FP tests pass
+- QE tracked tree now imports standalone (no build/lib dependency)
 
 ## Session Log
 
-- `2026-08-21` — Dispatched batch of 10 fix/audit/gate agents (QE oracle, FO checkpoint, QE serialization, FO objective, FA+QE audit, FP leakage, FE zerocopy, manifest refresh, fresh-wheel, scale gates). All running in background.
+- `2026-08-21` — Dispatched batch of 10 fix/audit/gate agents (QE oracle, FO checkpoint, QE serialization, FO objective, FA+QE audit, FP leakage, FE zerocopy, manifest refresh, fresh-wheel, scale gates). Resumed 6 agents after 400/524 errors.
+- `2026-08-22` — All 10+6 agents landed. FO search 385p, QE 167p/2s, FP 52p. QE tracked-tree broken at HEAD (axis_refs.py missing) — repaired. Full batch committed+pushed: 3 submodule commits + 1 parent commit + 1 gitlink sync commit.

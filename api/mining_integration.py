@@ -1496,7 +1496,12 @@ def default_typed_mining_search_space_config(
         signature_entry["lane"] = row.mining_lane
         signature_entry["mining_visible"] = row.mining_visible
         signature_entry["composition_usable"] = row.composition_usable
+        # R23: terminal_usable is the semantic gate; production_terminal_usable
+        # is the production gate (terminal_usable AND production_admitted).
+        # Mining consumers must use production_terminal_usable as the final
+        # flag for terminal placement in production.
         signature_entry["terminal_usable"] = row.terminal_usable
+        signature_entry["production_terminal_usable"] = row.production_terminal_usable
         signature_entry["production_admitted"] = row.production_admitted
         signature_entry["context_admitted"] = row.context_admitted
         signature_entry["output_domain"] = row.output_value_domain or ""
