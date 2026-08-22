@@ -1,0 +1,44 @@
+# 参数网格批量回测示例
+# 用法: python -m vectorbt_qs batch configs/config.batch.example.yaml
+
+market: ashare
+
+# 可以是单个路径、路径列表，或下面这种显式命名映射。
+# 多个仓位文件会与 batch.grid 的参数组合继续做笛卡尔积。
+input:
+  positions:
+    group_1: path/to/group_1_target_positions.parquet
+    group_2: path/to/group_2_target_positions.parquet
+
+# 所有批次共享的基础参数
+backtest:
+  start: 2024-01-01
+  end:
+  execution_mode: fast
+  freq: 1D
+  signal_time: close
+  execution_lag: 1
+  price_type: Open_adj
+  init_cash: 10000000
+  fees: 0.0
+  fixed_fees: 0.0
+  slippage: 0.0
+  benchmark_index: 000300.SH
+
+batch:
+  # 每个遍历条件必须显式写成列表。
+  # 以下配置生成 2 × 2 × 2 = 8 组参数；再乘以 2 个仓位文件，
+  # 最终运行 16 次回测。
+  grid:
+    freq: [1D, 1W]
+    fast_tradeability: [ignore, approximate]
+    limit_check_mode: [execution, strict]
+
+  max_runs: 256               # 防止意外生成过大的笛卡尔积
+  on_error: raise             # raise | continue
+  workers: 1                  # 1=串行；大批量 accurate 可设 2-4
+
+output:
+  dir: examples/output/factor_batch
+  plot: true                  # 输出批次 NAV 对比 PNG 和 HTML
+  plot_each: false            # 是否额外输出每组单独图表

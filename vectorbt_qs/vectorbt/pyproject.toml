@@ -1,0 +1,101 @@
+[build-system]
+requires = ["setuptools>=83.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vectorbt"
+dynamic = ["version"]
+description = "Python library for backtesting and analyzing trading strategies at scale"
+readme = "README.md"
+license-files = ["LICENSE.md"]
+authors = [
+    {name = "Oleg Polakow", email = "olegpolakow@vectorbt.pro"}
+]
+requires-python = ">=3.11,<3.15"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Software Development",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+    "numpy>=2.4.6",
+    "pandas>=3.0.3,<4.0",
+    "scipy",
+    "matplotlib",
+    "plotly>=4.12.0",
+    "ipywidgets>=7.0.0",
+    "anywidget",
+    "numba>=0.66",
+    "dill",
+    "tqdm",
+    "dateparser",
+    "imageio",
+    "scikit-learn",
+    "schedule",
+    "requests",
+    "pytz",
+    "mypy_extensions",
+]
+
+[project.optional-dependencies]
+rust = [
+    "vectorbt-rust==1.1.0",
+]
+full = [
+    "TA-Lib",
+    "yfinance>=0.2.22",
+    "python-binance",
+    "ccxt>=4.0.14",
+    "alpaca-py",
+    "ray>=1.4.1",
+    "ta",
+    "pandas-ta-classic",
+    "python-telegram-bot>=13.4",
+    "quantstats>=0.0.37",
+]
+test = [
+    "pytest",
+    "pytest-cov",
+    "pytest-xdist",
+    "codecov",
+]
+test-rust = [
+    "vectorbt[test]",
+    "maturin>=1.14,<2.0",
+]
+docs = [
+    "mkdocs-material",
+    "mkdocs-minify-plugin",
+    "ruamel.yaml",
+    "mako",
+]
+all = [
+    "vectorbt[rust]",
+    "vectorbt[full]",
+    "vectorbt[test]",
+    "vectorbt[docs]",
+]
+
+[project.urls]
+Homepage = "https://github.com/polakowo/vectorbt"
+
+[tool.setuptools.dynamic]
+version = {attr = "vectorbt._version.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["vectorbt*"]
+
+[tool.setuptools.package-data]
+vectorbt = ["templates/*.json"]
+
+[tool.black]
+line-length = 120

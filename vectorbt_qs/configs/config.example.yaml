@@ -1,0 +1,50 @@
+# ============================================================
+# vectorbt_qs 回测配置文件 (示例)
+# 用法: python -m vectorbt_qs run configs/config.example.yaml
+# 输出: 默认 → examples/output/{配置文件名}/
+# ============================================================
+
+# 市场: ashare | us
+market: ashare
+
+# 输入: target_positions.parquet 路径
+input:
+  positions: ../../benchmarks/gtja191_alpha191_meanvar_hist/results/gtja191_alpha191_meanvar_hist_v1_1/target_positions.parquet
+
+# 回测参数
+backtest:
+  start: 2024-01-01              # 默认回测起点
+  end:                            # 留空 = 仓位数据末日
+  init_cash: 10000000           # 初始资金
+  freq: 1D                       # 调仓频率 (1D=日频)
+  execution_mode: accurate       # 准确模式：显式现金、股数和订单
+  signal_time: close             # 权重在收盘后产生
+  execution_lag: 1               # 延迟 1 个交易日，即下一交易日执行
+  price_type: open               # 原始开盘价成交
+  benchmark_index: 000300.SH     # 基准指数
+  costs:
+    commission: 0.00025          # 双边佣金率
+    stamp_tax: 0.0005            # 卖出印花税率
+    transfer_fee: 0.00001        # 双边过户费率
+    minimum_commission: 5.0      # 单笔最低佣金
+  slippage: 0.001                # 滑点 0.1%
+
+# 输出目录（可选；默认 = examples/output/{配置文件名}/）
+# output:
+#   dir: examples/output/my_backtest      # 输出目录
+
+# 可选：使用 Barra-lite B/f 做组合、基准与主动暴露分析
+analysis:
+  exposure:
+    enabled: false
+    risk_model_root: ../../v2_sbi_mvl_fullA
+    benchmark_data_root: ../../lqtp_data
+    benchmark_index: 000300.SH
+    weight_source: realized_close
+    missing_policy: report_unknown
+    min_portfolio_coverage: 0.98
+    min_benchmark_coverage: 0.995
+    include_attribution: true       # 实验性事后 B×f 归因
+    plot: true
+    png_dpi: 150
+    industry_top_n: 10

@@ -5,8 +5,8 @@ backend-path = ["."]
 
 [project]
 name = "quant-projects"
-version = "0.3.1"
-description = "Quantitative research umbrella project: factor engine, data access, and orchestration"
+version = "0.4.0"
+description = "Quantitative research umbrella project: factor engine, data access, vectorbt backtesting, and orchestration"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -38,11 +38,35 @@ clickhouse = ["clickhouse-connect>=0.8"]
 sql = ["sqlglot>=25.0"]
 dev = ["pytest>=8.0", "pydantic>=2.0", "fastapi>=0.110", "httpx>=0.27", "build>=1.2", "twine>=5.0"]
 full = ["polars>=0.20", "duckdb>=0.10", "psutil>=5.9", "data-access>=0.10.0"]
+# vectorbt-qs backtesting (requires Python >=3.11,<3.13)
+vectorbt = [
+    "numpy>=1.26,<2",
+    "pandas>=2.2,<3",
+    "scipy",
+    "matplotlib",
+    "plotly>=4.12.0",
+    "ipywidgets>=7.0.0",
+    "anywidget",
+    "numba>=0.60,<0.61",
+    "dill",
+    "tqdm",
+    "dateparser",
+    "imageio",
+    "scikit-learn",
+    "schedule",
+    "requests",
+    "pytz",
+    "mypy-extensions",
+    "pyarrow>=15",
+    "duckdb>=1.0",
+    "cos-python-sdk-v5>=1.9.0",
+]
 
 [project.scripts]
 factor-engine-serve = "factor_engine.service.app:main"
 data-access-server = "dataaccess.data_access.service.__main__:main"
 data-access-quality = "dataaccess.data_access.quality.cli:main"
+vectorbt-qs = "vectorbt_qs.cli:main"
 
 [tool.setuptools]
 py-modules = [
@@ -96,6 +120,13 @@ include = [
     "dataaccess.data_access.r30",
     "dataaccess.data_access.export",
     "dataaccess.data_access.telemetry",
+    "vectorbt_qs",
+    "vectorbt_qs.mvp",
+    "vectorbt_qs.mvp.analysis",
+    "vectorbt_qs.mvp.constraints",
+    "vectorbt_qs.mvp.data",
+    "vectorbt_qs.mvp.engine",
+    "vectorbt_qs.mvp.examples",
 ]
 exclude = [
     "tests", "tests.*",
@@ -122,12 +153,18 @@ exclude = [
 "dataaccess.data_access.r30" = "dataaccess/r30"
 "dataaccess.data_access.export" = "dataaccess/export"
 "dataaccess.data_access.telemetry" = "dataaccess/telemetry"
+"vectorbt_qs" = "vectorbt_qs"
 
 [tool.setuptools.package-data]
 "evidence" = ["*.json", "*.yaml"]
 "docs" = ["*.json", "*.yaml", "*.md"]
 "cleaned_operators" = ["docs/*"]
 dataaccess = ["config/*.yaml", "config/README.md", "docs/*.md"]
+vectorbt_qs = [
+    "vectorbt/vectorbt/*.py",
+    "vectorbt/vectorbt/**/*.py",
+    "vectorbt/vectorbt/**/*.json",
+]
 
 [tool.setuptools.exclude-package-data]
 "*" = [

@@ -1,0 +1,27 @@
+# A 股无摩擦因子分层研究配置
+# 用法: python -m vectorbt_qs run configs/config.factor_fast.example.yaml
+market: ashare
+
+input:
+  positions: path/to/target_positions.parquet
+
+backtest:
+  start: 2024-01-01              # 默认回测起点
+  end:                            # 留空 = 仓位数据末日
+  execution_mode: fast
+  freq: 1D                       # 1D 或 1W；周频取每周最后一个信号
+  signal_time: close             # 固定：收盘后产生信号
+  execution_lag: 1               # 固定：下一交易日执行
+  price_type: Open_adj           # 固定：复权开盘价
+  fast_tradeability: ignore      # ignore | approximate
+  limit_check_mode: execution    # execution | strict；仅 approximate 生效
+  limit_price_rtol: 0.00001      # 日内高低价触及涨跌停的相对容差
+  limit_price_atol: 0.00000001   # 日内高低价触及涨跌停的绝对容差
+
+  init_cash: 10000000            # 只改变金额尺度，不应改变收益率
+  fees: 0.0                      # 固定为 0
+  fixed_fees: 0.0                # 固定为 0
+  slippage: 0.0                  # 固定为 0
+
+output:
+  plot: true

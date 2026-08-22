@@ -1,0 +1,2 @@
+*.ipynb linguist-language=Python
+*.rs linguist-language=Rust

@@ -1,0 +1,45 @@
+{
+  "baseline": "B002_meanvar_1D_python",
+  "contract": "legacy_adjusted_price_v1",
+  "valid_for_standard_accurate_v2": false,
+  "engine": "python",
+  "config": {
+    "init_cash": 10000000,
+    "freq": "1D",
+    "execution_mode": "accurate",
+    "signal_time": "close",
+    "execution_lag": 1,
+    "price_type": "Open_adj",
+    "benchmark_index": "000300.SH",
+    "costs": {
+      "commission": 0.00025,
+      "stamp_tax": 0.0005,
+      "transfer_fee": 1e-05,
+      "minimum_commission": 5.0
+    },
+    "slippage": 0.0
+  },
+  "target_shape": [
+    2294,
+    300
+  ],
+  "portfolio_shape": [
+    2295,
+    300
+  ],
+  "elapsed_seconds": 36.22365680000803,
+  "order_count": 35900,
+  "execution_log_count": 35925,
+  "start": "2017-01-11 00:00:00",
+  "end": "2026-06-29 00:00:00",
+  "start_nav": 10000000.0,
+  "end_nav": 14579566.095176164,
+  "total_return_pct": 45.79566095176167,
+  "total_fees": 7214692.901977847,
+  "files": {
+    "nav.parquet": "a44ea6433c7476c3cbb47b81c55528dbba8c3770e49ff874d0014274784f74c8",
+    "orders.parquet": "154a49ea1bf50dcb8587dad8ef50d037f5051ef1b90e0a1520b48ffa61ded0e0",
+    "final_assets.parquet": "d5493f0e34d09ce9d536984dc262e075d862566aac3dd02f5338177d70910ef8",
+    "execution_log.parquet": "1f2863533e0d175a444b47fd25f7295efc7f59a09262ab83c8739ad5791a0d2e"
+  }
+}

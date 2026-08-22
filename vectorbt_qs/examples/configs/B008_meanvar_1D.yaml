@@ -1,0 +1,18 @@
+# B008: tree_xgboost_h1 meanvar  |  日频
+market: ashare
+input:
+  positions: D:\quantsociety\whh_local_workspace\benchmarks\tree_xgboost_h1_meanvar_hist\results\tree_xgboost_h1_meanvar_hist_v1\target_positions.parquet
+backtest:
+  init_cash: 10000000
+  freq: 1D
+  execution_mode: accurate
+  signal_time: close
+  execution_lag: 1
+  price_type: open
+  benchmark_index: 000300.SH
+  costs:
+    commission: 0.00025
+    stamp_tax: 0.0005
+    transfer_fee: 0.00001
+    minimum_commission: 5.0
+  slippage: 0.0

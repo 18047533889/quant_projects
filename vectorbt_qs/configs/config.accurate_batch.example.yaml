@@ -1,0 +1,22 @@
+# 冻结准确回测口径：standard_accurate_v2
+# 用户只需要修改下面三个路径。
+# 相对路径以本 YAML 所在的 vectorbt_qs/configs 目录为基准。
+# 在工作区根目录运行:
+# python -m vectorbt_qs batch .\vectorbt_qs\configs\config.accurate_batch.example.yaml
+
+input:
+  positions: ../../strategy_data/target_positions.parquet
+  barra_root: ../../v2_sbi_mvl_fullA
+
+output:
+  root: ../../backtest_results/standard_accurate_v2
+
+batch:
+  profile: standard_accurate_v2
+  workers: 1                  # 1=串行；可设 2-4 启用多进程
+
+# 可选。start 不写时固定默认为 2024-01-01；
+# end 不写时使用仓位数据的最后日期。
+backtest:
+  start: 2024-01-01
+  end:

@@ -1,0 +1,29 @@
+# ============================================================
+# B001: gtja191_alpha191  |  topn_long_only_equal_weight
+# ============================================================
+# 信号源:  GTJA191 Alpha191 单因子
+# 优化器:  Top-50 等权做多 (topn=50, max_single_name=0.05)
+# 风险模型: 无
+# 标的池:   全量 alpha 覆盖 (~5122 只)
+# 区间:     2017-01-11 ~ 2026-06-26 (2294 交易日)
+# ============================================================
+
+market: ashare
+
+input:
+  positions: D:\quantsociety\whh_local_workspace\benchmarks\gtja191_alpha191_topn\results\gtja191_alpha191_topn_v1\target_positions.parquet
+
+backtest:
+  init_cash: 10000000           # 初始资金
+  freq: 1D                       # 调仓频率 (1D=日频)
+  execution_mode: accurate
+  signal_time: close
+  execution_lag: 1               # 下一交易日执行
+  price_type: open
+  benchmark_index: 000300.SH     # 基准指数 (沪深300)
+  costs:
+    commission: 0.00025
+    stamp_tax: 0.0005
+    transfer_fee: 0.00001
+    minimum_commission: 5.0
+  slippage: 0.0                  # 滑点

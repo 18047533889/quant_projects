@@ -1,0 +1,29 @@
+# ============================================================
+# B005: linear_ridge_h1  |  topn_long_only_equal_weight
+# ============================================================
+# 信号源:  Ridge 回归预测 (horizon=1), OOS 预测值
+# 优化器:  Top-50 等权做多
+# 风险模型: 无
+# 标的池:  全量预测覆盖 (~5112 只)
+# 区间:    2020-07-28 ~ 2026-06-26 (1433 交易日)
+# ============================================================
+
+market: ashare
+
+input:
+  positions: D:\quantsociety\whh_local_workspace\benchmarks\linear_ridge_h1_topn\results\linear_ridge_h1_topn_v1\target_positions.parquet
+
+backtest:
+  init_cash: 10000000
+  freq: 1D
+  execution_mode: accurate
+  signal_time: close
+  execution_lag: 1
+  price_type: open
+  benchmark_index: 000300.SH
+  costs:
+    commission: 0.00025
+    stamp_tax: 0.0005
+    transfer_fee: 0.00001
+    minimum_commission: 5.0
+  slippage: 0.0

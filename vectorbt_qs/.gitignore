@@ -1,0 +1,62 @@
+# Python 虚拟环境
+venv/
+env/
+.venv/
+.venv*/
+.conda/
+
+# vectorbt 源码（从上游克隆，纳入版本控制）
+# 排除上游 git 历史，只保留源码
+vectorbt/.git/
+
+# 数据文件与本地缓存（不纳入版本控制）
+data/**/*.parquet
+data/cache/
+
+# 回测产物。小型回归基线只放在 tests/baselines。
+examples/output/
+/outputs/
+/backtest_results/
+
+# 测试、类型检查、Notebook 和覆盖率缓存
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.ipynb_checkpoints/
+
+# Python/Numba 缓存与构建产物
+__pycache__/
+*.pyc
+*.pyo
+*.nbi
+*.nbc
+*.egg-info/
+dist/
+build/
+.tmp_dist/
+
+# 本地配置、日志和归档
+.env
+.env.*
+!.env.example
+configs/local/
+configs/*.local.yaml
+*.log
+*.zip
+
+# IDE 配置
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 操作系统
+.DS_Store
+Thumbs.db

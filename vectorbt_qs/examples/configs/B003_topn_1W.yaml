@@ -1,0 +1,18 @@
+# B003: composite169_ic topn 等权  |  周频
+market: ashare
+input:
+  positions: D:\quantsociety\whh_local_workspace\benchmarks\gtja191_composite169_ic_topn\results\gtja191_composite169_ic_topn_v1\target_positions.parquet
+backtest:
+  init_cash: 10000000
+  freq: 1W
+  execution_mode: accurate
+  signal_time: close
+  execution_lag: 1               # 周末信号后的下一交易日执行
+  price_type: open
+  benchmark_index: 000300.SH
+  costs:
+    commission: 0.00025
+    stamp_tax: 0.0005
+    transfer_fee: 0.00001
+    minimum_commission: 5.0
+  slippage: 0.0

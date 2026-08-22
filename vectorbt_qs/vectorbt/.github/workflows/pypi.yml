@@ -1,0 +1,227 @@
+name: PyPi
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and upload artifacts, but skip PyPI and Docker publishing."
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  vectorbt-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+          fetch-depth: 1
+          fetch-tags: true
+          filter: blob:none
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build release distributions
+        run: |
+          python -m pip install build
+          python -m build
+
+      - name: Upload vectorbt distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: vectorbt-dists
+          path: dist/
+
+  rust-sdist:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+          fetch-depth: 1
+          fetch-tags: true
+          filter: blob:none
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build vectorbt-rust source distribution
+        run: |
+          python -m pip install maturin
+          python -m maturin sdist --manifest-path rust/Cargo.toml --out dist
+
+      - name: Upload vectorbt-rust source distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: vectorbt-rust-sdist
+          path: dist/
+
+  rust-wheels:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            python-version: "3.11"
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            python-version: "3.12"
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            python-version: "3.13"
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            python-version: "3.14"
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            python-version: "3.11"
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            python-version: "3.12"
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            python-version: "3.13"
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            python-version: "3.14"
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            python-version: "3.11"
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            python-version: "3.12"
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            python-version: "3.13"
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            python-version: "3.14"
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            python-version: "3.11"
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            python-version: "3.12"
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            python-version: "3.13"
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            python-version: "3.14"
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            python-version: "3.11"
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            python-version: "3.12"
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            python-version: "3.13"
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            python-version: "3.14"
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+          fetch-depth: 1
+          fetch-tags: true
+          filter: blob:none
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Build vectorbt-rust wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --locked --manifest-path rust/Cargo.toml --out dist --compatibility pypi -i python${{ matrix.python-version }}
+          sccache: "true"
+          manylinux: auto
+
+      - name: Upload vectorbt-rust wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: vectorbt-rust-wheel-${{ matrix.target }}-py${{ matrix.python-version }}
+          path: dist/
+
+  vectorbt-rust-publish:
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    needs:
+      - rust-sdist
+      - rust-wheels
+    permissions:
+      id-token: write
+
+    environment:
+      name: pypi
+
+    steps:
+      - name: Retrieve vectorbt-rust distributions
+        uses: actions/download-artifact@v4
+        with:
+          pattern: vectorbt-rust-*
+          path: dist/
+          merge-multiple: true
+
+      - name: Publish vectorbt-rust distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
+  vectorbt-publish:
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    needs:
+      - vectorbt-build
+      - vectorbt-rust-publish
+    permissions:
+      id-token: write
+
+    environment:
+      name: pypi
+
+    steps:
+      - name: Retrieve vectorbt distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: vectorbt-dists
+          path: dist/
+
+      - name: Publish vectorbt distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
+  docker-publish:
+    if: ${{ !inputs.dry_run }}
+    needs:
+      - vectorbt-publish
+    uses: ./.github/workflows/docker.yml
+    with:
+      ref: ${{ github.event.release.tag_name || github.ref }}
+      version: ${{ github.event.release.tag_name }}
+      prerelease: ${{ github.event.release.prerelease || false }}
+    secrets: inherit

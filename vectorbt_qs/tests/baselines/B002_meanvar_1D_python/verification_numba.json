@@ -1,0 +1,18 @@
+{
+  "status": "passed",
+  "config": "D:\\quantsociety\\whh_local_workspace\\vectorbt_qs\\examples\\configs\\B002_meanvar_1D.yaml",
+  "baseline_dir": "D:\\quantsociety\\whh_local_workspace\\vectorbt_qs\\tests\\baselines\\B002_meanvar_1D_python",
+  "planner_engine": "numba",
+  "elapsed_seconds": 11.424000999992131,
+  "nav_rows": 2295,
+  "order_count": 35900,
+  "execution_log_count": 35925,
+  "start_nav": 10000000.0,
+  "end_nav": 14579566.095176164,
+  "max_nav_abs_diff": 0.0,
+  "max_cash_abs_diff": 0.0,
+  "max_return_abs_diff": 0.0,
+  "orders_exact": true,
+  "final_assets_exact": true,
+  "execution_log_exact": true
+}
