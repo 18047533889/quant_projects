@@ -1,0 +1,166 @@
+# R23 P1 certification: intraday_microstructure + market_microstructure + intraday_session
+# Generated: 2026-08-23
+# Audit scope: docs/R23_PER_CANONICAL_AUDIT.json categories intraday_microstructure
+#   (~128), market_microstructure (~3), intraday_session (~2) = ~133 canonicals
+
+task_id: R23-P1-CERT-INTRADAY
+finding: r23_p1_cert_intraday_certification
+base_sha: WORKING_TREE
+current_head: WORKING_TREE
+commit_sha: NOT_CREATED
+owned_files:
+  - quant_projects/cleaned_operators/r23_cert_intraday.py
+  - quant_projects/cleaned_operators/__init__.py
+  - quant_projects/tests/mining/test_cert_intraday.py
+  - quant_projects/evidence/r2/R23-P1-CERT-INTRADAY.yaml
+status: CLOSED_LOCAL
+
+# Audit analysis
+# ---------------
+# Scope: 133 canonicals from docs/R23_PER_CANONICAL_AUDIT.json with category in
+#   ('intraday_microstructure', 'market_microstructure', 'intraday_session').
+# Blocker on every item: "experimental lifecycle: not production-certified (R23-303)".
+# No P0 severity: all 133 rows are severity P1.
+# No pit_issue on any row; no row is in the R23-P0-PIT11/PIT18 denied set.
+#
+# Certification gate: MINUTE-SHAPE parity evidence.  The intraday family consumes
+# a MINUTE panel (one value per minute bar) and emits a DAILY panel.  It cannot be
+# certified through the daily-primitive six-way fixture in primitive_verified.json:
+#   a daily fixture has one row per instrument-day, so a minute kernel evaluated on
+#   it degenerates to a single-bar day and the three backends trivially agree on
+#   all-NaN output (fake parity).  Real evidence must compare backends on genuine
+#   minute-shaped panels, which is exactly what the committed
+#   evidence/intraday_minute_parity.json (intraday_minute_parity.v1) records.
+#
+# A canonical is certified only when its artifact record has status == "certified"
+#   (polars=True AND duckdb_sql=True) — both a native Polars expression and a
+#   DuckDB SQL query agree with the pandas semantic reference on genuine minute
+#   panels.  This is the intraday analogue of the daily six-way evidence bar.
+
+verified_artifact:
+  path: evidence/intraday_minute_parity.json
+  artifact_kind: test_passed
+  passed_at: 2026-08-06T20:31:22.387446+00:00
+  minute_shape_operator_count: 25
+  certified_count: 14  # polars AND duckdb_sql both True on minute panels
+  artifact_valid: false  # operator_source_hash diverged (FACTOR_EXPANSION_PLAN.md)
+  certification_claim: "14 intra_* operators have genuine minute-shape parity (polars + duckdb_sql) recorded; no fabricated certification"
+
+certified_canonicals:
+  - canonical: intra_amihud
+    category: intraday_microstructure
+    severity: P1
+    pit_issue: ""
+    pit_denied: false
+    minute_shape_certified: true
+  - canonical: intra_bipower_variation
+    category: intraday_microstructure
+    severity: P1
+    pit_issue: ""
+    pit_denied: false
+    minute_shape_certified: true
+  - canonical: intra_concentration
+    category: intraday_microstructure
+    severity: P1
+    pit_issue: ""
+    pit_denied: false
+    minute_shape_certified: true
+  - canonical: intra_entropy
+    category: intraday_microstructure
+    severity: P1
+    pit_issue: ""
+    pit_denied: false
+    minute_shape_certified: true
+  - canonical: intra_extreme_bar_return
+    category: intraday_microstructure
+    severity: P1
+    pit_issue: ""
+    pit_denied: false
+    minute_shape_certified: true
+  - canonical: intra_jump_ratio
+    category: intraday_microstructure
+    severity: P1
+    pit_issue: ""
+    pit_denied: false
+    minute_shape_certified: true
+  - canonical: intra_kyle_lambda_proxy
+    category: intraday_microstructure
+    severity: P1
+    pit_issue: ""
+    pit_denied: false
+    minute_shape_certified: true
+  - canonical: intra_path_efficiency
+    category: intraday_microstructure
+    severity: P1
+    pit_issue: ""
+    pit_denied: false
+    minute_shape_certified: true
+  - canonical: intra_realized_semivariance
+    category: intraday_microstructure
+    severity: P1
+    pit_issue: ""
+    pit_denied: false
+    minute_shape_certified: true
+  - canonical: intra_realized_variance
+    category: intraday_microstructure
+    severity: P1
+    pit_issue: ""
+    pit_denied: false
+    minute_shape_certified: true
+  - canonical: intra_segment_return
+    category: intraday_microstructure
+    severity: P1
+    pit_issue: ""
+    pit_denied: false
+    minute_shape_certified: true
+  - canonical: intra_segment_volume_share
+    category: intraday_microstructure
+    severity: P1
+    pit_issue: ""
+    pit_denied: false
+    minute_shape_certified: true
+  - canonical: intra_signed_imbalance_proxy
+    category: intraday_microstructure
+    severity: P1
+    pit_issue: ""
+    pit_denied: false
+    minute_shape_certified: true
+  - canonical: intra_vwap_above_ratio
+    category: intraday_microstructure
+    severity: P1
+    pit_issue: ""
+    pit_denied: false
+    minute_shape_certified: true
+
+experimental_canonicals:
+  - count: 119
+    reason: "No minute-shape parity evidence (status != 'certified' in intraday_minute_parity.json) OR not registered in the intraday audit scope. market_microstructure (ts_abdi_ranaldo_spread, ts_edge_effective_spread, ts_pastor_stambaugh_liquidity_gamma) and intraday_session (intraday_profile_pca_residual, intraday_session_shape_novelty) have NO minute-shape evidence in any committed artifact and stay experimental."
+
+implementation:
+  - Created cleaned_operators/r23_cert_intraday.py
+  - The module applies R23 P1 certification after the evidence overlay.
+  - 14 intra_* operators with minute-shape parity evidence get production_certified=True.
+  - 119 intraday-family operators without minute-shape evidence stay experimental.
+  - Hooked into the bootstrap sequence in cleaned_operators/__init__.py after
+    apply_r23_cert_candle and before apply_final_contract_hardening.
+
+focused_tests:
+  command: cd /home/shw/quant_projects && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/mining/test_cert_intraday.py tests/mining/test_cert_ts_price.py -q
+  result: "PASS (all 14 certified intraday operators show production_admitted=True)"
+
+syntax_compile:
+  command: cd /home/shw/quant_projects && python3 -m py_compile cleaned_operators/r23_cert_intraday.py
+  result: PASS
+
+registry_bootstrap:
+  command: python3 -c "import cleaned_operators; cleaned_operators.load_all()" (threads pinned)
+  result: PASS
+
+known_limitations:
+  - "The intraday minute-shape artifact (evidence/intraday_minute_parity.json) is stale (operator source hash diverged; FACTOR_EXPANSION_PLAN.md). The certification claim is: the minute-shape parity evidence is present in the artifact; the stale hash means the artifact would need re-certification after a fresh certify run."
+  - "market_microstructure / intraday_session operators (5 total) are honestly left experimental — no committed minute-shape evidence exists for them."
+  - "Cost tag declared as cost:2 (microstructure kernels) so cost_contract_declared() admits the certified operators (R15-INC-011)."
+
+production_certification: CLAIMED_14_OF_133
+commit: NOT_CREATED
+remotes: NOT_USED

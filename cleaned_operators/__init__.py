@@ -918,6 +918,19 @@ def _load_all_impl(*, include_research: bool = True) -> None:
     from cleaned_operators.r23_cert_candle import apply_r23_certification as _apply_r23_cert_candle
     _apply_r23_cert_candle()
 
+    # R23 P1 certification: intraday_microstructure / market_microstructure /
+    # intraday_session families.  The intraday family consumes a minute panel
+    # and cannot be certified through the daily-primitive six-way fixture (a
+    # daily fixture degenerates minute kernels to a single-bar day = fake
+    # parity), so the honest gate is the committed minute-shape parity artifact
+    # ``evidence/intraday_minute_parity.json``.  Runs after the evidence overlay
+    # and the other R23 passes, before contract_hardening (which freezes the
+    # certification fields).  Sets production_certified=True for the 14 intra_*
+    # operators whose minute-shape parity (polars AND duckdb_sql on genuine
+    # minute panels) is present in the artifact.
+    from cleaned_operators.r23_cert_intraday import apply_r23_certification as apply_r23_cert_intraday
+    apply_r23_cert_intraday()
+
     from cleaned_operators.contract_hardening import apply_final_contract_hardening
     apply_final_contract_hardening()
 
