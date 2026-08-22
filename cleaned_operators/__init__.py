@@ -931,6 +931,18 @@ def _load_all_impl(*, include_research: bool = True) -> None:
     from cleaned_operators.r23_cert_intraday import apply_r23_certification as apply_r23_cert_intraday
     apply_r23_cert_intraday()
 
+    # R23 P1 certification: fundamental_period / shareholder / valuation families.
+    # These are point-in-time (PIT-sensitive) financial-data operators.  Same
+    # data-driven guard as the other R23 P1 passes, with an explicit PIT-denial
+    # filter so the R23-P0-PIT11/PIT18 expectation/revision/restatement canonicals
+    # (already fail-closed via production_hardening.NON_FACTOR_PRODUCTION_CANONICALS)
+    # are NEVER re-certified here.  Honest finding: no in-scope operator has
+    # six-way primitive evidence in the artifact, so the certified set is empty
+    # and this is a safe no-op.  It stays wired so genuine future six-way evidence
+    # promotes automatically (cost tier: financial family = tier 2 => cost:2).
+    from cleaned_operators.r23_cert_fundamental import apply_r23_certification as _apply_r23_cert_fundamental
+    _apply_r23_cert_fundamental()
+
     from cleaned_operators.contract_hardening import apply_final_contract_hardening
     apply_final_contract_hardening()
 

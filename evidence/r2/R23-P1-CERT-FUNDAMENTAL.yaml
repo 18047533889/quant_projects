@@ -1,0 +1,98 @@
+# R23 P1 certification: fundamental_period + shareholder + valuation
+# Generated: 2026-08-22
+# Audit scope: docs/R23_PER_CANONICAL_AUDIT.json categories fundamental_period
+#   (~159), shareholder (~31), valuation (~15) = 205 canonicals
+
+task_id: R23-P1-CERT-FUNDAMENTAL
+finding: r23_p1_cert_fundamental_certification
+base_sha: WORKING_TREE
+current_head: WORKING_TREE
+commit_sha: NOT_CREATED
+owned_files:
+  - quant_projects/cleaned_operators/r23_cert_fundamental.py
+  - quant_projects/cleaned_operators/__init__.py
+  - quant_projects/tests/mining/test_cert_fundamental.py
+  - quant_projects/evidence/r2/R23-P1-CERT-FUNDAMENTAL.yaml
+status: CLOSED_LOCAL
+
+# Audit analysis
+# ---------------
+# Scope: 205 canonicals from docs/R23_PER_CANONICAL_AUDIT.json with category in
+#   ('fundamental_period', 'shareholder', 'valuation').
+# Blocker on every item: "experimental lifecycle: not production-certified (R23-303)".
+#
+# P0 severity: 21 items — fin_* expectation/revision/restatement ops.  These are
+#   EXACTLY the R23-P0-PIT11/PIT18 denied set (NON_FACTOR_PRODUCTION_CANONICALS in
+#   production_hardening.py).  They are fail-closed and are NEVER re-certified here.
+# Remaining 184 items: P1 severity, no P0, not in the PIT denied set.
+#
+# Certification gate: six-way primitive evidence
+#   (polars_reference_parity ∩ polars_edge_verified ∩ duckdb_reference_parity ∩
+#    duckdb_real_sql_verified ∩ (duckdb_edge_verified ∪ duckdb_nan_edge_verified) ∩
+#    no_fallback_verified)
+#   from evidence/primitive_verified.json (79 operators total).
+#
+# HONEST FINDING: ZERO fundamental_period / shareholder / valuation canonicals
+# pass the six-way gate.  The artifact's six-way intersection covers only the
+# time_series / price_structure / price_volume_extension / cross_sectional /
+# group / elementwise / math primitives already certified by the sibling R23 P1
+# passes.  Each of the 205 in-scope financial operators carries at most a 5-gate
+# factor-runtime record (runtime_execution, shape, determinism,
+# prefix_kernel_causality, temporal_prefix) in factor_operator_verified.json but
+# is MISSING semantic_golden_verified and source_contract_verified — the six-way
+# bar is not satisfied.  Honest certification cannot claim them without
+# fabricated evidence.
+#
+# Therefore the certified set is EMPTY.  No certification is fabricated.  The
+# guard stays wired so genuine future six-way evidence promotes automatically
+# (financial family = tier 2 => cost:2).  The PIT11/PIT18 denied canonicals
+# remain fail-closed (production_admitted=False) regardless.
+
+verified_artifact:
+  path: evidence/primitive_verified.json
+  artifact_kind: test_passed
+  passed_at: 2026-08-20T01:23:43.326449+00:00
+  commit_sha: 724cf286c567512efeefb2e24622eb0bb665680d
+  six_way_operator_count: 79
+  artifact_valid: false  # source hashes diverged since commit
+  certification_claim: "Six-way intersection present but covers NO fundamental_period/shareholder/valuation canonical; financial six-way evidence absent, so nothing is certified"
+
+certified_canonicals: []
+
+scope_summary:
+  fundamental_period: 159
+  shareholder: 31
+  valuation: 15
+  total: 205
+  certified_total: 0
+  p0_severity: 21
+  pit_denied: 21  # P0 == R23-P0-PIT11/PIT18 denied set (fail-closed, never re-certified)
+  non_denied_p1: 184  # P1 severity, not PIT-denied, but no six-way evidence
+
+certification_tier:
+  fundamental_period: tier2_cost2
+  shareholder: tier2_cost2
+  valuation: tier2_cost2
+
+pit_denied_canonicals:  # fail-closed via NON_FACTOR_PRODUCTION_CANONICALS; excluded from this pass
+  - fin_actual_expectation_divergence
+  - fin_beat_streak
+  - fin_days_since_expectation_revision
+  - fin_days_since_update
+  - fin_expectation_revision
+  - fin_expectation_revision_count
+  - fin_expectation_revision_magnitude
+  - fin_expectation_revision_pct
+  - fin_expectation_revision_speed
+  - fin_miss_streak
+  - fin_restated_flag
+  - fin_revision_count
+  - fin_revision_delta
+  - fin_revision_direction
+  - fin_revision_magnitude
+  - fin_revision_pct
+  - fin_staleness
+  - fin_surprise
+  - fin_surprise_event_percentile
+  - fin_surprise_event_zscore
+  - fin_surprise_zscore
