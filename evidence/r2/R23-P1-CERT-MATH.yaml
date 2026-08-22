@@ -1,0 +1,68 @@
+# -*- coding: utf-8 -*-
+"""R23-P1-CERT-MATH: evidence for the R23 P1 math-family production certification.
+
+Certifies the math and elementwise_math families to production based on the
+six-way primitive evidence intersection in ``evidence/primitive_verified.json``.
+
+Scope / honesty
+---------------
+* math               (16 operators, tier 1 => cost:1)
+* elementwise_math   (17 operators, tier 0 => cost:0)
+* robust_statistics   (0 certified — no six-way evidence in the artifact)
+* information_theory  (0 certified — no six-way evidence in the artifact)
+
+Only operators that (a) appear in the full six-way intersection, (b) have no
+P0 severity in ``docs/R23_PER_CANONICAL_AUDIT.json``, and (c) are not in the
+PIT11/PIT18 denied set (``PRODUCTION_DENIED_CANONICALS``) are certified.
+No certification is fabricated.
+"""
+
+scope:
+  categories:
+    math: tier1_cost1
+    elementwise_math: tier0_cost0
+    robust_statistics: tier2_cost2
+    information_theory: tier4_cost4
+
+evidence:
+  artifact: evidence/primitive_verified.json
+  six_way_keys:
+    - polars_reference_parity
+    - polars_edge_verified
+    - duckdb_reference_parity
+    - duckdb_real_sql_verified
+    - duckdb_edge_verified
+    - duckdb_nan_edge_verified
+    - no_fallback_verified
+  six_way_total: 79
+
+certified:
+  math: 16
+  elementwise_math: 17
+  robust_statistics: 0
+  information_theory: 0
+  total: 33
+
+not_certified_reasons:
+  robust_statistics: "no canonical in category has six-way evidence in artifact (all blocked R23-303)"
+  information_theory: "no canonical in category has six-way evidence in artifact (all blocked R23-303)"
+
+exclusions:
+  pit_denied: "none of the 33 certified are in PRODUCTION_DENIED_CANONICALS"
+  p0_severity: "none of the 33 certified have severity=P0 in R23_PER_CANONICAL_AUDIT.json"
+
+mechanism:
+  module: cleaned_operators/r23_cert_math.py
+  gate: apply_r23_certification (after apply_evidence_certification_overlay, before contract_hardening)
+  cost_tag: "cost:<tier> per category so cost_contract_declared() admits"
+
+verification:
+  test_file: tests/mining/test_cert_math.py
+  gate_results:
+    production_admitted: True
+    production_certified: True
+    status: production
+
+ref:
+  - docs/R23_PER_CANONICAL_AUDIT.json
+  - evidence/primitive_verified.json

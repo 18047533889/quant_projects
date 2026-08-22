@@ -880,7 +880,15 @@ def _load_all_impl(*, include_research: bool = True) -> None:
     # contract_hardening (which freezes the certification fields).  Sets
     # production_certified=True for the 18 operators whose six-way primitive
     # evidence is present in the committed artifact.
-    from cleaned_operators.r23_cert_ts_price import apply_r23_certification
+    from cleaned_operators.r23_cert_ts_price import apply_r23_certification as apply_r23_cert_ts_price
+    apply_r23_cert_ts_price()
+
+    # R23 P1 certification: math + elementwise_math families (tier 0 / tier 1).
+    # Runs after the evidence overlay and the ts/price certification, before
+    # contract_hardening (which freezes the certification fields).  Sets
+    # production_certified=True for the operators whose six-way primitive
+    # evidence is present in the committed artifact.
+    from cleaned_operators.r23_cert_math import apply_r23_certification
     apply_r23_certification()
 
     # R23 P1 certification: cross_sectional + ashare categories.  Runs after the
@@ -891,6 +899,15 @@ def _load_all_impl(*, include_research: bool = True) -> None:
     # are certified.
     from cleaned_operators.r23_cert_cs_ashare import apply_r23_certification
     apply_r23_certification()
+
+    # R23 P1 certification: time_series_regression / time_series_risk /
+    # time_series_volatility categories.  Same data-driven guard as the other R23
+    # P1 passes.  Honest finding: no in-scope operator has six-way primitive
+    # evidence in the artifact, so the certified set is empty and this is a safe
+    # no-op.  It stays wired so genuine future six-way evidence promotes
+    # automatically (cost tiers: regression=3, risk/volatility=2).
+    from cleaned_operators.r23_cert_ts_regression import apply_r23_certification as _apply_r23_cert_ts_regression
+    _apply_r23_cert_ts_regression()
 
     from cleaned_operators.contract_hardening import apply_final_contract_hardening
     apply_final_contract_hardening()
