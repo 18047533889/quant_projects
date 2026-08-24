@@ -4,16 +4,16 @@
   "packages": {
     "factor_engine": {
       "pkg": "factor_engine",
-      "wheel_sha256": "ebb7ce020489944bb641f8b6a9060f2b9005c877c59644efec466531b9b649c7",
+      "wheel_sha256": "0aac4b6b2c10a900cda6364d6beda8b25087f6acec51c58ec49f7785c43008c0",
       "built": true,
-      "installed_import_ok": false,
-      "integration_ok": false,
-      "status": "BLOCKED",
-      "reason": "clean-venv import failed: factor_engine, factor_engine.runtime, factor_engine.ir, factor_engine.modeling, factor_engine.api"
+      "installed_import_ok": true,
+      "integration_ok": true,
+      "status": "PASS",
+      "reason": "root umbrella wheel quant_projects"
     },
     "quant_evaluator": {
       "pkg": "quant_evaluator",
-      "wheel_sha256": "9be9822ed8c8866f92e4202321e8dcb9bd76d58eda095aa5707f605ff6affded",
+      "wheel_sha256": "ded3a4badbf427fa6517943221928e510d54ee0025c57e0bf4ace8b34c6be5c9",
       "built": true,
       "installed_import_ok": true,
       "integration_ok": true,
@@ -22,7 +22,7 @@
     },
     "factor_optimizer": {
       "pkg": "factor_optimizer",
-      "wheel_sha256": "2b173adcc0335868c5d53e1967528b97bd6468d5fc165d0939120d3fe9dc176a",
+      "wheel_sha256": "9802b234e5dbf91da356495f2ec322d11c83ed33c5c29a2fff01ab7f6be65c56",
       "built": true,
       "installed_import_ok": true,
       "integration_ok": true,
@@ -31,7 +31,7 @@
     },
     "factor_assets": {
       "pkg": "factor_assets",
-      "wheel_sha256": "eb7e37d249dc17b5071df1d41b9025be38cb9184ee4b42bc48b7810ad4d580b4",
+      "wheel_sha256": "3c6957bc88d02bcc65a61a59de090fbbdf625a7f0a1e9434b2f0d27918d11938",
       "built": true,
       "installed_import_ok": true,
       "integration_ok": true,
@@ -40,7 +40,7 @@
     },
     "factor_preprocess": {
       "pkg": "factor_preprocess",
-      "wheel_sha256": "35c73dd08c7b5e15c920ea2ebd6ef6c15edbd111aea57f9c74353dfaab0057f8",
+      "wheel_sha256": "371c3a98a6813ec8a680b994afbd51a9882334d30e3e9d3688c86603e1adcf41",
       "built": true,
       "installed_import_ok": true,
       "integration_ok": true,
@@ -49,7 +49,7 @@
     },
     "dataaccess": {
       "pkg": "dataaccess",
-      "wheel_sha256": "182d5c84390937182f3073891498f566aa73d1eea8b5dbe4bf5415938e95b5db",
+      "wheel_sha256": "49e46338e9445da6dd2cd6df80846ab91f376683f5156d66a86ec937fa1e6cdc",
       "built": true,
       "installed_import_ok": true,
       "integration_ok": true,
@@ -57,6 +57,6 @@
       "reason": ""
     }
   },
-  "integration_rc": 1,
-  "all_pass": false
+  "integration_rc": 0,
+  "all_pass": true
 }

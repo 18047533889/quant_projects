@@ -1,28 +1,31 @@
 {
   "schema_version": 3,
-  "generated_at": "2026-08-21T20:57:58.342507+00:00",
-  "source_snapshot_id": "src:v1:de9f031abb6725fe",
+  "generated_at": "2026-08-24T04:44:40.433023+00:00",
+  "source_snapshot_id": "src:v1:97ca5e9e3f6988f1",
   "sha_bindings": {
-    "RootRepoSHA": "{\"HEAD\":\"940750b8edf91ba973833465032c26e4d46a3008\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"95b33cb593a1f678cb422eeebf3361e58d4c94ce88e13ca1457686ee1e1c55db\",\"dirty\":true,\"untracked_source_hash\":\"c877f1be4a593574201bcd88bef13b75bba6f02270233a0a9eea40b6574f1a90\"}",
-    "FactorEngineSubmoduleSHA": "fc3e5f32f199177512231ec8791d3f8da0fcc803",
-    "DataAccessSubmoduleSHA": "afda9f47b76df677893bf4cf516c0f9cc825190c",
-    "OperatorCatalogSHA": "46a324edc634e8b931d353066c1cbbb3e8935aca01fcb6e66f81d9be3ae8958a",
+    "RootRepoSHA": "{\"HEAD\":\"c0893da04d1177a4d8fbc07de35e4db368935f68\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"dirty\":true,\"untracked_source_hash\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"}",
+    "FactorEngineSubmoduleSHA": "c0893da04d1177a4d8fbc07de35e4db368935f68",
+    "DataAccessSubmoduleSHA": "c0893da04d1177a4d8fbc07de35e4db368935f68",
+    "OperatorCatalogSHA": "faaa8200e1a27bc9574f91fbc84547e649e48eb9413ff4b967b5a682063f1428",
     "SemanticCatalogIdentity": "a336cab3bf6b4113942c317e1949efdb2b749e334910cc458b1daef9ff16774d",
-    "ImplementationClosureHashSet": "a02155caddb5cec36738886f81d056fc7e3b6f4f16daaf726b1b60a644b09666",
+    "ImplementationClosureHashSet": "5e9db85f3b7aa69e32f4e9335a104fc6803c73eab06a7687c4dac2932d4f07b4",
     "DependencyLockHash": "b982526eea6469422787b2fe4031af472e1ceb49afaff11f2c0fe260bbc3ae1b",
-    "TestEnvironmentIdentity": "9776c1c7ed397c72e9e9e19c6cd23c6fac3e2ce4990c06f4ffc04dd40e12fb48"
+    "TestEnvironmentIdentity": "9097a407115a2ffd8a33d93ee25a89c02c14002193309537a989d8674efda3fb"
   },
   "sha_binding_metadata": {
     "OperatorCatalogPath": "build/mining/direct_mining_catalog.json",
-    "DependencyLockPath": "requirements-production.lock",
-    "OperatorCatalogCount": 1565
+    "DependencyLockPath": "factor_engine/requirements-production.lock",
+    "OperatorCatalogCount": 1558
   },
   "artifacts": {
     "operator-benchmark-manifest": {
       "artifact_id": "operator-benchmark-manifest",
-      "status": "CURRENT",
-      "details": "BOUND inputs == LIVE inputs and executed_at present",
-      "stale_inputs": [],
+      "status": "STALE",
+      "details": "source_snapshot_id changed; ImplementationClosureHashSet changed",
+      "stale_inputs": [
+        "source_snapshot_id changed",
+        "ImplementationClosureHashSet changed"
+      ],
       "bound_input_identity": {
         "source_snapshot_id": "src:v1:de9f031abb6725fe",
         "ImplementationClosureHashSet": "a02155caddb5cec36738886f81d056fc7e3b6f4f16daaf726b1b60a644b09666",
@@ -32,9 +35,12 @@
     },
     "operator-certification": {
       "artifact_id": "operator-certification",
-      "status": "CURRENT",
-      "details": "BOUND inputs == LIVE inputs and executed_at present",
-      "stale_inputs": [],
+      "status": "STALE",
+      "details": "source_snapshot_id changed; ImplementationClosureHashSet changed",
+      "stale_inputs": [
+        "source_snapshot_id changed",
+        "ImplementationClosureHashSet changed"
+      ],
       "bound_input_identity": {
         "source_snapshot_id": "src:v1:de9f031abb6725fe",
         "ImplementationClosureHashSet": "a02155caddb5cec36738886f81d056fc7e3b6f4f16daaf726b1b60a644b09666",
@@ -44,9 +50,12 @@
     },
     "operator-inventory": {
       "artifact_id": "operator-inventory",
-      "status": "CURRENT",
-      "details": "BOUND inputs == LIVE inputs and executed_at present",
-      "stale_inputs": [],
+      "status": "STALE",
+      "details": "source_snapshot_id changed; ImplementationClosureHashSet changed",
+      "stale_inputs": [
+        "source_snapshot_id changed",
+        "ImplementationClosureHashSet changed"
+      ],
       "bound_input_identity": {
         "source_snapshot_id": "src:v1:de9f031abb6725fe",
         "ImplementationClosureHashSet": "a02155caddb5cec36738886f81d056fc7e3b6f4f16daaf726b1b60a644b09666",
@@ -57,8 +66,8 @@
   },
   "summary": {
     "total": 3,
-    "current": 3,
-    "stale": 0,
+    "current": 0,
+    "stale": 3,
     "failed": 0,
     "not_run": 0
   },
@@ -69,9 +78,13 @@
     "staleness_rule": "An artifact is CURRENT only when its BOUND input identity (source_snapshot_id + ImplementationClosureHashSet + SemanticCatalogIdentity at the time it was built) equals the freshly recomputed live identity AND the artifact was produced by an actual verification run (executed_at present).  Any difference -> STALE.  Unresolvable source snapshot -> UNRESOLVED (fail-closed)."
   },
   "evaluation": {
-    "staleness_evaluated_at": "2026-08-21T20:57:58.342624+00:00",
-    "status": "CURRENT",
-    "changed_artifacts": [],
+    "staleness_evaluated_at": "2026-08-24T04:44:40.466721+00:00",
+    "status": "STALE",
+    "changed_artifacts": [
+      "operator-benchmark-manifest",
+      "operator-certification",
+      "operator-inventory"
+    ],
     "note": "status is CURRENT only when every artifact's BOUND input identity matches the LIVE identity set AND the artifact has an executed_at from a real verification run."
   }
 }

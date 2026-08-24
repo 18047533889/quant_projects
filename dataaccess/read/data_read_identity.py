@@ -48,6 +48,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from data_access.core.exceptions import ValidationError
@@ -147,14 +148,22 @@ def _field_event_time(f: Any) -> str | None:
 
 
 def _field_revision_policy(f: Any) -> str | None:
-    """字段的 revision 策略（canonical 缺省 latest_revision）。"""
+    """字段的 revision 策略。
+
+    R45 closure：字段既无 ``revision_policy`` 也无 ``duplicate_policy`` 时，**不再
+    乐观缺省 ``latest_revision``**。对 A 股财务，``latest_revision`` = 仓库里现在
+    的值，**不是**历史上市场可知的值——把它当默认会掩盖 PIT 前视。因此缺省改为
+    ``UNKNOWN``，并要求 production PIT 字段显式声明（见
+    ``assert_semantic_field_production_ready``）。research 非 PIT 读若确实要用
+    latest，由调用方显式声明，不在这里静默注入。
+    """
     rp = getattr(f, "revision_policy", None)
     if rp:
         return str(rp)
     dp = getattr(f, "duplicate_policy", None)
     if dp:
         return str(dp)
-    return "latest_revision"
+    return "UNKNOWN"
 
 
 def _field_identity(f: Any) -> ResolvedFieldIdentity:
@@ -232,6 +241,25 @@ def _sorted_field_identities(
     return tuple(out)
 
 
+def _pit_relevant(fields: tuple[ResolvedFieldIdentity, ...]) -> bool:
+    """R45：这些字段的可见行集是否受 decision_clock / availability_cutoff 影响。
+
+    只要任一字段带 PIT 语义（availability 非 same_day、或 pit_fidelity 非
+    effective_only/unsupported、或 temporal_model 是 financial/event），decision
+    clock 就可能改变可见行 → 必须进内容身份 hash。纯 same_day 面板字段不受
+    decision clock 影响，不进内容 hash（保持缓存复用）。
+    """
+    for f in fields:
+        if f.availability not in (None, "same_day"):
+            return True
+        if f.pit_fidelity not in (None, "effective_only", "unsupported"):
+            return True
+        tm = (f.temporal_model or "").lower()
+        if any(tok in tm for tok in ("financial", "event")):
+            return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # DA-P0-04：内容身份 vs 执行身份。
 # ---------------------------------------------------------------------------
@@ -248,15 +276,24 @@ class DataReadContentIdentity:
 
     dataset: str
     revision: str | None = None
-    availability: str = "same_day"            # 向后兼容：单字段读的首 availability
+    # R45 DEPRECATED：单值 availability 只用于向后兼容/单字段读的首 availability。
+    # production 消费方必须用 per-field ``ResolvedFieldIdentity.availability``
+    # （``fields`` 里的 FieldReadPolicySetIdentity），不得消费本单值。
+    availability: str = "same_day"
     calendar_identity: str | None = None
     universe_snapshot: str | None = None
     source_snapshot: str | None = None
+    # R45 DEPRECATED：单值 grain 同理，production 用 per-field grain。
     grain: str | None = None
     columns: tuple[str, ...] | None = None
     time_range: tuple[str | None, str | None] | None = None
     instrument_filter: tuple[str, ...] | None = None
     fields: tuple[ResolvedFieldIdentity, ...] = ()
+    # R45：decision_clock / availability_cutoff 在**能改变可见行集**（PIT /
+    # availability cutoff）时进入内容身份 hash——否则只进执行身份。见
+    # ``_pit_relevant``。
+    decision_clock: str | None = None
+    availability_cutoff: str | None = None
     digest: str = field(init=False)
     # provenance 状态：production 下必须是 available；research 下 UNKNOWN 显式记录。
     provenance_status: str = "available"      # available / unknown
@@ -300,6 +337,15 @@ class DataReadContentIdentity:
             raise ValidationError(
                 f"provenance_status 必须是 available/unknown，收到 {self.provenance_status!r}"
             )
+        # R45：decision_clock / availability_cutoff 只有能改变可见行集（PIT /
+        # availability cutoff）时才进内容身份 hash。纯执行语义（如仅用于审计的
+        # decision_clock 快照）不进内容身份——此时字段置 None，保证非 PIT 读的
+        # 内容身份跨 decision_clock 相同（DA-P0-04 执行身份独立）。
+        pit_relevant = _pit_relevant(self.fields)
+        dc = self.decision_clock if pit_relevant else None
+        ac = self.availability_cutoff if pit_relevant else None
+        object.__setattr__(self, "decision_clock", dc)
+        object.__setattr__(self, "availability_cutoff", ac)
         # DA-P0-02：digest 始终内部推导，绝不接受 caller 传入值。
         object.__setattr__(
             self,
@@ -318,6 +364,8 @@ class DataReadContentIdentity:
                 canonical(self.time_range),
                 canonical(self.instrument_filter),
                 canonical(tuple(f.content_canonical for f in self.fields)),
+                canonical(dc),
+                canonical(ac),
                 canonical(self.provenance_status),
                 canonical(tuple(self.provenance_notes)),
             ),
@@ -337,6 +385,8 @@ class DataReadContentIdentity:
             "instrument_filter": self.instrument_filter,
             "fields": [f.to_dict() for f in self.fields],
             "digest": self.digest,
+            "decision_clock": self.decision_clock,
+            "availability_cutoff": self.availability_cutoff,
             "provenance_status": self.provenance_status,
             "provenance_notes": list(self.provenance_notes),
             "_schema_version": self._schema_version,
@@ -408,6 +458,7 @@ class DataReadIdentity:
 
     dataset: str
     revision: str | None = None
+    # R45 DEPRECATED：单值 availability/grain 只向后兼容；production 用 per-field。
     availability: str = "same_day"
     calendar_identity: str | None = None
     universe_snapshot: str | None = None
@@ -415,6 +466,8 @@ class DataReadIdentity:
     grain: str | None = None
     session: str | None = None
     decision_clock: str | None = None
+    # R45：availability_cutoff（PIT 可见性截止）在能改变可见行集时进内容身份。
+    availability_cutoff: str | None = None
     columns: tuple[str, ...] | None = None
     time_range: tuple[str | None, str | None] | None = None
     instrument_filter: tuple[str, ...] | None = None
@@ -460,6 +513,8 @@ class DataReadIdentity:
             time_range=self.time_range,
             instrument_filter=self.instrument_filter,
             fields=self.fields,
+            decision_clock=self.decision_clock,
+            availability_cutoff=self.availability_cutoff,
             provenance_status=self.provenance_status,
             provenance_notes=self.provenance_notes,
         )
@@ -520,13 +575,26 @@ class DataReadIdentity:
 # Provenance helpers（DA-P0-03：production fail-closed / research UNKNOWN）。
 # ---------------------------------------------------------------------------
 
-def _is_strict() -> bool:
-    try:
-        from data_access.read.query_budget import is_strict_semantics
+@dataclass(frozen=True)
+class ProductionExecutionContext:
+    """R45: explicit production/strict execution context.
 
-        return bool(is_strict_semantics())
-    except Exception:
-        return False
+    The strict/production mode is **never** inferred from "did an import
+    succeed"（旧 ``_is_strict()`` 的 ``except Exception: return False`` 会在
+    strict-infra 导入失败时 fail-open 成 research 语义）。生产调用路径显式传入
+    本上下文；research 保留兼容默认（``from_authority`` 走 RuntimeModeIdentity
+    单一权威，不依赖任何单个 import 是否成功）。
+    """
+
+    strict: bool
+    source: str = "explicit"
+
+    @classmethod
+    def from_authority(cls) -> "ProductionExecutionContext":
+        """从 RuntimeModeIdentity 单一权威解析（不 try/except 单个 import）。"""
+        from data_access.runtime.mode_identity import is_strict_semantics_authority
+
+        return cls(strict=bool(is_strict_semantics_authority()), source="authority")
 
 
 def _revision_of(
@@ -597,7 +665,38 @@ def _revision_of(
                 )
                 files = tuple(sorted(str(p) for p in paths)) if paths else ()
                 if files:
-                    return f"{dataset}:objects:{len(files)}", None
+                    # R45 closure：不能只按文件**数量** hash——100 个不同文件会
+                    # 塌缩成同一个 digest。改为对排序后的
+                    # ``[(object_key, etag, size)]`` 做稳定 hash；etag/size 任一
+                    # 不可得 → 返回 UNKNOWN / 不可缓存，而不是 count-only digest。
+                    import hashlib
+
+                    entries: list[tuple[str, str | None, int | None]] = []
+                    for p in files:
+                        etag = None
+                        size = None
+                        try:
+                            st = Path(p).stat()
+                            size = st.st_size
+                        except OSError:
+                            size = None
+                        entries.append((p, etag, size))
+                    if all(e[1] is not None or e[2] is not None for e in entries):
+                        payload = "\n".join(
+                            f"{k}|{e}|{s}" for k, e, s in entries
+                        )
+                        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+                        return f"{dataset}:objects:{digest}", None
+                    # etag/size 都不可得 → 无法形成内容级 digest，标 UNKNOWN。
+                    note = (
+                        "revision: 无 manifest 且对象 etag/size 不可得，"
+                        "无法形成内容级 digest（不可缓存）"
+                    )
+                    if _resolve_strict(strict):
+                        raise ValidationError(
+                            f"production/strict 下无法解析 dataset={dataset!r} 的 revision：{note}"
+                        )
+                    return None, note
         except Exception:
             pass
     note = "revision: manifest 存在但无 generation/epoch token"
@@ -689,10 +788,15 @@ def _source_snapshot_id(
 
 
 def _resolve_strict(strict: bool | None) -> bool:
-    """strict 判定：显式传参优先；缺省用进程/请求级权威。"""
+    """strict 判定：显式传参优先；缺省用进程/请求级权威。
+
+    R45：不再用 ``_is_strict()`` 的 try/except fail-open。缺省走
+    ``ProductionExecutionContext.from_authority()``（RuntimeModeIdentity 单一
+    权威），生产调用路径应显式传入 ``ProductionExecutionContext``。
+    """
     if strict is not None:
         return bool(strict)
-    return _is_strict()
+    return ProductionExecutionContext.from_authority().strict
 
 
 # ---------------------------------------------------------------------------
@@ -814,6 +918,7 @@ def build_data_read_identity(
     instrument_filter: Sequence[str] | None = None,
     universe: str | None = None,
     decision_clock: str | None = None,
+    availability_cutoff: str | None = None,
     prepared: Any = None,
     fields: Iterable[Any] | None = None,
     source_snapshot: Any = None,
@@ -853,6 +958,12 @@ def build_data_read_identity(
     )
     grain = first.grain if first is not None else None
 
+    # R45：production 读绝不消费 legacy 单值 availability/grain——必须用 per-field
+    # FieldReadPolicySetIdentity（``fields`` 里的 ResolvedFieldIdentity）。单值只
+    # 是向后兼容/单字段读的首值，多字段混合语义下它必然塌缩，production 禁止。
+    if strict_mode and resolved_fields:
+        _assert_production_uses_field_policies(resolved_fields, availability, grain)
+
     provenance_status = "unknown" if notes else "available"
 
     # DA-P0-04：session/request_id 不再参与内容 hash。执行身份独立记录。
@@ -866,6 +977,7 @@ def build_data_read_identity(
         grain=grain,
         session=None,  # 显式 session 由调用方 set 后走 __post_init__ 记录执行身份
         decision_clock=decision_clock,
+        availability_cutoff=availability_cutoff,
         columns=tuple(columns) if columns is not None else None,
         time_range=_stable_range(time_range),
         instrument_filter=tuple(instrument_filter) if instrument_filter is not None else None,
@@ -895,6 +1007,30 @@ def _placeholder_fields(columns: Sequence[str], dataset: str) -> list[Any]:
     ]
 
 
+def _assert_production_uses_field_policies(
+    fields: tuple[ResolvedFieldIdentity, ...],
+    legacy_availability: str,
+    legacy_grain: str | None,
+) -> None:
+    """R45：production 读必须消费 per-field FieldReadPolicySetIdentity。
+
+    单值 ``availability`` / ``grain`` 在多字段混合语义下必然塌缩（DA-P0-01 已
+    证明），production 消费它会把不同可见性/粒度的字段当成同一语义。这里在
+    production/strict 下拒绝「多字段读却依赖单值」的路径——单字段读（fields
+    长度 1）仍允许单值作为该字段的首值。
+    """
+    if len(fields) <= 1:
+        return
+    # 多字段读：单值 availability/grain 无法表达混合语义 → production 拒绝。
+    raise ValidationError(
+        "production/strict 读禁止消费 legacy 单值 availability/grain："
+        f"多字段读（{len(fields)} 个字段）的可见性/粒度必须用 per-field "
+        "FieldReadPolicySetIdentity（ResolvedFieldIdentity.availability / .grain），"
+        f"单值 availability={legacy_availability!r} / grain={legacy_grain!r} 会塌缩"
+        "混合语义（DA-P0-01）。"
+    )
+
+
 def _session_id() -> str | None:
     """兼容旧 helper：当前 request 上下文的 request_id（只进执行身份）。"""
     return _execution_request_id()
@@ -907,14 +1043,13 @@ def assert_semantic_field_production_ready(field: Any, *, strict: bool | None = 
     R21: production SemanticField reads must not silently default to
     ``same_day`` availability / ``True`` mining / no unit / no PIT fidelity —
     those defaults hide look-ahead and unit-mixing bugs.
+
+    R45: strict 判定走 ``ProductionExecutionContext``（显式传参或 RuntimeModeIdentity
+    单一权威），不再 try/except 单个 import 推断——import 失败绝不 fail-open 成
+    research 语义。
     """
     if strict is None:
-        try:
-            from data_access.read.query_budget import is_strict_semantics
-
-            strict = is_strict_semantics()
-        except Exception:
-            strict = False
+        strict = ProductionExecutionContext.from_authority().strict
     if not strict:
         return
     missing: list[str] = []
@@ -939,6 +1074,7 @@ __all__ = [
     "DataReadContentIdentity",
     "ReadExecutionIdentity",
     "ResolvedFieldIdentity",
+    "ProductionExecutionContext",
     "assert_semantic_field_production_ready",
     "build_data_read_identity",
 ]

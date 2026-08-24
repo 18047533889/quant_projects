@@ -6,14 +6,23 @@ point for release CURRENT-ness.  This module regenerates it deterministically
 from the *current* tree so it can never silently drift:
 
     RootRepoSHA             = repo HEAD SHA + DirtyTreeDigest (diff/cached/untracked)
-    FactorEngineSubmoduleSHA  = factor_engine/ submodule pinned SHA
-    DataAccessSubmoduleSHA    = dataaccess/ submodule pinned SHA
+    PlatformSourceTreeIdentity = stable Merkle root over the ENTIRE platform source
+                              (all package trees + packaging + dependency lock +
+                              config), evidence-free (R46 P0-01/P0-02/P0-C).
     OperatorCatalogSHA        = SHA-256 of build/mining/direct_mining_catalog.json
     SemanticCatalogIdentity   = DataAccess-issued SemanticCatalogIdentity.cache_key() (STRICT)
     ImplementationClosureHashSet = SHA-256 over per-operator implementation closure
                               hashes (name + implementing module source + contract)
     DependencyLockHash          = SHA-256 over the production dependency lock
     TestEnvironmentIdentity     = SHA-256 over python version + key dep versions
+
+R46 P0-C: the old ``FactorEngineSubmoduleSHA`` / ``DataAccessSubmoduleSHA``
+payloads are DELETED.  factor_engine / dataaccess are regular monorepo dirs
+(no submodules); the old ``submodule_sha()`` ran ``git rev-parse HEAD`` inside
+them and returned the PARENT HEAD — a fabricated "submodule SHA".  Package
+identity now comes from :func:`package_tree_identity` (real Merkle tree hash).
+:func:`root_repo_sha` returns a single immutable :class:`RepoIdentity` always
+(P0-04/P0-D), never the old ``dict | str`` dual type.
 
 Honesty contract (VER-P0-03/04):
   ``build_current()`` NEVER certifies the tree it just wrote.  An artifact is
@@ -46,9 +55,34 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from evidence.repo_identity import RepoIdentity, PackageTreeIdentity
+
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUT = _REPO_ROOT / "evidence" / "CURRENT.json"
 EVIDENCE_DIR = _REPO_ROOT / "evidence"
+
+# P0-4: evidence/output/generated artifacts are NOT production source. They
+# are attested separately (EvidenceAttestationIdentity) so committing new
+# evidence never mutates the SourceTreeIdentity.
+_NON_SOURCE_OUTPUT_DIRS = {
+    "evidence",
+    "build",
+    "docs/reports",
+    "docs/generated",
+    "archives",
+}
+
+
+def _is_non_source_path(rel: str) -> bool:
+    """True if ``rel`` (repo-root-relative) is under an evidence/output dir.
+
+    P0-4: any path equal to or nested under an entry in
+    ``_NON_SOURCE_OUTPUT_DIRS`` is excluded from the STABLE source identity.
+    """
+    for excl in _NON_SOURCE_OUTPUT_DIRS:
+        if rel == excl or rel.startswith(excl + "/"):
+            return True
+    return False
 
 CATALOG_PATH = _REPO_ROOT / "build" / "mining" / "direct_mining_catalog.json"
 LOCK_CANDIDATES = (
@@ -131,6 +165,11 @@ def _tracked_untracked_source_hash() -> str:
             rel = line.strip()
             if not rel:
                 continue
+            # P0-4: evidence/output/generated artifacts are attested separately
+            # (EvidenceAttestationIdentity); they are NOT production source and
+            # must not perturb the SourceTreeIdentity.
+            if _is_non_source_path(rel):
+                continue
             p = _REPO_ROOT / rel
             if not p.is_file():
                 continue
@@ -172,31 +211,89 @@ def _dirty_tree_digest() -> dict[str, str | bool]:
     }
 
 
-def root_repo_sha() -> dict[str, str | bool] | str:
-    """DirtyTreeDigest for the repo root (VER-P0-03).
+def root_repo_sha() -> RepoIdentity:
+    """Release identity for the monorepo root (R46 P0-04 / P0-D).
 
-    When the working tree is dirty the digest carries HEAD + diff_hash +
-    cached_diff_hash + untracked_source_hash, so two different uncommitted
-    modifications never share an identity.  When the tree is clean it returns
-    the plain HEAD string (backwards compatible with callers that split on a
-    space, e.g. ``scripts/gen_verification_manifest.py``).
+    Returns a single immutable :class:`RepoIdentity` ALWAYS (never ``dict|str``),
+    so callers can no longer mis-handle a string-vs-dict split.  ``to_dict()``
+    carries the VER-P0-03 DirtyTreeDigest schema (HEAD / dirty / diff_hash /
+    cached_diff_hash / untracked_source_hash / identity_hash), and ``str()``
+    yields the bare HEAD SHA for back-compat with callers that only need the
+    commit.
     """
     digest = _dirty_tree_digest()
     if not digest["HEAD"]:
         raise RuntimeError("R22-CURRENT-TRUTH: repo root is not a git checkout")
-    if digest["dirty"]:
-        return digest
-    return str(digest["HEAD"])
+    return RepoIdentity.from_parts(
+        head_sha=str(digest["HEAD"]),
+        dirty=bool(digest["dirty"]),
+        working_tree_hash=str(digest["diff_hash"]),
+        staged_hash=str(digest["cached_diff_hash"]),
+        untracked_source_hash=str(digest["untracked_source_hash"]),
+    )
 
 
-def submodule_sha(sub: str) -> str:
-    path = _REPO_ROOT / sub
-    sha = _git_capture(["git", "rev-parse", "HEAD"], path)
-    if not sha:
-        raise RuntimeError(
-            f"R22-CURRENT-TRUTH: submodule {sub!r} is not a git checkout"
+def gitlink_count() -> int:
+    """Count real git submodule pins (index entries with mode 160000).
+
+    factor_engine / dataaccess are regular monorepo directories (not
+    submodules), so the correct answer on this repo is 0.  This is the only
+    legitimate source of "submodule SHAs"; the old ``submodule_sha()`` that ran
+    ``git rev-parse HEAD`` inside a plain directory returned the PARENT HEAD — a
+    fabricated submodule SHA — and is REMOVED (R46 P0-C).
+    """
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", "--stage"],
+            cwd=str(_REPO_ROOT), capture_output=True, text=True, timeout=60,
         )
-    return sha
+        if out.returncode == 0:
+            return sum(
+                1 for line in out.stdout.splitlines()
+                if line.split() and line.split()[0] == "160000"
+            )
+    except Exception:
+        pass
+    return 0
+
+
+def package_tree_identity(
+    package_name: str, source_root: Path | None = None,
+) -> PackageTreeIdentity:
+    """Merkle-tree identity for a real platform package (R46 P0-C).
+
+    Replaces the fabricated ``FactorEngineSubmoduleSHA`` / ``DataAccessSubmoduleSHA``
+    which used ``git rev-parse HEAD`` inside a plain monorepo dir (returning the
+    parent HEAD).  ``tree_hash`` binds relative_path || mode || size || content
+    so a rename or an edit always changes it.  ``packaging_hash`` binds the
+    package's pyproject.toml (if any).
+    """
+    from evidence.source_snapshot import _package_tree_merkle, _single_file_hash
+    src = source_root or (_REPO_ROOT / package_name)
+    tree_hash = _package_tree_merkle(src) if src.is_dir() else _merkle_empty()
+    packaging_hash = _single_file_hash(f"{package_name}/pyproject.toml", _REPO_ROOT) \
+        if src.is_dir() else ""
+    version = _dist_version(package_name)
+    return PackageTreeIdentity(
+        package_name=package_name,
+        source_root=str(src.relative_to(_REPO_ROOT)) if src.is_dir() else str(src),
+        tree_hash=tree_hash,
+        packaging_hash=packaging_hash,
+        version=version,
+    )
+
+
+def _merkle_empty() -> str:
+    return hashlib.sha256(b"").hexdigest()
+
+
+def platform_source_tree_identity() -> dict[str, Any]:
+    """Platform-wide SourceTreeIdentity (R46 P0-02, P0-C).
+
+    Thin re-export so evidence.current callers get a single import surface.
+    """
+    from evidence.source_snapshot import platform_source_tree_identity as _inner
+    return _inner(_REPO_ROOT)
 
 
 def operator_catalog_sha() -> str:
@@ -465,6 +562,12 @@ def test_environment_identity() -> str:
 def _root_diff_hash() -> str:
     """SHA-256 of the root working-tree ``git diff`` defensively cached.
 
+    P0-4: evidence/output/generated artifacts (evidence/, build/,
+    docs/reports/, docs/generated/, archives/) are attested separately
+    (EvidenceAttestationIdentity) and are EXCLUDED from the STABLE source
+    identity.  Only the changed paths NOT under an excluded dir contribute to
+    the digest, so committing new evidence never perturbs the SourceTreeIdentity.
+
     ``git diff`` re-hashes every modified blob on each call and can take tens
     of seconds on this repo; the working tree content can only change when a
     write happens *inside this process*, so the digest is memoized and only
@@ -473,7 +576,17 @@ def _root_diff_hash() -> str:
     global _ROOT_DIFF_HASH_CACHE
     if _ROOT_DIFF_HASH_CACHE is not None:
         return _ROOT_DIFF_HASH_CACHE
-    diff = _git_capture(["git", "diff"], _REPO_ROOT) or ""
+    # Collect the changed paths, dropping any under an excluded output dir.
+    changed = _git_capture(["git", "diff", "--name-only"], _REPO_ROOT) or ""
+    kept = [
+        line.strip()
+        for line in changed.splitlines()
+        if line.strip() and not _is_non_source_path(line.strip())
+    ]
+    if not kept:
+        _ROOT_DIFF_HASH_CACHE = ""
+        return _ROOT_DIFF_HASH_CACHE
+    diff = _git_capture(["git", "diff", "--"] + kept, _REPO_ROOT) or ""
     _ROOT_DIFF_HASH_CACHE = _sha256_byte_stream(diff.encode("utf-8"))
     return _ROOT_DIFF_HASH_CACHE
 
@@ -486,6 +599,42 @@ def _invalidate_root_diff_cache() -> None:
     global _ROOT_DIFF_HASH_CACHE, _ROOT_PREV_DIFF_HASH
     _ROOT_DIFF_HASH_CACHE = None
     _ROOT_PREV_DIFF_HASH = ""
+
+
+def evidence_attestation_identity() -> str:
+    """EvidenceAttestationIdentity: SHA-256 over the evidence output tree.
+
+    P0-4: the evidence/ tree (CURRENT.json, verified_gate_evidence.json,
+    manifests, reports, snapshots) is attested SEPARATELY from the STABLE
+    SourceTreeIdentity.  Committing new evidence therefore never mutates the
+    source identity, but an evidence change is still honestly detected here.
+
+    Mirrors ``_tracked_untracked_source_hash`` canonical length-prefixed
+    encoding, restricted to the TRACKED files under ``evidence/`` (git
+    ls-files evidence/).  Returns "" when evidence/ has no tracked files.
+    """
+    h = hashlib.sha256()
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", "evidence/"],
+            cwd=str(_REPO_ROOT), capture_output=True, text=True, timeout=30,
+        )
+        if out.returncode != 0:
+            return ""
+        for line in sorted(out.stdout.splitlines()):
+            rel = line.strip()
+            if not rel:
+                continue
+            p = _REPO_ROOT / rel
+            if not p.is_file():
+                continue
+            h.update(rel.encode("utf-8"))
+            h.update(b"\x00")
+            h.update(_sha256_bytes(p.read_bytes()).encode("utf-8"))
+            h.update(b"\x00")
+    except Exception:
+        return ""
+    return h.hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -503,14 +652,23 @@ def build_current() -> dict[str, Any]:
     """
     dep_hash, dep_lock = dependency_lock_hash()
     closure_hash, num_operators = implementation_closure_hash_set()
-    live_root = _dirty_tree_digest()
+    live_root = root_repo_sha()
+
+    # R46 P0-01 / P0-02 / P0-C: the release payload binds a platform source
+    # identity that is stable and evidence-free (no submodule SHAs; the fake
+    # FactorEngineSubmoduleSHA / DataAccessSubmoduleSHA are gone).
+    platform_identity = platform_source_tree_identity()
+    source_tree_identity = platform_identity["root_merkle"]
 
     live_bindings = {
         "RootRepoSHA": json.dumps(
-            live_root, sort_keys=True, separators=(",", ":")
-        ) if live_root["dirty"] else (live_root["HEAD"] or ""),
-        "FactorEngineSubmoduleSHA": submodule_sha("factor_engine"),
-        "DataAccessSubmoduleSHA": submodule_sha("dataaccess"),
+            live_root.to_dict(), sort_keys=True, separators=(",", ":")
+        ),
+        "SourceTreeIdentity": json.dumps(
+            live_root.to_dict(), sort_keys=True, separators=(",", ":")
+        ),
+        "PlatformSourceTreeIdentity": source_tree_identity,
+        "EvidenceAttestationIdentity": evidence_attestation_identity(),
         "OperatorCatalogSHA": operator_catalog_sha(),
         "SemanticCatalogIdentity": semantic_catalog_identity(),
         "ImplementationClosureHashSet": closure_hash,
@@ -524,12 +682,15 @@ def build_current() -> dict[str, Any]:
         .isoformat(),
         "source_snapshot_id": "src:v1:rn",  # replaced by _set_source_snapshot_id
         "sha_bindings": live_bindings,
+        "source_tree_identity": source_tree_identity,
         "sha_binding_metadata": {
             "OperatorCatalogPath": str(CATALOG_PATH.relative_to(_REPO_ROOT)),
             "DependencyLockPath": str(
                 dep_lock.relative_to(_REPO_ROOT) if dep_lock else "NONE"
             ),
             "OperatorCatalogCount": num_operators,
+            "gitlink_count": gitlink_count(),
+            "platform_packages": sorted(platform_identity.get("packages", {})),
         },
         "artifacts": {
             art_id: {
@@ -645,11 +806,33 @@ def evaluate(payload: dict[str, Any]) -> dict[str, Any]:
             if bound_sid and not live_sid:
                 stale_reasons.append("source_snapshot_id unresolved")
 
-            for key in ("ImplementationClosureHashSet", "SemanticCatalogIdentity"):
+            for key in (
+                "ImplementationClosureHashSet",
+                "SemanticCatalogIdentity",
+                "EvidenceAttestationIdentity",
+                "PlatformSourceTreeIdentity",
+                "source_tree_identity",
+            ):
                 bval = bound.get(key)
                 lval = live.get(key)
-                if bval is not None and bval != lval:
+                if bval is None:
+                    continue
+                if lval is None:
+                    # live platform identity present but the artifact did not bind it
+                    stale_reasons.append(f"{key} not bound on live payload")
+                elif bval != lval:
                     stale_reasons.append(f"{key} changed")
+
+        # R46 P0-01: the artifact's BOUND source_tree_identity (if recorded) must
+        # equal the LIVE platform source identity.  If they differ the evidence is
+        # STALE — it can never be silently used as PASS.  Compare against the live
+        # platform source identity recomputed this run (stable, evidence-free).
+        bound_pl = (bound or {}).get("PlatformSourceTreeIdentity") \
+            or (bound or {}).get("source_tree_identity")
+        live_pl = live.get("PlatformSourceTreeIdentity") \
+            or payload.get("source_tree_identity")
+        if bound_pl is not None and bound_pl and live_pl and bound_pl != live_pl:
+            stale_reasons.append("source_tree_identity changed (evidence does not match live platform source)")
 
         snapshot_ok_for_art = snapshot_ok and bool(live_sid)
         if not snapshot_ok_for_art:
@@ -742,11 +925,24 @@ def check_stale(
         if bound.get("source_snapshot_id") and existing_sid \
                 and bound["source_snapshot_id"] != existing_sid:
             changed.append(f"artifact:{art_id}:bound_snapshot_mismatch")
-        for key in ("ImplementationClosureHashSet", "SemanticCatalogIdentity"):
+        for key in (
+            "ImplementationClosureHashSet",
+            "SemanticCatalogIdentity",
+            "EvidenceAttestationIdentity",
+            "PlatformSourceTreeIdentity",
+        ):
             bval = bound.get(key)
             lval = live.get(key)
             if bval is not None and bval != lval:
                 changed.append(f"artifact:{art_id}:{key}")
+
+    # R46 P0-01: bind evidence to the LIVE platform source identity.  If the
+    # stored payload's source_tree_identity differs from the live one, mark
+    # STALE (never silently PASS).
+    stored_pl = existing.get("source_tree_identity") or ""
+    live_pl = current.get("source_tree_identity") or live.get("PlatformSourceTreeIdentity") or ""
+    if stored_pl and live_pl and stored_pl != live_pl:
+        changed.append("source_tree_identity")
 
     return (not changed), sorted(set(changed))
 
@@ -854,15 +1050,21 @@ def main(argv: list[str] | None = None) -> int:
             if not art.get("bound_input_identity"):
                 art.setdefault("bound_input_identity", {}).update({
                     "source_snapshot_id": payload.get("source_snapshot_id") or "",
+                    "source_tree_identity": payload.get("source_tree_identity") or "",
+                    "PlatformSourceTreeIdentity": payload["sha_bindings"].get("PlatformSourceTreeIdentity") or "",
                     "ImplementationClosureHashSet": payload["sha_bindings"]["ImplementationClosureHashSet"],
                     "SemanticCatalogIdentity": payload["sha_bindings"]["SemanticCatalogIdentity"],
+                    "EvidenceAttestationIdentity": payload["sha_bindings"]["EvidenceAttestationIdentity"],
                 })
     else:
         for art in payload["artifacts"].values():
             art.setdefault("bound_input_identity", {}).update({
                 "source_snapshot_id": payload.get("source_snapshot_id") or "",
+                "source_tree_identity": payload.get("source_tree_identity") or "",
+                "PlatformSourceTreeIdentity": payload["sha_bindings"].get("PlatformSourceTreeIdentity") or "",
                 "ImplementationClosureHashSet": payload["sha_bindings"]["ImplementationClosureHashSet"],
                 "SemanticCatalogIdentity": payload["sha_bindings"]["SemanticCatalogIdentity"],
+                "EvidenceAttestationIdentity": payload["sha_bindings"]["EvidenceAttestationIdentity"],
             })
 
     out = Path(args.out) if args.out else DEFAULT_OUT

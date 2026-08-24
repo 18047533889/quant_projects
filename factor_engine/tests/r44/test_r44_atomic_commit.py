@@ -98,12 +98,16 @@ def test_stage_commit_round_trip(tmp_path) -> None:
     assert loaded.factor_output_watermark == "2026-08-23"
     assert loaded.state_watermark == "2026-08-23"
 
-    # manifest 10 字段
+    # manifest 字段：既有 10 字段 + R45 manifest closure 追加字段（additive）。
     manifest = gen.to_manifest()
     expected = {
         "generation", "source_snapshot_id", "execution_id", "factor_parts",
         "state_parts", "dq_certificate", "pit_certificate",
         "factor_output_watermark", "state_watermark", "watermark",
+        # R45 追加（缺省 None）。
+        "factor_semantic_id", "data_read_identity", "universe", "decision_clock",
+        "physical_plan_id", "pi_ids", "build", "calendar",
+        "incremental_contract_identity",
     }
     assert set(manifest) == expected
 
@@ -312,3 +316,152 @@ class _DummyFactor:
         self.name = name
         self.description = name
         self.freq = "1d"
+
+
+# ---------------------------------------------------------------------------
+# R45: 命名空间守卫 / 生产门禁 / ObjectStore 后端（零本地写）
+# ---------------------------------------------------------------------------
+def _full_wm() -> WatermarkSet:
+    return WatermarkSet("2026-08-23", "2026-08-23", "2026-08-23")
+
+
+def test_stage_rejects_same_name_factor_state_conflict(tmp_path) -> None:
+    from runtime.generation_store import NamespaceConflictError
+
+    tx = IncrementalCommitTransaction(tmp_path / "gen")
+    with pytest.raises(NamespaceConflictError):
+        tx.stage(
+            factor_parts={"dup.parquet": b"F"},
+            state_parts={"dup.parquet": b"S"},
+            watermarks=_full_wm(),
+        )
+
+
+def test_production_commit_rejects_missing_gates(tmp_path) -> None:
+    # 缺 DQ/PIT/DRI/FactorSemanticID → 生产提交被拒（research 宽松）。
+    tx = IncrementalCommitTransaction(tmp_path / "gen")
+    tx.stage(
+        factor_parts={"f.parquet": b"X"},
+        watermarks=_full_wm(),
+    )
+    with pytest.raises(WatermarkViolation):
+        tx.commit(production=True)
+    # research 提交不受门禁约束。
+    tx.commit(production=False)
+    assert current_generation(tmp_path / "gen") is not None
+
+
+def test_production_commit_requires_data_read_identity(tmp_path) -> None:
+    # DQ/PIT PASS 但 DRI/FactorSemanticID 缺失 → 仍拒绝（读身份未认证）。
+    tx = IncrementalCommitTransaction(tmp_path / "gen")
+    tx.stage(
+        factor_parts={"f.parquet": b"X"},
+        watermarks=_full_wm(),
+        dq_certificate={"passed": True},
+        pit_certificate={"passed": True},
+    )
+    with pytest.raises(WatermarkViolation):
+        tx.commit(production=True)
+
+
+def test_production_commit_passes_when_all_gates_pass(tmp_path) -> None:
+    tx = IncrementalCommitTransaction(tmp_path / "gen")
+    tx.stage(
+        factor_parts={"f.parquet": b"X"},
+        state_parts={"s.json": b"{}"},
+        watermarks=_full_wm(),
+        dq_certificate={"passed": True},
+        pit_certificate={"passed": True},
+        factor_semantic_id="sem1",
+        data_read_identity="dri1",
+    )
+    gen = tx.commit(production=True)
+    loaded = load_generation(tmp_path / "gen", gen.generation)
+    assert loaded is not None
+    assert loaded.factor_semantic_id == "sem1"
+    assert loaded.data_read_identity == "dri1"
+
+
+def test_object_store_generation_commit_zero_local_path_writes(tmp_path) -> None:
+    """ObjectGenerationStore 生产提交：parts/manifest/CURRENT 全走 ObjectStore，
+    命名空间 disjoint，无本地 Path 写。"""
+    import importlib.util
+
+    from runtime.generation_store import ObjectGenerationStore
+
+    # dataaccess 包 __init__ 存在既有循环导入（会拉进 data_access），object_store
+    # 本身仅用 stdlib，故按文件独立加载以隔离环境问题。
+    _spec = importlib.util.spec_from_file_location(
+        "_r45_object_store", "dataaccess/read/object_store.py"
+    )
+    _mod = importlib.util.module_from_spec(_spec)
+    assert _spec and _spec.loader
+    _spec.loader.exec_module(_mod)
+    LocalObjectStore = _mod.LocalObjectStore
+
+    store = LocalObjectStore(tmp_path / "lake")
+    ostore = ObjectGenerationStore(store)
+    tx = IncrementalCommitTransaction(tmp_path / "txroot")
+    tx.stage(
+        factor_parts={"f_a.parquet": b"AAA"},
+        state_parts={"st_a.json": b"{}"},
+        watermarks=_full_wm(),
+        dq_certificate={"passed": True},
+        pit_certificate={"passed": True},
+        source_snapshot_id="snap1",
+        execution_id="exec1",
+        factor_semantic_id="SEM1",
+        data_read_identity="DRI1",
+        universe=["A", "B"],
+        decision_clock="dc1",
+        physical_plan_id="pp1",
+        pi_ids=["pi1"],
+        build="b1",
+        calendar="cn",
+        incremental_contract_identity="ici1",
+    )
+    gen = tx.commit(generation_store=ostore, production=True)
+    keys = store.list_objects("")
+    # factor / state 命名空间物理 disjoint（不同前缀），杜绝同名互相覆盖。
+    assert f"factor/{gen.generation}/f_a.parquet" in keys
+    assert f"state/{gen.generation}/st_a.json" in keys
+    assert f"generation/{gen.generation}/manifest.json" in keys
+    assert "generation/CURRENT" in keys
+    assert store.range_read("generation/CURRENT", offset=0, length=200).decode().strip() == gen.generation
+    for k in keys:
+        assert not (k.startswith("factor/") and k.startswith("state/"))
+    # CURRENT 指针指向的 manifest 保留新增 closure 字段。
+    loaded = ostore.load_manifest(gen.generation)
+    assert loaded["factor_semantic_id"] == "SEM1"
+    assert loaded["data_read_identity"] == "DRI1"
+    assert loaded["calendar"] == "cn"
+
+
+def test_manifest_closure_backfills_from_stage(tmp_path) -> None:
+    """R45: manifest closure 追加字段从 stage 传入并被 round-trip 保留。"""
+    tx = IncrementalCommitTransaction(tmp_path / "gen")
+    tx.stage(
+        factor_parts={"f.parquet": b"X"},
+        watermarks=_full_wm(),
+        factor_semantic_id="sem9",
+        data_read_identity="dri9",
+        universe=["X", "Y"],
+        decision_clock="dc9",
+        physical_plan_id="pp9",
+        pi_ids=["p1", "p2"],
+        build="b9",
+        calendar="cn",
+        incremental_contract_identity="ici9",
+    )
+    gen = tx.commit()
+    loaded = load_generation(tmp_path / "gen", gen.generation)
+    assert loaded is not None
+    assert loaded.factor_semantic_id == "sem9"
+    assert loaded.data_read_identity == "dri9"
+    assert loaded.universe == ["X", "Y"]
+    assert loaded.decision_clock == "dc9"
+    assert loaded.physical_plan_id == "pp9"
+    assert loaded.pi_ids == ["p1", "p2"]
+    assert loaded.build == "b9"
+    assert loaded.calendar == "cn"
+    assert loaded.incremental_contract_identity == "ici9"

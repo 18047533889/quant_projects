@@ -7,6 +7,14 @@ Region 并行调度优化（region = 同 backend 的连续算子序列）：
     - Region-level resource reservation（避免 oversubscription）
     - 动态负载均衡（慢 region 优先调度）
 
+R45 production-closure additions:
+    - ResourceBroker admission：每个 region 在提交前经 broker ``try_reserve``
+      获取 CPU/RAM/IO token，完成/取消时释放（避免 4×8GB 在 16GB 主机上超订）。
+    - 动态并行度：``max_parallel_regions`` 默认从可用 CPU/RAM 推导，而非固定 4。
+    - Deadline / cancellation：region 超时 → ``future.cancel()`` + 释放租约 +
+      级联取消后代（后代不再调度）。
+    - DAG cycle 校验：调度前硬报错（``PhysicalPlanCycleError``），不再静默 no-op。
+
 示例：
     Factor A: Pandas region (10s) + DuckDB region (5s)
     Factor B: Polars region (8s) + DuckDB region (3s)
@@ -17,145 +25,22 @@ Region 并行调度优化（region = 同 backend 的连续算子序列）：
 from __future__ import annotations
 
 import logging
+import os
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 _logger = logging.getLogger(__name__)
 
 
-@dataclass
-class RegionOutputBundle:
-    """Multiple named live-out values produced by a single execution region.
+class PhysicalPlanCycleError(Exception):
+    """Region 依赖图存在环时抛出（R45：调度前硬校验，不再静默 no-op）。"""
 
-    A region may drive several downstream consumers (transfer edges, factor
-    roots, or materialized sinks), each requiring its own output value. This
-    bundle is the per-region result value: it holds every named live-out so
-    consumers retrieve exactly the output they depend on instead of being
-    forced to share one scalar result.
-
-    Behavior:
-        - Values are stored by stable output name (``dict[str, Any]``).
-        - ``get``/``__getitem__`` retrieve a named output; a missing name is
-          a contract violation and fails closed (KeyError).
-        - ``only()`` returns the single output when the region produces
-          exactly one value (backward-compatible scalar access).
-        - ``merge`` combines bundles (or named values) from executed
-          sub-regions into one aggregate result.
-        - ``to_dict``/``names`` preserve telemetry; bundles that wrap a plain
-          scalar value are flattened in ``to_dict`` so single-output regions
-          keep their previous summary shape.
-    """
-
-    outputs: dict[str, Any] = field(default_factory=dict)
-    region_id: str | None = None
-
-    @property
-    def is_single(self) -> bool:
-        """True when the bundle holds exactly one named output."""
-        return len(self.outputs) == 1
-
-    @property
-    def names(self) -> list[str]:
-        """Live-out names in insertion order."""
-        return list(self.outputs)
-
-    def get(self, name: str, default: Any = None) -> Any:
-        """Retrieve a named live-out value (with explicit default).
-
-        Args:
-            name: Live-out/edge output name.
-            default: Returned when ``name`` is absent instead of raising.
-
-        Returns:
-            The value bound to ``name``, or ``default`` when missing.
-        """
-        return self.outputs.get(name, default)
-
-    def __getitem__(self, name: str) -> Any:
-        """Retrieve a named live-out value.
-
-        Raises:
-            KeyError: When ``name`` is not a live-out written by the region.
-        """
-        if name not in self.outputs:
-            raise KeyError(
-                f"RegionOutputBundle {self.region_id or '?'} has no live-out "
-                f"{name!r}; known outputs: {sorted(self.outputs)}"
-            )
-        return self.outputs[name]
-
-    def only(self) -> Any:
-        """Return the region's single output value.
-
-        Raises:
-            ValueError: When the bundle holds zero or multiple named outputs
-                (multi-live-out regions must be consumed by output name).
-        """
-        names = list(self.outputs)
-        if len(names) != 1:
-            raise ValueError(
-                f"RegionOutputBundle {self.region_id or '?'} has "
-                f"{len(names)} live-outs ({sorted(names)}); "
-                "multi-live-out regions require by-name retrieval (get/[]) "
-                "for each output edge"
-            )
-        return self.outputs[names[0]]
-
-    def add(self, name: str, value: Any) -> RegionOutputBundle:
-        """Bind one named live-out value (in place) and return self."""
-        self.outputs[name] = value
-        return self
-
-    @classmethod
-    def single(cls, value: Any, *, name: str = "result", region_id: str | None = None) -> RegionOutputBundle:
-        """Wrap one value as the region's single named live-out."""
-        return cls(outputs={name: value}, region_id=region_id)
-
-    @classmethod
-    def merge(
-        cls,
-        values: Iterable[RegionOutputBundle] | dict[str, Any],
-        *,
-        region_id: str | None = None,
-    ) -> RegionOutputBundle:
-        """Merge several sub-region bundles (or a bare name->value map) into
-        one combined bundle.
-
-        Args:
-            values: Bundles to merge, or a raw ``{name: value}`` mapping.
-            region_id: Optional id attached to the merged bundle.
-
-        Returns:
-            A bundle holding the union of all named outputs. Later bundles win
-            when two sources define the same output name (last writer wins),
-            which matches deterministic execution order.
-        """
-        combined: dict[str, Any] = {}
-        if isinstance(values, dict):
-            combined.update(values)
-        else:
-            for bundle in values:
-                combined.update(bundle.outputs)
-        return cls(outputs=combined, region_id=region_id)
-
-    def to_dict(self) -> dict[str, Any]:
-        """Serialize the bundle.
-
-        Single-output bundles are flattened to just their scalar value so the
-        scheduler's summary dict keeps ``{region_id: <scalar>}`` for legacy
-        single-live-out regions. Multi-output bundles serialize to a dict of
-        ``{name: value}`` entries.
-        """
-        if len(self.outputs) == 1:
-            return next(iter(self.outputs.values()))
-        return dict(self.outputs)
-
-    def __repr__(self) -> str:  # pragma: no cover - debugging aid
-        return (
-            f"RegionOutputBundle(region_id={self.region_id!r}, "
-            f"outputs={sorted(self.outputs)})"
+    def __init__(self, cycle: list[str]) -> None:
+        self.cycle = cycle
+        super().__init__(
+            f"cyclic dependency detected in region graph: {' -> '.join(cycle)}"
         )
 
 
@@ -169,9 +54,7 @@ class ExecutionRegion:
     dependencies: list[str]  # 依赖的 region IDs
     estimated_cost_ms: float
     memory_requirement_bytes: int
-    thread_requirement: int = 1  # 需要的线程数（资源预留用）
-    deadline_ms: float | None = None  # 单 region 执行 deadline（可选）
-    output_names: tuple[str, ...] = ()  # 多 live-out 输出名（P0-6）
+    deadline_ms: float | None = None  # R45：region 绝对 deadline（monotonic ms）
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -181,9 +64,45 @@ class ExecutionRegion:
             "dependencies": self.dependencies,
             "estimated_cost_ms": round(self.estimated_cost_ms, 2),
             "memory_requirement_bytes": self.memory_requirement_bytes,
-            "thread_requirement": self.thread_requirement,
             "deadline_ms": self.deadline_ms,
-            "output_names": list(self.output_names),
+        }
+
+
+@dataclass
+class TypedRegionFailure:
+    """Typed region failure with structured error information."""
+
+    region_id: str
+    error_type: str
+    error_message: str
+    exception: Exception | None = None
+    failed_dependencies: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "region_id": self.region_id,
+            "error_type": self.error_type,
+            "error_message": self.error_message,
+            "failed_dependencies": self.failed_dependencies,
+        }
+
+
+@dataclass
+class RegionExecutionResult:
+    """Result of a single region execution."""
+
+    region_id: str
+    success: bool
+    result: Any = None
+    failure: TypedRegionFailure | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        if self.success:
+            return {"region_id": self.region_id, "success": True, "result": self.result}
+        return {
+            "region_id": self.region_id,
+            "success": False,
+            "failure": self.failure.to_dict() if self.failure else None,
         }
 
 
@@ -207,6 +126,47 @@ class ParallelSchedulerMetrics:
         }
 
 
+def _derive_default_parallelism() -> int:
+    """R45：从可用 CPU / RAM 推导默认并行度（替代固定 4）。
+
+    优先 cgroup/psutil 探测；不可用时回退保守启发式。结果 clamp 到
+    ``[1, cpu_slots]`` 且受 RAM 预算约束。
+    """
+    cpu_slots = 0
+    mem_limit = 0
+    try:
+        from runtime.resource_governor import (
+            effective_cpu_slots,
+            effective_memory_limit_bytes,
+        )
+
+        cpu_slots = int(effective_cpu_slots())
+        mem_limit = int(effective_memory_limit_bytes())
+    except Exception:
+        pass
+    if cpu_slots <= 0:
+        try:
+            cpu_slots = int(os.sysconf("SC_NPROCESSORS_ONLN"))
+        except (ValueError, OSError, AttributeError):
+            cpu_slots = 4
+    if mem_limit <= 0:
+        try:
+            import psutil  # type: ignore[import-untyped]
+
+            mem_limit = int(psutil.virtual_memory().total)
+        except Exception:
+            mem_limit = 0
+
+    by_cpu = max(1, cpu_slots)
+    if mem_limit > 0:
+        # 保守启发式：每个 region 默认预留 2GB 峰值（无更精确契约时）。
+        per_region_guess = 2 * 1024**3
+        by_mem = max(1, mem_limit // per_region_guess)
+    else:
+        by_mem = by_cpu
+    return max(1, min(by_cpu, by_mem))
+
+
 class ParallelRegionScheduler:
     """并行 region 调度器（跨 backend 并行执行）。
 
@@ -219,54 +179,86 @@ class ParallelRegionScheduler:
     def __init__(
         self,
         *,
-        max_parallel_regions: int = 4,
-        memory_limit_bytes: int | None = None,
-        thread_limit: int | None = None,
+        max_parallel_regions: int | None = None,
+        resource_broker: Any | None = None,
+        default_deadline_ms: float | None = None,
     ) -> None:
         """
         Args:
-            max_parallel_regions: 最大并行 region 数（受 CPU/memory 约束）
-            memory_limit_bytes: 总内存预算（资源预留用）。None 表示不限制。
-            thread_limit: 总线程预算（资源预留用）。None 表示不限制。
+            max_parallel_regions: 最大并行 region 数（受 CPU/memory 约束）。
+                ``None`` 时从可用资源动态推导（R45）。
+            resource_broker: 可选 ``ResourceBroker`` 实例。提供时每个 region
+                提交前经 ``try_reserve`` 获取 CPU/RAM/IO token，完成/取消时释放。
+            default_deadline_ms: 未在 region 上显式指定 deadline 时的默认
+                deadline（monotonic ms）。``None`` 表示不设默认 deadline。
         """
-        self.max_parallel_regions = max_parallel_regions
-        self.memory_limit_bytes = memory_limit_bytes
-        self.thread_limit = thread_limit
+        if max_parallel_regions is None:
+            max_parallel_regions = _derive_default_parallelism()
+        self.max_parallel_regions = max(1, int(max_parallel_regions))
+        self.resource_broker = resource_broker
+        self.default_deadline_ms = default_deadline_ms
         self._metrics = ParallelSchedulerMetrics()
         self._lock = threading.RLock()
-        self._executor = ThreadPoolExecutor(max_workers=max_parallel_regions)
+        self._executor = ThreadPoolExecutor(max_workers=self.max_parallel_regions)
 
-    def _admit_region(
-        self,
-        region: ExecutionRegion,
-        *,
-        reserved_memory: int,
-        reserved_threads: int,
-    ) -> bool:
-        """资源预留准入：仅当总预留 + 本 region 需求 <= 预算时放行。
+    # -- R45: DAG cycle validation --
 
-        Args:
-            region: 待准入 region
-            reserved_memory: 已预留内存字节
-            reserved_threads: 已预留线程数
+    def _validate_dag(self, dep_graph: dict[str, set[str]]) -> None:
+        """R45：调度前校验依赖图无环；有环抛 ``PhysicalPlanCycleError``。
 
-        Returns:
-            True 表示可准入（资源充足），False 表示资源不足（拒绝）。
+        用 Kahn 拓扑排序检测环，并提取一个环路径用于报错。
         """
-        if self.memory_limit_bytes is not None:
-            if reserved_memory + region.memory_requirement_bytes > self.memory_limit_bytes:
-                return False
-        if self.thread_limit is not None:
-            if reserved_threads + region.thread_requirement > self.thread_limit:
-                return False
-        return True
+        indegree = {rid: len(deps) for rid, deps in dep_graph.items()}
+        reverse: dict[str, set[str]] = {rid: set() for rid in dep_graph}
+        for rid, deps in dep_graph.items():
+            for d in deps:
+                if d in reverse:
+                    reverse[d].add(rid)
+        queue = [rid for rid, deg in indegree.items() if deg == 0]
+        processed = 0
+        while queue:
+            node = queue.pop()
+            processed += 1
+            for child in reverse.get(node, set()):
+                indegree[child] -= 1
+                if indegree[child] == 0:
+                    queue.append(child)
+        if processed != len(dep_graph):
+            # 剩余 indegree>0 的节点构成环。沿依赖走出一条环路径。
+            remaining = [rid for rid, deg in indegree.items() if deg > 0]
+            cycle: list[str] = []
+            seen: set[str] = set()
+            start = remaining[0]
+            cur = start
+            while cur not in seen:
+                seen.add(cur)
+                cycle.append(cur)
+                nxt = next(
+                    (d for d in dep_graph[cur] if d in seen or indegree.get(d, 0) > 0),
+                    None,
+                )
+                if nxt is None:
+                    break
+                cur = nxt
+            # 截取环起点
+            if start in cycle:
+                idx = cycle.index(start)
+                cycle = cycle[idx:] + [start]
+            raise PhysicalPlanCycleError(cycle)
 
     def schedule_parallel(
         self,
         regions: list[ExecutionRegion],
         execute_fn: Any,
     ) -> dict[str, Any]:
-        """并行调度多个 region（拓扑排序 + 并发执行 + 资源预留 + 祖先失败阻断 + 超时）。
+        """并行调度多个 region（topological ready-queue, work-conserving）。
+
+        与旧版 strict-layer-barrier 的区别：
+            - 旧版：Layer 0 全部完成 → Layer 1 全部完成 → ...（层内等待）
+            - 新版：region 完成后立即唤醒其依赖者（ready queue push），不再等
+              同层未完成的兄弟。
+            - 优势：减少关键路径延迟（关键 path 上的 region 不被非关键 path 上
+              的兄弟阻塞）。
 
         Args:
             regions: Region 列表
@@ -274,110 +266,220 @@ class ParallelRegionScheduler:
 
         Returns:
             执行结果摘要 {"results": {region_id: result}, "elapsed_ms": ...}
+
+        Raises:
+            PhysicalPlanCycleError: 依赖图存在环时（调度前硬校验）。
         """
         import time
 
         start_ms = time.monotonic() * 1000.0
 
-        # 构建依赖图（region_id → 依赖的 region_id 列表）
+        # 构建依赖图
         dep_graph = {r.region_id: set(r.dependencies) for r in regions}
         region_by_id = {r.region_id: r for r in regions}
 
-        # 拓扑排序（分层：每层是独立可并行的 region）
-        layers = self._topological_layers(dep_graph)
+        # R45: 调度前硬校验 DAG 无环（不再静默 no-op）。
+        self._validate_dag(dep_graph)
 
-        results: dict[str, Any] = {}
+        # 反向依赖图（用于推入 ready queue）
+        reverse_deps: dict[str, set[str]] = {rid: set() for rid in dep_graph}
+        for rid, deps in dep_graph.items():
+            for d in deps:
+                if d in reverse_deps:
+                    reverse_deps[d].add(rid)
+
+        results: dict[str, RegionExecutionResult] = {}
+        failed_regions: set[str] = set()
         completed: set[str] = set()
-        failed: set[str] = set()  # 已失败的 region（含被阻断的）
 
-        # 逐层执行（层内并行）
-        for layer_idx, layer in enumerate(layers):
-            _logger.info(
-                "executing layer %d: %d regions (parallel)", layer_idx, len(layer)
+        # Ready queue：所有依赖已满足的 region
+        ready_queue: list[str] = [
+            rid for rid, deps in dep_graph.items() if not deps
+        ]
+
+        # 在跑 futures: {region_id: Future}
+        running: dict[str, Any] = {}
+        # R45: 每个 admitted region 的 broker 租约（完成/取消时释放）。
+        leases: dict[str, Any] = {}
+        # R45: 每个 admitted region 的 deadline（monotonic ms）。
+        deadlines: dict[str, float] = {}
+        admitted: set[str] = set()
+
+        def _build_contract(region: ExecutionRegion) -> Any:
+            """把 region 映射为 TaskResourceContract（供 broker admission）。"""
+            from runtime.task_resource_contract import TaskResourceContract
+
+            return TaskResourceContract(
+                predicted_elapsed_ms=region.estimated_cost_ms,
+                cpu_tokens=1,
+                io_tokens=1,
+                peak_memory_bytes=region.memory_requirement_bytes,
+                backend=region.backend,
+                estimate_basis="region_scheduler",
             )
 
-            # 资源预留：层内按依赖顺序累计已预留资源
-            reserved_memory = 0
-            reserved_threads = 0
-            admitted: list[str] = []
-            rejected: list[str] = []
-
-            for region_id in layer:
-                region = region_by_id[region_id]
-                # 祖先失败阻断：任一依赖已失败 → 本 region 直接 fail-closed，不执行
-                if dep_graph[region_id] & failed:
-                    _logger.error(
-                        "region %s blocked: ancestor region(s) %s failed",
-                        region_id,
-                        sorted(dep_graph[region_id] & failed),
-                    )
-                    results[region_id] = {
-                        "error": "ancestor region failed; descendant blocked (fail-closed)"
-                    }
-                    failed.add(region_id)
-                    continue
-
-                # 资源预留准入
-                if not self._admit_region(
-                    region,
-                    reserved_memory=reserved_memory,
-                    reserved_threads=reserved_threads,
-                ):
-                    _logger.warning(
-                        "region %s rejected: resource budget exceeded "
-                        "(mem %d/%s, threads %d/%s)",
-                        region_id,
-                        reserved_memory + region.memory_requirement_bytes,
-                        self.memory_limit_bytes,
-                        reserved_threads + region.thread_requirement,
-                        self.thread_limit,
-                    )
-                    results[region_id] = {
-                        "error": "resource reservation rejected (budget exceeded)"
-                    }
-                    failed.add(region_id)
-                    rejected.append(region_id)
-                    continue
-
-                admitted.append(region_id)
-                reserved_memory += region.memory_requirement_bytes
-                reserved_threads += region.thread_requirement
-
-            # 提交已准入 region（并行执行）
-            futures = {}
-            for region_id in admitted:
-                region = region_by_id[region_id]
-                future = self._executor.submit(execute_fn, region)
-                futures[future] = region_id
-
-            # 等待层内所有已准入 region 完成（带真实超时）。
-            # 注意：不能用 as_completed —— 它要等 future 真正完成才 yield，
-            # 导致 future.result(timeout=...) 永远没有机会触发超时。
-            # 改为直接遍历 futures，对每个 future 用其 region 的 deadline 调用 result()。
-            for future, region_id in futures.items():
-                region = region_by_id[region_id]
-                deadline_ms = region.deadline_ms
+        def _release_lease(rid: str) -> None:
+            lease = leases.pop(rid, None)
+            if lease is not None:
                 try:
-                    if deadline_ms is not None:
-                        result = future.result(timeout=deadline_ms / 1000.0)
-                    else:
-                        result = future.result()
-                    results[region_id] = result
-                    completed.add(region_id)
+                    lease.release()
+                except Exception as exc:  # pragma: no cover - defensive
+                    _logger.warning("lease release failed for %s: %s", rid, exc)
 
+        def _admit_from_queue() -> None:
+            """从 ready_queue 提交可运行的 region 到线程池（broker 准入）。"""
+            nonlocal ready_queue
+            admitted_this_round: list[str] = []
+            for rid in ready_queue:
+                if len(running) >= self.max_parallel_regions:
+                    break
+                if rid in admitted or rid in completed or rid in failed_regions:
+                    continue
+                # 二次检查依赖（可能在 queue 排序期间被取消）
+                failed_deps = [d for d in dep_graph[rid] if d in failed_regions]
+                if failed_deps:
+                    results[rid] = RegionExecutionResult(
+                        region_id=rid,
+                        success=False,
+                        failure=TypedRegionFailure(
+                            region_id=rid,
+                            error_type="DependencyCancellation",
+                            error_message=f"Region cancelled due to failed dependencies: {failed_deps}",
+                            failed_dependencies=failed_deps,
+                        ),
+                    )
+                    failed_regions.add(rid)
+                    continue
+                region = region_by_id[rid]
+                # R45: broker admission —— 拒绝则留在 ready_queue 等下一轮
+                #（work-conserving，不 deadlock）。
+                if self.resource_broker is not None:
+                    contract = _build_contract(region)
+                    lease = self.resource_broker.try_reserve(
+                        contract, task_id=rid
+                    )
+                    if lease is None:
+                        continue  # 资源不足：本轮不提交，留待后续
+                    leases[rid] = lease
+                future = self._executor.submit(execute_fn, region)
+                running[rid] = future
+                admitted.add(rid)
+                admitted_this_round.append(rid)
+                # R45: 记录 deadline（region 显式 > 默认）。
+                if region.deadline_ms is not None:
+                    deadlines[rid] = region.deadline_ms
+                elif self.default_deadline_ms is not None:
+                    deadlines[rid] = start_ms + self.default_deadline_ms
+            # Remove admitted regions from queue (keep unadmitted ones for next round)
+            ready_queue = [r for r in ready_queue if r not in admitted_this_round]
+
+        def _cancel_descendants(failed_rid: str) -> None:
+            """Recursively cancel all descendants of a failed region."""
+            for child in reverse_deps.get(failed_rid, set()):
+                if child in completed or child in failed_regions or child in admitted:
+                    continue
+                child_deps = dep_graph[child]
+                failed_deps = [d for d in child_deps if d in failed_regions]
+                if failed_deps:
+                    results[child] = RegionExecutionResult(
+                        region_id=child,
+                        success=False,
+                        failure=TypedRegionFailure(
+                            region_id=child,
+                            error_type="DependencyCancellation",
+                            error_message=f"Region cancelled due to failed dependencies: {failed_deps}",
+                            failed_dependencies=failed_deps,
+                        ),
+                    )
+                    failed_regions.add(child)
+                    # Recursively cancel this child's descendants
+                    _cancel_descendants(child)
+
+        def _on_complete(rid: str) -> None:
+            """region 完成后的回调：记录结果 + 推入 ready queue。"""
+            completed.add(rid)
+            running.pop(rid, None)
+            deadlines.pop(rid, None)
+            _release_lease(rid)
+            # 推入 ready queue：依赖此 region 且所有依赖已满足
+            for child in reverse_deps.get(rid, set()):
+                if child in completed or child in failed_regions or child in admitted:
+                    continue
+                child_deps = dep_graph[child]
+                if child_deps.issubset(completed):
+                    ready_queue.append(child)
+
+        def _check_deadlines(now_ms: float) -> None:
+            """R45: 检查 running region 是否超时；超时则取消 + 级联取消后代。"""
+            expired = [
+                rid
+                for rid, dl in deadlines.items()
+                if now_ms >= dl and rid in running
+            ]
+            for rid in expired:
+                future = running.get(rid)
+                if future is not None:
+                    future.cancel()
+                _release_lease(rid)
+                running.pop(rid, None)
+                deadlines.pop(rid, None)
+                results[rid] = RegionExecutionResult(
+                    region_id=rid,
+                    success=False,
+                    failure=TypedRegionFailure(
+                        region_id=rid,
+                        error_type="DeadlineExceeded",
+                        error_message=f"Region exceeded its deadline ({deadlines.get(rid, '?')}ms)",
+                    ),
+                )
+                failed_regions.add(rid)
+                _cancel_descendants(rid)
+
+        # 主循环：work-conserving ready-queue 调度
+        while ready_queue or running:
+            _admit_from_queue()
+            if not running:
+                break
+            # 等待任意一个完成（事件驱动，非轮询）
+            done_set, _ = wait(
+                list(running.values()),
+                timeout=0.1,
+                return_when=FIRST_COMPLETED,
+            )
+            now_ms = time.monotonic() * 1000.0
+            # R45: 先处理 deadline 超时（含 wait 超时返回的轮次）。
+            _check_deadlines(now_ms)
+            for future in done_set:
+                # 找到对应的 region_id
+                rid = None
+                for r, f in list(running.items()):
+                    if f is future:
+                        rid = r
+                        break
+                if rid is None:
+                    continue
+                try:
+                    result = future.result(timeout=0)
+                    results[rid] = RegionExecutionResult(
+                        region_id=rid, success=True, result=result
+                    )
                     with self._lock:
                         self._metrics.total_regions_scheduled += 1
-                        if len(layer) > 1:
-                            self._metrics.parallel_executions += 1
-                        else:
-                            self._metrics.sequential_executions += 1
-
                 except Exception as exc:
-                    _logger.error("region %s execution failed: %s", region_id, exc)
-                    results[region_id] = {
-                        "error": f"{type(exc).__name__}: {exc}"
-                    }
-                    failed.add(region_id)
+                    _logger.error("region %s execution failed: %s", rid, exc)
+                    failure = TypedRegionFailure(
+                        region_id=rid,
+                        error_type=type(exc).__name__,
+                        error_message=str(exc),
+                        exception=exc,
+                    )
+                    results[rid] = RegionExecutionResult(
+                        region_id=rid, success=False, failure=failure
+                    )
+                    failed_regions.add(rid)
+                    # Cancel all descendants of this failed region
+                    _cancel_descendants(rid)
+                _on_complete(rid)
 
         elapsed_ms = (time.monotonic() * 1000.0) - start_ms
 
@@ -392,13 +494,32 @@ class ParallelRegionScheduler:
             self._metrics.total_saved_ms += saved_ms
 
         return {
-            "results": results,
+            "results": {rid: res.to_dict() for rid, res in results.items()},
             "elapsed_ms": elapsed_ms,
             "estimated_serial_ms": serial_time_ms,
             "saved_ms": saved_ms,
-            "layers": len(layers),
-            "failed": sorted(failed),
+            "layers": self._topological_depth(dep_graph),
+            "failed_regions": list(failed_regions),
         }
+
+    def _topological_depth(self, dep_graph: dict[str, set[str]]) -> int:
+        """计算 DAG 的拓扑深度（关键路径层数），用于估算加速比。"""
+        depths: dict[str, int] = {}
+
+        def _depth(rid: str) -> int:
+            if rid in depths:
+                return depths[rid]
+            deps = dep_graph.get(rid, set())
+            if not deps:
+                depths[rid] = 0
+                return 0
+            d = max(_depth(d) for d in deps if d in dep_graph) + 1
+            depths[rid] = d
+            return d
+
+        for rid in dep_graph:
+            _depth(rid)
+        return max(depths.values()) + 1 if depths else 0
 
     def _topological_layers(
         self, dep_graph: dict[str, set[str]]
@@ -410,6 +531,9 @@ class ParallelRegionScheduler:
 
         Returns:
             分层列表（每层是无依赖冲突的 node 列表）
+
+        Raises:
+            PhysicalPlanCycleError: 依赖图存在环时（R45：不再 ``break`` 静默）。
         """
         layers: list[list[str]] = []
         remaining = set(dep_graph.keys())
@@ -424,13 +548,10 @@ class ParallelRegionScheduler:
             ]
 
             if not layer:
-                # 循环依赖：fail closed
-                from ..exceptions import PhysicalPlanCycleError
-
-                raise PhysicalPlanCycleError(
-                    f"Cyclic dependency detected in region graph: "
-                    f"remaining nodes {sorted(remaining)}"
-                )
+                # 循环依赖：硬报错（R45）。
+                self._validate_dag(dep_graph)  # 会抛 PhysicalPlanCycleError
+                # 防御：validate 未抛（理论上不会）则显式抛。
+                raise PhysicalPlanCycleError(list(remaining))
 
             layers.append(layer)
             completed.update(layer)
@@ -512,8 +633,6 @@ class ParallelRegionScheduler:
             metrics = self.metrics().to_dict()
             return {
                 "max_parallel_regions": self.max_parallel_regions,
-                "memory_limit_bytes": self.memory_limit_bytes,
-                "thread_limit": self.thread_limit,
                 "metrics": metrics,
             }
 

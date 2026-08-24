@@ -24,6 +24,19 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EVIDENCE_PATH = os.path.join(REPO_ROOT, "evidence", "verified_gate_evidence.json")
 GATES_CONFIG_PATH = os.path.join(REPO_ROOT, "config", "gates.json")
 
+# R46 P0-X: single authoritative verdict system.  GateMatrix only RENDERS
+# verdicts from it — it never re-derives PASS.
+try:
+    sys.path.insert(0, os.path.join(REPO_ROOT, "scripts"))
+    from gate_evidence_verifier import (
+        GateEvidenceVerifier,
+        NOT_APPLICABLE,
+        NOT_RUN,
+    )
+except Exception as _gve_import_err:  # pragma: no cover - import hardening
+    print(f"ERROR: cannot import GateEvidenceVerifier: {_gve_import_err}", file=sys.stderr)
+    sys.exit(2)
+
 
 def get_current_git_sha() -> str:
     """Return the current HEAD SHA of the repo."""
@@ -121,7 +134,69 @@ EVIDENCE_BACKED_GATES = {
     "SOURCE_AUTHORITY", "SUPPLY_CHAIN", "FRESH_WHEEL_MATRIX", "EVIDENCE_CURRENT",
 }
 
+# R46 P0-Z: the platform structural gates that gate EVERY production candidate.
+# All must be PASS (or legitimate NOT_APPLICABLE) for ANY package to be
+# PRODUCTION_CANDIDATE; a single FAIL/BLOCKED/STALE floors the platform to
+# PRE_PRODUCTION / SAFE_BY_GATING — never PRODUCTION_CANDIDATE.
+PLATFORM_STRUCTURAL_GATES = {
+    "SOURCE_AUTHORITY", "SUPPLY_CHAIN", "FRESH_WHEEL_MATRIX", "EVIDENCE_CURRENT",
+    "SUBMODULE_REACHABILITY",
+}
+
+# R46 P0-Z: every production package must at least carry this core set of gates
+# (cross-package + the structural package-specific responsibilities).  A
+# package with an empty package-specific gate set can no longer be
+# PRODUCTION_CANDIDATE via CROSS_PACKAGE alone.
+PLATFORM_CORE_GATES = {
+    "SOURCE_AUTHORITY", "PACKAGE_UNIT", "PACKAGE_CONTRACT",
+    "SERIALIZATION", "DETERMINISM", "FRESH_WHEEL", "SUPPLY_CHAIN",
+    "CROSS_PACKAGE",
+}
+
 ASPIRATIONAL_GATES: set[str] = set()
+
+
+def _first_entry_note(gate_obj: dict) -> str:
+    """Pull the first evidence entry's note (verifier reason) if present."""
+    ev = (gate_obj or {}).get("evidence", []) or []
+    for e in ev:
+        if e.get("note"):
+            return e["note"]
+    return ""
+
+
+def _find_spec(gate_name: str):
+    """Look up the live GateSpec for a gate (None when unavailable)."""
+    try:
+        sys.path.insert(0, os.path.join(REPO_ROOT, "scripts"))
+        from gate_runner import find_spec as _fs  # noqa: PLC0415
+        return _fs(gate_name)
+    except Exception:
+        return None
+
+
+def _spec_expected_hashes(gate_name: str) -> set[str] | None:
+    """ExpectedCommandIdentitySet for the live spec (None for unknown/verifier gates)."""
+    spec = _find_spec(gate_name)
+    if spec is None:
+        return None
+    return GateEvidenceVerifier().expected_command_identity_set(spec)
+
+
+def _verdict_expected_commands(gate_name: str, spec) -> set[str] | None:
+    """ExpectedCommandIdentitySet to bind the verdict; empty for verifier gates.
+
+    Returns ``None`` for verifier-backed gates so the verifier trusts its
+    authoritative per-entry status instead of command identity.
+    """
+    if spec is not None and getattr(spec, "verifier", None):
+        return None
+    if spec is not None:
+        return GateEvidenceVerifier().expected_command_identity_set(spec)
+    try:
+        return _spec_expected_hashes(gate_name)
+    except Exception:
+        return None
 
 
 def compute_gate_status(
@@ -129,51 +204,23 @@ def compute_gate_status(
     evidence_gates: dict[str, list[dict[str, Any]]],
     evidence_sha: str | None,
     current_sha: str,
-) -> tuple[str, int, str]:
-    """Compute status for a single gate.
+    verifier: GateEvidenceVerifier,
+) -> tuple[str, int, str, str]:
+    """Compute a SINGLE authoritative status via GateEvidenceVerifier.
 
-    Returns (status, total_test_count, timestamp).
-    Status: NOT_RUN -> STALE -> BLOCKED -> FAIL -> PASS (priority order).
+    R46 P0-X: the verifier is the only source of gate truth; GateMatrix only
+    renders.  Returns (status, total_tests, timestamp, reason).
     """
     entries = evidence_gates.get(gate_name)
-
-    # NOT_RUN: no evidence entries
-    if not entries:
-        return ("NOT_RUN", 0, "—")
-
-    # STALE: evidence git SHA doesn't match current HEAD
-    if evidence_sha is not None and evidence_sha != current_sha:
-        total_tests = sum(e.get("tests", 0) or 0 for e in entries)
-        timestamps = [e.get("executed_at", "") or "" for e in entries if e.get("executed_at")]
-        ts = timestamps[0] if timestamps else "—"
-        return ("STALE", total_tests, ts)
-
-    total_tests = 0
-    has_blocked = False
-    has_fail = False
-    timestamps = []
-
-    for entry in entries:
-        tests = entry.get("tests", 0) or 0
-        total_tests += tests
-        ts = entry.get("executed_at") or ""
-        if ts:
-            timestamps.append(ts)
-
-        if tests == 0:
-            has_blocked = True
-        elif entry.get("failed", 0) or entry.get("errors", 0):
-            has_fail = True
-
-    timestamp = timestamps[0] if timestamps else "—"
-
-    if has_blocked:
-        return ("BLOCKED", total_tests, timestamp)
-    if has_fail:
-        return ("FAIL", total_tests, timestamp)
-
-    # PASS: all entries have exit_code==0, failures==0, errors==0, tests>0
-    return ("PASS", total_tests, timestamp)
+    spec = _find_spec(gate_name)
+    live_hashes = _verdict_expected_commands(gate_name, spec)
+    verdict = verifier.verify_gate(
+        gate_name=gate_name,
+        spec=spec,
+        entries=entries or [],
+        live_command_hashes=live_hashes,
+    )
+    return (verdict.status, verdict.tests, verdict.timestamp, verdict.reason_text())
 
 
 def classify_package(
@@ -281,11 +328,13 @@ def main() -> int:
     tree_dirty = git_tree_dirty()
     n_gitlinks = gitlink_count()
 
-    # Build evidence lookup: gate_name -> list of entries
+    # Build evidence lookup: gate_name -> list of entries, and gate_name -> gate obj
     evidence_gates: dict[str, list[dict[str, Any]]] = {}
+    evidence_gate_objs: dict[str, dict[str, Any]] = {}
     for gate_entry in evidence.get("gates", []):
         name = gate_entry["name"]
         evidence_gates[name] = gate_entry.get("evidence", [])
+        evidence_gate_objs[name] = gate_entry
 
     # VER-P0-05: SUBMODULE_REACHABILITY — with no git submodules declared there
     # is nothing pinned to prove, so the gate is NOT_RUN (never PASS).
@@ -316,8 +365,14 @@ def main() -> int:
                 gate_notes[gate_name] = "no submodules declared; nothing pinned to prove"
         elif gate_name in EVIDENCE_BACKED_GATES:
             # SOURCE_AUTHORITY / SUPPLY_CHAIN / FRESH_WHEEL_MATRIX /
-            # EVIDENCE_CURRENT: read from evidence when present, else NOT_RUN.
-            if evidence_gates.get(gate_name):
+            # EVIDENCE_CURRENT: the runner now emits an authoritative per-gate
+            # ``status`` (PASS/FAIL/BLOCKED/NOT_RUN) derived from REAL verifier
+            # output.  Prefer that over recomputing from synthetic entries.
+            gate_status = evidence_gate_objs.get(gate_name, {}).get("status")
+            if gate_status is not None:
+                gate_notes[gate_name] = _first_entry_note(evidence_gate_objs.get(gate_name, {}))
+                status, tests, ts = gate_status, 0, evidence_timestamp
+            elif evidence_gates.get(gate_name):
                 status, tests, ts = compute_gate_status(
                     gate_name, evidence_gates, evidence_sha, current_sha,
                 )

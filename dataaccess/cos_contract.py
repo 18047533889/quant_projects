@@ -18,6 +18,7 @@ _MODELS = {"D1", "E1", "E2", "S1", "X0", "STATIC", "EMPTY", "MINUTE", "RAW_EVENT
 _PANEL = {"dense", "state_ready", "minute", "event_only", "sparse", "dimension", "forbidden"}
 _PIT = {"strict", "effective_time_only", "unsupported", "not_applicable"}
 _CALENDAR_DOMAINS = {"trade_day", "calendar_day", "event_time", "static"}
+_SOURCE_CLASSES = {"cos_physical", "derived_dataset"}
 _CARDINALITY = {"one_to_one", "one_to_many", "many_to_one", "many_to_many"}  # 相对股票日频面板
 _TIME_REPRESENTATIONS = {None, "date_label", "instant"}
 _TIME_PRECISIONS = {None, "date", "timestamp"}
@@ -65,6 +66,11 @@ class COSDatasetContract:
     expected_cadence: str | None = None        # daily/weekly/quarterly/annual/event_driven
     max_staleness: str | None = None           # 如 "7d"（超过告警/查询前提示）
     missing_partition_semantics: str = "error" # error/warn/empty_ok
+    # ---- R45 P0-ASHARE：来源类别区分 ----
+    # cos_physical = COS lqtp_data/massive_data 真源物理镜像（provenance / snapshot
+    # identity / revision 语义均以 COS 物理源为准）；derived_dataset = 派生/本地研究
+    # 数据集（如 universe_daily），不是 COS 物理源，**不得**被当作 COS 物理契约使用。
+    source_class: str = "cos_physical"         # cos_physical / derived_dataset
     # ---- R24 P0-PIT2 §11：时间表示 / 精度与时区契约 ----
     time_representation: str | None = None     # date_label / instant
     time_precision: str | None = None          # date / timestamp
@@ -85,6 +91,8 @@ class COSDatasetContract:
             raise ValueError(f"invalid COS contract: {self.name}")
         if self.calendar_domain not in _CALENDAR_DOMAINS:
             raise ValueError(f"invalid calendar_domain {self.calendar_domain!r}: {self.name}")
+        if self.source_class not in _SOURCE_CLASSES:
+            raise ValueError(f"invalid source_class {self.source_class!r}: {self.name}")
         if self.cardinality not in _CARDINALITY:
             raise ValueError(f"invalid cardinality {self.cardinality!r}: {self.name}")
         if self.pit_policy == "strict" and not self.availability_column:
@@ -168,6 +176,32 @@ from .cos_contract_us import US_COS_CONTRACTS  # noqa: E402
 
 COS_DATASET_CONTRACTS = {**ASHARE_COS_CONTRACTS, **US_COS_CONTRACTS}
 
+# ---- R45 P0-ASHARE：派生 / 本地研究数据集注册表（非 COS 物理源）----
+# 与 ASHARE_COS_CONTRACTS / COS_DATASET_CONTRACTS **分离**：这些数据集不是 COS
+# lqtp_data 物理镜像（字典 §8「非 COS / 不在本字典范围」），而是本地 clean_data 派生
+# 数据集（如 universe_daily）。它们的 provenance / snapshot identity / revision 语义
+# 均不同于 COS 物理源——必须单独登记，禁止伪装成 COS 物理契约（source_class=
+# "derived_dataset"）。读取走统一的 runtime/read 层，但契约语义不进入 COS 物理注册表。
+DERIVED_DATASET_CONTRACTS: dict[str, "COSDatasetContract"] = {
+    name: contract
+    for name, contract in COS_DATASET_CONTRACTS.items()
+    if getattr(contract, "source_class", "cos_physical") == "derived_dataset"
+}
+
+
+def cos_physical_contracts() -> dict[str, "COSDatasetContract"]:
+    """COS 物理源契约（source_class == 'cos_physical'）。
+
+    ``COS_DATASET_CONTRACTS`` 同时承载派生/本地研究数据集（如 universe_daily），
+    但只有 ``cos_physical`` 才是真 COS 物理源——provenance / snapshot identity /
+    revision 语义以 COS 物理源为准。派生数据集见 :data:`DERIVED_DATASET_CONTRACTS`。
+    """
+    return {
+        name: contract
+        for name, contract in COS_DATASET_CONTRACTS.items()
+        if getattr(contract, "source_class", "cos_physical") == "cos_physical"
+    }
+
 
 def get_cos_contract(dataset: str) -> COSDatasetContract | None:
     return COS_DATASET_CONTRACTS.get(str(dataset))
@@ -177,6 +211,11 @@ def require_cos_contract(dataset: str) -> COSDatasetContract:
     contract = get_cos_contract(dataset)
     if contract is None:
         raise ValidationError(f"数据集 {dataset!r} 没有 COS 语义契约；不得推断 panel/PIT 语义")
+    if contract.source_class != "cos_physical":
+        raise ValidationError(
+            f"数据集 {dataset!r} 是 source_class={contract.source_class!r}（派生/本地研究数据集），"
+            "不是 COS 物理源；不得按 COS 物理契约（provenance/snapshot/revision 语义）使用。"
+        )
     return contract
 
 
@@ -390,4 +429,4 @@ def semantic_contract_fingerprint() -> str:
     return CanonicalIdentityEncoder(strict=True).hash_identity(payload, bits=256)
 
 
-__all__ = ["COSDatasetContract", "COS_DATASET_CONTRACTS", "get_cos_contract", "require_cos_contract", "validate_panel_request", "resolve_event_clock", "validate_event_filters", "normalize_return_values", "semantic_contract_fingerprint"]
+__all__ = ["COSDatasetContract", "COS_DATASET_CONTRACTS", "DERIVED_DATASET_CONTRACTS", "cos_physical_contracts", "get_cos_contract", "require_cos_contract", "validate_panel_request", "resolve_event_clock", "validate_event_filters", "normalize_return_values", "semantic_contract_fingerprint"]

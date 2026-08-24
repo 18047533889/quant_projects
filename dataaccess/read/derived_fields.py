@@ -1,4 +1,4 @@
-"""R39 #67 —— DerivedFieldCompiler：把 ``derived_expression`` 编译成可执行表达式。
+"""R39 #67 / R45 —— DerivedFieldCompiler：把 ``derived_expression`` 编译成可执行表达式。
 
 背景
     语义 catalog 允许声明 derived 字段（``derived_expression``），但执行链长期
@@ -9,6 +9,18 @@
     - :class:`DerivedFieldCompiler`：把 ``SemanticField.derived_expression``
       编译成 AST（plan 期 fail-fast）；
     - :func:`evaluate_expression`：在 Arrow Table 上求值（pyarrow.compute）。
+
+R45 强化（本文件本次修改）
+    1. **Field-ID 绑定**：plan/compile 期把每个 ``dataset.column`` 引用绑定成
+       ``ResolvedFieldID``（``(dataset, physical_name)`` 组合键），执行期按绑定
+       ID 解析列。两个数据集暴露同名物理列（``alpha.value`` 与 ``beta.value``）
+       时各归其列，绝不交叉引用——即使 ``read_joined`` 里同名输出列已被拒绝，
+       绑定语义仍显式携带数据集身份，杜绝拼写错位。
+    2. **NumericPolicy 绑定**：derived 计算绑定一个数值策略，控制除零 / Inf /
+       NaN 行为（``raise`` / ``nan`` / ``masked``）。两份逻辑表达式相同但 policy
+       不同的字段会 hash 成不同实例，行为按各自策略执行。
+    3. **Projection closure**：最终投影只返回请求的逻辑字段（derived 的
+       ``logical_name``）以及它们依赖的原始物理列，绝不泄露无关原始列。
 
 安全性
     - 只接受白名单 token（数字 / 标识符 / ``+-*/()``），不执行任意代码；
@@ -30,6 +42,47 @@ from data_access.core.exceptions import (
     UnsupportedFeatureError,
     ValidationError,
 )
+
+# ---------------------------------------------------------------------------
+# NumericPolicy（R45 fix 2）
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class NumericPolicy:
+    """控制 derived 求值里的除零 / Inf / NaN 行为。
+
+    - ``division``：除数为 0 时的行为。
+        - ``"raise"``  → 抛 ``ValidationError``（fail-closed）；
+        - ``"nan"``    → 该位填 NaN；
+        - ``"masked"`` → 该位填 NULL。
+    - ``nonfinite``：最终结果里出现的 Inf / NaN（含除零溢出）如何收口。
+        - ``"raise"``  → 抛 ``ValidationError``；
+        - ``"nan"``    → 归一化 NaN；
+        - ``"masked"`` → 归一化 NULL。
+
+    同表达式但 policy 不同 → 编译出的对象不同（frozen dataclass，按值 hash 区分）。
+    """
+
+    division: str = "nan"
+    nonfinite: str = "nan"
+
+    def __post_init__(self) -> None:
+        if self.division not in {"raise", "nan", "masked"}:
+            raise ValidationError(
+                f"NumericPolicy.division 非法: {self.division!r}（raise/nan/masked）"
+            )
+        if self.nonfinite not in {"raise", "nan", "masked"}:
+            raise ValidationError(
+                f"NumericPolicy.nonfinite 非法: {self.nonfinite!r}（raise/nan/masked）"
+            )
+
+
+_DEFAULT_POLICY = NumericPolicy()
+
+# 除零保护：pc.divide 除数不能为 0，用一个极小的非零替身近似除零结果。
+_EPS = 1e-300
+
 
 # ---------------------------------------------------------------------------
 # AST
@@ -58,6 +111,47 @@ class Bin:
 class Unary:
     op: str
     operand: Any
+
+
+# ---------------------------------------------------------------------------
+# Field-ID 绑定（R45 fix 1）
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ResolvedFieldID:
+    """``dataset.column`` 引用在执行期的唯一身份。
+
+    同一物理列名在**不同数据集**里是不同 ID（即使列名相同也不会交叉引用）。
+    """
+
+    dataset: str
+    physical_name: str
+
+    @property
+    def qualified(self) -> str:
+        return f"{self.dataset}.{self.physical_name}"
+
+
+def bind_ref(dataset: str | None, column: str) -> ResolvedFieldID:
+    """把 ``(dataset, column)`` 引用编译成唯一 Field-ID。
+
+    带 ``dataset.`` 前缀 → ``(dataset, column)``；
+    裸引用 → ``column`` 当作 dataset 持有者（单一数据集场景）。真正校验列是否
+    存在于结果表留到执行期（表在 execute 才物化）。
+    """
+    ds = dataset if dataset is not None else column
+    return ResolvedFieldID(dataset=ds, physical_name=column)
+
+
+def _walk_refs(node: Any) -> list[Ref]:
+    if isinstance(node, Ref):
+        return [node]
+    if isinstance(node, Unary):
+        return _walk_refs(node.operand)
+    if isinstance(node, Bin):
+        return _walk_refs(node.left) + _walk_refs(node.right)
+    return []
 
 
 # ---------------------------------------------------------------------------
@@ -180,10 +274,39 @@ def parse_expression(expr: str) -> Any:
     return _Parser(_tokenize(str(expr))).parse()
 
 
-class DerivedFieldCompiler:
-    """把 ``SemanticField.derived_expression`` 编译成可执行 AST（plan 期 fail-fast）。"""
+def _numeric_policy_from_field(field: Any) -> NumericPolicy:
+    """从 SemanticField 的 ``policy_derive`` 读取 NumericPolicy。
 
-    def __init__(self, field: Any) -> None:
+    字段无声明 → 默认 ``_DEFAULT_POLICY``；声明非法 → 编译期抛。
+    """
+    raw = getattr(field, "policy_derive", None)
+    if not raw:
+        return _DEFAULT_POLICY
+    if isinstance(raw, NumericPolicy):
+        return raw
+    if isinstance(raw, dict):
+        return NumericPolicy(
+            division=str(raw.get("division", "nan")),
+            nonfinite=str(raw.get("nonfinite", "nan")),
+        )
+    raise ValidationError(
+        f"derived 字段 '{getattr(field, 'logical_name', '')}' 的 policy_derive "
+        f"必须为 dict 或 NumericPolicy，收到 {type(raw).__name__}"
+    )
+
+
+class DerivedFieldCompiler:
+    """把 ``SemanticField.derived_expression`` 编译成可执行 AST（plan 期 fail-fast）。
+
+    持有字段数值策略（fix 2）；``bind()`` 把列引用绑定成 Field-ID（fix 1）。
+    """
+
+    def __init__(
+        self,
+        field: Any,
+        *,
+        numeric_policy: NumericPolicy | None = None,
+    ) -> None:
         self.field = field
         self.logical_name = str(getattr(field, "logical_name", ""))
         expr = getattr(field, "derived_expression", None)
@@ -193,63 +316,181 @@ class DerivedFieldCompiler:
             )
         self.expression = str(expr)
         self.ast = parse_expression(self.expression)
+        self.numeric_policy = numeric_policy or _numeric_policy_from_field(field)
+        self._bound: dict[str, ResolvedFieldID] | None = None
 
     def describe(self) -> str:
         return f"{self.logical_name} := {self.expression}"
 
+    def bind(self) -> DerivedFieldCompiler:
+        """把每个列引用绑定成唯一 Field-ID（fix 1 plan 面）。"""
+        self._bound = {}
+        for ref in _walk_refs(self.ast):
+            key = ref.dataset if ref.dataset is not None else ref.column
+            if key in self._bound:
+                continue
+            self._bound[key] = bind_ref(ref.dataset, ref.column)
+        return self
 
-def _resolve_column(table: pa.Table, dataset: str | None, column: str) -> pa.ChunkedArray:
-    """把 ``(dataset, column)`` 引用映射到结果表列。
+    @property
+    def referenced_ids(self) -> list[ResolvedFieldID]:
+        if self._bound is None:
+            raise ValidationError(f"DerivedFieldCompiler 尚未 bind（{self.logical_name}）")
+        return sorted(self._bound.values(), key=lambda f: f.qualified)
 
-    结果表列名是物理列名（read_joined 多表输出=physical_name）。若结果表里同名
-    物理列出现多次（跨数据集重复列）→ ``AmbiguousFieldError``。
+    @property
+    def raw_columns(self) -> list[str]:
+        """该 derived 依赖的物理列名（去重，保持 AST 出现顺序）。"""
+        if self._bound is None:
+            raise ValidationError(f"DerivedFieldCompiler 尚未 bind（{self.logical_name}）")
+        out: list[str] = []
+        for ref in _walk_refs(self.ast):
+            fid = self._bound.get(ref.dataset if ref.dataset is not None else ref.column)
+            if fid is not None and fid.physical_name not in out:
+                out.append(fid.physical_name)
+        return out
+
+
+# ---------------------------------------------------------------------------
+# 求值（R45：按绑定 Field-ID 解析列 + 按 NumericPolicy 收口）
+# ---------------------------------------------------------------------------
+
+
+def _resolve_by_id(table: pa.Table, fid: ResolvedFieldID) -> pa.ChunkedArray:
+    """执行期按绑定 Field-ID 解析列。
+
+    结果表列名 = 物理列名（``read_joined`` 多表输出即 physical_name）。同名物理列
+    跨数据集已被 join 输出守卫拒绝，故按 ``physical_name`` 取列即精确命中目标列。
+    ``fid.dataset`` 用于错误信息与拼写错位防御。
     """
-    names = table.column_names
-    matches = [c for c in names if c == column]
-    if not matches:
-        qual = f"{dataset}.{column}" if dataset else column
+    if fid.physical_name not in table.column_names:
         raise ValidationError(
-            f"derived 字段引用 {qual!r} 在结果表里找不到列（可用列: "
-            f"{sorted(set(names))[:20]}）"
+            f"derived 字段引用 {fid.qualified!r} 在结果表里找不到列"
+            f"（可用列: {sorted(table.column_names)[:20]}）"
         )
-    if len(matches) > 1:
-        raise AmbiguousFieldError(
-            f"derived 字段引用 {dataset}.{column} 在结果表里有多个同名物理列"
-            f"（{len(matches)}），无法确定用哪一列"
-        )
-    return table.column(column)
+    return table.column(fid.physical_name)
 
 
-def _evaluate_node(node: Any, table: pa.Table) -> Any:
+def _coerce_array(x: Any, n_rows: int) -> pa.Array:
+    """把求值子项统一成行数一致的单列 Array。"""
+    if isinstance(x, pa.ChunkedArray):
+        x = x.combine_chunks()
+    if isinstance(x, pa.Array):
+        return x
+    if isinstance(x, (int, float)):
+        return pa.array([float(x)] * n_rows)
+    raise UnsupportedFeatureError(f"derived 求值返回未知类型: {type(x).__name__}")
+
+
+def _divide(left: Any, right: Any, n_rows: int, policy: NumericPolicy) -> pa.Array:
+    """除法：除零按 NumericPolicy.division 处理，结果 Inf/NaN 按 nonfinite 收口。"""
+    larr = _coerce_fixed(left, n_rows)
+    rarr = _coerce_fixed(right, n_rows)
+    if policy.division == "raise":
+        # 除零 → 抛
+        is_zero = pc.equal(rarr, 0)
+        if pa.compute.any(is_zero).as_py():
+            raise ValidationError(
+                "derived 除法遇到除零（NumericPolicy.division=raise）"
+            )
+        return pc.divide(larr, rarr)
+    # nan / masked：用极小替身避免 pc.divide 抛错，除零位留下 inf 再由下面收口。
+    zero_mask = pc.equal(rarr, 0)
+    safe_den = pc.if_else(zero_mask, _EPS, rarr)
+    out = pc.divide(larr, safe_den)
+    return _finalize(out, policy)
+
+
+def _coerce_fixed(x: Any, n_rows: int) -> pa.Array:
+    return _coerce_scalarish(x, n_rows)
+
+
+def _coerce_scalarish(x: Any, n_rows: int) -> pa.Array:
+    if isinstance(x, (int, float)):
+        return pa.array([float(x)] * n_rows)
+    if isinstance(x, pa.ChunkedArray):
+        x = x.combine_chunks()
+    if isinstance(x, pa.Array):
+        if len(x) == 0:
+            return pa.array([], type=x.type)
+        return x
+    raise UnsupportedFeatureError(f"derived 求值返回未知类型: {type(x).__name__}")
+
+
+def _finalize(out: pa.Array, policy: NumericPolicy) -> pa.Array:
+    """把结果列按 ``nonfinite`` 收口 Inf/NaN（默认 nan：原样保留）。"""
+    if policy.nonfinite == "raise":
+        is_bad = pc.or_kleene(pc.is_nan(out), pc.is_inf(out))
+        if pa.compute.any(is_bad).as_py():
+            raise ValidationError(
+                "derived 结果含 Inf/NaN（NumericPolicy.nonfinite=raise）"
+            )
+        return out
+    if policy.nonfinite == "masked":
+        is_bad = pc.or_kleene(pc.is_nan(out), pc.is_inf(out))
+        return pc.if_else(
+            is_bad, pa.scalar(None, type=out.type), out
+        )
+    return out
+
+
+def _evaluate_node(
+    node: Any,
+    table: pa.Table,
+    bound: dict[str, ResolvedFieldID],
+    policy: NumericPolicy,
+    n_rows: int,
+) -> Any:
     if isinstance(node, Num):
         return node.value
     if isinstance(node, Ref):
-        return _resolve_column(table, node.dataset, node.column)
+        key = node.dataset if node.dataset is not None else node.column
+        fid = bound.get(key)
+        if fid is None:
+            raise ValidationError(f"derived 引用未绑定列 {key!r}")
+        return _resolve_by_id(table, fid)
     if isinstance(node, Unary):
-        operand = _evaluate_node(node.operand, table)
+        operand = _evaluate_node(node.operand, table, bound, policy, n_rows)
         if isinstance(operand, (int, float)):
             return -float(operand)
-        return pc.negate(operand)
+        return pc.negate(_coerce_fixed(operand, n_rows))
     if isinstance(node, Bin):
-        left = _evaluate_node(node.left, table)
-        right = _evaluate_node(node.right, table)
+        left = _evaluate_node(node.left, table, bound, policy, n_rows)
+        right = _evaluate_node(node.right, table, bound, policy, n_rows)
         if node.op == "+":
-            return pc.add(left, right)
+            return pc.add(_coerce_fixed(left, n_rows), _coerce_fixed(right, n_rows))
         if node.op == "-":
-            return pc.subtract(left, right)
+            return pc.subtract(_coerce_fixed(left, n_rows), _coerce_fixed(right, n_rows))
         if node.op == "*":
-            return pc.multiply(left, right)
+            return pc.multiply(_coerce_fixed(left, n_rows), _coerce_fixed(right, n_rows))
         if node.op == "/":
-            return pc.divide(left, right)
+            return _divide(left, right, n_rows, policy)
         raise UnsupportedFeatureError(f"不支持的运算符: {node.op!r}")
     raise UnsupportedFeatureError(f"未知表达式节点: {node!r}")
 
 
-def evaluate_expression(ast: Any, table: pa.Table) -> pa.Array:
-    """在 Arrow Table 上求值 AST → 单列 ``pa.Array``/``ChunkedArray``。"""
-    result = _evaluate_node(ast, table)
+def evaluate_expression(
+    ast: Any,
+    table: pa.Table,
+    *,
+    bindings_map: dict[str, ResolvedFieldID] | None = None,
+    numeric_policy: NumericPolicy | None = None,
+) -> pa.Array:
+    """在 Arrow Table 上求值 AST → 单列 ``pa.Array``。
+
+    默认用表列名直接解析（保持 R39 旧接口）；``bindings_map`` 传入时按绑定
+    Field-ID 解析列（R45 fix 1 执行面）。
+    """
+    policy = numeric_policy or _DEFAULT_POLICY
+    if bindings_map is not None:
+        bound = bindings_map
+    else:
+        bound = {}
+        for ref in _walk_refs(ast):
+            key = ref.dataset if ref.dataset is not None else ref.column
+            bound.setdefault(key, bind_ref(ref.dataset, ref.column))
+    result = _evaluate_node(ast, table, bound, policy, table.num_rows)
     if isinstance(result, (int, float)):
-        # 整表达式退化成常量（如纯数字）→ 广播成行数一致的列。
         return pa.array([float(result)] * table.num_rows)
     if isinstance(result, pa.ChunkedArray):
         return result.combine_chunks()
@@ -262,23 +503,41 @@ def apply_derived_fields(
     table: pa.Table,
     derived_fields: Sequence[Any],
 ) -> pa.Table:
-    """在结果表上追加全部 derived 字段列（列名=logical_name）。
+    """在结果表上追加 derived 字段列并做投影闭包。
 
-    derived 列依赖的物理列必须已经出现在 ``table``（plan 阶段已把它们展开进
-    扫描/join）。只做追加投影，不删除依赖列。
+    R45 行为
+        - bind() 期给每个列引用绑定 Field-ID，执行期按 ID 解析列（fix 1）；
+        - 每个字段绑定 NumericPolicy（fix 2）；
+        - 投影闭包（fix 3）：只返回请求的逻辑输出（derived 列）+ 其依赖的原始
+          物理列，绝不泄露无关输入列。依赖物理列保留原始列名。
     """
     if not derived_fields:
         return table
+    n_rows = table.num_rows
     out = table
+    compiled: list[DerivedFieldCompiler] = []
     for df in derived_fields:
-        compiler = DerivedFieldCompiler(df)
-        col = evaluate_expression(compiler.ast, out)
-        out = out.append_column(df.logical_name, col)
-    return out
+        c = DerivedFieldCompiler(df)
+        c.bind()
+        col = _evaluate_node(c.ast, out, c._bound, c.numeric_policy, n_rows)
+        col = _finalize(col, c.numeric_policy)
+        out = out.append_column(c.logical_name, col)
+        compiled.append(c)
+    # fix 3：投影闭包 —— derived 输出 + 依赖的原始物理列。
+    keep: list[str] = []
+    for c in compiled:
+        if c.logical_name not in keep:
+            keep.append(c.logical_name)
+        for rc in c.raw_columns:
+            if rc not in keep:
+                keep.append(rc)
+    return out.select(keep)
 
 
 __all__ = [
     "DerivedFieldCompiler",
+    "NumericPolicy",
+    "ResolvedFieldID",
     "parse_expression",
     "evaluate_expression",
     "apply_derived_fields",

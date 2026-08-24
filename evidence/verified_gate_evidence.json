@@ -1,8 +1,8 @@
 {
   "schema_version": 2,
   "generated_by": "refresh_gate_evidence",
-  "git_sha": "49b81f00dc6c7ec4ef32a056f171c35a416bcf3d",
-  "timestamp": "2026-08-22T16:46:42.662420+00:00",
+  "git_sha": "c0893da04d1177a4d8fbc07de35e4db368935f68",
+  "timestamp": "2026-08-24T07:54:09.288762+00:00",
   "gates": [
     {
       "name": "NUMERICAL_ORACLE",
@@ -11,7 +11,7 @@
         {
           "test": "quant_evaluator/tests/test_numerical_oracle.py",
           "result": "passed",
-          "command_hash": "bc51ef628c9f4b5dcb540f0bb72bed9afb4b909278b718f7dbadc0ab854fdba5",
+          "command_hash": "666a8a285874f1a602dd1259eb9858c505343c64582092a72c3fe83cb984172a",
           "exit_code": 0,
           "passed": 13,
           "failed": 0,
@@ -21,9 +21,9 @@
           "xpassed": 0,
           "tests": 13,
           "collected_tests": null,
-          "duration_sec": 5.37,
-          "executed_at": "2026-08-22T16:40:06.825749+00:00",
-          "run_at": "2026-08-22T16:40:06.825749+00:00"
+          "duration_sec": 4.898,
+          "executed_at": "2026-08-24T07:49:31.489368+00:00",
+          "run_at": "2026-08-24T07:49:31.489368+00:00"
         }
       ]
     },
@@ -34,7 +34,7 @@
         {
           "test": "quant_evaluator/tests/test_metamorphic.py",
           "result": "passed",
-          "command_hash": "bc8fd6ac0b7424ec2f9724ad23b7c8df89d1c691426b7809f90e0974fa5843eb",
+          "command_hash": "0b75030cbfc376c27797264cdef2dafb5313bc18437871a1ef7a3f393eb5f297",
           "exit_code": 0,
           "passed": 18,
           "failed": 0,
@@ -44,14 +44,14 @@
           "xpassed": 0,
           "tests": 20,
           "collected_tests": null,
-          "duration_sec": 1.383,
-          "executed_at": "2026-08-22T16:40:08.209401+00:00",
-          "run_at": "2026-08-22T16:40:08.209401+00:00"
+          "duration_sec": 1.292,
+          "executed_at": "2026-08-24T07:49:32.781867+00:00",
+          "run_at": "2026-08-24T07:49:32.781867+00:00"
         },
         {
           "test": "quant_evaluator/tests/test_consistency.py",
           "result": "passed",
-          "command_hash": "1f4e5e3d69d75d8c129a8250ebdbb2359b1814b1cade2007b4d016d96d681114",
+          "command_hash": "50e336928cfb830ed711e0baf6c1bf7f97667a373aa38a333955cb35e21352f8",
           "exit_code": 0,
           "passed": 11,
           "failed": 0,
@@ -61,9 +61,9 @@
           "xpassed": 0,
           "tests": 11,
           "collected_tests": null,
-          "duration_sec": 1.433,
-          "executed_at": "2026-08-22T16:40:09.642281+00:00",
-          "run_at": "2026-08-22T16:40:09.642281+00:00"
+          "duration_sec": 1.31,
+          "executed_at": "2026-08-24T07:49:34.092050+00:00",
+          "run_at": "2026-08-24T07:49:34.092050+00:00"
         }
       ]
     },
@@ -74,7 +74,7 @@
         {
           "test": "integration_tests/test_cross_package_contracts.py",
           "result": "passed",
-          "command_hash": "1941620d47609a0aa98d0ba3f333f4b5f230624b0841db1220b2b239f637bad7",
+          "command_hash": "b512eaba7f7a727fa319e03d342e887971ee6763f7984b92ac1fc0214cc407b6",
           "exit_code": 0,
           "passed": 4,
           "failed": 0,
@@ -84,9 +84,9 @@
           "xpassed": 0,
           "tests": 6,
           "collected_tests": null,
-          "duration_sec": 1.435,
-          "executed_at": "2026-08-22T16:40:11.077520+00:00",
-          "run_at": "2026-08-22T16:40:11.077520+00:00"
+          "duration_sec": 1.542,
+          "executed_at": "2026-08-24T07:49:35.634197+00:00",
+          "run_at": "2026-08-24T07:49:35.634197+00:00"
         }
       ]
     },
@@ -97,7 +97,7 @@
         {
           "test": "integration_tests/test_ashare_semantic_golden.py",
           "result": "passed",
-          "command_hash": "7a371f829db0b321e123b7a6bb3217743eac27dcc61eb18b02e3a1e096c3deb4",
+          "command_hash": "160cf0c11027eeacbe6f9b7fcc974ce30666462e1091f1a2fa8d470d3266a592",
           "exit_code": 0,
           "passed": 8,
           "failed": 0,
@@ -107,32 +107,32 @@
           "xpassed": 0,
           "tests": 8,
           "collected_tests": null,
-          "duration_sec": 1.701,
-          "executed_at": "2026-08-22T16:40:12.778422+00:00",
-          "run_at": "2026-08-22T16:40:12.778422+00:00"
+          "duration_sec": 1.702,
+          "executed_at": "2026-08-24T07:49:37.336580+00:00",
+          "run_at": "2026-08-24T07:49:37.336580+00:00"
         }
       ]
     },
     {
       "name": "ASHARE_REAL_DATA_SHADOW",
-      "status": "PASS",
+      "status": "FAIL",
       "evidence": [
         {
           "test": "integration_tests/test_real_ashare_shadow.py",
-          "result": "passed",
-          "command_hash": "e374edb8279068b66d97b8a9ea82390c3b36d030f0867a2ac81ee24300bb7e6e",
+          "result": "fail",
+          "command_hash": "0f0ac799deb5e4bb0112a52d61b6cd0688e6672f872e4cc15d372388d5fc3fe3",
           "exit_code": 0,
-          "passed": 4,
+          "passed": 0,
           "failed": 0,
           "errors": 0,
-          "skipped": 0,
+          "skipped": 4,
           "xfailed": 0,
           "xpassed": 0,
           "tests": 4,
           "collected_tests": null,
-          "duration_sec": 1.804,
-          "executed_at": "2026-08-22T16:40:14.582732+00:00",
-          "run_at": "2026-08-22T16:40:14.582732+00:00"
+          "duration_sec": 1.527,
+          "executed_at": "2026-08-24T07:49:38.864407+00:00",
+          "run_at": "2026-08-24T07:49:38.864407+00:00"
         }
       ]
     },
@@ -143,7 +143,7 @@
         {
           "test": "quant_evaluator/tests/test_qe_serialization.py",
           "result": "passed",
-          "command_hash": "15c9c93aafec6d7c6a8d7aae567fea950c1dc32cfa8ce820b5ceb5b0821f0ae6",
+          "command_hash": "c40939168c7aa7b95205cd3308878c93ba58439a31fadc45ed09e7f3599660bb",
           "exit_code": 0,
           "passed": 36,
           "failed": 0,
@@ -153,14 +153,14 @@
           "xpassed": 0,
           "tests": 36,
           "collected_tests": null,
-          "duration_sec": 1.006,
-          "executed_at": "2026-08-22T16:40:15.588862+00:00",
-          "run_at": "2026-08-22T16:40:15.588862+00:00"
+          "duration_sec": 0.937,
+          "executed_at": "2026-08-24T07:49:39.801465+00:00",
+          "run_at": "2026-08-24T07:49:39.801465+00:00"
         },
         {
           "test": "factor_assets/tests/registry/test_serialization_codec.py",
           "result": "passed",
-          "command_hash": "315c761df54045fa9c55910762bb43aee67e2307f51e80342ba2f30aa0947975",
+          "command_hash": "8d7b30d21cda84d8f7192431e990d9aaa0ad369339ddb3114ef563fb5befd353",
           "exit_code": 0,
           "passed": 17,
           "failed": 0,
@@ -170,9 +170,9 @@
           "xpassed": 0,
           "tests": 17,
           "collected_tests": null,
-          "duration_sec": 0.27,
-          "executed_at": "2026-08-22T16:40:15.858700+00:00",
-          "run_at": "2026-08-22T16:40:15.858700+00:00"
+          "duration_sec": 0.239,
+          "executed_at": "2026-08-24T07:49:40.040430+00:00",
+          "run_at": "2026-08-24T07:49:40.040430+00:00"
         }
       ]
     },
@@ -183,7 +183,7 @@
         {
           "test": "factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py",
           "result": "passed",
-          "command_hash": "3ddf17942d9dab8a28cee2c34297d48ac36d8ecc22a063b3f4b812516aa9755f",
+          "command_hash": "1a823f6398cdb577489d2435d89c48f61d2a2d4ff92523e04e088d7d363e8cb0",
           "exit_code": 0,
           "passed": 3,
           "failed": 0,
@@ -193,9 +193,9 @@
           "xpassed": 0,
           "tests": 3,
           "collected_tests": null,
-          "duration_sec": 1.441,
-          "executed_at": "2026-08-22T16:40:17.299699+00:00",
-          "run_at": "2026-08-22T16:40:17.299699+00:00"
+          "duration_sec": 1.528,
+          "executed_at": "2026-08-24T07:49:41.568996+00:00",
+          "run_at": "2026-08-24T07:49:41.568996+00:00"
         }
       ]
     },
@@ -206,7 +206,7 @@
         {
           "test": "factor_engine/tests/test_capability_registry.py",
           "result": "passed",
-          "command_hash": "612f8886b4fe17d3d7b7f959a2304878d6ba33bc0e1c8582b2b71dc565403a50",
+          "command_hash": "e9ba661db85cdc79fbcb2c5f0723da29446b79c41b849a1d1f4f92cf7d9c9c10",
           "exit_code": 0,
           "passed": 23,
           "failed": 0,
@@ -216,14 +216,14 @@
           "xpassed": 0,
           "tests": 23,
           "collected_tests": null,
-          "duration_sec": 2.189,
-          "executed_at": "2026-08-22T16:40:19.488942+00:00",
-          "run_at": "2026-08-22T16:40:19.488942+00:00"
+          "duration_sec": 2.224,
+          "executed_at": "2026-08-24T07:49:43.793341+00:00",
+          "run_at": "2026-08-24T07:49:43.793341+00:00"
         },
         {
           "test": "factor_engine/tests/test_concurrency_safety.py",
           "result": "passed",
-          "command_hash": "6ea4ec07125189f8769a28e75e964a07873066af842f5705743ebd70e28bb78f",
+          "command_hash": "ef6d3efd313d9fab4f77d58302ef1353bd3b0fe23cb65ef472e08de3087d1edf",
           "exit_code": 0,
           "passed": 16,
           "failed": 0,
@@ -233,9 +233,9 @@
           "xpassed": 0,
           "tests": 16,
           "collected_tests": null,
-          "duration_sec": 104.062,
-          "executed_at": "2026-08-22T16:42:03.551325+00:00",
-          "run_at": "2026-08-22T16:42:03.551325+00:00"
+          "duration_sec": 66.604,
+          "executed_at": "2026-08-24T07:50:50.398193+00:00",
+          "run_at": "2026-08-24T07:50:50.398193+00:00"
         }
       ]
     },
@@ -246,7 +246,7 @@
         {
           "test": "factor_engine/tests/modeling/test_evaluation_leakage_evidence.py",
           "result": "passed",
-          "command_hash": "af84e2ad4669e1fc1e8751d52fd6e574864d6e79d14ce37a6b2bdcbfc1b38550",
+          "command_hash": "3c41370c2e3d771a8ec2e2d1e0e0fe8492e1a7a5ed5e373830e6d9bdceb85fd9",
           "exit_code": 0,
           "passed": 14,
           "failed": 0,
@@ -256,14 +256,14 @@
           "xpassed": 0,
           "tests": 14,
           "collected_tests": null,
-          "duration_sec": 82.23,
-          "executed_at": "2026-08-22T16:43:25.781584+00:00",
-          "run_at": "2026-08-22T16:43:25.781584+00:00"
+          "duration_sec": 47.315,
+          "executed_at": "2026-08-24T07:51:37.713644+00:00",
+          "run_at": "2026-08-24T07:51:37.713644+00:00"
         },
         {
           "test": "factor_preprocess/tests/contracts/test_leakage_properties.py",
           "result": "passed",
-          "command_hash": "d60c0b5c1d83e48a584f47022d0685fd3cd5f4676abb50d4cab52667d65852f4",
+          "command_hash": "042593708f303788f0a188db4efa194a6f69d1947158cbb48b51990c76ec0d42",
           "exit_code": 0,
           "passed": 4,
           "failed": 0,
@@ -273,9 +273,9 @@
           "xpassed": 0,
           "tests": 4,
           "collected_tests": null,
-          "duration_sec": 0.984,
-          "executed_at": "2026-08-22T16:43:26.766059+00:00",
-          "run_at": "2026-08-22T16:43:26.766059+00:00"
+          "duration_sec": 0.916,
+          "executed_at": "2026-08-24T07:51:38.630384+00:00",
+          "run_at": "2026-08-24T07:51:38.630384+00:00"
         }
       ]
     },
@@ -286,7 +286,7 @@
         {
           "test": "factor_engine/tests/runtime/test_pit_audit.py",
           "result": "passed",
-          "command_hash": "c805192189f28c1eb4c41b189bb538d58ff06cf7642177c1f827e51c22d601e7",
+          "command_hash": "05cf2b6794a20e3cb49eec1118f4a1206c18b33c05680c1c29d99f9cbf9bb049",
           "exit_code": 0,
           "passed": 3,
           "failed": 0,
@@ -296,14 +296,14 @@
           "xpassed": 0,
           "tests": 3,
           "collected_tests": null,
-          "duration_sec": 81.007,
-          "executed_at": "2026-08-22T16:44:47.773083+00:00",
-          "run_at": "2026-08-22T16:44:47.773083+00:00"
+          "duration_sec": 46.653,
+          "executed_at": "2026-08-24T07:52:25.283563+00:00",
+          "run_at": "2026-08-24T07:52:25.283563+00:00"
         },
         {
           "test": "factor_engine/tests/runtime/test_label_pit.py",
           "result": "passed",
-          "command_hash": "157cb6a3a918e0776760b5c613fa75302368fa182ee45d132e068615ceba2049",
+          "command_hash": "e079db3e633901796ac3ee6ac0d10f8564add173bac90dc1f8430d3027f11e6d",
           "exit_code": 0,
           "passed": 4,
           "failed": 0,
@@ -313,14 +313,14 @@
           "xpassed": 0,
           "tests": 4,
           "collected_tests": null,
-          "duration_sec": 1.448,
-          "executed_at": "2026-08-22T16:44:49.221622+00:00",
-          "run_at": "2026-08-22T16:44:49.221622+00:00"
+          "duration_sec": 1.677,
+          "executed_at": "2026-08-24T07:52:26.960992+00:00",
+          "run_at": "2026-08-24T07:52:26.960992+00:00"
         },
         {
           "test": "factor_engine/tests/runtime/test_r10_pit_tristate.py",
           "result": "passed",
-          "command_hash": "cb70bed8e1d86ea652ac878f527bfeda1c9bb566ca467139d98b9afad27c4278",
+          "command_hash": "6b35eb5fcc64aeb6a3bd7ecd31f675aea7adeaf0a0f028355b773195781a8b9d",
           "exit_code": 0,
           "passed": 5,
           "failed": 0,
@@ -330,9 +330,9 @@
           "xpassed": 0,
           "tests": 5,
           "collected_tests": null,
-          "duration_sec": 1.428,
-          "executed_at": "2026-08-22T16:44:50.650148+00:00",
-          "run_at": "2026-08-22T16:44:50.650148+00:00"
+          "duration_sec": 1.512,
+          "executed_at": "2026-08-24T07:52:28.473731+00:00",
+          "run_at": "2026-08-24T07:52:28.473731+00:00"
         }
       ]
     },
@@ -343,7 +343,7 @@
         {
           "test": "factor_engine/tests/test_comprehensive_data_consistency.py",
           "result": "passed",
-          "command_hash": "d353b1459709930b6d9f1389ca67edddb14e6c9d376a5b71f80468c8c7d6a33c",
+          "command_hash": "a9d945930554b6ccbb8c29e3d766ce0ecd9552f414366e89fe6e94c9bb43ed8a",
           "exit_code": 0,
           "passed": 12,
           "failed": 0,
@@ -353,14 +353,14 @@
           "xpassed": 0,
           "tests": 12,
           "collected_tests": null,
-          "duration_sec": 1.829,
-          "executed_at": "2026-08-22T16:44:52.479024+00:00",
-          "run_at": "2026-08-22T16:44:52.479024+00:00"
+          "duration_sec": 1.945,
+          "executed_at": "2026-08-24T07:52:30.419538+00:00",
+          "run_at": "2026-08-24T07:52:30.419538+00:00"
         },
         {
           "test": "factor_engine/tests/backend/test_r21_def5_payload_hash.py",
           "result": "passed",
-          "command_hash": "d3618cde701a0e6f091bd727ef6df5e20cc1307f5e07454ab025603bde5ca5c3",
+          "command_hash": "59f6b9013e0b066a8ce9e74c9533446833d91aaca99e056d9728611aebeedde9",
           "exit_code": 0,
           "passed": 7,
           "failed": 0,
@@ -370,9 +370,9 @@
           "xpassed": 0,
           "tests": 7,
           "collected_tests": null,
-          "duration_sec": 1.441,
-          "executed_at": "2026-08-22T16:44:53.919983+00:00",
-          "run_at": "2026-08-22T16:44:53.919983+00:00"
+          "duration_sec": 1.583,
+          "executed_at": "2026-08-24T07:52:32.003232+00:00",
+          "run_at": "2026-08-24T07:52:32.003232+00:00"
         }
       ]
     },
@@ -383,7 +383,7 @@
         {
           "test": "factor_engine/scripts/wheel_clean_install_smoke.py",
           "result": "passed",
-          "command_hash": "bde5f4935ae41d090141e32d5dac3a6ae7507873070aee0e4328cb1dac6bf880",
+          "command_hash": "bac270aab224f98b40cfcc1697b731e87787f5f451c155fc18d90643314ed052",
           "exit_code": 0,
           "passed": 1,
           "failed": 0,
@@ -393,9 +393,9 @@
           "xpassed": 0,
           "tests": 1,
           "collected_tests": null,
-          "duration_sec": 105.504,
-          "executed_at": "2026-08-22T16:46:39.424316+00:00",
-          "run_at": "2026-08-22T16:46:39.424316+00:00"
+          "duration_sec": 69.452,
+          "executed_at": "2026-08-24T07:53:41.455611+00:00",
+          "run_at": "2026-08-24T07:53:41.455611+00:00"
         }
       ]
     },
@@ -406,7 +406,7 @@
         {
           "test": "quant_evaluator/tests/test_scale_gates.py",
           "result": "passed",
-          "command_hash": "cb9cafa791121743cc91c95c589e6b5f3d56586666879a9c65e92d6ac6e29489",
+          "command_hash": "fd17dea780782778e3e166c49b6e6695ab75b0a8a0f49c99bb38beeb97a5a674",
           "exit_code": 0,
           "passed": 1,
           "failed": 0,
@@ -416,9 +416,9 @@
           "xpassed": 0,
           "tests": 1,
           "collected_tests": null,
-          "duration_sec": 1.049,
-          "executed_at": "2026-08-22T16:46:40.473673+00:00",
-          "run_at": "2026-08-22T16:46:40.473673+00:00"
+          "duration_sec": 0.898,
+          "executed_at": "2026-08-24T07:53:42.353646+00:00",
+          "run_at": "2026-08-24T07:53:42.353646+00:00"
         }
       ]
     },
@@ -429,7 +429,7 @@
         {
           "test": "quant_evaluator/tests/test_scale_gates.py",
           "result": "passed",
-          "command_hash": "8b812a248faa6b60762594f56343823865b922881554b83d6eeef9a5ba5862f5",
+          "command_hash": "1c5a1e426798a4ca2fb48daff507d550aded6a0a43393575c028e11739df9068",
           "exit_code": 0,
           "passed": 1,
           "failed": 0,
@@ -439,9 +439,9 @@
           "xpassed": 0,
           "tests": 1,
           "collected_tests": null,
-          "duration_sec": 1.052,
-          "executed_at": "2026-08-22T16:46:41.526497+00:00",
-          "run_at": "2026-08-22T16:46:41.526497+00:00"
+          "duration_sec": 0.954,
+          "executed_at": "2026-08-24T07:53:43.308429+00:00",
+          "run_at": "2026-08-24T07:53:43.308429+00:00"
         }
       ]
     },
@@ -452,7 +452,7 @@
         {
           "test": "quant_evaluator/tests/test_scale_gates.py",
           "result": "passed",
-          "command_hash": "4a0172718f03d9a2c773ee00b7999a0fee23268e9e8f5aae63eec7faa048e8e4",
+          "command_hash": "df596bbd527d1e8b2af35f7b56b0f686fc8864d71238f4b83009abc43d30c284",
           "exit_code": 0,
           "passed": 3,
           "failed": 0,
@@ -462,9 +462,129 @@
           "xpassed": 0,
           "tests": 3,
           "collected_tests": null,
-          "duration_sec": 1.134,
-          "executed_at": "2026-08-22T16:46:42.660993+00:00",
-          "run_at": "2026-08-22T16:46:42.660993+00:00"
+          "duration_sec": 0.975,
+          "executed_at": "2026-08-24T07:53:44.283357+00:00",
+          "run_at": "2026-08-24T07:53:44.283357+00:00"
+        }
+      ]
+    },
+    {
+      "name": "EVIDENCE_CURRENT",
+      "status": "FAIL",
+      "evidence": [
+        {
+          "test": "",
+          "result": "fail",
+          "command_hash": "",
+          "exit_code": null,
+          "passed": null,
+          "failed": null,
+          "errors": null,
+          "skipped": null,
+          "xfailed": null,
+          "xpassed": null,
+          "tests": null,
+          "collected_tests": null,
+          "duration_sec": 0.906,
+          "executed_at": "2026-08-24T07:53:45.189620+00:00",
+          "run_at": "2026-08-24T07:53:45.189620+00:00",
+          "note": "STALE/UNRESOLVED: EVIDENCE_CURRENT: STALE reason=artifact bound inputs differ from the live tree (changed=['operator-benchmark-manifest', 'operator-certification', 'operator-inventory'])"
+        }
+      ]
+    },
+    {
+      "name": "SOURCE_AUTHORITY",
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "",
+          "result": "passed",
+          "command_hash": "",
+          "exit_code": 0,
+          "passed": null,
+          "failed": null,
+          "errors": null,
+          "skipped": null,
+          "xfailed": null,
+          "xpassed": null,
+          "tests": null,
+          "collected_tests": null,
+          "duration_sec": 0.142,
+          "executed_at": "2026-08-24T07:53:45.331328+00:00",
+          "run_at": "2026-08-24T07:53:45.331328+00:00",
+          "note": "canonical cleaned_operators present (435 .py); no live-code import of the archived factor_engine.cleaned_operators duplicate"
+        }
+      ]
+    },
+    {
+      "name": "SUPPLY_CHAIN",
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "",
+          "result": "passed",
+          "command_hash": "",
+          "exit_code": 0,
+          "passed": null,
+          "failed": null,
+          "errors": null,
+          "skipped": null,
+          "xfailed": null,
+          "xpassed": null,
+          "tests": null,
+          "collected_tests": null,
+          "duration_sec": 0.0,
+          "executed_at": "2026-08-24T07:53:45.331514+00:00",
+          "run_at": "2026-08-24T07:53:45.331514+00:00",
+          "note": "lock present with lock_digest; 11 pinned deps; explicit sentinels (==missing, optional providers): numba, clickhouse-connect, factor-engine, uvicorn"
+        }
+      ]
+    },
+    {
+      "name": "FRESH_WHEEL_MATRIX",
+      "status": "BLOCKED",
+      "evidence": [
+        {
+          "test": "",
+          "result": "blocked",
+          "command_hash": "",
+          "exit_code": null,
+          "passed": 5,
+          "failed": null,
+          "errors": null,
+          "skipped": null,
+          "xfailed": null,
+          "xpassed": null,
+          "tests": null,
+          "collected_tests": null,
+          "duration_sec": 23.949,
+          "executed_at": "2026-08-24T07:54:09.280284+00:00",
+          "run_at": "2026-08-24T07:54:09.280284+00:00",
+          "note": "BLOCKED: factor_engine (clean-venv import failed: factor_engine, factor_engine.runtime, factor_engine.ir, factor_engine.modeling, factor_engine.api)"
+        }
+      ]
+    },
+    {
+      "name": "SUBMODULE_REACHABILITY",
+      "status": "NOT_RUN",
+      "evidence": [
+        {
+          "test": "",
+          "result": "not_run",
+          "command_hash": "",
+          "exit_code": null,
+          "passed": null,
+          "failed": null,
+          "errors": null,
+          "skipped": null,
+          "xfailed": null,
+          "xpassed": null,
+          "tests": null,
+          "collected_tests": null,
+          "duration_sec": 0.008,
+          "executed_at": "2026-08-24T07:54:09.287819+00:00",
+          "run_at": "2026-08-24T07:54:09.287819+00:00",
+          "note": "no submodules declared; nothing pinned to prove"
         }
       ]
     }

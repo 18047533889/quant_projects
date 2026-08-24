@@ -360,6 +360,10 @@ ashare_stock_status:
     Comments: string
     UpdateTime: timestamp
 
+# R45 P0-ASHARE：universe_daily 是本地 clean_data 研究 universe（非 COS lqtp_data 物理源）。
+# 契约侧已在 cos_contract_ashare.py 归入 source_class=derived_dataset 并移出 COS 物理契约语义
+# （见 DERIVED_DATASET_CONTRACTS）。物理配置仍在 datasets.yaml 的 research/parametric 节，读走
+# 统一 runtime 层，但不按 COS 物理契约（provenance/snapshot/revision）解释。
 # Point-in-time research universe and tradability mask used by production factor evaluation.
 # This is a curated clean-data contract, not a current-security-master snapshot. Each row
 # must describe what was knowable and tradable on TradeDate; missing rows mean ineligible.

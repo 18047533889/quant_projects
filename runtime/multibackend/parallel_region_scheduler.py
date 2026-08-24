@@ -7,6 +7,14 @@ Region 并行调度优化（region = 同 backend 的连续算子序列）：
     - Region-level resource reservation（避免 oversubscription）
     - 动态负载均衡（慢 region 优先调度）
 
+R45 production-closure additions:
+    - ResourceBroker admission：每个 region 在提交前经 broker ``try_reserve``
+      获取 CPU/RAM/IO token，完成/取消时释放（避免 4×8GB 在 16GB 主机上超订）。
+    - 动态并行度：``max_parallel_regions`` 默认从可用 CPU/RAM 推导，而非固定 4。
+    - Deadline / cancellation：region 超时 → ``future.cancel()`` + 释放租约 +
+      级联取消后代（后代不再调度）。
+    - DAG cycle 校验：调度前硬报错（``PhysicalPlanCycleError``），不再静默 no-op。
+
 示例：
     Factor A: Pandas region (10s) + DuckDB region (5s)
     Factor B: Polars region (8s) + DuckDB region (3s)
@@ -17,12 +25,23 @@ Region 并行调度优化（region = 同 backend 的连续算子序列）：
 from __future__ import annotations
 
 import logging
+import os
 import threading
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed, wait
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from typing import Any
 
 _logger = logging.getLogger(__name__)
+
+
+class PhysicalPlanCycleError(Exception):
+    """Region 依赖图存在环时抛出（R45：调度前硬校验，不再静默 no-op）。"""
+
+    def __init__(self, cycle: list[str]) -> None:
+        self.cycle = cycle
+        super().__init__(
+            f"cyclic dependency detected in region graph: {' -> '.join(cycle)}"
+        )
 
 
 @dataclass
@@ -35,6 +54,7 @@ class ExecutionRegion:
     dependencies: list[str]  # 依赖的 region IDs
     estimated_cost_ms: float
     memory_requirement_bytes: int
+    deadline_ms: float | None = None  # R45：region 绝对 deadline（monotonic ms）
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -44,6 +64,7 @@ class ExecutionRegion:
             "dependencies": self.dependencies,
             "estimated_cost_ms": round(self.estimated_cost_ms, 2),
             "memory_requirement_bytes": self.memory_requirement_bytes,
+            "deadline_ms": self.deadline_ms,
         }
 
 
@@ -105,6 +126,47 @@ class ParallelSchedulerMetrics:
         }
 
 
+def _derive_default_parallelism() -> int:
+    """R45：从可用 CPU / RAM 推导默认并行度（替代固定 4）。
+
+    优先 cgroup/psutil 探测；不可用时回退保守启发式。结果 clamp 到
+    ``[1, cpu_slots]`` 且受 RAM 预算约束。
+    """
+    cpu_slots = 0
+    mem_limit = 0
+    try:
+        from runtime.resource_governor import (
+            effective_cpu_slots,
+            effective_memory_limit_bytes,
+        )
+
+        cpu_slots = int(effective_cpu_slots())
+        mem_limit = int(effective_memory_limit_bytes())
+    except Exception:
+        pass
+    if cpu_slots <= 0:
+        try:
+            cpu_slots = int(os.sysconf("SC_NPROCESSORS_ONLN"))
+        except (ValueError, OSError, AttributeError):
+            cpu_slots = 4
+    if mem_limit <= 0:
+        try:
+            import psutil  # type: ignore[import-untyped]
+
+            mem_limit = int(psutil.virtual_memory().total)
+        except Exception:
+            mem_limit = 0
+
+    by_cpu = max(1, cpu_slots)
+    if mem_limit > 0:
+        # 保守启发式：每个 region 默认预留 2GB 峰值（无更精确契约时）。
+        per_region_guess = 2 * 1024**3
+        by_mem = max(1, mem_limit // per_region_guess)
+    else:
+        by_mem = by_cpu
+    return max(1, min(by_cpu, by_mem))
+
+
 class ParallelRegionScheduler:
     """并行 region 调度器（跨 backend 并行执行）。
 
@@ -114,15 +176,75 @@ class ParallelRegionScheduler:
         - ResourceBroker 控制总并发度（避免 oversubscription）
     """
 
-    def __init__(self, *, max_parallel_regions: int = 4) -> None:
+    def __init__(
+        self,
+        *,
+        max_parallel_regions: int | None = None,
+        resource_broker: Any | None = None,
+        default_deadline_ms: float | None = None,
+    ) -> None:
         """
         Args:
-            max_parallel_regions: 最大并行 region 数（受 CPU/memory 约束）
+            max_parallel_regions: 最大并行 region 数（受 CPU/memory 约束）。
+                ``None`` 时从可用资源动态推导（R45）。
+            resource_broker: 可选 ``ResourceBroker`` 实例。提供时每个 region
+                提交前经 ``try_reserve`` 获取 CPU/RAM/IO token，完成/取消时释放。
+            default_deadline_ms: 未在 region 上显式指定 deadline 时的默认
+                deadline（monotonic ms）。``None`` 表示不设默认 deadline。
         """
-        self.max_parallel_regions = max_parallel_regions
+        if max_parallel_regions is None:
+            max_parallel_regions = _derive_default_parallelism()
+        self.max_parallel_regions = max(1, int(max_parallel_regions))
+        self.resource_broker = resource_broker
+        self.default_deadline_ms = default_deadline_ms
         self._metrics = ParallelSchedulerMetrics()
         self._lock = threading.RLock()
-        self._executor = ThreadPoolExecutor(max_workers=max_parallel_regions)
+        self._executor = ThreadPoolExecutor(max_workers=self.max_parallel_regions)
+
+    # -- R45: DAG cycle validation --
+
+    def _validate_dag(self, dep_graph: dict[str, set[str]]) -> None:
+        """R45：调度前校验依赖图无环；有环抛 ``PhysicalPlanCycleError``。
+
+        用 Kahn 拓扑排序检测环，并提取一个环路径用于报错。
+        """
+        indegree = {rid: len(deps) for rid, deps in dep_graph.items()}
+        reverse: dict[str, set[str]] = {rid: set() for rid in dep_graph}
+        for rid, deps in dep_graph.items():
+            for d in deps:
+                if d in reverse:
+                    reverse[d].add(rid)
+        queue = [rid for rid, deg in indegree.items() if deg == 0]
+        processed = 0
+        while queue:
+            node = queue.pop()
+            processed += 1
+            for child in reverse.get(node, set()):
+                indegree[child] -= 1
+                if indegree[child] == 0:
+                    queue.append(child)
+        if processed != len(dep_graph):
+            # 剩余 indegree>0 的节点构成环。沿依赖走出一条环路径。
+            remaining = [rid for rid, deg in indegree.items() if deg > 0]
+            cycle: list[str] = []
+            seen: set[str] = set()
+            start = remaining[0]
+            cur = start
+            while cur not in seen:
+                seen.add(cur)
+                cycle.append(cur)
+                nxt = next(
+                    (d for d in dep_graph[cur] if d in seen or indegree.get(d, 0) > 0),
+                    None,
+                )
+                if nxt is None:
+                    break
+                cur = nxt
+            # 截取环起点
+            if start in cycle:
+                idx = cycle.index(start)
+                cycle = cycle[idx:] + [start]
+            raise PhysicalPlanCycleError(cycle)
 
     def schedule_parallel(
         self,
@@ -144,6 +266,9 @@ class ParallelRegionScheduler:
 
         Returns:
             执行结果摘要 {"results": {region_id: result}, "elapsed_ms": ...}
+
+        Raises:
+            PhysicalPlanCycleError: 依赖图存在环时（调度前硬校验）。
         """
         import time
 
@@ -152,6 +277,9 @@ class ParallelRegionScheduler:
         # 构建依赖图
         dep_graph = {r.region_id: set(r.dependencies) for r in regions}
         region_by_id = {r.region_id: r for r in regions}
+
+        # R45: 调度前硬校验 DAG 无环（不再静默 no-op）。
+        self._validate_dag(dep_graph)
 
         # 反向依赖图（用于推入 ready queue）
         reverse_deps: dict[str, set[str]] = {rid: set() for rid in dep_graph}
@@ -171,10 +299,35 @@ class ParallelRegionScheduler:
 
         # 在跑 futures: {region_id: Future}
         running: dict[str, Any] = {}
+        # R45: 每个 admitted region 的 broker 租约（完成/取消时释放）。
+        leases: dict[str, Any] = {}
+        # R45: 每个 admitted region 的 deadline（monotonic ms）。
+        deadlines: dict[str, float] = {}
         admitted: set[str] = set()
 
+        def _build_contract(region: ExecutionRegion) -> Any:
+            """把 region 映射为 TaskResourceContract（供 broker admission）。"""
+            from runtime.task_resource_contract import TaskResourceContract
+
+            return TaskResourceContract(
+                predicted_elapsed_ms=region.estimated_cost_ms,
+                cpu_tokens=1,
+                io_tokens=1,
+                peak_memory_bytes=region.memory_requirement_bytes,
+                backend=region.backend,
+                estimate_basis="region_scheduler",
+            )
+
+        def _release_lease(rid: str) -> None:
+            lease = leases.pop(rid, None)
+            if lease is not None:
+                try:
+                    lease.release()
+                except Exception as exc:  # pragma: no cover - defensive
+                    _logger.warning("lease release failed for %s: %s", rid, exc)
+
         def _admit_from_queue() -> None:
-            """从 ready_queue 提交可运行的 region 到线程池。"""
+            """从 ready_queue 提交可运行的 region 到线程池（broker 准入）。"""
             nonlocal ready_queue
             admitted_this_round: list[str] = []
             for rid in ready_queue:
@@ -198,10 +351,25 @@ class ParallelRegionScheduler:
                     failed_regions.add(rid)
                     continue
                 region = region_by_id[rid]
+                # R45: broker admission —— 拒绝则留在 ready_queue 等下一轮
+                #（work-conserving，不 deadlock）。
+                if self.resource_broker is not None:
+                    contract = _build_contract(region)
+                    lease = self.resource_broker.try_reserve(
+                        contract, task_id=rid
+                    )
+                    if lease is None:
+                        continue  # 资源不足：本轮不提交，留待后续
+                    leases[rid] = lease
                 future = self._executor.submit(execute_fn, region)
                 running[rid] = future
                 admitted.add(rid)
                 admitted_this_round.append(rid)
+                # R45: 记录 deadline（region 显式 > 默认）。
+                if region.deadline_ms is not None:
+                    deadlines[rid] = region.deadline_ms
+                elif self.default_deadline_ms is not None:
+                    deadlines[rid] = start_ms + self.default_deadline_ms
             # Remove admitted regions from queue (keep unadmitted ones for next round)
             ready_queue = [r for r in ready_queue if r not in admitted_this_round]
 
@@ -231,6 +399,8 @@ class ParallelRegionScheduler:
             """region 完成后的回调：记录结果 + 推入 ready queue。"""
             completed.add(rid)
             running.pop(rid, None)
+            deadlines.pop(rid, None)
+            _release_lease(rid)
             # 推入 ready queue：依赖此 region 且所有依赖已满足
             for child in reverse_deps.get(rid, set()):
                 if child in completed or child in failed_regions or child in admitted:
@@ -238,6 +408,32 @@ class ParallelRegionScheduler:
                 child_deps = dep_graph[child]
                 if child_deps.issubset(completed):
                     ready_queue.append(child)
+
+        def _check_deadlines(now_ms: float) -> None:
+            """R45: 检查 running region 是否超时；超时则取消 + 级联取消后代。"""
+            expired = [
+                rid
+                for rid, dl in deadlines.items()
+                if now_ms >= dl and rid in running
+            ]
+            for rid in expired:
+                future = running.get(rid)
+                if future is not None:
+                    future.cancel()
+                _release_lease(rid)
+                running.pop(rid, None)
+                deadlines.pop(rid, None)
+                results[rid] = RegionExecutionResult(
+                    region_id=rid,
+                    success=False,
+                    failure=TypedRegionFailure(
+                        region_id=rid,
+                        error_type="DeadlineExceeded",
+                        error_message=f"Region exceeded its deadline ({deadlines.get(rid, '?')}ms)",
+                    ),
+                )
+                failed_regions.add(rid)
+                _cancel_descendants(rid)
 
         # 主循环：work-conserving ready-queue 调度
         while ready_queue or running:
@@ -250,6 +446,9 @@ class ParallelRegionScheduler:
                 timeout=0.1,
                 return_when=FIRST_COMPLETED,
             )
+            now_ms = time.monotonic() * 1000.0
+            # R45: 先处理 deadline 超时（含 wait 超时返回的轮次）。
+            _check_deadlines(now_ms)
             for future in done_set:
                 # 找到对应的 region_id
                 rid = None
@@ -332,6 +531,9 @@ class ParallelRegionScheduler:
 
         Returns:
             分层列表（每层是无依赖冲突的 node 列表）
+
+        Raises:
+            PhysicalPlanCycleError: 依赖图存在环时（R45：不再 ``break`` 静默）。
         """
         layers: list[list[str]] = []
         remaining = set(dep_graph.keys())
@@ -346,9 +548,10 @@ class ParallelRegionScheduler:
             ]
 
             if not layer:
-                # 循环依赖：报错
-                _logger.error("cyclic dependency detected in region graph")
-                break
+                # 循环依赖：硬报错（R45）。
+                self._validate_dag(dep_graph)  # 会抛 PhysicalPlanCycleError
+                # 防御：validate 未抛（理论上不会）则显式抛。
+                raise PhysicalPlanCycleError(list(remaining))
 
             layers.append(layer)
             completed.update(layer)

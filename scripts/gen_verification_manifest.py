@@ -440,24 +440,30 @@ def _load_verified_evidence() -> list[dict] | None:
 
 
 # ---------------------------------------------------------------------------
-# VER-P0-02 — exact-identity gate aggregation
+# VER-P0-02 / R46 P0-Y — exact command-identity gate aggregation
 # ---------------------------------------------------------------------------
 def _build_gate_expectations() -> tuple[dict[str, set[str]], dict[str, str], dict[str, set[str]]]:
-    """Expected test sets per gate, from scripts/gate_runner.GATE_SPECS.
+    """Expected command-identity sets per gate, from scripts.gate_runner.
 
-    Returns (expected_tests, skip_policies, allowed_skips):
-      - expected_tests: gate_id -> set(spec.tests)
-      - skip_policies:  gate_id -> spec.skip_policy ("allowed" | "fail_on_skip")
-      - allowed_skips:  gate_id -> set of test paths that may skip (from
-                        ``allowed_skip_inventory`` if the GateSpec exposes it;
-                        tolerated as absent — the other agent is adding it).
+    Returns (expected_commands, skip_policies, allowed_skips):
+      - expected_commands: gate_id -> set(command_template_hash of each command)
+      - skip_policies:     gate_id -> spec.skip_policy ("allowed" | "fail_on_skip")
+      - allowed_skips:     gate_id -> set of test paths that may skip (from
+        ``allowed_skip_inventory`` if the GateSpec exposes it; tolerated as
+        absent — the other agent is adding it).
 
-    Falls back to a local constant (the 15 gate test-file lists from config)
-    when ``scripts.gate_runner`` cannot be imported (in-flight edit).  Gates
-    with no known spec simply have an empty expected set — their evidence is
-    validated by machine fields but never promoted to PASS by the exact-match
-    check below.
+    R46 P0-Y: identity is the COMMAND-TEMPLATE hash, not the bare test path.
+    The same ``test_scale_gates.py`` under ``-k 1k`` vs ``-k 100k`` is TWO
+    distinct command identities.  ``_FallbackSpec.commands`` is set to one
+    entry per test file (a single generic ``-k``-free command), so the fallback
+    matches the historical test-path identity semantics.
+
+    Falls back to a local constant when ``scripts.gate_runner`` cannot be
+    imported (in-flight edit).  Verifier-backed structural gates
+    (``commands == ()``) get an EMPTY expected command set — their truth comes
+    from the authoritative per-entry status, not command identity.
     """
+    verifier = _GateEvidenceVerifier()
     try:
         from scripts.gate_runner import GateSpec, GATE_SPECS  # noqa: F401
         specs = list(GATE_SPECS)
@@ -476,23 +482,19 @@ def _build_gate_expectations() -> tuple[dict[str, set[str]], dict[str, str], dic
             )
             specs = _FALLBACK_GATE_SPECS
             source = "local-fallback"
-    expected: dict[str, set[str]] = {}
+    expected_commands: dict[str, set[str]] = {}
     policies: dict[str, str] = {}
     allowed: dict[str, set[str]] = {}
     for spec in specs:
         gid = getattr(spec, "gate_id", None)
         if not gid:
             continue
-        tests = tuple(getattr(spec, "tests", ()) or ())
-        expected[gid] = {str(t) for t in tests}
+        # R46 P0-Y: expected identity = the set of command-template hashes.
+        expected_commands[gid] = verifier.expected_command_identity_set(spec)
         pol = getattr(spec, "skip_policy", "allowed")
         policies[gid] = str(pol) if pol else "allowed"
-        # VER-P0-02: the sibling agent's allowed_skip_inventory is a dict
-        # {test_path: {reason_regex: allowance}} (or a plain dict of test
-        # paths).  A path registered with a non-empty rule set counts as
-        # covered: a skip on that file with a registered reason is a
-        # legitimate expected skip.  Unregistered test paths (or an empty rule
-        # set) are NOT covered.
+        # VER-P0-02: allowed_skip_inventory path registration (kept from the
+        # prior schema; the authoritative skip check now lives in the verifier).
         inv = getattr(spec, "allowed_skip_inventory", None)
         covered: set[str] = set()
         if isinstance(inv, dict):
@@ -505,8 +507,27 @@ def _build_gate_expectations() -> tuple[dict[str, set[str]], dict[str, str], dic
                     covered.add(str(path))
         allowed[gid] = covered
     if verbose_debug():
-        print(f"  gate expectations source: {source} ({len(expected)} gates)")
-    return expected, policies, allowed
+        print(f"  gate expectations source: {source} ({len(expected_commands)} gates)")
+    return expected_commands, policies, allowed
+
+
+# ---------------------------------------------------------------------------
+# R46 P0-X — consume the SINGLE authoritative gate truth verifier.
+# ---------------------------------------------------------------------------
+def _GateEvidenceVerifier():
+    """Lazily import scripts.gate_evidence_verifier.GateEvidenceVerifier.
+
+    Binds the verifier to the live repo submodule count so
+    SUBMODULE_REACHABILITY can be judged NOT_APPLICABLE when the monorepo
+    declares no gitlinks (R46 P0-29).
+    """
+    from scripts.gate_evidence_verifier import GateEvidenceVerifier
+    n_gitlinks = len(_gitlinks_from_index(REPO_ROOT))
+    return GateEvidenceVerifier(
+        source_sha=None,
+        current_sha=None,
+        gitlinks_count=n_gitlinks,
+    )
 
 
 @dataclass(frozen=True)
@@ -520,22 +541,39 @@ class _FallbackSpec:
 # Fallback expectation map used ONLY when scripts.gate_runner cannot be
 # imported (its schema is mid-refactor under a sibling agent).  Values mirror
 # config/gates.json + the 15 gate test-file lists from gate_runner.GATE_SPECS.
+# ``commands`` is one ``-q`` pytest argv per test file, so the expected
+# command-identity set is meaningful under the R46 P0-Y verifier.
 _FALLBACK_GATE_SPECS: list[Any] = [
-    _FallbackSpec("NUMERICAL_ORACLE", ("quant_evaluator/tests/test_numerical_oracle.py",)),
-    _FallbackSpec("PROPERTY", ("quant_evaluator/tests/test_metamorphic.py", "quant_evaluator/tests/test_consistency.py")),
-    _FallbackSpec("CROSS_PACKAGE", ("integration_tests/test_cross_package_contracts.py",)),
-    _FallbackSpec("ASHARE_SEMANTIC_CONTRACT_GOLDEN", ("integration_tests/test_ashare_semantic_golden.py",)),
-    _FallbackSpec("ASHARE_REAL_DATA_SHADOW", ("integration_tests/test_real_ashare_shadow.py",), skip_policy="fail_on_skip"),
-    _FallbackSpec("SERIALIZATION", ("quant_evaluator/tests/test_qe_serialization.py", "factor_assets/tests/registry/test_serialization_codec.py")),
-    _FallbackSpec("CHECKPOINT_RESUME", ("factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py",)),
-    _FallbackSpec("UNIT", ("factor_engine/tests/test_capability_registry.py", "factor_engine/tests/test_concurrency_safety.py")),
-    _FallbackSpec("LEAKAGE", ("factor_engine/tests/modeling/test_evaluation_leakage_evidence.py", "factor_preprocess/tests/contracts/test_leakage_properties.py")),
-    _FallbackSpec("PIT", ("factor_engine/tests/runtime/test_pit_audit.py", "factor_engine/tests/runtime/test_label_pit.py", "factor_engine/tests/runtime/test_r10_pit_tristate.py")),
-    _FallbackSpec("DETERMINISM", ("factor_engine/tests/test_comprehensive_data_consistency.py", "factor_engine/tests/backend/test_r21_def5_payload_hash.py")),
-    _FallbackSpec("FRESH_WHEEL", ("factor_engine/scripts/wheel_clean_install_smoke.py",)),
-    _FallbackSpec("1K_SCALE", ("quant_evaluator/tests/test_scale_gates.py",)),
-    _FallbackSpec("10K_SCALE", ("quant_evaluator/tests/test_scale_gates.py",)),
-    _FallbackSpec("100K_SCALE", ("quant_evaluator/tests/test_scale_gates.py",)),
+    _FallbackSpec("NUMERICAL_ORACLE", ("quant_evaluator/tests/test_numerical_oracle.py",),
+                  commands=(("quant_evaluator/tests/test_numerical_oracle.py", "-q"),)),
+    _FallbackSpec("PROPERTY", ("quant_evaluator/tests/test_metamorphic.py", "quant_evaluator/tests/test_consistency.py"),
+                  commands=(("quant_evaluator/tests/test_metamorphic.py", "-q"), ("quant_evaluator/tests/test_consistency.py", "-q"))),
+    _FallbackSpec("CROSS_PACKAGE", ("integration_tests/test_cross_package_contracts.py",),
+                  commands=(("integration_tests/test_cross_package_contracts.py", "-q"),)),
+    _FallbackSpec("ASHARE_SEMANTIC_CONTRACT_GOLDEN", ("integration_tests/test_ashare_semantic_golden.py",),
+                  commands=(("integration_tests/test_ashare_semantic_golden.py", "-q"),)),
+    _FallbackSpec("ASHARE_REAL_DATA_SHADOW", ("integration_tests/test_real_ashare_shadow.py",),
+                  commands=(("integration_tests/test_real_ashare_shadow.py", "-q"),), skip_policy="fail_on_skip"),
+    _FallbackSpec("SERIALIZATION", ("quant_evaluator/tests/test_qe_serialization.py", "factor_assets/tests/registry/test_serialization_codec.py"),
+                  commands=(("quant_evaluator/tests/test_qe_serialization.py", "-q"), ("factor_assets/tests/registry/test_serialization_codec.py", "-q"))),
+    _FallbackSpec("CHECKPOINT_RESUME", ("factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py",),
+                  commands=(("factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py", "-q"),)),
+    _FallbackSpec("UNIT", ("factor_engine/tests/test_capability_registry.py", "factor_engine/tests/test_concurrency_safety.py"),
+                  commands=(("factor_engine/tests/test_capability_registry.py", "-q"), ("factor_engine/tests/test_concurrency_safety.py", "-q"))),
+    _FallbackSpec("LEAKAGE", ("factor_engine/tests/modeling/test_evaluation_leakage_evidence.py", "factor_preprocess/tests/contracts/test_leakage_properties.py"),
+                  commands=(("factor_engine/tests/modeling/test_evaluation_leakage_evidence.py", "-q"), ("factor_preprocess/tests/contracts/test_leakage_properties.py", "-q"))),
+    _FallbackSpec("PIT", ("factor_engine/tests/runtime/test_pit_audit.py", "factor_engine/tests/runtime/test_label_pit.py", "factor_engine/tests/runtime/test_r10_pit_tristate.py"),
+                  commands=(("factor_engine/tests/runtime/test_pit_audit.py", "-q"), ("factor_engine/tests/runtime/test_label_pit.py", "-q"), ("factor_engine/tests/runtime/test_r10_pit_tristate.py", "-q"))),
+    _FallbackSpec("DETERMINISM", ("factor_engine/tests/test_comprehensive_data_consistency.py", "factor_engine/tests/backend/test_r21_def5_payload_hash.py"),
+                  commands=(("factor_engine/tests/test_comprehensive_data_consistency.py", "-q"), ("factor_engine/tests/backend/test_r21_def5_payload_hash.py", "-q"))),
+    _FallbackSpec("FRESH_WHEEL", ("factor_engine/scripts/wheel_clean_install_smoke.py",),
+                  commands=(("factor_engine/scripts/wheel_clean_install_smoke.py", "-q"),)),
+    _FallbackSpec("1K_SCALE", ("quant_evaluator/tests/test_scale_gates.py",),
+                  commands=(("quant_evaluator/tests/test_scale_gates.py", "-q"),)),
+    _FallbackSpec("10K_SCALE", ("quant_evaluator/tests/test_scale_gates.py",),
+                  commands=(("quant_evaluator/tests/test_scale_gates.py", "-q"),)),
+    _FallbackSpec("100K_SCALE", ("quant_evaluator/tests/test_scale_gates.py",),
+                  commands=(("quant_evaluator/tests/test_scale_gates.py", "-q"),)),
 ]
 
 _verbose_flag: bool | None = None
@@ -549,10 +587,11 @@ def verbose_debug() -> bool:
 
 
 def apply_verified_evidence(gates: list[dict], verbose: bool = True) -> list[dict]:
-    """Fold current-tree verified evidence (from verified_gate_evidence.json) in.
+    """Fold current-tree verified evidence into the manifest via the verifier.
 
-    VER-P0-01 (honesty): a gate is moved to PASS ONLY when every evidence item
-    carries real machine fields proving an actual executed run:
+    R46 P0-X: gate truth is derived ONLY by ``GateEvidenceVerifier`` — the single
+    authoritative verdict system shared with GateMatrix.  A gate is moved to
+    PASS ONLY when the verifier returns PASS from real machine evidence:
 
         * ``command_hash``  — sha256 of the exact pytest argv (non-empty)
         * ``exit_code``     — 0
@@ -560,31 +599,30 @@ def apply_verified_evidence(gates: list[dict], verbose: bool = True) -> list[dic
         * ``errors``        — 0
         * ``tests``         — > 0 (a gate that ran nothing is not a pass)
 
-    VER-P0-02 (exact identity): the set of machine-verified ``test`` paths for
-    a gate must EXACTLY equal the expected test file set from the gate spec —
-    no missing, no extra, no duplicate.  A partial run (e.g. only 1 of 2
-    expected files) leaves the gate NOT_RUN.  The per-gate ``status`` string in
-    the evidence file is NOT trusted; it is advisory only.
+    R46 P0-Y: identity is the COMMAND-TEMPLATE hash (ObservedCommandIdentitySet
+    == ExpectedCommandIdentitySet).  The same test file under two ``-k`` selects
+    is two distinct command identities.  A partial / extra / duplicate run
+    leaves the gate NOT_RUN.
 
     The ``result: "passed"`` string and per-gate ``status`` in the evidence file
-    are NOT trusted; they are advisory only.  An entry missing those machine
-    fields is treated as NOT_RUN — never PASS.  This is deliberate: the old
-    system could fabricate PASS from config alone; this one cannot.
-
-    Any gate NOT covered by honest evidence stays NOT_RUN -- the manifest must
-    not overclaim.
-
-    Note: historically only a hard-coded _PROVABLE_GATE_NAMES subset could be
-    upgraded to PASS; LEAKAGE, PIT, DETERMINISM, FRESH_WHEEL, 1K_SCALE,
-    10K_SCALE, 100K_SCALE were excluded even when the evidence proved them.
-    That exclusion has been removed: the machine-field validation + exact
-    test-set match below are the only gatekeepers, applied uniformly to ALL
-    gates.
+    are NOT trusted; they are advisory only.  A required gate satisfied by a
+    legitimate NOT_APPLICABLE (with reason/evidence) is accepted the same as a
+    PASS (R46 P0-29).
     """
     entries = _load_verified_evidence()
     if entries is None:
         return gates
-    expected_tests, skip_policies, allowed_skips = _build_gate_expectations()
+    expected_commands, _, _ = _build_gate_expectations()
+    verifier = _GateEvidenceVerifier()
+
+    # spec lookup for per-gate skip policy / commands.
+    def _find_spec(gid: str):
+        from scripts.gate_runner import find_spec as _fs  # noqa: PLC0415
+        try:
+            return _fs(gid)
+        except Exception:
+            return None
+
     applied: list[str] = []
     for entry in entries:
         name = entry["name"]
@@ -597,178 +635,39 @@ def apply_verified_evidence(gates: list[dict], verbose: bool = True) -> list[dic
                 print(f"  [skip] gate {name}: status already {g['status']}", file=sys.stderr)
             continue
         ev_items = entry.get("evidence") or []
-        if not ev_items:
-            if verbose:
-                print(f"  [skip] gate {name}: no evidence items", file=sys.stderr)
-            continue
-        expected: set[str] = expected_tests.get(name, set())
-        # VER-P0-02: machine-verified evidence items ONLY; a ``result:
-        # "passed"`` string or a bare ``count`` does NOT count.
-        ok_items: list[dict] = []
-        has_extra = False
-        has_duplicate = False
-        for it in ev_items:
-            if not isinstance(it, dict):
-                continue
-            if not it.get("test"):
-                continue
-            test_path = str(it["test"])
-            # VER-P0-02: evidence for a test file that is NOT part of this
-            # gate's expected set is EXTRANEOUS.  It is excluded from the ok
-            # set AND its presence keeps the gate NOT_RUN (exact identity: no
-            # extra evidence allowed).
-            if expected and test_path not in expected:
-                has_extra = True
-                if verbose:
-                    print(
-                        f"  [drop-extra] gate {name}: evidence test {test_path!r} "
-                        f"not in expected set {sorted(expected)} -> EXTRANEous "
-                        "evidence; gate stays NOT_RUN",
-                        file=sys.stderr,
-                    )
-                continue
-            cmd_hash = it.get("command_hash")
-            exit_code = it.get("exit_code")
-            if not cmd_hash or not isinstance(exit_code, int):
-                if verbose:
-                    print(
-                        f"  [drop-item] gate {name}: evidence for {test_path} "
-                        "missing command_hash/exit_code -> treated NOT_RUN",
-                        file=sys.stderr,
-                    )
-                continue
-            failed = it.get("failed")
-            errors = it.get("errors")
-            tests = it.get("tests")
-            if failed != 0 or errors != 0:
-                if verbose:
-                    print(
-                        f"  [drop-item] gate {name}: evidence for {test_path} "
-                        f"has failed={failed} errors={errors} -> NOT a pass",
-                        file=sys.stderr,
-                    )
-                continue
-            if exit_code != 0:
-                if verbose:
-                    print(
-                        f"  [drop-item] gate {name}: evidence for {test_path} "
-                        f"has exit_code={exit_code} != 0 -> NOT a pass",
-                        file=sys.stderr,
-                    )
-                continue
-            if not isinstance(tests, int) or tests <= 0:
-                if verbose:
-                    print(
-                        f"  [drop-item] gate {name}: evidence for {test_path} "
-                        f"has tests={tests!r} (<=0) -> NOT a pass",
-                        file=sys.stderr,
-                    )
-                continue
-            # VER-P0-02: a duplicate test path is never acceptable — one test
-            # file must produce exactly one honest evidence entry, and a
-            # duplicate keeps the gate NOT_RUN (exact identity).
-            if any(o["test"] == test_path for o in ok_items):
-                has_duplicate = True
-                if verbose:
-                    print(
-                        f"  [drop-dupe] gate {name}: duplicate evidence for "
-                        f"{test_path} -> DUPLICATE evidence; gate stays NOT_RUN",
-                        file=sys.stderr,
-                    )
-                continue
-            ok_items.append({
-                "test": test_path,
-                "command_hash": str(cmd_hash),
-                "exit_code": int(exit_code),
-                "passed": int(it["passed"]) if isinstance(it.get("passed"), int) else None,
-                "failed": int(failed),
-                "errors": int(errors),
-                "skipped": int(it["skipped"]) if isinstance(it.get("skipped"), int) else None,
-                "tests": int(tests),
-                "duration_sec": it.get("duration_sec"),
-                "executed_at": str(it.get("executed_at") or ""),
-                "run_at": str(it.get("run_at") or ""),
-            })
-        # VER-P0-02: extra or duplicate evidence keeps the gate NOT_RUN even
-        # when the expected set would otherwise be covered.
-        if has_extra:
+        spec = _find_spec(name)
+        live_hashes = expected_commands.get(name)
+        verdict = verifier.verify_gate(
+            gate_name=name,
+            spec=spec,
+            entries=ev_items,
+            live_command_hashes=live_hashes,
+        )
+        # R46 P0-29: a legitimate NOT_APPLICABLE satisfies the gate the same as
+        # a PASS (the manifest records it with the reason as evidence).
+        if verdict.status == PASS or verdict.status == NOT_APPLICABLE:
+            g["status"] = verdict.status
+            g["evidence"] = [
+                {"test": e.get("test") or "", "command_hash": str(e.get("command_hash") or ""),
+                 "exit_code": e.get("exit_code"), "passed": e.get("passed"),
+                 "failed": e.get("failed"), "errors": e.get("errors"),
+                 "skipped": e.get("skipped"), "tests": e.get("tests"),
+                 "executed_at": e.get("executed_at") or "", "run_at": e.get("run_at") or ""}
+                for e in ev_items
+            ] or [{"note": verdict.reason_text()}]
+            if verdict.status == NOT_APPLICABLE:
+                g["evidence"] = [{"note": verdict.reason_text(),
+                                  "reason": verdict.reason_text()}]
+            applied.append(f"{name}({verdict.status})")
+        else:
             if verbose:
                 print(
-                    f"  [skip] gate {name}: EXTRANEOUS evidence present -> "
-                    "NOT_RUN (exact identity forbids extra tests)",
+                    f"  [skip] gate {name}: verifier -> {verdict.status} "
+                    f"({verdict.reason_text()})",
                     file=sys.stderr,
                 )
-            continue
-        if has_duplicate:
-            if verbose:
-                print(
-                    f"  [skip] gate {name}: DUPLICATE evidence present -> "
-                    "NOT_RUN (exact identity forbids duplicates)",
-                    file=sys.stderr,
-                )
-            continue
-        if not ok_items:
-            if verbose:
-                print(f"  [skip] gate {name}: no machine-verified evidence items", file=sys.stderr)
-            continue
-        ok_paths: set[str] = {o["test"] for o in ok_items}
-
-        # VER-P0-02: exact identity — the verified set MUST equal the expected
-        # set.  Missing / extra / duplicate test paths all keep the gate NOT_RUN.
-        if not expected:
-            if verbose:
-                print(
-                    f"  [skip] gate {name}: no expectation map entry (unknown spec); "
-                    "exact-identity gate cannot be proven -> NOT_RUN",
-                    file=sys.stderr,
-                )
-            continue
-        missing = expected - ok_paths
-        extra = ok_paths - expected
-        if missing:
-            if verbose:
-                print(
-                    f"  [skip] gate {name}: MISSING verified evidence for expected "
-                    f"tests {sorted(missing)} -> NOT_RUN (exact identity requires all)",
-                    file=sys.stderr,
-                )
-            continue
-        if extra:
-            if verbose:
-                print(
-                    f"  [skip] gate {name}: EXTRA verified evidence {sorted(extra)} "
-                    f"beyond expected {sorted(expected)} -> NOT_RUN (exact identity)",
-                    file=sys.stderr,
-                )
-            continue
-
-        # VER-P0-02: skip policy — when the gate fails on skips (or has an
-        # allowed-skip inventory) any ok item with skipped > 0 not covered by
-        # the allowed inventory keeps the gate NOT_RUN.
-        policy = skip_policies.get(name, "allowed")
-        allowed = allowed_skips.get(name, set())
-        skip_fail = False
-        if policy == "fail_on_skip" or allowed:
-            for o in ok_items:
-                skipped = o.get("skipped") or 0
-                if skipped > 0 and o["test"] not in allowed:
-                    if verbose:
-                        print(
-                            f"  [skip] gate {name}: evidence for {o['test']} has "
-                            f"skipped={skipped} (not covered by allowed-skip "
-                            f"inventory {sorted(allowed) or 'none'}) -> NOT a pass",
-                            file=sys.stderr,
-                        )
-                    skip_fail = True
-                    break
-        if skip_fail:
-            continue
-
-        g["status"] = "PASS"
-        g["evidence"] = ok_items
-        applied.append(f"{name}({len(ok_items)} evidence items)")
     if applied:
-        print(f"  gates moved PASS by machine-verified evidence: {', '.join(applied)}")
+        print(f"  gates resolved by verifier: {', '.join(applied)}")
     return gates
 
 def run_pytest_gate(gates: list[dict], command: str | None = None) -> dict | None:

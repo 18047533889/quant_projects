@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# Canonical DataAccess packaging config (R46).
+#
+# The DataAccess source root is the flat `dataaccess/` directory: top-level
+# modules (cos_contract.py, store.py, ...) and subpackages (core/, read/,
+# cos/, ...) sit directly inside it, and every internal import uses the
+# `data_access` dotted name (e.g. `from data_access.core.engine import ...`).
+# To make the source root importable as the canonical `data_access` package
+# without rewriting hundreds of internal imports, we map the `data_access`
+# package to this directory — the same `"data_access" = "."` mapping that the
+# fresh-wheel matrix used ad-hoc at build time. That mapping is now a
+# committed, canonical config; the wheel matrix builds DataAccess from HERE,
+# not from a temporary staged copy.
+
+[project]
+name = "data-access"
+version = "0.10.2"
+description = "Team DataAccess API with executable COS panel and PIT contracts"
+readme = "CHANGELOG.md"
+requires-python = ">=3.10"
+license = {text = "Proprietary"}
+authors = [{name = "Quant Platform Team"}]
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "pyarrow>=14.0",
+    "duckdb>=0.10",
+    "sqlglot>=25.0",
+    "clickhouse-connect>=0.8",
+    "fastapi>=0.110",
+    "httpx>=0.27",
+    "pydantic>=2.0",
+    "PyYAML>=6.0",
+    "typing-extensions>=4.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.0",
+    "build>=1.2",
+]
+service = ["uvicorn[standard]>=0.27"]
+
+[tool.setuptools]
+# Explicit package list: only these become `data_access.*` in the wheel.
+# tests/, benchmarks/, ops/, deploy/, constraints/, scripts/ are intentionally
+# excluded (they are not part of the runtime distribution).
+packages = [
+    "data_access",
+    "data_access.core",
+    "data_access.read",
+    "data_access.write",
+    "data_access.registry",
+    "data_access.cos",
+    "data_access.contract",
+    "data_access.clickhouse",
+    "data_access.security",
+    "data_access.runtime",
+    "data_access.snapshot",
+    "data_access.r30",
+    "data_access.export",
+    "data_access.telemetry",
+    "data_access.service",
+    "data_access.quality",
+]
+
+[tool.setuptools.package-dir]
+"data_access" = "."
+
+[tool.setuptools.exclude-package-data]
+"*" = ["*.pyc", "__pycache__", "test_*.py", "*_test.py"]

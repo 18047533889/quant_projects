@@ -30,17 +30,25 @@ if _dataaccess is not None and _dataaccess.origin is not None:
     __path__ = [_root]  # type: ignore[name-defined]
 
 # Make ``from data_access import X`` resolve through the source package.
-from dataaccess import *  # noqa: F401,F403
-from dataaccess import (  # noqa: F401
-    __build_id__,
-    __build_sha__,
-    __build_time__,
-    __version__,
-)
+# Not a bare ``from dataaccess import *``: when this shim is first imported it
+# is triggered from *inside* ``dataaccess/__init__.py`` (line 4), so the source
+# package is only partially initialized and a star-import would capture an
+# incomplete attribute set (e.g. ``reset_store``, bound later at source line 44,
+# or the build dunders at line 125).  Everything is therefore forwarded lazily.
+def __getattr__(name: str):
+    """Forward any attribute through the canonical ``dataaccess`` package.
 
-# Mirror the subpackage namespace aliases so relative imports and re-exports
-# (``data_access.core``) resolve to the same module objects.
-_LOADED = frozenset(getattr(_sys, "modules", ()))
-for _mod in list(_LOADED):
-    if _mod.startswith("dataaccess."):
-        _sys.modules.setdefault("data_access" + _mod[len("dataaccess"):], _sys.modules[_mod])
+    ``dataaccess`` imports this shim at the very top of its own ``__init__``,
+    so when a caller reaches for ``data_access.X`` the source package may still
+    be mid-initialization.  Deferring resolution until attribute access means
+    by the time the name is actually read the canonical module is fully loaded
+    (or, for names still being defined, we rely on the caller not racing the
+    import).  This covers both the build-identity dunders and every public name
+    (e.g. ``reset_store``, ``get_store``).
+    """
+    import dataaccess as _src  # noqa: PLC0415
+
+    try:
+        return getattr(_src, name)
+    except AttributeError:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None

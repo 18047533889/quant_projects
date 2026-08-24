@@ -101,9 +101,11 @@ def test_runner_builds_capabilities_and_records_split_plan():
     )
     # runner._data_capabilities built from the protocol split plan
     assert runner._data_capabilities is not None
-    assert set(runner._data_capabilities) == {DataScope.TRAIN, DataScope.VALIDATION, DataScope.TEST}
+    # R46 P0-R: the search runner's object graph contains ONLY train and
+    # validation capabilities — never a TEST capability.
+    assert set(runner._data_capabilities) == {DataScope.TRAIN, DataScope.VALIDATION}
     assert isinstance(runner._data_capabilities[DataScope.TRAIN], TrainDataCapability)
-    assert isinstance(runner._data_capabilities[DataScope.TEST], TestDataCapability)
+    assert isinstance(runner._data_capabilities[DataScope.VALIDATION], ValidationDataCapability)
     # the search split plan is recorded on the config
     assert runner.config._search_split_plan is plan
     # the runner's train capability is NOT a test capability
@@ -170,14 +172,17 @@ def test_train_and_validation_never_construct_test_capability():
         proposal_fn=lambda: _trial(),
         evaluation_fn=_protocol(plan),
     )
-    # The train and validation capabilities are not test capabilities; the
-    # only TestDataCapability lives on the TEST scope key.
+    # R46 P0-R: the search runner's object graph contains ONLY train and
+    # validation capabilities.  No TEST capability is reachable from the
+    # search runner.
+    assert set(runner._data_capabilities) == {DataScope.TRAIN, DataScope.VALIDATION}
     assert not isinstance(
         runner._data_capabilities[DataScope.TRAIN], TestDataCapability
     )
     assert not isinstance(
         runner._data_capabilities[DataScope.VALIDATION], TestDataCapability
     )
-    assert isinstance(
-        runner._data_capabilities[DataScope.TEST], TestDataCapability
-    )
+    # No method on the runner returns a TEST capability.
+    assert runner._test_authority_broker is None
+    executor = runner.create_sealed_test_executor()
+    assert executor.has_test_authority is False

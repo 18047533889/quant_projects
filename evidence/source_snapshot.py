@@ -15,6 +15,7 @@ import datetime
 import hashlib
 import json
 import os
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -26,7 +27,11 @@ EVIDENCE_DIR = Path(__file__).resolve().parents[0]          # evidence/
 REPO_ROOT = EVIDENCE_DIR.parent                              # quant_projects/
 OUTPUT_PATH = EVIDENCE_DIR / "current" / "source_snapshot.json"
 
-# Directories to scan (relative to REPO_ROOT)
+# Directories to scan (relative to REPO_ROOT).
+# R46 P0-02: coverage now spans the FULL platform source tree, not just the
+# legacy FactorEngine dirs.  quant_evaluator / factor_optimizer / factor_assets /
+# factor_preprocess / dataaccess / vectorbt_qs / factor_engine are all regular
+# monorepo packages (no submodules) and must be inside the evidence snapshot.
 SCAN_DIRS: tuple[str, ...] = (
     "backend",
     "cleaned_operators",
@@ -35,6 +40,13 @@ SCAN_DIRS: tuple[str, ...] = (
     "runtime",
     "market",
     "fields",
+    "factor_engine",
+    "quant_evaluator",
+    "factor_optimizer",
+    "factor_assets",
+    "factor_preprocess",
+    "dataaccess",
+    "vectorbt_qs",
 )
 
 # Directory / pattern exclusions (relative to each scanned dir root)
@@ -127,6 +139,28 @@ def _should_skip_dir(rel: str) -> bool:
 class FileEntry:
     rel_path: str   # relative to REPO_ROOT
     sha256: str
+    mode: int = 0o644        # file mode bits (part of the leaf identity)
+    size: int = 0            # byte size (part of the leaf identity)
+
+    def leaf_hash(self) -> str:
+        """R46 P0-02: leaf binds relative_path || mode || size || content_sha256.
+
+        The path is part of the leaf, so ``a/foo.py -> b/foo.py`` rename changes
+        the Merkle root even when content is byte-identical.  Length-prefixed
+        and collision-safe like the other canonical encodings in this repo.
+        """
+        h = hashlib.sha256()
+        h.update(len(self.rel_path.encode("utf-8")).to_bytes(8, "big"))
+        h.update(self.rel_path.encode("utf-8"))
+        h.update(b"\x00")
+        h.update(len(str(self.mode).encode("utf-8")).to_bytes(8, "big"))
+        h.update(str(self.mode).encode("utf-8"))
+        h.update(b"\x00")
+        h.update(len(str(self.size).encode("utf-8")).to_bytes(8, "big"))
+        h.update(str(self.size).encode("utf-8"))
+        h.update(b"\x00")
+        h.update(self.sha256.encode("utf-8"))
+        return h.hexdigest()
 
 
 def scan_source_tree(
@@ -160,7 +194,13 @@ def scan_source_tree(
                 if _should_skip_dir(rel_file):
                     continue
                 file_hash = _sha256_file(abs_file)
-                entries.append(FileEntry(rel_path=rel_file, sha256=file_hash))
+                st = abs_file.stat()
+                entries.append(FileEntry(
+                    rel_path=rel_file,
+                    sha256=file_hash,
+                    mode=st.st_mode,
+                    size=st.st_size,
+                ))
 
     # Sort for determinism
     entries.sort(key=lambda e: e.rel_path)
@@ -184,7 +224,9 @@ def build_snapshot(
     for e in entries:
         top = e.rel_path.split(os.sep)[0]
         if top in tree_buckets:
-            tree_buckets[top].append(e.sha256)
+            # R46 P0-02: Merkle leaves bind path+mode+size+content so a rename
+            # of a byte-identical file still changes the tree hash.
+            tree_buckets[top].append(e.leaf_hash())
 
     tree_roots: dict[str, str] = {}
     all_leaf_hashes: list[str] = []
@@ -233,6 +275,233 @@ def load_snapshot(path: Path | None = None) -> dict[str, Any] | None:
         return json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         return None
+
+
+# ---------------------------------------------------------------------------
+# Platform-wide SourceTreeIdentity (R46 P0-02, P0-C)
+# ---------------------------------------------------------------------------
+
+# Regular monorepo packages (all real dirs, NOT submodules).
+PLATFORM_PACKAGES: tuple[str, ...] = (
+    "factor_engine",
+    "quant_evaluator",
+    "factor_optimizer",
+    "factor_assets",
+    "factor_preprocess",
+    "dataaccess",
+    "vectorbt_qs",
+)
+
+# Dirs that must never be treated as production source even if tracked.
+_PLATFORM_EXCLUDE_SUFFIXES: frozenset[str] = frozenset({
+    ".pyc", ".pyo", ".so", ".a", ".o", ".parquet", ".parq", ".feather",
+    ".pickle", ".pkl", ".npy", ".npz",
+})
+
+
+def _package_tree_merkle(pkg_dir: Path) -> str:
+    """SHA-256 Merkle root over a package's tracked source files.
+
+    Each leaf = hash(relative_path || mode || size || content_sha256).  Uses the
+    platform exclusion set (no evidence/docs/build descent, no generated/binary
+    suffixes).  Deterministic for a fixed file set.
+    """
+    leaves: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(pkg_dir):
+        dirnames[:] = sorted(
+            d for d in dirnames
+            if d not in EXCLUDE_DIRS and d != ".git"
+        )
+        rel_dir = os.path.relpath(dirpath, pkg_dir)
+        for fname in sorted(filenames):
+            if any(fname.endswith(s) for s in _PLATFORM_EXCLUDE_SUFFIXES):
+                continue
+            if fname in EXCLUDE_SUFFIXES or fname.endswith(".py.pre_lazy_opt"):
+                continue
+            abs_file = Path(dirpath) / fname
+            if not abs_file.is_file():
+                continue
+            try:
+                st = abs_file.stat()
+            except OSError:
+                continue
+            rel = Path(rel_dir) / fname
+            rel_posix = rel.as_posix()
+            if rel_posix == ".git" or rel_posix.startswith(".git/"):
+                continue
+            content = _sha256_file(abs_file)
+            leaf = hashlib.sha256()
+            leaf.update(len(rel_posix.encode("utf-8")).to_bytes(8, "big"))
+            leaf.update(rel_posix.encode("utf-8"))
+            leaf.update(b"\x00")
+            leaf.update(len(str(st.st_mode).encode("utf-8")).to_bytes(8, "big"))
+            leaf.update(str(st.st_mode).encode("utf-8"))
+            leaf.update(b"\x00")
+            leaf.update(len(str(st.st_size).encode("utf-8")).to_bytes(8, "big"))
+            leaf.update(str(st.st_size).encode("utf-8"))
+            leaf.update(b"\x00")
+            leaf.update(content.encode("utf-8"))
+            leaves.append(leaf.hexdigest())
+    return _merkle_root(leaves)
+
+
+def _single_file_hash(rel: str, root: Path) -> str:
+    """SHA-256 of one packaging/dependency file ("" if missing)."""
+    p = root / rel
+    if not p.is_file():
+        return ""
+    return _sha256_file(p)
+
+
+def _config_dir_merkle(root: Path) -> str:
+    """SHA-256 Merkle over all tracked files under ``config/`` (production conf)."""
+    cfg = root / "config"
+    if not cfg.is_dir():
+        return _merkle_root([])
+    leaves: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(cfg):
+        dirnames[:] = sorted(d for d in dirnames if d not in EXCLUDE_DIRS)
+        rel_dir = os.path.relpath(dirpath, cfg)
+        for fname in sorted(filenames):
+            abs_file = Path(dirpath) / fname
+            if not abs_file.is_file():
+                continue
+            rel = Path(rel_dir) / fname
+            rel_posix = rel.as_posix()
+            try:
+                st = abs_file.stat()
+            except OSError:
+                continue
+            content = _sha256_file(abs_file)
+            leaf = hashlib.sha256()
+            leaf.update(len(rel_posix.encode("utf-8")).to_bytes(8, "big"))
+            leaf.update(rel_posix.encode("utf-8"))
+            leaf.update(b"\x00")
+            leaf.update(str(st.st_mode).encode("utf-8"))
+            leaf.update(b"\x00")
+            leaf.update(str(st.st_size).encode("utf-8"))
+            leaf.update(b"\x00")
+            leaf.update(content.encode("utf-8"))
+            leaves.append(leaf.hexdigest())
+    return _merkle_root(leaves)
+
+
+def platform_source_tree_identity(
+    repo_root: Path | None = None,
+) -> dict[str, Any]:
+    """Platform-wide SourceTreeIdentity (R46 P0-02, P0-C).
+
+    Merkle-style root over the ENTIRE platform source:
+      * per-package tree hash for each regular package (factor_engine,
+        quant_evaluator, factor_optimizer, factor_assets, factor_preprocess,
+        dataaccess, vectorbt_qs);
+      * root orchestration source files (*.py, *.sh at the monorepo root);
+      * packaging_identity  = Merkle over all pyproject.toml files;
+      * dependency_lock_identity = SHA-256 over the production dependency lock
+        (requirements-production.lock at root and factor_engine/);
+      * config_identity    = Merkle over the config/ dir;
+      * root_merkle        = Merkle over every leaf so a change anywhere is
+                             detected even if no single bucket changes alone.
+
+    Excludes generated/evidence/output/reports/backtest dirs (not production
+    source).  Each package leaf binds relative_path || mode || size || content,
+    so a rename changes the hash.
+    """
+    root = repo_root or REPO_ROOT
+    package_trees: dict[str, str] = {}
+    package_packaging: dict[str, str] = {}
+    all_leaves: list[str] = []
+
+    for pkg in PLATFORM_PACKAGES:
+        pkg_dir = root / pkg
+        if not pkg_dir.is_dir():
+            continue
+        tree_hash = _package_tree_merkle(pkg_dir)
+        package_trees[pkg] = tree_hash
+        all_leaves.append(
+            hashlib.sha256(
+                (f"pkg:{pkg}\x00" + tree_hash).encode("utf-8")
+            ).hexdigest()
+        )
+        pkg_pp = _single_file_hash(f"{pkg}/pyproject.toml", root)
+        if pkg_pp:
+            package_packaging[pkg] = pkg_pp
+
+    # Root orchestration source files (tracked *.py / *.sh at monorepo root).
+    root_src: list[str] = []
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", "--", "*.py", "*.sh"],
+            cwd=str(root), capture_output=True, text=True, timeout=30,
+        )
+        for line in sorted(out.stdout.splitlines()):
+            rel = line.strip()
+            if "/" in rel or not rel:
+                continue
+            f = root / rel
+            if not f.is_file():
+                continue
+            if _is_non_source(rel):
+                continue
+            root_src.append(_single_file_hash(rel, root))
+    except Exception:
+        pass
+    if root_src:
+        for leaf in root_src:
+            all_leaves.append(
+                hashlib.sha256(("root-src\x00" + leaf).encode("utf-8")).hexdigest()
+            )
+
+    # Packaging config: all pyproject.toml under the platform packages + root.
+    pyprojects: list[str] = []
+    for rel in ("pyproject.toml",) + tuple(
+        f"{p}/pyproject.toml" for p in PLATFORM_PACKAGES
+    ):
+        h = _single_file_hash(rel, root)
+        if h:
+            pyprojects.append(h)
+    packaging_identity = _merkle_root(pyprojects) if pyprojects else _merkle_root([])
+    all_leaves.append(
+        hashlib.sha256(("packaging\x00" + packaging_identity).encode("utf-8")).hexdigest()
+    )
+
+    # Dependency lock identity.
+    dep_leaves: list[str] = []
+    for rel in ("requirements-production.lock", "factor_engine/requirements-production.lock"):
+        h = _single_file_hash(rel, root)
+        if h:
+            dep_leaves.append(h)
+    dependency_lock_identity = _merkle_root(dep_leaves) if dep_leaves else _merkle_root([])
+    all_leaves.append(
+        hashlib.sha256(("dep-lock\x00" + dependency_lock_identity).encode("utf-8")).hexdigest()
+    )
+
+    # Config dir identity.
+    config_identity = _config_dir_merkle(root)
+    all_leaves.append(
+        hashlib.sha256(("config\x00" + config_identity).encode("utf-8")).hexdigest()
+    )
+
+    root_merkle = _merkle_root(all_leaves)
+
+    return {
+        "schema_version": 1,
+        "platform_source_tree_identity": root_merkle,
+        "root_merkle": root_merkle,
+        "packages": package_trees,
+        "package_packaging": package_packaging,
+        "root_source_count": len(root_src),
+        "packaging_identity": packaging_identity,
+        "dependency_lock_identity": dependency_lock_identity,
+        "config_identity": config_identity,
+    }
+
+
+def _is_non_source(rel: str) -> bool:
+    for excl in ("evidence", "build", "docs", "archives"):
+        if rel == excl or rel.startswith(excl + "/"):
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------

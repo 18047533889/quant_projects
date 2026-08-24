@@ -58,6 +58,11 @@ class CapabilityError(FactorOptimizerError):
     pass
 
 
+class CapabilityForgeryError(CapabilityError):
+    """A capability's identity/authorization fields were forged or altered."""
+    pass
+
+
 class UnsupportedMutationError(CapabilityError):
     """Requested mutation type is not implemented."""
     pass
@@ -177,6 +182,7 @@ __all__ = [
     "SnapshotMismatchError",
     # Capability
     "CapabilityError",
+    "CapabilityForgeryError",
     "UnsupportedMutationError",
     "OptionalDependencyMissing",
     # Data

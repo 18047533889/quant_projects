@@ -13,6 +13,7 @@ from planner.backend_region import (
     PhysicalRegionPlan,
     Representation,
     TransferEdge,
+    TransferTransform,
 )
 from planner.logical_plan import PlanNode
 from planner.physical_factor_dag import (
@@ -180,6 +181,7 @@ def test_physical_execution_materializes_valid_transfer_in_topological_order() -
         target_backend=PhysicalBackend.PANDAS_NUMPY,
         source_representation=Representation.PANDAS_LONG,
         target_representation=Representation.PANDAS_LONG,
+        transform=TransferTransform.SAME_BACKEND_NATIVE,
         estimated_rows=1,
         estimated_bytes=8,
         estimated_transfer_ms=1.0,
@@ -228,6 +230,7 @@ def test_physical_execution_rejects_malformed_transfer_residency() -> None:
         target_backend=PhysicalBackend.PANDAS_NUMPY,
         source_representation=Representation.PANDAS_LONG,
         target_representation=Representation.PANDAS_LONG,
+        transform=TransferTransform.POLARS_TO_NUMPY,
         estimated_rows=1,
         estimated_bytes=8,
         estimated_transfer_ms=1.0,

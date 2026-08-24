@@ -47,8 +47,10 @@ def main() -> int:
         for e in g.get("evidence", []):
             entry = {
                 "test": e["test"],
+                "status": e["status"],
                 "result": "passed" if e["status"] == Status.PASS else e["status"].lower(),
                 "command_hash": e["command_hash"],
+                "command_template_hash": e.get("command_template_hash") or e["command_hash"],
                 "exit_code": e["exit_code"],
                 "passed": e["passed"],
                 "failed": e["failed"],
@@ -64,6 +66,8 @@ def main() -> int:
             }
             if e.get("timed_out"):
                 entry["note"] = "TIMEOUT"
+            elif e.get("note"):
+                entry["note"] = e["note"]
             entries.append(entry)
         if entries:
             gates.append({"name": g["name"], "status": g["status"], "evidence": entries})

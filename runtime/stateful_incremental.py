@@ -763,6 +763,22 @@ def _stable_digest(payload: Mapping[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _node_input_columns(node: Any) -> tuple[str, ...]:
+    """R45：提取一个 IR 节点的**实际**上游 source 列名（按输入顺序）。
+
+    用于把 ``ts_ema(close, 20)`` 与 ``ts_ema(volume, 20)`` 区分开 ——
+    ``_INPUT_KEYS[ts_ema]`` 只是 ``("x",)``（输入槽位名），不含真实列名，若只
+    用槽位名做身份，两个不同列的 EMA 会碰撞。
+    """
+    cols: list[str] = []
+    for child in getattr(node, "inputs", ()) or ():
+        if getattr(child, "op", None) == "column":
+            name = getattr(child, "attrs", {}).get("name")
+            if name:
+                cols.append(str(name))
+    return tuple(cols)
+
+
 def compute_state_node_identity(
     canonical: str,
     params: Mapping[str, Any] | None,
@@ -778,8 +794,9 @@ def compute_state_node_identity(
     operator_semantic_contract_digest: str = "",
     numeric_semantics_hash: str = "",
     missing_support_policy: str = "",
+    input_columns: tuple[str, ...] = (),
 ) -> StateNodeIdentity:
-    """R44：计算一个 stateful 节点的跨因子共享身份。
+    """R44/R45：计算一个 stateful 节点的跨因子共享身份。
 
     复用 :func:`_checkpoint_input_identity` 的上下文构建块（market / calendar /
     timezone / universe / price basis / field / operator contract / numeric
@@ -787,24 +804,48 @@ def compute_state_node_identity(
     canonical + params + source_scope + 实现 + schema，因此两个共享
     ``ts_ema(close, 20)`` 的因子得到同一个 :meth:`StateNodeIdentity.stable_key`。
 
-    ``subdag_semantic_identity`` 编码 canonical + 上游 column/op 形状（不含
-    bound params）；``bound_parameter_identity`` 单独编码 params，使 span=20
-    与 span=30 产生不同身份。
+    R45 碰撞修复：``subdag_semantic_identity`` 不再只编码 ``canonical +
+    _INPUT_KEYS 槽位名``（那会让 ``ts_ema(close,20)`` 与 ``ts_ema(volume,20)``
+    碰撞），而是把**全部**区分上下文绑定进哈希：
+
+    * 实际输入列名 ``input_columns``（真实列，非槽位名）；
+    * 上下文：calendar_version / timezone / universe_membership_hash /
+      price_basis_policy / field_contract_digests /
+      operator_semantic_contract_digest / numeric_semantics_hash /
+      missing_support_policy；
+    * bound_parameter_identity（span=20 vs 30 不同）；
+    * physical_implementation_id（算子实现哈希）；
+    * checkpoint_schema_version。
+
+    任一字段为 ``None`` 时按 ``None`` 参与哈希（不跳过），保证"缺失上下文"与
+    "空上下文"是不同身份。不使用 ``id()`` / 对象同一性。
     """
     spec = StatefulCheckpointRegistry.get(canonical)
     checkpoint_schema_version = (
         spec.state_schema_version if spec is not None else ""
     )
-    # 上游 column/op 形状：canonical 本身 + 输入列名（不含 params）。
-    input_names = _INPUT_KEYS.get(canonical, ())
+    bound_parameter_identity = _stable_digest(
+        {str(k): params[k] for k in sorted(params or {})}
+    )
+    physical_implementation_id = _implementation_hash(canonical)
+    # 综合语义指纹：canonical + 真实输入列 + 全部上下文 + bound params +
+    # 实现 + schema。None 值保留为 None（不跳过）。
     subdag_semantic_identity = _stable_digest(
         {
             "canonical": canonical,
-            "input_columns": sorted(str(n) for n in input_names),
+            "input_columns": sorted(str(c) for c in (input_columns or ())),
+            "calendar_version": calendar_version,
+            "timezone": timezone,
+            "universe_membership_hash": universe_membership_hash,
+            "price_basis_policy": price_basis_policy,
+            "field_contract_digests": dict(field_contract_digests or {}),
+            "operator_semantic_contract_digest": operator_semantic_contract_digest,
+            "numeric_semantics_hash": numeric_semantics_hash,
+            "missing_support_policy": missing_support_policy,
+            "bound_parameter_identity": bound_parameter_identity,
+            "physical_implementation_id": physical_implementation_id,
+            "checkpoint_schema_version": checkpoint_schema_version,
         }
-    )
-    bound_parameter_identity = _stable_digest(
-        {str(k): params[k] for k in sorted(params or {})}
     )
     # source_policy_identity 直接复用调用方传入的 source_scope（已不含查询窗口）。
     return StateNodeIdentity(
@@ -813,7 +854,7 @@ def compute_state_node_identity(
         source_policy_identity=str(source_scope),
         market=str(market or ""),
         frequency=str(frequency or ""),
-        physical_implementation_id=_implementation_hash(canonical),
+        physical_implementation_id=physical_implementation_id,
         checkpoint_schema_version=checkpoint_schema_version,
     )
 
@@ -901,12 +942,22 @@ def _classify_node_mode(op: str, params: Mapping[str, Any]) -> NodeIncrementalMo
         mode = getattr(contract, "incremental_mode", None)
         mode_name = getattr(mode, "value", None) or str(mode)
         if mode_name == "CHECKPOINTED_STATE":
-            return NodeIncrementalMode.RESTORE_STATE
+            # R45: 只有**可 segmented 恢复**的 stateful canonical 才映射到
+            # RESTORE_STATE。注册在 StatefulCheckpointRegistry 但
+            # ``segmented_execution_supported=False`` 的算子（如 KAMA）无法用
+            # segmented 路径恢复 → FULL_REPLAY（fail-closed）。
+            if op in SEGMENTED_EXECUTION_CANONICALS:
+                return NodeIncrementalMode.RESTORE_STATE
+            return NodeIncrementalMode.FULL_REPLAY
         if mode_name == "EVENT_ASOF":
             return NodeIncrementalMode.EVENT_ASOF
         if mode_name == "FINITE_WINDOW":
             return NodeIncrementalMode.LOAD_TAIL
-        if mode_name == "LOAD_TODAY":
+        if mode_name == "STATELESS":
+            # IncrementalMode.STATELESS — 零历史逐行算子（add/mul/elementwise）。
+            # 只需当前 bar，映射到 LOAD_TODAY。注意 IncrementalMode 没有
+            # "LOAD_TODAY" 这个值；此前错误检查 "LOAD_TODAY" 导致 stateless
+            # 非叶子节点落入 FULL_REPLAY（fail-closed 但代价是全量重放）。
             return NodeIncrementalMode.LOAD_TODAY
         return NodeIncrementalMode.FULL_REPLAY
     except Exception:
@@ -917,7 +968,14 @@ def _classify_node_mode(op: str, params: Mapping[str, Any]) -> NodeIncrementalMo
 
         contract = execution_contract(op)
         if contract.requires_full_history or contract.state_model != "stateless":
-            if StatefulCheckpointRegistry.get(op) is not None:
+            # R45: 只有**可 segmented 恢复**的 stateful canonical 才映射到
+            # RESTORE_STATE。注册在 StatefulCheckpointRegistry 但
+            # ``segmented_execution_supported=False`` 的算子（如 KAMA）无法用
+            # segmented 路径恢复 → FULL_REPLAY（fail-closed）。
+            if (
+                StatefulCheckpointRegistry.get(op) is not None
+                and op in SEGMENTED_EXECUTION_CANONICALS
+            ):
                 return NodeIncrementalMode.RESTORE_STATE
             return NodeIncrementalMode.FULL_REPLAY
         req = history_requirement(op, params)
@@ -1004,6 +1062,7 @@ def plan_node_level_incremental(
                 operator_semantic_contract_digest=operator_semantic_contract_digest,
                 numeric_semantics_hash=numeric_semantics_hash,
                 missing_support_policy=missing_support_policy,
+                input_columns=_node_input_columns(node),
             )
             stateful_ids.append(node_id)
         nodes.append(
@@ -1029,12 +1088,8 @@ def plan_node_level_incremental(
             )
         elif has_full:
             unsupported_reason = "a node requires full-history replay"
-        elif len(stateful_ids) > 1:
-            # 多个 stateful 节点：仅当它们共享同一 source 才可能（当前不支持
-            # composite state），保守回退。
-            unsupported_reason = (
-                "multiple stateful nodes require composite state (not yet supported)"
-            )
+        # R45: 支持 N>=1 个 stateful 节点 —— 每个 stateful 节点独立恢复其
+        # StateBlock（按 StateNodeIdentity），再注入 DAG。不再因多 stateful 回退。
 
     return NodeIncrementalPlan(
         factor_id=str(factor_id),
@@ -1120,24 +1175,28 @@ def _eval_downstream_node(
     return None
 
 
-def _eval_downstream_dag(
+def _eval_residual_dag(
     root: Any,
-    stateful_node: Any,
-    stateful_frame: pd.DataFrame,
+    stateful_nodes: list[Any],
+    stateful_frames: list[pd.DataFrame],
     column_frames: Mapping[str, pd.DataFrame],
 ) -> pd.DataFrame | None:
-    """R44：post-order 求值 stateful 节点之后的下游子 DAG。
+    """R45：从**真实因子根**求值整棵残差 DAG。
 
-    ``stateful_node`` 是已由 stateful segment 求值的节点对象，其结果为
-    ``stateful_frame``；``column_frames`` 是 ``{column_name: DataFrame}`` 的
-    源列数据（供下游 ``column`` 叶子读取）。返回根节点结果；任何不受支持
-    算子 → None。
+    每个已恢复的 stateful IR 节点（``stateful_nodes`` 与 ``stateful_frames``
+    按位置对应）被当作一个已求值的叶子（持有其 StateBlock 结果）；其余节点用
+    最小 pandas 解释器 post-order 求值。这覆盖 ``rank(ema(close)+volume)`` 等
+    外层算子 —— 不再只从 stateful 节点的第一个直接消费者开始。
+
+    ``column_frames`` 是 ``{column_name: DataFrame}`` 的源列数据（供下游
+    ``column`` 叶子读取）。任何不受支持算子 → None（调用方回退 full replay）。
     """
     def walk(node: Any) -> pd.DataFrame | None:
-        if node is stateful_node:
-            return stateful_frame
-        if node.op == "column":
-            name = str(node.attrs.get("name", ""))
+        for i, sn in enumerate(stateful_nodes):
+            if node is sn:
+                return stateful_frames[i]
+        if getattr(node, "op", None) == "column":
+            name = str(getattr(node, "attrs", {}).get("name", ""))
             frame = column_frames.get(name)
             if frame is None:
                 return None
@@ -1218,18 +1277,12 @@ def try_interior_stateful_incremental(
     if not plan.supportable or not plan.stateful_node_ids:
         return None
 
-    # 只支持单个 stateful 节点（composite state 未支持）。
-    if len(plan.stateful_node_ids) != 1:
-        return None
-    stateful_node_id = plan.stateful_node_ids[0]
-    stateful_plan = next(n for n in plan.nodes if n.node_id == stateful_node_id)
-    canonical = stateful_plan.op
-    if canonical not in SEGMENTED_EXECUTION_CANONICALS:
-        return None
-    if StatefulCheckpointRegistry.get(canonical) is None:
-        return None
-
-    # 定位 stateful 节点在 IR 中的位置（post-order 顺序）。
+    # R45: 支持 N>=1 个 stateful 节点 —— 每个 stateful 节点独立恢复其
+    # StateBlock（按 StateNodeIdentity），再注入 DAG。任一节点 checkpoint
+    # 缺失/过期/schema 不匹配 → 整体回退（fail-closed，绝不部分恢复）。
+    # 定位 stateful 节点在 IR 中的位置：post-order 顺序与 plan 的 node_id
+    # 一一对应（node_id == f"n{post_order_index}"），用稳定逻辑 id 而非
+    # ``node.op == canonical`` 查找（两个 ts_ema 节点不会混淆）。
     order: list[Any] = []
 
     def collect(node: Any) -> None:
@@ -1238,136 +1291,142 @@ def try_interior_stateful_incremental(
         order.append(node)
 
     collect(ir)
-    stateful_ir = None
-    for node in order:
-        if str(getattr(node, "op", "")) == canonical:
-            stateful_ir = node
-            break
-    if stateful_ir is None:
+    if len(order) != len(plan.nodes):
         return None
+    node_id_to_ir: dict[str, Any] = {
+        f"n{i}": node for i, node in enumerate(order)
+    }
 
-    extracted = _root_series_and_params(stateful_ir, canonical)
-    if extracted is None:
-        return None
-    input_names, params = extracted
-    input_keys = _INPUT_KEYS[canonical]
-    try:
-        series = {name: source.load_column(name) for name in input_names}
-    except Exception:
-        return None
-    if not series:
-        return None
-    anchor = series[input_names[0]].index
-    if not isinstance(anchor, pd.MultiIndex):
-        return None
-    frames = {name: series[name].unstack(level="instrument") for name in input_names}
-    reference = frames[input_names[0]]
-    instruments = list(reference.columns)
-    if len(reference.index) == 0:
-        return None
-    segment_timestamps = pd.to_datetime(reference.index, utc=True)
+    # 收集整棵 IR 用到的全部 source 列（供残差 DAG 的 column 叶子读取）。
+    all_columns: set[str] = set()
 
-    input_identity = _checkpoint_input_identity(
-        factor_id=factor_id, canonical=canonical, input_names=input_names,
-        params=params, source_scope=source_scope, market=market,
-        calendar_version=calendar_version, timezone=timezone,
-        universe_membership_hash=universe_membership_hash,
-        price_basis_policy=price_basis_policy,
-        field_contract_digests=field_contract_digests,
-        operator_semantic_contract_digest=operator_semantic_contract_digest,
-        numeric_semantics_hash=numeric_semantics_hash,
-        missing_support_policy=missing_support_policy,
-    )
+    def collect_columns(node: Any) -> None:
+        if getattr(node, "op", None) == "column":
+            name = getattr(node, "attrs", {}).get("name")
+            if name:
+                all_columns.add(str(name))
+        for child in getattr(node, "inputs", ()) or ():
+            collect_columns(child)
 
-    out = np.full((len(segment_timestamps), len(instruments)), np.nan, dtype=float)
-    pending: dict[str, Any] = {}
-    stateful_frames: dict[str, pd.DataFrame] = {}
-    for j, instrument in enumerate(instruments):
-        checkpoint = None if bootstrap else store.load_latest(
-            factor_id, canonical, instrument, before=start
-        )
-        if checkpoint is None and not bootstrap:
+    collect_columns(ir)
+
+    # 每个 stateful 节点独立执行 segment，累积 pending checkpoint 与结果 frame。
+    # pending 以 (stateful_node_id, instrument) 为键 —— 多个 stateful 节点各自
+    # 的 checkpoint 都要提交，不能只按 instrument 覆盖。
+    pending: dict[tuple[str, str], Any] = {}
+    stateful_nodes: list[Any] = []
+    stateful_frames: list[pd.DataFrame] = []
+    for stateful_node_id in plan.stateful_node_ids:
+        stateful_plan = next(n for n in plan.nodes if n.node_id == stateful_node_id)
+        canonical = stateful_plan.op
+        if canonical not in SEGMENTED_EXECUTION_CANONICALS:
             return None
-        starts_at_origin = bootstrap or checkpoint is None
-        inputs: Mapping[str, np.ndarray] = {
-            key: frames[name][instrument].to_numpy(dtype=float)
-            for key, name in zip(input_keys, input_names)
-        }
+        if StatefulCheckpointRegistry.get(canonical) is None:
+            return None
+        stateful_ir = node_id_to_ir.get(stateful_node_id)
+        if stateful_ir is None:
+            return None
+
+        extracted = _root_series_and_params(stateful_ir, canonical)
+        if extracted is None:
+            return None
+        input_names, params = extracted
+        input_keys = _INPUT_KEYS[canonical]
         try:
-            if len(segment_timestamps) >= 2:
-                first = execute_stateful_segment(
-                    canonical,
-                    {key: values[:-1] for key, values in inputs.items()},
-                    timestamps=segment_timestamps[:-1],
-                    instrument=str(instrument),
-                    input_identity=input_identity,
-                    params=params,
-                    checkpoint=checkpoint,
-                    starts_at_dataset_origin=starts_at_origin,
-                )
-                last = execute_stateful_segment(
-                    canonical,
-                    {key: values[-1:] for key, values in inputs.items()},
-                    timestamps=segment_timestamps[-1:],
-                    instrument=str(instrument),
-                    input_identity=input_identity,
-                    params=params,
-                    checkpoint=first.checkpoint,
-                )
-                out[:, j] = np.concatenate([first.values, last.values])
-                pending[instrument] = first.checkpoint
-            else:
-                single = execute_stateful_segment(
-                    canonical,
-                    inputs,
-                    timestamps=segment_timestamps,
-                    instrument=str(instrument),
-                    input_identity=input_identity,
-                    params=params,
-                    checkpoint=checkpoint,
-                    starts_at_dataset_origin=starts_at_origin,
-                )
-                out[:, j] = single.values
+            series = {name: source.load_column(name) for name in input_names}
         except Exception:
             return None
-        stateful_frames[stateful_node_id] = pd.DataFrame(
-            out, index=reference.index, columns=instruments
+        if not series:
+            return None
+        anchor = series[input_names[0]].index
+        if not isinstance(anchor, pd.MultiIndex):
+            return None
+        frames = {name: series[name].unstack(level="instrument") for name in input_names}
+        reference = frames[input_names[0]]
+        instruments = list(reference.columns)
+        if len(reference.index) == 0:
+            return None
+        segment_timestamps = pd.to_datetime(reference.index, utc=True)
+
+        input_identity = _checkpoint_input_identity(
+            factor_id=factor_id, canonical=canonical, input_names=input_names,
+            params=params, source_scope=source_scope, market=market,
+            calendar_version=calendar_version, timezone=timezone,
+            universe_membership_hash=universe_membership_hash,
+            price_basis_policy=price_basis_policy,
+            field_contract_digests=field_contract_digests,
+            operator_semantic_contract_digest=operator_semantic_contract_digest,
+            numeric_semantics_hash=numeric_semantics_hash,
+            missing_support_policy=missing_support_policy,
         )
 
-    # 求值下游子 DAG（stateful 节点之后）。
-    downstream_root = None
-    for node in order:
-        if node is stateful_ir:
-            continue
-        if any(child is stateful_ir for child in getattr(node, "inputs", ()) or ()):
-            downstream_root = node
-            break
-    if downstream_root is None:
-        # 无下游节点：stateful 节点即根 —— 直接返回。
-        if pending:
+        out = np.full((len(segment_timestamps), len(instruments)), np.nan, dtype=float)
+        for j, instrument in enumerate(instruments):
+            checkpoint = None if bootstrap else store.load_latest(
+                factor_id, canonical, instrument, before=start
+            )
+            if checkpoint is None and not bootstrap:
+                return None
+            starts_at_origin = bootstrap or checkpoint is None
+            inputs: Mapping[str, np.ndarray] = {
+                key: frames[name][instrument].to_numpy(dtype=float)
+                for key, name in zip(input_keys, input_names)
+            }
             try:
-                store.commit_batch(factor_id, list(pending.values()))
+                if len(segment_timestamps) >= 2:
+                    first = execute_stateful_segment(
+                        canonical,
+                        {key: values[:-1] for key, values in inputs.items()},
+                        timestamps=segment_timestamps[:-1],
+                        instrument=str(instrument),
+                        input_identity=input_identity,
+                        params=params,
+                        checkpoint=checkpoint,
+                        starts_at_dataset_origin=starts_at_origin,
+                    )
+                    last = execute_stateful_segment(
+                        canonical,
+                        {key: values[-1:] for key, values in inputs.items()},
+                        timestamps=segment_timestamps[-1:],
+                        instrument=str(instrument),
+                        input_identity=input_identity,
+                        params=params,
+                        checkpoint=first.checkpoint,
+                    )
+                    out[:, j] = np.concatenate([first.values, last.values])
+                    pending[(stateful_node_id, instrument)] = first.checkpoint
+                else:
+                    single = execute_stateful_segment(
+                        canonical,
+                        inputs,
+                        timestamps=segment_timestamps,
+                        instrument=str(instrument),
+                        input_identity=input_identity,
+                        params=params,
+                        checkpoint=checkpoint,
+                        starts_at_dataset_origin=starts_at_origin,
+                    )
+                    out[:, j] = single.values
             except Exception:
                 return None
-        panel = pd.DataFrame(out, index=reference.index, columns=instruments)
-        result_series = panel.stack(future_stack=True)
-        result_series = result_series.reindex(
-            pd.MultiIndex.from_product(
-                [reference.index, instruments], names=["timestamp", "instrument"]
-            )
+        stateful_nodes.append(stateful_ir)
+        stateful_frames.append(
+            pd.DataFrame(out, index=reference.index, columns=instruments)
         )
-        mode_info = {
-            "mode": "interior_stateful",
-            "bootstrap": bool(bootstrap),
-            "canonical": canonical,
-            "instruments": len(instruments),
-            "execution_mode": mode,
-        }
-        return result_series, mode_info
 
-    downstream = _eval_downstream_dag(
-        downstream_root, stateful_ir, stateful_frames[stateful_node_id], frames
-    )
+    # 从**真实因子根**求值整棵残差 DAG（stateful 节点作为已求值叶子注入）。
+    # 覆盖 rank(ema(close)+volume) 等外层算子 —— 不再只从第一个直接消费者开始。
+    column_frames: dict[str, pd.DataFrame] = {}
+    for name in all_columns:
+        try:
+            col_series = source.load_column(name)
+        except Exception:
+            return None
+        if not isinstance(col_series.index, pd.MultiIndex):
+            return None
+        column_frames[name] = col_series.unstack(level="instrument")
+
+    downstream = _eval_residual_dag(ir, stateful_nodes, stateful_frames, column_frames)
     if downstream is None:
         return None
     if downstream.shape != (len(reference.index), len(instruments)):

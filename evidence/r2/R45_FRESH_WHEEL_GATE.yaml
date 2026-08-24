@@ -1,0 +1,83 @@
+gate: R45_FRESH_WHEEL_GATE
+head_sha: c0893da04d1177a4d8fbc07de35e4db368935f68
+date: "2026-08-24"
+python: "3.12.3"
+summary: >-
+  Fresh-wheel packaging gate. Build of HEAD produced a wheel whose dataaccess /
+  data_access package did not land in the archive, so `import data_access` /
+  `import dataaccess` FAILED in a clean venv (ModuleNotFoundError). A minimal,
+  safe pyproject.toml fix (add "dataaccess", "dataaccess.*", "data_access" to
+  the [tool.setuptools.packages.find] include list) makes the wheel import
+  cleanly and pass all smoke tests. Original build: FAILED (P0 packaging
+  defect). Fixed build: PASS.
+
+# ---------------------------------------------------------------------------
+# 1. BUILD
+# ---------------------------------------------------------------------------
+build:
+  ok_original_head_wheel: false   # clean wheel built but dropped dataaccess entirely
+  original_wheel_file: /tmp/r45wheel/quant_projects-0.4.0-py3-none-any.whl
+  original_wheel_sha256: bea249770b63c52829fe2087b63ab1a1ef36f19942f9505556825fe202119914
+  original_wheel_data_entries: 0        # `dataaccess` / `data_access` NOT packaged
+  fixed_wheel_file: /tmp/r45b4/quant_projects-0.4.0-py3-none-any.whl
+  fixed_wheel_sha256: 8ba35b579725b872550f395060c99cdf5a1d203e47c661b32d1c55ebd0b2162d
+  build_ok_fixed: true
+
+# ---------------------------------------------------------------------------
+# 2. FRESH-VENV IMPORT MATRIX  (empty cwd /tmp/r45gate, PYTHONPATH unset)
+# ---------------------------------------------------------------------------
+# venvH = HEAD wheel (pre-fix). venv4 = fixed wheel.
+import_matrix:
+  venv_original_head:
+    venv: /tmp/r45venvH
+    factor_engine: PASS
+    factor_engine.runtime.incremental_contract: PASS
+    data_access: FAIL  # ModuleNotFoundError: No module named 'data_access'
+    data_access.read.semantic_catalog: FAIL
+    dataaccess: FAIL
+  venv_fixed:
+    venv: /tmp/r45venv4
+    factor_engine: PASS
+    factor_engine.runtime.incremental_contract: PASS
+    data_access: PASS
+    data_access.read.semantic_catalog: PASS
+    dataaccess: PASS
+    all_imports_ok: true
+
+# ---------------------------------------------------------------------------
+# 3. MINIMAL SMOKE  (fixed wheel, venv4, empty dir)
+# ---------------------------------------------------------------------------
+minimal_smoke:
+  factor:
+    import: PASS  # from factor_engine.runtime.incremental_contract import IncrementalContract
+    instantiate: PASS
+    args: {canonical: "{factor: close}", incremental_mode: full}
+    result: "OK IncrementalContract; canonical={'factor': 'close'}; incremental_mode='full'"
+  data_access_read:
+    import: PASS  # from data_access.read.semantic_catalog import get_semantic_catalog
+    run: PASS  # get_semantic_catalog() -> SemanticFieldCatalog
+    result: "SemanticFieldCatalog returned OK"
+  overall: PASS
+
+# ---------------------------------------------------------------------------
+# 4. VERDICT
+# ---------------------------------------------------------------------------
+verdict: PASS_WITH_MINIMAL_FIX
+verdict_detail: >-
+  Original HEAD wheel (git rev-parse HEAD == c0893da0) is a CONFIRMED P0
+  packaging defect: [tool.setuptools.packages.find].include listed only
+  `dataaccess.data_access.<sub>` names, so the top-level `dataaccess` and
+  `data_access` packages were dropped from the wheel -> `import data_access`
+  FAILED in a clean venv. Minimal safe fix applied to pyproject.toml (add
+  `dataaccess`, `dataaccess.*`, `data_access` to include). After fix the wheel
+  imports all 5 required modules and both minimal smokes PASS. No code edited.
+
+# ---------------------------------------------------------------------------
+# 5. .pytest_full.txt (stale red artifact)
+# ---------------------------------------------------------------------------
+pytest_full_txt:
+  status: ARCHIVED
+  from: .pytest_full.txt
+  to: .pytest_full.stale.txt
+  content_head: "(1 failed / 65 passed / 11 skipped, from old code)"
+  note: "Archived per review; not regenerated at HEAD."

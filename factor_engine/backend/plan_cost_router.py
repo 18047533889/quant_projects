@@ -83,12 +83,17 @@ def plan_occurrences(plan: PlanNode) -> tuple[BoundNodeOccurrence, ...]:
     from cleaned_operators.registry import OperatorRegistry
 
     occurrences: list[BoundNodeOccurrence] = []
-    seen_ids: set[int] = set()
     # R31-013 fix：node_id 用**独立计数器**（不是 len(occurrences)）。meta op
     # 不 append occurrence 却仍要占用一个 node_id；若用 occurrence 计数，第一个
     # 非 meta 算子会与第一个 meta 子节点拿到相同 id → occurrence 指向自身 → DP
     # 无限递归。
     node_counter: list[int] = [0]
+    # R45-PLAN-NODE-ID：同节点对象在多次引用时返回**同一个**稳定 id。用对象
+    # identity（id()）仅作内部访问去重（同一对象只分配一次），绝不把 id() 注入
+    # 返回的 node_id（旧代码 revisit 走 ``f"n{id(node)}"``，与首访的计数 id
+    # 不一致 → 共享节点在 nodes/inputs 图里自相矛盾）。返回的 id 全部是确定性的
+    # DFS 前序计数串，两个结构相同的子树必然得到不同 id、同一节点必映射同 id。
+    assigned_ids: dict[int, str] = {}
 
     def _num(attrs: Any, key: str) -> int | None:
         try:
@@ -97,14 +102,15 @@ def plan_occurrences(plan: PlanNode) -> tuple[BoundNodeOccurrence, ...]:
             return None
 
     def walk(node: PlanNode) -> str:
-        if id(node) in seen_ids:
-            return getattr(node, "node_id", None) or f"n{id(node)}"
-        seen_ids.add(id(node))
+        existing = assigned_ids.get(id(node))
+        if existing is not None:
+            return existing
         node_counter[0] += 1
         # 关键：**先** 捕获自己的 node_id（在 walk children 之前）——children 会
         # 继续递增计数器；若后取，父节点会拿到最后一个子节点的 id → 与子节点
         # 同 id → occurrence 自引用 → DP 无限递归。
         my_id = f"n{node_counter[0]}"
+        assigned_ids[id(node)] = my_id
         attrs = getattr(node, "attrs", None) or {}
         child_ids = tuple(walk(child) for child in (getattr(node, "inputs", ()) or ()))
         op = str(getattr(node, "op", "") or "")

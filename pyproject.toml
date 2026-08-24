@@ -72,6 +72,9 @@ vectorbt-qs = "vectorbt_qs.cli:main"
 py-modules = [
     "logging_utils",
     "workspace_paths",
+    "pit_contract",
+    "stateful_contract",
+    "stateful_runtime",
 ]
 
 [tool.setuptools.packages.find]
@@ -80,6 +83,34 @@ include = [
     "planning*",
     "modeling",
     "modeling.*",
+    # Top-level packages that factor_engine submodules import via absolute
+    # imports (from runtime import ..., from expr import ..., etc.). These are
+    # the canonical packages; factor_engine/ mirrors them. Required so that
+    # `import factor_engine.runtime` etc. resolve in the umbrella wheel.
+    "api*",
+    "backend*",
+    "cache*",
+    "cleaned_operators*",
+    "evidence*",
+    "export*",
+    "expr*",
+    "factor_recipes*",
+    "fields*",
+    "ir*",
+    "market*",
+    "mining*",
+    "planner*",
+    "research_operators*",
+    "research_tools*",
+    "runtime*",
+    "security*",
+    "service*",
+    "storage*",
+    "telemetry*",
+    "util*",
+    "validation*",
+    "factor_engine",
+    "factor_engine.*",
     "factor_engine.api*",
     "factor_engine.backend*",
     "factor_engine.cache*",
@@ -104,6 +135,9 @@ include = [
     "factor_engine.storage*",
     "factor_engine.util*",
     "factor_engine.validation*",
+    "dataaccess",
+    "dataaccess.*",
+    "data_access",
     "dataaccess.data_access",
     "dataaccess.data_access.core",
     "dataaccess.data_access.registry",

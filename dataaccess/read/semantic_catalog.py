@@ -445,6 +445,22 @@ def _strict_bool_or_none(value: Any, *, context: str) -> bool | None:
     return _strict_bool(value, context=context, default=False)
 
 
+def assert_production_mining_field(field: "SemanticField") -> None:
+    """R45: FactorEngine Production Mining 的字段级 fail-closed 校验。
+
+    生产挖掘必须显式声明 period_selection（latest_period / ttm / single-quarter /
+    annual），**禁止**默认 ``"all"``——``all`` 会同时取多个会计期，作为因子输入
+    会混入不可比/未对齐的期间数据。``"all"`` 只对 research 合法。
+    """
+    if field.period_selection == "all":
+        raise ValidationError(
+            f"FactorEngine Production Mining 要求字段 "
+            f"'{field.logical_name}' 显式声明 period_selection（latest_period / "
+            "ttm / single-quarter / annual），收到默认 'all'。'all' 只对 research "
+            "合法；生产挖掘禁止同时取多个会计期（期间不可比/未对齐）。"
+        )
+
+
 def _strict_scale(value: Any, *, context: str) -> float | None:
     """#31 非法 scale 直接报错，禁止静默变 None（单位换算语义不容丢失）。"""
     if value is None:
@@ -723,9 +739,20 @@ class SemanticFieldCatalog:
         return None
 
     def resolve_one(
-        self, name: str, market: str | None = None, *, dataset: str | None = None
+        self,
+        name: str,
+        market: str | None = None,
+        *,
+        dataset: str | None = None,
+        strict_semantic_fields: bool = False,
     ) -> SemanticField | None:
         """按逻辑名或别名解析；找不到返回 None（调用方可再回退 registry）。
+
+        R45：``strict_semantic_fields=True``（FactorEngine Production Mining）时，
+        逻辑字段不在 catalog **不返回 None 让调用方回退到 raw 物理 schema**——
+        直接抛 ``SemanticFieldNotRegisteredError``，使 unit / PIT / availability /
+        market / mining_allowed 语义契约无法被绕过。legacy research 保留
+        None 回退。
 
         market 传入时，优先返回该市场专属字段；没找着再回退 any（跨市场通用）。
         未声明市场的候选（market=UNKNOWN）**不算任何市场通用**——需要显式
@@ -737,6 +764,17 @@ class SemanticFieldCatalog:
         """
         candidates = self._by_name.get(name)
         if not candidates:
+            if strict_semantic_fields:
+                from data_access.core.exceptions import SemanticFieldNotRegisteredError
+
+                raise SemanticFieldNotRegisteredError(
+                    f"逻辑字段 '{name}' 未登记在 SemanticFieldCatalog 中"
+                    f"（dataset={dataset or '-'}）。FactorEngine Production Mining "
+                    "strict_semantic_fields=True 禁止回退到 raw 物理 schema——"
+                    "未登记字段没有 unit / PIT / availability / market / "
+                    "mining_allowed 语义契约，作为挖掘输入会藏前视与单位错误。"
+                    "请先在 config/semantic_fields.yaml 登记。"
+                )
             return None
         effective = market or (self._market_of(dataset) if dataset else None)
         if effective and effective != "any":
@@ -820,9 +858,18 @@ class SemanticFieldCatalog:
             logger.warning("%s（research 取第一个）", msg)
         return pool[0]
 
-    def get(self, name: str, market: str | None = None, *, dataset: str | None = None) -> SemanticField:
-        """严格解析；找不到抛 ValidationError。"""
-        f = self.resolve_one(name, market=market, dataset=dataset)
+    def get(
+        self,
+        name: str,
+        market: str | None = None,
+        *,
+        dataset: str | None = None,
+        strict_semantic_fields: bool = False,
+    ) -> SemanticField:
+        """严格解析；找不到抛 ValidationError（strict 下抛 SemanticFieldNotRegisteredError）。"""
+        f = self.resolve_one(
+            name, market=market, dataset=dataset, strict_semantic_fields=strict_semantic_fields
+        )
         if f is None:
             raise ValidationError(
                 f"逻辑字段 '{name}' 不在 SemanticFieldCatalog 中。"
@@ -831,11 +878,22 @@ class SemanticFieldCatalog:
         return f
 
     def resolve(
-        self, *names: str, market: str | None = None, dataset: str | None = None
+        self,
+        *names: str,
+        market: str | None = None,
+        dataset: str | None = None,
+        strict_semantic_fields: bool = False,
     ) -> list[SemanticField]:
         out: list[SemanticField] = []
         for name in names:
-            out.append(self.get(name, market=market, dataset=dataset))
+            out.append(
+                self.get(
+                    name,
+                    market=market,
+                    dataset=dataset,
+                    strict_semantic_fields=strict_semantic_fields,
+                )
+            )
         return out
 
     def to_dict(self) -> dict[str, Any]:

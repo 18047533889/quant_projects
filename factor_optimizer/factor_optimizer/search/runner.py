@@ -27,9 +27,12 @@ from factor_optimizer.contracts.splits import (
 )
 from factor_optimizer.contracts.validator import TrialValidatorIdentity
 from factor_optimizer.data_capabilities import (
+    DataCapability,
     DataScope,
-    TestDataCapability,
-    build_data_capabilities,
+    TestAuthorityBroker,
+    TestDataProvider,
+    ScopedEvaluator,
+    build_search_capabilities,
 )
 from factor_optimizer.search.multifidelity import FidelityTier, MultiFidelityScheduler
 from factor_optimizer.search.plateau import PlateauConfig, PlateauDetector
@@ -874,20 +877,27 @@ class SearchRunner:
                 )
         # Lazily-built default PlateauDetector (package semantics).
         self._default_plateau_detector: Optional[PlateauDetector] = None
-        # P0-10: capability-only data boundary.  The runner builds one
-        # authorization per scope from the protocol's split plan; the train and
-        # validation contexts receive ONLY their scope capability, so the
-        # search-process object graph never contains a TestDataCapability or
-        # any test payload.
+        # R46 P0-R: capability-only data boundary.  The runner builds ONLY the
+        # train and validation capabilities from the protocol's split plan.
+        # The search-process object graph NEVER contains a TestDataCapability
+        # or any test payload: obtaining a TEST capability requires a
+        # TestAuthorityBroker, which the search worker does not hold.
         self._data_capabilities = None
+        # R46 P0-S: the search worker never has a test provider.  This broker
+        # is always None inside a search session; sealed test evaluation
+        # happens only through a separate test authority.
+        self._test_authority_broker: Optional[TestAuthorityBroker] = None
         if isinstance(evaluation_fn, EvaluationProtocol):
             # Record the search-time data boundary so freeze_for_sealed_test
             # can reject sealed plans that overlap search data.
             object.__setattr__(
                 self.config, "_search_split_plan", evaluation_fn.split_plan
             )
-            self._data_capabilities = build_data_capabilities(
-                evaluation_fn.split_plan
+            self._data_capabilities = build_search_capabilities(
+                evaluation_fn.split_plan,
+                search_session_id="search",
+                dataset_identity="search_dataset",
+                provider_identity="search_provider",
             )
 
     def run(self, session_id: str) -> SearchSession:
@@ -943,8 +953,15 @@ class SearchRunner:
         return ValidationEvaluationContext(self)
 
     def create_sealed_test_executor(self) -> "SealedTestExecutor":
-        """Create an isolated executor for sealed test data."""
-        return SealedTestExecutor(self)
+        """Create an isolated executor for sealed test data.
+
+        R46 P0-S: the search runner never holds a test authority broker, so a
+        sealed-test executor created from the search runner is inert — it has
+        no test provider and cannot resolve test data.  Sealed test evaluation
+        happens only through a separate test authority that supplies a
+        ``TestAuthorityBroker``.
+        """
+        return SealedTestExecutor(self, self._test_authority_broker)
 
     def _run_session(self, session: SearchSession) -> SearchSession:
         """Execute a session from its current quiescent state."""
@@ -1252,14 +1269,28 @@ class ValidationEvaluationContext:
 class SealedTestExecutor:
     """Isolated executor for sealed test data.
 
-    Ensures that test data cannot be used for training or validation evaluation.
+    R46 P0-S: sealed test evaluation happens only through a separate test
+    authority.  A ``SealedTestExecutor`` created from a search runner carries
+    no ``TestAuthorityBroker`` and therefore has no test provider — it cannot
+    resolve test data.  A test authority constructs a ``SealedTestExecutor``
+    with a broker, which supplies the physical test-data path.
     """
 
-    def __init__(self, runner: SearchRunner):
+    def __init__(
+        self,
+        runner: SearchRunner,
+        test_authority_broker: Optional[TestAuthorityBroker] = None,
+    ):
         self._runner = runner
         self._split_plan = None
         if isinstance(runner.evaluation_fn, EvaluationProtocol):
             self._split_plan = runner.evaluation_fn.split_plan
+        self._test_authority_broker = test_authority_broker
+
+    @property
+    def has_test_authority(self) -> bool:
+        """True only when a test authority broker is attached."""
+        return self._test_authority_broker is not None
 
     def evaluate_sealed_test(
         self,
@@ -1267,7 +1298,18 @@ class SealedTestExecutor:
         handle: SealedTestHandle,
         split_plan: SplitPlan,
     ) -> SealedTestResult:
-        """Evaluate the sealed test using only test data."""
+        """Evaluate the sealed test using only test data.
+
+        Requires a test authority broker (the physical test-data path).  A
+        search-runner-created executor without a broker raises rather than
+        silently evaluating against search data.
+        """
+        if self._test_authority_broker is None:
+            raise ValueError(
+                "SealedTestExecutor has no test authority broker; sealed test "
+                "evaluation requires a separate test authority, not the search "
+                "runner"
+            )
         if self._split_plan is None:
             raise ValueError("SealedTestExecutor requires a SplitPlan")
         # Ensure we're only using test_mask

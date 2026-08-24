@@ -180,10 +180,20 @@ class IncrementalExecutionGeneration:
     factor_output_watermark: str | None = None
     state_watermark: str | None = None
     watermark: WatermarkSet | None = None
+    # ---- R45 追加字段（additive，缺省 None 以保持既有测试通过）----
+    factor_semantic_id: str | None = None
+    data_read_identity: str | None = None
+    universe: list[str] | None = None
+    decision_clock: str | None = None
+    physical_plan_id: str | None = None
+    pi_ids: list[str] | None = None
+    build: str | None = None
+    calendar: str | None = None
+    incremental_contract_identity: str | None = None
 
     def to_manifest(self) -> dict[str, Any]:
         """序列化为 JSON 可序列化 manifest。"""
-        return {
+        m = {
             "generation": self.generation,
             "source_snapshot_id": self.source_snapshot_id,
             "execution_id": self.execution_id,
@@ -195,6 +205,21 @@ class IncrementalExecutionGeneration:
             "state_watermark": self.state_watermark,
             "watermark": self.watermark.to_dict() if self.watermark is not None else None,
         }
+        # R45：追加 manifest closure 字段（additive；None 时以 None 占位，
+        # 保持既有 10 字段集合对旧 manifest 的兼容）。
+        for key, value in {
+            "factor_semantic_id": self.factor_semantic_id,
+            "data_read_identity": self.data_read_identity,
+            "universe": list(self.universe) if self.universe is not None else None,
+            "decision_clock": self.decision_clock,
+            "physical_plan_id": self.physical_plan_id,
+            "pi_ids": list(self.pi_ids) if self.pi_ids is not None else None,
+            "build": self.build,
+            "calendar": self.calendar,
+            "incremental_contract_identity": self.incremental_contract_identity,
+        }.items():
+            m[key] = value
+        return m
 
     @classmethod
     def from_manifest(cls, payload: dict) -> "IncrementalExecutionGeneration":
@@ -211,6 +236,15 @@ class IncrementalExecutionGeneration:
             factor_output_watermark=payload.get("factor_output_watermark"),
             state_watermark=payload.get("state_watermark"),
             watermark=WatermarkSet.from_dict(wm) if isinstance(wm, dict) else None,
+            factor_semantic_id=payload.get("factor_semantic_id"),
+            data_read_identity=payload.get("data_read_identity"),
+            universe=payload.get("universe"),
+            decision_clock=payload.get("decision_clock"),
+            physical_plan_id=payload.get("physical_plan_id"),
+            pi_ids=payload.get("pi_ids"),
+            build=payload.get("build"),
+            calendar=payload.get("calendar"),
+            incremental_contract_identity=payload.get("incremental_contract_identity"),
         )
 
 
@@ -223,6 +257,35 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _require_production_gates(
+    *, dq_certificate: dict | None, pit_certificate: dict | None,
+    data_read_identity: str | None, factor_semantic_id: str | None,
+) -> None:
+    """生产提交的强制门禁（R45）：DQ / PIT / DataReadIdentity 必须当前 PASS。
+
+    production 下：
+      - ``dq_certificate`` 须为非空且 ``passed`` 为真；
+      - ``pit_certificate`` 须为非空且 ``passed`` 为真；
+      - ``data_read_identity`` 须非空（已 resolve 且认证通过的读身份）；
+      - ``factor_semantic_id`` 须非空（唯一指代被物化的因子语义）。
+
+    任一不满足 → 抛 :class:`WatermarkViolation`（fail-closed，拒绝生产提交）。
+    research 可不提供，宽松。
+    """
+
+    def _raise(reason: str) -> None:
+        raise WatermarkViolation(f"生产提交门禁拒绝（R45 fail-closed）: {reason}")
+
+    if dq_certificate is None or not bool(dq_certificate.get("passed")):
+        _raise("DQ 证书缺失或未 PASS")
+    if pit_certificate is None or not bool(pit_certificate.get("passed")):
+        _raise("PIT 证书缺失或未 PASS")
+    if not data_read_identity:
+        _raise("DataReadIdentity 缺失（读身份未认证）")
+    if not factor_semantic_id:
+        _raise("FactorSemanticID 缺失")
+
+
 def _coerce_bytes_or_path(value: bytes | Path) -> bytes:
     """把 part 载荷统一成 bytes：Path → read；bytes → 原样。"""
     if isinstance(value, Path):
@@ -230,6 +293,11 @@ def _coerce_bytes_or_path(value: bytes | Path) -> bytes:
     if isinstance(value, (bytes, bytearray, memoryview)):
         return bytes(value)
     raise TypeError(f"part 载荷必须为 bytes 或 Path，实际 {type(value).__name__}")
+
+
+def _staged_bytes(tmp: Path) -> bytes:
+    """读回 staging 临时文件的字节（对象后端提交用，避免二次 Path 写）。"""
+    return tmp.read_bytes()
 
 
 def _gen_dir(root: Path, generation: str) -> Path:
@@ -265,6 +333,16 @@ class IncrementalCommitTransaction:
         self._generation: str | None = None
         self._committed = False
         self._staging: Path | None = None
+        # R45 manifest closure 字段。
+        self._factor_semantic_id: str | None = None
+        self._data_read_identity: str | None = None
+        self._universe: list[str] | None = None
+        self._decision_clock: str | None = None
+        self._physical_plan_id: str | None = None
+        self._pi_ids: list[str] | None = None
+        self._build: str | None = None
+        self._calendar: str | None = None
+        self._incremental_contract_identity: str | None = None
 
     # -- helpers -----------------------------------------------------------
 
@@ -288,6 +366,15 @@ class IncrementalCommitTransaction:
         pit_certificate: dict | None = None,
         source_snapshot_id: str = "",
         execution_id: str = "",
+        factor_semantic_id: str | None = None,
+        data_read_identity: str | None = None,
+        universe: list[str] | None = None,
+        decision_clock: str | None = None,
+        physical_plan_id: str | None = None,
+        pi_ids: list[str] | None = None,
+        build: str | None = None,
+        calendar: str | None = None,
+        incremental_contract_identity: str | None = None,
     ) -> None:
         """把 parts 写入 staging 目录（temp 名，不发布）。"""
         if self._committed:
@@ -297,11 +384,30 @@ class IncrementalCommitTransaction:
         self._pit_certificate = pit_certificate
         self._source_snapshot_id = source_snapshot_id or ""
         self._execution_id = execution_id or ""
+        self._factor_semantic_id = factor_semantic_id
+        self._data_read_identity = data_read_identity
+        self._universe = universe
+        self._decision_clock = decision_clock
+        self._physical_plan_id = physical_plan_id
+        self._pi_ids = pi_ids
+        self._build = build
+        self._calendar = calendar
+        self._incremental_contract_identity = incremental_contract_identity
         self._generation = self._generation or f"G-{uuid.uuid4().hex[:12]}"
         factor_parts = factor_parts or {}
         state_parts = state_parts or {}
         if not factor_parts and not state_parts:
             raise ValueError("stage 需要至少一个 factor 或 state part")
+        # R45 命名空间守卫：同一 part 名不能同时注册为 factor 与 state（杜绝
+        # 跨命名空间同名互相覆盖）。
+        conflict = set(factor_parts) & set(state_parts)
+        if conflict:
+            from runtime.generation_store import NamespaceConflictError
+
+            raise NamespaceConflictError(
+                f"同一 part 名同时注册为 factor 与 state（跨命名空间同名冲突）: "
+                f"{sorted(conflict)}"
+            )
         staging = self._staging_dir()
         staging.mkdir(parents=True, exist_ok=True)
         try:
@@ -321,8 +427,18 @@ class IncrementalCommitTransaction:
             shutil.rmtree(staging, ignore_errors=True)
             raise
 
-    def commit(self, *, production: bool = False) -> IncrementalExecutionGeneration:
+    def commit(
+        self, *, production: bool = False,
+        generation_store: Any | None = None,
+    ) -> IncrementalExecutionGeneration:
         """提交：认证证书 → 写 manifest → 原子翻转 CURRENT 指针。
+
+        参数:
+            production: 生产提交时强制 DQ / PIT / DataReadIdentity PASS 门禁
+                （R45 fail-closed）并走 ObjectStore 后端零本地写。
+            generation_store: 可选 ``GenerationStore`` 后端；提供时所有 part /
+                manifest / CURRENT 经该后端落盘（production 用
+                ObjectGenerationStore 零本地字节），缺省用既有本地目录事务。
 
         返回:
             IncrementalExecutionGeneration
@@ -332,8 +448,33 @@ class IncrementalCommitTransaction:
         watermarks = self._watermarks
         # 1) 重新认证三水位线证书（production 违背抛 WatermarkViolation）。
         three_watermark_certificate(watermarks, production=production)
+        if production:
+            # R45：生产提交强制 DQ / PIT / DataReadIdentity 当前 PASS。
+            _require_production_gates(
+                dq_certificate=self._dq_certificate,
+                pit_certificate=self._pit_certificate,
+                data_read_identity=self._data_read_identity,
+                factor_semantic_id=self._factor_semantic_id,
+            )
         if self._generation is None:
             self._generation = f"G-{uuid.uuid4().hex[:12]}"
+
+        if generation_store is not None:
+            # 后端路径：parts → manifest → CURRENT 三阶段原子提交，零本地 Path 写。
+            gen = self._build_generation()
+            manifest = gen.to_manifest()
+            for name in self._factor_parts:
+                generation_store.put_part(
+                    self._generation, "factor", name, _staged_bytes(self._staged[name])
+                )
+            for name in self._state_parts:
+                generation_store.put_part(
+                    self._generation, "state", name, _staged_bytes(self._staged[name])
+                )
+            generation_store.write_manifest(self._generation, manifest)
+            generation_store.set_current(self._generation)
+            self._committed = True
+            return gen
 
         staging = self._staging_dir()
         if not staging.exists():
@@ -386,6 +527,15 @@ class IncrementalCommitTransaction:
             factor_output_watermark=wm.factor_output if wm is not None else None,
             state_watermark=wm.node_state if wm is not None else None,
             watermark=wm,
+            factor_semantic_id=self._factor_semantic_id,
+            data_read_identity=self._data_read_identity,
+            universe=self._universe,
+            decision_clock=self._decision_clock,
+            physical_plan_id=self._physical_plan_id,
+            pi_ids=self._pi_ids,
+            build=self._build,
+            calendar=self._calendar,
+            incremental_contract_identity=self._incremental_contract_identity,
         )
 
     @property
