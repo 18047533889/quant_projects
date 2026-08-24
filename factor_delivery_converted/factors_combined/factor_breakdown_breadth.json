@@ -1,0 +1,124 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "de4048bc3a290d43274184a266219ce4c7b23efa7abfce42c9540aa1cfae15ea",
+  "candidate_ids": [
+    "crash_pred_001"
+  ],
+  "code": "def factor_breakdown_breadth(df):\n    df_copy = df.copy()\n    range_ = df_copy['high'] - df_copy['low']\n    close_ret = df_copy['close'].pct_change()\n    # align range to start at period 1\n    range_shifted = range_.shift(1)\n    # rolling volatility of close returns over 20 days\n    close_vol = close_ret.rolling(20, min_periods=10).std()\n    # rolling average of range over 5 days\n    range_ma = range_.rolling(5, min_periods=3).mean()\n    # ratio of current range to close volatility as a breakdown signal\n    # when range expands relative to close vol, potential breakdown\n    factor = range_ / close_vol.replace(0, np.nan)\n    # smooth a bit with previous period to reduce noise\n    factor = factor.rolling(2).mean()\n    df_copy['factor_breakdown_breadth'] = factor\n    return df_copy['factor_breakdown_breadth']",
+  "cross_sectional_rationale": "Crash signals are relative across assets; extreme range/vol divergence in one stock versus peers indicates idiosyncratic breakdown risk.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9757575757575757,
+        "top_quantile_annualized_excess_return": -0.02787934431102379,
+        "top_quantile_excess_return": -0.07688484473241963,
+        "top_quantile_max_drawdown": -0.17285953996110137,
+        "top_quantile_turnover": 0.18239992781306028
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_breakdown_breadth",
+  "fitness_direction": -1,
+  "formula": "range / close_vol smoothed over 2 periods",
+  "metrics": {
+    "ic": 0.014928207842657392,
+    "icir": 0.1557592438978773,
+    "mi": 0.008221239388271684,
+    "rank_ic": 0.027400560910251122,
+    "rank_icir": 0.2326220276305896
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": -0.02787934431102379,
+    "top_quantile_excess_return": -0.07688484473241963,
+    "top_quantile_max_drawdown": -0.17285953996110137,
+    "top_quantile_turnover": 0.18239992781306028
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.001186688023888765,
+    "icir": 0.04683815475974381,
+    "mi": 0.011677607779411403,
+    "rank_ic": 0.027400560910251122,
+    "rank_icir": 0.2326220276305896
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": -0.02787934431102379,
+    "top_quantile_excess_return": -0.07688484473241963,
+    "top_quantile_max_drawdown": -0.17285953996110137,
+    "top_quantile_turnover": 0.18239992781306028
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.001186688023888765,
+    "icir": -0.04683815475974381,
+    "mi": 0.011677607779411403,
+    "rank_ic": -0.027400560910251122,
+    "rank_icir": -0.2326220276305896
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Crash precursor: intraday range widens relative to close-to-close volatility before a regime breakdown. This captures the shift where daily extremes expand faster than daily returns, indicating fragility and potential crash. Cross-sectional ranking selects stocks with the most extreme range/vol divergence.",
+  "raw_metrics": {
+    "ic": -0.014928207842657392,
+    "icir": -0.1557592438978773,
+    "mi": 0.008221239388271684,
+    "rank_ic": -0.027400560910251122,
+    "rank_icir": -0.2326220276305896
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260717-061725-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260717-061725-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.3197250391038847,
+    "pre_transform_top_quantile_excess_return": -0.07688484473241963,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.43893127966964707,
+    "transformed_top_quantile_excess_return": -0.07688484473241963
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "range / close_vol smoothed over 2 periods",
+  "fe_formula": "range / close_vol smoothed over 2 periods",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "range / close_vol smoothed over 2 periods"
+}

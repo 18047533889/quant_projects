@@ -1,0 +1,93 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "bce87eadd35d4109104a0273c04904d9cbcf430910c11b8b982d4db1815e819c",
+  "candidate_ids": [
+    "AC_001_mutated_002"
+  ],
+  "code": "def factor_squared_range_volume_rank_smoothed_no_cuberoot(df):\n    df_copy = df.copy()\n    range_ = df_copy['high'] - df_copy['low']\n    range_sq = range_ ** 2\n    vol_rank = df_copy['volume'].rolling(20, min_periods=20).rank(pct=True)\n    raw = (range_sq / df_copy['close']) * vol_rank\n    signal = raw.ewm(span=10, min_periods=10, adjust=False).mean()\n    signal.name = 'factor_squared_range_volume_rank_smoothed_no_cuberoot'\n    return signal",
+  "cross_sectional_rationale": "Rank transform ensures cross-sectional comparability, reducing scale bias from price levels and volume magnitude.",
+  "cross_sectional_transform": "cs_rank",
+  "factor_name": "factor_squared_range_volume_rank_smoothed_no_cuberoot",
+  "fitness_direction": -1,
+  "formula": "ema( (range^2/close) * ts_rank(volume,20), 10 )",
+  "metrics": {
+    "ic": 0.018170606158440003,
+    "icir": 0.1487114219987361,
+    "mi": 0.029352228059321916,
+    "rank_ic": 0.05511587881677816,
+    "rank_icir": 0.3908509425469413
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.09054858250609588,
+    "top_quantile_excess_return": 0.270492054453493,
+    "top_quantile_max_drawdown": -0.0784338551456415,
+    "top_quantile_turnover": 0.08350689620454445
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.003363025397110455,
+    "icir": 0.08610981957839346,
+    "mi": 0.057270589186258825,
+    "rank_ic": 0.05511587881677816,
+    "rank_icir": 0.3908509425469413
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.09054858250609588,
+    "top_quantile_excess_return": 0.270492054453493,
+    "top_quantile_max_drawdown": -0.0784338551456415,
+    "top_quantile_turnover": 0.08350689620454445
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.003363025397110455,
+    "icir": -0.08610981957839346,
+    "mi": 0.057270589186258825,
+    "rank_ic": -0.05511587881677816,
+    "rank_icir": -0.3908509425469413
+  },
+  "rationale": "Ablation of cube root compression to improve linear predictive power (IC) while preserving rank stability. The cube root dampened signal extremes but also reduced linear correlation with future returns. Removing it allows the smoothed product of squared range and volume rank to express full magnitude, improving IC potential.",
+  "raw_metrics": {
+    "ic": -0.018170606158440003,
+    "icir": -0.1487114219987361,
+    "mi": 0.029352228059321916,
+    "rank_ic": -0.05511587881677816,
+    "rank_icir": -0.3908509425469413
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260629-010620-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260629-010620-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.5927102555254822,
+    "pre_transform_top_quantile_excess_return": 0.270492054453493,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.6422010775802175,
+    "transformed_top_quantile_excess_return": 0.270492054453493
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema( (range^2/close) * ts_rank(volume,20), 10 )",
+  "fe_formula": "ema( (range^2/close) * ts_rank(volume,20), 10 )",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "ema( (range^2/close) * ts_rank(volume,20), 10 )"
+}

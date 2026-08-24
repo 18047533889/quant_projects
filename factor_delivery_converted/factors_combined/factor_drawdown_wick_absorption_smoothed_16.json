@@ -1,0 +1,95 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "23d5473ffb318d38d18f7d5c25c79e5e89a7db7e49b2394181991fd0173776b0",
+  "candidate_ids": [
+    "g1_crossover_then_mutation_alpha_drawdown_g0_wick_absorption_alpha_vol_asym_fae79d29"
+  ],
+  "code": "def factor_drawdown_wick_absorption_smoothed_16(df):\n    \"\"\"Measure underwater lower-wick absorption with a longer smoothing window for predictive stability.\"\"\"\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    open_ = df_copy[\"open\"]\n    close = df_copy[\"close\"]\n    eps = np.finfo(float).eps\n    safe_close = close.clip(lower=eps)\n    bar_range = (high - low).replace(0.0, np.nan)\n    wick_base = np.minimum(open_, close)\n    lower_wick = ((wick_base - low) / bar_range).clip(lower=0.0, upper=1.0)\n    close_location = ((close - low) / bar_range).clip(lower=0.0, upper=1.0)\n    absorption = (lower_wick * close_location).rolling(16, min_periods=16).mean()\n    high_water = safe_close.rolling(50, min_periods=50).max().clip(lower=eps)\n    depth = (1.0 - safe_close / high_water).clip(lower=0.0)\n    prior_close = safe_close.shift(1)\n    downside_damage = (-np.log(safe_close / prior_close)).clip(lower=0.0).rolling(12, min_periods=12).sum()\n    ret = safe_close.pct_change()\n    downside_energy = ret.clip(upper=0.0).pow(2).rolling(20, min_periods=20).mean()\n    total_energy = ret.pow(2).rolling(20, min_periods=20).mean().replace(0.0, np.nan)\n    downside_share = (downside_energy / total_energy).clip(lower=0.0, upper=1.0)\n    signal = depth * absorption / (1.0 + downside_damage)\n    signal = signal * (1.0 - 0.5 * downside_share)\n    df_copy[\"factor_drawdown_wick_absorption_smoothed_16\"] = signal.replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_drawdown_wick_absorption_smoothed_16\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.030169969195598112,
+        "top_quantile_excess_return": 0.08287261730670048,
+        "top_quantile_max_drawdown": -0.10311219099537916,
+        "top_quantile_turnover": 0.17289262411551393
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_drawdown_wick_absorption_smoothed_16",
+  "fitness_direction": 1,
+  "formula": "[drawdown_depth_50 × mean_16(lower_wick_fraction × close_location)] / [1 + downside_damage_12] × [1 - 0.5 × downside_energy_share_20]",
+  "metrics": {
+    "ic": 0.017714642808536064,
+    "icir": 0.15278491709237893,
+    "mi": 0.01193508163662127,
+    "rank_ic": 0.020626012799073206,
+    "rank_icir": 0.13639038725700622
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.030169969195598112,
+    "top_quantile_excess_return": 0.08287261730670048,
+    "top_quantile_max_drawdown": -0.10311219099537916,
+    "top_quantile_turnover": 0.17289262411551393
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "Mutates the qualified payoff-first parent by extending only the absorption smoothing window from 12 to 16 bars. The core economic mechanism—underwater price drawdown combined with repeated lower-wick recovery—remains intact, while the longer aggregation should reduce single-bar noise and improve weak IC and RankIC stability. The existing bounded downside-energy attenuation and raw payoff geometry are preserved to protect positive cost-adjusted payoff without adding a new feature family or cross-sectional transform.",
+  "raw_metrics": {
+    "ic": 0.017714642808536064,
+    "icir": 0.15278491709237893,
+    "mi": 0.01193508163662127,
+    "rank_ic": 0.020626012799073206,
+    "rank_icir": 0.13639038725700622
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260807-060418-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260807-060418-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "[drawdown_depth_50 × ts_mean(16, lower_wick_fraction × close_location)] / [1 + downside_damage_12] × [1 - 0.5 × downside_energy_share_20]",
+  "fe_formula": "[drawdown_depth_50 × ts_mean(16, lower_wick_fraction × close_location)] / [1 + downside_damage_12] × [1 - 0.5 × downside_energy_share_20]",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "[drawdown_depth_50 × mean_16(lower_wick_fraction × close_location)] / [1 + downside_damage_12] × [1 - 0.5 × downside_energy_share_20]"
+}

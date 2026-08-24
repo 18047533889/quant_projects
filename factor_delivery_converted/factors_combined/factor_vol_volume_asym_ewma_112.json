@@ -1,0 +1,37 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "d0d3df267ccc996725539f0f5bd343292d4e7509b290fd5197b47f939c5cdfbd",
+  "candidate_ids": [
+    "mut_v1_crossover_v1"
+  ],
+  "code": "def factor_vol_volume_asym_ewma(df):\n    df_copy = df.copy()\n    range_ = df_copy['high'] - df_copy['low']\n    # EWMA smooth range and volume\n    range_ewma10 = range_.ewm(span=10, adjust=False).mean()\n    range_ewma40 = range_.ewm(span=40, adjust=False).mean()\n    vol_ratio = range_ewma10 / range_ewma40 - 1\n    vol_ewma10 = df_copy['volume'].ewm(span=10, adjust=False).mean()\n    vol_ewma40 = df_copy['volume'].ewm(span=40, adjust=False).mean()\n    vol_change = vol_ewma10 / vol_ewma40 - 1\n    # Asymmetric range: up range and down range using close direction\n    ret = df_copy['close'].pct_change()\n    up = ret > 0\n    down = ret < 0\n    # Compute rolling average range on up/down days\n    up_range = range_.where(up, 0)\n    down_range = range_.where(down, 0)\n    # Use EWMA to smooth these conditional ranges\n    up_range_ewma = up_range.ewm(span=20, adjust=False).mean()\n    down_range_ewma = down_range.ewm(span=20, adjust=False).mean()\n    # Avoid division by zero\n    down_range_ewma = down_range_ewma.replace(0, np.nan)\n    asym_ratio = up_range_ewma / down_range_ewma\n    asym_ratio = asym_ratio.replace([np.inf, -np.inf], np.nan)\n    # Combine components with shift to avoid future lookahead\n    factor = vol_ratio.shift(1) * vol_change.shift(1) * asym_ratio.shift(1)\n    # Winsorize extreme values at 5th and 95th percentile\n    lower = factor.quantile(0.05)\n    upper = factor.quantile(0.95)\n    factor = factor.clip(lower, upper)\n    df_copy['factor_vol_volume_asym_ewma'] = factor\n    return df_copy['factor_vol_volume_asym_ewma']",
+  "factor_name": "factor_vol_volume_asym_ewma",
+  "fitness_direction": -1,
+  "formula": "((EWMA(range,10)/EWMA(range,40)-1) * (EWMA(volume,10)/EWMA(volume,40)-1) * (EWMA(up_range,20)/EWMA(down_range,20))).shift(1)",
+  "metrics": {
+    "ic": 0.040468708770889684,
+    "icir": 0.5814495996489054,
+    "mi": 0.00761205174561308,
+    "rank_ic": 0.04259697319709014,
+    "rank_icir": 0.6747364534004229
+  },
+  "rationale": "This factor mutates the parent crossover_v1 by replacing simple moving averages with EWMA for smoother, more adaptive estimates of volatility and volume deviations. The asymmetric ratio is redefined using conditional range on up/down days instead of squared returns, reducing noise and improving rank stability. Outlier clipping at 5th and 95th percentiles further enhances robustness. The core economic intuition of combining volatility-volume interaction with asymmetry is preserved, targeting improved RankIC and MI.",
+  "required_columns": [
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260609-072013-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260609-072013-r1"
+  ],
+  "lqtp_formula": "((ema(10, range)/ema(40, range)-1) * (ema(10, volume)/ema(40, volume)-1) * (ema(20, up_range)/ema(20, down_range))).delay(1)",
+  "fe_formula": "((ema(10, range)/ema(40, range)-1) * (ema(10, volume)/ema(40, volume)-1) * (ema(20, up_range)/ema(20, down_range))).ts_delay(1)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "((EWMA(range,10)/EWMA(range,40)-1) * (EWMA(volume,10)/EWMA(volume,40)-1) * (EWMA(up_range,20)/EWMA(down_range,20))).shift(1)"
+}

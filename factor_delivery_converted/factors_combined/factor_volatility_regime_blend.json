@@ -1,0 +1,93 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "4017e57f5a58ca4819cfa04cce794a402ebf4803d343bd3cf166873442900137",
+  "candidate_ids": [
+    "g1_mutation_alpha_volatility_regime_001_c5441284"
+  ],
+  "code": "def factor_volatility_regime_blend(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol = ret.rolling(20).std()\n    vol_median = vol.rolling(40).median().replace(0.0, np.nan)\n    weight = (vol / vol_median).clip(0, 1)\n    weight = weight.fillna(0.5)\n    mean_rev = -ret.shift(1)\n    momentum = df_copy[\"close\"] / df_copy[\"close\"].shift(20) - 1\n    raw = (1 - weight) * mean_rev + weight * momentum\n    raw = raw.rolling(5).mean()\n    df_copy[\"factor_volatility_regime_blend\"] = raw\n    return df_copy[\"factor_volatility_regime_blend\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.00209342994285322,
+        "top_quantile_excess_return": 0.005825909908380389,
+        "top_quantile_max_drawdown": -0.17874133718982765,
+        "top_quantile_turnover": 0.11676213382252305
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_volatility_regime_blend",
+  "fitness_direction": -1,
+  "formula": "weight = clip(vol / vol_median, 0, 1); factor = (1-weight)*(-1d_ret) + weight*(20d_ret); smoothed",
+  "metrics": {
+    "ic": 0.019870590421822595,
+    "icir": 0.13159377821463666,
+    "mi": 0.030034776737325686,
+    "rank_ic": 0.030894454292646614,
+    "rank_icir": 0.18593724398852313
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.00209342994285322,
+    "top_quantile_excess_return": 0.005825909908380389,
+    "top_quantile_max_drawdown": -0.17874133718982765,
+    "top_quantile_turnover": 0.11676213382252305
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Replaces the binary volatility regime switch with a continuous blend of short-term reversal and long-term momentum, weighted by relative volatility. When volatility is very low, the factor leans on mean-reversion; when volatility is very high, it leans on momentum; in between, it smoothly combines both signals. This reduces abrupt transition noise and preserves the core economic intuition of regime-dependent market behavior.",
+  "raw_metrics": {
+    "ic": -0.019870590421822595,
+    "icir": -0.13159377821463666,
+    "mi": 0.030034776737325686,
+    "rank_ic": -0.030894454292646614,
+    "rank_icir": -0.18593724398852313
+  },
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260715-060858-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260715-060858-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "weight = clip(vol / vol_median, 0, 1); factor = (1-weight)*(-1d_ret) + weight*(20d_ret); smoothed",
+  "fe_formula": "weight = clip(vol / vol_median, 0, 1); factor = (1-weight)*(-1d_ret) + weight*(20d_ret); smoothed",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "weight = clip(vol / vol_median, 0, 1); factor = (1-weight)*(-1d_ret) + weight*(20d_ret); smoothed"
+}

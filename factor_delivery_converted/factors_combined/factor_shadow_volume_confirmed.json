@@ -1,0 +1,45 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "635467142c5fd41e9266805145688614b710e3f2041c42329dc26114eb8239b4",
+  "candidate_ids": [
+    "shadow_vol_confirmed_001"
+  ],
+  "code": "def factor_shadow_volume_confirmed(df):\n    df_copy = df.copy()\n    lower = df_copy[['open', 'close']].min(axis=1) - df_copy['low']\n    upper = df_copy['high'] - df_copy[['open', 'close']].max(axis=1)\n    total = lower + upper\n    shadow_ratio = lower / (total + 1e-8)\n    mean = shadow_ratio.rolling(20, min_periods=20).mean()\n    std = shadow_ratio.rolling(20, min_periods=20).std()\n    shadow_z = (shadow_ratio - mean) / (std + 1e-8)\n    volume_ma20 = df_copy['volume'].rolling(20, min_periods=1).mean()\n    volume_ratio = df_copy['volume'] / (volume_ma20 + 1e-8)\n    factor = shadow_z * volume_ratio\n    factor = factor.clip(-5, 5).fillna(0)\n    factor.name = 'factor_shadow_volume_confirmed'\n    return factor",
+  "factor_name": "factor_shadow_volume_confirmed",
+  "fitness_direction": -1,
+  "formula": "z-score(lower_shadow / (lower+upper), 20) * (volume / volume_ma20)",
+  "metrics": {
+    "ic": 0.013751781722575953,
+    "icir": 0.29223188287069435,
+    "mi": 0.008689463440086698,
+    "rank_ic": 0.010223987687697271,
+    "rank_icir": 0.1857869896696968
+  },
+  "rationale": "Combines the candlestick shape anomaly (lower shadow proportion z-score) from bar_shape_001 with the volume confirmation (ratio to 20-day average volume) from apvc_gen0_1. The multiplication amplifies shape signals when volume is elevated, filtering out low-conviction noise. The z-score normalization ensures stationarity and rank stability, while volume ratio improves IC and MI by emphasizing information-rich episodes.",
+  "raw_metrics": {
+    "ic": -0.013751781722575953,
+    "icir": -0.29223188287069435,
+    "mi": 0.008689463440086698,
+    "rank_ic": -0.010223987687697271,
+    "rank_icir": -0.1857869896696968
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260610-073501-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260610-073501-r1"
+  ],
+  "lqtp_formula": "z-score(lower_shadow / (lower+upper), 20) * (volume / volume_ma20)",
+  "fe_formula": "z-score(lower_shadow / (lower+upper), 20) * (volume / volume_ma20)",
+  "lqtp_notes": "Unconverted: ['score']",
+  "fe_notes": "Unconverted: ['score']",
+  "source_formula": "z-score(lower_shadow / (lower+upper), 20) * (volume / volume_ma20)"
+}

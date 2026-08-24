@@ -1,0 +1,124 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "c04decfda2680d9831902aac28c17079d99a446bf08bd0b9a8e418fc0d48c37c",
+  "candidate_ids": [
+    "g2_crossover_alphacycle_001_g1_crossover_alphacycle_001_order_bbd2f019"
+  ],
+  "code": "def factor_directional_imbalance_trend_aligned(df):\n    df_copy = df.copy()\n    prev_close = df_copy['close'].shift(1)\n    buy = (df_copy['high'] - prev_close) * df_copy['volume']\n    sell = (prev_close - df_copy['low']) * df_copy['volume']\n    window = 20\n    net = (buy.rolling(window).sum() - sell.rolling(window).sum()) / df_copy['volume'].rolling(window).sum().replace(0, np.nan)\n    adx = pd.Series(talib.ADX(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=50), index=df_copy.index)\n    pdi = pd.Series(talib.PLUS_DI(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=50), index=df_copy.index)\n    mdi = pd.Series(talib.MINUS_DI(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=50), index=df_copy.index)\n    direction = np.sign(pdi - mdi)\n    factor = np.where(adx > 25, net * direction, net * 0.5)\n    factor = pd.Series(factor, index=df_copy.index).ewm(span=10).mean()\n    factor.name = \"factor_directional_imbalance_trend_aligned\"\n    return factor",
+  "cross_sectional_rationale": "Cross-sectional rank reveals which stocks have the strongest trend-aligned directional pressure on each date, improving comparability across stocks with different volume scales.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.7818181818181819,
+        "top_quantile_annualized_excess_return": -0.006767227551532917,
+        "top_quantile_excess_return": -0.01879073960699129,
+        "top_quantile_max_drawdown": -0.13946314863291553,
+        "top_quantile_turnover": 0.07271732433852185
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_directional_imbalance_trend_aligned",
+  "fitness_direction": -1,
+  "formula": "(((high-prev_close)*volume - (prev_close-low)*volume).rolling(20).sum() / volume.rolling(20).sum()) * sign(PLUS_DI(50)-MINUS_DI(50)) when ADX(50)>25, else *0.5, then 10-day EMA",
+  "metrics": {
+    "ic": 0.015273436369499993,
+    "icir": 0.15200664254022056,
+    "mi": 0.010689667411545756,
+    "rank_ic": 0.038036701680575165,
+    "rank_icir": 0.33801258870309414
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7818181818181819,
+    "top_quantile_annualized_excess_return": -0.006767227551532917,
+    "top_quantile_excess_return": -0.01879073960699129,
+    "top_quantile_max_drawdown": -0.13946314863291553,
+    "top_quantile_turnover": 0.07271732433852185
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.002060597267156389,
+    "icir": 0.07129446865004392,
+    "mi": 0.01898482012904168,
+    "rank_ic": 0.038036701680575165,
+    "rank_icir": 0.33801258870309414
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.7818181818181819,
+    "top_quantile_annualized_excess_return": -0.006767227551532917,
+    "top_quantile_excess_return": -0.01879073960699129,
+    "top_quantile_max_drawdown": -0.13946314863291553,
+    "top_quantile_turnover": 0.07271732433852185
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.002060597267156389,
+    "icir": -0.07129446865004392,
+    "mi": 0.01898482012904168,
+    "rank_ic": -0.038036701680575165,
+    "rank_icir": -0.33801258870309414
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Primary mechanism from directional imbalance parent: net volume-weighted directional movement using 20-day buy/sell imbalance. Lightweight modifier from cyclical trend strength parent: use DI crossover direction to align the imbalance with the dominant trend direction when ADX>25, amplifying consistent signals and attenuating in non-trending environments. This targets the payoff weakness of the directional imbalance parent by reducing conflicting directional bets.",
+  "raw_metrics": {
+    "ic": -0.015273436369499993,
+    "icir": -0.15200664254022056,
+    "mi": 0.010689667411545756,
+    "rank_ic": -0.038036701680575165,
+    "rank_icir": -0.33801258870309414
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260720-053953-r6",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260720-053953-r6"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.4683891764299113,
+    "pre_transform_top_quantile_excess_return": -0.01879073960699129,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.5540190367049356,
+    "transformed_top_quantile_excess_return": -0.01879073960699129
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(((high-prev_close)*volume - (prev_close-low)*volume).<rolling>(20).ts_sum() / volume.<rolling>(20).ts_sum()) * sign(PLUS_DI(50)-MINUS_DI(50)) when ts_adx(50)>25, else *0.5, then 10-day EMA",
+  "fe_formula": "(((high-prev_close)*volume - (prev_close-low)*volume).<rolling>(20).ts_sum() / volume.<rolling>(20).ts_sum()) * sign(PLUS_DI(50)-MINUS_DI(50)) when ADX(50)>25, else *0.5, then 10-day EMA",
+  "lqtp_notes": "Unconverted: ['MINUS_DI', 'PLUS_DI']",
+  "fe_notes": "Unconverted: ['MINUS_DI', 'PLUS_DI']",
+  "source_formula": "(((high-prev_close)*volume - (prev_close-low)*volume).rolling(20).sum() / volume.rolling(20).sum()) * sign(PLUS_DI(50)-MINUS_DI(50)) when ADX(50)>25, else *0.5, then 10-day EMA"
+}

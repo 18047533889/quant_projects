@@ -1,0 +1,97 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "a015a08ede0ecf25596c19da106f81cd47da10d5258ecaa5d7826aa0095fb5f8",
+  "candidate_ids": [
+    "g1_crossover_then_mutation_amc_g0_signed_path_efficiency_cycle_alpha_vol_as_52be889a",
+    "g2_crossover_then_mutation_g1_crossover_then_mutation_amc_g0_signed_path_ef_2a3bfdb6",
+    "g2_mutation_g1_crossover_amc_g0_signed_path_efficiency_cycle_2be7494e"
+  ],
+  "code": "def factor_path_efficiency_tail_filtered_smooth(df):\n    \"\"\"Reward persistent directional paths with a smoother recent-efficiency confirmation and bounded downside-tail attenuation.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"].replace(0.0, np.nan)\n    net_move = close - close.shift(126)\n    path_length = close.diff().abs().rolling(126, min_periods=126).sum()\n    efficiency = net_move / path_length.replace(0.0, np.nan)\n    recent_path = close - close.shift(63)\n    recent_length = close.diff().abs().rolling(63, min_periods=63).sum()\n    recent_efficiency = recent_path / recent_length.replace(0.0, np.nan)\n    ret = close / close.shift(1) - 1.0\n    downside_tail = (-ret.clip(upper=0.0)).rolling(20, min_periods=20).max()\n    upside_tail = ret.clip(lower=0.0).rolling(20, min_periods=20).max()\n    baseline = ret.abs().rolling(20, min_periods=20).mean().clip(lower=1e-6)\n    downside_fragility = ((downside_tail - upside_tail) / baseline).clip(lower=0.0, upper=2.0)\n    signal = efficiency * recent_efficiency.abs() * (1.0 - 0.25 * downside_fragility)\n    df_copy[\"factor_path_efficiency_tail_filtered_smooth\"] = signal.replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_path_efficiency_tail_filtered_smooth\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.03206894642957803,
+        "top_quantile_excess_return": 0.07778215486355111,
+        "top_quantile_max_drawdown": -0.1971782313096423,
+        "top_quantile_turnover": 0.15036771712395597
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_path_efficiency_tail_filtered_smooth",
+  "fitness_direction": -1,
+  "formula": "[(C_t-C_{t-126}) / sum_{126}|Delta C|] * |(C_t-C_{t-63}) / sum_{63}|Delta C|| * [1 - 0.25 * clip(max20(-r)^+ - max20(r^+), 0, 2) / max(mean20(|r|), 1e-6)]",
+  "metrics": {
+    "ic": 0.024032474559527908,
+    "icir": 0.18071060932071703,
+    "mi": 0.016098365017747973,
+    "rank_ic": 0.034223246417648887,
+    "rank_icir": 0.2228300106016053
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.03206894642957803,
+    "top_quantile_excess_return": 0.07778215486355111,
+    "top_quantile_max_drawdown": -0.1971782313096423,
+    "top_quantile_turnover": 0.15036771712395597
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "Mutates the qualified path-efficiency parent by extending only the recent confirmation window from 42 to 63 bars. This smoother efficiency estimate should reduce sensitivity to short-lived path noise and target the parent's weaker predictive stability metrics while preserving its signed long-horizon directional mechanism, bounded downside-tail attenuation, positive cost-adjusted payoff, and low-turnover character.",
+  "raw_metrics": {
+    "ic": -0.024032474559527908,
+    "icir": -0.18071060932071703,
+    "mi": 0.016098365017747973,
+    "rank_ic": -0.034223246417648887,
+    "rank_icir": -0.2228300106016053
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260807-092149-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260807-092149-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "[(C_t-C_{t-126}) / sum_{126}|Delta C|] * |(C_t-C_{t-63}) / sum_{63}|Delta C|| * [1 - 0.25 * clip(max20(-r)^+ - max20(r^+), 0, 2) / max(mean20(|r|), 1e-6)]",
+  "fe_formula": "[(C_t-C_{t-126}) / sum_{126}|Delta C|] * |(C_t-C_{t-63}) / sum_{63}|Delta C|| * [1 - 0.25 * clip(max20(-r)^+ - max20(r^+), 0, 2) / flex_max(mean20(|r|), 1e-6)]",
+  "lqtp_notes": "Textual non-executable: C (close shorthand in text, not executable); Unconverted: ['max20', 'mean20']",
+  "fe_notes": "Textual non-executable: C (close shorthand in text, not executable); Unconverted: ['max20', 'mean20']",
+  "source_formula": "[(C_t-C_{t-126}) / sum_{126}|Delta C|] * |(C_t-C_{t-63}) / sum_{63}|Delta C|| * [1 - 0.25 * clip(max20(-r)^+ - max20(r^+), 0, 2) / max(mean20(|r|), 1e-6)]"
+}

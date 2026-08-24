@@ -1,0 +1,97 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "1bfeb4d5a4c03574844e6412ba896d4ed684567de60e00183b57fcb409db2423",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_then_mutation_alpha_drawdown_g0_wic_99b675cc"
+  ],
+  "code": "def factor_drawdown_wick_absorption_smoothed_60(df):\n    \"\"\"Measure underwater lower-wick absorption with a slower drawdown reference for robust predictive ordering.\"\"\"\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    open_ = df_copy[\"open\"]\n    close = df_copy[\"close\"]\n    eps = np.finfo(float).eps\n    safe_close = close.clip(lower=eps)\n    bar_range = (high - low).replace(0.0, np.nan)\n    wick_base = np.minimum(open_, close)\n    lower_wick = ((wick_base - low) / bar_range).clip(lower=0.0, upper=1.0)\n    close_location = ((close - low) / bar_range).clip(lower=0.0, upper=1.0)\n    absorption = (lower_wick * close_location).rolling(16, min_periods=16).mean()\n    high_water = safe_close.rolling(60, min_periods=60).max().clip(lower=eps)\n    depth = (1.0 - safe_close / high_water).clip(lower=0.0)\n    prior_close = safe_close.shift(1)\n    downside_damage = (-np.log(safe_close / prior_close)).clip(lower=0.0).rolling(12, min_periods=12).sum()\n    ret = safe_close.pct_change()\n    downside_energy = ret.clip(upper=0.0).pow(2).rolling(20, min_periods=20).mean()\n    total_energy = ret.pow(2).rolling(20, min_periods=20).mean().replace(0.0, np.nan)\n    downside_share = (downside_energy / total_energy).clip(lower=0.0, upper=1.0)\n    signal = depth * absorption / (1.0 + downside_damage)\n    signal = signal * (1.0 - 0.5 * downside_share)\n    df_copy[\"factor_drawdown_wick_absorption_smoothed_60\"] = signal.replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_drawdown_wick_absorption_smoothed_60\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.009721534291730505,
+        "top_quantile_excess_return": 0.025858838313878918,
+        "top_quantile_max_drawdown": -0.14088805032563256,
+        "top_quantile_turnover": 0.16646469669292255
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_drawdown_wick_absorption_smoothed_60",
+  "fitness_direction": 1,
+  "formula": "[drawdown_depth_60 × mean_16(lower_wick_fraction × close_location)] / [1 + downside_damage_12] × [1 - 0.5 × downside_energy_share_20]",
+  "metrics": {
+    "ic": 0.017135383553711667,
+    "icir": 0.14770061515550384,
+    "mi": 0.011023466372876989,
+    "rank_ic": 0.019667938862544778,
+    "rank_icir": 0.12997344650965556
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.009721534291730505,
+    "top_quantile_excess_return": 0.025858838313878918,
+    "top_quantile_max_drawdown": -0.14088805032563256,
+    "top_quantile_turnover": 0.16646469669292255
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Mutates the qualified payoff-first parent by extending only the high-water reference from 50 to 60 sessions. The core mechanism of identifying underwater prices with repeated lower-wick recovery is preserved, along with the existing downside-damage and downside-energy controls that support positive payoff and monotonicity. The slower drawdown context should reduce short-lived depth reversals and improve weak IC and rank stability without adding features or materially increasing turnover.",
+  "raw_metrics": {
+    "ic": 0.017135383553711667,
+    "icir": 0.14770061515550384,
+    "mi": 0.011023466372876989,
+    "rank_ic": 0.019667938862544778,
+    "rank_icir": 0.12997344650965556
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260807-060418-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260807-060418-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "[drawdown_depth_60 × ts_mean(16, lower_wick_fraction × close_location)] / [1 + downside_damage_12] × [1 - 0.5 × downside_energy_share_20]",
+  "fe_formula": "[drawdown_depth_60 × ts_mean(16, lower_wick_fraction × close_location)] / [1 + downside_damage_12] × [1 - 0.5 × downside_energy_share_20]",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "[drawdown_depth_60 × mean_16(lower_wick_fraction × close_location)] / [1 + downside_damage_12] × [1 - 0.5 × downside_energy_share_20]"
+}

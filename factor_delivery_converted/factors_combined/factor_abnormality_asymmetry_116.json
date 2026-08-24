@@ -1,0 +1,39 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "b1ddd737f189a4e7ee111d28de169724322e0d77c5bca23b92155fe94ecf3a5c",
+  "candidate_ids": [
+    "abnormality-asymm-c1"
+  ],
+  "code": "def factor_abnormality_asymmetry(df):\n    df_copy = df.copy()\n    log_vol = np.log(df_copy['volume'] + 1)\n    rolling_mean = log_vol.rolling(window=20).mean()\n    rolling_std = log_vol.rolling(window=20).std()\n    z_score = (log_vol - rolling_mean) / rolling_std\n    abnormality = np.abs(z_score)\n    range_ratio = (df_copy['high'] - df_copy['low']) / df_copy['close']\n    vol_abnorm = abnormality * range_ratio\n    up_day = df_copy['close'] >= df_copy['open']\n    vol_up = df_copy['volume'].where(up_day, 0)\n    vol_down = df_copy['volume'].where(~up_day, 0)\n    span = 10\n    ewma_up = vol_up.ewm(span=span, adjust=False).mean()\n    ewma_down = vol_down.ewm(span=span, adjust=False).mean()\n    ratio = np.where(ewma_down > 0, ewma_up / ewma_down, 1.0)\n    factor = vol_abnorm * ratio\n    df_copy['factor_abnormality_asymmetry'] = factor\n    return df_copy['factor_abnormality_asymmetry']",
+  "factor_name": "factor_abnormality_asymmetry",
+  "fitness_direction": -1,
+  "formula": "abs(z_score(log(volume),20)) * (high-low)/close * EWMA_up_vol/EWMA_down_vol",
+  "metrics": {
+    "ic": 0.025771257895519383,
+    "icir": 0.4762314754943835,
+    "mi": 0.008049680555625383,
+    "rank_ic": 0.04510398895031004,
+    "rank_icir": 0.6227396587802287
+  },
+  "rationale": "Combines volume abnormality (z-score of log volume over 20 days weighted by range ratio) with lagged volume asymmetry (ratio of up-day to down-day volume EWMA over 10 days). The product amplifies the asymmetry signal when volume is abnormal, capturing extreme volatility events with delayed volume adjustment to price direction. This leverages the rank stability of the abnormality component and the lagged response insight of the asymmetry component.",
+  "raw_metrics": null,
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260609-093208-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260609-093208-r2"
+  ],
+  "lqtp_formula": "abs(z_score(log(volume),20)) * (high-low)/close * EWMA_up_vol/EWMA_down_vol",
+  "fe_formula": "abs(z_score(log(volume),20)) * (high-low)/close * EWMA_up_vol/EWMA_down_vol",
+  "lqtp_notes": "Unconverted: ['z_score']",
+  "fe_notes": "Unconverted: ['z_score']",
+  "source_formula": "abs(z_score(log(volume),20)) * (high-low)/close * EWMA_up_vol/EWMA_down_vol"
+}

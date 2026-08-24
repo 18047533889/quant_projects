@@ -1,0 +1,44 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "b4fbbf973a26ebf2c87a4254442734b04247042450d4f9109a6be30351866676",
+  "candidate_ids": [
+    "alpha-vol-asymmetry-mutation-1-repair-1"
+  ],
+  "code": "def factor_asymmetry_index_rolling(df):\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    up_day = df_copy[\"close\"] > df_copy[\"open\"]\n    down_day = ~up_day\n    up_range = pd.Series(np.nan, index=df_copy.index)\n    down_range = pd.Series(np.nan, index=df_copy.index)\n    up_range[up_day] = range_[up_day]\n    down_range[down_day] = range_[down_day]\n    window = 20\n    up_mean = up_range.rolling(window=window, min_periods=5).mean()\n    down_mean = down_range.rolling(window=window, min_periods=5).mean()\n    epsilon = 1e-8\n    index_ = (up_mean - down_mean) / (up_mean + down_mean + epsilon)\n    df_copy[\"factor_asymmetry_index_rolling\"] = index_\n    return df_copy[\"factor_asymmetry_index_rolling\"]",
+  "factor_name": "factor_asymmetry_index_rolling",
+  "fitness_direction": -1,
+  "formula": "asymmetry = (rolling_mean(up_range, 20, min_periods=5) - rolling_mean(down_range, 20, min_periods=5)) / (rolling_mean(up_range, 20, min_periods=5) + rolling_mean(down_range, 20, min_periods=5) + epsilon)",
+  "metrics": {
+    "ic": 0.014863728770174583,
+    "icir": 0.2680208607427484,
+    "mi": 0.008513619180806842,
+    "rank_ic": 0.02593314819293701,
+    "rank_icir": 0.4265372644424383
+  },
+  "rationale": "Repaired version of factor_asymmetry_index_rolling (alpha-vol-asymmetry-mutation-1). Reduced min_periods from 10 to 5 to lower NaN fraction while retaining the 20-day window. The economic intuition remains: comparing rolling average up-day range to down-day range as a bounded asymmetry index.",
+  "raw_metrics": {
+    "ic": -0.014863728770174583,
+    "icir": -0.2680208607427484,
+    "mi": 0.008513619180806842,
+    "rank_ic": -0.02593314819293701,
+    "rank_icir": -0.4265372644424383
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-20260610-095822-r3",
+  "source_run_ids": [
+    "formal-mvp-loop-20260610-095822-r3"
+  ],
+  "lqtp_formula": "asymmetry = (ts_mean(20, up_range, min_periods=5) - ts_mean(20, down_range, min_periods=5)) / (ts_mean(20, up_range, min_periods=5) + ts_mean(20, down_range, min_periods=5) + epsilon)",
+  "fe_formula": "asymmetry = (ts_mean(20, up_range, min_periods=5) - ts_mean(20, down_range, min_periods=5)) / (ts_mean(20, up_range, min_periods=5) + ts_mean(20, down_range, min_periods=5) + epsilon)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "asymmetry = (rolling_mean(up_range, 20, min_periods=5) - rolling_mean(down_range, 20, min_periods=5)) / (rolling_mean(up_range, 20, min_periods=5) + rolling_mean(down_range, 20, min_periods=5) + epsilon)"
+}

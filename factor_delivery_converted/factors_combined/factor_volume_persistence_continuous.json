@@ -1,0 +1,98 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "dd135560c95b994e01adf8d49034ed7492c75f1ab895beaa15784fdc6ad6fbe0",
+  "candidate_ids": [
+    "g2_mutation_alpha_stability_0_0_1d9f24df"
+  ],
+  "code": "def factor_volume_persistence_continuous(df):\n    df_copy = df.copy()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    persistence = vol_ratio.rolling(40, min_periods=20).mean()\n    df_copy[\"factor_volume_persistence_continuous\"] = persistence\n    return df_copy[\"factor_volume_persistence_continuous\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9515151515151515,
+        "top_quantile_annualized_excess_return": 0.04979178833554365,
+        "top_quantile_excess_return": 0.1456148486897626,
+        "top_quantile_max_drawdown": -0.11845354289790377,
+        "top_quantile_turnover": 0.0730285681035519
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.08892357212060119,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.11076427879398817,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_volume_persistence_continuous",
+  "fitness_direction": -1,
+  "formula": "Rolling mean of continuous volume ratio (volume/EMA) over 40 days from 20-day volume classification.",
+  "metrics": {
+    "ic": 0.010146373709022938,
+    "icir": 0.08892357212060119,
+    "mi": 0.014268730310210032,
+    "rank_ic": 0.029495200089710846,
+    "rank_icir": 0.26539358975720045
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": 0.04979178833554365,
+    "top_quantile_excess_return": 0.1456148486897626,
+    "top_quantile_max_drawdown": -0.11845354289790377,
+    "top_quantile_turnover": 0.0730285681035519
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Mutates parent by replacing the binary high-volume regime flag with the continuous volume ratio from classify_volume_regime, capturing intensity rather than just frequency of high-volume states. The 40-day averaging window preserves the core persistence intuition while being more responsive than 60 days. This targets improved timeliness and signal granularity.",
+  "raw_metrics": {
+    "ic": -0.010146373709022938,
+    "icir": -0.08892357212060119,
+    "mi": 0.014268730310210032,
+    "rank_ic": -0.029495200089710846,
+    "rank_icir": -0.26539358975720045
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-20260730-055319-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-20260730-055319-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "Rolling mean of continuous volume ratio (volume/EMA) over 40 days from 20-day volume classification.",
+  "fe_formula": "Rolling mean of continuous volume ratio (volume/EMA) over 40 days from 20-day volume classification.",
+  "lqtp_notes": "Unconverted: ['ratio']",
+  "fe_notes": "Unconverted: ['ratio']",
+  "source_formula": "Rolling mean of continuous volume ratio (volume/EMA) over 40 days from 20-day volume classification."
+}

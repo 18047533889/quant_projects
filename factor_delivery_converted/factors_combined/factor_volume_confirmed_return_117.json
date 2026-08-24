@@ -1,0 +1,35 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "527c39a30a73a60384aa977de3f04e2110bfe46f8e0af235c081d5a15a6df841",
+  "candidate_ids": [
+    "alpha-mutation_gen1_001"
+  ],
+  "code": "def factor_volume_confirmed_return(df):\n    df_copy = df.copy()\n    ret = df_copy['close'] / df_copy['close'].shift(1) - 1\n    vol_ma = df_copy['volume'].rolling(window=20, min_periods=5).mean()\n    vol_dev = df_copy['volume'] / vol_ma - 1\n    df_copy['factor_volume_confirmed_return'] = ret * vol_dev * 10000\n    return df_copy['factor_volume_confirmed_return']",
+  "factor_name": "factor_volume_confirmed_return",
+  "fitness_direction": -1,
+  "formula": "factor = (close / lag(close) - 1) * (volume / rolling_mean(volume, 20) - 1) * 10000",
+  "metrics": {
+    "ic": 0.02090624188076112,
+    "icir": 0.4235753506168239,
+    "mi": 0.011789031093910829,
+    "rank_ic": 0.019410981870234267,
+    "rank_icir": 0.341860800652608
+  },
+  "rationale": "Mutates the original price-volume coherence factor by using percentage price return instead of absolute price change, making the signal scale-invariant across stocks with different price levels. Volume confirmation mechanism is preserved. The multiplication by 10000 scales the factor to a typical range. This mutation targets improved cross-sectional IC while maintaining the robust RankICIR of the parent.",
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260609-083420-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260609-083420-r1"
+  ],
+  "lqtp_formula": "factor = (close / lag(close) - 1) * (volume / ts_mean(20, volume) - 1) * 10000",
+  "fe_formula": "factor = (close / lag(close) - 1) * (volume / ts_mean(20, volume) - 1) * 10000",
+  "lqtp_notes": "Unconverted: ['lag']",
+  "fe_notes": "Unconverted: ['lag']",
+  "source_formula": "factor = (close / lag(close) - 1) * (volume / rolling_mean(volume, 20) - 1) * 10000"
+}

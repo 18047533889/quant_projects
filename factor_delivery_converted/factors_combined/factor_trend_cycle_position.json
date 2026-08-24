@@ -1,0 +1,125 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "0a8eb79cca310b6ff0f71da150a9ec7ba0a1a59e86aed34a8a2725e1ba61efdc",
+  "candidate_ids": [
+    "g1_crossover_then_mutation_mc_cycle_pos_1_alpha_tail_risk_002_af1c89c0",
+    "g2_crossover_then_mutation_g1_crossover_then_mutation_mc_cycle_pos_1_alpha_0983911e",
+    "g2_crossover_then_mutation_mc_cycle_pos_1_alpha_herding_2_4eb8048d",
+    "mc_cycle_pos_1"
+  ],
+  "code": "def factor_trend_cycle_position(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    # long-term SMA\n    sma200 = close.rolling(200, min_periods=200).mean()\n    # ATR20\n    tr = pd.concat([high - low, (high - close.shift(1)).abs(), (low - close.shift(1)).abs()], axis=1).max(axis=1)\n    atr20 = tr.rolling(20, min_periods=20).mean()\n    # position\n    position = (close - sma200) / atr20.replace(0, np.nan)\n    df_copy[\"factor_trend_cycle_position\"] = position\n    return df_copy[\"factor_trend_cycle_position\"]",
+  "cross_sectional_rationale": "Cross-sectional rank helps identify stocks that are most overextended or oversold relative to their long-term trend, improving comparability across assets for cycle-based mean-reversion.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9151515151515152,
+        "top_quantile_annualized_excess_return": 0.047608494617145114,
+        "top_quantile_excess_return": 0.10174546995526468,
+        "top_quantile_max_drawdown": -0.19227680156213733,
+        "top_quantile_turnover": 0.07360178114083996
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_trend_cycle_position",
+  "fitness_direction": -1,
+  "formula": "(close - SMA(close,200)) / ATR(20)",
+  "metrics": {
+    "ic": 0.0158042831899052,
+    "icir": 0.11530220432493495,
+    "mi": 0.008089074965960563,
+    "rank_ic": 0.03218776361275435,
+    "rank_icir": 0.20030841447699646
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9151515151515152,
+    "top_quantile_annualized_excess_return": 0.047608494617145114,
+    "top_quantile_excess_return": 0.10174546995526468,
+    "top_quantile_max_drawdown": -0.19227680156213733,
+    "top_quantile_turnover": 0.07360178114083996
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.014218815450978669,
+    "icir": 0.10337776227819027,
+    "mi": 0.01044322413095955,
+    "rank_ic": 0.03218776361275435,
+    "rank_icir": 0.20030841447699646
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9151515151515152,
+    "top_quantile_annualized_excess_return": 0.047608494617145114,
+    "top_quantile_excess_return": 0.10174546995526468,
+    "top_quantile_max_drawdown": -0.19227680156213733,
+    "top_quantile_turnover": 0.07360178114083996
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.014218815450978669,
+    "icir": -0.10337776227819027,
+    "mi": 0.01044322413095955,
+    "rank_ic": -0.03218776361275435,
+    "rank_icir": -0.20030841447699646
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "Long-term trend cycle position: Measures distance of price from 200-day SMA normalized by 20-day ATR. High positive values indicate overextended uptrend, negative values indicate oversold downtrend, capturing cyclical mean-reversion in market phases. Cross-sectional ranking allows comparison of deviation across stocks.",
+  "raw_metrics": {
+    "ic": -0.0158042831899052,
+    "icir": -0.11530220432493495,
+    "mi": 0.008089074965960563,
+    "rank_ic": -0.03218776361275435,
+    "rank_icir": -0.20030841447699646
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260715-060858-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260715-060858-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.3605359799498793,
+    "pre_transform_top_quantile_excess_return": 0.10174546995526468,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.37169174057055154,
+    "transformed_top_quantile_excess_return": 0.10174546995526468
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(close - ts_mean(200, close)) / ts_atr(20)",
+  "fe_formula": "(close - ts_mean(200, close)) / ATR(20)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(close - SMA(close,200)) / ATR(20)"
+}

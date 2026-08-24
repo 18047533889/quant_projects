@@ -1,0 +1,69 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "982f0b1995244dbf41f3f6a0070a5b3b86916f38deb724fbe551fa7fe03f3066",
+  "candidate_ids": [
+    "g2_crossover_g1_mutation_arg_001_ddc774ee_g1_mutation_avs_001_4c9dde88"
+  ],
+  "code": "def factor_volratio_resvol_trend_gated(df):\n    df_copy = df.copy()\n    high_resvol = df_copy[\"style_gate_resvol_high\"] > 0\n    mid = (df_copy[\"high\"] + df_copy[\"low\"]) / 2\n    fast_ret = (df_copy[\"close\"] - mid) / (df_copy[\"high\"] - df_copy[\"low\"] + 1e-8)\n    ema_short = df_copy[\"close\"].ewm(span=20, adjust=False).mean()\n    ema_long = df_copy[\"close\"].ewm(span=50, adjust=False).mean()\n    slow_trend = (ema_short - ema_long) / ema_long\n    ema_vol = df_copy[\"volume\"].ewm(span=20, adjust=False).mean()\n    vol_ratio = df_copy[\"volume\"] / ema_vol.replace(0, np.nan)\n    fast_ret_scaled = fast_ret * vol_ratio\n    df_copy[\"factor_volratio_resvol_trend_gated\"] = np.where(high_resvol, fast_ret_scaled, slow_trend)\n    return df_copy[\"factor_volratio_resvol_trend_gated\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_volratio_resvol_trend_gated",
+  "fitness_direction": -1,
+  "formula": "if resvol_high then (close - (high+low)/2)/(high-low) * (V/EMA(V,20)) else (EMA(C,20)-EMA(C,50))/EMA(C,50)",
+  "metrics": {
+    "ic": 0.01999933058410358,
+    "icir": 0.2532323667700488,
+    "mi": 0.03163813677130456,
+    "rank_ic": 0.021526019772385992,
+    "rank_icir": 0.17993264169625395
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.806060606060606,
+    "top_quantile_annualized_excess_return": 0.021374151614813375,
+    "top_quantile_excess_return": 0.06264513071807021,
+    "top_quantile_max_drawdown": -0.17424304503813526,
+    "top_quantile_turnover": 0.6934081902582905
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Crossover preserving parent ARG-001 mutation's regime-gated mean-reversion/trend structure and borrowing parent AVS-001 mutation's volume ratio as a lightweight weight on the fast mean-reversion signal to enhance reversal detection when volume is elevated relative to its norm. The slow trend component remains unchanged, keeping the design compact while targeting IC improvement via volume confirmation.",
+  "raw_metrics": {
+    "ic": -0.01999933058410358,
+    "icir": -0.2532323667700488,
+    "mi": 0.03163813677130456,
+    "rank_ic": -0.021526019772385992,
+    "rank_icir": -0.17993264169625395
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "style_gate_resvol_high"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260708-233155-r8",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260708-233155-r8"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "The style_gate_resvol_high gate switches between a volume-confirmed short-term reversal signal in high residual volatility regimes and a slow trend signal in low regimes. In high residual volatility, the reversal signal is multiplied by the volume ratio to emphasize high-volume reversals which are more likely to be genuine. In low volatility, the trend signal captures persistent directional movement.",
+  "style_gates_used": [
+    "style_gate_resvol_high"
+  ],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "if resvol_high then (close - (high+low)/2)/(high-low) * (V/ema(20, V)) else (ema(20, C)-ema(50, C))/ema(50, C)",
+  "fe_formula": "if resvol_high then (close - (high+low)/2)/(high-low) * (V/ema(20, V)) else (ema(20, C)-ema(50, C))/ema(50, C)",
+  "lqtp_notes": "Textual non-executable: C (close shorthand in text, not executable); Unconverted: ['then']",
+  "fe_notes": "Textual non-executable: C (close shorthand in text, not executable); Unconverted: ['then']",
+  "source_formula": "if resvol_high then (close - (high+low)/2)/(high-low) * (V/EMA(V,20)) else (EMA(C,20)-EMA(C,50))/EMA(C,50)"
+}

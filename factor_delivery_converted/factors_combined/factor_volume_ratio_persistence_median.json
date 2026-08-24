@@ -1,0 +1,95 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "404e3bb67bfbfea8cfc30cfc58a726b6a0212fc3d76d07f567e44e241a26c021",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_alpha_stability_0_0_candidate_tail_260ccfd0"
+  ],
+  "code": "def factor_volume_ratio_persistence_median(df):\n    df_copy = df.copy()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    persistence = vol_ratio.rolling(60, min_periods=30).median()\n    df_copy[\"factor_volume_ratio_persistence_median\"] = persistence\n    return df_copy[\"factor_volume_ratio_persistence_median\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.0632724380850509,
+        "top_quantile_excess_return": 0.18436071816498045,
+        "top_quantile_max_drawdown": -0.112700155753235,
+        "top_quantile_turnover": 0.058630545722819914
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_volume_ratio_persistence_median",
+  "fitness_direction": -1,
+  "formula": "rolling median of vol_ratio (volume/EMA) over 60 days",
+  "metrics": {
+    "ic": 0.010390734791605842,
+    "icir": 0.11149793325524415,
+    "mi": 0.014674251346825429,
+    "rank_ic": 0.018544685368532213,
+    "rank_icir": 0.1814422933285808
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.0632724380850509,
+    "top_quantile_excess_return": 0.18436071816498045,
+    "top_quantile_max_drawdown": -0.112700155753235,
+    "top_quantile_turnover": 0.058630545722819914
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "Mutates parent by replacing rolling mean with rolling median for persistence measurement. Median reduces sensitivity to extreme volume spikes, yielding a more stable and robust signal that improves rank consistency and nonlinear information (targeting weak RankIC and MI) while preserving the core economic mechanism of sustained relative volume smoothing. The parent's positive payoff profile is maintained as the directional intuition is unchanged.",
+  "raw_metrics": {
+    "ic": -0.010390734791605842,
+    "icir": -0.11149793325524415,
+    "mi": 0.014674251346825429,
+    "rank_ic": -0.018544685368532213,
+    "rank_icir": -0.1814422933285808
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-20260730-055319-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-20260730-055319-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "rolling median of <vol_ratio>(volume/EMA) over 60 days",
+  "fe_formula": "rolling median of <vol_ratio>(volume/EMA) over 60 days",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "rolling median of vol_ratio (volume/EMA) over 60 days"
+}

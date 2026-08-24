@@ -1,0 +1,44 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "6332df239e1852f5babc7a127f0ee6f8833405711822698bb434c80e14b43903",
+  "candidate_ids": [
+    "XO-003"
+  ],
+  "code": "def factor_asym_vol_volume_confirmed(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    returns = close.pct_change()\n    pos_returns = returns.where(returns > 0, 0.0)\n    neg_returns = abs(returns.where(returns < 0, 0.0))\n    pos_vol = pos_returns.rolling(20, min_periods=10).std()\n    neg_vol = neg_returns.rolling(20, min_periods=10).std()\n    ratio = neg_vol / pos_vol.replace(0, np.nan)\n    log_ratio = np.log(ratio.clip(lower=1e-12))\n    smoothed = log_ratio.ewm(span=5, min_periods=5, adjust=False).mean()\n    vol_ratio = volume / volume.rolling(20, min_periods=20).mean().replace(0, np.nan)\n    factor = smoothed * vol_ratio\n    df_copy['factor_asym_vol_volume_confirmed'] = factor\n    return df_copy['factor_asym_vol_volume_confirmed']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_asym_vol_volume_confirmed",
+  "fitness_direction": 1,
+  "formula": "log(ts_std(neg_ret,20)/ts_std(pos_ret,20)) * (volume/ts_mean(volume,20)) smoothed with ewm(span=5)",
+  "metrics": {
+    "ic": 0.020257076446376244,
+    "icir": 0.1773048517798126,
+    "mi": 0.015246869304672117,
+    "rank_ic": 0.03863379616862827,
+    "rank_icir": 0.3191319591105125
+  },
+  "rationale": "Crossover between M-001 (asymmetric volatility smoothed) and CROSS-001 (volume ratio from volume-momentum factor). Preserves M-001's core mechanism of downside vs upside volatility asymmetry measured by log ratio of rolling standard deviations of negative and positive returns, smoothed with EMA. Borrows CROSS-001's volume ratio (volume / 20-day mean) as a continuous multiplier to amplify the asymmetry signal during high volume periods, enhancing information content and aiming to improve IC while maintaining rank stability.",
+  "raw_metrics": {
+    "ic": 0.020257076446376244,
+    "icir": 0.1773048517798126,
+    "mi": 0.015246869304672117,
+    "rank_ic": 0.03863379616862827,
+    "rank_icir": 0.3191319591105125
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260623-054548-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260623-054548-r1"
+  ],
+  "lqtp_formula": "log(ts_std(neg_ret,20)/ts_std(pos_ret,20)) * (volume/ts_mean(volume,20)) smoothed with ema(span=5)",
+  "fe_formula": "log(ts_std(neg_ret,20)/ts_std(pos_ret,20)) * (volume/ts_mean(volume,20)) smoothed with ema(span=5)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "log(ts_std(neg_ret,20)/ts_std(pos_ret,20)) * (volume/ts_mean(volume,20)) smoothed with ewm(span=5)"
+}

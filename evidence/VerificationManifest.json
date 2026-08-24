@@ -1,81 +1,65 @@
 {
   "schema_version": 1,
-  "manifest_id": "rel-v1:2026-08-22T16:47:10.993916+00:00",
-  "timestamp": "2026-08-22T16:47:10.993916+00:00",
-  "host": "qs-data-ingest-hk-01",
+  "manifest_id": "rel-v1:2026-08-23T11:48:44.768336+00:00",
+  "timestamp": "2026-08-23T11:48:44.768336+00:00",
+  "host": "qs-compute-gpu-hk-01",
   "source_snapshot": {
-    "git_sha": "49b81f00dc6c7ec4ef32a056f171c35a416bcf3d",
+    "git_sha": "ec4ef105f5613e0889575f4f362f38c86020d267",
     "git_dirty": true,
-    "submodule_shas": {
-      "factor_engine": "8800ff37242acdb54d5c65bbce15a8cbb2bf6f5e",
-      "dataaccess": "05ab62715fec3dda71d8ffde3388411f9cf28910"
-    },
+    "diff_hash": "6de7cda06c33792e8ce3d8eb1cb662287a27af73b583f8ae17c79df5ed0bffe1",
+    "cached_diff_hash": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+    "untracked_source_hash": "eb44f43180c17262ffca327c6922e756ed74055440bb7f787aaf5b929f1dbd9f",
+    "submodule_shas": {},
     "git_repo": true
   },
   "packages": {
     "factor_engine": {
-      "tree_sha256": "e39617f56bfcb907fb392e927c5634c822b4df559dd75f84a663e889d3a3f490",
-      "wheel_sha256": null,
-      "git_sha": "8800ff37242acdb54d5c65bbce15a8cbb2bf6f5e",
-      "git_dirty": false
+      "tree_sha256": "5a9f50d4c6bb3c8f1c4a6e58181a5630f38ffc4ca9373eb64b1bb86194e572af",
+      "wheel_sha256": null
     },
     "quant_evaluator": {
-      "tree_sha256": "bb32b9672899ebd3ca19df1fdcaaa7b046077faa37cf750a7c7c4db27cdd620d",
-      "wheel_sha256": {
-        "wheel": "quant_evaluator-0.0.1a1-py3-none-any.whl",
-        "sha256": "00c6516d00cbb35406c8954acd02f6d4fd39819706931a7228bcd3465aff47f8"
-      }
+      "tree_sha256": "cd2cdbc17c461e62305f8130f7bafa772097e9c87871f213eff37e9a6c87f93c",
+      "wheel_sha256": null
     },
     "factor_optimizer": {
       "tree_sha256": "188c4e35038b7869251219dcded5d9b321a6680ae5503876e297d26e13faff52",
-      "wheel_sha256": {
-        "wheel": "factor_optimizer-0.1.0-py3-none-any.whl",
-        "sha256": "42bf01eaf86b16e1139155e3ea27e61e9121f2e6b6fa68bbb352cc76ff4a6259"
-      }
+      "wheel_sha256": null
     },
     "factor_assets": {
-      "tree_sha256": "c69bdaa782e7766a8e7a47faa210d3fcdba5206f793e04d93b75be27b330db65",
-      "wheel_sha256": {
-        "wheel": "factor_assets-0.1.0-py3-none-any.whl",
-        "sha256": "1a075027e6f73ab5c567d7bc39a8beb1fcf5825516ffd48ce14c6a615fcbb034"
-      }
+      "tree_sha256": null,
+      "wheel_sha256": null
     },
     "factor_preprocess": {
-      "tree_sha256": "c83f047b10918f874be0990cb58b86ba28f185e6875421671823edaa9770c2b6",
-      "wheel_sha256": {
-        "wheel": "factor_preprocess-0.1.0-py3-none-any.whl",
-        "sha256": "667dd80ff99d914ba342f8b0a3f53a83181b8696c7de68fe345d8e6725056160"
-      }
+      "tree_sha256": "105be04041e6fc3e372bef196d425fbbbd8c91fc852d27ae2ead69557eb3cde6",
+      "wheel_sha256": null
     },
     "dataaccess": {
-      "tree_sha256": "33f63f9568725a93ef5c7a2cb484aec2e951e769e8c2408d2d30b0f63dd511fe",
-      "wheel_sha256": null,
-      "git_sha": "05ab62715fec3dda71d8ffde3388411f9cf28910",
-      "git_dirty": false
+      "tree_sha256": "4aad421e54f914062522096c6530ee09b6098c891db9e5b590bb26843841a717",
+      "wheel_sha256": null
     }
   },
   "environment": {
-    "python_version": "3.10.12",
-    "platform": "Linux-5.15.0-171-generic-x86_64-with-glibc2.35",
+    "python_version": "3.12.3",
+    "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.39",
     "dependencies": {
-      "numpy": "2.2.6",
-      "pandas": "2.3.3",
-      "polars": "1.42.1",
-      "pyarrow": "25.0.0",
-      "scipy": "1.15.3",
+      "numpy": "2.5.2",
+      "pandas": "3.0.5",
+      "polars": "1.43.2",
+      "pyarrow": "25.0.1",
+      "scipy": "1.18.1",
       "pytest": "9.1.1",
-      "duckdb": "1.5.4",
+      "duckdb": "1.5.5",
       "factor_engine": "0.3.1",
-      "dataaccess": "0.10.2"
+      "dataaccess": "NOT_INSTALLED"
     },
-    "hash": "9776c1c7ed397c72e9e9e19c6cd23c6fac3e2ce4990c06f4ffc04dd40e12fb48"
+    "hash": "9097a407115a2ffd8a33d93ee25a89c02c14002193309537a989d8674efda3fb"
   },
   "executed_commands": [
     {
       "argv": [
         "scripts/gen_verification_manifest.py"
       ],
-      "cwd": "/home/shw/quant_projects",
+      "cwd": "/home/sunhaiwei/quant_projects",
       "exit_code": 0,
       "note": "manifest generator"
     }
@@ -376,7 +360,7 @@
     },
     {
       "name": "FRESH_WHEEL",
-      "description": "Package installs from a freshly built wheel and passes import/smoke.",
+      "description": "Package installs from a freshly built wheel and passes import/smoke. Superseded at release level by the FRESH_WHEEL_MATRIX gate (matrix across all release packages).",
       "status": "PASS",
       "evidence": [
         {
@@ -493,6 +477,36 @@
           "run_at": "2026-08-22T16:40:14.582732+00:00"
         }
       ]
+    },
+    {
+      "name": "SOURCE_AUTHORITY",
+      "description": "Every source snapshot / manifest input is bound to a verifiable authority (real git SHA, real artifact digest), never a fabricated string.",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "name": "SUPPLY_CHAIN",
+      "description": "The dependency/install supply chain is pinned and reproducible (dependency lock hash, wheel provenance).",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "name": "SUBMODULE_REACHABILITY",
+      "description": "Any declared submodule pin is reachable/present in this checkout. With no submodules declared there is nothing pinned to prove -> NOT_RUN (never PASS).",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "name": "FRESH_WHEEL_MATRIX",
+      "description": "Matrix of fresh-wheel clean-install smoke checks across the release packages (supersedes the single-package FRESH_WHEEL gate).",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "name": "EVIDENCE_CURRENT",
+      "description": "evidence/current.py --check reports every artifact CURRENT (bound inputs == live inputs, executed_at present).",
+      "status": "NOT_RUN",
+      "evidence": []
     }
   ],
   "release_notes": [
@@ -503,12 +517,12 @@
         {
           "path": ".pytest_full.txt",
           "bytes": 1867,
-          "mtime": "2026-08-20T14:48:51.678888+00:00"
+          "mtime": "2026-08-22T19:53:23.883162+00:00"
         },
         {
           "path": "factor_engine/.pytest_full.txt",
           "bytes": 1867,
-          "mtime": "2026-08-20T17:14:36.245802+00:00"
+          "mtime": "2026-08-22T19:53:24.149157+00:00"
         }
       ]
     }

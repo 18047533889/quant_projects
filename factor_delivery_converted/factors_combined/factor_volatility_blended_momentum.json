@@ -1,0 +1,97 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "8bba3911f94709c94c7891da129b43ab42d37bd5637b7e5d04c95a475e3f94bb",
+  "candidate_ids": [
+    "g2_mutation_ag_001_d5fe7d00"
+  ],
+  "code": "def factor_volatility_blended_momentum(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    ret = close.pct_change()\n    vol = ret.rolling(20).std()\n    vol_ema = vol.ewm(span=20).mean()\n    vol_ratio = vol / vol_ema.replace(0, np.nan)\n    weight_long = np.clip(vol_ratio, 0, 1)\n    roc10 = close.pct_change(10)\n    roc40 = close.pct_change(40)\n    factor = weight_long * roc40 + (1 - weight_long) * roc10\n    df_copy['factor_volatility_blended_momentum'] = factor\n    return df_copy['factor_volatility_blended_momentum']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9515151515151515,
+        "top_quantile_annualized_excess_return": -0.01657962320852302,
+        "top_quantile_excess_return": -0.044364836151109754,
+        "top_quantile_max_drawdown": -0.27972016229440533,
+        "top_quantile_turnover": 0.18555710305220532
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_volatility_blended_momentum",
+  "fitness_direction": -1,
+  "formula": "weight_long * roc40 + (1 - weight_long) * roc10, where weight_long = clip(vol/vol_ema, 0, 1), vol = rolling_std(returns, 20)",
+  "metrics": {
+    "ic": 0.0218603825992,
+    "icir": 0.1340159487582602,
+    "mi": 0.04899523304363029,
+    "rank_ic": 0.03557764869235682,
+    "rank_icir": 0.20044224160019639
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": -0.01657962320852302,
+    "top_quantile_excess_return": -0.044364836151109754,
+    "top_quantile_max_drawdown": -0.27972016229440533,
+    "top_quantile_turnover": 0.18555710305220532
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Blended momentum weighting by volatility ratio. Instead of a binary switch based on residual volatility regime, this factor continuously blends 10-day and 40-day momentum using the ratio of recent volatility (20-day rolling std of returns) to its 20-day EMA. When volatility is elevated (ratio > 1), more weight is given to the longer 40-day momentum to filter noise; when volatility is low, the faster 10-day momentum dominates. This preserves the adaptive hypothesis while eliminating the discontinuity of a hard gate, potentially improving rank stability and predictive consistency.",
+  "raw_metrics": {
+    "ic": -0.0218603825992,
+    "icir": -0.1340159487582602,
+    "mi": 0.04899523304363029,
+    "rank_ic": -0.03557764869235682,
+    "rank_icir": -0.20044224160019639
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260714-102203-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260714-102203-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "weight_long * roc40 + (1 - weight_long) * roc10, where weight_long = clip(vol/vol_ema, 0, 1), vol = ts_std(20, returns)",
+  "fe_formula": "weight_long * roc40 + (1 - weight_long) * roc10, where weight_long = clip(vol/vol_ema, 0, 1), vol = ts_std(20, returns)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "weight_long * roc40 + (1 - weight_long) * roc10, where weight_long = clip(vol/vol_ema, 0, 1), vol = rolling_std(returns, 20)"
+}

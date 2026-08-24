@@ -1,0 +1,121 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "53da4e6d1b647e59e2831c73142f4d14dd3994f87966a29d2d872061055ec518",
+  "candidate_ids": [
+    "AVSI-002"
+  ],
+  "code": "def factor_ts_size_adaptive_value(df):\n    df_copy = df.copy()\n    # Time-series rolling percentile of mkt_cap_float (own history)\n    size_pct = df_copy['mkt_cap_float'].rolling(252, min_periods=60).rank(pct=True)\n    # Earnings yield (safe inverse)\n    earn_yield = 1.0 / df_copy['pe_ttm'].replace(0, np.nan)\n    # Book yield with leverage penalty\n    book_yield = 1.0 / df_copy['pb_lf'].replace(0, np.nan)\n    debt_ratio = df_copy['debttoassets'] / 100.0\n    leverage_penalty = (1.0 - debt_ratio).clip(lower=0.0)\n    book_yield_adj = book_yield * leverage_penalty\n    # Conditions: large relative own history (>70th pct) use earn_yield; small (<30th pct) use book_yield_adj; else average\n    large = size_pct > 0.7\n    small = size_pct < 0.3\n    avg = (earn_yield + book_yield_adj) / 2.0\n    factor = np.select([large, small], [earn_yield, book_yield_adj], default=avg)\n    df_copy['factor_ts_size_adaptive_value'] = factor\n    return df_copy['factor_ts_size_adaptive_value']",
+  "cross_sectional_rationale": "Cross-sectional ranking ensures the blended value signal is comparable across stocks, necessary for long-short portfolio construction.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.11532314050057524,
+        "top_quantile_excess_return": 0.3683052733191039,
+        "top_quantile_max_drawdown": -0.05735698325198613,
+        "top_quantile_turnover": 0.10221356847178713
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_ts_size_adaptive_value",
+  "fitness_direction": 1,
+  "formula": "If rolling size percentile > 0.7: 1/pe_ttm. If < 0.3: (1/pb_lf) * max(1 - debttoassets/100, 0). Else average of both.",
+  "metrics": {
+    "ic": 0.013348258735808858,
+    "icir": 0.12471126204510714,
+    "mi": 0.015495650821241824,
+    "rank_ic": 0.039927105797582026,
+    "rank_icir": 0.3173131411900442
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.11532314050057524,
+    "top_quantile_excess_return": 0.3683052733191039,
+    "top_quantile_max_drawdown": -0.05735698325198613,
+    "top_quantile_turnover": 0.10221356847178713
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.011226945586766592,
+    "icir": 0.12263262879354497,
+    "mi": 0.019480145346282285,
+    "rank_ic": 0.039927105797582026,
+    "rank_icir": 0.3173131411900442
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.11532314050057524,
+    "top_quantile_excess_return": 0.3683052733191039,
+    "top_quantile_max_drawdown": -0.05735698325198613,
+    "top_quantile_turnover": 0.10221356847178713
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.011226945586766592,
+    "icir": 0.12263262879354497,
+    "mi": 0.019480145346282285,
+    "rank_ic": 0.039927105797582026,
+    "rank_icir": 0.3173131411900442
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Time-series size context: stocks that are relatively large in their own history use earnings yield; relatively small use book yield adjusted for leverage to avoid distress; in between, a blend. This conditions value on size without using cross-sectional size rank, and incorporates a leverage penalty for small-cap value. Cross-sectional rank is applied post-hoc for comparability.",
+  "raw_metrics": {
+    "ic": 0.013348258735808858,
+    "icir": 0.12471126204510714,
+    "mi": 0.015495650821241824,
+    "rank_ic": 0.039927105797582026,
+    "rank_icir": 0.3173131411900442
+  },
+  "required_columns": [
+    "pe_ttm",
+    "pb_lf",
+    "debttoassets",
+    "mkt_cap_float"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260721-20260721-175143-r4",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260721-20260721-175143-r4"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.5105799667142201,
+    "pre_transform_top_quantile_excess_return": 0.3683052733191039,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.5107954185897841,
+    "transformed_top_quantile_excess_return": 0.3683052733191039
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "If rolling size percentile > 0.7: 1/pe_ttm. If < 0.3: (1/pb_lf) * max(1 - debttoassets/100, 0). Else average of both.",
+  "fe_formula": "If rolling size percentile > 0.7: 1/pe_ttm. If < 0.3: (1/pb_lf) * flex_max(1 - debttoassets/100, 0). Else average of both.",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "If rolling size percentile > 0.7: 1/pe_ttm. If < 0.3: (1/pb_lf) * max(1 - debttoassets/100, 0). Else average of both."
+}

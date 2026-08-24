@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "588e8a989e69da4b4b0eea774f9a5030a77a25436f855ff5dd06373825238708",
+  "candidate_ids": [
+    "MUT_AVCR_001"
+  ],
+  "code": "def factor_volume_confirmed_return_ema(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change(5)\n    vol_ema = df_copy['volume'].ewm(span=20).mean()\n    vol_ratio = df_copy['volume'] / vol_ema.replace(0, np.nan)\n    vol_rank = vol_ratio.rolling(20).rank(pct=True)\n    factor = ret * vol_rank\n    factor.name = 'factor_volume_confirmed_return_ema'\n    return factor",
+  "factor_name": "factor_volume_confirmed_return_ema",
+  "fitness_direction": -1,
+  "formula": "factor = ret(5) * rank_{20}(volume / ewma(volume, 20))",
+  "metrics": {
+    "ic": 0.024273667840155073,
+    "icir": 0.22036906247012972,
+    "mi": 0.04246267036415574,
+    "rank_ic": 0.03485947317896187,
+    "rank_icir": 0.2914958792486585
+  },
+  "rationale": "Smoothed volume ratio: using exponential weighted moving average for volume reduces lag and better captures the most recent volume regime, potentially improving IC while preserving the rank transform for stable cross-sectional ordering.",
+  "raw_metrics": {
+    "ic": -0.024273667840155073,
+    "icir": -0.22036906247012972,
+    "mi": 0.04246267036415574,
+    "rank_ic": -0.03485947317896187,
+    "rank_icir": -0.2914958792486585
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260615-034100-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260615-034100-r1"
+  ],
+  "lqtp_formula": "factor = ret(5) * rank_{20}(volume / ema(20, volume))",
+  "fe_formula": "factor = ret(5) * rank_{20}(volume / ema(20, volume))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "factor = ret(5) * rank_{20}(volume / ewma(volume, 20))"
+}

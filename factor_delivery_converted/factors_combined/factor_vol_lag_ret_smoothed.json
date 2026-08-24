@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "fbf780832c17dc3462af9d3b954c016ab29e4b9949a06a53d0a28c253d125270",
+  "candidate_ids": [
+    "aglag_resp_001"
+  ],
+  "code": "def factor_vol_lag_ret_smoothed(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    high = df_copy['high']\n    low = df_copy['low']\n    # Lagged 5-day return\n    lag_ret_5 = close / close.shift(5) - 1.0\n    # Log volume ratio relative to 20-day EMA\n    vol_ema = volume.ewm(span=20, min_periods=20).mean()\n    vol_ratio = np.log(volume / vol_ema.replace(0, np.nan))\n    # ATR / close as volatility measure\n    tr = pd.DataFrame({'hl': high - low, 'hc': (high - close.shift()).abs(), 'lc': (low - close.shift()).abs()}).max(axis=1)\n    atr = tr.rolling(20, min_periods=20).mean()\n    vol_factor = atr / close.replace(0, np.nan)\n    # Combine: lagged return * log volume ratio * (1 + volatility factor)\n    raw = lag_ret_5 * vol_ratio * (1.0 + vol_factor)\n    # Smooth with EMA5 to capture delayed adjustment\n    df_copy['factor_vol_lag_ret_smoothed'] = raw.ewm(span=5, min_periods=5).mean()\n    return df_copy['factor_vol_lag_ret_smoothed']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_vol_lag_ret_smoothed",
+  "fitness_direction": -1,
+  "formula": "EMA5( (close/shift5 - 1) * log(volume/EMA20(volume)) * (1 + ATR20/close) )",
+  "metrics": {
+    "ic": 0.024806669419677373,
+    "icir": 0.22396148510427694,
+    "mi": 0.03673854280804356,
+    "rank_ic": 0.038685411615722295,
+    "rank_icir": 0.3664388193896784
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8787878787878788,
+    "top_quantile_annualized_excess_return": 0.03569725046924854,
+    "top_quantile_excess_return": 0.10248793568722059,
+    "top_quantile_max_drawdown": -0.18217766379898537,
+    "top_quantile_turnover": 0.34621066937722506
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "This factor captures the delayed adjustment between volatility, volume, and returns. Lagged 5-day return is multiplied by log volume ratio (to emphasize unusual volume) and amplified by the current volatility level (ATR/close). The EMA5 smoothing models the gradual incorporation of information into price, representing lagged response. The combination targets stable rank ordering across IC, RankIC, ICIR, RankICIR, and MI.",
+  "raw_metrics": {
+    "ic": -0.024806669419677373,
+    "icir": -0.22396148510427694,
+    "mi": 0.03673854280804356,
+    "rank_ic": -0.038685411615722295,
+    "rank_icir": -0.3664388193896784
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260708-140639-r4",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260708-140639-r4"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema(5, (close/shift5 - 1) * log(volume/EMA20(volume)) * (1 + ATR20/close))",
+  "fe_formula": "ema(5, (close/shift5 - 1) * log(volume/EMA20(volume)) * (1 + ATR20/close))",
+  "lqtp_notes": "Unconverted: ['EMA20']",
+  "fe_notes": "Unconverted: ['EMA20']",
+  "source_formula": "EMA5( (close/shift5 - 1) * log(volume/EMA20(volume)) * (1 + ATR20/close) )"
+}

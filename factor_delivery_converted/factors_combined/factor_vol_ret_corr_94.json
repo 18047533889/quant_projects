@@ -1,0 +1,130 @@
+{
+  "allowed_libraries": [],
+  "calculation_fingerprint": "1140d9cc7a9ac851d0aca959f5b1e9edf03480e31bf982e6ba3772cdbc8e8834",
+  "candidate_id": "g1_crossover_minute_amount_return_corr_0_minute_high_vol_skew_7446521e",
+  "candidate_ids": [
+    "g1_crossover_minute_amount_return_corr_0_minute_high_vol_skew_7446521e"
+  ],
+  "code": "def factor_vol_ret_corr(df):\n    \"\"\"Minute DSL factor — executed via /api/calculate/minute.\"\"\"\n    raise NotImplementedError(\"minute DSL expression; use metadata.expression\")\n    # expression = \"\"\"daily_corr(get('volume'), ifnan(pct_change(get('close')), 0.0))\"\"\"\n",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "domain_agent": "minute-amount-impact",
+  "expression": "daily_corr(get('volume'), ifnan(pct_change(get('close')), 0.0))",
+  "factor_name": "factor_vol_ret_corr",
+  "factor_value_contract": "minute_to_daily_panel",
+  "fitness_direction": -1,
+  "formula": "daily_corr(get('volume'), ifnan(pct_change(get('close')), 0.0))",
+  "frequency": "minute",
+  "lineage": {
+    "agent_skill": "minute-crossover",
+    "generation": 1,
+    "guidance_mode": null,
+    "operation": "crossover",
+    "parent_ids": [
+      "minute_amount_return_corr_0",
+      "minute_high_vol_skew_001"
+    ]
+  },
+  "metadata": {
+    "evolution_guidance": {
+      "preserve": {
+        "passed_predictive_metrics": [
+          "rank_ic",
+          "rank_icir",
+          "mi"
+        ],
+        "payoff_diagnostics": {
+          "quantile_monotonicity": 0.006060606060606061,
+          "top_quantile_annualized_excess_return": -0.5039822968103637,
+          "top_quantile_excess_return": -0.06198868827936088,
+          "top_quantile_max_drawdown": -0.05897836665998224,
+          "top_quantile_turnover": 0.888198757763975
+        },
+        "payoff_gate_passed": false
+      },
+      "primary_target": {
+        "current": 0.004774771756349483,
+        "field": "ic",
+        "kind": "predictive_metric",
+        "normalized_gap": 0.5225228243650517,
+        "threshold": 0.01
+      },
+      "qualification_track": null
+    },
+    "expression": "daily_corr(get('volume'), ifnan(pct_change(get('close')), 0.0))",
+    "fitness_direction": -1,
+    "fitness_metrics": {
+      "ic": 0.004774771756349483,
+      "icir": 0.04967981043064508,
+      "mi": 0.008875317203446365,
+      "rank_ic": 0.011826900093460144,
+      "rank_icir": 0.10956848794376806
+    },
+    "payoff_diagnostics": {
+      "quantile_monotonicity": 0.006060606060606061,
+      "top_quantile_annualized_excess_return": -0.5039822968103637,
+      "top_quantile_excess_return": -0.06198868827936088,
+      "top_quantile_max_drawdown": -0.05897836665998224,
+      "top_quantile_turnover": 0.888198757763975
+    },
+    "payoff_gate_passed": false,
+    "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+    "pre_transform_fitness_direction": 1,
+    "predictive_gate_passed": false,
+    "qualification_track": null,
+    "raw_fitness_metrics": {
+      "ic": -0.004774771756349483,
+      "icir": -0.04967981043064508,
+      "mi": 0.008875317203446365,
+      "rank_ic": -0.011826900093460144,
+      "rank_icir": -0.10956848794376806
+    },
+    "transform_gate_passed": true
+  },
+  "metrics": {
+    "ic": 0.004774771756349483,
+    "icir": 0.04967981043064508,
+    "mi": 0.008875317203446365,
+    "rank_ic": 0.011826900093460144,
+    "rank_icir": 0.10956848794376806
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.006060606060606061,
+    "top_quantile_annualized_excess_return": -0.5039822968103637,
+    "top_quantile_excess_return": -0.06198868827936088,
+    "top_quantile_max_drawdown": -0.05897836665998224,
+    "top_quantile_turnover": 0.888198757763975
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "post_transforms": null,
+  "rationale": "Combine volume (from parent2) with return correlation (from parent1) to measure volume-return comovement.",
+  "raw_metrics": {
+    "ic": -0.004774771756349483,
+    "icir": -0.04967981043064508,
+    "mi": 0.008875317203446365,
+    "rank_ic": -0.011826900093460144,
+    "rank_icir": -0.10956848794376806
+  },
+  "required_columns": [
+    "trading_datetime",
+    "TradingDay",
+    "open_price",
+    "high_price",
+    "low_price",
+    "close_price",
+    "volume",
+    "amount"
+  ],
+  "run_id": "minute-hs300-probe-repair-20260722-034558-r1",
+  "source_run_ids": [
+    "minute-hs300-probe-repair-20260722-034558-r1"
+  ],
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "daily_corr(get('volume'), <ifnan>(pct_change(get('close')), 0.0)",
+  "fe_formula": "daily_corr(get('volume'), <ifnan>(pct_change(get('close')), 0.0)",
+  "lqtp_notes": "Textual non-executable: daily_corr (pandas method, not LQTP executable); ifnan (pandas method, not LQTP executable); Unconverted: ['daily_corr']",
+  "fe_notes": "Textual non-executable: daily_corr (pandas method, not LQTP executable); ifnan (pandas method, not LQTP executable); Unconverted: ['daily_corr']",
+  "source_formula": "daily_corr(get('volume'), ifnan(pct_change(get('close')), 0.0))"
+}

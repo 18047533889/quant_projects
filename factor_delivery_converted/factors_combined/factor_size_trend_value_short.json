@@ -1,0 +1,115 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "15312e33d9c08137406f75f7e763451db97860dbcfb2c317f7e140c1ebc37998",
+  "candidate_ids": [
+    "g2_mutation_avsi_002_c4be457f"
+  ],
+  "code": "def factor_size_trend_value_short(df):\n    df_copy = df.copy()\n    pe = df_copy[\"pe_ttm\"].replace(0, np.nan)\n    cheapness = 1.0 / pe\n    cheapness = cheapness.where(cheapness > 0, np.nan)\n    size = np.log1p(df_copy[\"mkt_cap_float\"].abs())\n    size_ma = size.rolling(40, min_periods=14).mean()\n    size_dev = (size - size_ma) / size_ma.replace(0, np.nan)\n    signal = cheapness * (-size_dev)\n    signal = signal.replace([np.inf, -np.inf], np.nan)\n    return pd.Series(signal, index=df_copy.index, name=\"factor_size_trend_value_short\")",
+  "cross_sectional_rationale": "Cross-sectional ranking standardizes the raw signal across stocks, making the time-series deviation comparable despite different absolute size levels.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.6848484848484848,
+        "top_quantile_annualized_excess_return": 0.02979338590709335,
+        "top_quantile_excess_return": 0.08699230416415671,
+        "top_quantile_max_drawdown": -0.14201090900689628,
+        "top_quantile_turnover": 0.1897248931570484
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_size_trend_value_short",
+  "fitness_direction": 1,
+  "formula": "cheapness = 1/pe_ttm; size_dev = (ln(mkt_cap_float) - MA40(ln(mkt_cap_float))) / MA40(ln(mkt_cap_float)); signal = cheapness * -size_dev",
+  "metrics": {
+    "ic": 0.013410628622334168,
+    "icir": 0.1141738541213512,
+    "mi": 0.0054646364146586635,
+    "rank_ic": 0.0315224539439957,
+    "rank_icir": 0.22429842764117333
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6848484848484848,
+    "top_quantile_annualized_excess_return": 0.02979338590709335,
+    "top_quantile_excess_return": 0.08699230416415671,
+    "top_quantile_max_drawdown": -0.14201090900689628,
+    "top_quantile_turnover": 0.1897248931570484
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.011521151937829452,
+    "icir": 0.11403132696598735,
+    "mi": 0.010755029456793963,
+    "rank_ic": 0.0315224539439957,
+    "rank_icir": 0.22429842764117333
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.6848484848484848,
+    "top_quantile_annualized_excess_return": 0.02979338590709335,
+    "top_quantile_excess_return": 0.08699230416415671,
+    "top_quantile_max_drawdown": -0.14201090900689628,
+    "top_quantile_turnover": 0.1897248931570484
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.011521151937829452,
+    "icir": 0.11403132696598735,
+    "mi": 0.010755029456793963,
+    "rank_ic": 0.0315224539439957,
+    "rank_icir": 0.22429842764117333
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Mutation of avsi-002: shortened the size moving average window from 60 to 40 days to capture more recent size contraction trends while preserving the core value and size-trend interaction mechanism. The shorter window may improve responsiveness to recent size changes, potentially boosting IC and ICIR without changing the economic rationale.",
+  "raw_metrics": {
+    "ic": 0.013410628622334168,
+    "icir": 0.1141738541213512,
+    "mi": 0.0054646364146586635,
+    "rank_ic": 0.0315224539439957,
+    "rank_icir": 0.22429842764117333
+  },
+  "required_columns": [
+    "pe_ttm",
+    "mkt_cap_float"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260719-20260720-011513-r6",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260719-20260720-011513-r6"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.3921283899457798,
+    "pre_transform_top_quantile_excess_return": 0.08699230416415671,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.3888700007435131,
+    "transformed_top_quantile_excess_return": 0.08699230416415671
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "cheapness = 1/pe_ttm; size_dev = (log(mkt_cap_float) - ts_mean(40, log(mkt_cap_float))) / ts_mean(40, log(mkt_cap_float)); signal = cheapness * -size_dev",
+  "fe_formula": "cheapness = 1/pe_ttm; size_dev = (log(mkt_cap_float) - ts_mean(40, log(mkt_cap_float))) / ts_mean(40, log(mkt_cap_float)); signal = cheapness * -size_dev",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "cheapness = 1/pe_ttm; size_dev = (ln(mkt_cap_float) - MA40(ln(mkt_cap_float))) / MA40(ln(mkt_cap_float)); signal = cheapness * -size_dev"
+}

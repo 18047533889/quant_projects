@@ -1,0 +1,13 @@
+{
+  "run_id": "canary-20160104-08-r3",
+  "status": "STAGED_LOCAL",
+  "started_at": "canary",
+  "workdir": "/home/sunhaiwei/quantsociety/runs/status-canary-20160104-08-r3",
+  "source_partitions": 5,
+  "resource": {
+    "rss_bytes": 139415552,
+    "available_bytes": 58610311168,
+    "total_bytes": 99119288320,
+    "worker_count": 1
+  }
+}

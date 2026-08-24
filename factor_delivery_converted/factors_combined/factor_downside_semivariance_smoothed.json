@@ -1,0 +1,117 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "3533d3f01cd28f936e8d84611146fe932106ee33cd80921498736189c1923bcc",
+  "candidate_ids": [
+    "g1_mutation_tailrisk_g0_downside_semivariance_concentration_ed6ae2eb"
+  ],
+  "code": "def factor_downside_semivariance_smoothed(df):\n    \"\"\"Smoothed trailing concentration of return variance in downside outcomes.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    downside_sq = ret.clip(upper=0.0).pow(2).rolling(20, min_periods=20).mean()\n    total_sq = ret.pow(2).rolling(20, min_periods=20).mean()\n    concentration = downside_sq / total_sq.replace(0.0, np.nan)\n    df_copy[\"factor_downside_semivariance_smoothed\"] = concentration.ewm(span=5, adjust=False, min_periods=5).mean()\n    return df_copy[\"factor_downside_semivariance_smoothed\"]",
+  "cross_sectional_rationale": "Tail-loss concentration remains economically meaningful relative to same-day peers. Robust standardization limits the influence of unusually extreme crash-exposed names while preserving relative fragility.",
+  "cross_sectional_transform": "cs_robust_zscore",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "long_short_sharpe": 2.7906079145571887,
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.05388832953164058,
+        "top_quantile_excess_return": 0.15695993615884452,
+        "top_quantile_max_drawdown": -0.08975479974640388,
+        "top_quantile_turnover": 0.11562279540022972
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_downside_semivariance_smoothed",
+  "fitness_direction": 1,
+  "formula": "EMA_5(mean_20[min(r_t,0)^2] / mean_20[r_t^2])",
+  "metrics": {
+    "ic": 0.021026822541680912,
+    "icir": 0.1800448700693051,
+    "mi": 0.008951086228421445,
+    "rank_ic": 0.04244461886405701,
+    "rank_icir": 0.31484840307351747
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.7906079145571887,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.05388832953164058,
+    "top_quantile_excess_return": 0.15695993615884452,
+    "top_quantile_max_drawdown": -0.08975479974640388,
+    "top_quantile_turnover": 0.11562279540022972
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.021026822541680912,
+    "icir": 0.1800448700693051,
+    "mi": 0.0063059710815487335,
+    "rank_ic": 0.04244461886405701,
+    "rank_icir": 0.31484840307351747
+  },
+  "pre_transform_payoff_diagnostics": {
+    "long_short_sharpe": 2.7906079145571887,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.05388832953164058,
+    "top_quantile_excess_return": 0.15695993615884452,
+    "top_quantile_max_drawdown": -0.08975479974640388,
+    "top_quantile_turnover": 0.11562279540022972
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.021026822541680912,
+    "icir": 0.1800448700693051,
+    "mi": 0.0063059710815487335,
+    "rank_ic": 0.04244461886405701,
+    "rank_icir": 0.31484840307351747
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "This mutation preserves the parent’s lower-tail fragility mechanism: it measures the share of recent realized variance attributable to losses. A short causal exponential smoothing layer is added to reduce transient day-to-day shifts in the bounded concentration estimate, targeting more stable cross-sectional ordering and lower signal churn without introducing another economic feature family.",
+  "raw_metrics": {
+    "ic": 0.021026822541680912,
+    "icir": 0.1800448700693051,
+    "mi": 0.008951086228421445,
+    "rank_ic": 0.04244461886405701,
+    "rank_icir": 0.31484840307351747
+  },
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6terra-20260814-053307-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6terra-20260814-053307-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.9447380303224455,
+    "pre_transform_top_quantile_excess_return": 0.15695993615884452,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.9460605878958819,
+    "transformed_top_quantile_excess_return": 0.15695993615884452
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema(5, mean_20[min(r_t,0)^2] / mean_20[r_t^2])",
+  "fe_formula": "ema(5, mean_20[flex_min(r_t, 0)^2] / mean_20[r_t^2])",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "EMA_5(mean_20[min(r_t,0)^2] / mean_20[r_t^2])"
+}

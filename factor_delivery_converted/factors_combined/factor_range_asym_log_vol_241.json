@@ -1,0 +1,51 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "22e602754cf3bdf07a98e22e0724f76c8de6cbb8b1a519cfce23fedaf985e3fc",
+  "candidate_ids": [
+    "range-asym-log-vol-mut2"
+  ],
+  "code": "def factor_range_asym_log_vol(df):\n    df_copy = df.copy()\n    up_close = df_copy['close'] > df_copy['close'].shift(1)\n    down_close = ~up_close\n    range_ = df_copy['high'] - df_copy['low']\n    win = 20\n    min_per = 5\n    up_sum = range_.where(up_close, 0).rolling(win, min_periods=min_per).sum()\n    down_sum = range_.where(down_close, 0).rolling(win, min_periods=min_per).sum()\n    up_count = up_close.rolling(win, min_periods=min_per).sum()\n    down_count = down_close.rolling(win, min_periods=min_per).sum()\n    up_avg = up_sum / up_count.replace(0, np.nan)\n    down_avg = down_sum / down_count.replace(0, np.nan)\n    ratio = np.log((up_avg + 1e-12) / (down_avg + 1e-12))\n    vol_avg = df_copy['volume'].rolling(20, min_periods=10).mean()\n    vol_max = vol_avg.rolling(20, min_periods=10).max().replace(0, np.nan)\n    vol_weight = vol_avg / vol_max\n    factor = ratio * vol_weight\n    factor = factor.fillna(0)\n    df_copy['factor_range_asym_log_vol'] = factor\n    return df_copy['factor_range_asym_log_vol']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_range_asym_log_vol",
+  "fitness_direction": -1,
+  "formula": "ratio = log(avg_up_range / avg_down_range) over 20 days; factor = ratio * (vol_20_avg / rolling_max(vol_20_avg))",
+  "metrics": {
+    "ic": 0.014307643559566553,
+    "icir": 0.1817026423640046,
+    "mi": 0.006926365294864567,
+    "rank_ic": 0.03405519439506336,
+    "rank_icir": 0.37181621165356377
+  },
+  "rationale": "Preserves the volume-weighted asymmetric range mechanism from parent (strength: rank stability) and targets improved IC by replacing symmetric ratio (difference/sum) with log ratio, enhancing linearity. Removes EMA smoothing to keep one lightweight modifier (volume weight) and maintain compactness, following mutation principle of minimal intervention.",
+  "raw_metrics": {
+    "ic": -0.014307643559566553,
+    "icir": -0.1817026423640046,
+    "mi": 0.006926365294864567,
+    "rank_ic": -0.03405519439506336,
+    "rank_icir": -0.37181621165356377
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260622-052632-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260622-052632-r1"
+  ],
+  "lqtp_formula": "ratio = log(avg_up_range / avg_down_range) over 20 days; factor = ratio * (vol_20_avg / ts_max(vol_20_avg))",
+  "fe_formula": "ratio = log(avg_up_range / avg_down_range) over 20 days; factor = ratio * (vol_20_avg / ts_max(vol_20_avg))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "ratio = log(avg_up_range / avg_down_range) over 20 days; factor = ratio * (vol_20_avg / rolling_max(vol_20_avg))"
+}

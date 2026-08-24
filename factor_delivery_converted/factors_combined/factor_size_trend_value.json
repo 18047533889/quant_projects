@@ -1,0 +1,115 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "07cf5d4f2ee8a094e862a857e8fa480cde754fa34b4593d7e1e67aa1d0a07124",
+  "candidate_ids": [
+    "avsi-002"
+  ],
+  "code": "def factor_size_trend_value(df):\n    df_copy = df.copy()\n    pe = df_copy[\"pe_ttm\"].replace(0, np.nan)\n    cheapness = 1.0 / pe\n    cheapness = cheapness.where(cheapness > 0, np.nan)\n    size = np.log1p(df_copy[\"mkt_cap_float\"].abs())\n    size_ma = size.rolling(60, min_periods=20).mean()\n    size_dev = (size - size_ma) / size_ma.replace(0, np.nan)\n    signal = cheapness * (-size_dev)\n    signal = signal.replace([np.inf, -np.inf], np.nan)\n    return pd.Series(signal, index=df_copy.index, name=\"factor_size_trend_value\")",
+  "cross_sectional_rationale": "Cross-sectional ranking standardizes the raw signal across stocks, making the time-series deviation comparable despite different absolute size levels.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.7333333333333333,
+        "top_quantile_annualized_excess_return": 0.06544553663340502,
+        "top_quantile_excess_return": 0.19615295840660485,
+        "top_quantile_max_drawdown": -0.10294040155371931,
+        "top_quantile_turnover": 0.15381903541674075
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_size_trend_value",
+  "fitness_direction": 1,
+  "formula": "size_trend_value = cheapness * -((log_size - MA60(log_size)) / MA60(log_size))",
+  "metrics": {
+    "ic": 0.013762660419212402,
+    "icir": 0.11204208736101769,
+    "mi": 0.0064595411837906624,
+    "rank_ic": 0.033094780759115004,
+    "rank_icir": 0.22755168046881039
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7333333333333333,
+    "top_quantile_annualized_excess_return": 0.06544553663340502,
+    "top_quantile_excess_return": 0.19615295840660485,
+    "top_quantile_max_drawdown": -0.10294040155371931,
+    "top_quantile_turnover": 0.15381903541674075
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.011510280805361275,
+    "icir": 0.10932150969021599,
+    "mi": 0.011302994476944939,
+    "rank_ic": 0.033094780759115004,
+    "rank_icir": 0.22755168046881039
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.7333333333333333,
+    "top_quantile_annualized_excess_return": 0.06544553663340502,
+    "top_quantile_excess_return": 0.19615295840660485,
+    "top_quantile_max_drawdown": -0.10294040155371931,
+    "top_quantile_turnover": 0.15381903541674075
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.011510280805361275,
+    "icir": 0.10932150969021599,
+    "mi": 0.011302994476944939,
+    "rank_ic": 0.033094780759115004,
+    "rank_icir": 0.22755168046881039
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Combines earnings yield with a size trend deviation. When a stock is cheap (high earnings yield) and its market cap is shrinking relative to its own 60-day average (negative size deviation), the factor amplifies the signal. This conditions value on a size downturn, potentially capturing overlooked value in temporarily distressed small caps.",
+  "raw_metrics": {
+    "ic": 0.013762660419212402,
+    "icir": 0.11204208736101769,
+    "mi": 0.0064595411837906624,
+    "rank_ic": 0.033094780759115004,
+    "rank_icir": 0.22755168046881039
+  },
+  "required_columns": [
+    "pe_ttm",
+    "mkt_cap_float"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260719-20260720-011513-r6",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260719-20260720-011513-r6"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.39278124620044763,
+    "pre_transform_top_quantile_excess_return": 0.19615295840660485,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.3929107501919461,
+    "transformed_top_quantile_excess_return": 0.19615295840660485
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "size_trend_value = cheapness * -((log_size - ts_mean(60, log_size)) / ts_mean(60, log_size))",
+  "fe_formula": "size_trend_value = cheapness * -((log_size - ts_mean(60, log_size)) / ts_mean(60, log_size))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "size_trend_value = cheapness * -((log_size - MA60(log_size)) / MA60(log_size))"
+}

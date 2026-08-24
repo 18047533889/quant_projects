@@ -1,0 +1,97 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "3e7f7e6bfa99017a43bd51b302395135263e0d7790f5cd5d6b88937cc38ab755",
+  "candidate_ids": [
+    "g2_mutation_alpha_stability_0_1_a42a9f7f_repaired"
+  ],
+  "code": "def factor_stability_atr(df):\n    df_copy = df.copy()\n    high = df_copy[\"high\"].values.astype(np.float64)\n    low = df_copy[\"low\"].values.astype(np.float64)\n    close = df_copy[\"close\"].values.astype(np.float64)\n    atr_values = talib.ATR(high, low, close, timeperiod=20)\n    atr = pd.Series(atr_values, index=df_copy.index)\n    mean_atr = atr.rolling(20, min_periods=10).mean()\n    std_atr = atr.rolling(20, min_periods=10).std()\n    cv = std_atr / mean_atr.replace(0, np.nan)\n    factor = 1.0 / (1.0 + cv**2)\n    df_copy[\"factor_stability_atr\"] = factor\n    return df_copy[\"factor_stability_atr\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9272727272727272,
+        "top_quantile_annualized_excess_return": -0.028313661522188505,
+        "top_quantile_excess_return": -0.07615786283708414,
+        "top_quantile_max_drawdown": -0.17124077092171108,
+        "top_quantile_turnover": 0.13603911066823932
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_stability_atr",
+  "fitness_direction": 1,
+  "formula": "1 / (1 + (std(atr_20) / mean(atr_20))^2)",
+  "metrics": {
+    "ic": 0.01399192868110972,
+    "icir": 0.13681580416606612,
+    "mi": 0.009663321897262378,
+    "rank_ic": 0.015469270012353969,
+    "rank_icir": 0.1934900203108639
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9272727272727272,
+    "top_quantile_annualized_excess_return": -0.028313661522188505,
+    "top_quantile_excess_return": -0.07615786283708414,
+    "top_quantile_max_drawdown": -0.17124077092171108,
+    "top_quantile_turnover": 0.13603911066823932
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Measures stability of average true range to capture volatility consistency including overnight gaps. Low CV of ATR indicates consistent volatility regime, a temporal stability signal. Raw signal without cross-sectional rank to preserve payoff.",
+  "raw_metrics": {
+    "ic": 0.01399192868110972,
+    "icir": 0.13681580416606612,
+    "mi": 0.009663321897262378,
+    "rank_ic": 0.015469270012353969,
+    "rank_icir": 0.1934900203108639
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260717-104656-r3",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260717-104656-r3"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "1 / (1 + (ts_std(atr_20) / ts_mean(atr_20))^2)",
+  "fe_formula": "1 / (1 + (ts_std(atr_20) / ts_mean(atr_20))^2)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "1 / (1 + (std(atr_20) / mean(atr_20))^2)"
+}

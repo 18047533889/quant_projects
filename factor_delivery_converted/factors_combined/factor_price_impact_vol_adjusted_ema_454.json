@@ -1,0 +1,124 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "bd023d48561a58126522950b13aa95b0c88ca67237b0368eecf27183cc7068e1",
+  "candidate_ids": [
+    "g1_crossover_then_mutation_alpha_liquidity_gen0_c001_crash_002_d06b4233"
+  ],
+  "code": "def factor_price_impact_vol_adjusted_ema(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    ret = close / close.shift(1) - 1.0\n    abs_ret = ret.abs()\n    impact = abs_ret / volume.replace(0, np.nan)\n    avg_impact = impact.ewm(span=20, min_periods=20).mean()\n    vol = ret.ewm(span=20, min_periods=20).std()\n    factor = avg_impact / vol.replace(0, np.nan)\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy['factor_price_impact_vol_adjusted_ema'] = factor\n    return df_copy['factor_price_impact_vol_adjusted_ema']",
+  "cross_sectional_rationale": "Rank transform enables cross-sectional comparison of relative price impact across stocks, essential for liquidity-focused ranking signals.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9757575757575757,
+        "top_quantile_annualized_excess_return": 0.0552258058792805,
+        "top_quantile_excess_return": 0.16203418641478629,
+        "top_quantile_max_drawdown": -0.0913482349153939,
+        "top_quantile_turnover": 0.03153679839033619
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.08780815732390997,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.1219184267609004,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_price_impact_vol_adjusted_ema",
+  "fitness_direction": 1,
+  "formula": "ewm_mean(|ret|/vol, span=20) / ewm_std(ret, span=20)",
+  "metrics": {
+    "ic": 0.008904796782200476,
+    "icir": 0.08780815732390997,
+    "mi": 0.006754090206065655,
+    "rank_ic": 0.01588092184424197,
+    "rank_icir": 0.12722619344713476
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.0552258058792805,
+    "top_quantile_excess_return": 0.16203418641478629,
+    "top_quantile_max_drawdown": -0.0913482349153939,
+    "top_quantile_turnover": 0.03153679839033619
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.0010132618624021936,
+    "icir": 0.017330729163896705,
+    "mi": 0.014180318576356044,
+    "rank_ic": 0.01588092184424197,
+    "rank_icir": 0.12722619344713476
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.0552258058792805,
+    "top_quantile_excess_return": 0.16203418641478629,
+    "top_quantile_max_drawdown": -0.0913482349153939,
+    "top_quantile_turnover": 0.03153679839033619
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.0010132618624021936,
+    "icir": 0.017330729163896705,
+    "mi": 0.014180318576356044,
+    "rank_ic": 0.01588092184424197,
+    "rank_icir": 0.12722619344713476
+  },
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "This factor simplifies the parent's volatility-adjusted price impact by removing the volume imbalance asymmetry modifier, which could introduce noise. It uses exponential weighting to smooth the impact and volatility estimates, reducing lag and potentially improving RankIC and IC while preserving the low-turnover payoff profile. The core economic mechanism remains: high price impact per unit volume, normalized by recent return volatility, signals low liquidity or high impact. Cross-sectional rank ensures comparability across stocks.",
+  "raw_metrics": {
+    "ic": 0.008904796782200476,
+    "icir": 0.08780815732390997,
+    "mi": 0.006754090206065655,
+    "rank_ic": 0.01588092184424197,
+    "rank_icir": 0.12722619344713476
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-20260730-011744-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-20260730-011744-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.17563142489403166,
+    "pre_transform_top_quantile_excess_return": 0.16203418641478629,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.24657415960355283,
+    "transformed_top_quantile_excess_return": 0.16203418641478629
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ewm_mean(|ret|/vol, span=20) / ewm_std(ret, span=20)",
+  "fe_formula": "ewm_mean(|ret|/vol, span=20) / ewm_std(ret, span=20)",
+  "lqtp_notes": "Unconverted: ['ewm_mean', 'ewm_std']",
+  "fe_notes": "Unconverted: ['ewm_mean', 'ewm_std']",
+  "source_formula": "ewm_mean(|ret|/vol, span=20) / ewm_std(ret, span=20)"
+}

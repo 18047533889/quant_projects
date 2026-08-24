@@ -1,0 +1,54 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "e7733ebaead20927810b2afdeac6253fc2a6d2e611df54b00f923a42ac4f3133",
+  "candidate_ids": [
+    "mutate_asym_ratio_pure_001"
+  ],
+  "code": "def factor_asym_ratio_pure(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    down = ret < 0\n    up = ret >= 0\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    down_range = range_.where(down, 0)\n    up_range = range_.where(up, 0)\n    down_sum = down_range.rolling(20, min_periods=10).sum()\n    up_sum = up_range.rolling(20, min_periods=10).sum()\n    down_count = down.rolling(20, min_periods=10).sum()\n    up_count = up.rolling(20, min_periods=10).sum()\n    down_avg = down_sum / down_count.replace(0, np.nan)\n    up_avg = up_sum / up_count.replace(0, np.nan)\n    ratio = down_avg / up_avg.replace(0, np.nan)\n    factor = np.log(ratio.clip(lower=1e-6))\n    df_copy[\"factor_asym_ratio_pure\"] = factor\n    return df_copy[\"factor_asym_ratio_pure\"]",
+  "cross_sectional_rationale": "Rank transform highlights stocks with most pronounced asymmetric range behavior, aiding cross-sectional differentiation.",
+  "cross_sectional_transform": "cs_rank",
+  "factor_name": "factor_asym_ratio_pure",
+  "fitness_direction": 1,
+  "formula": "log(avg_down_range / avg_up_range) over 20 days",
+  "metrics": {
+    "ic": 0.014762764297136412,
+    "icir": 0.19122906225531947,
+    "mi": 0.005759942618199787,
+    "rank_ic": 0.03822636485752495,
+    "rank_icir": 0.41833313861328375
+  },
+  "rationale": "Simplifies the asymmetric volatility factor by removing the volume confirmation modifier, focusing solely on the core asymmetry mechanism. This reduces noise and may improve IC and MI while preserving the RankIC strength of the parent.",
+  "raw_metrics": {
+    "ic": 0.014762764297136412,
+    "icir": 0.19122906225531947,
+    "mi": 0.005759942618199787,
+    "rank_ic": 0.03822636485752495,
+    "rank_icir": 0.41833313861328375
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260625-030745-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260625-030745-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "lqtp_formula": "log(avg_down_range / avg_up_range) over 20 days",
+  "fe_formula": "log(avg_down_range / avg_up_range) over 20 days",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "log(avg_down_range / avg_up_range) over 20 days"
+}

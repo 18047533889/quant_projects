@@ -1,0 +1,119 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "bf9916901c4c20e2f23c8b50f640370435d0044c0a5dc99449bbf5541db1e0be",
+  "candidate_ids": [
+    "g1_mutation_crash_g0_left_tail_variance_share_94d43c38"
+  ],
+  "code": "def factor_smoothed_left_tail_variance_share(df):\n    \"\"\"Exponentially smoothed share of realized variance attributable to negative returns.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    downside_energy = ret.clip(upper=0.0).pow(2).ewm(span=30, min_periods=20, adjust=False).mean()\n    total_energy = ret.pow(2).ewm(span=30, min_periods=20, adjust=False).mean()\n    df_copy[\"factor_smoothed_left_tail_variance_share\"] = downside_energy / total_energy.replace(0.0, np.nan)\n    return df_copy[\"factor_smoothed_left_tail_variance_share\"]",
+  "cross_sectional_rationale": "The bounded downside-variance share is a relative same-day fragility measure: ranking identifies stocks with the most loss-dominated return variance among contemporaries while reducing sensitivity to market-wide changes in realized volatility.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "long_short_sharpe": 2.7908765995655918,
+        "quantile_monotonicity": 0.9151515151515152,
+        "top_quantile_annualized_excess_return": -0.002699783490278773,
+        "top_quantile_excess_return": -0.007524003774347587,
+        "top_quantile_max_drawdown": -0.14892404517900248,
+        "top_quantile_turnover": 0.15715487772219774
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return,top_quantile_excess_percentile"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_smoothed_left_tail_variance_share",
+  "fitness_direction": 1,
+  "formula": "EWMA_30[min(r_t,0)^2] / EWMA_30[r_t^2]",
+  "metrics": {
+    "ic": 0.023068723137263766,
+    "icir": 0.1913807637633932,
+    "mi": 0.013632222414654116,
+    "rank_ic": 0.051698541523699675,
+    "rank_icir": 0.3703466437969265
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.7908765995655918,
+    "quantile_monotonicity": 0.9151515151515152,
+    "top_quantile_annualized_excess_return": -0.002699783490278773,
+    "top_quantile_excess_return": -0.007524003774347587,
+    "top_quantile_max_drawdown": -0.14892404517900248,
+    "top_quantile_turnover": 0.15715487772219774
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return,top_quantile_excess_percentile",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.026092646933007523,
+    "icir": 0.21231490433402042,
+    "mi": 0.01808767366641284,
+    "rank_ic": 0.051698541523699675,
+    "rank_icir": 0.3703466437969265
+  },
+  "pre_transform_payoff_diagnostics": {
+    "long_short_sharpe": 2.7908765995655918,
+    "quantile_monotonicity": 0.9151515151515152,
+    "top_quantile_annualized_excess_return": -0.002699783490278773,
+    "top_quantile_excess_return": -0.007524003774347587,
+    "top_quantile_max_drawdown": -0.14892404517900248,
+    "top_quantile_turnover": 0.15715487772219774
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.026092646933007523,
+    "icir": 0.21231490433402042,
+    "mi": 0.01808767366641284,
+    "rank_ic": 0.051698541523699675,
+    "rank_icir": 0.3703466437969265
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "This mutation preserves the parent’s crash-fragility mechanism: loss-dominated realized variance identifies stocks whose return process is asymmetrically exposed to downside shocks. It replaces an equal-weight 20-session window with a 30-span exponentially weighted estimator, retaining the bounded downside-variance share while reducing abrupt window-boundary changes and giving more weight to recently emerging fragility. The targeted objective is improved rank stability and consistency rather than additional feature stacking.",
+  "raw_metrics": {
+    "ic": 0.023068723137263766,
+    "icir": 0.1913807637633932,
+    "mi": 0.013632222414654116,
+    "rank_ic": 0.051698541523699675,
+    "rank_icir": 0.3703466437969265
+  },
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6terra-20260814-053307-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6terra-20260814-053307-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 1.1200675742342767,
+    "pre_transform_top_quantile_excess_return": -0.007524003774347587,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 1.0777392565446733,
+    "transformed_top_quantile_excess_return": -0.007524003774347587
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "EWMA_30[min(r_t,0)^2] / EWMA_30[r_t^2]",
+  "fe_formula": "EWMA_30[flex_min(r_t, 0)^2] / EWMA_30[r_t^2]",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "EWMA_30[min(r_t,0)^2] / EWMA_30[r_t^2]"
+}

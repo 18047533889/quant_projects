@@ -1,0 +1,51 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "0d330f223f363115688de236955237969afe8a7c23e418f8d6dbdf0b8b724abd",
+  "candidate_ids": [
+    "MUT-004"
+  ],
+  "code": "def factor_regime_switch_zscore_momentum(df):\n    df_copy = df.copy()\n    mom = df_copy['close'] / df_copy['close'].shift(10) - 1\n    mom_mean = mom.rolling(60, min_periods=10).mean()\n    mom_std = mom.rolling(60, min_periods=10).std(ddof=1)\n    mom_z = (mom - mom_mean) / mom_std.replace(0.0, np.nan)\n    rev = (df_copy['open'] - df_copy['close']) / df_copy['open']\n    sma20 = df_copy['close'].rolling(20).mean()\n    trend_up = df_copy['close'] > sma20\n    factor = np.where(trend_up, mom_z, rev)\n    df_copy['factor_regime_switch_zscore_momentum'] = factor\n    return df_copy['factor_regime_switch_zscore_momentum']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_regime_switch_zscore_momentum",
+  "fitness_direction": -1,
+  "formula": "if close > SMA20 then z-score of 10-day momentum (over 60-day window) else intraday mean reversion",
+  "metrics": {
+    "ic": 0.015948730270630995,
+    "icir": 0.1494836336024385,
+    "mi": 0.1682506978456022,
+    "rank_ic": 0.01851857492980969,
+    "rank_icir": 0.1584445096190612
+  },
+  "rationale": "Mutation of MUT-003: preserve regime-switch core but normalize momentum component via trailing z-score to improve ICIR and IC stability. Keep reversal unchanged. Targeted at improving RankIC and ICIR while maintaining strong MI.",
+  "raw_metrics": {
+    "ic": -0.015948730270630995,
+    "icir": -0.1494836336024385,
+    "mi": 0.1682506978456022,
+    "rank_ic": -0.01851857492980969,
+    "rank_icir": -0.1584445096190612
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260622-085308-r3",
+  "source_run_ids": [
+    "formal-mvp-loop-20260622-085308-r3"
+  ],
+  "lqtp_formula": "if close > SMA20 then z-score of 10-day momentum (over 60-day window) else intraday mean reversion",
+  "fe_formula": "if close > SMA20 then z-score of 10-day momentum (over 60-day window) else intraday mean reversion",
+  "lqtp_notes": "Unconverted: ['momentum']",
+  "fe_notes": "Unconverted: ['momentum']",
+  "source_formula": "if close > SMA20 then z-score of 10-day momentum (over 60-day window) else intraday mean reversion"
+}

@@ -1,0 +1,89 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "3327ffe9137d6075ab2e90fb0db077cc69b40a3dd6b8f0e44254ee2b60116ddd",
+  "candidate_ids": [
+    "valsize_interaction_001"
+  ],
+  "code": "def factor_value_small_size_quality_filter(df):\n    df_copy = df.copy()\n    # Book yield cheapness\n    cheapness = 1.0 / df_copy[\"pb_lf\"].replace(0, np.nan)\n    # Time-series size regime: rolling median of mkt_cap_float (1 year window)\n    size_median = df_copy[\"mkt_cap_float\"].rolling(252, min_periods=63).median()\n    # Flag small: current mkt_cap_float below rolling median\n    is_small = df_copy[\"mkt_cap_float\"] < size_median\n    # Quality filter: positive ROE\n    positive_roe = df_copy[\"roe_ttm2\"] > 0\n    # For small caps, use cheapness only if ROE positive; for large caps, use cheapness as is\n    df_copy[\"factor_value_small_size_quality_filter\"] = np.where(\n        is_small & ~positive_roe, np.nan, cheapness\n    )\n    return df_copy[\"factor_value_small_size_quality_filter\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.1089654378325029,
+        "top_quantile_excess_return": 0.34601580309297897,
+        "top_quantile_max_drawdown": -0.15792265732537014,
+        "top_quantile_turnover": 0.026727240986359934
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_value_small_size_quality_filter",
+  "fitness_direction": 1,
+  "formula": "PB_cheapness = 1 / pb_lf; if mkt_cap_float < rolling_median(mkt_cap_float, 252) AND roe_ttm2 <= 0 then nan else PB_cheapness",
+  "metrics": {
+    "ic": 0.012278013414322124,
+    "icir": 0.10154244873323816,
+    "mi": 0.02552357781493697,
+    "rank_ic": 0.039234281539158936,
+    "rank_icir": 0.2564033242455751
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.1089654378325029,
+    "top_quantile_excess_return": 0.34601580309297897,
+    "top_quantile_max_drawdown": -0.15792265732537014,
+    "top_quantile_turnover": 0.026727240986359934
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Value signals (book yield) are conditioned on size by applying a quality filter (positive ROE) only for stocks in a time-series small-cap regime (current float market cap below its 1-year rolling median). This avoids amplifying distressed small-cap value traps while preserving the cheapness signal for large caps. The mechanism uses size as a conditional gate, not a monotonic multiplier.",
+  "raw_metrics": {
+    "ic": 0.012278013414322124,
+    "icir": 0.10154244873323816,
+    "mi": 0.02552357781493697,
+    "rank_ic": 0.039234281539158936,
+    "rank_icir": 0.2564033242455751
+  },
+  "required_columns": [
+    "pb_lf",
+    "roe_ttm2",
+    "mkt_cap_float"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260717-20260717-200138-r7",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260717-20260717-200138-r7"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "PB_cheapness = 1 / pb_lf; if mkt_cap_float < ts_median(252, mkt_cap_float) AND roe_ttm2 <= 0 then nan else PB_cheapness",
+  "fe_formula": "PB_cheapness = 1 / pb_lf; if mkt_cap_float < ts_median(252, mkt_cap_float) AND roe_ttm2 <= 0 then nan else PB_cheapness",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "PB_cheapness = 1 / pb_lf; if mkt_cap_float < rolling_median(mkt_cap_float, 252) AND roe_ttm2 <= 0 then nan else PB_cheapness"
+}

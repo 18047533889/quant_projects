@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "1fb6cef1abf43c75e3cdeb62485f3e2ff6feba299d00a90b5e6be83812b99e0b",
+  "candidate_ids": [
+    "g2_crossover_g1_crossover_then_mutation_alpha_daily_trend_gen_4bc8f6ea"
+  ],
+  "code": "def factor_smoothed_persistent_momentum_smoothness_weighted(df):\n    df_copy = df.copy()\n    ret = df_copy['close'] / df_copy['close'].shift(10) - 1\n    persistence = (df_copy['close'].pct_change() > 0).rolling(10).sum()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy['volume'], window=20)\n    weight = 1 + 0.5 * vol_ratio\n    daily_ret = df_copy['close'].pct_change()\n    abs_change = (daily_ret - daily_ret.shift(1)).abs()\n    smoothness = abs_change.rolling(10, min_periods=10).mean()\n    reliability = 1.0 / (1.0 + smoothness)\n    factor = ret * persistence * weight * reliability\n    df_copy['factor_smoothed_persistent_momentum_smoothness_weighted'] = factor\n    return df_copy['factor_smoothed_persistent_momentum_smoothness_weighted']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_smoothed_persistent_momentum_smoothness_weighted",
+  "fitness_direction": -1,
+  "formula": "ret(10) * sum(pos_ret_10) * (1+0.5*vol_ratio) * 1/(1+rolling_mean(|ret(t)-ret(t-1)|,10))",
+  "metrics": {
+    "ic": 0.026571163898271064,
+    "icir": 0.19878585578212715,
+    "mi": 0.04475404849354625,
+    "rank_ic": 0.029450099482558705,
+    "rank_icir": 0.18857609595758784
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6,
+    "top_quantile_annualized_excess_return": 0.03780075768682667,
+    "top_quantile_excess_return": 0.11068867078947409,
+    "top_quantile_max_drawdown": -0.13031473874507726,
+    "top_quantile_turnover": 0.27586327794413223
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Crossover: primary parent is qualified smoothed persistent volume ratio momentum (factor_smoothed_persistent_volume_ratio_momentum), secondary parent contributes the return change smoothness (smoothness) as a reliability weight. The primary mechanism (directional persistence weighted by volume ratio) is preserved; the smoothness reliability weight attenuates the signal when recent returns are erratic (high absolute change in returns), aiming to reduce noise and improve RankIC stability. This keeps the factor compact and interprets smoothness as a noise filter.",
+  "raw_metrics": {
+    "ic": -0.026571163898271064,
+    "icir": -0.19878585578212715,
+    "mi": 0.04475404849354625,
+    "rank_ic": -0.029450099482558705,
+    "rank_icir": -0.18857609595758784
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260629-073809-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260629-073809-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ret(10) * ts_sum(pos_ret_10) * (1+0.5*vol_ratio) * 1/(1+ts_mean(10, |ret(t)-ret(t-1)|))",
+  "fe_formula": "ret(10) * ts_sum(pos_ret_10) * (1+0.5*vol_ratio) * 1/(1+ts_mean(10, |ret(t)-ret(t-1)|))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "ret(10) * sum(pos_ret_10) * (1+0.5*vol_ratio) * 1/(1+rolling_mean(|ret(t)-ret(t-1)|,10))"
+}

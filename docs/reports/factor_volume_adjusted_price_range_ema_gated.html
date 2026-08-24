@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>factor_volume_adjusted_price_range_ema_gated</title>
+<style>
+:root{--bg:#eef2f7;--panel:#fff;--fg:#0f172a;--muted:#64748b;--line:#e2e8f0;--primary:#7c3aed;--pos:#16a34a;--neg:#dc2626}
+* {box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;color:var(--fg);background:var(--bg)}
+header{background:linear-gradient(135deg,#4a1942,#7c3aed 60%,#0d9488);color:#fff;padding:36px 48px 28px}
+header h1{margin:0 0 6px;font-size:1.7rem}
+header h1 code{font-size:0.85em;background:rgba(255,255,255,0.15);padding:2px 8px;border-radius:6px}
+header .meta{opacity:0.85;font-size:0.88rem;margin-top:6px}
+main{max-width:1000px;margin:0 auto;padding:24px}
+.back{display:inline-block;margin-bottom:20px;color:#93c5fd;font-weight:500;text-decoration:none;font-size:0.9rem}
+.back:hover{text-decoration:underline}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px}
+.metric{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center;box-shadow:0 4px 24px rgba(15,23,42,0.06)}
+.metric b{display:block;font-size:1.4rem;color:#dc2626}
+.metric span{color:var(--muted);font-size:0.76rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;box-shadow:0 4px 24px rgba(15,23,42,0.06);margin-bottom:16px}
+h2{font-size:1rem;color:var(--primary);margin:0 0 14px;border-bottom:1px solid var(--line);padding-bottom:8px}
+.formula-wrap{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:18px;font-family:"Courier New",monospace;font-size:0.88rem;word-break:break-all;line-height:1.9;color:var(--fg);overflow-x:auto}
+.meta-table{width:100%;border-collapse:collapse;font-size:0.85rem}
+.meta-table td{padding:7px 10px;border-bottom:1px solid var(--line)}
+.meta-table td:first-child{color:var(--muted);width:170px}
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:0.75rem;margin-right:6px}
+.badge-purple{background:#f3e8ff;color:#7c3aed}
+.badge-yellow{background:#fef3c7;color:#92400e}
+.pos{color:var(--pos);font-weight:bold}
+.neg{color:var(--neg)}
+</style>
+</head>
+<body>
+<header>
+<a class="back" href="../index.html">← 返回汇总</a>
+<h1><code>factor_volume_adjusted_price_range_ema_gated</code></h1>
+<div class="meta">本周新挖 · 负 Sharpe（需翻转评估） · 回测 2024-01-02 ~ 2025-12-31 · 生成时间 2026-08-23 19:05</div>
+</header>
+<main>
+<div class="grid-3">
+<div class="metric"><b class="pos">0.0000</b><span>Mean RankIC</span></div>
+<div class="metric"><b class="pos">0.00%</b><span>多空总收益（毛）</span></div>
+<div class="metric"><b class="pos">0.000</b><span>多空 Sharpe（毛）</span></div>
+</div>
+<div class="card">
+<h2>LQTP 公式</h2>
+<div class="formula-wrap">if style_gate_resvol_high: 0.9 * EMA( (high-low)*volume/EMA(volume,10), 10 ) else: EMA( (high-low)*v</div>
+</div>
+<div class="card">
+<h2>因子元数据</h2>
+<table class="meta-table">
+<tr><td>因子名称</td><td><code>factor_volume_adjusted_price_range_ema_gated</code></td></tr>
+<tr><td>回测区间</td><td>2024-01-02 ~ 2025-12-31</td></tr>
+<tr><td>翻转版本</td><td>否</td></tr>
+<tr><td>LW 扣费</td><td>G10/G1 等权组合，真实换手扣佣</td></tr>
+<tr><td>IC 口径</td><td>VWAP→VWAP（T+2/T+1）</td></tr>
+<tr><td>LQTP 提交</td><td><span class="badge badge-yellow">待评估</span></td></tr>
+<tr><td>生成时间</td><td>2026-08-23 19:05</td></tr>
+</table>
+</div>
+</main>
+</body>
+</html>

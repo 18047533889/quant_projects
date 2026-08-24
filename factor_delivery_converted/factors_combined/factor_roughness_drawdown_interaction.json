@@ -1,0 +1,34 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "198779af4aae8cdeb1e99d4e64648aeec6dfb276a40134024ff600365f4f8df4",
+  "candidate_ids": [
+    "crossover-roughness-drawdown-gen1-001"
+  ],
+  "code": "def factor_roughness_drawdown_interaction(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    # roughness ratio\n    log_ret = np.log(close / close.shift(1))\n    short_ma = log_ret.abs().rolling(5, min_periods=5).mean()\n    long_ma = log_ret.abs().rolling(20, min_periods=20).mean()\n    ratio = short_ma / long_ma - 1\n    # drawdown geometry\n    rolling_max = np.maximum.accumulate(close)\n    depth = (close - rolling_max) / rolling_max\n    is_dd = close < rolling_max\n    dd_group = (~is_dd).cumsum()\n    duration = df_copy.groupby(dd_group).cumcount() + 1\n    duration = duration.where(is_dd, 0)\n    dd_factor = -depth * duration\n    # interaction\n    factor = ratio * (1 + dd_factor)\n    factor.name = 'factor_roughness_drawdown_interaction'\n    return factor",
+  "factor_name": "factor_roughness_drawdown_interaction",
+  "fitness_direction": -1,
+  "formula": "factor = (short_ma_abs_log_ret / long_ma_abs_log_ret - 1) * (1 + drawdown_depth * drawdown_duration) where drawdown_depth = (close - cummax(close))/cummax(close), drawdown_duration = consecutive days below cummax",
+  "metrics": {
+    "ic": 0.011376862844022624,
+    "icir": 0.1883094546108911,
+    "mi": 0.00934653026736143,
+    "rank_ic": 0.01693191785505381,
+    "rank_icir": 0.20244136790569134
+  },
+  "rationale": "Combines multi-scale roughness and drawdown geometry to capture volatility amplification during drawdown regimes. The interaction term intensifies the roughness signal when drawdowns are deep and prolonged, potentially identifying panic-driven movements that precede reversals or further declines. This preserves the parent strengths of scale-sensitive turbulence and drawdown severity.",
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-20260609-013206-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260609-013206-r1"
+  ],
+  "lqtp_formula": "factor = (short_ma_abs_log_ret / long_ma_abs_log_ret - 1) * (1 + drawdown_depth * drawdown_duration) where drawdown_depth = (close - cummax(close))/cummax(close), drawdown_duration = consecutive days below cummax",
+  "fe_formula": "factor = (short_ma_abs_log_ret / long_ma_abs_log_ret - 1) * (1 + drawdown_depth * drawdown_duration) where drawdown_depth = (close - cummax(close))/cummax(close), drawdown_duration = consecutive days below cummax",
+  "lqtp_notes": "Unconverted: ['cummax']",
+  "fe_notes": "Unconverted: ['cummax']",
+  "source_formula": "factor = (short_ma_abs_log_ret / long_ma_abs_log_ret - 1) * (1 + drawdown_depth * drawdown_duration) where drawdown_depth = (close - cummax(close))/cummax(close), drawdown_duration = consecutive days below cummax"
+}

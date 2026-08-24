@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "49eb01c1497488c7b8b6c329dfc16dd56f4d967592bb8fab99b3f0cd85881ac8",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_then_mutation_aglag_resp_001_mc_2_3_81504466"
+  ],
+  "code": "def factor_lagret_vol_trend_gated_v2(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    high = df_copy['high']\n    low = df_copy['low']\n    lag_ret_5 = close / close.shift(5) - 1.0\n    vol_ema = volume.ewm(span=10, min_periods=10).mean()\n    vol_ratio = np.log(volume / vol_ema.replace(0, np.nan))\n    tr = pd.DataFrame({'hl': high - low, 'hc': (high - close.shift()).abs(), 'lc': (low - close.shift()).abs()}).max(axis=1)\n    atr = tr.rolling(10, min_periods=10).mean()\n    vol_factor = atr / close.replace(0, np.nan)\n    raw = lag_ret_5 * vol_ratio * (1.0 + vol_factor)\n    high_resvol = df_copy.get('style_gate_resvol_high', pd.Series(0, index=df_copy.index))\n    trend_mult = np.where(high_resvol > 0, 1.25, 0.85)\n    raw_trend = raw * trend_mult\n    factor = raw_trend.ewm(span=5, min_periods=5).mean()\n    df_copy['factor_lagret_vol_trend_gated_v2'] = factor\n    return df_copy['factor_lagret_vol_trend_gated_v2']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_lagret_vol_trend_gated_v2",
+  "fitness_direction": -1,
+  "formula": "EMA5( (close/shift5-1) * log(volume/EMA10(volume)) * (1+ATR10/close) * (1.25 if resvol_high else 0.85) )",
+  "metrics": {
+    "ic": 0.025261282703287955,
+    "icir": 0.24721923048808728,
+    "mi": 0.03853375427006167,
+    "rank_ic": 0.03926393483231598,
+    "rank_icir": 0.371228103661538
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.793939393939394,
+    "top_quantile_annualized_excess_return": 0.026804943388618385,
+    "top_quantile_excess_return": 0.07748797674893315,
+    "top_quantile_max_drawdown": -0.19098739458617198,
+    "top_quantile_turnover": 0.3742021016255961
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Reduced volume ratio and ATR windows from 20 to 10 to capture shorter-term volatility and volume dynamics while preserving the core lagged response mechanism. Adjusted trend multipliers slightly to 1.25/0.85 for finer regime adaptation. The resvol_high gate still amplifies the signal in high residual volatility regimes.",
+  "raw_metrics": {
+    "ic": -0.025261282703287955,
+    "icir": -0.24721923048808728,
+    "mi": 0.03853375427006167,
+    "rank_ic": -0.03926393483231598,
+    "rank_icir": -0.371228103661538
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260708-140639-r4",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260708-140639-r4"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": "Uses style_gate_resvol_high to adjust the amplification of the core signal. Rationale: In high residual volatility regimes, market dislocations amplify trend signals, so increasing weight (1.25x) improves rank stability. In low residual volatility, a reduced weight (0.85x) avoids overreacting to noise. The reduced windows make the gate more responsive to recent conditions.",
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema(5, (close/shift5-1) * log(volume/EMA10(volume)) * (1+ATR10/close) * (1.25 if resvol_high else 0.85))",
+  "fe_formula": "ema(5, (close/shift5-1) * log(volume/EMA10(volume)) * (1+ATR10/close) * (1.25 if resvol_high else 0.85))",
+  "lqtp_notes": "Unconverted: ['EMA10']",
+  "fe_notes": "Unconverted: ['EMA10']",
+  "source_formula": "EMA5( (close/shift5-1) * log(volume/EMA10(volume)) * (1+ATR10/close) * (1.25 if resvol_high else 0.85) )"
+}

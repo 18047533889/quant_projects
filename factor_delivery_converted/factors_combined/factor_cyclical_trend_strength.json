@@ -1,0 +1,97 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "71698b166b7afc3cf18408c06f72a9f63494507c31f82e490cd5a54a9193b88c",
+  "candidate_ids": [
+    "alphacycle-001"
+  ],
+  "code": "def factor_cyclical_trend_strength(df):\n    \"\"\"Long-term trend strength using ADX and directional indicators to identify strong cyclical phases.\"\"\"\n    df_copy = df.copy()\n    adx = pd.Series(talib.ADX(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=50), index=df_copy.index)\n    pdi = pd.Series(talib.PLUS_DI(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=50), index=df_copy.index)\n    mdi = pd.Series(talib.MINUS_DI(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=50), index=df_copy.index)\n    trend_strength = np.where(adx > 25, np.where(pdi > mdi, 1.0, -1.0), 0.0)\n    factor = pd.Series(talib.EMA(trend_strength, timeperiod=20), index=df_copy.index)\n    df_copy[\"factor_cyclical_trend_strength\"] = factor\n    return df_copy[\"factor_cyclical_trend_strength\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.41818181818181815,
+        "top_quantile_annualized_excess_return": 0.06386328276791708,
+        "top_quantile_excess_return": 0.16538043429579652,
+        "top_quantile_max_drawdown": -0.03322306630560501,
+        "top_quantile_turnover": 0.005881688101158333
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.005689036482608869,
+      "field": "ic",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.4310963517391131,
+      "threshold": 0.01
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_cyclical_trend_strength",
+  "fitness_direction": -1,
+  "formula": "ADX(50) > 25 ? sign(PLUS_DI(50) - MINUS_DI(50)) : 0, then EMA(20)",
+  "metrics": {
+    "ic": 0.005689036482608869,
+    "icir": 0.06996634087435405,
+    "mi": 0.005777053279737654,
+    "rank_ic": 0.013913526725094456,
+    "rank_icir": 0.20692552983033555
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.41818181818181815,
+    "top_quantile_annualized_excess_return": 0.06386328276791708,
+    "top_quantile_excess_return": 0.16538043429579652,
+    "top_quantile_max_drawdown": -0.03322306630560501,
+    "top_quantile_turnover": 0.005881688101158333
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Captures long-term cyclical trend phases by measuring trend strength via ADX and direction via DI crossovers. Strong phases generate sustained +1/-1 signals, smoothed to reflect regime persistence.",
+  "raw_metrics": {
+    "ic": -0.005689036482608869,
+    "icir": -0.06996634087435405,
+    "mi": 0.005777053279737654,
+    "rank_ic": -0.013913526725094456,
+    "rank_icir": -0.20692552983033555
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260720-053953-r6",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260720-053953-r6"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ts_adx(50) > 25 ? sign(PLUS_DI(50) - MINUS_DI(50)) : 0, then ema(20)",
+  "fe_formula": "ADX(50) > 25 ? sign(PLUS_DI(50) - MINUS_DI(50)) : 0, then ema(20)",
+  "lqtp_notes": "Unconverted: ['MINUS_DI', 'PLUS_DI']",
+  "fe_notes": "Unconverted: ['MINUS_DI', 'PLUS_DI']",
+  "source_formula": "ADX(50) > 25 ? sign(PLUS_DI(50) - MINUS_DI(50)) : 0, then EMA(20)"
+}

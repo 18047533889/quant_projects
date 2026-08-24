@@ -1,0 +1,98 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "079e8b4b7404ac9c02f28f9651a8a5a65e71e03c2982444e6dee4a4b74d9a2e7",
+  "candidate_ids": [
+    "g1_crossover_amc_g0_signed_path_efficiency_cycle_alpha_vol_as_c545826c",
+    "g2_crossover_amc_g0_signed_path_efficiency_cycle_g1_crossover_171dc92f"
+  ],
+  "code": "def factor_path_efficiency_tail_filtered(df):\n    \"\"\"Reward persistent directional paths while discounting fragile downside-shock regimes.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"].replace(0.0, np.nan)\n    net_move = close - close.shift(126)\n    path_length = close.diff().abs().rolling(126, min_periods=126).sum()\n    efficiency = net_move / path_length.replace(0.0, np.nan)\n    recent_path = close - close.shift(42)\n    recent_length = close.diff().abs().rolling(42, min_periods=42).sum()\n    recent_efficiency = recent_path / recent_length.replace(0.0, np.nan)\n    ret = close / close.shift(1) - 1.0\n    downside_tail = (-ret.clip(upper=0.0)).rolling(20, min_periods=20).max()\n    upside_tail = ret.clip(lower=0.0).rolling(20, min_periods=20).max()\n    baseline = ret.abs().rolling(20, min_periods=20).mean().clip(lower=1e-6)\n    downside_fragility = ((downside_tail - upside_tail) / baseline).clip(lower=0.0, upper=2.0)\n    signal = efficiency * recent_efficiency.abs() * (1.0 - 0.25 * downside_fragility)\n    df_copy[\"factor_path_efficiency_tail_filtered\"] = signal.replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_path_efficiency_tail_filtered\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": -0.001811208088835503,
+        "top_quantile_excess_return": -0.00429268254554116,
+        "top_quantile_max_drawdown": -0.21878448850133003,
+        "top_quantile_turnover": 0.17319148465884454
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_path_efficiency_tail_filtered",
+  "fitness_direction": -1,
+  "formula": "[(C_t-C_{t-126}) / sum_{126}|Delta C|] * |(C_t-C_{t-42}) / sum_{42}|Delta C|| * [1 - 0.25 * clip(max20(-r)^+ - max20(r^+), 0, 2) / max(mean20(|r|), 1e-6)]",
+  "metrics": {
+    "ic": 0.02325570367219206,
+    "icir": 0.1768253877577028,
+    "mi": 0.0154392730816717,
+    "rank_ic": 0.03385678738219906,
+    "rank_icir": 0.2245423262830914
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": -0.001811208088835503,
+    "top_quantile_excess_return": -0.00429268254554116,
+    "top_quantile_max_drawdown": -0.21878448850133003,
+    "top_quantile_turnover": 0.17319148465884454
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "The qualified parent mechanism remains primary: a signed long-horizon path-efficiency signal is strengthened when the recent path is also directional, preserving its payoff-oriented phase interpretation. The secondary parent contributes one bounded downside-tail fragility modifier that attenuates, rather than reverses, the signal when recent downside shocks materially exceed upside shocks. This targets predictive instability in fragile conditions without averaging unrelated mechanisms or collapsing the continuous raw signal.",
+  "raw_metrics": {
+    "ic": -0.02325570367219206,
+    "icir": -0.1768253877577028,
+    "mi": 0.0154392730816717,
+    "rank_ic": -0.03385678738219906,
+    "rank_icir": -0.2245423262830914
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260807-092149-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260807-092149-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "[(C_t-C_{t-126}) / sum_{126}|Delta C|] * |(C_t-C_{t-42}) / sum_{42}|Delta C|| * [1 - 0.25 * clip(max20(-r)^+ - max20(r^+), 0, 2) / max(mean20(|r|), 1e-6)]",
+  "fe_formula": "[(C_t-C_{t-126}) / sum_{126}|Delta C|] * |(C_t-C_{t-42}) / sum_{42}|Delta C|| * [1 - 0.25 * clip(max20(-r)^+ - max20(r^+), 0, 2) / flex_max(mean20(|r|), 1e-6)]",
+  "lqtp_notes": "Textual non-executable: C (close shorthand in text, not executable); Unconverted: ['max20', 'mean20']",
+  "fe_notes": "Textual non-executable: C (close shorthand in text, not executable); Unconverted: ['max20', 'mean20']",
+  "source_formula": "[(C_t-C_{t-126}) / sum_{126}|Delta C|] * |(C_t-C_{t-42}) / sum_{42}|Delta C|| * [1 - 0.25 * clip(max20(-r)^+ - max20(r^+), 0, 2) / max(mean20(|r|), 1e-6)]"
+}

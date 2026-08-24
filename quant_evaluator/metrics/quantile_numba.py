@@ -205,9 +205,9 @@ def assign_quantiles_numba(
     Returns:
         Quantile assignments (0 to n_quantiles-1), or -1 for NaN
     """
-    if not NUMBA_AVAILABLE:
-        raise RuntimeError("Numba is not available. Install with: pip install numba")
-
+    # Numba is optional: when absent, the no-op ``jit`` decorator and
+    # ``prange``->``range`` alias above make the JIT kernels run as plain
+    # Python, so this still returns a correct result (just slower).
     # Validate tie policy
     from quant_evaluator.contracts.quantile_policy import validate_tie_policy
     policy = validate_tie_policy(method)
@@ -245,9 +245,9 @@ def compute_quantile_returns_numba(
         quantile_returns: shape (T, n_quantiles, F)
         quantile_counts: shape (T, n_quantiles, F)
     """
-    if not NUMBA_AVAILABLE:
-        raise RuntimeError("Numba is not available. Install with: pip install numba")
-
+    # Numba is optional: when absent, the no-op ``jit`` decorator and
+    # ``prange``->``range`` alias above make the JIT kernels run as plain
+    # Python, so this still returns a correct result (just slower).
     from quant_evaluator.contracts.quantile_policy import validate_tie_policy
     policy = validate_tie_policy(method)
 

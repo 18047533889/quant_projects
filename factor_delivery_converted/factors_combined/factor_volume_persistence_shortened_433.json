@@ -1,0 +1,98 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "0580f6263247aaa4719abaad42d0520d95488518832ec59952187dd44c4125fe",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_crossover_then_mutation_alpha_stability_0_0_c_56c98c4a"
+  ],
+  "code": "def factor_volume_persistence_shortened(df):\n    df_copy = df.copy()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    factor = vol_ratio.rolling(20, min_periods=10).mean()\n    factor.name = \"factor_volume_persistence_shortened\"\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.696969696969697,
+        "top_quantile_annualized_excess_return": 0.020517835099396864,
+        "top_quantile_excess_return": 0.05931884846262747,
+        "top_quantile_max_drawdown": -0.10279964852281775,
+        "top_quantile_turnover": 0.09830503987465408
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.09313925103512427,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.06860748964875735,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_volume_persistence_shortened",
+  "fitness_direction": -1,
+  "formula": "rolling mean of vol_ratio over 20 days",
+  "metrics": {
+    "ic": 0.010142258458625753,
+    "icir": 0.09313925103512427,
+    "mi": 0.013799987565384697,
+    "rank_ic": 0.028123558722886268,
+    "rank_icir": 0.26649223046601905
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.696969696969697,
+    "top_quantile_annualized_excess_return": 0.020517835099396864,
+    "top_quantile_excess_return": 0.05931884846262747,
+    "top_quantile_max_drawdown": -0.10279964852281775,
+    "top_quantile_turnover": 0.09830503987465408
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Mutates parent by removing the style gate and using a single 20-day persistence window. This simplification makes the signal more uniform and responsive, targeting the parent's weak IC and ICIR while preserving the core volume persistence mechanism and positive payoff. The shorter window captures evolving trading activity more directly, improving linear correlation with future returns.",
+  "raw_metrics": {
+    "ic": -0.010142258458625753,
+    "icir": -0.09313925103512427,
+    "mi": 0.013799987565384697,
+    "rank_ic": -0.028123558722886268,
+    "rank_icir": -0.26649223046601905
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-20260730-055319-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-20260730-055319-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "rolling mean of vol_ratio over 20 days",
+  "fe_formula": "rolling mean of vol_ratio over 20 days",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "rolling mean of vol_ratio over 20 days"
+}

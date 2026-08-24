@@ -1,0 +1,96 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "89f52a942bf2a7c78feacd679ae913566431d5e48c735ad5daf5ccced39dafb6",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_drawn_0_1_g1_mutation_vol_asym_001_0a23a86d_4be4ccef"
+  ],
+  "code": "def factor_downside_vol_persistence_momentum_gated_longer(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    pos_ret = ret.clip(lower=0)\n    neg_ret = ret.clip(upper=0)\n    downside_vol = neg_ret.rolling(40, min_periods=40).std()\n    upside_vol = pos_ret.rolling(40, min_periods=40).std()\n    raw_asym = downside_vol - upside_vol\n    high_mom = df_copy[\"style_gate_momentum_high\"] > 0\n    factor = np.where(high_mom, raw_asym * 0.8, raw_asym)\n    df_copy[\"factor_downside_vol_persistence_momentum_gated_longer\"] = factor\n    return df_copy[\"factor_downside_vol_persistence_momentum_gated_longer\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.008701237198870393,
+        "top_quantile_excess_return": 0.023794153712702437,
+        "top_quantile_max_drawdown": -0.25736336513084224,
+        "top_quantile_turnover": 0.12887588617720525
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_downside_vol_persistence_momentum_gated_longer",
+  "fitness_direction": 1,
+  "formula": "downside_vol = rolling_std(neg_returns, 40); upside_vol = rolling_std(pos_returns, 40); raw = downside_vol - upside_vol; if high_momentum then raw * 0.8 else raw",
+  "metrics": {
+    "ic": 0.016749673302562943,
+    "icir": 0.1304931775372457,
+    "mi": 0.025323173328358095,
+    "rank_ic": 0.040420015352953025,
+    "rank_icir": 0.3163712295144338
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.008701237198870393,
+    "top_quantile_excess_return": 0.023794153712702437,
+    "top_quantile_max_drawdown": -0.25736336513084224,
+    "top_quantile_turnover": 0.12887588617720525
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Mutation of the crossover parent to improve payoff stability. Using a longer 40-day window for volatility asymmetry reduces noise and produces a more persistent signal, which improves the consistency of the leverage effect across market cycles. The momentum gate attenuation is slightly reduced to 0.8 (from 0.7) to allow more signal during high-momentum regimes, as the longer window already provides smoother asymmetry estimates. This targets the cost-adjusted payoff bottleneck while preserving the core economic mechanism and the regime-aware scaling.",
+  "raw_metrics": {
+    "ic": 0.016749673302562943,
+    "icir": 0.1304931775372457,
+    "mi": 0.025323173328358095,
+    "rank_ic": 0.040420015352953025,
+    "rank_icir": 0.3163712295144338
+  },
+  "required_columns": [
+    "close",
+    "style_gate_momentum_high"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260719-143332-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260719-143332-r1"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "style_gate_momentum_high identifies high-momentum regimes where volatility asymmetry is weaker; the signal is scaled down to avoid overstating the factor during strong uptrends.",
+  "style_gates_used": [
+    "style_gate_momentum_high"
+  ],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "downside_vol = ts_std(40, neg_returns); upside_vol = ts_std(40, pos_returns); raw = downside_vol - upside_vol; if high_momentum then raw * 0.8 else raw",
+  "fe_formula": "downside_vol = ts_std(40, neg_returns); upside_vol = ts_std(40, pos_returns); raw = downside_vol - upside_vol; if high_momentum then raw * 0.8 else raw",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "downside_vol = rolling_std(neg_returns, 40); upside_vol = rolling_std(pos_returns, 40); raw = downside_vol - upside_vol; if high_momentum then raw * 0.8 else raw"
+}

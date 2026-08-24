@@ -1,0 +1,128 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "b_id": "B9",
+  "c_id": "C902",
+  "calculation_fingerprint": "9cad6866e5a6ff5348f01314fd2bb92d41d7ddb29899d8f60e71cbd192b15332",
+  "candidate_ids": [
+    "C902_gen0_cand_vol_dryup_depth_tightness"
+  ],
+  "code": "def factor_dryup_depth_range_tightness_5_60_volume(df):\n    '''Idea: Volume dry-up inside a compressed price range signals absorption and delayed expansion/breakout.\n    Logic: Shortfall of 5-day average volume vs 60-day average measures participation shrinkage; 1 minus the ratio of 10-day to 60-day close range measures price consolidation. Their product is high when volume is unusually dry and price is unusually tight.\n    Sub-mechanism tags: volume_dry_up, range_compression, absorption_capacity.\n    Formula: dry = 1 - SMA(vol,5)/SMA(vol,60); tight = 1 - Rng(close,10)/Rng(close,60); signal = dry * tight.'''\n    df_copy = df.copy()\n    vol_ma5 = df_copy['volume'].rolling(5, min_periods=5).mean()\n    vol_ma60 = df_copy['volume'].rolling(60, min_periods=60).mean()\n    dry_up = 1.0 - vol_ma5 / vol_ma60.replace(0.0, np.nan)\n    high10 = df_copy['close'].rolling(10, min_periods=10).max()\n    low10 = df_copy['close'].rolling(10, min_periods=10).min()\n    high60 = df_copy['close'].rolling(60, min_periods=60).max()\n    low60 = df_copy['close'].rolling(60, min_periods=60).min()\n    tightness = 1.0 - (high10 - low10) / (high60 - low60).replace(0.0, np.nan)\n    signal = dry_up * tightness\n    return signal.rename('factor_dryup_depth_range_tightness_5_60_volume')\n",
+  "codegen_skill": "micro-active-agent-codegen",
+  "cross_sectional_rationale": "Same-day cross-sectional rank makes the dry-up/compression state comparable across stocks with very different volume scales, consistent with relative absorption capacity.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": -0.02852170012292321,
+        "top_quantile_excess_return": -0.07351720650081706,
+        "top_quantile_max_drawdown": -0.12748702998510286,
+        "top_quantile_turnover": 0.15587020475032537
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_dryup_depth_range_tightness_5_60_volume",
+  "fitness_direction": 1,
+  "formula": "dry = 1 - SMA(vol,5)/SMA(vol,60); tight = 1 - Rng(close,10)/Rng(close,60); signal = dry * tight",
+  "manual_admission": null,
+  "metrics": {
+    "ic": 0.013167340129725433,
+    "icir": 0.1267774205151075,
+    "mi": 0.011492577306557727,
+    "rank_ic": 0.03704887178497503,
+    "rank_icir": 0.31130896163839605
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": -0.02852170012292321,
+    "top_quantile_excess_return": -0.07351720650081706,
+    "top_quantile_max_drawdown": -0.12748702998510286,
+    "top_quantile_turnover": 0.15587020475032537
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.017084612325056342,
+    "icir": 0.15649015990252713,
+    "mi": 0.015760765255514286,
+    "rank_ic": 0.03704887178497503,
+    "rank_icir": 0.31130896163839605
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": -0.02852170012292321,
+    "top_quantile_excess_return": -0.07351720650081706,
+    "top_quantile_max_drawdown": -0.12748702998510286,
+    "top_quantile_turnover": 0.15587020475032537
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.017084612325056342,
+    "icir": 0.15649015990252713,
+    "mi": 0.015760765255514286,
+    "rank_ic": 0.03704887178497503,
+    "rank_icir": 0.31130896163839605
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Measures the depth of volume dry-up (5-day vs 60-day volume shortfall) together with close-range compression (10-day vs 60-day). Extreme dryness inside a tight range indicates absorption capacity / seller exhaustion; the raw signal is stock-specific, and same-day cross-sectional rank makes relative dryness comparable.",
+  "raw_metrics": {
+    "ic": 0.013167340129725433,
+    "icir": 0.1267774205151075,
+    "mi": 0.011492577306557727,
+    "rank_ic": 0.03704887178497503,
+    "rank_icir": 0.31130896163839605
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-dynamic-evo-optimized-v3-20260812-072416-r1",
+  "source_run_ids": [
+    "formal-dynamic-evo-optimized-v3-20260812-072416-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.5376933709064688,
+    "pre_transform_top_quantile_excess_return": -0.07351720650081706,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.4997951713747617,
+    "transformed_top_quantile_excess_return": -0.07351720650081706
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "dry = 1 - ts_mean(5, vol)/ts_mean(60, vol); tight = 1 - Rng(close,10)/Rng(close,60); signal = dry * tight",
+  "fe_formula": "dry = 1 - ts_mean(5, vol)/ts_mean(60, vol); tight = 1 - Rng(close,10)/Rng(close,60); signal = dry * tight",
+  "lqtp_notes": "Unconverted: ['Rng']",
+  "fe_notes": "Unconverted: ['Rng']",
+  "source_formula": "dry = 1 - SMA(vol,5)/SMA(vol,60); tight = 1 - Rng(close,10)/Rng(close,60); signal = dry * tight"
+}

@@ -1,0 +1,98 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "5c438278ab22c9e7171d379bbd170bb6295665ec14802f36b1a439838eded75a",
+  "candidate_ids": [
+    "g2_mutation_alpha_vol_asym_0002_beab7417"
+  ],
+  "code": "def factor_overnight_intraday_downside_smoothing(df):\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    down_overnight = (-overnight_ret.clip(upper=0.0)).rolling(18, min_periods=18).mean()\n    up_intraday = intraday_ret.clip(lower=0.0).rolling(18, min_periods=18).mean()\n    range_ = (df_copy[\"high\"] - df_copy[\"low\"]).rolling(18, min_periods=18).mean()\n    close_vol = df_copy[\"close\"].pct_change().abs().rolling(18, min_periods=18).mean()\n    asym = (down_overnight + 0.5 * close_vol) / (up_intraday + range_ + 1e-12)\n    df_copy[\"factor_overnight_intraday_downside_smoothing\"] = np.log1p(asym)\n    return df_copy[\"factor_overnight_intraday_downside_smoothing\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.0710702863675341,
+        "top_quantile_excess_return": 0.21209776295299565,
+        "top_quantile_max_drawdown": -0.11301033447018338,
+        "top_quantile_turnover": 0.04103422248558727
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.00906307900300974,
+      "field": "ic",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.09369209969902602,
+      "threshold": 0.01
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_overnight_intraday_downside_smoothing",
+  "fitness_direction": 1,
+  "formula": "log(1 + (mean(-min(overnight_ret,0)) + 0.5*mean(abs(close_ret))) / (mean(max(intraday_ret,0)) + mean(high-low)))",
+  "metrics": {
+    "ic": 0.00906307900300974,
+    "icir": 0.11038850587874928,
+    "mi": 0.009605669520734494,
+    "rank_ic": 0.016444408924923527,
+    "rank_icir": 0.13497200979418725
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.0710702863675341,
+    "top_quantile_excess_return": 0.21209776295299565,
+    "top_quantile_max_drawdown": -0.11301033447018338,
+    "top_quantile_turnover": 0.04103422248558727
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Preserves the parent's asymmetric overnight-versus-intraday downside mechanism, but smooths the noise by lengthening the lookback and replacing the more volatile intraday volatility denominator with the average daily range. The intent is to keep the same economic story: stocks with sustained negative overnight pressure and weak intraday recovery should score higher, while reducing spike sensitivity that likely hurt robustness and payoff thickness in the prior child.",
+  "raw_metrics": {
+    "ic": 0.00906307900300974,
+    "icir": 0.11038850587874928,
+    "mi": 0.009605669520734494,
+    "rank_ic": 0.016444408924923527,
+    "rank_icir": 0.13497200979418725
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-20260729-071718-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-20260729-071718-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "log(1 + (ts_mean(-min(overnight_ret,0)) + 0.5*ts_mean(abs(close_ret))) / (ts_mean(max(intraday_ret,0)) + ts_mean(high-low)))",
+  "fe_formula": "log(1 + (ts_mean(-min(overnight_ret,0))t, 0)) + 0.5*ts_mean(abs(close_ret))) / (ts_mean(max(intraday_ret,0))t, 0)) + ts_mean(high-low)))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "log(1 + (mean(-min(overnight_ret,0)) + 0.5*mean(abs(close_ret))) / (mean(max(intraday_ret,0)) + mean(high-low)))"
+}

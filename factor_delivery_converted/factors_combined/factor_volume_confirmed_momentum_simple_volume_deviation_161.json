@@ -1,0 +1,51 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "16e8da11b3c1f3cade2939ae5622a7cf89acf9d733869413b59a791c6f013dc4",
+  "candidate_ids": [
+    "APVC-MUT-002"
+  ],
+  "code": "def factor_volume_confirmed_momentum_simple_volume_deviation(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change(10)\n    vol_mean = df_copy['volume'].rolling(20).mean()\n    vol_dev = df_copy['volume'] / vol_mean.replace(0, np.nan) - 1\n    factor = ret * vol_dev\n    factor.name = \"factor_volume_confirmed_momentum_simple_volume_deviation\"\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_volume_confirmed_momentum_simple_volume_deviation",
+  "fitness_direction": -1,
+  "formula": "factor = close_10d_return * (volume / rolling_20d_mean_volume - 1)",
+  "metrics": {
+    "ic": 0.022887091134392964,
+    "icir": 0.22549464165303199,
+    "mi": 0.033829118551715,
+    "rank_ic": 0.02337647202563358,
+    "rank_icir": 0.258527386208539
+  },
+  "rationale": "Mutation of APVC-MUT-001: replaces robust z-score (median/MAD) with a simple volume deviation ratio (volume / rolling mean - 1) to simplify and reduce computational overhead while preserving the core price-volume coherence mechanism. The parent strength in RankIC is expected to be maintained because the relative ordering of the product remains similar, while IC may benefit from less aggressive clipping of volume extremes.",
+  "raw_metrics": {
+    "ic": -0.022887091134392964,
+    "icir": -0.22549464165303199,
+    "mi": 0.033829118551715,
+    "rank_ic": -0.02337647202563358,
+    "rank_icir": -0.258527386208539
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260622-103436-r4",
+  "source_run_ids": [
+    "formal-mvp-loop-20260622-103436-r4"
+  ],
+  "lqtp_formula": "factor = close_10d_return * (volume / rolling_20d_mean_volume - 1)",
+  "fe_formula": "factor = close_10d_return * (volume / rolling_20d_mean_volume - 1)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "factor = close_10d_return * (volume / rolling_20d_mean_volume - 1)"
+}

@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "b114ee777411548614785a9ac112c71055f7c43eb9090ccf3c385d7f338e1977",
+  "candidate_ids": [
+    "crash_vol_ratio_asym_cross001"
+  ],
+  "code": "def factor_crash_vol_ratio_asym(df):\n    df_copy = df.copy()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(10, min_periods=10).mean()\n    up_range = np.maximum(0, df_copy['close'] - df_copy['open'])\n    down_range = np.maximum(0, df_copy['open'] - df_copy['close'])\n    total_range = df_copy['high'] - df_copy['low']\n    ewma_up = up_range.ewm(span=10, min_periods=10).mean()\n    ewma_down = down_range.ewm(span=10, min_periods=10).mean()\n    ewma_total = total_range.ewm(span=10, min_periods=10).mean()\n    asym = (ewma_up - ewma_down) / ewma_total.replace(0, np.nan)\n    factor = -vol_ratio * asym\n    df_copy['factor_crash_vol_ratio_asym'] = factor\n    return df_copy['factor_crash_vol_ratio_asym']",
+  "factor_name": "factor_crash_vol_ratio_asym",
+  "fitness_direction": 1,
+  "formula": "- (volume / rolling_mean(volume, 10)) * (ewma(up_range,10) - ewma(down_range,10)) / ewma(total_range,10)",
+  "metrics": {
+    "ic": 0.020205024290762572,
+    "icir": 0.20392209525641428,
+    "mi": 0.007996822725381492,
+    "rank_ic": 0.03665034104645548,
+    "rank_icir": 0.301769213930153
+  },
+  "rationale": "Crossover of crash_vol_asym_001 and lag002_mut1. Preserves the crash precursor direction (negative sign) and EWMA asymmetry mechanism from crash_vol_asym_001. Borrows a lightweight 10-day volume ratio (non-ranked) from lag002_mut1 to replace the ranked 20-day volume ratio, simplifying the volume component. Aims to improve IC while maintaining RankIC and MI strength from parents.",
+  "raw_metrics": {
+    "ic": 0.020205024290762572,
+    "icir": 0.20392209525641428,
+    "mi": 0.007996822725381492,
+    "rank_ic": 0.03665034104645548,
+    "rank_icir": 0.301769213930153
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260615-064629-r3",
+  "source_run_ids": [
+    "formal-mvp-loop-20260615-064629-r3"
+  ],
+  "lqtp_formula": "- (volume / ts_mean(10, volume)) * (ema(10, up_range) - ema(10, down_range)) / ema(10, total_range)",
+  "fe_formula": "- (volume / ts_mean(10, volume)) * (ema(10, up_range) - ema(10, down_range)) / ema(10, total_range)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "- (volume / rolling_mean(volume, 10)) * (ewma(up_range,10) - ewma(down_range,10)) / ewma(total_range,10)"
+}

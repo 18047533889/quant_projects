@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "8a35ce72fce64652b6e6509bdcce9f4f4f646fa6c0b888e4aa6de9e091dae6c1",
+  "candidate_ids": [
+    "mut_vol_gate_cont_002"
+  ],
+  "code": "def factor_vol_gated_momentum_v2(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    high = df_copy['high']\n    low = df_copy['low']\n    volume = df_copy['volume']\n    # 21-day momentum\n    mom = close / close.shift(21) - 1\n    # 21-day ATR normalized by close for volatility gate\n    atr = pd.Series(talib.ATR(high, low, close, timeperiod=21), index=df_copy.index)\n    vol_gate = atr / close\n    # Volume ratio to 21-day SMA (changed from 63-day median for shorter-term capture)\n    vol_sma = volume.rolling(21, min_periods=21).mean()\n    vol_ratio = volume / vol_sma.replace(0, np.nan)\n    # Core: momentum dampened by volatility, multiplied by continuous volume confirmation\n    factor = mom * (1 / (1 + vol_gate)) * vol_ratio\n    df_copy['factor_vol_gated_momentum_v2'] = factor\n    return df_copy['factor_vol_gated_momentum_v2']",
+  "factor_name": "factor_vol_gated_momentum_v2",
+  "fitness_direction": -1,
+  "formula": "mom = close/shift(close,21)-1; atr = ATR(21); vol_gate = atr/close; vol_ratio = volume / rolling_mean(volume,21); factor = mom * (1/(1+vol_gate)) * vol_ratio",
+  "metrics": {
+    "ic": 0.022225218923484624,
+    "icir": 0.18906231120304082,
+    "mi": 0.029156075556483252,
+    "rank_ic": 0.032632189827875684,
+    "rank_icir": 0.2432885813980762
+  },
+  "rationale": "Mutation of mut_vol_gate_cont_001: preserve the volatility-gated momentum core that provides consistent RankICIR and ICIR, but change the volume modifier from a 63-day median ratio to a 21-day SMA ratio to capture shorter-term volume surges more promptly. This targets improving IC and MI while keeping the core mechanism unchanged.",
+  "raw_metrics": {
+    "ic": -0.022225218923484624,
+    "icir": -0.18906231120304082,
+    "mi": 0.029156075556483252,
+    "rank_ic": -0.032632189827875684,
+    "rank_icir": -0.2432885813980762
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260615-051510-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260615-051510-r2"
+  ],
+  "lqtp_formula": "mom = close/delay(close, 21)-1; atr = ts_atr(21); vol_gate = atr/close; vol_ratio = volume / ts_mean(21, volume); factor = mom * (1/(1+vol_gate)) * vol_ratio",
+  "fe_formula": "mom = close/ts_delay(close, 21)-1; atr = ATR(21); vol_gate = atr/close; vol_ratio = volume / ts_mean(21, volume); factor = mom * (1/(1+vol_gate)) * vol_ratio",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "mom = close/shift(close,21)-1; atr = ATR(21); vol_gate = atr/close; vol_ratio = volume / rolling_mean(volume,21); factor = mom * (1/(1+vol_gate)) * vol_ratio"
+}

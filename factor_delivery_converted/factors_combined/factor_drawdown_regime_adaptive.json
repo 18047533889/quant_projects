@@ -1,0 +1,100 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "b389bd29f113922b6f942fd52aa312198017f1441a3ac93d6b74cd09c6a2b240",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_crossover_alpha_drawdown_0_1_amc_002_fbd03a44_0faff3df"
+  ],
+  "code": "def factor_drawdown_regime_adaptive(df):\n    df_copy = df.copy()\n    high_regime = df_copy['style_gate_resvol_high'] > 0\n    rolling_max_fast = df_copy['close'].rolling(5, min_periods=5).max()\n    drawdown_fast = (df_copy['close'] / rolling_max_fast) - 1.0\n    high = df_copy['high'].values.astype(np.float64)\n    low = df_copy['low'].values.astype(np.float64)\n    close = df_copy['close'].values.astype(np.float64)\n    atr_fast = pd.Series(talib.ATR(high, low, close, timeperiod=5), index=df_copy.index).replace(0.0, np.nan)\n    normalized_dd_fast = drawdown_fast / atr_fast\n    stress_fast = normalized_dd_fast.rolling(5, min_periods=5).sum()\n    rolling_max_slow = df_copy['close'].rolling(20, min_periods=20).max()\n    drawdown_slow = (df_copy['close'] / rolling_max_slow) - 1.0\n    atr_slow = pd.Series(talib.ATR(high, low, close, timeperiod=20), index=df_copy.index).replace(0.0, np.nan)\n    normalized_dd_slow = drawdown_slow / atr_slow\n    stress_slow = normalized_dd_slow.rolling(5, min_periods=5).sum()\n    factor = np.where(high_regime, stress_fast, stress_slow)\n    df_copy['factor_drawdown_regime_adaptive'] = factor\n    return df_copy['factor_drawdown_regime_adaptive']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.09605167246577895,
+        "top_quantile_excess_return": 0.2972170316843239,
+        "top_quantile_max_drawdown": -0.07854601379503556,
+        "top_quantile_turnover": 0.08418112149320277
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_excess_percentile",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_percentile"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_drawdown_regime_adaptive",
+  "fitness_direction": -1,
+  "formula": "stress_fast = sum((close/rolling_max(close,5)-1)/ATR(5),5); stress_slow = sum((close/rolling_max(close,20)-1)/ATR(20),5); factor = if high_resvol then stress_fast else stress_slow",
+  "metrics": {
+    "ic": 0.010306979209274574,
+    "icir": 0.13864575805466395,
+    "mi": 0.009937992594608147,
+    "rank_ic": 0.03601503724764704,
+    "rank_icir": 0.2862397270499748
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.09605167246577895,
+    "top_quantile_excess_return": 0.2972170316843239,
+    "top_quantile_max_drawdown": -0.07854601379503556,
+    "top_quantile_turnover": 0.08418112149320277
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_percentile",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Mutation of volatility-adjusted drawdown stress by replacing the skew-weight modifier with a regime-adaptive window switch based on style_gate_resvol_high. In high residual volatility regimes, a shorter 5-day window captures rapid drawdowns more sensitively, aiming to improve rank differentiation. In low volatility regimes, a longer 20-day window reduces noise and preserves the core payoff mechanism. This targets the parent's rank IC weakness while maintaining the strong payoff evidence.",
+  "raw_metrics": {
+    "ic": -0.010306979209274574,
+    "icir": -0.13864575805466395,
+    "mi": 0.009937992594608147,
+    "rank_ic": -0.03601503724764704,
+    "rank_icir": -0.2862397270499748
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "style_gate_resvol_high"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260720-002200-r4",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260720-002200-r4"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "style_gate_resvol_high gates the lookback window of the drawdown and ATR calculation. In high residual volatility regimes, a shorter window (5 days) makes the drawdown stress signal more responsive to rapid price declines, potentially improving cross-sectional ordering by capturing transient stress events. In low residual volatility regimes, a longer window (20 days) provides a smoother and more persistent stress measure, preserving the stable payoff profile.",
+  "style_gates_used": [
+    "style_gate_resvol_high"
+  ],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "stress_fast = ts_sum(5, (close/rolling_max(close,5)-1)/ATR(5)) stress_slow = ts_sum(5, (close/rolling_max(close,20)-1)/ATR(20)) factor = if high_resvol then stress_fast else stress_slow",
+  "fe_formula": "stress_fast = ts_sum(5, (close/rolling_max(close,5)-1)/ATR(5))ress_slow = ts_sum(5, (close/rolling_max(close,20)-1)/ATR(20))ctor = if high_resvol then stress_fast else stress_slow",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "stress_fast = sum((close/rolling_max(close,5)-1)/ATR(5),5); stress_slow = sum((close/rolling_max(close,20)-1)/ATR(20),5); factor = if high_resvol then stress_fast else stress_slow"
+}

@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "f4617633bc3e6cf2c6033ceaa11b87f595edba7d1b82a29c5403876564c9d5f4",
+  "candidate_ids": [
+    "hp-crossover-001"
+  ],
+  "code": "def factor_herding_pressure(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_chg = df_copy['volume'].pct_change()\n    rank_ret = ret.rank()\n    rank_vol = vol_chg.rank()\n    rank_corr = rank_ret.rolling(20).corr(rank_vol)\n    imbalance = (df_copy['close'] - df_copy['open']) * df_copy['volume']\n    ema_imb = imbalance.ewm(span=5).mean()\n    std_imb = imbalance.rolling(20).std()\n    dp = ema_imb / (std_imb + 1e-10)\n    rank_dp = dp.rank()\n    factor = rank_corr * rank_dp\n    factor.name = 'factor_herding_pressure'\n    return factor",
+  "factor_name": "factor_herding_pressure",
+  "fitness_direction": -1,
+  "formula": "rank_corr(ret, vol_chg, 20) * rank(ema_imbalance / std_imbalance)",
+  "metrics": {
+    "ic": 0.014799536689397623,
+    "icir": 0.175971373088291,
+    "mi": 0.005285288154551537,
+    "rank_ic": 0.03201329412601074,
+    "rank_icir": 0.3517215119989387
+  },
+  "rationale": "Combines herding consensus (rank correlation of returns and volume changes over 20 days) with directional pressure (normalized dollar imbalance) via rank multiplication. The herding component captures agreement between price and volume direction; the pressure component adds the magnitude and sign of order flow. Multiplying their ranks amplifies signals when both are aligned and strong, enhancing nonlinear mutual information while preserving the rank stability from the herding parent.",
+  "raw_metrics": {
+    "ic": -0.014799536689397623,
+    "icir": -0.175971373088291,
+    "mi": 0.005285288154551537,
+    "rank_ic": -0.03201329412601074,
+    "rank_icir": -0.3517215119989387
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260610-084536-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260610-084536-r2"
+  ],
+  "lqtp_formula": "rank_corr(ret, vol_chg, 20) * cs_rank(ema_imbalance / std_imbalance)",
+  "fe_formula": "rank_corr(ret, vol_chg, 20) * rank(ema_imbalance / std_imbalance)",
+  "lqtp_notes": "Unconverted: ['rank_corr']",
+  "fe_notes": "Unconverted: ['rank_corr']",
+  "source_formula": "rank_corr(ret, vol_chg, 20) * rank(ema_imbalance / std_imbalance)"
+}

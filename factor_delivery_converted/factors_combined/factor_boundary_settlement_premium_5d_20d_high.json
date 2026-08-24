@@ -1,0 +1,101 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "b_id": "B3",
+  "c_id": "C301",
+  "calculation_fingerprint": "c1b987b468ce4b14cb82d22b9db7152a86a3697d8b8a90f6ebcaf2d094175575",
+  "candidate_ids": [
+    "C301_gen0_boundary_settlement_premium_5d_20d_high"
+  ],
+  "code": "def factor_boundary_settlement_premium_5d_20d_high(df):\n    \"\"\"Idea: Where closes settle relative to the broken 20-day high reveals whether the new level is being held; closes that finish well above the old boundary in the day's range indicate stronger acceptance.\n    Logic: For each day with close above the prior 20-day high, express the close minus that resistance in units of the day's high-low range. Average this settlement premium over 5 days, and assign zero on days when price is not above the old boundary.\n    Formula: mean_5( I(close > res20) * (close - res20) / (high - low) )\n    Sub-mechanism tags: settlement premium, upper-bound hold, close-location relative to resistance.\n    \"\"\"\n    df_copy = df.copy()\n    prior_high = df_copy[\"high\"].shift(1).rolling(20).max()\n    day_range = (df_copy[\"high\"] - df_copy[\"low\"]).replace(0.0, np.nan)\n    settlement = (df_copy[\"close\"] - prior_high) / day_range\n    premium = np.where(df_copy[\"close\"] > prior_high, settlement, 0.0)\n    df_copy[\"factor_boundary_settlement_premium_5d_20d_high\"] = pd.Series(premium, index=df_copy.index).rolling(5).mean()\n    return df_copy[\"factor_boundary_settlement_premium_5d_20d_high\"]",
+  "codegen_skill": "micro-active-agent-codegen",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "guidance_inconsistent": false,
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.7333333333333333,
+        "top_quantile_annualized_excess_return": -0.0003288186082762712,
+        "top_quantile_excess_return": -0.0009183334996568648,
+        "top_quantile_max_drawdown": -0.17699181248382356,
+        "top_quantile_turnover": 0.040529351166518894
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first",
+    "transform_applied": false
+  },
+  "factor_name": "factor_boundary_settlement_premium_5d_20d_high",
+  "fitness_direction": -1,
+  "formula": "mean_5( I(close > res20) * (close - res20) / (high - low) )",
+  "manual_admission": null,
+  "metrics": {
+    "ic": 0.02174224670206125,
+    "icir": 0.2913926745684979,
+    "mi": 0.00872918523596411,
+    "rank_ic": 0.034097662301539426,
+    "rank_icir": 0.36326788780471986
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7333333333333333,
+    "top_quantile_annualized_excess_return": -0.0003288186082762712,
+    "top_quantile_excess_return": -0.0009183334996568648,
+    "top_quantile_max_drawdown": -0.17699181248382356,
+    "top_quantile_turnover": 0.040529351166518894
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "This factor focuses on where closes settle relative to the broken 20-day high rather than on the breakout move itself. A close far above the old boundary relative to that day's trading range signals strong acceptance of the new level, while a close hugging the boundary signals a weak hold. Averaging over five days makes the signal a durable settlement premium.",
+  "raw_metrics": {
+    "ic": -0.02174224670206125,
+    "icir": -0.2913926745684979,
+    "mi": 0.00872918523596411,
+    "rank_ic": -0.034097662301539426,
+    "rank_icir": -0.36326788780471986
+  },
+  "required_columns": [
+    "high",
+    "low",
+    "close"
+  ],
+  "run_id": "formal-routing-penalty-xalpha-light-v2-20260817-093932-r1",
+  "source_run_ids": [
+    "formal-routing-penalty-xalpha-light-v2-20260817-093932-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ts_mean(5, I(close > res20) * (close - res20) / (high - low))",
+  "fe_formula": "ts_mean(5, I(close > res20) * (close - res20) / (high - low))",
+  "lqtp_notes": "Unconverted: ['I']",
+  "fe_notes": "Unconverted: ['I']",
+  "source_formula": "mean_5( I(close > res20) * (close - res20) / (high - low) )"
+}

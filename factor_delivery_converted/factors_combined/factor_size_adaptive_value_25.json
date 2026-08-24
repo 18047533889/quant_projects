@@ -1,0 +1,122 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "4ea375f36107745055d4e675fb19920c02f7b51b2c0cdeef9dc6705dfe04eccb",
+  "candidate_ids": [
+    "A_001"
+  ],
+  "code": "def factor_size_adaptive_value(df):\n    df_copy = df.copy()\n    # Small cap: book yield with leverage penalty\n    book_yield = 1.0 / df_copy[\"pb_lf\"].replace(0, np.nan)\n    leverage_penalty = 1.0 - df_copy[\"debttoassets\"] / 100.0\n    leverage_penalty = leverage_penalty.clip(0, 1)\n    small_value = book_yield * leverage_penalty\n    # Large cap: earnings yield with profitability boost\n    earnings_yield = 1.0 / df_copy[\"pe_ttm\"].replace(0, np.nan)\n    quality = df_copy[\"roe_ttm2\"] / 100.0\n    large_value = earnings_yield * (1.0 + quality)\n    # Condition on size regime\n    is_small = df_copy[\"style_gate_size_small\"] == 1\n    is_large = df_copy[\"style_gate_size_large\"] == 1\n    # Default: use large value for other regimes (e.g., mid-cap)\n    signal = large_value.copy()\n    signal[is_small] = small_value[is_small]\n    signal.name = 'factor_size_adaptive_value'\n    return signal",
+  "cross_sectional_rationale": "Value signals are inherently cross-sectional; ranking ensures comparability across assets.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.8787878787878788,
+        "top_quantile_annualized_excess_return": 0.19888061608130725,
+        "top_quantile_excess_return": 0.6839318896570763,
+        "top_quantile_max_drawdown": -0.19876444080046307,
+        "top_quantile_turnover": 0.028895313335257952
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_size_adaptive_value",
+  "fitness_direction": 1,
+  "formula": "If small-cap: (1/PB) * (1 - Debt/100); else: (1/PE) * (1 + ROE/100)",
+  "metrics": {
+    "ic": 0.016079620545058935,
+    "icir": 0.1893322279535779,
+    "mi": 0.00990930189331607,
+    "rank_ic": 0.030903772620667184,
+    "rank_icir": 0.30190845706973696
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8787878787878788,
+    "top_quantile_annualized_excess_return": 0.19888061608130725,
+    "top_quantile_excess_return": 0.6839318896570763,
+    "top_quantile_max_drawdown": -0.19876444080046307,
+    "top_quantile_turnover": 0.028895313335257952
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.00903026129448587,
+    "icir": 0.13312316619346837,
+    "mi": 0.01870128045081554,
+    "rank_ic": 0.030903772620667184,
+    "rank_icir": 0.30190845706973696
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.8787878787878788,
+    "top_quantile_annualized_excess_return": 0.19888061608130725,
+    "top_quantile_excess_return": 0.6839318896570763,
+    "top_quantile_max_drawdown": -0.19876444080046307,
+    "top_quantile_turnover": 0.028895313335257952
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.00903026129448587,
+    "icir": 0.13312316619346837,
+    "mi": 0.01870128045081554,
+    "rank_ic": 0.030903772620667184,
+    "rank_icir": 0.30190845706973696
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Value signals conditioned on market cap size: small caps use book yield with leverage penalty to reduce distress risk; large caps use earnings yield with profitability boost. This avoids the distress amplification of dividing value by log size.",
+  "raw_metrics": {
+    "ic": 0.016079620545058935,
+    "icir": 0.1893322279535779,
+    "mi": 0.00990930189331607,
+    "rank_ic": 0.030903772620667184,
+    "rank_icir": 0.30190845706973696
+  },
+  "required_columns": [
+    "pe_ttm",
+    "pb_lf",
+    "debttoassets",
+    "roe_ttm2",
+    "style_gate_size_small",
+    "style_gate_size_large"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260719-20260719-210614-r4",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260719-20260719-210614-r4"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "style_gate_size_small and size_large provide discrete size regimes to apply different value measures: book yield with leverage penalty for small caps, earnings yield with profitability boost for large caps.",
+  "style_gates_used": [
+    "style_gate_size_large",
+    "style_gate_size_small"
+  ],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.4936669376291739,
+    "pre_transform_top_quantile_excess_return": 0.6839318896570763,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.548133380082357,
+    "transformed_top_quantile_excess_return": 0.6839318896570763
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "If small-cap: (1/PB) * (1 - Debt/100); else: (1/PE) * (1 + ROE/100)",
+  "fe_formula": "If small-cap: (1/PB) * (1 - Debt/100); else: (1/PE) * (1 + ROE/100)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "If small-cap: (1/PB) * (1 - Debt/100); else: (1/PE) * (1 + ROE/100)"
+}

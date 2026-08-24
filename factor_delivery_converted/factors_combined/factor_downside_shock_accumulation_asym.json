@@ -1,0 +1,128 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "b_id": "B8",
+  "c_id": "C801",
+  "calculation_fingerprint": "1187ece88afb6287adfaa5a75b891ec950643e2e3a1cb2293c6fbefb89a0c194",
+  "candidate_ids": [
+    "C801_001_downside_shock_accumulation_asym"
+  ],
+  "code": "def factor_downside_shock_accumulation_asym(df):\n    \"\"\"Idea: Repeated prior downside shocks accumulate fragility, and the current downside-volatility premium is amplified by that accumulated shock count.\n\n    Logic: A downside shock is a close-to-close return below -2%. We count such shocks over the prior 60 trading days (excluding today). The current downside volatility premium is measured as the difference between downside and upside volatility from a 20-day return decomposition. Multiplying the premium by the prior shock count makes the volatility-asymmetry response path-dependent: the same downside-volatility level carries more fragility information after repeated adverse sessions.\n\n    Sub-mechanism tags: fragility_accumulation, downside_vol_premium, shock_count, volatility_asymmetry\n\n    Formula: ret = pct_change(close); shock = 1[ret < -0.02]; prior = rolling_sum(shift(shock), 60); premium = max(down_vol - up_vol, 0); factor = prior * premium\n    \"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    upside_vol, downside_vol = alpha_tools.decompose_return_volatility_direction(ret, min_periods=10, window=20)\n    downside_premium = (downside_vol - upside_vol).clip(lower=0.0)\n    down_shock = (ret < -0.02).astype(float)\n    prior_shocks = down_shock.shift(1).rolling(60, min_periods=20).sum()\n    factor = prior_shocks * downside_premium\n    factor = factor.replace([np.inf, -np.inf], np.nan)\n    df_copy.loc[:, \"factor_downside_shock_accumulation_asym\"] = factor\n    return df_copy[\"factor_downside_shock_accumulation_asym\"]",
+  "codegen_skill": "micro-active-agent-codegen",
+  "cross_sectional_rationale": "Fragility accumulation is best judged against the cross-section: the raw count-volatility product has a stock-specific scale, and cs_rank isolates which names have the most accumulated downside fragility on each date.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "guidance_inconsistent": false,
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.6848484848484848,
+        "top_quantile_annualized_excess_return": 0.016344182743484703,
+        "top_quantile_excess_return": 0.04633210834938484,
+        "top_quantile_max_drawdown": -0.14112063367230143,
+        "top_quantile_turnover": 0.17613323619528867
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced",
+    "transform_applied": true
+  },
+  "factor_name": "factor_downside_shock_accumulation_asym",
+  "fitness_direction": 1,
+  "formula": "ret = pct_change(close); shock = 1[ret < -0.02]; prior = rolling_sum(shift(shock), 60); premium = max(down_vol - up_vol, 0); factor = prior * premium",
+  "manual_admission": null,
+  "metrics": {
+    "ic": 0.014640776427512638,
+    "icir": 0.15030103312774457,
+    "mi": 0.08961218345016775,
+    "rank_ic": 0.028334369224625098,
+    "rank_icir": 0.2348714362085765
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6848484848484848,
+    "top_quantile_annualized_excess_return": 0.016344182743484703,
+    "top_quantile_excess_return": 0.04633210834938484,
+    "top_quantile_max_drawdown": -0.14112063367230143,
+    "top_quantile_turnover": 0.17613323619528867
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.01068816783707164,
+    "icir": 0.11389632155589388,
+    "mi": 0.012866971117551529,
+    "rank_ic": 0.028334369224625098,
+    "rank_icir": 0.2348714362085765
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.6848484848484848,
+    "top_quantile_annualized_excess_return": 0.016344182743484703,
+    "top_quantile_excess_return": 0.04633210834938484,
+    "top_quantile_max_drawdown": -0.14112063367230143,
+    "top_quantile_turnover": 0.17613323619528867
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.01068816783707164,
+    "icir": 0.11389632155589388,
+    "mi": 0.012866971117551529,
+    "rank_ic": 0.028334369224625098,
+    "rank_icir": 0.2348714362085765
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "This factor isolates a fragility-accumulation channel distinct from a single leverage effect. It counts large downside shocks over the past 60 trading days and uses the current downside-minus-upside volatility premium as the local volatility response. Because the premium is multiplied by the prior shock count, the same current volatility asymmetry carries more downside-fragility information after repeated adverse sessions. High values indicate accumulated fragility and should be associated with elevated forward drop risk.",
+  "raw_metrics": {
+    "ic": 0.014640776427512638,
+    "icir": 0.15030103312774457,
+    "mi": 0.08961218345016775,
+    "rank_ic": 0.028334369224625098,
+    "rank_icir": 0.2348714362085765
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-routing-penalty-xalpha-light-v1-20260817-061430-r1",
+  "source_run_ids": [
+    "formal-routing-penalty-xalpha-light-v1-20260817-061430-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.40065726594371864,
+    "pre_transform_top_quantile_excess_return": 0.04633210834938484,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.5177597984386265,
+    "transformed_top_quantile_excess_return": 0.04633210834938484
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ret = ts_pct(close); shock = 1[ret < -0.02]; prior = ts_sum(60, shift(shock)); premium = max(down_vol - up_vol, 0); factor = prior * premium",
+  "fe_formula": "ret = ts_pct(close); shock = 1[ret < -0.02]; prior = ts_sum(60, shift(shock))60); premium = flex_max(down_vol - up_vol, 0); factor = prior * premium",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "ret = pct_change(close); shock = 1[ret < -0.02]; prior = rolling_sum(shift(shock), 60); premium = max(down_vol - up_vol, 0); factor = prior * premium"
+}

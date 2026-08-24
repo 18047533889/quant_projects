@@ -1,0 +1,93 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "df70acd7b58c4c998336f0ae089dbb12239e8daf350fa008e1a8b07b8965e181",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_crossover_alpha_vol_asymmetry_g0_a_aoimb_g0_v_984912b4"
+  ],
+  "code": "def factor_recovery_drawdown_saturated(df):\n    \"\"\"Measure persistent recovery from a prior drawdown with bounded recovery amplitude.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    low = df_copy[\"low\"]\n    prior_peak = close.rolling(30, min_periods=30).max().shift(5)\n    drawdown_depth = (1.0 - close.shift(5) / prior_peak).clip(lower=0.0, upper=0.8)\n    prior_low = low.rolling(15, min_periods=15).min().shift(1).replace(0.0, np.nan)\n    recovery = close / prior_low - 1.0\n    recovery_score = recovery.ewm(span=6, adjust=False, min_periods=6).mean() - 0.5 * drawdown_depth\n    factor = np.tanh(2.0 * recovery_score) * (0.75 + 0.75 * drawdown_depth)\n    df_copy[\"factor_recovery_drawdown_saturated\"] = factor\n    return df_copy[\"factor_recovery_drawdown_saturated\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9515151515151515,
+        "top_quantile_annualized_excess_return": 0.018587555970164038,
+        "top_quantile_excess_return": 0.05172037642758376,
+        "top_quantile_max_drawdown": -0.13081830232119263,
+        "top_quantile_turnover": 0.1395202847258815
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_excess_percentile",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_percentile"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_recovery_drawdown_saturated",
+  "fitness_direction": -1,
+  "formula": "tanh(2 × [EMA6(close / lagged 15-bar low − 1) − 0.5 × drawdown_depth]) × [0.75 + 0.75 × drawdown_depth]",
+  "metrics": {
+    "ic": 0.028107939713287542,
+    "icir": 0.18874910250489801,
+    "mi": 0.026474454642219314,
+    "rank_ic": 0.04098632765798176,
+    "rank_icir": 0.25561194070700194
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": 0.018587555970164038,
+    "top_quantile_excess_return": 0.05172037642758376,
+    "top_quantile_max_drawdown": -0.13081830232119263,
+    "top_quantile_turnover": 0.1395202847258815
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_percentile",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Mutation preserves the parent's recovery-after-drawdown mechanism and its drawdown-conditioned emphasis while removing the unstable volume-correlation attenuation. The recovery score is changed to a slightly slower EMA and bounded with tanh, reducing the influence of isolated extreme rebounds and improving payoff robustness without adding a new feature family. Parent-strength target: preserve the parent's qualified predictive metrics, especially its recovery-based ranking signal, while targeting the predictive-first parent's failed top-quantile payoff and turnover robustness.",
+  "raw_metrics": {
+    "ic": -0.028107939713287542,
+    "icir": -0.18874910250489801,
+    "mi": 0.026474454642219314,
+    "rank_ic": -0.04098632765798176,
+    "rank_icir": -0.25561194070700194
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260806-094519-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260806-094519-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "tanh(2 × [EMA6(close / lagged 15-bar low − 1) − 0.5 × drawdown_depth]) × [0.75 + 0.75 × drawdown_depth]",
+  "fe_formula": "tanh(2 × [EMA6(close / lagged 15-bar low − 1) − 0.5 × drawdown_depth]) × [0.75 + 0.75 × drawdown_depth]",
+  "lqtp_notes": "Unconverted: ['EMA6']",
+  "fe_notes": "Unconverted: ['EMA6']",
+  "source_formula": "tanh(2 × [EMA6(close / lagged 15-bar low − 1) − 0.5 × drawdown_depth]) × [0.75 + 0.75 × drawdown_depth]"
+}

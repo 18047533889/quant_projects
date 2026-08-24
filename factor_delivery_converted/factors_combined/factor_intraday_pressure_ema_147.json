@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "afb1de92ee0f00144eaf358e8d1bf88db34e179f2593ea0571db7e3809346aa7",
+  "candidate_ids": [
+    "mutation_gen2_002_repair"
+  ],
+  "code": "def factor_intraday_pressure_ema(df):\n    df_copy = df.copy()\n    intraday_ret = (df_copy[\"close\"] - df_copy[\"open\"]) / df_copy[\"open\"].replace(0, np.nan)\n    pressure = intraday_ret * df_copy[\"volume\"]\n    # Fix: fill NaN and ensure float64 for talib\n    momentum = pd.Series(talib.EMA(pressure.fillna(0).values.astype(np.float64), timeperiod=10), index=df_copy.index)\n    return momentum.fillna(0).rename(\"factor_intraday_pressure_ema\")",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_intraday_pressure_ema",
+  "fitness_direction": -1,
+  "formula": "EMA( ((close-open)/open) * volume, 10 )",
+  "metrics": {
+    "ic": 0.01861066128018135,
+    "icir": 0.24044800815896175,
+    "mi": 0.02214180534612975,
+    "rank_ic": 0.03750613140037639,
+    "rank_icir": 0.30769172637849546
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6,
+    "top_quantile_annualized_excess_return": 0.03159791927338573,
+    "top_quantile_excess_return": 0.09227814098637732,
+    "top_quantile_max_drawdown": -0.11271386874574874,
+    "top_quantile_turnover": 0.24472200542313108
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Mutation of factor_intraday_pressure by replacing the simple moving average with an exponential moving average to give more weight to recent observations, preserving the core volume-weighted intraday momentum mechanism while improving responsiveness and potentially IC.",
+  "raw_metrics": {
+    "ic": -0.01861066128018135,
+    "icir": -0.24044800815896175,
+    "mi": 0.02214180534612975,
+    "rank_ic": -0.03750613140037639,
+    "rank_icir": -0.30769172637849546
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260626-020403-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260626-020403-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema(10, ((close-open)/open) * volume)",
+  "fe_formula": "ema(10, ((close-open)/open) * volume)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "EMA( ((close-open)/open) * volume, 10 )"
+}

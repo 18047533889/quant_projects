@@ -1,0 +1,95 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "7cb769d912f2c9866acf47923cf06542d93ae168139c8b8094c34fdfba68f081",
+  "candidate_ids": [
+    "g1_crossover_then_mutation_alpha_volume_structure_0002_alpha_tail_risk_over_78ad1b98"
+  ],
+  "code": "def factor_volume_transition_gap_stress_carry_30d(df):\n    \"\"\"Smoothed directional carry from volume-state transitions with overnight-stress attenuation.\"\"\"\n    df_copy = df.copy()\n    volume = df_copy[\"volume\"]\n    baseline = volume.rolling(20, min_periods=20).median()\n    active = volume > baseline\n    prior_active = active.shift(1).fillna(False)\n    transition = (active & ~prior_active).astype(float)\n    close_return = df_copy[\"close\"].pct_change()\n    transition_return = transition * close_return\n    event_count = transition.rolling(30, min_periods=30).sum()\n    carried_return = transition_return.rolling(30, min_periods=30).sum() / (1.0 + event_count)\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    overnight_downside = overnight_ret.clip(upper=0.0).pow(2)\n    intraday_downside = intraday_ret.clip(upper=0.0).pow(2)\n    total_energy = (overnight_downside + intraday_downside).rolling(20, min_periods=20).sum()\n    overnight_concentration = overnight_downside.rolling(20, min_periods=20).sum() / total_energy.replace(0.0, np.nan)\n    stress = overnight_concentration * np.sqrt(total_energy)\n    factor = carried_return / (1.0 + 5.0 * stress)\n    return factor.replace([np.inf, -np.inf], np.nan).rename(\"factor_volume_transition_gap_stress_carry_30d\")",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.024393874118408876,
+        "top_quantile_excess_return": 0.0686259362541628,
+        "top_quantile_max_drawdown": -0.13018587989673736,
+        "top_quantile_turnover": 0.12448257738881476
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_volume_transition_gap_stress_carry_30d",
+  "fitness_direction": -1,
+  "formula": "[sum_30(transition_into_high_volume * close_return) / (1 + sum_30(transition))] / [1 + 5 * sqrt(sum_20(downside_energy)) * overnight_downside_energy_share]",
+  "metrics": {
+    "ic": 0.017126577750401578,
+    "icir": 0.19250662977262697,
+    "mi": 0.015359537007645585,
+    "rank_ic": 0.04077050825181781,
+    "rank_icir": 0.42454658927893024
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.024393874118408876,
+    "top_quantile_excess_return": 0.0686259362541628,
+    "top_quantile_max_drawdown": -0.13018587989673736,
+    "top_quantile_turnover": 0.12448257738881476
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Mutates the parent's primary volume-transition carry mechanism by extending the carry and event-count horizon from 15 to 30 bars. The parent showed weak IC, RankIC, and payoff with high turnover, so the longer aggregation is intended to suppress isolated transition noise and reduce signal churn while preserving the directional participation intuition. The existing overnight downside-stress attenuation is retained as the single lightweight robustness modifier.",
+  "raw_metrics": {
+    "ic": -0.017126577750401578,
+    "icir": -0.19250662977262697,
+    "mi": 0.015359537007645585,
+    "rank_ic": -0.04077050825181781,
+    "rank_icir": -0.42454658927893024
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260806-064355-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260806-064355-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "[ts_sum(30, transition_into_high_volume * close_return) / (1 + ts_sum(30, transition))] / [1 + 5 * sqrt(sum_20(downside_energy)) * overnight_downside_energy_share]",
+  "fe_formula": "[ts_sum(30, transition_into_high_volume * close_return) / (1 + ts_sum(30, transition))] / [1 + 5 * sqrt(sum_20(downside_energy)) * overnight_downside_energy_share]",
+  "lqtp_notes": "Unconverted: ['sum_20']",
+  "fe_notes": "Unconverted: ['sum_20']",
+  "source_formula": "[sum_30(transition_into_high_volume * close_return) / (1 + sum_30(transition))] / [1 + 5 * sqrt(sum_20(downside_energy)) * overnight_downside_energy_share]"
+}

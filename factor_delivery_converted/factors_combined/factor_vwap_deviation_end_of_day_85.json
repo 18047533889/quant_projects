@@ -1,0 +1,130 @@
+{
+  "allowed_libraries": [],
+  "calculation_fingerprint": "dfc0414ede5f27a52e5804edf171d1434be2469cb9f3a70ed39212787a308713",
+  "candidate_id": "g1_crossover_then_mutation_minute_price_deviation_vwap_deviation_minute_con_f7b18401",
+  "candidate_ids": [
+    "g1_crossover_then_mutation_minute_price_deviation_vwap_deviation_minute_con_f7b18401",
+    "g2_mutation_minute_cond_vol_002_5aab763a",
+    "g2_crossover_g1_crossover_then_mutation_minute_price_deviatio_d62f5548"
+  ],
+  "code": "def factor_vwap_deviation_end_of_day(df):\n    \"\"\"Minute DSL factor — executed via /api/calculate/minute.\"\"\"\n    raise NotImplementedError(\"minute DSL expression; use metadata.expression\")\n    # expression = \"\"\"daily_last(vwap_deviation(get('close'), get('volume'), get('amount')))\"\"\"\n",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "domain_agent": "minute-evolution",
+  "expression": "daily_last(vwap_deviation(get('close'), get('volume'), get('amount')))",
+  "factor_name": "factor_vwap_deviation_end_of_day",
+  "factor_value_contract": "minute_to_daily_panel",
+  "fitness_direction": -1,
+  "formula": "daily_last(vwap_deviation(get('close'), get('volume'), get('amount')))",
+  "frequency": "minute",
+  "lineage": {
+    "agent_skill": "minute-mutation",
+    "generation": 1,
+    "guidance_mode": null,
+    "operation": "mutation",
+    "parent_ids": [
+      "minute_price_deviation_vwap_deviation",
+      "minute-cond-vol-001"
+    ]
+  },
+  "metadata": {
+    "evolution_guidance": {
+      "preserve": {
+        "passed_predictive_metrics": [
+          "ic",
+          "rank_ic",
+          "icir",
+          "rank_icir",
+          "mi"
+        ],
+        "payoff_diagnostics": {
+          "quantile_monotonicity": 0.9636363636363636,
+          "top_quantile_annualized_excess_return": -0.1464851643295858,
+          "top_quantile_excess_return": -0.02788809161071082,
+          "top_quantile_max_drawdown": -0.08229663820869582,
+          "top_quantile_turnover": 0.8533333333333332
+        },
+        "payoff_gate_passed": true
+      },
+      "primary_target": {
+        "kind": "preserve_balanced_strength"
+      },
+      "qualification_track": "balanced"
+    },
+    "expression": "daily_last(vwap_deviation(get('close'), get('volume'), get('amount')))",
+    "fitness_direction": -1,
+    "fitness_metrics": {
+      "ic": 0.04144848481609325,
+      "icir": 0.2529286936288702,
+      "mi": 0.03676556986422952,
+      "rank_ic": 0.04171558538078831,
+      "rank_icir": 0.22131818798207137
+    },
+    "llm_candidate_id": "g2_mutation_minute_vwap_deviation_end_of_day",
+    "payoff_diagnostics": {
+      "quantile_monotonicity": 0.9636363636363636,
+      "top_quantile_annualized_excess_return": -0.1464851643295858,
+      "top_quantile_excess_return": -0.02788809161071082,
+      "top_quantile_max_drawdown": -0.08229663820869582,
+      "top_quantile_turnover": 0.8533333333333332
+    },
+    "payoff_gate_passed": true,
+    "pre_transform_fitness_direction": 1,
+    "predictive_gate_passed": true,
+    "qualification_track": "balanced",
+    "raw_fitness_metrics": {
+      "ic": -0.04144848481609325,
+      "icir": -0.2529286936288702,
+      "mi": 0.03676556986422952,
+      "rank_ic": -0.04171558538078831,
+      "rank_icir": -0.22131818798207137
+    },
+    "transform_gate_passed": true
+  },
+  "metrics": {
+    "ic": 0.04144848481609325,
+    "icir": 0.2529286936288702,
+    "mi": 0.03676556986422952,
+    "rank_ic": 0.04171558538078831,
+    "rank_icir": 0.22131818798207137
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": -0.1464851643295858,
+    "top_quantile_excess_return": -0.02788809161071082,
+    "top_quantile_max_drawdown": -0.08229663820869582,
+    "top_quantile_turnover": 0.8533333333333332
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "post_transforms": null,
+  "rationale": "Captures the end-of-day deviation of closing price from volume-weighted average price (VWAP), a measure of intraday price inefficiency at market close.",
+  "raw_metrics": {
+    "ic": -0.04144848481609325,
+    "icir": -0.2529286936288702,
+    "mi": 0.03676556986422952,
+    "rank_ic": -0.04171558538078831,
+    "rank_icir": -0.22131818798207137
+  },
+  "required_columns": [
+    "trading_datetime",
+    "TradingDay",
+    "open_price",
+    "high_price",
+    "low_price",
+    "close_price",
+    "volume",
+    "amount"
+  ],
+  "run_id": "minute-hs300-formal-20260729-035814-r1",
+  "source_run_ids": [
+    "minute-hs300-formal-20260729-035814-r1"
+  ],
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "daily_last(vwap_deviation(get('close'), get('volume'), get('amount')))",
+  "fe_formula": "daily_last(vwap_deviation(get('close'), get('volume'), get('amount')))",
+  "lqtp_notes": "Textual non-executable: daily_last (pandas method, not LQTP executable); vwap_deviation (custom function, not in LQTP); Unconverted: ['daily_last', 'vwap_deviation']",
+  "fe_notes": "Textual non-executable: daily_last (pandas method, not LQTP executable); vwap_deviation (custom function, not in LQTP); Unconverted: ['daily_last', 'vwap_deviation']",
+  "source_formula": "daily_last(vwap_deviation(get('close'), get('volume'), get('amount')))"
+}

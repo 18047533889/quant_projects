@@ -1,0 +1,119 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "67acb88bf2196e5c5bac38b274196214716e654a473d5decc1ca3645cf2a6e87",
+  "candidate_ids": [
+    "volasym_tail_fragility_drawdown_g0_a"
+  ],
+  "code": "def factor_tail_fragility_drawdown_asymmetry(df):\n    \"\"\"Drawdown-conditioned asymmetry of downside versus upside intraday tail excursions.\"\"\"\n    df_copy = df.copy()\n    previous_close = df_copy[\"close\"].shift(1)\n    downside_tail = (previous_close - df_copy[\"low\"]).clip(lower=0.0) / previous_close.replace(0.0, np.nan)\n    upside_tail = (df_copy[\"high\"] - previous_close).clip(lower=0.0) / previous_close.replace(0.0, np.nan)\n    downside_energy = downside_tail.pow(2).rolling(20, min_periods=20).sum()\n    upside_energy = upside_tail.pow(2).rolling(20, min_periods=20).sum()\n    tail_asymmetry = downside_energy / (downside_energy + upside_energy).replace(0.0, np.nan)\n    drawdown = 1.0 - df_copy[\"close\"] / df_copy[\"close\"].rolling(60, min_periods=60).max().replace(0.0, np.nan)\n    df_copy[\"factor_tail_fragility_drawdown_asymmetry\"] = -tail_asymmetry * drawdown\n    return df_copy[\"factor_tail_fragility_drawdown_asymmetry\"]",
+  "cross_sectional_rationale": "The raw fragility measure is naturally interpreted relative to same-day peers because tail excursion scales and drawdown opportunities differ across stocks; ranking improves comparability while retaining the within-stock stress mechanism.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "long_short_sharpe": 2.343431281165205,
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.08166886775573956,
+        "top_quantile_excess_return": 0.2301870445801928,
+        "top_quantile_max_drawdown": -0.17129599231603843,
+        "top_quantile_turnover": 0.1490441928782453
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_tail_fragility_drawdown_asymmetry",
+  "fitness_direction": -1,
+  "formula": "-(20-day downside tail-energy share) × (60-day close drawdown), where tail energy is squared excursion from prior close to low or high.",
+  "metrics": {
+    "ic": 0.02233141585300695,
+    "icir": 0.15741696692115628,
+    "mi": 0.010142166396510888,
+    "rank_ic": 0.030359249792292552,
+    "rank_icir": 0.17158937529000043
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.343431281165205,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.08166886775573956,
+    "top_quantile_excess_return": 0.2301870445801928,
+    "top_quantile_max_drawdown": -0.17129599231603843,
+    "top_quantile_turnover": 0.1490441928782453
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.020236319883109345,
+    "icir": 0.14792874015238258,
+    "mi": 0.019059943609147645,
+    "rank_ic": 0.030359249792292552,
+    "rank_icir": 0.17158937529000043
+  },
+  "pre_transform_payoff_diagnostics": {
+    "long_short_sharpe": 2.343431281165205,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.08166886775573956,
+    "top_quantile_excess_return": 0.2301870445801928,
+    "top_quantile_max_drawdown": -0.17129599231603843,
+    "top_quantile_turnover": 0.1490441928782453
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.020236319883109345,
+    "icir": -0.14792874015238258,
+    "mi": 0.019059943609147645,
+    "rank_ic": -0.030359249792292552,
+    "rank_icir": -0.17158937529000043
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "This Price-Volatility Behavior signal measures tail fragility rather than ordinary return volatility. A stock in a sustained drawdown whose recent intraday excursions are disproportionately below the prior close has asymmetric downside volatility and weaker shock absorption; the negative sign favors assets with less such fragility. Squared tails emphasize economically consequential downside excursions, while drawdown conditions the mechanism on an already stressed price state.",
+  "raw_metrics": {
+    "ic": -0.02233141585300695,
+    "icir": -0.15741696692115628,
+    "mi": 0.010142166396510888,
+    "rank_ic": -0.030359249792292552,
+    "rank_icir": -0.17158937529000043
+  },
+  "required_columns": [
+    "high",
+    "low",
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6terra-20260814-053307-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6terra-20260814-053307-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.6251390353411848,
+    "pre_transform_top_quantile_excess_return": 0.2301870445801928,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.6394350316945772,
+    "transformed_top_quantile_excess_return": 0.2301870445801928
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "-(20-day downside tail-energy share) × (60-day close drawdown), where tail energy is squared excursion from prior close to low or high.",
+  "fe_formula": "-(20-day downside tail-energy share) × (60-day close drawdown), where tail energy is squared excursion from prior close to low or high.",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "-(20-day downside tail-energy share) × (60-day close drawdown), where tail energy is squared excursion from prior close to low or high."
+}

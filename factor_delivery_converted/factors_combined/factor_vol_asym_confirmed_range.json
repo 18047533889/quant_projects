@@ -1,0 +1,54 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "5648aa4c7f39177c60133a50f5e16f0bf5079721d1f971128529ea1d208feb32",
+  "candidate_ids": [
+    "alpha_crossover_002"
+  ],
+  "code": "def factor_vol_asym_confirmed_range(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    down_ret = np.where(ret < 0, ret, np.nan)\n    down_var = pd.Series(np.where(np.isnan(down_ret), 0, down_ret**2), index=df_copy.index).rolling(60, min_periods=40).mean()\n    down_vol = np.sqrt(down_var)\n    up_ret = np.where(ret > 0, ret, np.nan)\n    up_var = pd.Series(np.where(np.isnan(up_ret), 0, up_ret**2), index=df_copy.index).rolling(60, min_periods=40).mean()\n    up_vol = np.sqrt(up_var)\n    asym = np.log(1 + down_vol) - np.log(1 + up_vol)\n    vol_ma60 = df_copy[\"volume\"].rolling(60, min_periods=60).mean()\n    vol_ratio = df_copy[\"volume\"] / vol_ma60.replace(0, np.nan)\n    rel_range = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"].replace(0, np.nan)\n    factor = asym * vol_ratio * rel_range\n    df_copy[\"factor_vol_asym_confirmed_range\"] = factor\n    return df_copy[\"factor_vol_asym_confirmed_range\"]",
+  "cross_sectional_rationale": "The raw factor captures stock-specific volatility asymmetry and volume dynamics combined with relative range; cross-sectional z-score improves rank stability and comparability across stocks.",
+  "cross_sectional_transform": "cs_zscore",
+  "factor_name": "factor_vol_asym_confirmed_range",
+  "fitness_direction": 1,
+  "formula": "log(1+down_vol_60) - log(1+up_vol_60) * (volume / vol_ma60) * ((high - low) / close)",
+  "metrics": {
+    "ic": 0.020474934671852206,
+    "icir": 0.167229106857735,
+    "mi": 0.0381902569382806,
+    "rank_ic": 0.04497225689930976,
+    "rank_icir": 0.30612934725641056
+  },
+  "rationale": "Crossover of asymmetric volatility (parent 1) with relative range (parent 2) to enhance detection of informed selling pressure. The primary mechanism captures downside vs upside volatility asymmetry with volume confirmation over 60 days. The borrowed lightweight idea adds the relative intraday range (high-low)/close, amplifying the signal when the range is wide, consistent with informed liquidity flow. Target: improve IC and RankIC by incorporating range-based intensity.",
+  "raw_metrics": {
+    "ic": 0.020474934671852206,
+    "icir": 0.167229106857735,
+    "mi": 0.0381902569382806,
+    "rank_ic": 0.04497225689930976,
+    "rank_icir": 0.30612934725641056
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260624-051221-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260624-051221-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "lqtp_formula": "log(1+down_vol_60) - log(1+up_vol_60) * (volume / vol_ma60) * ((high - low) / close)",
+  "fe_formula": "log(1+down_vol_60) - log(1+up_vol_60) * (volume / vol_ma60) * ((high - low) / close)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "log(1+down_vol_60) - log(1+up_vol_60) * (volume / vol_ma60) * ((high - low) / close)"
+}

@@ -1,0 +1,42 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "b672f219b1d9e896bd4a126b90bc340ff3a33f9ddf0e82228d3095ddc1c3c0d6",
+  "candidate_ids": [
+    "drawdown-volume-crossover-gen1-1"
+  ],
+  "code": "def factor_drawdown_volume_geometry(df):\n    \"\"\"Rank-normalized drawdown geometry plus volume confirmation.\"\"\"\n    df_copy = df.copy()\n    rolling_high = df_copy[\"close\"].rolling(window=252, min_periods=20).max()\n    drawdown = (rolling_high - df_copy[\"close\"]) / rolling_high\n    new_peak = df_copy[\"close\"] >= rolling_high\n    group = new_peak.cumsum()\n    duration = new_peak.groupby(group).cumcount()\n    recovery = -drawdown.diff(5)\n    vol_ma = df_copy[\"volume\"].rolling(20).mean()\n    vol_ratio = df_copy[\"volume\"] / vol_ma\n    rank_dd = drawdown.rank(pct=True)\n    rank_dur = duration.rank(pct=True)\n    rank_rec = recovery.rank(pct=True)\n    rank_vol = vol_ratio.rank(pct=True)\n    df_copy[\"factor_drawdown_volume_geometry\"] = rank_dd + rank_dur + rank_rec + rank_vol\n    return df_copy[\"factor_drawdown_volume_geometry\"]",
+  "factor_name": "factor_drawdown_volume_geometry",
+  "fitness_direction": 1,
+  "formula": "R(DD) + R(Dur) + R(Rec) + R(V/MA20)",
+  "metrics": {
+    "ic": 0.047567970302629825,
+    "icir": 0.5309371815429017,
+    "mi": 0.007714443548460181,
+    "rank_ic": 0.0562849326857469,
+    "rank_icir": 0.5628331371935016
+  },
+  "rationale": "Combines drawdown geometry (depth, duration, recovery) with volume confirmation (volume relative to 20-day average) to capture both price structure and trading activity during downturns. Each component is rank-normalized to preserve the rank stability strength of the drawdown parent while adding volume information to improve linear predictive power. Volume ratio identifies periods of elevated trading that can confirm or reject the drawdown signal, targeting improvement in IC and MI without sacrificing RankICIR.",
+  "raw_metrics": null,
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260609-093208-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260609-093208-r2"
+  ],
+  "lqtp_formula": "cs_rank(depth) * cs_rank(vol/vol_ma20) + cs_rank(duration) + cs_rank(delta_depth_10)",
+  "fe_formula": "rank(depth) * rank(vol/vol_ma20) + rank(duration) + rank(delta_depth_10)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "rank(depth) * rank(vol/vol_ma20) + rank(duration) + rank(delta_depth_10)"
+}

@@ -1,0 +1,116 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "e8e78d5a2af74a27a460058431ec7593b49a7795a6ba9ae824bcef0d737f8d8b",
+  "candidate_ids": [
+    "vqc_002"
+  ],
+  "code": "def factor_improving_quality_value(df):\n    df_copy = df.copy()\n    pb = df_copy[\"pb_lf\"]\n    cheapness = 1.0 / pb.replace(0, np.nan)\n    cheapness = cheapness.where(pb > 0, np.nan)\n    roe = df_copy[\"roe_ttm2\"] / 100.0\n    roe_delta = roe - roe.shift(4)\n    rev_growth = df_copy[\"qfa_yoygr\"] / 100.0\n    roe_delta_clipped = roe_delta.clip(-0.9, 10)\n    rev_growth_clipped = rev_growth.clip(-0.9, 10)\n    composite = cheapness * (1 + roe_delta_clipped) * (1 + rev_growth_clipped)\n    composite = composite.replace([np.inf, -np.inf], np.nan)\n    composite.name = \"factor_improving_quality_value\"\n    return composite",
+  "cross_sectional_rationale": "Cross-sectional rank standardises the product of cheapness, profitability change, and growth across stocks each date.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9636363636363636,
+        "top_quantile_annualized_excess_return": 0.08214668879248421,
+        "top_quantile_excess_return": 0.2542050748649014,
+        "top_quantile_max_drawdown": -0.13238598446135674,
+        "top_quantile_turnover": 0.022788998090291578
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_improving_quality_value",
+  "fitness_direction": 1,
+  "formula": "composite = (1/pb_lf) * (1 + clip((roe_ttm2/100 - lag4(roe_ttm2/100)), -0.9, 10)) * (1 + clip(qfa_yoygr/100, -0.9, 10))",
+  "metrics": {
+    "ic": 0.012534048491629828,
+    "icir": 0.12256282244422151,
+    "mi": 0.015190783260617735,
+    "rank_ic": 0.03419802116713493,
+    "rank_icir": 0.2661881096472748
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.08214668879248421,
+    "top_quantile_excess_return": 0.2542050748649014,
+    "top_quantile_max_drawdown": -0.13238598446135674,
+    "top_quantile_turnover": 0.022788998090291578
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.007620950352346254,
+    "icir": 0.08771337257570419,
+    "mi": 0.018628535344053176,
+    "rank_ic": 0.03419802116713493,
+    "rank_icir": 0.2661881096472748
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.08214668879248421,
+    "top_quantile_excess_return": 0.2542050748649014,
+    "top_quantile_max_drawdown": -0.13238598446135674,
+    "top_quantile_turnover": 0.022788998090291578
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.007620950352346254,
+    "icir": 0.08771337257570419,
+    "mi": 0.018628535344053176,
+    "rank_ic": 0.03419802116713493,
+    "rank_icir": 0.2661881096472748
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Light composite of value (book yield), quality trend (4-period ROE change), and revenue growth. Captures firms with improving profitability that remain cheap and growing. Cross-sectional rank normalizes.",
+  "raw_metrics": {
+    "ic": 0.012534048491629828,
+    "icir": 0.12256282244422151,
+    "mi": 0.015190783260617735,
+    "rank_ic": 0.03419802116713493,
+    "rank_icir": 0.2661881096472748
+  },
+  "required_columns": [
+    "pb_lf",
+    "roe_ttm2",
+    "qfa_yoygr"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260721-20260721-175143-r4",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260721-20260721-175143-r4"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.41434898908651335,
+    "pre_transform_top_quantile_excess_return": 0.2542050748649014,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.4506737850108788,
+    "transformed_top_quantile_excess_return": 0.2542050748649014
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "composite = (1/pb_lf) * (1 + clip((roe_ttm2/100 - lag4(roe_ttm2/100)), -0.9, 10)) * (1 + clip(qfa_yoygr/100, -0.9, 10))",
+  "fe_formula": "composite = (1/pb_lf) * (1 + clip((roe_ttm2/100 - lag4(roe_ttm2/100)), -0.9, 10)) * (1 + clip(qfa_yoygr/100, -0.9, 10))",
+  "lqtp_notes": "Textual non-executable: lagN (variable delay, use Python code); Unconverted: ['lag4']",
+  "fe_notes": "Textual non-executable: lagN (variable delay, use Python code); Unconverted: ['lag4']",
+  "source_formula": "composite = (1/pb_lf) * (1 + clip((roe_ttm2/100 - lag4(roe_ttm2/100)), -0.9, 10)) * (1 + clip(qfa_yoygr/100, -0.9, 10))"
+}

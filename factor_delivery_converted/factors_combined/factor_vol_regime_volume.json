@@ -1,0 +1,41 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "1f0cfd5937008b475dc508a8d361d891ed39c211c22927be336d795297689ab6",
+  "candidate_ids": [
+    "cand_vol_regime_mut001"
+  ],
+  "code": "def factor_vol_regime_volume(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol20 = ret.rolling(20).std()\n    med_vol = vol20.rolling(60).median()\n    mom = (df_copy['close'] - df_copy['close'].shift(10)) / df_copy['close'].shift(10)\n    volume = df_copy['volume']\n    med_volume = volume.rolling(60).median()\n    vol_ratio = volume / med_volume\n    regime = (vol20 < med_vol).astype(int)\n    factor = (2 * regime - 1) * mom * vol_ratio\n    df_copy['factor_vol_regime_volume'] = factor\n    return df_copy['factor_vol_regime_volume']",
+  "factor_name": "factor_vol_regime_volume",
+  "fitness_direction": 1,
+  "formula": "factor = (2*I(vol20<med_vol)-1) * mom * (volume/med_volume)",
+  "metrics": {
+    "ic": 0.036038747651388814,
+    "icir": 0.5571676341851803,
+    "mi": 0.015960544226556905,
+    "rank_ic": 0.02614114739351769,
+    "rank_icir": 0.4083932930121626
+  },
+  "rationale": "Extends volatility regime switching by weighting signals with relative volume to focus on liquid periods where momentum/contrarian effects are more reliable. Preserves the core state-dependent market phase detection while adding a liquidity filter to potentially improve IC and MI without sacrificing rank stability.",
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260609-053202-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260609-053202-r1"
+  ],
+  "lqtp_formula": "factor = (2*I(vol20<med_vol)-1) * mom * (volume/med_volume)",
+  "fe_formula": "factor = (2*I(vol20<med_vol)-1) * mom * (volume/med_volume)",
+  "lqtp_notes": "Unconverted: ['I']",
+  "fe_notes": "Unconverted: ['I']",
+  "source_formula": "factor = (2*I(vol20<med_vol)-1) * mom * (volume/med_volume)"
+}

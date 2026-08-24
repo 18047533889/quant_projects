@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "b1b997e6ca0d0714ef24c23f4df0f8c7c8fa553fab92169006995728778114d1",
+  "candidate_ids": [
+    "mutation_001_g3"
+  ],
+  "code": "def factor_volume_reversal_rank(df):\n    df_copy = df.copy()\n    high = df_copy['high']\n    low = df_copy['low']\n    close = df_copy['close']\n    range_ = high - low\n    fraction = (close - low) / range_.replace(0.0, np.nan)\n    deviation = fraction - 0.5\n    rev = -deviation\n    vol_rank = df_copy['volume'].rolling(20, min_periods=20).rank(pct=True)\n    factor = rev * vol_rank\n    df_copy['factor_volume_reversal_rank'] = factor.fillna(0)\n    return df_copy['factor_volume_reversal_rank']",
+  "factor_name": "factor_volume_reversal_rank",
+  "fitness_direction": 1,
+  "formula": "- ( (close-low)/(high-low) - 0.5 ) * rolling_rank(volume,20)",
+  "metrics": {
+    "ic": 0.0271829248257788,
+    "icir": 0.3530648498689826,
+    "mi": 0.029990604921772857,
+    "rank_ic": 0.029681008909071816,
+    "rank_icir": 0.329772085702974
+  },
+  "rationale": "Mutation of crossover_002_g2: removed the 5-period rolling average on the intraday position fraction to make the reversal signal more responsive to current bar data, aligning with the effective parent2 (crossover_001_g1) approach. Preserves the strong IC and ICIR from the immediate reversal while retaining the volume rank modifier to support RankIC. Targets RankIC improvement by reducing lag in the core reversal component while keeping the volume rank window unchanged.",
+  "raw_metrics": {
+    "ic": 0.0271829248257788,
+    "icir": 0.3530648498689826,
+    "mi": 0.029990604921772857,
+    "rank_ic": 0.029681008909071816,
+    "rank_icir": 0.329772085702974
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260616-025809-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260616-025809-r1"
+  ],
+  "lqtp_formula": "- (ts_mean(5, (close-low)/(high-low)) - 0.5) * ts_rank(20, volume)",
+  "fe_formula": "- (ts_mean(5, (close-low)/(high-low)) - 0.5) * ts_rank(20, volume)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "- (rolling_mean((close-low)/(high-low),5) - 0.5) * rolling_rank(volume,20)"
+}

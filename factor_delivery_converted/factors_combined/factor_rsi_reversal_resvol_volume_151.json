@@ -1,0 +1,68 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "talib",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "19ed713c38e918784b522cdb473cb8cb770aef66cf896aab023baaa8a9226d46",
+  "candidate_ids": [
+    "g2_crossover_g1_mutation_factor_rsi_reversal_volume_b08fa6a8_c32634cd"
+  ],
+  "code": "def factor_rsi_reversal_resvol_volume(df):\n    df_copy = df.copy()\n    close_float = df_copy[\"close\"].values.astype(np.float64)\n    rsi = talib.RSI(close_float, timeperiod=14)\n    rsi = pd.Series(rsi, index=df_copy.index)\n    raw_signal = 50 - rsi\n    high_resvol = df_copy[\"style_gate_resvol_high\"] > 0\n    gate_scaled = raw_signal * np.where(high_resvol, 1.5, 0.5)\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20, high_threshold=1.5, low_threshold=0.6)\n    factor = gate_scaled * vol_ratio\n    df_copy[\"factor_rsi_reversal_resvol_volume\"] = factor\n    return df_copy[\"factor_rsi_reversal_resvol_volume\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_rsi_reversal_resvol_volume",
+  "fitness_direction": 1,
+  "formula": "(50 - RSI(14)) * (1.5 if style_gate_resvol_high else 0.5) * vol_ratio",
+  "metrics": {
+    "ic": 0.02941760822741136,
+    "icir": 0.23748768508498555,
+    "mi": 0.03233266295419046,
+    "rank_ic": 0.03599670887475334,
+    "rank_icir": 0.22692147219025713
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.5151515151515151,
+    "top_quantile_annualized_excess_return": 0.07958347545679367,
+    "top_quantile_excess_return": 0.2407894836922877,
+    "top_quantile_max_drawdown": -0.16269078213267252,
+    "top_quantile_turnover": 0.29357494130882344
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Combine two parents: preserve the residual volatility regime gating (resvol_high) from the qualified parent lineage, and borrow the volume ratio multiplier from the volume-confirmed reversal parent. The resvol gate amplifies the RSI mean-reversion signal in high-residual-volatility regimes where overreactions revert strongly, while the volume ratio emphasizes periods of abnormal trading activity that often accompany price dislocations. The volume ratio is used directly (not squared) as a lightweight modifier to avoid over-weighting.",
+  "raw_metrics": {
+    "ic": 0.02941760822741136,
+    "icir": 0.23748768508498555,
+    "mi": 0.03233266295419046,
+    "rank_ic": 0.03599670887475334,
+    "rank_icir": 0.22692147219025713
+  },
+  "required_columns": [
+    "close",
+    "volume",
+    "style_gate_resvol_high"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260709-041908-r10",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260709-041908-r10"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "style_gate_resvol_high distinguishes high residual volatility periods where mean reversion from overreaction is more likely. The gate amplifies the signal in high-resvol states and dampens it in low-resvol states, aligning the factor with regime-dependent reversal strength.",
+  "style_gates_used": [
+    "style_gate_resvol_high"
+  ],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(50 - ts_rsi(14)) * (1.5 if style_gate_resvol_high else 0.5) * vol_ratio",
+  "fe_formula": "(50 - RSI(14)) * (1.5 if style_gate_resvol_high else 0.5) * vol_ratio",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(50 - RSI(14)) * (1.5 if style_gate_resvol_high else 0.5) * vol_ratio"
+}

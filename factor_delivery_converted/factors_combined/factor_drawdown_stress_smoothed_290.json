@@ -1,0 +1,100 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "4586b2a681d2004501c411f37931ce726becf731dacc564027ea7805a59b88cd",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_tailrisk_002_6ed3b031_c7360bee"
+  ],
+  "code": "def factor_drawdown_stress_smoothed(df):\n    df_copy = df.copy()\n    peak_high = df_copy['high'].rolling(40, min_periods=40).max()\n    drawdown = (df_copy['close'] - peak_high) / peak_high.replace(0, np.nan)\n    max_drawdown = drawdown.rolling(40, min_periods=40).min()\n    atr = talib.ATR(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=20)\n    factor = -max_drawdown / atr.replace(0, np.nan)\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    factor = factor.rolling(3, min_periods=1).mean()\n    df_copy['factor_drawdown_stress_smoothed'] = factor\n    return df_copy['factor_drawdown_stress_smoothed']",
+  "cross_sectional_rationale": "Cross-sectional ranking identifies which stocks have experienced most severe drawdown stress relative to peers, enhancing top-decile separation.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {},
+  "factor_name": "factor_drawdown_stress_smoothed",
+  "fitness_direction": 1,
+  "formula": "max_drawdown(40) / ATR(20), sign reversed, smoothed with 3-day moving average",
+  "metrics": {
+    "ic": 0.017358194005353676,
+    "icir": 0.16576139869562395,
+    "mi": 0.011094726758896556,
+    "rank_ic": 0.030346150061244585,
+    "rank_icir": 0.23749532823861955
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.10693495094561767,
+    "top_quantile_excess_return": 0.2974978711403313,
+    "top_quantile_max_drawdown": -0.07014002376847694,
+    "top_quantile_turnover": 0.02171271064516417
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.010554338083583572,
+    "icir": 0.13439776754746702,
+    "mi": 0.00959155214366536,
+    "rank_ic": 0.030346150061244585,
+    "rank_icir": 0.23749532823861955
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.10693495094561767,
+    "top_quantile_excess_return": 0.2974978711403313,
+    "top_quantile_max_drawdown": -0.07014002376847694,
+    "top_quantile_turnover": 0.02171271064516417
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.010554338083583572,
+    "icir": 0.13439776754746702,
+    "mi": 0.00959155214366536,
+    "rank_ic": 0.030346150061244585,
+    "rank_icir": 0.23749532823861955
+  },
+  "predictive_gate_passed": null,
+  "qualification_track": null,
+  "rationale": "Mutation targeting improved ICIR and RankICIR by adding a 3-day rolling mean smoothing to the raw drawdown stress factor. Preserves the core tail-risk drawdown/ATR mechanism and the cs_rank post-transform. Smoothing reduces single-day noise while keeping the economic signal intact. Parent strength: tail-risk drawdown capture. Target bottleneck: predictive consistency (ICIR/RankICIR).",
+  "raw_metrics": {
+    "ic": 0.017358194005353676,
+    "icir": 0.16576139869562395,
+    "mi": 0.011094726758896556,
+    "rank_ic": 0.030346150061244585,
+    "rank_icir": 0.23749532823861955
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-20260714-082357-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-20260714-082357-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.42238513607458006,
+    "pre_transform_top_quantile_excess_return": 0.2974978711403313,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.4620557977597383,
+    "transformed_top_quantile_excess_return": 0.2974978711403313
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "max_drawdown(40) / ts_atr(20), sign reversed, smoothed with 3-day moving average",
+  "fe_formula": "max_drawdown(40) / ATR(20), sign reversed, smoothed with 3-day moving average",
+  "lqtp_notes": "Unconverted: ['max_drawdown']",
+  "fe_notes": "Unconverted: ['max_drawdown']",
+  "source_formula": "max_drawdown(40) / ATR(20), sign reversed, smoothed with 3-day moving average"
+}

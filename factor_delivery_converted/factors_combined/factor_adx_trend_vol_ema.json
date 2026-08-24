@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "talib",
+    "math",
+    "stats",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "a7de09636dfa6b900baa04336eda36fd1011814bf4c2455ceb61a815b3b93056",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_alpha_daily_trend_gen0_cand2_rev_vo_2174d507"
+  ],
+  "code": "def factor_adx_trend_vol_ema(df):\n    df_copy = df.copy()\n    high = df_copy[\"high\"].values.astype(np.float64)\n    low = df_copy[\"low\"].values.astype(np.float64)\n    close = df_copy[\"close\"].values.astype(np.float64)\n    adx = talib.ADX(high, low, close, timeperiod=14)\n    dir_sign = np.sign(df_copy[\"close\"].pct_change(10))\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    vol_ratio_clipped = vol_ratio.clip(0.5, 2.0)\n    factor = pd.Series(adx * dir_sign * vol_ratio_clipped, index=df_copy.index, name=\"factor_adx_trend_vol_ema\")\n    factor = factor.fillna(0)\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_adx_trend_vol_ema",
+  "fitness_direction": -1,
+  "formula": "ADX(14) * sign(close_10d_chg) * clip(vol_ratio_EMA(20), 0.5, 2.0)",
+  "metrics": {
+    "ic": 0.015180880286631901,
+    "icir": 0.13643996697587185,
+    "mi": 0.024295159428573854,
+    "rank_ic": 0.032044433562006515,
+    "rank_icir": 0.2779817504736948
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.08773597422686663,
+    "top_quantile_excess_return": 0.261883730401673,
+    "top_quantile_max_drawdown": -0.04983404811687331,
+    "top_quantile_turnover": 0.3856455016930884
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Mutation of parent g1_crossover_alpha_daily_trend_gen0_cand2_rev_vol_asym_002_c03340f0: preserve core directional trend strength (ADX + sign) and volume confirmation. Replace SMA-based volume ratio with EMA-based vol_ratio from classify_volume_regime tool for smoother volume weighting, keeping the clip to bound influence. This aims to preserve high RankICIR while improving IC stability.",
+  "raw_metrics": {
+    "ic": -0.015180880286631901,
+    "icir": -0.13643996697587185,
+    "mi": 0.024295159428573854,
+    "rank_ic": -0.032044433562006515,
+    "rank_icir": -0.2779817504736948
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260707-051741-r3",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260707-051741-r3"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ts_adx(14) * sign(close_10d_chg) * clip(vol_ratio_EMA(20), 0.5, 2.0)",
+  "fe_formula": "ADX(14) * sign(close_10d_chg) * clip(vol_ratio_EMA(20), 0.5, 2.0)",
+  "lqtp_notes": "Unconverted: ['vol_ratio_EMA']",
+  "fe_notes": "Unconverted: ['vol_ratio_EMA']",
+  "source_formula": "ADX(14) * sign(close_10d_chg) * clip(vol_ratio_EMA(20), 0.5, 2.0)"
+}

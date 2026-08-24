@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "0fe35a58df77a5c5771d3aa004c2d51763414b3362a4676b1e47418916dfae32",
+  "candidate_ids": [
+    "mutation_001_g2"
+  ],
+  "code": "def factor_volume_reversal_direct(df):\n    df_copy = df.copy()\n    high = df_copy['high']\n    low = df_copy['low']\n    close = df_copy['close']\n    range_ = high - low\n    fraction = (close - low) / range_.replace(0.0, np.nan)\n    deviation = fraction - 0.5\n    rev = -deviation\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20).mean()\n    vol_rank = vol_ratio.rolling(20).rank(pct=True)\n    factor = rev * vol_rank\n    df_copy['factor_volume_reversal_direct'] = factor\n    return df_copy['factor_volume_reversal_direct']",
+  "factor_name": "factor_volume_reversal_direct",
+  "fitness_direction": 1,
+  "formula": "rev * vol_rank where rev = -((close-low)/(high-low) - 0.5) and vol_rank = rolling_rank(volume / rolling_mean(volume,20),20)",
+  "metrics": {
+    "ic": 0.02484236399597817,
+    "icir": 0.3244731748527918,
+    "mi": 0.02758607575361882,
+    "rank_ic": 0.02796910176631845,
+    "rank_icir": 0.31083988659161843
+  },
+  "rationale": "Mutation of crossover_001_g1: removed the 5-period smoothing on the intraday position fraction to make the reversal signal more responsive to current bar overreaction. The direct deviation from 0.5 captures immediate intraday mean-reversion, while the volume rank (percentile of volume ratio over 20 days) filters noisy signals. This simplification targets improved ICIR and RankICIR while preserving the core volume-reversal interaction.",
+  "raw_metrics": {
+    "ic": 0.02484236399597817,
+    "icir": 0.3244731748527918,
+    "mi": 0.02758607575361882,
+    "rank_ic": 0.02796910176631845,
+    "rank_icir": 0.31083988659161843
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260616-025809-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260616-025809-r1"
+  ],
+  "lqtp_formula": "rev * vol_rank where rev = -((close-low)/(high-low) - 0.5) and vol_rank = ts_rank(20, volume / rolling_mean(volume,20))",
+  "fe_formula": "rev * vol_rank where rev = -((close-low)/(high-low) - 0.5) and vol_rank = ts_rank(20, volume / rolling_mean(volume,20))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "rev * vol_rank where rev = -((close-low)/(high-low) - 0.5) and vol_rank = rolling_rank(volume / rolling_mean(volume,20),20)"
+}

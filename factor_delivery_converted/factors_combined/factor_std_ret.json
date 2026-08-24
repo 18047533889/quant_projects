@@ -1,0 +1,136 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "a119f26e5743383f4c914d7730a752894c7a42e994db096e2771ddf10b25f73a",
+  "candidate_id": "g2_mutation_g1_mutation_minute_robust_shape_kurt_volume_bdbe_bcccc769",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_minute_robust_shape_kurt_volume_bdbe_bcccc769"
+  ],
+  "code": "def factor_std_ret(df):\n    \"\"\"Minute DSL factor — executed via /api/calculate/minute.\"\"\"\n    raise NotImplementedError(\"minute DSL expression; use metadata.expression\")\n    # expression = \"\"\"daily_std(pct_change(get('close')))\"\"\"\n",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "domain_agent": "minute-conditional-volatility",
+  "expression": "daily_std(pct_change(get('close')))",
+  "factor_name": "factor_std_ret",
+  "factor_value_contract": "minute_to_daily_panel",
+  "fitness_direction": -1,
+  "formula": "daily_std(pct_change(get('close')))",
+  "frequency": "minute",
+  "lineage": {
+    "agent_skill": "minute-mutation",
+    "generation": 2,
+    "guidance_mode": null,
+    "operation": "mutation",
+    "parent_ids": [
+      "g1_mutation_minute_robust_shape_kurt_volume_bdbece92"
+    ]
+  },
+  "metadata": {
+    "evolution_guidance": {
+      "preserve": {
+        "passed_predictive_metrics": [
+          "ic",
+          "rank_ic",
+          "icir",
+          "rank_icir",
+          "mi"
+        ],
+        "payoff_diagnostics": {
+          "quantile_monotonicity": 0.6242424242424243,
+          "top_quantile_annualized_excess_return": -0.08671903969775907,
+          "top_quantile_excess_return": -0.008245065066415092,
+          "top_quantile_max_drawdown": -0.03193680765287854,
+          "top_quantile_turnover": 0.43540372670807476
+        },
+        "payoff_gate_passed": false
+      },
+      "primary_target": {
+        "kind": "preserve_balanced_strength"
+      },
+      "qualification_track": null
+    },
+    "expression": "daily_std(pct_change(get('close')))",
+    "fitness_direction": -1,
+    "fitness_metrics": {
+      "ic": 0.0468972372967361,
+      "icir": 0.18257699942041666,
+      "mi": 0.0733471475257339,
+      "rank_ic": 0.07593153422639928,
+      "rank_icir": 0.36069206029020706
+    },
+    "infrastructure_recovery": true,
+    "llm_candidate_id": "g2_mutation_minute_std_ret_001",
+    "payoff_diagnostics": {
+      "quantile_monotonicity": 0.6242424242424243,
+      "top_quantile_annualized_excess_return": -0.08671903969775907,
+      "top_quantile_excess_return": -0.008245065066415092,
+      "top_quantile_max_drawdown": -0.03193680765287854,
+      "top_quantile_turnover": 0.43540372670807476
+    },
+    "payoff_gate_passed": false,
+    "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+    "pre_transform_fitness_direction": 1,
+    "predictive_gate_passed": true,
+    "qualification_track": null,
+    "raw_fitness_metrics": {
+      "ic": -0.0468972372967361,
+      "icir": -0.18257699942041666,
+      "mi": 0.0733471475257339,
+      "rank_ic": -0.07593153422639928,
+      "rank_icir": -0.36069206029020706
+    },
+    "transform_gate_passed": true
+  },
+  "metrics": {
+    "ic": 0.0468972372967361,
+    "icir": 0.18257699942041666,
+    "mi": 0.0733471475257339,
+    "rank_ic": 0.07593153422639928,
+    "rank_icir": 0.36069206029020706
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6242424242424243,
+    "top_quantile_annualized_excess_return": -0.08671903969775907,
+    "top_quantile_excess_return": -0.008245065066415092,
+    "top_quantile_max_drawdown": -0.03193680765287854,
+    "top_quantile_turnover": 0.43540372670807476
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "post_transforms": null,
+  "rationale": "Changed outer reducer from daily_kurt to daily_std to shift the mechanism from measuring tail risk (kurtosis) to measuring overall volatility (standard deviation) of intraday returns. This captures the magnitude of price fluctuations rather than the extremity of tails.",
+  "raw_metrics": {
+    "ic": -0.0468972372967361,
+    "icir": -0.18257699942041666,
+    "mi": 0.0733471475257339,
+    "rank_ic": -0.07593153422639928,
+    "rank_icir": -0.36069206029020706
+  },
+  "required_columns": [
+    "trading_datetime",
+    "TradingDay",
+    "open_price",
+    "high_price",
+    "low_price",
+    "close_price",
+    "volume",
+    "amount"
+  ],
+  "run_id": "minute-hs300-probe-repair-20260722-034558-r1",
+  "source_run_ids": [
+    "minute-hs300-probe-repair-20260722-034558-r1"
+  ],
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "daily_std(ts_pct(get('close')))",
+  "fe_formula": "daily_std(ts_pct(get('close')))",
+  "lqtp_notes": "Textual non-executable: daily_std (pandas method, not LQTP executable); Unconverted: ['daily_std']",
+  "fe_notes": "Textual non-executable: daily_std (pandas method, not LQTP executable); Unconverted: ['daily_std']",
+  "source_formula": "daily_std(pct_change(get('close')))"
+}

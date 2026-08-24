@@ -1,0 +1,38 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "bb6899938a2a4913974d9856314a3d69a8f070872e32c48c897b92f20c581703",
+  "candidate_ids": [
+    "VVR-001"
+  ],
+  "code": "def factor_vol_volume_regime(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_20 = ret.rolling(20).std()\n    med_vol_60 = vol_20.rolling(60).median()\n    regime = ((vol_20 > med_vol_60).astype(int) * 2) - 1\n    price_change = df_copy[\"close\"] - df_copy[\"close\"].shift(10)\n    vol_med_20 = df_copy[\"volume\"].rolling(20).median()\n    vol_dev = (df_copy[\"volume\"] / vol_med_20) - 1\n    factor = regime * price_change * (1 + 0.5 * vol_dev)\n    df_copy[\"factor_vol_volume_regime\"] = factor\n    return df_copy[\"factor_vol_volume_regime\"]",
+  "factor_name": "factor_vol_volume_regime",
+  "fitness_direction": -1,
+  "formula": "factor = regime * (close - close_10) * (1 + 0.5 * vol_dev), where regime = sign(vol_20 - med_vol_60), vol_dev = volume / rolling_median(volume, 20) - 1",
+  "metrics": {
+    "ic": 0.01621672881402269,
+    "icir": 0.33101692814426986,
+    "mi": 0.01903666703269291,
+    "rank_ic": 0.022912288774630977,
+    "rank_icir": 0.2978361550571337
+  },
+  "rationale": "This factor combines volatility regime switching with volume median deviation. The base regime signal (momentum in high vol, contrarian in low vol) is strengthened when volume is above its median (confirming) and weakened when volume is low (suggesting noise). The volume adjustment aims to improve rank consistency and nonlinear information capture.",
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260609-072013-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260609-072013-r1"
+  ],
+  "lqtp_formula": "factor = regime * (close - close_10) * (1 + 0.5 * vol_dev), where regime = sign(vol_20 - med_vol_60), vol_dev = volume / ts_median(20, volume) - 1",
+  "fe_formula": "factor = regime * (close - close_10) * (1 + 0.5 * vol_dev), where regime = sign(vol_20 - med_vol_60), vol_dev = volume / ts_median(20, volume) - 1",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "factor = regime * (close - close_10) * (1 + 0.5 * vol_dev), where regime = sign(vol_20 - med_vol_60), vol_dev = volume / rolling_median(volume, 20) - 1"
+}

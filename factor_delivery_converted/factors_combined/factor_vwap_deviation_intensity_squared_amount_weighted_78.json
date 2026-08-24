@@ -1,0 +1,104 @@
+{
+  "allowed_libraries": [
+    "numpy",
+    "pandas",
+    "minute_tools"
+  ],
+  "calculation_fingerprint": "legacy-unresolved:11",
+  "candidate_id": "g2_mutation_g1_crossover_then_mutation_minute_spread_pulse_i_fa1df3f8",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_then_mutation_minute_spread_pulse_i_fa1df3f8"
+  ],
+  "code": "def factor_vwap_deviation_intensity_squared_amount_weighted(df):\n    df_copy = df.copy()\n    vwap = (df_copy['close_price'] * df_copy['volume']).sum() / df_copy['volume'].sum()\n    deviation = (df_copy['close_price'] - vwap) ** 2\n    is_high, amount_z = minute_tools.get_up_space(df_copy['amount'], df_copy['TradingDay'], std_multiplier=1.0)\n    weight = amount_z.clip(lower=0)\n    weighted_dev = deviation * weight\n    sum_weight = weight.sum()\n    value = (weighted_dev.sum() / sum_weight) if sum_weight > 0 else 0.0\n    day = pd.Timestamp(df_copy['TradingDay'].iloc[0])\n    return pd.Series([value], index=[day], name='factor_vwap_deviation_intensity_squared_amount_weighted')",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "domain_agent": "minutemutation",
+  "factor_name": "factor_vwap_deviation_intensity_squared_amount_weighted",
+  "factor_value_contract": "minute_to_daily_panel",
+  "fitness_direction": 1,
+  "formula": null,
+  "frequency": "minute",
+  "lineage": {
+    "agent_skill": "MinuteMutation",
+    "generation": 2,
+    "guidance_mode": null,
+    "operation": "mutation",
+    "parent_ids": [
+      "g1_crossover_then_mutation_minute_spread_pulse_intensity_v1_minute_price_de_ec269f9e"
+    ]
+  },
+  "metadata": {
+    "fitness_direction": 1,
+    "fitness_metrics": {
+      "ic": 0.02204990034105271,
+      "icir": 0.4611196968915107,
+      "mi": 0.03020007442729833,
+      "rank_ic": 0.06050779633547814,
+      "rank_icir": 0.33680696335380284
+    },
+    "llm_candidate_id": "g2_mutation_minute_vwap_deviation_squared_amount_weighted",
+    "minute_required_columns": [
+      "close_price",
+      "volume",
+      "amount"
+    ],
+    "payoff_diagnostics": {
+      "quantile_monotonicity": 1.0,
+      "top_quantile_annualized_excess_return": 0.4037383388238358,
+      "top_quantile_excess_return": 0.012185752862403643,
+      "top_quantile_max_drawdown": -0.0181755960183555,
+      "top_quantile_turnover": 0.524129919812852
+    },
+    "payoff_gate_passed": true,
+    "pre_transform_fitness_direction": 1,
+    "raw_fitness_metrics": {
+      "ic": 0.02204990034105271,
+      "icir": 0.4611196968915107,
+      "mi": 0.03020007442729833,
+      "rank_ic": 0.06050779633547814,
+      "rank_icir": 0.33680696335380284
+    },
+    "transform_gate_passed": true
+  },
+  "metrics": {
+    "ic": 0.02204990034105271,
+    "icir": 0.4611196968915107,
+    "mi": 0.03020007442729833,
+    "rank_ic": 0.06050779633547814,
+    "rank_icir": 0.33680696335380284
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.4037383388238358,
+    "top_quantile_excess_return": 0.012185752862403643,
+    "top_quantile_max_drawdown": -0.0181755960183555,
+    "top_quantile_turnover": 0.524129919812852
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "post_transforms": null,
+  "rationale": "Mutated parent by replacing volume z-score weighting with amount z-score weighting. This amplifies impact of high-dollar-volume minutes, potentially capturing stronger price dislocations in thicker trading sessions.",
+  "raw_metrics": {
+    "ic": 0.02204990034105271,
+    "icir": 0.4611196968915107,
+    "mi": 0.03020007442729833,
+    "rank_ic": 0.06050779633547814,
+    "rank_icir": 0.33680696335380284
+  },
+  "required_columns": [
+    "close_price",
+    "volume",
+    "amount"
+  ],
+  "run_id": "minute-mvp-loop-20260711-151010-r10",
+  "source_run_ids": [
+    "minute-mvp-loop-20260711-151010-r10"
+  ],
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "",
+  "fe_formula": "",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": ""
+}

@@ -1,0 +1,104 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "minute_tools"
+  ],
+  "calculation_fingerprint": "legacy-unresolved:6",
+  "candidate_id": "g2_crossover_g1_crossover_then_mutation_minute_amount_impact_30db6ceb",
+  "candidate_ids": [
+    "g2_crossover_g1_crossover_then_mutation_minute_amount_impact_30db6ceb"
+  ],
+  "code": "def factor_high_volume_amount_weighted_impact(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close_price\"].pct_change().abs().fillna(0.0)\n    is_high, _ = minute_tools.get_up_space(df_copy[\"volume\"], df_copy[\"TradingDay\"], std_multiplier=1.5)\n    numerator = (ret * df_copy[\"amount\"] * is_high).sum()\n    denominator = (df_copy[\"amount\"] * is_high).sum()\n    value = numerator / denominator if denominator != 0 else 0.0\n    day = pd.Timestamp(df_copy[\"TradingDay\"].iloc[0])\n    out = pd.Series([value], index=[day], name=\"factor_high_volume_amount_weighted_impact\")\n    return out",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "domain_agent": "minute-crossover",
+  "factor_name": "factor_high_volume_amount_weighted_impact",
+  "factor_value_contract": "minute_to_daily_panel",
+  "fitness_direction": -1,
+  "formula": "Amount-weighted mean of absolute minute returns on high-volume minutes (volume > 1.5σ above mean)",
+  "frequency": "minute",
+  "lineage": {
+    "agent_skill": "minute-crossover",
+    "generation": 2,
+    "guidance_mode": null,
+    "operation": "crossover",
+    "parent_ids": [
+      "g1_crossover_then_mutation_minute_amount_impact_v0_minute_high_volume_event_ea53736b",
+      "minute-amount-impact_v0"
+    ]
+  },
+  "metadata": {
+    "fitness_direction": -1,
+    "fitness_metrics": {
+      "ic": 0.044691868276881465,
+      "icir": 0.38378950367810766,
+      "mi": 0.04875308069011286,
+      "rank_ic": 0.09343132750860433,
+      "rank_icir": 0.5035412030014619
+    },
+    "llm_candidate_id": "g2_crossover_minute_high_volume_amount_weighted_impact",
+    "minute_required_columns": [
+      "close_price",
+      "volume",
+      "amount"
+    ],
+    "payoff_diagnostics": {
+      "quantile_monotonicity": 1.0,
+      "top_quantile_annualized_excess_return": 0.34984454740783977,
+      "top_quantile_excess_return": 0.010771507857764817,
+      "top_quantile_max_drawdown": -0.010877502919430904,
+      "top_quantile_turnover": 0.5015797895695118
+    },
+    "payoff_gate_passed": true,
+    "pre_transform_fitness_direction": 1,
+    "raw_fitness_metrics": {
+      "ic": -0.044691868276881465,
+      "icir": -0.38378950367810766,
+      "mi": 0.04875308069011286,
+      "rank_ic": -0.09343132750860433,
+      "rank_icir": -0.5035412030014619
+    },
+    "transform_gate_passed": true
+  },
+  "metrics": {
+    "ic": 0.044691868276881465,
+    "icir": 0.38378950367810766,
+    "mi": 0.04875308069011286,
+    "rank_ic": 0.09343132750860433,
+    "rank_icir": 0.5035412030014619
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.34984454740783977,
+    "top_quantile_excess_return": 0.010771507857764817,
+    "top_quantile_max_drawdown": -0.010877502919430904,
+    "top_quantile_turnover": 0.5015797895695118
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "rationale": "Combines amount-weighted impact from parent2 with high-volume conditioning from parent1. Captures average absolute price impact during intense volume periods, focusing on minutes where volume exceeds 1.5 standard deviations above the mean. Continuous and dense across all days.",
+  "raw_metrics": {
+    "ic": -0.044691868276881465,
+    "icir": -0.38378950367810766,
+    "mi": 0.04875308069011286,
+    "rank_ic": -0.09343132750860433,
+    "rank_icir": -0.5035412030014619
+  },
+  "required_columns": [
+    "close_price",
+    "volume",
+    "amount"
+  ],
+  "run_id": "minute-mvp-loop-20260630-082206-r2",
+  "source_run_ids": [
+    "minute-mvp-loop-20260630-082206-r2"
+  ],
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "Amount-weighted mean of absolute minute returns on high-volume minutes (volume > 1.5σ above mean)",
+  "fe_formula": "Amount-weighted mean of absolute minute returns on high-volume minutes (volume > 1.5σ above mean)",
+  "lqtp_notes": "Unconverted: ['minutes']",
+  "fe_notes": "Unconverted: ['minutes']",
+  "source_formula": "Amount-weighted mean of absolute minute returns on high-volume minutes (volume > 1.5σ above mean)"
+}

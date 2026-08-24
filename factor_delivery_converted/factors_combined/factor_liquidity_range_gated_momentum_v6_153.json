@@ -1,0 +1,45 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "talib"
+  ],
+  "calculation_fingerprint": "7655e636ec318836966adcfe29a0e31b96a272aeae949ec198866e0a24fb04f6",
+  "candidate_ids": [
+    "mutation_lrgm_v6_001"
+  ],
+  "code": "def factor_liquidity_range_gated_momentum_v6(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    high = df_copy['high']\n    low = df_copy['low']\n    volume = df_copy['volume']\n    ret5 = close.pct_change(5)\n    med_vol20 = volume.rolling(20, min_periods=20).median().replace(0, np.nan)\n    vol_ratio = volume / med_vol20\n    price_range = high - low\n    conviction_raw = price_range * vol_ratio\n    conviction_rank = conviction_raw.rolling(20, min_periods=20).rank(pct=True)\n    atr = talib.ATR(high.values.astype(np.float64), low.values.astype(np.float64), close.values.astype(np.float64), timeperiod=20)\n    atr_series = pd.Series(atr, index=df_copy.index).fillna(0)\n    atr_ratio = atr_series / close.replace(0, np.nan)\n    vol_gate = np.tanh(atr_ratio)\n    factor = ret5 * conviction_rank * vol_gate\n    df_copy['factor_liquidity_range_gated_momentum_v6'] = factor.fillna(0)\n    return df_copy['factor_liquidity_range_gated_momentum_v6']",
+  "factor_name": "factor_liquidity_range_gated_momentum_v6",
+  "fitness_direction": -1,
+  "formula": "pct_change(close,5) * rank_20((high-low) * (volume/rolling_median(volume,20))) * tanh(ATR20/close)",
+  "metrics": {
+    "ic": 0.024786992246334797,
+    "icir": 0.23511774841353206,
+    "mi": 0.029141128882767653,
+    "rank_ic": 0.03668319583951928,
+    "rank_icir": 0.30199118862189467
+  },
+  "rationale": "Mutation from liquidity_range_gated_momentum_v5: changed ATR window from 14 to 20 to align with the conviction window, reducing parameter count and potentially improving signal coherence. Preserves the core mechanism and the strong RankIC/MI from the parent while targeting improved ICIR through consistent window selection.",
+  "raw_metrics": {
+    "ic": -0.024786992246334797,
+    "icir": -0.23511774841353206,
+    "mi": 0.029141128882767653,
+    "rank_ic": -0.03668319583951928,
+    "rank_icir": -0.30199118862189467
+  },
+  "required_columns": [
+    "close",
+    "high",
+    "low",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260612-014632-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260612-014632-r1"
+  ],
+  "lqtp_formula": "ts_pct(close, 5) * ts_rank(20, (high-low) * (volume/ts_median(20, volume))) * tanh(ATR20/close)",
+  "fe_formula": "ts_pct(close, 5) * ts_rank(20, (high-low) * (volume/ts_median(20, volume))) * tanh(ATR20/close)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "pct_change(close,5) * rank_20((high-low) * (volume/rolling_median(volume,20))) * tanh(ATR20/close)"
+}

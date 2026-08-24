@@ -56,29 +56,9 @@ import pytest
 # ---------------------------------------------------------------------------
 # Importable-source bootstrap (identical pattern to test_metamorphic.py).
 # ---------------------------------------------------------------------------
-_BUILD_LIB = Path(__file__).resolve().parents[1] / "build" / "lib"
-_PKG_ROOT = _BUILD_LIB / "quant_evaluator"
-if str(_BUILD_LIB) not in sys.path:
-    sys.path.insert(0, str(_BUILD_LIB))
-
-_QE = sys.modules.get("quant_evaluator")
-if _QE is None or not str(getattr(_QE, "__file__", "")).startswith(str(_PKG_ROOT)):
-    import importlib.util as _ilu
-
-    for _pkg in ("", "contracts", "metrics", "kernels", "runtime", "planner",
-                 "registry", "diagnosis", "api", "adapters", "backends",
-                 "reporting"):
-        _root = _PKG_ROOT if not _pkg else _PKG_ROOT / _pkg
-        _init = _root / "__init__.py"
-        if _init.exists():
-            _name = "quant_evaluator" if not _pkg else f"quant_evaluator.{_pkg}"
-            _spec = _ilu.spec_from_file_location(_name, str(_init))
-            _mod = _ilu.module_from_spec(_spec)
-            sys.modules[_name] = _mod
-            _spec.loader.exec_module(_mod)
-    import quant_evaluator
-    _qe_dir = str(Path(quant_evaluator.__file__).resolve())
-    assert _qe_dir.startswith(str(_PKG_ROOT)), f"bootstrap failed: {_qe_dir}"
+_REPO_ROOT = Path(__file__).resolve().parents[2]   # quant_projects root
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle

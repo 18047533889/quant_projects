@@ -1,0 +1,302 @@
+[
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-04.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-04.parquet",
+    "bytes": 210755,
+    "sha256": "5cee84d05cb8bafba186e4925d55aa71b632b44072a57cd04a04d43f4715d67c",
+    "rows": 2811,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2811,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  },
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-05.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-05.parquet",
+    "bytes": 213435,
+    "sha256": "a5d82bd4e3c461269b977a82c3c85389b49ed2f62a46ce5a66f453819bd12440",
+    "rows": 2811,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2811,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  },
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-06.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-06.parquet",
+    "bytes": 213256,
+    "sha256": "2c3afe2b21508f73b9af9dd87e6b39d22300e024f0449408d511abe4a851e3bb",
+    "rows": 2812,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2812,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  },
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-07.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-07.parquet",
+    "bytes": 207130,
+    "sha256": "f947588093cc3ec0d4eaaa5afbae7a2d35582c92ccd9d516e1077be00979e9ff",
+    "rows": 2812,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2812,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  },
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-08.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-08.parquet",
+    "bytes": 211372,
+    "sha256": "1a965c65796ed1ebd1a57402b2c6356db3695235016b8372f3a5096d2a40ccee",
+    "rows": 2812,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2812,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  },
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-11.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-11.parquet",
+    "bytes": 207055,
+    "sha256": "ff18714882c6e431cbc19a8285f950393aee8cae96a432b2dcab3786602329d5",
+    "rows": 2812,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2812,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  },
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-12.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-12.parquet",
+    "bytes": 209793,
+    "sha256": "c5360061fd242e4f6c91aa5eb7ebd406a5706461015b74125d9067717e24efdc",
+    "rows": 2812,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2812,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  },
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-13.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-13.parquet",
+    "bytes": 209542,
+    "sha256": "fe632caf6d315d7712bc1049c49642b0c2c311047421a33120b04e72e9646287",
+    "rows": 2812,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2812,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  },
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-14.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-14.parquet",
+    "bytes": 208470,
+    "sha256": "77a4b3a6c40d3d9bca4e625e13ad91778db2593253c83c81690ecc8c7850a6db",
+    "rows": 2812,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2812,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  },
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-15.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-15.parquet",
+    "bytes": 209633,
+    "sha256": "f7b3a689a9ced0574fa36e3a7fafd3d5afe0f22dd5c9c462dbe416e8368ad2e7",
+    "rows": 2812,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2812,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  },
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-18.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-18.parquet",
+    "bytes": 208169,
+    "sha256": "80936dd775fce8ede8cb56a7bbbfa395d431a20c4374c95823d7ba7578fcf103",
+    "rows": 2812,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2812,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  },
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-19.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-19.parquet",
+    "bytes": 210340,
+    "sha256": "e8eb1d32c11e39680773b2f7063c5628538f9166b8438d4fd34d815174723fe5",
+    "rows": 2812,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2812,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  },
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-20.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-20.parquet",
+    "bytes": 211046,
+    "sha256": "38fe5107f83362fa0494896860a9e69e1d27831677b8cfd7e7e011aebdda7ef5",
+    "rows": 2812,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2812,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  },
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-21.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-21.parquet",
+    "bytes": 210448,
+    "sha256": "9b5a750c33fc07198933d81311bd8f2b8a4f341fa9ffc62d2f50573135ea5092",
+    "rows": 2812,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2812,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  },
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-22.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-22.parquet",
+    "bytes": 208934,
+    "sha256": "6324fdfacebd7bf32218d9c24c78524d0070818cafb55fcab45554e2cc5e88f6",
+    "rows": 2812,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2812,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  },
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-25.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-25.parquet",
+    "bytes": 209331,
+    "sha256": "66848618fdd44ecd7f4497654eb8582765faa3a2ffe6271b695ec46924a3af8c",
+    "rows": 2812,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2812,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  },
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-26.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-26.parquet",
+    "bytes": 207849,
+    "sha256": "dee6d62bca2e3858fd81a185bc05408bed19c9cb1f6976e9b137de2094896595",
+    "rows": 2812,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2812,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  },
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-27.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-27.parquet",
+    "bytes": 208857,
+    "sha256": "a48ae3f91a24ce8828aa9178c2ed1d2b3713004c21797ffc936ae7f6bd59c603",
+    "rows": 2812,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2812,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  },
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-28.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-28.parquet",
+    "bytes": 207859,
+    "sha256": "44aececece617157e14a41d241a1b54848068ff18f18fef4fef1171c5f408e60",
+    "rows": 2812,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2812,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  },
+  {
+    "key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-29.parquet",
+    "local_path": "/home/sunhaiwei/quantsociety/runs/status-jan2016-v2/inputs/2016-01-29.parquet",
+    "bytes": 216806,
+    "sha256": "741a3803f40e125363f119426ee0cf04041dfe45cc5d7fc7fbe2973ee79c3b7f",
+    "rows": 2812,
+    "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+    "quality": {
+      "rows": 2812,
+      "schema_fingerprint": "2503e9ca906c6cdca33358509a20f1b447170473d92ed7c40b1622d0ba6b077b",
+      "invalid_ohlc": 0,
+      "invalid_nonnegative": 0,
+      "duplicate_keys": 0
+    }
+  }
+]

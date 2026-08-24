@@ -1,0 +1,89 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "363d6cd3138eb97d749a23581413923f004d7b1c78b1283d8d2e4efe1c893d65",
+  "candidate_ids": [
+    "g1_crossover_then_mutation_tailrisk_g0_downside_semivariance_concentration_53648494"
+  ],
+  "code": "def factor_downside_semivariance_resilience_ema8(df):\n    \"\"\"Resilience from smoothed concentration of recent return variance in losses.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    downside_energy = ret.clip(upper=0.0).pow(2).rolling(20, min_periods=20).sum()\n    total_energy = ret.pow(2).rolling(20, min_periods=20).sum()\n    downside_share = downside_energy / total_energy.replace(0.0, np.nan)\n    df_copy[\"factor_downside_semivariance_resilience_ema8\"] = -downside_share.ewm(span=8, adjust=False, min_periods=8).mean()\n    return df_copy[\"factor_downside_semivariance_resilience_ema8\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "long_short_sharpe": 2.795728847510422,
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.0724280659957075,
+        "top_quantile_excess_return": 0.21337349841666065,
+        "top_quantile_max_drawdown": -0.08090408950664751,
+        "top_quantile_turnover": 0.09739993098411015
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_downside_semivariance_resilience_ema8",
+  "fitness_direction": -1,
+  "formula": "-EMA_8(sum_20[min(r_t,0)^2] / sum_20[r_t^2])",
+  "metrics": {
+    "ic": 0.020238111191216636,
+    "icir": 0.17425630096679065,
+    "mi": 0.0054386446605025895,
+    "rank_ic": 0.041434968301668804,
+    "rank_icir": 0.3080149008819174
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.795728847510422,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.0724280659957075,
+    "top_quantile_excess_return": 0.21337349841666065,
+    "top_quantile_max_drawdown": -0.08090408950664751,
+    "top_quantile_turnover": 0.09739993098411015
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "This mutation preserves the parent’s downside-semivariance resilience mechanism: stocks whose recent realized variance is less concentrated in losses receive higher scores. It only lengthens the causal smoothing horizon from 5 to 8 sessions, reducing transitory day-to-day changes in the bounded downside share to target rank-order stability while retaining the parent’s payoff-oriented tail-fragility interpretation.",
+  "raw_metrics": {
+    "ic": -0.020238111191216636,
+    "icir": -0.17425630096679065,
+    "mi": 0.0054386446605025895,
+    "rank_ic": -0.041434968301668804,
+    "rank_icir": -0.3080149008819174
+  },
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6terra-20260814-053307-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6terra-20260814-053307-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "-ema(8, sum_20[min(r_t,0)^2] / sum_20[r_t^2])",
+  "fe_formula": "-ema(8, sum_20[flex_min(r_t, 0)^2] / sum_20[r_t^2])",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "-EMA_8(sum_20[min(r_t,0)^2] / sum_20[r_t^2])"
+}

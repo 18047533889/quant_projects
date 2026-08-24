@@ -332,9 +332,15 @@ def _module_source_digest(module_ref: str) -> str:
 
     The catalog ``module`` field already carries the ``cleaned_operators.``
     package prefix (e.g. ``cleaned_operators.overhaul.base``), so the module
-    is resolved as ``<repo>/cleaned_operators/<rest>.py`` (with a
-    ``__init__.py`` package fallback).  Filesystem-only — the operator is never
-    imported (importing registers it and mutates the global OperatorRegistry).
+    is resolved as ``<repo_root>/cleaned_operators/<rest>.py`` (with a
+    ``__init__.py`` package fallback).  The canonical source authority is
+    ``_REPO_ROOT / "cleaned_operators"`` (the repo-ROOT operator library —
+    the SAME copy the factor-engine wheel runtime packages); the former
+    ``factor_engine/cleaned_operators/`` duplicate is archived and never
+    resolved here.  Filesystem-only — the operator is never imported
+    (importing registers it and mutates the global OperatorRegistry).
+    Fail-closed: raises if the canonical package directory is missing rather
+    than silently hashing some non-canonical copy.
 
     Memoized per module with mtime+size self-invalidation: the 1565 catalog
     operators share ~175 distinct modules, any on-disk source change bumps the
@@ -348,7 +354,20 @@ def _module_source_digest(module_ref: str) -> str:
         rel_parts = rel_parts[1:]
     if not rel_parts:
         return "MISSING:" + _sha256_bytes(module_ref.encode("utf-8"))
+    # SOURCE AUTHORITY (P0-7): the ONLY canonical operator runtime is
+    # ``<repo_root>/cleaned_operators/``.  The former duplicate at
+    # ``factor_engine/cleaned_operators/`` was archived (moved to
+    # ``factor_engine/cleaned_operators_archived/``) and is NOT hashed.
+    # Resolving anywhere else (a shadowed package, an alternate copy) would
+    # silently certify the wrong source, so fail CLOSED if the canonical
+    # directory is missing or is not a directory.
     pkg_root = _REPO_ROOT / "cleaned_operators"
+    if not pkg_root.is_dir():
+        raise RuntimeError(
+            "P0-7 SOURCE AUTHORITY: canonical operator package missing at "
+            f"{pkg_root} — refusing to hash operator source from an "
+            "ambiguous/non-canonical location"
+        )
     rel_file = pkg_root.joinpath(*rel_parts).with_suffix(".py")
     if rel_file.is_file():
         target: Path | None = rel_file
@@ -780,12 +799,47 @@ def main(argv: list[str] | None = None) -> int:
         "--skip-snapshot", action="store_true", default=False,
         help="Do not recompute the Merkle source snapshot id (faster)",
     )
+    parser.add_argument(
+        "--check", action="store_true", default=False,
+        help=(
+            "VER-P0-05: dry-run evaluate and print a single machine line "
+            "'EVIDENCE_CURRENT: <PASS|FAIL|STALE|UNRESOLVED> reason=...'.  "
+            "Never writes.  Returns non-zero unless every artifact is CURRENT "
+            "and no failures (dataaccess/import errors are honest UNRESOLVED, "
+            "fail-closed)."
+        ),
+    )
     args = parser.parse_args(argv)
 
-    payload = build_current()
-    if not args.skip_snapshot:
-        payload = _set_source_snapshot_id(payload)
-    payload = evaluate(payload)
+    # VER-P0-05: dataaccess (and other optional providers) must not take the
+    # whole check down with an import traceback.  Guard the import here so a
+    # missing data_access package reports an honest UNRESOLVED with a reason.
+    try:
+        from data_access.read.semantic_catalog import get_semantic_catalog  # noqa: F401
+        _da_import_error: str | None = None
+    except Exception as _exc:  # pragma: no cover - env-dependent
+        _da_import_error = f"{type(_exc).__name__}: {_exc}"
+
+    # VER-P0-05: a failure to resolve the LIVE identity set (missing operator
+    # catalog, data_access not importable, non-git checkout, ...) is an honest
+    # UNRESOLVED, never a crash and never a fabricated PASS.  Non-check runs
+    # keep their historical behavior (re-raise) so --write does not silently
+    # succeed on a half-resolved payload.
+    try:
+        payload = build_current()
+        if not args.skip_snapshot:
+            payload = _set_source_snapshot_id(payload)
+        payload = evaluate(payload)
+    except Exception as exc:  # pragma: no cover - env-dependent
+        if not args.check:
+            raise
+        reason = (
+            f"data_access import failed: {_da_import_error}"
+            if _da_import_error else
+            f"{type(exc).__name__}: {exc}"
+        )
+        print(f"EVIDENCE_CURRENT: UNRESOLVED reason={reason}")
+        return 1
 
     # VER-P0-03: when artifacts lack BOUND input identities this run cannot
     # certify them — bind them to the LIVE input set and the snapshot this run
@@ -820,18 +874,58 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"wrote {out}")
 
-    print(json.dumps(payload, indent=2, sort_keys=False) + "\n")
+    if not args.check:
+        print(json.dumps(payload, indent=2, sort_keys=False) + "\n")
 
     summary = payload.get("summary", {})
     status = payload.get("evaluation", {}).get("status", "STALE")
-    if status == "CURRENT" and summary.get("stale") == 0 \
-            and summary.get("failed") == 0:
+    all_current = (
+        status == "CURRENT"
+        and summary.get("stale") == 0
+        and summary.get("failed") == 0
+    )
+    changed = payload.get("evaluation", {}).get("changed_artifacts", [])
+
+    # VER-P0-05: the machine-readable check line.
+    if args.check:
+        if _da_import_error is not None:
+            print(
+                f"EVIDENCE_CURRENT: UNRESOLVED "
+                f"reason=data_access import failed: {_da_import_error}"
+            )
+            return 1
+        if all_current:
+            print(
+                f"EVIDENCE_CURRENT: PASS reason=every artifact CURRENT "
+                f"(current={summary.get('current')}, stale={summary.get('stale')}, "
+                f"unresolved={summary.get('failed')})"
+            )
+            return 0
+        if status == "UNRESOLVED":
+            print(
+                f"EVIDENCE_CURRENT: UNRESOLVED "
+                f"reason=source snapshot unresolved artifacts={changed or []}"
+            )
+            return 1
+        if status == "STALE":
+            print(
+                f"EVIDENCE_CURRENT: STALE reason=artifact bound inputs differ "
+                f"from the live tree (changed={changed or []})"
+            )
+            return 1
+        print(
+            f"EVIDENCE_CURRENT: FAIL reason=evaluation status {status} "
+            f"summary={summary}"
+        )
+        return 1
+
+    # Non-check reporting (unchanged behavior).
+    if all_current:
         print(
             "evaluation: CURRENT (every artifact's bound inputs match the "
             "live tree and executed_at is present)"
         )
         return 0
-    changed = payload.get("evaluation", {}).get("changed_artifacts", [])
     print(
         f"evaluation: {status} (CURRENT={summary.get('current')}, "
         f"STALE={summary.get('stale')}, UNRESOLVED={summary.get('failed')}) "

@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "3cd0d50e67e1298bd04bed013fbe5c4eda7481725563d9bd81ea62d29db3df25",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_regime_gate_002_regime_gate_001_272_268badb6"
+  ],
+  "code": "def factor_ema_trend_simple(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    fast_ema = close.ewm(span=20, adjust=False).mean()\n    slow_ema = close.ewm(span=40, adjust=False).mean()\n    factor = (fast_ema - slow_ema) / slow_ema.replace(0, np.nan)\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy['factor_ema_trend_simple'] = factor\n    return df_copy['factor_ema_trend_simple']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_ema_trend_simple",
+  "fitness_direction": -1,
+  "formula": "(EMA(20) - EMA(40)) / EMA(40)",
+  "metrics": {
+    "ic": 0.018402730548583775,
+    "icir": 0.11277573860985281,
+    "mi": 0.03112839192254846,
+    "rank_ic": 0.030864566505140325,
+    "rank_icir": 0.17276775655357138
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.11952413639147363,
+    "top_quantile_excess_return": 0.3825451883714752,
+    "top_quantile_max_drawdown": -0.12283285887279749,
+    "top_quantile_turnover": 0.0468943949443396
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Simplified trend factor using a single EMA cross (20/40) to capture persistent momentum direction. Removes the liquidity gate and short-term cross from the parent, which introduced noise and complexity. The single EMA cross preserves the core trend-following mechanism while improving robustness and interpretability.",
+  "raw_metrics": {
+    "ic": -0.018402730548583775,
+    "icir": -0.11277573860985281,
+    "mi": 0.03112839192254846,
+    "rank_ic": -0.030864566505140325,
+    "rank_icir": -0.17276775655357138
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260708-211634-r7",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260708-211634-r7"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(ema(20) - ema(40)) / ema(40)",
+  "fe_formula": "(ema(20) - ema(40)) / ema(40)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(EMA(20) - EMA(40)) / EMA(40)"
+}

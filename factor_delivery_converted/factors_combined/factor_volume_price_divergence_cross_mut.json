@@ -1,0 +1,42 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "98c64d529ff931d03c72bc255c411899a60d8c849e70a69d30442697c097d06c",
+  "candidate_ids": [
+    "volume_price_divergence_cross_mut_001"
+  ],
+  "code": "def factor_volume_price_divergence_cross_mut(df):\n    df_copy = df.copy()\n    price_change_5 = df_copy['close'] - df_copy['close'].shift(5)\n    avg_volume = df_copy['volume'].ewm(span=20, adjust=False).mean()\n    volume_surge = df_copy['volume'] / avg_volume.replace(0, np.nan)\n    factor = -price_change_5 * volume_surge\n    factor = np.tanh(factor)\n    factor = factor.fillna(0)\n    factor.name = \"factor_volume_price_divergence_cross_mut\"\n    return factor",
+  "factor_name": "factor_volume_price_divergence_cross_mut",
+  "fitness_direction": 1,
+  "formula": "tanh(-1 * (close - close_5d_ago) * (volume / 20d_ema_volume))",
+  "metrics": {
+    "ic": 0.018629639543945423,
+    "icir": 0.18073055875627803,
+    "mi": 0.03427676793045187,
+    "rank_ic": 0.03685153814231231,
+    "rank_icir": 0.3012953144109146
+  },
+  "rationale": "Mutation of volume_price_divergence_cross_001: replaced simple rolling mean of volume with exponential weighted moving average (span=20) to make the volume ratio more responsive to recent volume changes, targeting improved IC and ICIR while preserving the core price decline and volume surge mechanism and RankIC strength.",
+  "raw_metrics": {
+    "ic": 0.018629639543945423,
+    "icir": 0.18073055875627803,
+    "mi": 0.03427676793045187,
+    "rank_ic": 0.03685153814231231,
+    "rank_icir": 0.3012953144109146
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260615-034100-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260615-034100-r1"
+  ],
+  "lqtp_formula": "tanh(-1 * (close - close_5d_ago) * (volume / 20d_ema_volume))",
+  "fe_formula": "tanh(-1 * (close - close_5d_ago) * (volume / 20d_ema_volume))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "tanh(-1 * (close - close_5d_ago) * (volume / 20d_ema_volume))"
+}

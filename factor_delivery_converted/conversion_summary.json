@@ -1,0 +1,11 @@
+{
+  "total": 474,
+  "fully_converted": 319,
+  "with_unconverted": 155,
+  "by_source": {
+    "dev": 14,
+    "fundamental": 56,
+    "minute": 26,
+    "original": 378
+  }
+}

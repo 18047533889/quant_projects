@@ -1,0 +1,95 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "0c1d80072036263cc2568e2370e9721f47c0045fff859ecee73423042c0a7037",
+  "candidate_ids": [
+    "g2_mutation_alpha_volume_structure_0002_0d047658"
+  ],
+  "code": "def factor_volume_state_transition_carry_smooth(df):\n    \"\"\"Smoothed carry of price movement following transitions into unusually active volume.\"\"\"\n    df_copy = df.copy()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    active = is_high_vol > 0\n    prior_active = active.shift(1).fillna(False)\n    transition = (active & ~prior_active).astype(float)\n    close_return = df_copy[\"close\"].pct_change()\n    transition_return = transition * close_return\n    event_count = transition.rolling(30, min_periods=30).sum()\n    carried_return = transition_return.rolling(30, min_periods=30).sum()\n    factor = carried_return / (1.0 + event_count)\n    df_copy[\"factor_volume_state_transition_carry_smooth\"] = factor.replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_volume_state_transition_carry_smooth\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9272727272727272,
+        "top_quantile_annualized_excess_return": 0.025905591015545903,
+        "top_quantile_excess_return": 0.07297454200306319,
+        "top_quantile_max_drawdown": -0.1300314734876865,
+        "top_quantile_turnover": 0.08343405459283802
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_volume_state_transition_carry_smooth",
+  "fitness_direction": -1,
+  "formula": "sum_{30}(transition_into_high_volume * close_return) / (1 + sum_{30}(transition_into_high_volume))",
+  "metrics": {
+    "ic": 0.015843981924707255,
+    "icir": 0.17485198000750535,
+    "mi": 0.017337513016083328,
+    "rank_ic": 0.04303008545342276,
+    "rank_icir": 0.45673253259143043
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9272727272727272,
+    "top_quantile_annualized_excess_return": 0.025905591015545903,
+    "top_quantile_excess_return": 0.07297454200306319,
+    "top_quantile_max_drawdown": -0.1300314734876865,
+    "top_quantile_turnover": 0.08343405459283802
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Mutation target: improve the parent's weak predictive robustness and suppress isolated transition noise while preserving its qualified volume-participation carry and positive cost-adjusted payoff evidence. The core mechanism remains directional price carry at entries into an unusually active volume state. The volume-state classification is replaced by the reusable EMA-based regime module for a cleaner, more stable activity definition, and the event aggregation horizon is extended from 15 to 30 bars so the signal responds less to single-event fluctuations and should avoid materially increasing turnover. Parent-strength target: preserve the qualified payoff profile and lower-churn event-driven participation mechanism while improving IC, RankIC, and their stability.",
+  "raw_metrics": {
+    "ic": -0.015843981924707255,
+    "icir": -0.17485198000750535,
+    "mi": 0.017337513016083328,
+    "rank_ic": -0.04303008545342276,
+    "rank_icir": -0.45673253259143043
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260806-064355-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260806-064355-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "sum_{30}(transition_into_high_volume * close_return) / (1 + sum_{30}(transition_into_high_volume))",
+  "fe_formula": "sum_{30}(transition_into_high_volume * close_return) / (1 + sum_{30}(transition_into_high_volume))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "sum_{30}(transition_into_high_volume * close_return) / (1 + sum_{30}(transition_into_high_volume))"
+}

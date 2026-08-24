@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "271e31d49d8a4384dea7f25b7a2a1363646123d34c1d3ceff5e8cb1b7a8333da",
+  "candidate_ids": [
+    "cand_cross_001"
+  ],
+  "code": "def factor_range_volume_trend(df):\n    df_copy = df.copy()\n    high, low, vol = df_copy['high'], df_copy['low'], df_copy['volume']\n    # range expansion ratio\n    range_ = high - low\n    range_mean = range_.rolling(20).mean().shift(1)\n    range_ratio = range_ / range_mean.replace(0, np.nan)\n    # short-term volume z-score\n    vol_mean20 = vol.rolling(20).mean().shift(1)\n    vol_std20 = vol.rolling(20).std(ddof=0).shift(1)\n    vol_z20 = (vol - vol_mean20) / (vol_std20 + 1e-8)\n    # long-term volume trend\n    vol_mean200 = vol.rolling(200).mean().shift(1)\n    vol_trend = vol / (vol_mean200 + 1e-8)\n    # combine\n    factor = range_ratio * vol_z20 * vol_trend\n    df_copy['factor_range_volume_trend'] = factor\n    return df_copy['factor_range_volume_trend']",
+  "factor_name": "factor_range_volume_trend",
+  "fitness_direction": -1,
+  "formula": "range_ratio = (high - low) / SMA(high-low, 20); vol_z20 = (volume - SMA(volume,20)) / STD(volume,20); vol_trend = volume / SMA(volume,200); factor = range_ratio * vol_z20 * vol_trend",
+  "metrics": {
+    "ic": 0.01317953796165914,
+    "icir": 0.19596658477365445,
+    "mi": 0.024342556276697458,
+    "rank_ic": 0.023922038720534583,
+    "rank_icir": 0.2776133743902083
+  },
+  "rationale": "Combines range-based volatility expansion with both short-term volume abnormality and long-term volume trend. Range ratio identifies volatility expansion relative to recent average; volume z-score captures unusual trading activity; volume trend ratio indicates volume regime relative to long-term baseline. The product strengthens when all three align, targeting price-volume dynamics in a multi-scale volume confirmation framework.",
+  "raw_metrics": {
+    "ic": -0.01317953796165914,
+    "icir": -0.19596658477365445,
+    "mi": 0.024342556276697458,
+    "rank_ic": -0.023922038720534583,
+    "rank_icir": -0.2776133743902083
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260610-095822-r3",
+  "source_run_ids": [
+    "formal-mvp-loop-20260610-095822-r3"
+  ],
+  "lqtp_formula": "range_ratio = (high - low) / ts_mean(20, high-low); vol_z20 = (volume - ts_mean(20, volume)) / ts_std(20, volume); vol_trend = volume / ts_mean(200, volume); factor = range_ratio * vol_z20 * vol_trend",
+  "fe_formula": "range_ratio = (high - low) / ts_mean(20, high-low); vol_z20 = (volume - ts_mean(20, volume)) / ts_std(20, volume); vol_trend = volume / ts_mean(200, volume); factor = range_ratio * vol_z20 * vol_trend",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "range_ratio = (high - low) / SMA(high-low, 20); vol_z20 = (volume - SMA(volume,20)) / STD(volume,20); vol_trend = volume / SMA(volume,200); factor = range_ratio * vol_z20 * vol_trend"
+}

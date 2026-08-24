@@ -1,0 +1,124 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "alpha_tools"
+  ],
+  "b_id": "B3",
+  "c_id": "C303",
+  "calculation_fingerprint": "0fada3f1e494b6615c771cff9a2283653191d58f539e680d96b952515f14fb7b",
+  "candidate_ids": [
+    "g2_crossover_c1201_persistent_buying_005_c303_breakout_effici_7c660326"
+  ],
+  "code": "def factor_breakout_hold_persistence_20d(df):\n    '''\n    Idea: A genuine level repricing is confirmed when, after breaking the prior 20-day high,\n    the stock persistently closes in the upper quartile of the post-breakout channel instead of\n    fading back toward the broken level.\n\n    Logic: The prior 20-day high acts as the new floor. The 10-day persistence of closes in the\n    upper quartile of the post-breakout channel captures the buying-pressure mechanism from the\n    persistent-upper-quartile parent, while the ATR-normalized distance above the broken level,\n    directional efficiency, and volume momentum retain the breakout-decisiveness mechanism from\n    the efficiency parent. Persistent holds above the level receive high positive values; failed\n    attempts that close back below resistance collapse to zero.\n\n    Sub-mechanism tags: post-breakout-hold, upper-quartile-persistence, directional-efficiency, volume-confirmation\n\n    Formula: hold_persistence * (close-prior_high)/ATR * (0.5+0.5*efficiency) * volume_momentum\n    '''\n    df_copy = df.copy()\n    atr = alpha_tools.average_true_range(df_copy, window=14).replace(0.0, np.nan)\n    resistance = df_copy['high'].rolling(20).max().shift(1)\n    channel_high = df_copy['high'].rolling(10, min_periods=5).max()\n    channel_range = (channel_high - resistance).replace(0.0, np.nan)\n    hold_loc = (df_copy['close'] - resistance) / channel_range\n    hold_flag = ((hold_loc >= 0.75) & (df_copy['close'] > resistance)).astype(float)\n    hold_persistence = hold_flag.rolling(10, min_periods=5).sum() / 10.0\n    position = ((df_copy['close'] - resistance) / atr).clip(0.0, 5.0)\n    efficiency = alpha_tools.directional_efficiency(df_copy, window=10)\n    vol_conf = alpha_tools.volume_momentum_ratio(df_copy['volume'], long_window=20, short_window=5).clip(0.5, 2.0)\n    factor = position * hold_persistence * (0.5 + 0.5 * efficiency.clip(-1.0, 1.0)) * vol_conf\n    factor = factor.replace([np.inf, -np.inf], np.nan)\n    df_copy['factor_breakout_hold_persistence_20d'] = factor\n    return df_copy['factor_breakout_hold_persistence_20d']",
+  "codegen_skill": "alpha-crossover",
+  "cross_sectional_rationale": "The raw factor is a per-stock post-breakout persistence measure. Cross-sectional ranking makes the relative decisiveness of level repricing comparable across stocks on the same date, which is the relevant comparison for forecasting forward returns.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.6484848484848484,
+        "top_quantile_annualized_excess_return": -0.0015712769451157182,
+        "top_quantile_excess_return": -0.004364777499659911,
+        "top_quantile_max_drawdown": -0.14946779287850342,
+        "top_quantile_turnover": 0.02228169353256614
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_breakout_hold_persistence_20d",
+  "fitness_direction": -1,
+  "formula": "hold_persistence * (close-prior_high)/ATR * (0.5+0.5*efficiency) * volume_momentum",
+  "manual_admission": null,
+  "metrics": {
+    "ic": 0.02240299933649042,
+    "icir": 0.33521198048469725,
+    "mi": 0.15658455837277163,
+    "rank_ic": 0.024717608018297397,
+    "rank_icir": 0.4855507973299849
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6484848484848484,
+    "top_quantile_annualized_excess_return": -0.0015712769451157182,
+    "top_quantile_excess_return": -0.004364777499659911,
+    "top_quantile_max_drawdown": -0.14946779287850342,
+    "top_quantile_turnover": 0.02228169353256614
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.01696083097466739,
+    "icir": 0.23050539851166615,
+    "mi": 0.009527570835712762,
+    "rank_ic": 0.024717608018297397,
+    "rank_icir": 0.4855507973299849
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.6484848484848484,
+    "top_quantile_annualized_excess_return": -0.0015712769451157182,
+    "top_quantile_excess_return": -0.004364777499659911,
+    "top_quantile_max_drawdown": -0.14946779287850342,
+    "top_quantile_turnover": 0.02228169353256614
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.01696083097466739,
+    "icir": -0.23050539851166615,
+    "mi": 0.009527570835712762,
+    "rank_ic": -0.024717608018297397,
+    "rank_icir": -0.4855507973299849
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "A price-level repricing is only genuine if, after breaking the prior 20-day high, the stock persistently closes in the upper quartile of the post-breakout channel rather than fading back to the broken level. This crossover combines the persistent upper-quartile close mechanism from C1201 with the breakout-efficiency/volume mechanism from C303: the post-breakout hold-persistence count conditions the ATR-normalized breakout distance, and directional efficiency plus volume intensity weight the signal toward decisive relaunches rather than exhausted attempts.",
+  "raw_metrics": {
+    "ic": -0.02240299933649042,
+    "icir": -0.33521198048469725,
+    "mi": 0.15658455837277163,
+    "rank_ic": -0.024717608018297397,
+    "rank_icir": -0.4855507973299849
+  },
+  "required_columns": [
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-dynamic-memory-xalpha-light-v2-20260810-072411-r1",
+  "source_run_ids": [
+    "formal-dynamic-memory-xalpha-light-v2-20260810-072411-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.7672622056703287,
+    "pre_transform_top_quantile_excess_return": -0.004364777499659911,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 1.0244679435422417,
+    "transformed_top_quantile_excess_return": -0.004364777499659911
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "hold_persistence * (close-prior_high)/ATR * (0.5+0.5*efficiency) * volume_momentum",
+  "fe_formula": "hold_persistence * (close-prior_high)/ATR * (0.5+0.5*efficiency) * volume_momentum",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "hold_persistence * (close-prior_high)/ATR * (0.5+0.5*efficiency) * volume_momentum"
+}

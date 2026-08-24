@@ -1,0 +1,124 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "69ce1d10f1ff90c87108eb6291887a549453a036a85c6cdcf7cdacb650ab0129",
+  "candidate_ids": [
+    "alpha-drawdown-002"
+  ],
+  "code": "def factor_drawdown_stress_ratio(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(20, min_periods=10).max()\n    max_drawdown_20 = (df_copy['close'] - rolling_max) / rolling_max\n    high_low_range = (df_copy['high'] - df_copy['low']).rolling(20, min_periods=10).mean()\n    stress_ratio = -max_drawdown_20 / high_low_range.replace(0.0, np.nan)\n    df_copy['factor_drawdown_stress_ratio'] = stress_ratio.fillna(0.0)\n    return df_copy['factor_drawdown_stress_ratio']",
+  "cross_sectional_rationale": "cs_rank standardizes the stress ratio across stocks, as drawdown depth and range scales differ per asset. Ranking highlights which stocks are under the most relative stress.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9393939393939394,
+        "top_quantile_annualized_excess_return": 0.0024877098187270352,
+        "top_quantile_excess_return": 0.0070745249972712365,
+        "top_quantile_max_drawdown": -0.15101819149351803,
+        "top_quantile_turnover": 0.14619385658596107
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_drawdown_stress_ratio",
+  "fitness_direction": 1,
+  "formula": "stress_ratio = -(close / rolling_max(20) - 1) / rolling_mean(high - low, 20)",
+  "metrics": {
+    "ic": 0.016701210624015066,
+    "icir": 0.14991402175372762,
+    "mi": 0.026475701796591977,
+    "rank_ic": 0.0320982186780693,
+    "rank_icir": 0.23883341287162074
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9393939393939394,
+    "top_quantile_annualized_excess_return": 0.0024877098187270352,
+    "top_quantile_excess_return": 0.0070745249972712365,
+    "top_quantile_max_drawdown": -0.15101819149351803,
+    "top_quantile_turnover": 0.14619385658596107
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.009095132313890916,
+    "icir": 0.11619986677831659,
+    "mi": 0.011171222217258858,
+    "rank_ic": 0.0320982186780693,
+    "rank_icir": 0.23883341287162074
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9393939393939394,
+    "top_quantile_annualized_excess_return": 0.0024877098187270352,
+    "top_quantile_excess_return": 0.0070745249972712365,
+    "top_quantile_max_drawdown": -0.15101819149351803,
+    "top_quantile_turnover": 0.14619385658596107
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.009095132313890916,
+    "icir": 0.11619986677831659,
+    "mi": 0.011171222217258858,
+    "rank_ic": 0.0320982186780693,
+    "rank_icir": 0.23883341287162074
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Measures the severity of a recent drawdown relative to the stock's typical daily price range. A deep drawdown combined with a narrow recent range indicates a stressed but compressed condition, while a deep drawdown with a wide range suggests high uncertainty. This factor captures drawdown depth normalized by recent volatility, a geometry of stress that operates at a multi-scale (20-day drawdown vs 20-day range).",
+  "raw_metrics": {
+    "ic": 0.016701210624015066,
+    "icir": 0.14991402175372762,
+    "mi": 0.026475701796591977,
+    "rank_ic": 0.0320982186780693,
+    "rank_icir": 0.23883341287162074
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260717-061725-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260717-061725-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.4073978528591564,
+    "pre_transform_top_quantile_excess_return": 0.0070745249972712365,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.46402256572402467,
+    "transformed_top_quantile_excess_return": 0.0070745249972712365
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(cumulative max drawdown sum over 60d) / (60d return volatility)",
+  "fe_formula": "(cumulative max drawdown sum over 60d) / (60d return volatility)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(cumulative max drawdown sum over 60d) / (60d return volatility)"
+}

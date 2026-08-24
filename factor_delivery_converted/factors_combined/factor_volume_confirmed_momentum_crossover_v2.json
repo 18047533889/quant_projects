@@ -1,0 +1,42 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "49f2861b906e9a9765b879b994e4d39adc1f4b471688f668b7a2175cac63abf6",
+  "candidate_ids": [
+    "mut_vcm_window_001"
+  ],
+  "code": "def factor_volume_confirmed_momentum_crossover_v2(df):\n    df_copy = df.copy()\n    price_ret = df_copy['close'].pct_change(5)\n    volume_30_avg = df_copy['volume'].rolling(30).mean().replace(0, np.nan)\n    volume_ratio = df_copy['volume'] / volume_30_avg\n    volume_rank = volume_ratio.rolling(10).rank(pct=True)\n    factor = price_ret * volume_rank\n    factor.name = 'factor_volume_confirmed_momentum_crossover_v2'\n    return factor",
+  "factor_name": "factor_volume_confirmed_momentum_crossover_v2",
+  "fitness_direction": -1,
+  "formula": "pct_return_5 * rank(volume / sma_30) over 10",
+  "metrics": {
+    "ic": 0.023596985139328928,
+    "icir": 0.2118033287271011,
+    "mi": 0.06932238992765605,
+    "rank_ic": 0.03435217245390473,
+    "rank_icir": 0.28540869518788736
+  },
+  "rationale": "Mutation of crossover_vcm_001: increase the volume average window from 20 to 30 days to smooth the volume ratio, reducing noise in the volume confirmation while preserving the core momentum mechanism and rank window. Targets improved IC and RankIC stability.",
+  "raw_metrics": {
+    "ic": -0.023596985139328928,
+    "icir": -0.2118033287271011,
+    "mi": 0.06932238992765605,
+    "rank_ic": -0.03435217245390473,
+    "rank_icir": -0.28540869518788736
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260612-014632-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260612-014632-r1"
+  ],
+  "lqtp_formula": "pct_return_5 * cs_rank(volume / sma_30) over 10",
+  "fe_formula": "pct_return_5 * rank(volume / sma_30) over 10",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "pct_return_5 * rank(volume / sma_30) over 10"
+}

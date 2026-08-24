@@ -1,0 +1,39 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "ee43f48be5b657fcc7f83ba423dab39e49d124a87c4463af761ecc88abf59dff",
+  "candidate_ids": [
+    "alpha-drawdown-volume-gen1-0"
+  ],
+  "code": "def factor_drawdown_volume_complexity(df):\n    \"\"\"Mutated drawdown geometry with volume-confirmed recovery.\"\"\"\n    df_copy = df.copy()\n    rolling_high = df_copy[\"close\"].rolling(window=252, min_periods=20).max()\n    drawdown = (rolling_high - df_copy[\"close\"]) / rolling_high\n    new_peak = df_copy[\"close\"] >= rolling_high\n    group = new_peak.cumsum()\n    duration = new_peak.groupby(group).cumcount()\n    recovery = -drawdown.diff(5)\n    vol_ma = df_copy[\"volume\"].rolling(window=20).mean()\n    rel_volume = df_copy[\"volume\"] / vol_ma\n    rank_dd = drawdown.rank(pct=True)\n    rank_dur = duration.rank(pct=True)\n    rank_rec = recovery.rank(pct=True)\n    rank_vol = rel_volume.rank(pct=True)\n    confirmed_recovery = rank_rec * rank_vol\n    df_copy[\"factor_drawdown_volume_complexity\"] = rank_dd + rank_dur + confirmed_recovery\n    return df_copy[\"factor_drawdown_volume_complexity\"]",
+  "factor_name": "factor_drawdown_volume_complexity",
+  "fitness_direction": 1,
+  "formula": "R(DD) + R(Dur) + R(Rec) * R(V/MA20_V)",
+  "metrics": {
+    "ic": 0.06143285399289829,
+    "icir": 0.6421906094058794,
+    "mi": 0.01324449299371544,
+    "rank_ic": 0.07838581623059628,
+    "rank_icir": 0.7706274982868747
+  },
+  "rationale": "Extends the drawdown geometry factor by incorporating volume-confirmed recovery. The parent's recovery slope is multiplied by relative volume rank so that only recoveries accompanied by elevated volume contribute strongly, introducing nonlinear interaction that can improve MI. Depth and duration components remain additive to preserve rank stability.",
+  "raw_metrics": null,
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260609-093208-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260609-093208-r2"
+  ],
+  "lqtp_formula": "R(DD) + R(Dur) + R(Rec) * R(V/MA20_V)",
+  "fe_formula": "R(DD) + R(Dur) + R(Rec) * R(V/MA20_V)",
+  "lqtp_notes": "Textual non-executable: R(...)-notation (rank, use Python code); Unconverted: ['R']",
+  "fe_notes": "Textual non-executable: R(...)-notation (rank, use Python code); Unconverted: ['R']",
+  "source_formula": "R(DD) + R(Dur) + R(Rec) * R(V/MA20_V)"
+}

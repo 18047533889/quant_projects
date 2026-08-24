@@ -1,0 +1,45 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "f11ff0e1726a80cff4b5efeeeaf3578185ac11bd59a1b5c5086935acca5beb61",
+  "candidate_ids": [
+    "mutation-crossover-gen5-001"
+  ],
+  "code": "def factor_mutation_dir_vol_shape_zscore(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    sign_ret = np.sign(ret)\n    net_dir = sign_ret.rolling(5, min_periods=5).sum()\n    mom = df_copy['close'] / df_copy['close'].shift(20) - 1\n    direction = net_dir * mom\n    abs_ret = ret.abs()\n    avg_abs_ret = abs_ret.rolling(20, min_periods=10).mean()\n    vol = df_copy['volume']\n    vol_mean = vol.rolling(20).mean()\n    vol_std = vol.rolling(20).std(ddof=1)\n    vol_z = (vol - vol_mean) / vol_std.replace(0.0, np.nan)\n    vol_tanh = np.tanh(vol_z)\n    high = df_copy['high']\n    low = df_copy['low']\n    open_ = df_copy['open']\n    close = df_copy['close']\n    body_top = np.maximum(open_, close)\n    body_bottom = np.minimum(open_, close)\n    upper_shadow = high - body_top\n    lower_shadow = body_bottom - low\n    symmetry = (lower_shadow - upper_shadow) / (lower_shadow + upper_shadow + 1e-10)\n    sym_mean = symmetry.rolling(20).mean()\n    sym_std = symmetry.rolling(20).std(ddof=1)\n    sym_z = (symmetry - sym_mean) / sym_std.replace(0.0, np.nan)\n    sym_tanh = np.tanh(sym_z)\n    magnitude = avg_abs_ret * (1 + vol_tanh) * (1 + sym_tanh)\n    factor = direction * magnitude\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy['factor_mutation_dir_vol_shape_zscore'] = factor\n    return df_copy['factor_mutation_dir_vol_shape_zscore']",
+  "factor_name": "factor_mutation_dir_vol_shape_zscore",
+  "fitness_direction": -1,
+  "formula": "direction * (avg_abs_ret * (1 + tanh(vol_z)) * (1 + tanh(sym_z)))",
+  "metrics": {
+    "ic": 0.015056727623111865,
+    "icir": 0.19384520275820907,
+    "mi": 0.026080501543663814,
+    "rank_ic": 0.019138942423718056,
+    "rank_icir": 0.294968673282069
+  },
+  "rationale": "Mutation of crossover-gen4-001: preserves the core directional persistence (net_5_sign * momentum) and volume-confirmed magnitude logic, but replaces rolling percentile ranks with hyperbolic tangent of z-scores for both volume and symmetry components. This reduces extreme value influence and improves cross-sectional stability. The mutation targets improvement in ICIR and MI while preserving the strong RankIC from the parent structure.",
+  "raw_metrics": {
+    "ic": -0.015056727623111865,
+    "icir": -0.19384520275820907,
+    "mi": 0.026080501543663814,
+    "rank_ic": -0.019138942423718056,
+    "rank_icir": -0.294968673282069
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260611-061826-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260611-061826-r1"
+  ],
+  "lqtp_formula": "direction * (avg_abs_ret * (1 + tanh(vol_z)) * (1 + tanh(sym_z)))",
+  "fe_formula": "direction * (avg_abs_ret * (1 + tanh(vol_z)) * (1 + tanh(sym_z)))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "direction * (avg_abs_ret * (1 + tanh(vol_z)) * (1 + tanh(sym_z)))"
+}

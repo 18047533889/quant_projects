@@ -1,0 +1,123 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "dab1a6ee1bbe2876269fc3aca2feeb7d236832e526c1f59cad4816d92af682f3",
+  "candidate_ids": [
+    "g1_crossover_avsi_gen0_001_alpha_float_size_context_002_d46200b4"
+  ],
+  "code": "def factor_float_adaptive_cf_book_yield(df):\n    df_copy = df.copy()\n    large = df_copy['style_gate_size_large'].astype(bool)\n    small = df_copy['style_gate_size_small'].astype(bool)\n    cfy = 1.0 / df_copy['pcf_ocf_ttm'].replace(0, np.nan)\n    roe = df_copy['roe_ttm2'].clip(lower=0) / 100.0\n    float_weight = 1.0 / np.log1p(df_copy['free_float_shares'].clip(lower=1))\n    large_val = cfy * (1 + roe * float_weight)\n    by = 1.0 / df_copy['pb_lf'].replace(0, np.nan)\n    lev = df_copy['debttoassets'] / 100.0\n    health = (1 - lev).clip(lower=0)\n    small_val = by * health\n    factor = np.where(large, large_val, np.where(small, small_val, large_val))\n    return pd.Series(factor, index=df_copy.index, name='factor_float_adaptive_cf_book_yield')",
+  "cross_sectional_rationale": "Cross-sectional rank makes cash flow yield and book yield comparable across different size regimes and mitigates scale differences.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9272727272727272,
+        "top_quantile_annualized_excess_return": 0.18431193647279476,
+        "top_quantile_excess_return": 0.6258081266103865,
+        "top_quantile_max_drawdown": -0.13139848335089355,
+        "top_quantile_turnover": 0.029051751247589113
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_float_adaptive_cf_book_yield",
+  "fitness_direction": 1,
+  "formula": "For large caps: (1/pcf_ocf_ttm) * (1 + max(0, roe_ttm2/100) * (1/log(1+free_float_shares))). For small caps: (1/pb_lf) * max(0, 1 - debttoassets/100). Default large_val for medium caps.",
+  "metrics": {
+    "ic": 0.01740391274705557,
+    "icir": 0.19754821378605164,
+    "mi": 0.010233466783367007,
+    "rank_ic": 0.032131426585980206,
+    "rank_icir": 0.29736907351135466
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9272727272727272,
+    "top_quantile_annualized_excess_return": 0.18431193647279476,
+    "top_quantile_excess_return": 0.6258081266103865,
+    "top_quantile_max_drawdown": -0.13139848335089355,
+    "top_quantile_turnover": 0.029051751247589113
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.013638548459019025,
+    "icir": 0.19624428149486603,
+    "mi": 0.0161824819088201,
+    "rank_ic": 0.032131426585980206,
+    "rank_icir": 0.29736907351135466
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9272727272727272,
+    "top_quantile_annualized_excess_return": 0.18431193647279476,
+    "top_quantile_excess_return": 0.6258081266103865,
+    "top_quantile_max_drawdown": -0.13139848335089355,
+    "top_quantile_turnover": 0.029051751247589113
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.013638548459019025,
+    "icir": 0.19624428149486603,
+    "mi": 0.0161824819088201,
+    "rank_ic": 0.032131426585980206,
+    "rank_icir": 0.29736907351135466
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Crossover combining size-adaptive value (parent1) with float scarcity quality amplification (parent2). Large caps benefit from cash flow yield boosted by ROE weighted by float scarcity: low-float high-ROE large caps have greater re-rating potential. Small caps retain book yield with leverage penalty. Cross-sectional rank ensures cross-size comparability.",
+  "raw_metrics": {
+    "ic": 0.01740391274705557,
+    "icir": 0.19754821378605164,
+    "mi": 0.010233466783367007,
+    "rank_ic": 0.032131426585980206,
+    "rank_icir": 0.29736907351135466
+  },
+  "required_columns": [
+    "pcf_ocf_ttm",
+    "roe_ttm2",
+    "pb_lf",
+    "debttoassets",
+    "free_float_shares",
+    "style_gate_size_large",
+    "style_gate_size_small"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260721-20260721-084650-r1",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260721-20260721-084650-r1"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "Size gates directly implement the mkt_cap_float conditioning: large caps and small caps use different value metrics because the reliability of cash flow vs. book values differs by size. Float scarcity further amplifies the ROE quality boost for large caps.",
+  "style_gates_used": [
+    "style_gate_size_large",
+    "style_gate_size_small"
+  ],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.55556581196004,
+    "pre_transform_top_quantile_excess_return": 0.6258081266103865,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.5546860934138091,
+    "transformed_top_quantile_excess_return": 0.6258081266103865
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "For large caps: (1/pcf_ocf_ttm) * (1 + max(0, roe_ttm2/100) * (1/log(1+free_float_shares))). For small caps: (1/pb_lf) * max(0, 1 - debttoassets/100). Default large_val for medium caps.",
+  "fe_formula": "For large caps: (1/pcf_ocf_ttm) * (1 + flex_max(0, roe_ttm2/100) * (1/log(1+free_float_shares))). For small caps: (1/pb_lf) * flex_max(0, 1 - debttoassets/100). Default large_val for medium caps.",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "For large caps: (1/pcf_ocf_ttm) * (1 + max(0, roe_ttm2/100) * (1/log(1+free_float_shares))). For small caps: (1/pb_lf) * max(0, 1 - debttoassets/100). Default large_val for medium caps."
+}

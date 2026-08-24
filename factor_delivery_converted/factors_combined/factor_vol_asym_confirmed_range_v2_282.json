@@ -1,0 +1,54 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "eb55ae962d0991f34cc79893938ca47ec332ce43cf01010aff6ec05db9f62fa1",
+  "candidate_ids": [
+    "alpha_mutation_003"
+  ],
+  "code": "def factor_vol_asym_confirmed_range_v2(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    down_ret = np.where(ret < 0, ret, np.nan)\n    down_var = pd.Series(np.where(np.isnan(down_ret), 0, down_ret**2), index=df_copy.index).rolling(60, min_periods=40).mean()\n    down_vol = np.sqrt(down_var)\n    up_ret = np.where(ret > 0, ret, np.nan)\n    up_var = pd.Series(np.where(np.isnan(up_ret), 0, up_ret**2), index=df_copy.index).rolling(60, min_periods=40).mean()\n    up_vol = np.sqrt(up_var)\n    asym = np.log(1 + down_vol) - np.log(1 + up_vol)\n    vol_ma40 = df_copy[\"volume\"].rolling(40, min_periods=40).mean()\n    vol_ratio = df_copy[\"volume\"] / vol_ma40.replace(0, np.nan)\n    typical_price = (df_copy[\"high\"] + df_copy[\"low\"] + df_copy[\"close\"]) / 3.0\n    rel_range = (df_copy[\"high\"] - df_copy[\"low\"]) / typical_price.replace(0, np.nan)\n    factor = asym * vol_ratio * rel_range\n    df_copy[\"factor_vol_asym_confirmed_range_v2\"] = factor\n    return df_copy[\"factor_vol_asym_confirmed_range_v2\"]",
+  "cross_sectional_rationale": "The raw factor captures stock-specific volatility asymmetry and volume dynamics combined with relative range; cross-sectional z-score improves rank stability and comparability across stocks.",
+  "cross_sectional_transform": "cs_zscore",
+  "factor_name": "factor_vol_asym_confirmed_range_v2",
+  "fitness_direction": 1,
+  "formula": "log(1+down_vol_60) - log(1+up_vol_60) * (volume / vol_ma40) * ((high - low) / typical_price)",
+  "metrics": {
+    "ic": 0.02067473172268245,
+    "icir": 0.1699733588769105,
+    "mi": 0.03759920475294809,
+    "rank_ic": 0.043634520834947635,
+    "rank_icir": 0.3021474756485707
+  },
+  "rationale": "Mutation of alpha_crossover_002. Preserve core asymmetric volatility with volume confirmation, and adjust the relative range denominator from close to typical price to reduce noise. Reduce volume MA window from 60 to 40 for more responsive volume confirmation. Target: improve RankIC and ICIR by making the volume signal more adaptive and the range less sensitive to closing price fluctuations.",
+  "raw_metrics": {
+    "ic": 0.02067473172268245,
+    "icir": 0.1699733588769105,
+    "mi": 0.03759920475294809,
+    "rank_ic": 0.043634520834947635,
+    "rank_icir": 0.3021474756485707
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260624-051221-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260624-051221-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "lqtp_formula": "log(1+down_vol_60) - log(1+up_vol_60) * (volume / vol_ma40) * ((high - low) / typical_price)",
+  "fe_formula": "log(1+down_vol_60) - log(1+up_vol_60) * (volume / vol_ma40) * ((high - low) / typical_price)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "log(1+down_vol_60) - log(1+up_vol_60) * (volume / vol_ma40) * ((high - low) / typical_price)"
+}

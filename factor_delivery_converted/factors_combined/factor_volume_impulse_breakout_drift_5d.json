@@ -1,0 +1,97 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "b_id": "B14",
+  "c_id": "C1401",
+  "calculation_fingerprint": "b361f4f1d557b39d0fe716526212a55cd71110222d427e82e35486413c341dd7",
+  "candidate_ids": [
+    "g1_mutation_c1001_pvc_004_95950ee5"
+  ],
+  "code": "def factor_volume_impulse_breakout_drift_5d(df):\n    '''Idea: After a volume impulse, price adjusts with delay; the rate of post-impulse progress above the prior 20-day high captures how well the market absorbs the shock.\n    Logic: For each day, compute the positive distance above the prior 20-day high and scale it by the positive volume deviation from the 20-day mean. Average this product over the last 5 days and divide by the cumulative volume impulse over the same window, yielding the average post-impulse breakout progress.\n    Sub-mechanism tags: volume_impulse, delayed_adjustment, breakout_drift, price_volume_confirmation.\n    Formula: sum( max(close/prior_high-1,0) * max(vol/vol_ma-1,0) , 5d ) / sum( max(vol/vol_ma-1,0) , 5d )\n    '''\n    df_copy = df.copy()\n    prior_high = df_copy[\"high\"].rolling(20).max().shift(1)\n    breakout_daily = (df_copy[\"close\"] / prior_high - 1.0).clip(lower=0.0)\n    vol_ma = df_copy[\"volume\"].rolling(20).mean().replace(0.0, np.nan)\n    vol_impulse = (df_copy[\"volume\"] / vol_ma - 1.0).clip(lower=0.0)\n    weighted_progress = (breakout_daily * vol_impulse).rolling(5, min_periods=5).sum()\n    cumulative_impulse = vol_impulse.rolling(5, min_periods=5).sum().replace(0.0, np.nan)\n    factor = weighted_progress / cumulative_impulse\n    factor = factor.fillna(0.0)\n    df_copy[\"factor_volume_impulse_breakout_drift_5d\"] = factor\n    return df_copy[\"factor_volume_impulse_breakout_drift_5d\"]\n",
+  "codegen_skill": "alpha-mutation",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.7454545454545455,
+        "top_quantile_annualized_excess_return": -1.3371018888541641e-05,
+        "top_quantile_excess_return": -3.714127769394171e-05,
+        "top_quantile_max_drawdown": -0.1815865008701789,
+        "top_quantile_turnover": 0.039136389700770574
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_volume_impulse_breakout_drift_5d",
+  "fitness_direction": -1,
+  "formula": "mean_5d( max(close/prior_high-1,0) * max(vol/vol_ma-1,0) ) / mean_5d( max(vol/vol_ma-1,0) )",
+  "manual_admission": null,
+  "metrics": {
+    "ic": 0.03054565854844509,
+    "icir": 0.3265216610556111,
+    "mi": 0.012299545182526295,
+    "rank_ic": 0.036962902933056374,
+    "rank_icir": 0.39182391506272823
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7454545454545455,
+    "top_quantile_annualized_excess_return": -1.3371018888541641e-05,
+    "top_quantile_excess_return": -3.714127769394171e-05,
+    "top_quantile_max_drawdown": -0.1815865008701789,
+    "top_quantile_turnover": 0.039136389700770574
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "The parent factor requires a same-day close above the prior 20-day high with above-average volume. This mutation targets the information gap about delayed price adjustment by measuring the rate at which price progresses above the prior high after volume impulses over a 5-day window. The raw mechanism changes from an instantaneous breakout confirmation to a windowed post-impulse drift, which is more robust to single-day noise and better captures prolonged versus short adjustment delays. The price-volume confirmation core is preserved.",
+  "raw_metrics": {
+    "ic": -0.03054565854844509,
+    "icir": -0.3265216610556111,
+    "mi": 0.012299545182526295,
+    "rank_ic": -0.036962902933056374,
+    "rank_icir": -0.39182391506272823
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-dynamic-evo-optimized-v3-20260812-072416-r1",
+  "source_run_ids": [
+    "formal-dynamic-evo-optimized-v3-20260812-072416-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ts_mean(5, max(close/prior_high-1,0) * max(vol/vol_ma-1,0)) / ts_mean(5, max(vol/vol_ma-1,0))",
+  "fe_formula": "ts_mean(5, flex_max(close/prior_high-1, 0) * flex_max(vol/vol_ma-1, 0)) / ts_mean(5, flex_max(vol/vol_ma-1, 0))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "mean_5d( max(close/prior_high-1,0) * max(vol/vol_ma-1,0) ) / mean_5d( max(vol/vol_ma-1,0) )"
+}

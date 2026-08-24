@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# mafm2 / 学校机：clean_data/ 只读，经 Server A 调用 clean-cos-ro
+set -euo pipefail
+
+ENV_FILE="${HOME}/.quantsociety/server-a.env"
+[[ -f "$ENV_FILE" ]] && source "$ENV_FILE"
+
+: "${QS_SERVER_A_HOST:=43.154.17.120}"
+: "${QS_SERVER_A_USER:?请先配置 ~/.quantsociety/server-a.env 中的 QS_SERVER_A_USER}"
+
+SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=20)
+[[ -n "${QS_SERVER_A_IDENTITY:-}" ]] && SSH_OPTS+=(-i "${QS_SERVER_A_IDENTITY/#\~/$HOME}")
+
+_mafm2_audit_log() {
+  local rc=$1
+  shift
+  local audit_dir="${HOME}/.quantsociety/cos-audit"
+  mkdir -p "$audit_dir"
+  local action="cmd"
+  [[ $# -ge 1 && ${1:-} == rm* ]] && action="DELETE"
+  [[ $# -ge 2 && ${1:-} == cp && ${2:-} == cos://* ]] && action="DOWNLOAD"
+  {
+    printf '%s\tmafm2_linux=%s\tserver_a_user=%s\tssh=%s\taction=%s\t' \
+      "$(date -Iseconds)" "$USER" "$QS_SERVER_A_USER" "${SSH_CLIENT:-}" "$action"
+    printf '%q' "$@"
+    printf '\trc=%s\n' "$rc"
+  } >> "$audit_dir/$(date +%Y-%m-%d).log"
+}
+
+_ro_guard_local() {
+  [[ $# -ge 1 ]] || return 1
+  case "$1" in
+    ls|lsr|cat|du|hash|probe|version|help) return 0 ;;
+    cp|sync)
+      if [[ $# -ge 3 && $2 == cos://* && ${3:-} != cos://* ]]; then return 0; fi
+      echo "clean-cos-ro: 只读，禁止上传到 COS" >&2
+      return 1
+      ;;
+    rm|rb|restore|inventory|mkdir|put)
+      echo "clean-cos-ro: 只读，禁止 $1" >&2
+      return 1
+      ;;
+    *)
+      echo "clean-cos-ro: 未允许的子命令: $1" >&2
+      return 1
+      ;;
+  esac
+}
+
+_ro_guard_local "$@" || exit 1
+
+_ssh_ro() {
+  ssh "${SSH_OPTS[@]}" "${QS_SERVER_A_USER}@${QS_SERVER_A_HOST}" \
+    "clean-cos-ro $(printf ' %q' "$@")"
+}
+
+if [[ $# -ge 3 && $1 == cp && $2 == cos://* && ${3:-} != cos://* ]]; then
+  dest=$3
+  mkdir -p "$(dirname "$dest")" 2>/dev/null || true
+  set +e
+  ssh "${SSH_OPTS[@]}" "${QS_SERVER_A_USER}@${QS_SERVER_A_HOST}" \
+    "clean-cos-ro cat $(printf '%q' "$2")" > "$dest"
+  rc=$?
+  set -e
+  _mafm2_audit_log "$rc" cp "$2" "$dest"
+  exit "$rc"
+fi
+
+# sync：Server A 暂存 → rsync 回本机（只读账号无法本机直连 coscli sync）
+if [[ $# -ge 3 && $1 == sync && $2 == cos://* && ${3:-} != cos://* ]]; then
+  cos_src=$2
+  dest=$3
+  shift 3
+  sync_extra=("$@")
+  staging="/tmp/mafm2-cos-ro-${USER}-$$"
+  mkdir -p "$dest"
+  set +e
+  ssh "${SSH_OPTS[@]}" "${QS_SERVER_A_USER}@${QS_SERVER_A_HOST}" \
+    "rm -rf $(printf '%q' "$staging") && mkdir -p $(printf '%q' "$staging") && clean-cos-ro sync $(printf '%q' "$cos_src") $(printf '%q' "${staging}/") $(printf ' %q' "${sync_extra[@]}")"
+  rc=$?
+  if [[ $rc -eq 0 ]]; then
+    rsync -a -e "ssh ${SSH_OPTS[*]}" \
+      "${QS_SERVER_A_USER}@${QS_SERVER_A_HOST}:${staging}/" "$dest/"
+    rc=$?
+  fi
+  ssh "${SSH_OPTS[@]}" "${QS_SERVER_A_USER}@${QS_SERVER_A_HOST}" \
+    "rm -rf $(printf '%q' "$staging")" 2>/dev/null || true
+  set -e
+  _mafm2_audit_log "$rc" sync "$cos_src" "$dest" "${sync_extra[@]}"
+  exit "$rc"
+fi
+
+set +e
+_ssh_ro "$@"
+rc=$?
+set -e
+_mafm2_audit_log "$rc" "$@"
+exit "$rc"

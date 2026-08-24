@@ -1,0 +1,178 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import base64
+import json
+import os
+import random
+import ssl
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+CONFIG_DIR = Path.home() / ".quantsociety" / "cos-api"
+AUDIT_DIR = Path.home() / ".quantsociety" / "cos-audit"
+
+
+class CosApiError(RuntimeError):
+    def __init__(self, message: str, *, status: int | None = None, request_id: str | None = None) -> None:
+        self.status = status
+        self.request_id = request_id
+        super().__init__(message)
+
+
+def load_config() -> dict:
+    override = os.getenv("COS_API_CONFIG")
+    if override:
+        path = Path(override).expanduser()
+    else:
+        invoked = Path(sys.argv[0]).name
+        candidate = CONFIG_DIR / f"{invoked}.json"
+        path = candidate if candidate.exists() else CONFIG_DIR / "config.json"
+    if not path.exists():
+        raise SystemExit(f"missing config: {path}")
+    return json.loads(path.read_text())
+
+
+def audit(rc: int, argv: list[str], action: str, resource: str | None = None) -> None:
+    AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+    line = {
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "mafm2_linux": os.getenv("USER", "unknown"),
+        "action": action,
+        "resource": resource,
+        "argv": argv,
+        "rc": rc,
+    }
+    with (AUDIT_DIR / (time.strftime("%Y-%m-%d") + ".jsonl")).open("a") as fh:
+        fh.write(json.dumps(line, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def ensure_tunnel(cfg: dict) -> None:
+    if cfg.get("ssh_tunnel"):
+        raise RuntimeError("ssh_tunnel is disabled; use direct HTTPS API access")
+
+def _retry_delay(attempt: int, cfg: dict) -> float:
+    base = float(cfg.get("retry_base_seconds", os.getenv("COS_API_RETRY_BASE_SECONDS", "0.5")))
+    cap = float(cfg.get("retry_max_seconds", os.getenv("COS_API_RETRY_MAX_SECONDS", "6")))
+    jitter = random.uniform(0, base)
+    return min(cap, base * (2 ** attempt) + jitter)
+
+
+def _parse_error_payload(raw: bytes) -> tuple[str, str | None]:
+    if not raw:
+        return "empty error response", None
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except Exception:
+        return raw[:300].decode("utf-8", errors="replace"), None
+    if isinstance(payload, dict):
+        message = str(payload.get("error") or payload.get("message") or payload)
+        request_id = payload.get("request_id")
+        return message, str(request_id) if request_id else None
+    return str(payload), None
+
+
+def _raise_http_error(exc: urllib.error.HTTPError) -> None:
+    message, request_id = _parse_error_payload(exc.read())
+    suffix = f" request_id={request_id}" if request_id else ""
+    raise CosApiError(f"HTTP {exc.code}: {message}{suffix}", status=exc.code, request_id=request_id) from exc
+
+
+def request(cfg: dict, method: str, path: str, body: dict | None = None) -> dict:
+    ensure_tunnel(cfg)
+    data = None if body is None else json.dumps(body, ensure_ascii=False).encode()
+    cafile = cfg.get("cafile")
+    context = ssl.create_default_context(cafile=str(Path(cafile).expanduser())) if cafile else ssl.create_default_context()
+    timeout = int(cfg.get("timeout_seconds", os.getenv("COS_API_TIMEOUT_SECONDS", "60")))
+    max_retries = int(cfg.get("max_retries", os.getenv("COS_API_MAX_RETRIES", "2")))
+    transient_status = {429, 500, 502, 503, 504}
+    url = cfg["endpoint"].rstrip("/") + path
+    headers = {
+        "Authorization": "Bearer " + cfg["token"],
+        "Content-Type": "application/json",
+        "X-Operator-Claim": os.getenv("USER", "mafm2"),
+    }
+    for attempt in range(max_retries + 1):
+        req = urllib.request.Request(url, method=method, data=data, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout, context=context) as resp:
+                return json.loads(resp.read().decode())
+        except urllib.error.HTTPError as exc:
+            if exc.code in transient_status and attempt < max_retries:
+                time.sleep(_retry_delay(attempt, cfg))
+                continue
+            _raise_http_error(exc)
+        except (urllib.error.URLError, TimeoutError, OSError, ssl.SSLError) as exc:
+            if attempt < max_retries:
+                time.sleep(_retry_delay(attempt, cfg))
+                continue
+            raise CosApiError(f"network error after {attempt + 1} attempt(s): {exc}") from exc
+    raise CosApiError("request failed after retries")
+
+
+def cos_key(value: str) -> str:
+    if value.startswith("cos://"):
+        rest = value[len("cos://"):]
+        parts = rest.split("/", 1)
+        return parts[1] if len(parts) == 2 else ""
+    return value.strip("/")
+
+
+def main(argv: list[str]) -> int:
+    cfg = load_config()
+    if not argv or argv[0] in {"-h", "--help"}:
+        print("usage: cos-api.py ls <cos-prefix>|cat <cos-key>|cp <src> <dst>|rm <cos-key>|whoami")
+        return 0
+    action = argv[0]
+    try:
+        if action == "whoami":
+            print(json.dumps(request(cfg, "GET", "/v1/whoami"), ensure_ascii=False, indent=2))
+            return 0
+        if action == "ls":
+            prefix = cos_key(argv[1])
+            payload = request(cfg, "GET", "/v1/cos/list?" + urllib.parse.urlencode({"prefix": prefix}))
+            for item in payload.get("objects", []):
+                print(item)
+            audit(0, argv, "LIST", prefix)
+            return 0
+        if action == "cat":
+            key = cos_key(argv[1])
+            payload = request(cfg, "GET", "/v1/cos/download?" + urllib.parse.urlencode({"key": key}))
+            sys.stdout.buffer.write(base64.b64decode(payload["content_base64"]))
+            audit(0, argv, "DOWNLOAD", key)
+            return 0
+        if action == "cp" and len(argv) >= 3:
+            src, dst = argv[1], argv[2]
+            if src.startswith("cos://") and not dst.startswith("cos://"):
+                key = cos_key(src)
+                payload = request(cfg, "GET", "/v1/cos/download?" + urllib.parse.urlencode({"key": key}))
+                out = Path(dst)
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_bytes(base64.b64decode(payload["content_base64"]))
+                audit(0, argv, "DOWNLOAD", key)
+                return 0
+            if not src.startswith("cos://") and dst.startswith("cos://"):
+                key = cos_key(dst)
+                content = base64.b64encode(Path(src).read_bytes()).decode("ascii")
+                request(cfg, "POST", "/v1/cos/upload", {"key": key, "content_base64": content})
+                audit(0, argv, "UPLOAD", key)
+                return 0
+        if action in {"rm", "delete"}:
+            key = cos_key(argv[1])
+            request(cfg, "POST", "/v1/cos/delete", {"key": key})
+            audit(0, argv, "DELETE", key)
+            return 0
+        raise SystemExit(f"unsupported command: {' '.join(argv)}")
+    except Exception as exc:
+        audit(1, argv, action.upper())
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

@@ -1,0 +1,51 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "8676becac800b4b86741b82242897742a0902d00469fe8956efeb8adf202564d",
+  "candidate_ids": [
+    "mutation_volume_adjusted_breakout_window_001"
+  ],
+  "code": "def factor_volume_adjusted_breakout_window_001(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean()\n    highest_high = df_copy['high'].rolling(20, min_periods=20).max().shift(1)\n    breakout = df_copy['close'] > highest_high\n    neg_ret = ret.where(ret < 0, 0)\n    pos_ret = ret.where(ret > 0, 0)\n    neg_vol = neg_ret.rolling(10, min_periods=5).std(ddof=1)\n    pos_vol = pos_ret.rolling(10, min_periods=5).std(ddof=1)\n    vol_ratio_risk = neg_vol / pos_vol.replace(0, np.nan)\n    vol_ratio_risk = np.log(vol_ratio_risk.clip(lower=1e-12))\n    vol_risk_median = vol_ratio_risk.rolling(20, min_periods=20).median()\n    low_risk = vol_ratio_risk < vol_risk_median\n    coherence_signal = (breakout & (vol_ratio > 1) & low_risk) * ret * vol_ratio\n    factor = coherence_signal.rolling(5).sum()\n    factor.name = 'factor_volume_adjusted_breakout_window_001'\n    return factor",
+  "cross_sectional_rationale": "Rank transform highlights stocks with most coherent volume-confirmed breakouts relative to peers, improving cross-sectional separation.",
+  "cross_sectional_transform": "cs_rank",
+  "factor_name": "factor_volume_adjusted_breakout_window_001",
+  "fitness_direction": -1,
+  "formula": "sum_5( if(close > max_20(high).shift(1) and volume > mean_20(volume) and log(vol_ratio_risk_10) < median_20(log(vol_ratio_risk_10)), (close/delay(close,1)-1) * (volume/mean_20(volume)), 0 ) )",
+  "metrics": {
+    "ic": 0.017722997300985824,
+    "icir": 0.20686721468909322,
+    "mi": 0.18799013097696982,
+    "rank_ic": 0.03360775598138224,
+    "rank_icir": 0.4043311661141199
+  },
+  "rationale": "Mutation of crossover_volume_asymmetry_001: Shortens the volatility estimation window for downside and upside return std from 20 to 10 days to increase responsiveness of the risk filter, aiming to improve IC and ICIR while preserving the core breakout mechanism and RankIC strength.",
+  "raw_metrics": {
+    "ic": -0.017722997300985824,
+    "icir": -0.20686721468909322,
+    "mi": 0.18799013097696982,
+    "rank_ic": -0.03360775598138224,
+    "rank_icir": -0.4043311661141199
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260624-010848-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260624-010848-r1"
+  ],
+  "lqtp_formula": "ts_sum(5, if(close > max_20(high).delay(1) and volume > mean_20(volume) and log(vol_ratio_risk_10) < median_20(log(vol_ratio_risk_10)), (close/delay(close,1)-1) * (volume/mean_20(volume)), 0 ))",
+  "fe_formula": "ts_sum(5, if(close > max_20(high).ts_delay(1) and volume > mean_20(volume) and log(vol_ratio_risk_10) < median_20(log(vol_ratio_risk_10)), (close/ts_delay(close, 1)-1) * (volume/mean_20(volume)), 0 ))",
+  "lqtp_notes": "Unconverted: ['max_20', 'mean_20', 'median_20']",
+  "fe_notes": "Unconverted: ['max_20', 'mean_20', 'median_20']",
+  "source_formula": "sum_5( if(close > max_20(high).shift(1) and volume > mean_20(volume) and log(vol_ratio_risk_10) < median_20(log(vol_ratio_risk_10)), (close/delay(close,1)-1) * (volume/mean_20(volume)), 0 ) )"
+}

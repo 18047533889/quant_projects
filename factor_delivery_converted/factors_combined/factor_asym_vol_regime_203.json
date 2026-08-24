@@ -1,0 +1,54 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "0e791e8d19b66fd7c7df8d68e5ce9be94850d93c11d123a1728f7513c257cdf1",
+  "candidate_ids": [
+    "mutate_asym_vol_regime_002"
+  ],
+  "code": "def factor_asym_vol_regime(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    down = ret < 0\n    up = ret >= 0\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    down_range = range_.where(down, 0)\n    up_range = range_.where(up, 0)\n    down_sum = down_range.rolling(15, min_periods=8).sum()\n    up_sum = up_range.rolling(15, min_periods=8).sum()\n    down_count = down.rolling(15, min_periods=8).sum()\n    up_count = up.rolling(15, min_periods=8).sum()\n    down_avg = down_sum / down_count.replace(0, np.nan)\n    up_avg = up_sum / up_count.replace(0, np.nan)\n    ratio = down_avg / up_avg.replace(0, np.nan)\n    asym = np.log(ratio.clip(lower=1e-6))\n    vol_regime = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20, high_threshold=1.5, low_threshold=0.6)\n    factor = np.where(vol_regime == 1, asym * 1.2, asym)\n    df_copy[\"factor_asym_vol_regime\"] = factor\n    return df_copy[\"factor_asym_vol_regime\"]",
+  "cross_sectional_rationale": "Rank transform highlights stocks with most pronounced asymmetry, aiding cross-sectional differentiation.",
+  "cross_sectional_transform": "cs_rank",
+  "factor_name": "factor_asym_vol_regime",
+  "fitness_direction": 1,
+  "formula": "log(avg_down_range/avg_up_range) * (1.2 if volume_regime == high else 1) with window 15",
+  "metrics": {
+    "ic": 0.014681939913315598,
+    "icir": 0.19490729384609334,
+    "mi": 0.005444048607051499,
+    "rank_ic": 0.037625774978599126,
+    "rank_icir": 0.4158072046166114
+  },
+  "rationale": "Mutates asymmetric volatility factor by shortening the trailing window from 20 to 15 bars for the asymmetry calculation, making the signal more responsive to recent volatility regimes. The volume-based amplification is slightly reduced from 1.3 to 1.2 to preserve rank stability while improving IC and MI capture. The core mechanism and volume regime gate are preserved.",
+  "raw_metrics": {
+    "ic": 0.014681939913315598,
+    "icir": 0.19490729384609334,
+    "mi": 0.005444048607051499,
+    "rank_ic": 0.037625774978599126,
+    "rank_icir": 0.4158072046166114
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260625-030745-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260625-030745-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "lqtp_formula": "log(avg_down_range/avg_up_range) * (1.2 if volume_regime == high else 1) with window 15",
+  "fe_formula": "log(avg_down_range/avg_up_range) * (1.2 if volume_regime == high else 1) with window 15",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "log(avg_down_range/avg_up_range) * (1.2 if volume_regime == high else 1) with window 15"
+}

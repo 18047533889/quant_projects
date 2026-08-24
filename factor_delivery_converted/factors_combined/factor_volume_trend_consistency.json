@@ -1,0 +1,97 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "095aa07131b35acb5b2ca9211a6576ae327ded3830702e9437c254c8b35b1572",
+  "candidate_ids": [
+    "stable_vol_trend_0"
+  ],
+  "code": "def factor_volume_trend_consistency(df):\n    df_copy = df.copy()\n    vol = df_copy[\"volume\"]\n    ema_short = talib.EMA(vol, timeperiod=10)\n    ema_long = talib.EMA(vol, timeperiod=30)\n    factor = ema_short / ema_long.replace(0, np.nan)\n    df_copy[\"factor_volume_trend_consistency\"] = factor\n    return df_copy[\"factor_volume_trend_consistency\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.8545454545454545,
+        "top_quantile_annualized_excess_return": -0.02009924193079793,
+        "top_quantile_excess_return": -0.05445810968478615,
+        "top_quantile_max_drawdown": -0.13000609705838828,
+        "top_quantile_turnover": 0.13609433536370538
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_volume_trend_consistency",
+  "fitness_direction": -1,
+  "formula": "factor = EMA(volume, 10) / EMA(volume, 30)",
+  "metrics": {
+    "ic": 0.013227358525012493,
+    "icir": 0.1205235679072587,
+    "mi": 0.020953494703606523,
+    "rank_ic": 0.03460752189603224,
+    "rank_icir": 0.3155376806991638
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8545454545454545,
+    "top_quantile_annualized_excess_return": -0.02009924193079793,
+    "top_quantile_excess_return": -0.05445810968478615,
+    "top_quantile_max_drawdown": -0.13000609705838828,
+    "top_quantile_turnover": 0.13609433536370538
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Captures persistence in volume trend: a rising short-term EMA relative to long-term EMA indicates increasing volume momentum, which may precede persistent price moves. This is a volume-based persistence signal aligned to temporal stability within the Stability & Regime-Gating layer.",
+  "raw_metrics": {
+    "ic": -0.013227358525012493,
+    "icir": -0.1205235679072587,
+    "mi": 0.020953494703606523,
+    "rank_ic": -0.03460752189603224,
+    "rank_icir": -0.3155376806991638
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260720-210415-r10",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260720-210415-r10"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "factor = ema(10, volume) / ema(30, volume)",
+  "fe_formula": "factor = ema(10, volume) / ema(30, volume)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "factor = EMA(volume, 10) / EMA(volume, 30)"
+}

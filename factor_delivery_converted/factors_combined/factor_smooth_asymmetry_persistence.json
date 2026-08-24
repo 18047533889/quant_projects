@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "df122b67c9e37ef8c96f3d5c4c128c7ca123315447f44b5ab86175616c12d327",
+  "candidate_ids": [
+    "alpha-crossover-gen1-001"
+  ],
+  "code": "def factor_smooth_asymmetry_persistence(df):\n    df_copy = df.copy()\n    # Compute absolute returns\n    returns = df_copy['close'].pct_change().abs()\n    # Smooth persistence (EWMA of abs returns)\n    smooth_ret = returns.ewm(span=10, min_periods=10).mean()\n    # Volume confirmation\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(window=20, min_periods=20).mean()\n    # Asymmetric volatility\n    range_ = df_copy['high'] - df_copy['low']\n    up_day = df_copy['close'] > df_copy['open']\n    up_range = pd.Series(np.nan, index=df_copy.index)\n    down_range = pd.Series(np.nan, index=df_copy.index)\n    up_range[up_day] = range_[up_day]\n    down_range[~up_day] = range_[~up_day]\n    up_range_ewm = up_range.ewm(span=20, min_periods=10).mean()\n    down_range_ewm = down_range.ewm(span=20, min_periods=10).mean()\n    epsilon = 1e-8\n    asymmetry_ratio = up_range_ewm / (down_range_ewm + epsilon)\n    # Combine: smooth persistence gated by volume and modulated by asymmetry\n    factor = smooth_ret * vol_ratio * (1 + asymmetry_ratio)\n    df_copy['factor_smooth_asymmetry_persistence'] = factor.fillna(0)\n    return df_copy['factor_smooth_asymmetry_persistence']",
+  "factor_name": "factor_smooth_asymmetry_persistence",
+  "fitness_direction": -1,
+  "formula": "EWMA(|r|, span=10) * (vol / MA(vol,20)) * (1 + EWMA(up_range,20) / (EWMA(down_range,20)+ε))",
+  "metrics": {
+    "ic": 0.01784012410879515,
+    "icir": 0.1704187898491796,
+    "mi": 0.044227880292900146,
+    "rank_ic": 0.04083499547106554,
+    "rank_icir": 0.3400450635386315
+  },
+  "rationale": "This factor combines the smooth persistence of absolute returns (EWMA) with volume confirmation from parent alpha-stability-gen0-001, and asymmetric volatility from parent alpha-vol-asymmetry-1. The asymmetry ratio (up-range EWMA / down-range EWMA) adds directional bias: when up-day ranges exceed down-day ranges, the factor is amplified, capturing bullish momentum or mean reversion pressure. The volume ratio filters low-participation noise, preserving rank stability. This crossover targets improved IC and ICIR while maintaining the rank stability strength.",
+  "raw_metrics": {
+    "ic": -0.01784012410879515,
+    "icir": -0.1704187898491796,
+    "mi": 0.044227880292900146,
+    "rank_ic": -0.04083499547106554,
+    "rank_icir": -0.3400450635386315
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260610-095822-r3",
+  "source_run_ids": [
+    "formal-mvp-loop-20260610-095822-r3"
+  ],
+  "lqtp_formula": "ema(span=10, |r|) * (vol / ts_mean(20, vol)) * (1 + ema(20, up_range) / (ema(20, down_range)+ε))",
+  "fe_formula": "ema(span=10, |r|) * (vol / ts_mean(20, vol)) * (1 + ema(20, up_range) / (ema(20, down_range)+ε))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "EWMA(|r|, span=10) * (vol / MA(vol,20)) * (1 + EWMA(up_range,20) / (EWMA(down_range,20)+ε))"
+}

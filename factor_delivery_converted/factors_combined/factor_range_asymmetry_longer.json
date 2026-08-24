@@ -1,0 +1,97 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "c8229d84584ce376cf7be50a3263a21a190274870b52f916d01775dd56417533",
+  "candidate_ids": [
+    "g1_mutation_ava_0_001_81cb3258"
+  ],
+  "code": "def factor_range_asymmetry_longer(df):\n    df_copy = df.copy()\n    df_copy['range'] = df_copy['high'] - df_copy['low']\n    df_copy['up'] = (df_copy['close'] > df_copy['close'].shift(1)).astype(float)\n    df_copy['down'] = (df_copy['close'] < df_copy['close'].shift(1)).astype(float)\n    up_range_sum = (df_copy['range'] * df_copy['up']).rolling(60).sum()\n    up_count = df_copy['up'].rolling(60).sum().replace(0, np.nan)\n    down_range_sum = (df_copy['range'] * df_copy['down']).rolling(60).sum()\n    down_count = df_copy['down'].rolling(60).sum().replace(0, np.nan)\n    up_mean = up_range_sum / up_count\n    down_mean = down_range_sum / down_count\n    factor = down_mean / up_mean\n    factor.name = 'factor_range_asymmetry_longer'\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": -0.0017156560868806237,
+        "top_quantile_excess_return": -0.00452106307147071,
+        "top_quantile_max_drawdown": -0.20209549657054515,
+        "top_quantile_turnover": 0.11758157371866201
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_range_asymmetry_longer",
+  "fitness_direction": 1,
+  "formula": "ratio = rolling_mean(high-low | down) / rolling_mean(high-low | up) over 60 days",
+  "metrics": {
+    "ic": 0.012502878636333769,
+    "icir": 0.14788796625285577,
+    "mi": 0.006351628453682423,
+    "rank_ic": 0.033409490766429545,
+    "rank_icir": 0.3390051604243965
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": -0.0017156560868806237,
+    "top_quantile_excess_return": -0.00452106307147071,
+    "top_quantile_max_drawdown": -0.20209549657054515,
+    "top_quantile_turnover": 0.11758157371866201
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Captures asymmetric volatility by comparing average intraday range on downtrend days versus uptrend days. Using a longer 60-day window produces a more stable estimate of the leverage effect, reducing noise while preserving the core economic mechanism.",
+  "raw_metrics": {
+    "ic": 0.012502878636333769,
+    "icir": 0.14788796625285577,
+    "mi": 0.006351628453682423,
+    "rank_ic": 0.033409490766429545,
+    "rank_icir": 0.3390051604243965
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260719-181655-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260719-181655-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ratio = ts_mean(high-low | down) / ts_mean(high-low | up) over 60 days",
+  "fe_formula": "ratio = ts_mean(high-low | down) / ts_mean(high-low | up) over 60 days",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "ratio = rolling_mean(high-low | down) / rolling_mean(high-low | up) over 60 days"
+}

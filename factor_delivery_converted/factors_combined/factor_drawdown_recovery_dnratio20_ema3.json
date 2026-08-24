@@ -1,0 +1,123 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "4ddc3888ac5ac8352e24213f034afe0c259a9fa4ab8cff6e3b2046f93e843e84",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_crossover_drawdown_vol_adjusted_001_tail_001_999fa0de"
+  ],
+  "code": "def factor_drawdown_recovery_dnratio20_ema3(df):\n    df_copy = df.copy()\n    high = df_copy['high']\n    low = df_copy['low']\n    close = df_copy['close']\n    rolling_max = close.rolling(window=252, min_periods=20).max()\n    drawdown = (close - rolling_max) / rolling_max\n    tr = np.maximum(high - low,\n                    np.maximum((high - low.shift(1)).abs(),\n                               (low - high.shift(1)).abs()))\n    atr = tr.rolling(window=20, min_periods=10).mean()\n    normalizer = atr / close\n    normalizer = normalizer.replace(0, np.nan)\n    base_factor = -drawdown / normalizer\n    ret = close.pct_change()\n    neg_ret = ret.where(ret < 0, 0.0)\n    down_vol = neg_ret.rolling(window=20, min_periods=20).std(ddof=1)\n    total_vol = ret.rolling(window=20, min_periods=20).std(ddof=1)\n    total_vol_safe = total_vol.replace(0, np.nan)\n    downside_ratio = down_vol / total_vol_safe\n    downside_ratio = downside_ratio.fillna(0.5)\n    factor = base_factor * (1.0 + 0.3 * downside_ratio)\n    factor = factor.fillna(0)\n    factor_arr = talib.EMA(factor.values, timeperiod=3)\n    factor = pd.Series(factor_arr, index=df_copy.index).fillna(0)\n    factor.name = 'factor_drawdown_recovery_dnratio20_ema3'\n    return factor",
+  "cross_sectional_rationale": "Ranking across stocks captures relative drawdown recovery opportunity and downside asymmetry; cross-sectional comparison is relevant for factor effectiveness.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.8787878787878788,
+        "top_quantile_annualized_excess_return": 0.03701708526455638,
+        "top_quantile_excess_return": 0.10703911745176664,
+        "top_quantile_max_drawdown": -0.1111225007432406,
+        "top_quantile_turnover": 0.049146630662959025
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.09703054305272449,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.029694569472755172,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_drawdown_recovery_dnratio20_ema3",
+  "fitness_direction": 1,
+  "formula": "-DD/(ATR/close) * (1 + 0.3 * downside_ratio(20)) smoothed with 3-EMA",
+  "metrics": {
+    "ic": 0.011493369109552629,
+    "icir": 0.09703054305272449,
+    "mi": 0.011538962095727356,
+    "rank_ic": 0.030952710518610576,
+    "rank_icir": 0.22769363337402393
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8787878787878788,
+    "top_quantile_annualized_excess_return": 0.03701708526455638,
+    "top_quantile_excess_return": 0.10703911745176664,
+    "top_quantile_max_drawdown": -0.1111225007432406,
+    "top_quantile_turnover": 0.049146630662959025
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.010742033816464528,
+    "icir": 0.09512165470698265,
+    "mi": 0.015539827349535074,
+    "rank_ic": 0.030952710518610576,
+    "rank_icir": 0.22769363337402393
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.8787878787878788,
+    "top_quantile_annualized_excess_return": 0.03701708526455638,
+    "top_quantile_excess_return": 0.10703911745176664,
+    "top_quantile_max_drawdown": -0.1111225007432406,
+    "top_quantile_turnover": 0.049146630662959025
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.010742033816464528,
+    "icir": 0.09512165470698265,
+    "mi": 0.015539827349535074,
+    "rank_ic": 0.030952710518610576,
+    "rank_icir": 0.22769363337402393
+  },
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Mutation of factor_drawdown_recovery_vol_adjusted_downside_modulated: shorten downside ratio window from 40 to 20 and EMA smoothing from 5 to 3 to make the signal more responsive and improve top-quantile payoff. The core drawdown/volatility recovery mechanism is preserved. Target: payoff thickness in top quantile.",
+  "raw_metrics": {
+    "ic": 0.011493369109552629,
+    "icir": 0.09703054305272449,
+    "mi": 0.011538962095727356,
+    "rank_ic": 0.030952710518610576,
+    "rank_icir": 0.22769363337402393
+  },
+  "required_columns": [
+    "close",
+    "high",
+    "low"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260717-143914-r4",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260717-143914-r4"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.3800498597656168,
+    "pre_transform_top_quantile_excess_return": 0.10703911745176664,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.37870921815063896,
+    "transformed_top_quantile_excess_return": 0.10703911745176664
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "-DD/(ATR/close) * (1 + 0.3 * downside_ratio(20)) smoothed with 3-EMA",
+  "fe_formula": "-DD/(ATR/close) * (1 + 0.3 * downside_ratio(20)) smoothed with 3-EMA",
+  "lqtp_notes": "Unconverted: ['downside_ratio']",
+  "fe_notes": "Unconverted: ['downside_ratio']",
+  "source_formula": "-DD/(ATR/close) * (1 + 0.3 * downside_ratio(20)) smoothed with 3-EMA"
+}

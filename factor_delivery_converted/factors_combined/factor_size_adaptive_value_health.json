@@ -1,0 +1,122 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "1cc95e1a04e70343066cb0f2277a610b9196362d3cd4d5a877accc97a9adf7bb",
+  "candidate_ids": [
+    "g1_mutation_avsi_gen0_001_8eebf144"
+  ],
+  "code": "def factor_size_adaptive_value_health(df):\n    df_copy = df.copy()\n    large = df_copy['style_gate_size_large'].astype(bool)\n    small = df_copy['style_gate_size_small'].astype(bool)\n    cfy = 1.0 / df_copy['pcf_ocf_ttm'].replace(0, np.nan)\n    roe = df_copy['roe_ttm2'].clip(lower=0) / 100.0\n    by = 1.0 / df_copy['pb_lf'].replace(0, np.nan)\n    lev = df_copy['debttoassets'] / 100.0\n    health = (1 - lev).clip(lower=0)\n    large_val = cfy * (1 + roe) * health\n    small_val = by * health\n    factor = np.where(large, large_val, np.where(small, small_val, large_val))\n    return pd.Series(factor, index=df_copy.index, name='factor_size_adaptive_value_health')",
+  "cross_sectional_rationale": "Cross-sectional rank makes cash flow yield and book yield comparable across different size regimes and mitigates scale differences.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9515151515151515,
+        "top_quantile_annualized_excess_return": 0.2065633212596767,
+        "top_quantile_excess_return": 0.7151210852846581,
+        "top_quantile_max_drawdown": -0.1967194616870671,
+        "top_quantile_turnover": 0.02940946240970644
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_size_adaptive_value_health",
+  "fitness_direction": 1,
+  "formula": "For large caps: (1/pcf_ocf_ttm) * (1 + max(0, roe_ttm2/100)) * max(0, 1 - debttoassets/100). For small caps: (1/pb_lf) * max(0, 1 - debttoassets/100). Default large_val for medium caps.",
+  "metrics": {
+    "ic": 0.018061199585791346,
+    "icir": 0.20498506855308554,
+    "mi": 0.009771269177294428,
+    "rank_ic": 0.031679794222531546,
+    "rank_icir": 0.2914511014317813
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": 0.2065633212596767,
+    "top_quantile_excess_return": 0.7151210852846581,
+    "top_quantile_max_drawdown": -0.1967194616870671,
+    "top_quantile_turnover": 0.02940946240970644
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.01713441514924418,
+    "icir": 0.1909244269242843,
+    "mi": 0.017229294698732467,
+    "rank_ic": 0.031679794222531546,
+    "rank_icir": 0.2914511014317813
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": 0.2065633212596767,
+    "top_quantile_excess_return": 0.7151210852846581,
+    "top_quantile_max_drawdown": -0.1967194616870671,
+    "top_quantile_turnover": 0.02940946240970644
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.01713441514924418,
+    "icir": 0.1909244269242843,
+    "mi": 0.017229294698732467,
+    "rank_ic": 0.031679794222531546,
+    "rank_icir": 0.2914511014317813
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Unify the quality adjustment across size regimes by applying the leverage-based financial health multiplier to both large and small cap value formulas. For large caps, cash flow yield is boosted by ROE quality and penalized by leverage; for small caps, book yield is penalized by leverage. This improves raw IC by making the large cap valuation more robust to capital structure risk, while preserving the parent's strong RankIC and RankICIR. Cross-sectional rank ensures comparability.",
+  "raw_metrics": {
+    "ic": 0.018061199585791346,
+    "icir": 0.20498506855308554,
+    "mi": 0.009771269177294428,
+    "rank_ic": 0.031679794222531546,
+    "rank_icir": 0.2914511014317813
+  },
+  "required_columns": [
+    "pcf_ocf_ttm",
+    "roe_ttm2",
+    "pb_lf",
+    "debttoassets",
+    "style_gate_size_large",
+    "style_gate_size_small"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260721-20260721-084650-r1",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260721-20260721-084650-r1"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "Size gates directly implement the mkt_cap_float conditioning: large caps and small caps use different value metrics because the reliability of cash flow vs. book values differs by size. The health penalty applies uniformly.",
+  "style_gates_used": [
+    "style_gate_size_large",
+    "style_gate_size_small"
+  ],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.5484190324265739,
+    "pre_transform_top_quantile_excess_return": 0.7151210852846581,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.5559484329704842,
+    "transformed_top_quantile_excess_return": 0.7151210852846581
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "For large caps: (1/pcf_ocf_ttm) * (1 + max(0, roe_ttm2/100)) * max(0, 1 - debttoassets/100). For small caps: (1/pb_lf) * max(0, 1 - debttoassets/100). Default large_val for medium caps.",
+  "fe_formula": "For large caps: (1/pcf_ocf_ttm) * (1 + flex_max(0, roe_ttm2/100)) * flex_max(0, 1 - debttoassets/100). For small caps: (1/pb_lf) * flex_max(0, 1 - debttoassets/100). Default large_val for medium caps.",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "For large caps: (1/pcf_ocf_ttm) * (1 + max(0, roe_ttm2/100)) * max(0, 1 - debttoassets/100). For small caps: (1/pb_lf) * max(0, 1 - debttoassets/100). Default large_val for medium caps."
+}

@@ -1,0 +1,42 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "137073c89a2626020e60973aa1f524e92586182bb5eefa8d0abb9b7226d5745e",
+  "candidate_ids": [
+    "volume_abnormality_price_amp_0"
+  ],
+  "code": "def factor_volume_abnormality_price_amp(df):\n    df_copy = df.copy()\n    vol = df_copy['volume']\n    close = df_copy['close']\n    vol_ma20 = vol.rolling(20, min_periods=10).mean()\n    vol_std20 = vol.rolling(20, min_periods=10).std()\n    vol_z = (vol - vol_ma20) / vol_std20.replace(0, np.nan)\n    vol_ma5 = vol.rolling(5, min_periods=3).mean()\n    vol_trend = vol_ma5 / vol_ma20 - 1\n    close_pct = close.pct_change()\n    price_amp = np.abs(close_pct)\n    factor = vol_z * vol_trend * (1 + price_amp)\n    factor = factor.fillna(0)\n    factor.name = \"factor_volume_abnormality_price_amp\"\n    return factor",
+  "factor_name": "factor_volume_abnormality_price_amp",
+  "fitness_direction": -1,
+  "formula": "vol_z = (volume - SMA(20)) / STD(20); vol_trend = SMA(5)/SMA(20) - 1; price_amp = abs(close.pct_change()); factor = vol_z * vol_trend * (1 + price_amp)",
+  "metrics": {
+    "ic": 0.020827481686098503,
+    "icir": 0.2688235348537685,
+    "mi": 0.008257557365408452,
+    "rank_ic": 0.0173491073582847,
+    "rank_icir": 0.3115265971814071
+  },
+  "rationale": "This mutation enhances the parent factor by adding a price change amplitude multiplier. The idea is that volume spikes accompanied by larger price moves carry stronger conviction, especially when they occur in a rising volume trend. The price amplification captures nonlinear dependence that the pure volume factor might miss, targeting the MI bottleneck while preserving the core volume abnormality and trend logic.",
+  "raw_metrics": {
+    "ic": -0.020827481686098503,
+    "icir": -0.2688235348537685,
+    "mi": 0.008257557365408452,
+    "rank_ic": -0.0173491073582847,
+    "rank_icir": -0.3115265971814071
+  },
+  "required_columns": [
+    "volume",
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-20260610-073501-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260610-073501-r1"
+  ],
+  "lqtp_formula": "vol_z = (volume - ts_mean(20)) / ts_std(20); vol_trend = ts_mean(5)/ts_mean(20) - 1; price_amp = abs(close.ts_pct()); factor = vol_z * vol_trend * (1 + price_amp)",
+  "fe_formula": "vol_z = (volume - ts_mean(20)) / ts_std(20); vol_trend = ts_mean(5)/ts_mean(20) - 1; price_amp = abs(close.ts_pct()); factor = vol_z * vol_trend * (1 + price_amp)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "vol_z = (volume - SMA(20)) / STD(20); vol_trend = SMA(5)/SMA(20) - 1; price_amp = abs(close.pct_change()); factor = vol_z * vol_trend * (1 + price_amp)"
+}

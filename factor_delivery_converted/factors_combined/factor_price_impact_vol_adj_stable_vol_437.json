@@ -1,0 +1,124 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "b4f8741b4a8624c90a9b4ebc78a941d2b324916a56a3768cf6e583a061d5a07a",
+  "candidate_ids": [
+    "g2_mutation_alpha_liquidity_gen0_c001_15f2de51"
+  ],
+  "code": "def factor_price_impact_vol_adj_stable_vol(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    ret = close / close.shift(1) - 1.0\n    abs_ret = ret.abs()\n    # Price impact per unit volume\n    impact = abs_ret / volume.replace(0, np.nan)\n    avg_impact = impact.rolling(20, min_periods=20).mean()\n    # Longer-term volatility for stability\n    vol = ret.rolling(40, min_periods=40).std(ddof=1).replace(0, np.nan)\n    factor = avg_impact / vol\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy['factor_price_impact_vol_adj_stable_vol'] = factor\n    return df_copy['factor_price_impact_vol_adj_stable_vol']",
+  "cross_sectional_rationale": "Rank transform enables cross-sectional comparison of relative price impact across stocks, essential for liquidity-focused ranking signals.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.08567758160726369,
+        "top_quantile_excess_return": 0.24997797779623854,
+        "top_quantile_max_drawdown": -0.09812660790273109,
+        "top_quantile_turnover": 0.02976994228675886
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.008955037975897768,
+      "field": "ic",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.10449620241022323,
+      "threshold": 0.01
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_price_impact_vol_adj_stable_vol",
+  "fitness_direction": 1,
+  "formula": "rolling_20_mean(|ret|/vol) / rolling_40_std(ret)",
+  "metrics": {
+    "ic": 0.008955037975897768,
+    "icir": 0.09146143823767253,
+    "mi": 0.006513394904924752,
+    "rank_ic": 0.01398412010664825,
+    "rank_icir": 0.11560669538875679
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.08567758160726369,
+    "top_quantile_excess_return": 0.24997797779623854,
+    "top_quantile_max_drawdown": -0.09812660790273109,
+    "top_quantile_turnover": 0.02976994228675886
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.0015786695493182142,
+    "icir": 0.025927136991091313,
+    "mi": 0.012673734859649954,
+    "rank_ic": 0.01398412010664825,
+    "rank_icir": 0.11560669538875679
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.08567758160726369,
+    "top_quantile_excess_return": 0.24997797779623854,
+    "top_quantile_max_drawdown": -0.09812660790273109,
+    "top_quantile_turnover": 0.02976994228675886
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.0015786695493182142,
+    "icir": 0.025927136991091313,
+    "mi": 0.012673734859649954,
+    "rank_ic": 0.01398412010664825,
+    "rank_icir": 0.11560669538875679
+  },
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Volatility-adjusted price impact using a longer-term volatility estimate (40-day rolling std) to provide a more stable risk adjustment. This reduces noise in the factor and improves cross-sectional ranking consistency while preserving the core liquidity/impact intuition. The 20-day impact window captures recent market microstructure, while the 40-day volatility window captures persistent risk.",
+  "raw_metrics": {
+    "ic": 0.008955037975897768,
+    "icir": 0.09146143823767253,
+    "mi": 0.006513394904924752,
+    "rank_ic": 0.01398412010664825,
+    "rank_icir": 0.11560669538875679
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-20260730-011744-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-20260730-011744-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.16977035689546452,
+    "pre_transform_top_quantile_excess_return": 0.24997797779623854,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.23652068661390008,
+    "transformed_top_quantile_excess_return": 0.24997797779623854
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "rolling_20_mean(|ret|/vol) / rolling_40_std(ret)",
+  "fe_formula": "rolling_20_mean(|ret|/vol) / rolling_40_std(ret)",
+  "lqtp_notes": "Unconverted: ['rolling_20_mean', 'rolling_40_std']",
+  "fe_notes": "Unconverted: ['rolling_20_mean', 'rolling_40_std']",
+  "source_formula": "rolling_20_mean(|ret|/vol) / rolling_40_std(ret)"
+}

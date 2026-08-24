@@ -1,0 +1,125 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "6a9fbdd1d277907d0a2fd7ba16c63b2c4748bd847445a01f366241e688c3fd6b",
+  "candidate_ids": [
+    "APS_001",
+    "AVSI-001",
+    "PGA01",
+    "avqc_gen0_a",
+    "g2_mutation_g1_crossover_then_mutation_vsi_g0_c1_alr_g0_001_531630ba",
+    "vpe-divergence-rank-001"
+  ],
+  "code": "def factor_value_quality_growth_sales_yield(df):\n    df_copy = df.copy()\n    cheapness = 1.0 / df_copy[\"ps_ttm\"].replace(0, np.nan)\n    quality = df_copy[\"roe_ttm2\"]\n    growth = df_copy[\"qfa_yoygr\"]\n    leverage_penalty = 1.0 / (1.0 + df_copy[\"debttoassets\"].abs())\n    df_copy[\"factor_value_quality_growth_sales_yield\"] = cheapness * quality * growth * leverage_penalty\n    return df_copy[\"factor_value_quality_growth_sales_yield\"]",
+  "cross_sectional_rationale": "Components are in different units (multiples, percentage points); cross-sectional rank creates a comparable composite score across stocks each day.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.5878787878787879,
+        "top_quantile_annualized_excess_return": 0.02309945902135513,
+        "top_quantile_excess_return": 0.06781042099522483,
+        "top_quantile_max_drawdown": -0.1253678146456041,
+        "top_quantile_turnover": 0.01779694751380915
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": -0.007887733782097527,
+      "field": "rank_icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 1.098596672276219,
+      "threshold": 0.08
+    },
+    "qualification_track": null
+  },
+  "factor_name": "factor_value_quality_growth_sales_yield",
+  "fitness_direction": 1,
+  "formula": null,
+  "metrics": {
+    "ic": 0.0004165223401149397,
+    "icir": 0.011064082568145096,
+    "mi": 0.004619679890392803,
+    "rank_ic": -0.0003630343479564656,
+    "rank_icir": -0.007887733782097527
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.5878787878787879,
+    "top_quantile_annualized_excess_return": 0.02309945902135513,
+    "top_quantile_excess_return": 0.06781042099522483,
+    "top_quantile_max_drawdown": -0.1253678146456041,
+    "top_quantile_turnover": 0.01779694751380915
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.0010897113998255808,
+    "icir": 0.05058476614512913,
+    "mi": 0.014107736587297914,
+    "rank_ic": 0.0003630343479564656,
+    "rank_icir": 0.007887733782097527
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": -0.5878787878787879,
+    "top_quantile_annualized_excess_return": 0.004406283682084844,
+    "top_quantile_excess_return": 0.012711628878570913,
+    "top_quantile_max_drawdown": -0.07301688808622353,
+    "top_quantile_turnover": 0.017443501408403603
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.0010897113998255808,
+    "icir": -0.05058476614512913,
+    "mi": 0.014107736587297914,
+    "rank_ic": -0.0003630343479564656,
+    "rank_icir": -0.007887733782097527
+  },
+  "predictive_gate_passed": false,
+  "qualification_track": null,
+  "rationale": "Light composite of value (sales yield = 1/ps_ttm), quality (ROE), and growth (revenue YoY change), with leverage penalty via debt-to-assets. Cross-sectional rank aligns the mixed units into a common scale.",
+  "raw_metrics": {
+    "ic": 0.0004165223401149397,
+    "icir": 0.011064082568145096,
+    "mi": 0.004619679890392803,
+    "rank_ic": -0.0003630343479564656,
+    "rank_icir": -0.007887733782097527
+  },
+  "required_columns": [
+    "ps_ttm",
+    "roe_ttm2",
+    "qfa_yoygr",
+    "debttoassets"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260717-20260717-061233-r1",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260717-20260717-061233-r1",
+    "formal-fundamental-strict-and-20260717-20260717-200138-r7",
+    "formal-fundamental-strict-and-20260717-20260718-001731-r9",
+    "formal-fundamental-strict-and-20260717-20260718-074009-r13",
+    "formal-fundamental-strict-and-20260719-20260720-062738-r10",
+    "formal-fundamental-strict-and-20260721-20260721-143838-r3"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.07403298226230662,
+    "pre_transform_top_quantile_excess_return": 0.012711628878570913,
+    "transform_gate_passed": false,
+    "transform_gate_reason": "transform_composite_below_raw",
+    "transformed_composite": 0.007849516668598847,
+    "transformed_top_quantile_excess_return": 0.06781042099522483
+  },
+  "transform_gate_passed": false,
+  "transform_gate_reason": "transform_composite_below_raw",
+  "lqtp_formula": "",
+  "fe_formula": "",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": ""
+}

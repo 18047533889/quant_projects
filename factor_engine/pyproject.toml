@@ -1,0 +1,127 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "factor-engine"
+version = "0.3.1"
+description = "Factor engine: DSL parser, IR, planner, runtime, modeling, and service"
+requires-python = ">=3.10"
+dependencies = [
+    "PyYAML>=6.0",
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "packaging>=23.0",
+    "pyarrow>=14.0",
+    "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+service = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "pydantic>=2.0"]
+pandas = ["pandas>=2.0", "pyarrow>=14.0", "scipy>=1.10"]
+accel = ["bottleneck>=1.3", "numba>=0.58"]
+polars = ["polars>=0.20"]
+validation = ["pydantic>=2.0"]
+dev = ["pytest>=8.0", "pydantic>=2.0", "fastapi>=0.110", "build>=1.2"]
+
+[tool.setuptools]
+py-modules = [
+    "logging_utils",
+    "pit_contract",
+    "stateful_contract",
+    "stateful_runtime",
+    "workspace_paths",
+]
+packages = [
+    "api",
+    "backend",
+    "backend.contracts",
+    "backend.numba_kernels",
+    "backend.q_backend",
+    "backend.sql_pushdown",
+    "cache",
+    "cleaned_operators",
+    "cleaned_operators.ashare",
+    "cleaned_operators.closure",
+    "cleaned_operators.common",
+    "cleaned_operators.cross_section",
+    "cleaned_operators.docs",
+    "cleaned_operators.fundamental",
+    "cleaned_operators.index_listing",
+    "cleaned_operators.intraday",
+    "cleaned_operators.microstructure",
+    "cleaned_operators.overhaul",
+    "cleaned_operators.polars_native",
+    "cleaned_operators.price_volume",
+    "cleaned_operators.relation",
+    "cleaned_operators.shareholder",
+    "cleaned_operators.stateful",
+    "cleaned_operators.technical",
+    "cleaned_operators.ts_model",
+    "cleaned_operators.valuation",
+    "docs",
+    "evidence",
+    "export",
+    "expr",
+    "factor_recipes",
+    "fields",
+    "ir",
+    "market",
+    "mining",
+    "modeling",
+    "modeling.learners",
+    "planner",
+    "planner.lowerings",
+    "planning",
+    "research_operators",
+    "research_tools",
+    "runtime",
+    "runtime.multibackend",
+    "runtime.pipeline",
+    "runtime.quality",
+    "runtime.reconcile",
+    "security",
+    "semantic",
+    "service",
+    "storage",
+    "storage.materialize",
+    "storage.sources",
+    "telemetry",
+    "util",
+]
+
+[tool.setuptools.package-dir]
+"cleaned_operators" = "cleaned_operators_archived"
+"cleaned_operators.ashare" = "cleaned_operators_archived/ashare"
+"cleaned_operators.closure" = "cleaned_operators_archived/closure"
+"cleaned_operators.common" = "cleaned_operators_archived/common"
+"cleaned_operators.cross_section" = "cleaned_operators_archived/cross_section"
+"cleaned_operators.docs" = "cleaned_operators_archived/docs"
+"cleaned_operators.fundamental" = "cleaned_operators_archived/fundamental"
+"cleaned_operators.index_listing" = "cleaned_operators_archived/index_listing"
+"cleaned_operators.intraday" = "cleaned_operators_archived/intraday"
+"cleaned_operators.microstructure" = "cleaned_operators_archived/microstructure"
+"cleaned_operators.overhaul" = "cleaned_operators_archived/overhaul"
+"cleaned_operators.polars_native" = "cleaned_operators_archived/polars_native"
+"cleaned_operators.price_volume" = "cleaned_operators_archived/price_volume"
+"cleaned_operators.relation" = "cleaned_operators_archived/relation"
+"cleaned_operators.shareholder" = "cleaned_operators_archived/shareholder"
+"cleaned_operators.stateful" = "cleaned_operators_archived/stateful"
+"cleaned_operators.technical" = "cleaned_operators_archived/technical"
+"cleaned_operators.ts_model" = "cleaned_operators_archived/ts_model"
+"cleaned_operators.valuation" = "cleaned_operators_archived/valuation"
+
+[tool.setuptools.package-data]
+"docs" = ["*.json", "*.yaml", "*.md", "*.txt"]
+"evidence" = ["*.json", "*.yaml"]
+"cleaned_operators" = ["docs/*"]
+
+[tool.setuptools.exclude-package-data]
+"*" = [
+    "tests", "tests.*",
+    "benchmarks", "benchmarks.*",
+    "audit", "audit.*",
+    "scripts", "scripts.*",
+    "*.pyc", "__pycache__",
+    "test_*.py", "*_test.py",
+]

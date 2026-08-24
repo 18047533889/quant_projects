@@ -1,0 +1,117 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "fe4ac017b8820008e811b350a62c84e223e07d8f5b4c630cfe94b872632e0763",
+  "candidate_ids": [
+    "g1_crossover_002_vgc_001_4746f842"
+  ],
+  "code": "def factor_book_yield_leverage_roa_confirmed(df):\n    df_copy = df.copy()\n    book_yield = 1.0 / df_copy[\"pb_lf\"].replace(0, np.nan)\n    debt_ratio = df_copy[\"debttoassets\"] / 100.0\n    adj = (1 - debt_ratio).clip(lower=0.1, upper=1.0)\n    log_mkt = np.log(df_copy[\"mkt_cap_float\"].clip(lower=1e6))\n    rank_size = log_mkt.rolling(60, min_periods=30).rank(pct=True)\n    size_w = (4 * rank_size * (1 - rank_size)).clip(lower=0.1, upper=1.0)\n    roa = df_copy[\"roa2_ttm2\"] / 100.0\n    roa_conf = (1 + roa).clip(lower=0.5, upper=2.0)\n    result = book_yield * adj * size_w * roa_conf\n    result.name = \"factor_book_yield_leverage_roa_confirmed\"\n    return result",
+  "cross_sectional_rationale": "Rank transformation highlights relative value-quality combinations across diverse securities, consistent with the primary parent.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9757575757575757,
+        "top_quantile_annualized_excess_return": 0.13486692277891432,
+        "top_quantile_excess_return": 0.424672382122784,
+        "top_quantile_max_drawdown": -0.12739858948951233,
+        "top_quantile_turnover": 0.27059604366690454
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_book_yield_leverage_roa_confirmed",
+  "fitness_direction": 1,
+  "formula": "book_yield = 1/pb_lf; leverage_adj = (1 - debttoassets/100) clipped [0.1,1]; size_w = 4*percentile_rank*(1-percentile_rank) clipped [0.1,1]; roa_conf = (1 + roa2_ttm2/100) clipped [0.5,2]; signal = book_yield * leverage_adj * size_w * roa_conf",
+  "metrics": {
+    "ic": 0.01452271404395385,
+    "icir": 0.17402444609036508,
+    "mi": 0.008226771295569257,
+    "rank_ic": 0.03203751251538238,
+    "rank_icir": 0.3183413539035682
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.13486692277891432,
+    "top_quantile_excess_return": 0.424672382122784,
+    "top_quantile_max_drawdown": -0.12739858948951233,
+    "top_quantile_turnover": 0.27059604366690454
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.012492121225654844,
+    "icir": 0.15965707918613062,
+    "mi": 0.013163276511609645,
+    "rank_ic": 0.03203751251538238,
+    "rank_icir": 0.3183413539035682
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.13486692277891432,
+    "top_quantile_excess_return": 0.424672382122784,
+    "top_quantile_max_drawdown": -0.12739858948951233,
+    "top_quantile_turnover": 0.27059604366690454
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.012492121225654844,
+    "icir": 0.15965707918613062,
+    "mi": 0.013163276511609645,
+    "rank_ic": 0.03203751251538238,
+    "rank_icir": 0.3183413539035682
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Combines book-value yield with leverage penalty and mid-cap size tilt from the primary parent, and adds a ROA quality multiplier from the secondary parent. Firms with higher ROA get a stronger value signal, while negative ROA firms are penalized. This provides a quality confirmation to avoid distressed value traps beyond leverage alone.",
+  "raw_metrics": {
+    "ic": 0.01452271404395385,
+    "icir": 0.17402444609036508,
+    "mi": 0.008226771295569257,
+    "rank_ic": 0.03203751251538238,
+    "rank_icir": 0.3183413539035682
+  },
+  "required_columns": [
+    "pb_lf",
+    "debttoassets",
+    "mkt_cap_float",
+    "roa2_ttm2"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260717-20260718-115642-r15",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260717-20260718-115642-r15"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.5356913433423457,
+    "pre_transform_top_quantile_excess_return": 0.424672382122784,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.5471527978488387,
+    "transformed_top_quantile_excess_return": 0.424672382122784
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "book_yield = 1/pb_lf; leverage_adj = (1 - debttoassets/100) clipped [0.1,1]; size_w = 4*percentile_rank*(1-percentile_rank) clipped [0.1,1]; roa_conf = (1 + roa2_ttm2/100) clipped [0.5,2]; signal = book_yield * leverage_adj * size_w * roa_conf",
+  "fe_formula": "book_yield = 1/pb_lf; leverage_adj = (1 - debttoassets/100) clipped [0.1,1]; size_w = 4*percentile_rank*(1-percentile_rank) clipped [0.1,1]; roa_conf = (1 + roa2_ttm2/100) clipped [0.5,2]; signal = book_yield * leverage_adj * size_w * roa_conf",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "book_yield = 1/pb_lf; leverage_adj = (1 - debttoassets/100) clipped [0.1,1]; size_w = 4*percentile_rank*(1-percentile_rank) clipped [0.1,1]; roa_conf = (1 + roa2_ttm2/100) clipped [0.5,2]; signal = book_yield * leverage_adj * size_w * roa_conf"
+}

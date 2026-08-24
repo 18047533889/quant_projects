@@ -51,14 +51,19 @@ class TestCapabilityQuery:
         assert result.record.backend == BackendKind.PANDAS_NUMPY
 
     def test_query_unsupported_backend(self):
+        # Q_KDB capability is driven by the q evidence authority. `add` has a
+        # q lowering (implemented); `corr` has no q lowering, so it is
+        # genuinely unsupported on Q_KDB. The registry always builds a
+        # BackendCapability record for a known backend kind, so `record` is
+        # not None even when unsupported.
         result = BackendCapabilityRegistry.query(
-            "add",
+            "corr",
             BackendKind.Q_KDB,
             mode="research",
         )
         assert not result.supported
-        assert result.record is None
-        assert "not yet implemented" in result.reason
+        assert result.record is not None
+        assert "unsupported" in result.reason
 
     def test_query_unknown_backend_string(self):
         result = BackendCapabilityRegistry.query(

@@ -1,0 +1,34 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "8a6387faea70404994bd4a08c1cb403b86f47171d3af46652dee57f2dc7ca35b",
+  "candidate_ids": [
+    "alpha-mutation-001"
+  ],
+  "code": "def factor_volatility_scaled_deviation(df):\n    df_copy = df.copy()\n    sma20 = df_copy['close'].rolling(window=20, min_periods=20).mean()\n    deviation = df_copy['close'] - sma20\n    ret = df_copy['close'].pct_change()\n    vol20 = ret.rolling(window=20, min_periods=20).std()\n    scaled_dev = deviation / (vol20 * sma20 + 1e-8)\n    factor = np.tanh(scaled_dev)\n    df_copy['factor_volatility_scaled_deviation'] = factor\n    return df_copy['factor_volatility_scaled_deviation']",
+  "factor_name": "factor_volatility_scaled_deviation",
+  "fitness_direction": -1,
+  "formula": "tanh((close - SMA20(close,20)) / (volatility(close,20) * SMA20(close,20)))",
+  "metrics": {
+    "ic": 0.006447991521522727,
+    "icir": 0.06282121204604746,
+    "mi": 0.009234516523006775,
+    "rank_ic": 0.032149869706540005,
+    "rank_icir": 0.257288409940358
+  },
+  "rationale": "Mutates parent factor_nonlinear_deviation by scaling the close deviation from SMA20 by rolling volatility of returns. This adjusts for market regime changes, potentially improving IC and mutual information while preserving the bounded nonlinearity and rank stability from the parent. The hyperbolic tangent compresses outliers.",
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-20260609-013206-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260609-013206-r1"
+  ],
+  "lqtp_formula": "tanh((close - SMA20(close,20)) / (volatility(close,20) * SMA20(close,20)))",
+  "fe_formula": "tanh((close - SMA20(close,20)) / (volatility(close,20) * SMA20(close,20)))",
+  "lqtp_notes": "Unconverted: ['SMA20', 'volatility']",
+  "fe_notes": "Unconverted: ['SMA20', 'volatility']",
+  "source_formula": "tanh((close - SMA20(close,20)) / (volatility(close,20) * SMA20(close,20)))"
+}

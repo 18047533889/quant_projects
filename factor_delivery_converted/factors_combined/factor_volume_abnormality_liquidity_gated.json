@@ -1,0 +1,72 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "d9e616c9ec0b5451d52e314d255540b7d58c61a7cb13c706c02316d2fd2292d4",
+  "candidate_ids": [
+    "MUT_001_G3"
+  ],
+  "code": "def factor_volume_abnormality_liquidity_gated(df):\n    df_copy = df.copy()\n    vol = df_copy['volume']\n    median_vol = vol.rolling(20, min_periods=20).median()\n    vol_ratio = vol / median_vol.replace(0, np.nan)\n    raw = vol_ratio.rolling(15, min_periods=15).std()\n    high_liquidity = df_copy['style_gate_liquidity_high'] > 0\n    factor = np.where(high_liquidity, raw, raw * 0.7)\n    df_copy['factor_volume_abnormality_liquidity_gated'] = factor\n    return df_copy['factor_volume_abnormality_liquidity_gated']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_volume_abnormality_liquidity_gated",
+  "fitness_direction": -1,
+  "formula": "vol_ratio = volume / rolling_median(volume, 20); raw = rolling_std(vol_ratio, 15); factor = if liquidity_high then raw else 0.7*raw",
+  "metrics": {
+    "ic": 0.011283818114848463,
+    "icir": 0.12673114144361397,
+    "mi": 0.013059909758895927,
+    "rank_ic": 0.037338591290124415,
+    "rank_icir": 0.4351522728293232
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.06264759226296923,
+    "top_quantile_excess_return": 0.181302256070752,
+    "top_quantile_max_drawdown": -0.06563283251534469,
+    "top_quantile_turnover": 0.1323395243130121
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Preserves the strong RankICIR of parent CRS_001_G2 by retaining its volume variability core (volume/median ratio and rolling std). Improves IC and RankIC by increasing the std window from 10 to 15 for smoother variability estimates, and adjusting the low-liquidity multiplier from 0.5 to 0.7 to retain more signal. These compact changes target the metric bottleneck (IC and RankIC) without weakening rank stability.",
+  "raw_metrics": {
+    "ic": -0.011283818114848463,
+    "icir": -0.12673114144361397,
+    "mi": 0.013059909758895927,
+    "rank_ic": -0.037338591290124415,
+    "rank_icir": -0.4351522728293232
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260626-020403-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260626-020403-r1"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "Uses style_gate_liquidity_high to modulate the volume variability signal. High liquidity indicates reliable volume patterns so the signal is kept at full strength; low liquidity attenuates the signal by 0.7 (previously 0.5) to retain more predictive content while still reducing noise.",
+  "style_gates_used": [
+    "style_gate_liquidity_high"
+  ],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "vol_ratio = volume / ts_median(20, volume); raw = ts_std(15, vol_ratio); factor = if liquidity_high then raw else 0.7*raw",
+  "fe_formula": "vol_ratio = volume / ts_median(20, volume); raw = ts_std(15, vol_ratio); factor = if liquidity_high then raw else 0.7*raw",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "vol_ratio = volume / rolling_median(volume, 20); raw = rolling_std(vol_ratio, 15); factor = if liquidity_high then raw else 0.7*raw"
+}

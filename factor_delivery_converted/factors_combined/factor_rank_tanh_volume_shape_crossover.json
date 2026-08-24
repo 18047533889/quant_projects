@@ -1,0 +1,45 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "6450543c79d828d464116bbd7e692383984d406d51112b9414556cbc4696a71f",
+  "candidate_ids": [
+    "crossover_dir_vol_conf_shape_001"
+  ],
+  "code": "def factor_rank_tanh_volume_shape_crossover(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    sign_ret = np.sign(ret)\n    net_dir = sign_ret.rolling(5, min_periods=5).sum()\n    mom = df_copy[\"close\"] / df_copy[\"close\"].shift(20) - 1\n    direction = net_dir * mom\n    vol_20_mean = df_copy[\"volume\"].rolling(20).mean()\n    vol_20_std = df_copy[\"volume\"].rolling(20).std(ddof=1)\n    vol_z = (df_copy[\"volume\"] - vol_20_mean) / vol_20_std.replace(0.0, np.nan)\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    range_20_mean = range_.rolling(20).mean()\n    range_ratio = range_ / range_20_mean.replace(0.0, np.nan)\n    rank_vol_z = vol_z.rolling(20, min_periods=10).rank(pct=True)\n    rank_range_ratio = range_ratio.rolling(20, min_periods=10).rank(pct=True)\n    rank_conf = rank_vol_z * rank_range_ratio\n    raw_conf = vol_z * range_ratio\n    tanh_conf = np.tanh(raw_conf)\n    combined_conf = rank_conf + 0.5 * tanh_conf\n    body_top = np.maximum(df_copy[\"open\"], df_copy[\"close\"])\n    body_bottom = np.minimum(df_copy[\"open\"], df_copy[\"close\"])\n    upper_shadow = df_copy[\"high\"] - body_top\n    lower_shadow = body_bottom - df_copy[\"low\"]\n    symmetry = (lower_shadow - upper_shadow) / (lower_shadow + upper_shadow + 1e-10)\n    tanh_symmetry = np.tanh(symmetry)\n    factor = direction * combined_conf * (1 + 0.25 * tanh_symmetry)\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy[\"factor_rank_tanh_volume_shape_crossover\"] = factor\n    return df_copy[\"factor_rank_tanh_volume_shape_crossover\"]",
+  "factor_name": "factor_rank_tanh_volume_shape_crossover",
+  "fitness_direction": -1,
+  "formula": "factor = direction * [rank(vol_z,20)*rank(range_ratio,20) + 0.5*tanh(vol_z*range_ratio)] * (1+0.25*tanh(symmetry))",
+  "metrics": {
+    "ic": 0.01666538642306801,
+    "icir": 0.20861033517619673,
+    "mi": 0.017640278097093898,
+    "rank_ic": 0.017689911476978525,
+    "rank_icir": 0.31581077570191507
+  },
+  "rationale": "Crossover combines the rank-based volume-range confirmation (robust ordinal ordering) from the strong parent mut_dir_vol_shape_tanh_001 with a tanh-transformed raw composite from volume_confirmed_dir_mut_3 to capture nonlinear magnitude effects that may improve mutual information. The shape asymmetry modulation from the strong parent is retained. The weight 0.5 on tanh_conf ensures the rank-based term dominates, preserving RankIC and RankICIR strength while adding a complementary nonlinear signal to target MI improvement.",
+  "raw_metrics": {
+    "ic": -0.01666538642306801,
+    "icir": -0.20861033517619673,
+    "mi": 0.017640278097093898,
+    "rank_ic": -0.017689911476978525,
+    "rank_icir": -0.31581077570191507
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260611-061826-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260611-061826-r1"
+  ],
+  "lqtp_formula": "factor = direction * [cs_rank(vol_z, 20)*cs_rank(range_ratio, 20) + 0.5*tanh(vol_z*range_ratio)] * (1+0.25*tanh(symmetry))",
+  "fe_formula": "factor = direction * [rank(vol_z,20)*rank(range_ratio,20) + 0.5*tanh(vol_z*range_ratio)] * (1+0.25*tanh(symmetry))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "factor = direction * [rank(vol_z,20)*rank(range_ratio,20) + 0.5*tanh(vol_z*range_ratio)] * (1+0.25*tanh(symmetry))"
+}

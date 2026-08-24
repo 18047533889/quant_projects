@@ -1,0 +1,67 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "4f8a765b110c9d1e595d63465ec6e6e83ab844e410084ae1627d7993deeb0624",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_then_mutation_alpha_market_cycle_2_1641cbf5"
+  ],
+  "code": "def factor_vol_regime_impact_ema(df):\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    impact = abs(intraday_ret) * vol_ratio\n    factor = impact.ewm(span=10, min_periods=10, adjust=False).mean()\n    df_copy[\"factor_vol_regime_impact_ema\"] = factor\n    return df_copy[\"factor_vol_regime_impact_ema\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_vol_regime_impact_ema",
+  "fitness_direction": -1,
+  "formula": "EWMA( |intraday_ret| * vol_ratio, span=10 )",
+  "metrics": {
+    "ic": 0.019646686240179487,
+    "icir": 0.13931225622118307,
+    "mi": 0.06182201352988237,
+    "rank_ic": 0.05613513531671366,
+    "rank_icir": 0.37618805164106023
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.027848041763946396,
+    "top_quantile_excess_return": 0.08105035380173087,
+    "top_quantile_max_drawdown": -0.13635447329335615,
+    "top_quantile_turnover": 0.18615018479000225
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Mutation from factor_vol_regime_impact_smoothed: replaces rolling mean with exponential weighted moving average to reduce lag and improve signal responsiveness while preserving the core economic mechanism of intraday price impact scaled by volume regime. Parent strength target: RankICIR stability.",
+  "raw_metrics": {
+    "ic": -0.019646686240179487,
+    "icir": -0.13931225622118307,
+    "mi": 0.06182201352988237,
+    "rank_ic": -0.05613513531671366,
+    "rank_icir": -0.37618805164106023
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260707-104009-r6",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260707-104009-r6"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema(span=10, |intraday_ret| * vol_ratio)",
+  "fe_formula": "ema(span=10, |intraday_ret| * vol_ratio)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "EWMA( |intraday_ret| * vol_ratio, span=10 )"
+}

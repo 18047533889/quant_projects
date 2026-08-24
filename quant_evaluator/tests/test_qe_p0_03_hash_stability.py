@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-_BUILD_LIB = Path(__file__).resolve().parents[1] / "build" / "lib"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 #: Code run inside each subprocess.  Prints a JSON digest keyed by the
 #: identity surface so the parent can compare cross-process.
@@ -32,7 +32,7 @@ import sys
 
 import numpy as np
 
-sys.path.insert(0, "@BUILD_LIB@")
+sys.path.insert(0, "@REPO_ROOT@")
 
 from quant_evaluator.contracts._hashutil import canonicalize, stable_content_hex
 from quant_evaluator.contracts.artifact_types import (
@@ -139,12 +139,12 @@ print(json.dumps(digest, sort_keys=True))
 
 def _run_digest(seed: str) -> dict:
     """Run the digest snippet in a fresh subprocess under the given seed."""
-    script = _SUBPROCESS_SNIPPET.replace("@BUILD_LIB@", str(_BUILD_LIB))
+    script = _SUBPROCESS_SNIPPET.replace("@REPO_ROOT@", str(_REPO_ROOT))
     env = dict(os.environ)
     env["PYTHONHASHSEED"] = seed
-    # Ensure the fixed source tree wins in the subprocess too.
+    # Ensure the repo-root source package is importable in the subprocess too.
     env["PYTHONPATH"] = os.pathsep.join(
-        [str(_BUILD_LIB)] + [p for p in env.get("PYTHONPATH", "").split(os.pathsep) if p]
+        [str(_REPO_ROOT)] + [p for p in env.get("PYTHONPATH", "").split(os.pathsep) if p]
     )
     proc = subprocess.run(
         [sys.executable, "-c", script],

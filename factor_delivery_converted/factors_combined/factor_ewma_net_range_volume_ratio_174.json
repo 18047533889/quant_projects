@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "f8e98852627c0cc9d3bc47a22e8ba101cc65266ac4beaa4a6618844c413e2b5f",
+  "candidate_ids": [
+    "lag002_mut2"
+  ],
+  "code": "def factor_ewma_net_range_volume_ratio(df):\n    df_copy = df.copy()\n    net_range = df_copy[\"close\"] - df_copy[\"open\"]\n    ewma_net = net_range.ewm(span=5, min_periods=5).mean()\n    total_range = df_copy[\"high\"] - df_copy[\"low\"]\n    ewma_total = total_range.ewm(span=5, min_periods=5).mean()\n    asym = ewma_net / ewma_total.replace(0, np.nan)\n    vol_ratio = df_copy[\"volume\"] / df_copy[\"volume\"].rolling(10, min_periods=10).mean()\n    factor = asym * vol_ratio\n    df_copy[\"factor_ewma_net_range_volume_ratio\"] = factor\n    return df_copy[\"factor_ewma_net_range_volume_ratio\"]",
+  "factor_name": "factor_ewma_net_range_volume_ratio",
+  "fitness_direction": -1,
+  "formula": "(EWMA5(close-open) / EWMA5(high-low)) * (volume / SMA10(volume))",
+  "metrics": {
+    "ic": 0.020069907574753416,
+    "icir": 0.21276596008921844,
+    "mi": 0.005921265776933637,
+    "rank_ic": 0.03567298326857827,
+    "rank_icir": 0.30530690458414206
+  },
+  "rationale": "Simplifies the asymmetry component by using net range (close-open) smoothed with a 5-day EWMA instead of separate up/down ranges with 10-day EWMA. This reduces code complexity and lag, targeting improved IC while preserving the volume ratio confirmation and the parent's RankIC strength.",
+  "raw_metrics": {
+    "ic": -0.020069907574753416,
+    "icir": -0.21276596008921844,
+    "mi": 0.005921265776933637,
+    "rank_ic": -0.03567298326857827,
+    "rank_icir": -0.30530690458414206
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260615-064629-r3",
+  "source_run_ids": [
+    "formal-mvp-loop-20260615-064629-r3"
+  ],
+  "lqtp_formula": "(ema(5, close-open) / ema(5, high-low)) * (volume / ts_mean(10, volume))",
+  "fe_formula": "(ema(5, close-open) / ema(5, high-low)) * (volume / ts_mean(10, volume))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(EWMA5(close-open) / EWMA5(high-low)) * (volume / SMA10(volume))"
+}

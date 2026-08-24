@@ -37,7 +37,9 @@ import socket
 import subprocess
 import sys
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -174,36 +176,105 @@ def _dist_version(name: str) -> str:
     return "NOT_INSTALLED"
 
 
-def _release_identity() -> dict:
-    """Single source of truth for root/FE/DA git SHAs: evidence.current.
+@dataclass(frozen=True)
+class ReleaseIdentity:
+    """Formal release identity (VER-P0-06).
 
-    R23: the manifest no longer computes its own root/submodule SHAs.  It
-    delegates to ``evidence.current`` (R22-CURRENT-TRUTH) so the
-    VerificationManifest's ReleaseIdentity (root / factor_engine / dataaccess)
-    can never drift from CURRENT.json's sha_bindings.  Degrades to local git
-    calls only if evidence.current is unavailable (non-git / no dataaccess).
+    Fields mirror ``evidence.current._dirty_tree_digest()``:
+      - ``git_sha``                root repo HEAD SHA (or None when not a git checkout)
+      - ``dirty``                  working tree has uncommitted changes
+      - ``diff_hash``              sha256 of ``git diff`` (unstaged) when dirty
+      - ``cached_diff_hash``       sha256 of ``git diff --cached`` when dirty
+      - ``untracked_source_hash``  digest of untracked non-ignored source files
+      - ``gitlinks``               path -> blob SHA for real git submodules
+                                   (git index entries with mode 160000); empty
+                                   dict when the repo declares none.
+
+    ``submodule_shas`` in the manifest MUST be populated ONLY from ``gitlinks``
+    so the manifest can never fabricate submodule SHAs (this repo has no
+    submodules; the old manifest recorded fabricated SHAs for factor_engine /
+    dataaccess — that stops here).
+    """
+
+    git_sha: str | None = None
+    dirty: bool = False
+    diff_hash: str | None = None
+    cached_diff_hash: str | None = None
+    untracked_source_hash: str | None = None
+    gitlinks: dict[str, str] = field(default_factory=dict)
+
+
+def _gitlinks_from_index(root: Path) -> dict[str, str]:
+    """Real gitlinks: index entries with mode ``160000`` -> path -> blob SHA.
+
+    ``git ls-files --stage`` emits one line per index entry of the form::
+
+        160000 <blob_sha> 0\t<path>
+
+    Any path registered that way is a REAL submodule pin in this repository.
+    No ``160000`` entries => no submodules => empty dict (nothing pinned).
+    """
+    gitlinks: dict[str, str] = {}
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", "--stage"],
+            cwd=str(root), capture_output=True, text=True, timeout=60,
+        )
+        if out.returncode == 0:
+            for line in out.stdout.splitlines():
+                parts = line.split()
+                if not parts or parts[0] != "160000":
+                    continue
+                if len(parts) >= 2:
+                    path = parts[-1]
+                    gitlinks[path] = parts[1]
+    except Exception:
+        pass
+    return gitlinks
+
+
+def _release_identity() -> ReleaseIdentity:
+    """Single source of truth for the root repo release identity.
+
+    VER-P0-06: delegates to ``evidence.current.root_repo_sha()``.  That API
+    returns a plain str for a clean tree, or a dict (HEAD/dirty/diff_hash/
+    cached_diff_hash/untracked_source_hash) for a dirty tree.  Both return
+    types are handled explicitly — the old code did ``root.split(" ")[0]`` /
+    ``root.endswith(...)`` string guessing, which the coordinator flagged as
+    fabricated.  Submodule SHAs come ONLY from real git index gitlinks; if
+    ``evidence.current`` is unavailable the identity degrades to direct git
+    calls with the same schema.
     """
     try:
-        from evidence.current import root_repo_sha, submodule_sha
+        from evidence.current import root_repo_sha
         root = root_repo_sha()
-        return {
-            "git_sha": root.split(" ")[0],
-            "git_dirty": root.endswith("(working-tree-dirty)"),
-            "factor_engine": submodule_sha("factor_engine"),
-            "dataaccess": submodule_sha("dataaccess"),
-        }
+        if isinstance(root, dict):
+            identity = ReleaseIdentity(
+                git_sha=root.get("HEAD") or root.get("git_sha"),
+                dirty=bool(root.get("dirty")),
+                diff_hash=root.get("diff_hash"),
+                cached_diff_hash=root.get("cached_diff_hash"),
+                untracked_source_hash=root.get("untracked_source_hash"),
+                gitlinks=_gitlinks_from_index(REPO_ROOT),
+            )
+        else:
+            identity = ReleaseIdentity(
+                git_sha=str(root) if root else None,
+                dirty=False,
+                gitlinks=_gitlinks_from_index(REPO_ROOT),
+            )
+        return identity
     except Exception as exc:  # pragma: no cover - degraded fallback
         print(
             f"warning: evidence.current identity unavailable ({exc}); "
             "falling back to local git calls",
             file=sys.stderr,
         )
-        return {
-            "git_sha": _git_sha(REPO_ROOT),
-            "git_dirty": _git_dirty(REPO_ROOT),
-            "factor_engine": _git_sha(REPO_ROOT / "factor_engine"),
-            "dataaccess": _git_sha(REPO_ROOT / "dataaccess"),
-        }
+        return ReleaseIdentity(
+            git_sha=_git_sha(REPO_ROOT),
+            dirty=_git_dirty(REPO_ROOT),
+            gitlinks=_gitlinks_from_index(REPO_ROOT),
+        )
 
 
 def package_tree_hash(pkg: str) -> str | None:
@@ -292,6 +363,9 @@ def load_gates() -> list[dict]:
         "CHECKPOINT_RESUME", "FRESH_WHEEL", "1K_SCALE", "10K_SCALE",
         "100K_SCALE", "ASHARE_SEMANTIC_CONTRACT_GOLDEN",
         "ASHARE_REAL_DATA_SHADOW",
+        # VER-P0-05 hard/structural gates (default NOT_RUN).
+        "SOURCE_AUTHORITY", "SUPPLY_CHAIN", "SUBMODULE_REACHABILITY",
+        "FRESH_WHEEL_MATRIX", "EVIDENCE_CURRENT",
     )
     for name in all_gates:
         if name not in known:
@@ -365,6 +439,115 @@ def _load_verified_evidence() -> list[dict] | None:
     return [g for g in gates if isinstance(g, dict) and g.get("name")]
 
 
+# ---------------------------------------------------------------------------
+# VER-P0-02 — exact-identity gate aggregation
+# ---------------------------------------------------------------------------
+def _build_gate_expectations() -> tuple[dict[str, set[str]], dict[str, str], dict[str, set[str]]]:
+    """Expected test sets per gate, from scripts/gate_runner.GATE_SPECS.
+
+    Returns (expected_tests, skip_policies, allowed_skips):
+      - expected_tests: gate_id -> set(spec.tests)
+      - skip_policies:  gate_id -> spec.skip_policy ("allowed" | "fail_on_skip")
+      - allowed_skips:  gate_id -> set of test paths that may skip (from
+                        ``allowed_skip_inventory`` if the GateSpec exposes it;
+                        tolerated as absent — the other agent is adding it).
+
+    Falls back to a local constant (the 15 gate test-file lists from config)
+    when ``scripts.gate_runner`` cannot be imported (in-flight edit).  Gates
+    with no known spec simply have an empty expected set — their evidence is
+    validated by machine fields but never promoted to PASS by the exact-match
+    check below.
+    """
+    try:
+        from scripts.gate_runner import GateSpec, GATE_SPECS  # noqa: F401
+        specs = list(GATE_SPECS)
+        source = "gate_runner"
+    except Exception:
+        try:
+            sys.path.insert(0, str(REPO_ROOT / "scripts"))
+            from gate_runner import GateSpec, GATE_SPECS  # noqa: F401
+            specs = list(GATE_SPECS)
+            source = "gate_runner"
+        except Exception as exc:
+            print(
+                f"warning: scripts.gate_runner unavailable ({exc}); using the "
+                "local 15-gate fallback expectation map",
+                file=sys.stderr,
+            )
+            specs = _FALLBACK_GATE_SPECS
+            source = "local-fallback"
+    expected: dict[str, set[str]] = {}
+    policies: dict[str, str] = {}
+    allowed: dict[str, set[str]] = {}
+    for spec in specs:
+        gid = getattr(spec, "gate_id", None)
+        if not gid:
+            continue
+        tests = tuple(getattr(spec, "tests", ()) or ())
+        expected[gid] = {str(t) for t in tests}
+        pol = getattr(spec, "skip_policy", "allowed")
+        policies[gid] = str(pol) if pol else "allowed"
+        # VER-P0-02: the sibling agent's allowed_skip_inventory is a dict
+        # {test_path: {reason_regex: allowance}} (or a plain dict of test
+        # paths).  A path registered with a non-empty rule set counts as
+        # covered: a skip on that file with a registered reason is a
+        # legitimate expected skip.  Unregistered test paths (or an empty rule
+        # set) are NOT covered.
+        inv = getattr(spec, "allowed_skip_inventory", None)
+        covered: set[str] = set()
+        if isinstance(inv, dict):
+            for path, rules in inv.items():
+                if isinstance(rules, dict) and rules:
+                    covered.add(str(path))
+                elif isinstance(rules, (list, tuple)) and rules:
+                    covered.add(str(path))
+                elif rules:  # truthy non-container (legacy bool/1)
+                    covered.add(str(path))
+        allowed[gid] = covered
+    if verbose_debug():
+        print(f"  gate expectations source: {source} ({len(expected)} gates)")
+    return expected, policies, allowed
+
+
+@dataclass(frozen=True)
+class _FallbackSpec:
+    gate_id: str
+    tests: tuple[str, ...]
+    skip_policy: str = "allowed"
+    commands: tuple[tuple[str, ...], ...] = ()
+
+
+# Fallback expectation map used ONLY when scripts.gate_runner cannot be
+# imported (its schema is mid-refactor under a sibling agent).  Values mirror
+# config/gates.json + the 15 gate test-file lists from gate_runner.GATE_SPECS.
+_FALLBACK_GATE_SPECS: list[Any] = [
+    _FallbackSpec("NUMERICAL_ORACLE", ("quant_evaluator/tests/test_numerical_oracle.py",)),
+    _FallbackSpec("PROPERTY", ("quant_evaluator/tests/test_metamorphic.py", "quant_evaluator/tests/test_consistency.py")),
+    _FallbackSpec("CROSS_PACKAGE", ("integration_tests/test_cross_package_contracts.py",)),
+    _FallbackSpec("ASHARE_SEMANTIC_CONTRACT_GOLDEN", ("integration_tests/test_ashare_semantic_golden.py",)),
+    _FallbackSpec("ASHARE_REAL_DATA_SHADOW", ("integration_tests/test_real_ashare_shadow.py",), skip_policy="fail_on_skip"),
+    _FallbackSpec("SERIALIZATION", ("quant_evaluator/tests/test_qe_serialization.py", "factor_assets/tests/registry/test_serialization_codec.py")),
+    _FallbackSpec("CHECKPOINT_RESUME", ("factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py",)),
+    _FallbackSpec("UNIT", ("factor_engine/tests/test_capability_registry.py", "factor_engine/tests/test_concurrency_safety.py")),
+    _FallbackSpec("LEAKAGE", ("factor_engine/tests/modeling/test_evaluation_leakage_evidence.py", "factor_preprocess/tests/contracts/test_leakage_properties.py")),
+    _FallbackSpec("PIT", ("factor_engine/tests/runtime/test_pit_audit.py", "factor_engine/tests/runtime/test_label_pit.py", "factor_engine/tests/runtime/test_r10_pit_tristate.py")),
+    _FallbackSpec("DETERMINISM", ("factor_engine/tests/test_comprehensive_data_consistency.py", "factor_engine/tests/backend/test_r21_def5_payload_hash.py")),
+    _FallbackSpec("FRESH_WHEEL", ("factor_engine/scripts/wheel_clean_install_smoke.py",)),
+    _FallbackSpec("1K_SCALE", ("quant_evaluator/tests/test_scale_gates.py",)),
+    _FallbackSpec("10K_SCALE", ("quant_evaluator/tests/test_scale_gates.py",)),
+    _FallbackSpec("100K_SCALE", ("quant_evaluator/tests/test_scale_gates.py",)),
+]
+
+_verbose_flag: bool | None = None
+
+
+def verbose_debug() -> bool:
+    global _verbose_flag
+    if _verbose_flag is None:
+        _verbose_flag = "--verbose" in sys.argv or "-v" in sys.argv
+    return _verbose_flag
+
+
 def apply_verified_evidence(gates: list[dict], verbose: bool = True) -> list[dict]:
     """Fold current-tree verified evidence (from verified_gate_evidence.json) in.
 
@@ -377,6 +560,12 @@ def apply_verified_evidence(gates: list[dict], verbose: bool = True) -> list[dic
         * ``errors``        — 0
         * ``tests``         — > 0 (a gate that ran nothing is not a pass)
 
+    VER-P0-02 (exact identity): the set of machine-verified ``test`` paths for
+    a gate must EXACTLY equal the expected test file set from the gate spec —
+    no missing, no extra, no duplicate.  A partial run (e.g. only 1 of 2
+    expected files) leaves the gate NOT_RUN.  The per-gate ``status`` string in
+    the evidence file is NOT trusted; it is advisory only.
+
     The ``result: "passed"`` string and per-gate ``status`` in the evidence file
     are NOT trusted; they are advisory only.  An entry missing those machine
     fields is treated as NOT_RUN — never PASS.  This is deliberate: the old
@@ -388,12 +577,14 @@ def apply_verified_evidence(gates: list[dict], verbose: bool = True) -> list[dic
     Note: historically only a hard-coded _PROVABLE_GATE_NAMES subset could be
     upgraded to PASS; LEAKAGE, PIT, DETERMINISM, FRESH_WHEEL, 1K_SCALE,
     10K_SCALE, 100K_SCALE were excluded even when the evidence proved them.
-    That exclusion has been removed: the machine-field validation below is the
-    only gatekeeper, applied uniformly to ALL gates.
+    That exclusion has been removed: the machine-field validation + exact
+    test-set match below are the only gatekeepers, applied uniformly to ALL
+    gates.
     """
     entries = _load_verified_evidence()
     if entries is None:
         return gates
+    expected_tests, skip_policies, allowed_skips = _build_gate_expectations()
     applied: list[str] = []
     for entry in entries:
         name = entry["name"]
@@ -410,20 +601,38 @@ def apply_verified_evidence(gates: list[dict], verbose: bool = True) -> list[dic
             if verbose:
                 print(f"  [skip] gate {name}: no evidence items", file=sys.stderr)
             continue
-        # VER-P0-01: only machine-verified evidence items are acceptable.  A
-        # ``result: "passed"`` string or a bare ``count`` does NOT count.
+        expected: set[str] = expected_tests.get(name, set())
+        # VER-P0-02: machine-verified evidence items ONLY; a ``result:
+        # "passed"`` string or a bare ``count`` does NOT count.
         ok_items: list[dict] = []
+        has_extra = False
+        has_duplicate = False
         for it in ev_items:
             if not isinstance(it, dict):
                 continue
             if not it.get("test"):
+                continue
+            test_path = str(it["test"])
+            # VER-P0-02: evidence for a test file that is NOT part of this
+            # gate's expected set is EXTRANEOUS.  It is excluded from the ok
+            # set AND its presence keeps the gate NOT_RUN (exact identity: no
+            # extra evidence allowed).
+            if expected and test_path not in expected:
+                has_extra = True
+                if verbose:
+                    print(
+                        f"  [drop-extra] gate {name}: evidence test {test_path!r} "
+                        f"not in expected set {sorted(expected)} -> EXTRANEous "
+                        "evidence; gate stays NOT_RUN",
+                        file=sys.stderr,
+                    )
                 continue
             cmd_hash = it.get("command_hash")
             exit_code = it.get("exit_code")
             if not cmd_hash or not isinstance(exit_code, int):
                 if verbose:
                     print(
-                        f"  [drop-item] gate {name}: evidence for {it.get('test')} "
+                        f"  [drop-item] gate {name}: evidence for {test_path} "
                         "missing command_hash/exit_code -> treated NOT_RUN",
                         file=sys.stderr,
                     )
@@ -434,7 +643,7 @@ def apply_verified_evidence(gates: list[dict], verbose: bool = True) -> list[dic
             if failed != 0 or errors != 0:
                 if verbose:
                     print(
-                        f"  [drop-item] gate {name}: evidence for {it.get('test')} "
+                        f"  [drop-item] gate {name}: evidence for {test_path} "
                         f"has failed={failed} errors={errors} -> NOT a pass",
                         file=sys.stderr,
                     )
@@ -442,7 +651,7 @@ def apply_verified_evidence(gates: list[dict], verbose: bool = True) -> list[dic
             if exit_code != 0:
                 if verbose:
                     print(
-                        f"  [drop-item] gate {name}: evidence for {it.get('test')} "
+                        f"  [drop-item] gate {name}: evidence for {test_path} "
                         f"has exit_code={exit_code} != 0 -> NOT a pass",
                         file=sys.stderr,
                     )
@@ -450,13 +659,25 @@ def apply_verified_evidence(gates: list[dict], verbose: bool = True) -> list[dic
             if not isinstance(tests, int) or tests <= 0:
                 if verbose:
                     print(
-                        f"  [drop-item] gate {name}: evidence for {it.get('test')} "
+                        f"  [drop-item] gate {name}: evidence for {test_path} "
                         f"has tests={tests!r} (<=0) -> NOT a pass",
                         file=sys.stderr,
                     )
                 continue
+            # VER-P0-02: a duplicate test path is never acceptable — one test
+            # file must produce exactly one honest evidence entry, and a
+            # duplicate keeps the gate NOT_RUN (exact identity).
+            if any(o["test"] == test_path for o in ok_items):
+                has_duplicate = True
+                if verbose:
+                    print(
+                        f"  [drop-dupe] gate {name}: duplicate evidence for "
+                        f"{test_path} -> DUPLICATE evidence; gate stays NOT_RUN",
+                        file=sys.stderr,
+                    )
+                continue
             ok_items.append({
-                "test": str(it["test"]),
+                "test": test_path,
                 "command_hash": str(cmd_hash),
                 "exit_code": int(exit_code),
                 "passed": int(it["passed"]) if isinstance(it.get("passed"), int) else None,
@@ -468,10 +689,81 @@ def apply_verified_evidence(gates: list[dict], verbose: bool = True) -> list[dic
                 "executed_at": str(it.get("executed_at") or ""),
                 "run_at": str(it.get("run_at") or ""),
             })
+        # VER-P0-02: extra or duplicate evidence keeps the gate NOT_RUN even
+        # when the expected set would otherwise be covered.
+        if has_extra:
+            if verbose:
+                print(
+                    f"  [skip] gate {name}: EXTRANEOUS evidence present -> "
+                    "NOT_RUN (exact identity forbids extra tests)",
+                    file=sys.stderr,
+                )
+            continue
+        if has_duplicate:
+            if verbose:
+                print(
+                    f"  [skip] gate {name}: DUPLICATE evidence present -> "
+                    "NOT_RUN (exact identity forbids duplicates)",
+                    file=sys.stderr,
+                )
+            continue
         if not ok_items:
             if verbose:
                 print(f"  [skip] gate {name}: no machine-verified evidence items", file=sys.stderr)
             continue
+        ok_paths: set[str] = {o["test"] for o in ok_items}
+
+        # VER-P0-02: exact identity — the verified set MUST equal the expected
+        # set.  Missing / extra / duplicate test paths all keep the gate NOT_RUN.
+        if not expected:
+            if verbose:
+                print(
+                    f"  [skip] gate {name}: no expectation map entry (unknown spec); "
+                    "exact-identity gate cannot be proven -> NOT_RUN",
+                    file=sys.stderr,
+                )
+            continue
+        missing = expected - ok_paths
+        extra = ok_paths - expected
+        if missing:
+            if verbose:
+                print(
+                    f"  [skip] gate {name}: MISSING verified evidence for expected "
+                    f"tests {sorted(missing)} -> NOT_RUN (exact identity requires all)",
+                    file=sys.stderr,
+                )
+            continue
+        if extra:
+            if verbose:
+                print(
+                    f"  [skip] gate {name}: EXTRA verified evidence {sorted(extra)} "
+                    f"beyond expected {sorted(expected)} -> NOT_RUN (exact identity)",
+                    file=sys.stderr,
+                )
+            continue
+
+        # VER-P0-02: skip policy — when the gate fails on skips (or has an
+        # allowed-skip inventory) any ok item with skipped > 0 not covered by
+        # the allowed inventory keeps the gate NOT_RUN.
+        policy = skip_policies.get(name, "allowed")
+        allowed = allowed_skips.get(name, set())
+        skip_fail = False
+        if policy == "fail_on_skip" or allowed:
+            for o in ok_items:
+                skipped = o.get("skipped") or 0
+                if skipped > 0 and o["test"] not in allowed:
+                    if verbose:
+                        print(
+                            f"  [skip] gate {name}: evidence for {o['test']} has "
+                            f"skipped={skipped} (not covered by allowed-skip "
+                            f"inventory {sorted(allowed) or 'none'}) -> NOT a pass",
+                            file=sys.stderr,
+                        )
+                    skip_fail = True
+                    break
+        if skip_fail:
+            continue
+
         g["status"] = "PASS"
         g["evidence"] = ok_items
         applied.append(f"{name}({len(ok_items)} evidence items)")
@@ -531,8 +823,8 @@ def build_manifest() -> dict:
 
     # --- source snapshot (ReleaseIdentity from evidence.current) ------------
     identity = _release_identity()
-    git_sha = identity["git_sha"]
-    git_dirty = identity["git_dirty"]
+    git_sha = identity.git_sha
+    git_dirty = identity.dirty
 
     packages: dict[str, dict] = {}
     for pkg in PACKAGES:
@@ -541,8 +833,16 @@ def build_manifest() -> dict:
             "tree_sha256": package_tree_hash(pkg),
             "wheel_sha256": package_wheel_sha256(pkg),
         }
-        if (pkg_root / ".git").exists():
-            entry["git_sha"] = identity.get(pkg) or _git_sha(pkg_root)
+        # VER-P0-06: only REAL git index gitlinks count as submodule pins.
+        # factor_engine / dataaccess are plain tracked directories here (no
+        # mode-160000 index entries), so they get NO git_sha / git_dirty / no
+        # submodule fabrication.
+        if pkg in identity.gitlinks:
+            entry["git_sha"] = identity.gitlinks[pkg]
+            entry["is_git_submodule"] = True
+            entry["git_dirty"] = _git_dirty(pkg_root)
+        elif (pkg_root / ".git").exists():
+            entry["git_sha"] = _git_sha(pkg_root)
             entry["git_dirty"] = _git_dirty(pkg_root)
         if (pkg_root / ".gitmodules").exists():
             entry["is_git_submodule"] = True
@@ -592,10 +892,13 @@ def build_manifest() -> dict:
         "source_snapshot": {
             "git_sha": git_sha,
             "git_dirty": git_dirty,
-            "submodule_shas": {
-                pkg: packages[pkg].get("git_sha") for pkg in PACKAGES
-                if packages[pkg].get("git_sha")
-            },
+            "diff_hash": identity.diff_hash,
+            "cached_diff_hash": identity.cached_diff_hash,
+            "untracked_source_hash": identity.untracked_source_hash,
+            # VER-P0-06: submodule_shas is populated ONLY from real git index
+            # gitlinks (mode 160000).  This repo declares none, so the field is
+            # absent here and empty below — no fabricated SHAs.
+            "submodule_shas": dict(identity.gitlinks),
             "git_repo": git_sha is not None,
         },
         "packages": packages,

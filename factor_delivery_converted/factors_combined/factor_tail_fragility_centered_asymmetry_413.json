@@ -1,0 +1,121 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "2c344068aa462c330902b6a66a032153b513f3630692841e94a82c4c9ab937c1",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_mutation_volasym_tail_fragility_drawdown_g0_a_4278f52f"
+  ],
+  "code": "def factor_tail_fragility_centered_asymmetry(df):\n    \"\"\"Drawdown-conditioned excess downside tail energy using causal EWMA estimates.\"\"\"\n    df_copy = df.copy()\n    previous_close = df_copy[\"close\"].shift(1)\n    downside_tail = (previous_close - df_copy[\"low\"]).clip(lower=0.0) / previous_close.replace(0.0, np.nan)\n    upside_tail = (df_copy[\"high\"] - previous_close).clip(lower=0.0) / previous_close.replace(0.0, np.nan)\n    downside_energy = downside_tail.pow(2).ewm(span=30, min_periods=20, adjust=False).mean()\n    upside_energy = upside_tail.pow(2).ewm(span=30, min_periods=20, adjust=False).mean()\n    tail_imbalance = (downside_energy - upside_energy) / (downside_energy + upside_energy).replace(0.0, np.nan)\n    drawdown = 1.0 - df_copy[\"close\"] / df_copy[\"close\"].rolling(60, min_periods=60).max().replace(0.0, np.nan)\n    df_copy[\"factor_tail_fragility_centered_asymmetry\"] = -tail_imbalance * drawdown\n    return df_copy[\"factor_tail_fragility_centered_asymmetry\"]",
+  "cross_sectional_rationale": "The drawdown-conditioned tail imbalance is economically relative across contemporaneous stocks. Same-day ranking identifies the firms with the most downside-dominated tail stress while limiting market-wide variation in intraday excursion intensity.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "long_short_sharpe": 1.2552308144919515,
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": -0.025195821437072885,
+        "top_quantile_excess_return": -0.06512358645060301,
+        "top_quantile_max_drawdown": -0.18141384077828837,
+        "top_quantile_turnover": 0.18891243305675115
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return,top_quantile_excess_percentile"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_tail_fragility_centered_asymmetry",
+  "fitness_direction": -1,
+  "formula": "-[(EWMA_30(downside prior-close-to-low excursion squared) - EWMA_30(upside prior-close-to-high excursion squared)) / (EWMA_30(downside excursion squared) + EWMA_30(upside excursion squared))] × 60-day close drawdown",
+  "metrics": {
+    "ic": 0.01040567486596506,
+    "icir": 0.10453780305660396,
+    "mi": 0.01299664314311677,
+    "rank_ic": 0.038693696822182246,
+    "rank_icir": 0.32492954846109345
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 1.2552308144919515,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": -0.025195821437072885,
+    "top_quantile_excess_return": -0.06512358645060301,
+    "top_quantile_max_drawdown": -0.18141384077828837,
+    "top_quantile_turnover": 0.18891243305675115
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return,top_quantile_excess_percentile",
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.010612431995198799,
+    "icir": 0.10491169348323111,
+    "mi": 0.025262124038639477,
+    "rank_ic": 0.038693696822182246,
+    "rank_icir": 0.32492954846109345
+  },
+  "pre_transform_payoff_diagnostics": {
+    "long_short_sharpe": 1.2552308144919515,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": -0.025195821437072885,
+    "top_quantile_excess_return": -0.06512358645060301,
+    "top_quantile_max_drawdown": -0.18141384077828837,
+    "top_quantile_turnover": 0.18891243305675115
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.010612431995198799,
+    "icir": -0.10491169348323111,
+    "mi": 0.025262124038639477,
+    "rank_ic": -0.038693696822182246,
+    "rank_icir": -0.32492954846109345
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "This mutation preserves the parent’s drawdown-conditioned intraday tail-fragility mechanism and its causal 30-span EWMA tail-energy estimates. It removes the uncentered downside-share baseline: symmetric upside and downside tail energy now contributes zero rather than being treated as fragility solely because a stock is in drawdown. The centered imbalance should produce a cleaner cross-sectional ordering of genuinely downside-dominated stressed stocks, targeting predictive and rank-consistency robustness without adding another signal family or regime gate.",
+  "raw_metrics": {
+    "ic": -0.01040567486596506,
+    "icir": -0.10453780305660396,
+    "mi": 0.01299664314311677,
+    "rank_ic": -0.038693696822182246,
+    "rank_icir": -0.32492954846109345
+  },
+  "required_columns": [
+    "high",
+    "low",
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6terra-20260814-053307-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6terra-20260814-053307-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.8257902005730089,
+    "pre_transform_top_quantile_excess_return": -0.06512358645060301,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.8188190516539317,
+    "transformed_top_quantile_excess_return": -0.06512358645060301
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "-[(ema(30, downside prior-close-to-low excursion squared) - ema(30, upside prior-close-to-high excursion squared)) / (ema(30, downside excursion squared) + ema(30, upside excursion squared))] × 60-day close drawdown",
+  "fe_formula": "-[(ema(30, downside prior-close-to-low excursion squared) - ema(30, upside prior-close-to-high excursion squared)) / (ema(30, downside excursion squared) + ema(30, upside excursion squared))] × 60-day close drawdown",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "-[(EWMA_30(downside prior-close-to-low excursion squared) - EWMA_30(upside prior-close-to-high excursion squared)) / (EWMA_30(downside excursion squared) + EWMA_30(upside excursion squared))] × 60-day close drawdown"
+}

@@ -1,0 +1,141 @@
+{
+  "allowed_libraries": [],
+  "calculation_fingerprint": "b69551fe4c292b00d703f54786523284b0ff1eca92f167868d3e678791d78e8e",
+  "candidate_id": "minute_price_deviation_vwap_deviation",
+  "candidate_ids": [
+    "minute_price_deviation_vwap_deviation"
+  ],
+  "code": "def factor_vwap_deviation(df):\n    \"\"\"Minute DSL factor — executed via /api/calculate/minute.\"\"\"\n    raise NotImplementedError(\"minute DSL expression; use metadata.expression\")\n    # expression = \"\"\"daily_last(vwap_deviation(get('close'), get('volume'), get('amount')))\"\"\"\n",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "domain_agent": "minute-price-deviation",
+  "expression": "daily_last(vwap_deviation(get('close'), get('volume'), get('amount')))",
+  "factor_name": "factor_vwap_deviation",
+  "factor_value_contract": "minute_to_daily_panel",
+  "fitness_direction": -1,
+  "formula": "daily_last(vwap_deviation(get('close'), get('volume'), get('amount')))",
+  "frequency": "minute",
+  "lineage": {
+    "agent_skill": "MinutePriceDeviation",
+    "generation": 0,
+    "guidance_mode": null,
+    "operation": null,
+    "parent_ids": []
+  },
+  "metadata": {
+    "evolution_guidance": {
+      "preserve": {
+        "passed_predictive_metrics": [
+          "ic",
+          "rank_ic",
+          "icir",
+          "rank_icir",
+          "mi"
+        ],
+        "payoff_diagnostics": {
+          "quantile_monotonicity": 0.9151515151515152,
+          "top_quantile_annualized_excess_return": -0.11652309785031312,
+          "top_quantile_excess_return": -0.019954938924846788,
+          "top_quantile_max_drawdown": -0.051695265567171855,
+          "top_quantile_turnover": 0.47108013937282245
+        },
+        "payoff_gate_passed": true
+      },
+      "primary_target": {
+        "kind": "preserve_balanced_strength"
+      },
+      "qualification_track": "balanced"
+    },
+    "expression": "daily_last(vwap_deviation(get('close'), get('volume'), get('amount')))",
+    "fitness_direction": -1,
+    "fitness_metrics": {
+      "ic": 0.032998785765884366,
+      "icir": 0.2646380193781391,
+      "mi": 0.008705240749637078,
+      "rank_ic": 0.03859245996599544,
+      "rank_icir": 0.2542066327712743
+    },
+    "payoff_diagnostics": {
+      "quantile_monotonicity": 0.9151515151515152,
+      "top_quantile_annualized_excess_return": -0.11652309785031312,
+      "top_quantile_excess_return": -0.019954938924846788,
+      "top_quantile_max_drawdown": -0.051695265567171855,
+      "top_quantile_turnover": 0.47108013937282245
+    },
+    "payoff_gate_passed": true,
+    "post_transforms": [
+      {
+        "name": "cs_rank"
+      },
+      {
+        "name": "rolling_mean",
+        "window": 10
+      }
+    ],
+    "pre_transform_fitness_direction": 1,
+    "predictive_gate_passed": true,
+    "qualification_track": "balanced",
+    "raw_fitness_metrics": {
+      "ic": -0.032998785765884366,
+      "icir": -0.2646380193781391,
+      "mi": 0.008705240749637078,
+      "rank_ic": -0.03859245996599544,
+      "rank_icir": -0.2542066327712743
+    },
+    "transform_gate_passed": true
+  },
+  "metrics": {
+    "ic": 0.032998785765884366,
+    "icir": 0.2646380193781391,
+    "mi": 0.008705240749637078,
+    "rank_ic": 0.03859245996599544,
+    "rank_icir": 0.2542066327712743
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9151515151515152,
+    "top_quantile_annualized_excess_return": -0.11652309785031312,
+    "top_quantile_excess_return": -0.019954938924846788,
+    "top_quantile_max_drawdown": -0.051695265567171855,
+    "top_quantile_turnover": 0.47108013937282245
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "post_transforms": [
+    {
+      "name": "cs_rank"
+    },
+    {
+      "name": "rolling_mean",
+      "window": 10
+    }
+  ],
+  "rationale": "End-of-day deviation of closing price from volume-weighted average price (VWAP) proxy, capturing intraday price inefficiency.",
+  "raw_metrics": {
+    "ic": -0.032998785765884366,
+    "icir": -0.2646380193781391,
+    "mi": 0.008705240749637078,
+    "rank_ic": -0.03859245996599544,
+    "rank_icir": -0.2542066327712743
+  },
+  "required_columns": [
+    "trading_datetime",
+    "TradingDay",
+    "open_price",
+    "high_price",
+    "low_price",
+    "close_price",
+    "volume",
+    "amount"
+  ],
+  "run_id": "minute-hs300-formal-20260729-035814-r1",
+  "source_run_ids": [
+    "minute-hs300-formal-20260729-035814-r1"
+  ],
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "daily_last(vwap_deviation(get('close'), get('volume'), get('amount')))",
+  "fe_formula": "daily_last(vwap_deviation(get('close'), get('volume'), get('amount')))",
+  "lqtp_notes": "Textual non-executable: daily_last (pandas method, not LQTP executable); vwap_deviation (custom function, not in LQTP); Unconverted: ['daily_last', 'vwap_deviation']",
+  "fe_notes": "Textual non-executable: daily_last (pandas method, not LQTP executable); vwap_deviation (custom function, not in LQTP); Unconverted: ['daily_last', 'vwap_deviation']",
+  "source_formula": "daily_last(vwap_deviation(get('close'), get('volume'), get('amount')))"
+}

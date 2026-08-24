@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "8b9a31a047a9ec549383d6673afbb96974a02cd7e442caf013b128e2f4ac5fa9",
+  "candidate_ids": [
+    "mutation_pressure_compression_simplified_v3"
+  ],
+  "code": "def factor_pressure_compression_simplified_v3(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    high = df_copy['high']\n    low = df_copy['low']\n    volume = df_copy['volume']\n    open_ = df_copy['open']\n    pressure = (close - open_) * volume\n    abs_pressure = pressure.abs()\n    avg_abs = abs_pressure.rolling(21, min_periods=21).mean().replace(0, np.nan)\n    norm_pressure = pressure / avg_abs\n    vol_ma21 = volume.rolling(21, min_periods=21).mean().replace(0, np.nan)\n    vol_ratio21 = volume / vol_ma21\n    atr = talib.ATR(high.values.astype(np.float64), low.values.astype(np.float64), close.values.astype(np.float64), timeperiod=21)\n    atr_series = pd.Series(atr, index=df_copy.index).fillna(0)\n    atr_ratio = atr_series / close.replace(0, np.nan)\n    gate = np.tanh(vol_ratio21) * np.tanh(atr_ratio)\n    factor = norm_pressure * gate\n    df_copy['factor_pressure_compression_simplified_v3'] = factor.fillna(0)\n    return df_copy['factor_pressure_compression_simplified_v3']",
+  "factor_name": "factor_pressure_compression_simplified_v3",
+  "fitness_direction": -1,
+  "formula": "norm_pressure * tanh(vol/ma_vol21) * tanh(ATR21/close)",
+  "metrics": {
+    "ic": 0.01900718406953164,
+    "icir": 0.23923600539087242,
+    "mi": 0.02067373875564371,
+    "rank_ic": 0.031434481962221296,
+    "rank_icir": 0.310919436972867
+  },
+  "rationale": "Mutation of factor_pressure_compression_simplified_v2: increased all rolling windows from 14 to 21 days to capture medium-term pressure and volume trends while reducing noise. This targets improved IC and RankIC by smoothing the pressure signal and the gate, while preserving the parent's strong ICIR and RankICIR consistency. Core mechanism (volume-price pressure gated by volume and volatility) remains unchanged.",
+  "raw_metrics": {
+    "ic": -0.01900718406953164,
+    "icir": -0.23923600539087242,
+    "mi": 0.02067373875564371,
+    "rank_ic": -0.031434481962221296,
+    "rank_icir": -0.310919436972867
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260612-014632-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260612-014632-r1"
+  ],
+  "lqtp_formula": "norm_pressure * tanh(vol/ma_vol21) * tanh(ATR21/close)",
+  "fe_formula": "norm_pressure * tanh(vol/ma_vol21) * tanh(ATR21/close)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "norm_pressure * tanh(vol/ma_vol21) * tanh(ATR21/close)"
+}

@@ -1,0 +1,34 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "bf8792a6c667cf025e69f354ed8e340953605baa58fea127f48d4dd6f66d698c",
+  "candidate_ids": [
+    "avr_gen0_001"
+  ],
+  "code": "def factor_volatility_regime_momentum(df):\n    close = df['close']\n    result = -np.where(close.pct_change().rolling(20).std() > close.pct_change().rolling(20).std().rolling(60).median(), 1, -1) * close.pct_change(12)\n    result = result.fillna(0)\n    result.name = 'factor_volatility_regime_momentum'\n    return result",
+  "factor_name": "factor_volatility_regime_momentum",
+  "fitness_direction": 1,
+  "formula": "-regime * momentum, where regime = 1 if rolling_std(ret,20) > rolling_median(rolling_std(ret,20),60) else -1, momentum = 12-day return",
+  "metrics": {
+    "ic": 0.01984680388827997,
+    "icir": 0.2795477762582467,
+    "mi": 0.04180123474376796,
+    "rank_ic": 0.023802726620157803,
+    "rank_icir": 0.29424771743447486
+  },
+  "rationale": "Volatility regime indicator based on rolling 20-day return standard deviation compared to its 60-day median. In high-volatility states (above median), the factor takes a contrarian stance against 12-day momentum, anticipating mean reversion. In low-volatility states, it follows the trend. This captures state-dependent market phases as described in AgentVolatilityRegime focus.",
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-20260608-075710-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260608-075710-r1"
+  ],
+  "lqtp_formula": "-regime * momentum, where regime = 1 if ts_std(20, ret) > ts_median(60, rolling_std(ret,20))e -1, momentum = 12-day return",
+  "fe_formula": "-regime * momentum, where regime = 1 if ts_std(20, ret) > ts_median(60, rolling_std(ret,20))e -1, momentum = 12-day return",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "-regime * momentum, where regime = 1 if rolling_std(ret,20) > rolling_median(rolling_std(ret,20),60) else -1, momentum = 12-day return"
+}

@@ -1,0 +1,67 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "6a9fbdd1d277907d0a2fd7ba16c63b2c4748bd847445a01f366241e688c3fd6b",
+  "candidate_ids": [
+    "alpha-drawdown_gen0_c2",
+    "alpha-fractal-002",
+    "alpha_regime_gating_2",
+    "arg-002",
+    "g2_mutation_alpha_drawdown_gen0_c2_25a91ed7",
+    "regime_001",
+    "regime_gating_001",
+    "vol_asym_vol_weighted_001"
+  ],
+  "code": "def factor_asym_vol_weighted(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    down = ret < 0\n    up = ret >= 0\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    vol = df_copy[\"volume\"]\n    down_range_vol = (range_ * vol).where(down, 0)\n    down_vol_sum = vol.where(down, 0).rolling(20, min_periods=10).sum()\n    down_range_vol_sum = down_range_vol.rolling(20, min_periods=10).sum()\n    down_avg = down_range_vol_sum / down_vol_sum.replace(0, np.nan)\n    up_range_vol = (range_ * vol).where(up, 0)\n    up_vol_sum = vol.where(up, 0).rolling(20, min_periods=10).sum()\n    up_range_vol_sum = up_range_vol.rolling(20, min_periods=10).sum()\n    up_avg = up_range_vol_sum / up_vol_sum.replace(0, np.nan)\n    ratio = down_avg / up_avg.replace(0, np.nan)\n    factor = np.log(ratio.clip(lower=1e-6))\n    df_copy[\"factor_asym_vol_weighted\"] = factor\n    return df_copy[\"factor_asym_vol_weighted\"]",
+  "cross_sectional_rationale": "Rank transform highlights stocks with most pronounced range asymmetry, aiding cross-sectional differentiation.",
+  "cross_sectional_transform": "cs_rank",
+  "factor_name": "factor_asym_vol_weighted",
+  "fitness_direction": 1,
+  "formula": null,
+  "metrics": {
+    "ic": 0.013599322894694246,
+    "icir": 0.19632767610696925,
+    "mi": 0.004329522257656038,
+    "rank_ic": 0.0356551192000183,
+    "rank_icir": 0.4331288421996682
+  },
+  "rationale": "Volume-weighted asymmetric volatility: preserves the core asymmetry mechanism of comparing down-day vs up-day range, but weights each day by volume to emphasize periods of higher trading activity. This enhances the signal's nonlinear content by incorporating volume information, targeting the MI bottleneck observed in the parent. The log ratio amplifies differences. Cross-sectional rank still highlights stocks with pronounced asymmetry.",
+  "raw_metrics": {
+    "ic": 0.013599322894694246,
+    "icir": 0.19632767610696925,
+    "mi": 0.004329522257656038,
+    "rank_ic": 0.0356551192000183,
+    "rank_icir": 0.4331288421996682
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260625-030745-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260625-030745-r1",
+    "formal-mvp-loop-admitted-v2-20260711-010625-r9",
+    "formal-mvp-loop-admitted-v2-20260711-042756-r11",
+    "formal-mvp-loop-admitted-v2-20260711-061229-r12",
+    "formal-mvp-loop-admitted-v2-20260712-040018-r10",
+    "formal-mvp-loop-v3-guarded-or-20260716-080935-r1",
+    "formal-mvp-loop-v3-guarded-or-20260720-095718-r7"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "lqtp_formula": "",
+  "fe_formula": "",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": ""
+}

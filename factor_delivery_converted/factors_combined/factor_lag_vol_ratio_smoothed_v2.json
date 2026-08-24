@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "c043f442b10da61d0dedbada0c7f657bebdf9c8e2df13f6d76a8a0b37b26c2e7",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_then_mutation_alpha_lag_response_00_db9ad144"
+  ],
+  "code": "def factor_lag_vol_ratio_smoothed_v2(df):\n    df_copy = df.copy()\n    ret = df_copy['close'] / df_copy['close'].shift(5) - 1\n    range_ = df_copy['high'] - df_copy['low']\n    range_med = range_.rolling(window=30, min_periods=30).median()\n    range_mad = (range_ - range_med).abs().rolling(window=30, min_periods=30).mean()\n    range_z = (range_ - range_med) / range_mad.replace(0.0, np.nan)\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy['volume'], window=20)\n    raw_factor = ret * range_z * vol_ratio\n    factor = talib.EMA(raw_factor, timeperiod=15)\n    df_copy['factor_lag_vol_ratio_smoothed_v2'] = factor\n    return df_copy['factor_lag_vol_ratio_smoothed_v2']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_lag_vol_ratio_smoothed_v2",
+  "fitness_direction": -1,
+  "formula": "EMA(ret(5) * robust_z(range,30) * vol_ratio(volume,20), 15)",
+  "metrics": {
+    "ic": 0.02290197046162046,
+    "icir": 0.1894710235914773,
+    "mi": 0.04063065009561928,
+    "rank_ic": 0.04971827824986982,
+    "rank_icir": 0.4011062724026068
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.08488185846916663,
+    "top_quantile_excess_return": 0.2346534125116,
+    "top_quantile_max_drawdown": -0.13760098383111385,
+    "top_quantile_turnover": 0.12052730536829999
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Preserve the lagged return and robust range normalization from the parent, but increase the range window to 30 for more stable robust z-score, and increase EMA period to 15 for stronger smoothing. These changes target the IC bottleneck (weaker than RankIC) by reducing noise in the linear correlation while preserving the core economic mechanism of gradual price adjustment following volume- and volatility-driven moves.",
+  "raw_metrics": {
+    "ic": -0.02290197046162046,
+    "icir": -0.1894710235914773,
+    "mi": 0.04063065009561928,
+    "rank_ic": -0.04971827824986982,
+    "rank_icir": -0.4011062724026068
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260707-123212-r7",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260707-123212-r7"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema(15, ret(5) * robust_z(range,30) * vol_ratio(volume,20))15)",
+  "fe_formula": "ema(15, ret(5) * robust_z(range,30) * vol_ratio(volume,20))15)",
+  "lqtp_notes": "Unconverted: ['robust_z']",
+  "fe_notes": "Unconverted: ['robust_z']",
+  "source_formula": "EMA(ret(5) * robust_z(range,30) * vol_ratio(volume,20), 15)"
+}

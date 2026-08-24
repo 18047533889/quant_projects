@@ -1,0 +1,122 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "6c8adeaf9ff3e15626cf829b34cf5683b0ef1aedfa01c54e05242f26b7f1e987",
+  "candidate_ids": [
+    "g1_crossover_then_mutation_ac_002_alpha_stability_2_4d85628a"
+  ],
+  "code": "def factor_correlation_synergy_trend_smoothed_2(df):\n    df_copy = df.copy()\n    price_roc = df_copy['close'].pct_change(20)\n    volume_roc = df_copy['volume'].pct_change(20)\n    # reduced correlation window for more responsive alignment\n    corr = price_roc.rolling(20, min_periods=20).corr(volume_roc).fillna(0)\n    # lighter smoothing to preserve responsiveness\n    smooth_corr = corr.ewm(span=3, adjust=False).mean().clip(0, 1)\n    short_trend = (df_copy['close'].rolling(10).mean() / df_copy['close'].rolling(40).mean() - 1)\n    long_trend = (df_copy['close'].rolling(20).mean() / df_copy['close'].rolling(80).mean() - 1)\n    factor = short_trend * smooth_corr + long_trend * (1 - smooth_corr)\n    factor.name = 'factor_correlation_synergy_trend_smoothed_2'\n    return factor",
+  "cross_sectional_rationale": "Gaussian rank normalization ensures cross-sectional comparability of the synergy-weighted trend signal, which is economically relevant as it reflects relative alignment across stocks.",
+  "cross_sectional_transform": "cs_rank_gauss",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.09641721013644844,
+        "top_quantile_excess_return": 0.2656660310008141,
+        "top_quantile_max_drawdown": -0.11794674670384742,
+        "top_quantile_turnover": 0.055608822672217235
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_correlation_synergy_trend_smoothed_2",
+  "fitness_direction": -1,
+  "formula": "smooth_corr = ewma(clip(corr(roc(close,20), roc(volume,20), 20), 0,1), span=3); factor = short_trend * smooth_corr + long_trend * (1-smooth_corr)",
+  "metrics": {
+    "ic": 0.01588799003118377,
+    "icir": 0.10264683982781228,
+    "mi": 0.01224445021763465,
+    "rank_ic": 0.03267059526897659,
+    "rank_icir": 0.1862796955566831
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.09641721013644844,
+    "top_quantile_excess_return": 0.2656660310008141,
+    "top_quantile_max_drawdown": -0.11794674670384742,
+    "top_quantile_turnover": 0.055608822672217235
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.01814259587189366,
+    "icir": 0.11322667350021567,
+    "mi": 0.028191562899129607,
+    "rank_ic": 0.03267059526897659,
+    "rank_icir": 0.1862796955566831
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.09641721013644844,
+    "top_quantile_excess_return": 0.2656660310008141,
+    "top_quantile_max_drawdown": -0.11794674670384742,
+    "top_quantile_turnover": 0.055608822672217235
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.01814259587189366,
+    "icir": -0.11322667350021567,
+    "mi": 0.028191562899129607,
+    "rank_ic": -0.03267059526897659,
+    "rank_icir": -0.1862796955566831
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "Mutation of parent crossover to improve predictive metrics (IC, RankIC) by reducing correlation window from 30 to 20 and smoothing span from 5 to 3, making the price-volume alignment signal more responsive to recent changes. This targets the primary bottleneck of low IC and ICIR while preserving the payoff strength and low turnover of the parent.",
+  "raw_metrics": {
+    "ic": -0.01588799003118377,
+    "icir": -0.10264683982781228,
+    "mi": 0.01224445021763465,
+    "rank_ic": -0.03267059526897659,
+    "rank_icir": -0.1862796955566831
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260719-181655-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260719-181655-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.3785111230968986,
+    "pre_transform_top_quantile_excess_return": 0.2656660310008141,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.3497295709022904,
+    "transformed_top_quantile_excess_return": 0.2656660310008141
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "smooth_corr = ema(span=3, clip(corr(roc(close,20), roc(volume,20), 20), 0,1))1), span=3); factor = short_trend * smooth_corr + long_trend * (1-smooth_corr)",
+  "fe_formula": "smooth_corr = ema(span=3, clip(corr(roc(close,20), roc(volume,20), 20), 0,1))1), span=3); factor = short_trend * smooth_corr + long_trend * (1-smooth_corr)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "smooth_corr = ewma(clip(corr(roc(close,20), roc(volume,20), 20), 0,1), span=3); factor = short_trend * smooth_corr + long_trend * (1-smooth_corr)"
+}

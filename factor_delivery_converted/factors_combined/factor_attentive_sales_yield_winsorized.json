@@ -1,0 +1,115 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "69128586d7e5487cf69c26fb30c56a8a7e51f2106853a136f4a69c9e09ed1fe5",
+  "candidate_ids": [
+    "g2_mutation_alpha_turnover_attention_context_0_0_repaired_0_05f0c60b"
+  ],
+  "code": "def factor_attentive_sales_yield_winsorized(df):\n    df_copy = df.copy()\n    sales_yield = 1.0 / df_copy[\"ps_ttm\"].replace(0, np.nan)\n    inattention = 1.0 - df_copy[\"free_turn\"].rolling(20, min_periods=1).rank(pct=True)\n    sales_yield = sales_yield.ffill()\n    inattention = inattention.ffill()\n    raw = sales_yield * inattention\n    low = raw.rolling(60, min_periods=10).quantile(0.05)\n    high = raw.rolling(60, min_periods=10).quantile(0.95)\n    winsorized = raw.clip(lower=low, upper=high)\n    df_copy[\"factor_attentive_sales_yield_winsorized\"] = winsorized\n    return df_copy[\"factor_attentive_sales_yield_winsorized\"]",
+  "cross_sectional_rationale": "Sales yield and inattention are inherently cross-sectional; ranking after winsorization emphasizes relative value-attention across stocks.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.7454545454545455,
+        "top_quantile_annualized_excess_return": 0.05866289912789768,
+        "top_quantile_excess_return": 0.17769003837948616,
+        "top_quantile_max_drawdown": -0.08266520765292285,
+        "top_quantile_turnover": 0.2921896737210914
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_attentive_sales_yield_winsorized",
+  "fitness_direction": 1,
+  "formula": "clip( (1/ps_ttm) * (1 - ts_rank(free_turn, 20)), rolling 5th/95th pctl 60d )",
+  "metrics": {
+    "ic": 0.012229170712852577,
+    "icir": 0.14424023958504226,
+    "mi": 0.022774384483689403,
+    "rank_ic": 0.03493004168174804,
+    "rank_icir": 0.34881995971581475
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7454545454545455,
+    "top_quantile_annualized_excess_return": 0.05866289912789768,
+    "top_quantile_excess_return": 0.17769003837948616,
+    "top_quantile_max_drawdown": -0.08266520765292285,
+    "top_quantile_turnover": 0.2921896737210914
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.004097915972097396,
+    "icir": 0.08020209659449211,
+    "mi": 0.016682442101703998,
+    "rank_ic": 0.03493004168174804,
+    "rank_icir": 0.34881995971581475
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.7454545454545455,
+    "top_quantile_annualized_excess_return": 0.05866289912789768,
+    "top_quantile_excess_return": 0.17769003837948616,
+    "top_quantile_max_drawdown": -0.08266520765292285,
+    "top_quantile_turnover": 0.2921896737210914
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.004097915972097396,
+    "icir": 0.08020209659449211,
+    "mi": 0.016682442101703998,
+    "rank_ic": 0.03493004168174804,
+    "rank_icir": 0.34881995971581475
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Mutation of attentive sales yield: added rolling winsorization (5th/95th percentile over 60-day window) to the product of sales yield and inattention. This reduces extreme values that weaken linear correlation (IC) while preserving the strong rank ordering (RankIC, RankICIR) and nonlinear dependence (MI). The core mechanism remains: value (sales yield) amplified when turnover is low (inattention). Ffill reduces missing data. Post-transform cs_rank ensures cross-sectional comparability.",
+  "raw_metrics": {
+    "ic": 0.012229170712852577,
+    "icir": 0.14424023958504226,
+    "mi": 0.022774384483689403,
+    "rank_ic": 0.03493004168174804,
+    "rank_icir": 0.34881995971581475
+  },
+  "required_columns": [
+    "ps_ttm",
+    "free_turn"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260717-20260718-074009-r13",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260717-20260718-074009-r13"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.4847324560658563,
+    "pre_transform_top_quantile_excess_return": 0.17769003837948616,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.562993796179147,
+    "transformed_top_quantile_excess_return": 0.17769003837948616
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "clip( (1/ps_ttm) * (1 - ts_rank(free_turn, 20)), rolling 5th/95th pctl 60d )",
+  "fe_formula": "clip( (1/ps_ttm) * (1 - ts_rank(free_turn, 20)), rolling 5th/95th pctl 60d )",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "clip( (1/ps_ttm) * (1 - ts_rank(free_turn, 20)), rolling 5th/95th pctl 60d )"
+}

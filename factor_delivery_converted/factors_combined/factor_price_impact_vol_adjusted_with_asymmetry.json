@@ -1,0 +1,122 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "75d43127b3fa2c102fd20e445b07b57a1136757c77d595c9feaa43b2a72c0ed4",
+  "candidate_ids": [
+    "g1_crossover_alpha_liquidity_gen0_c001_crash_002_e7fa9f1c"
+  ],
+  "code": "def factor_price_impact_vol_adjusted_with_asymmetry(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    high = df_copy['high']\n    low = df_copy['low']\n    ret = close / close.shift(1) - 1.0\n    abs_ret = ret.abs()\n    impact = abs_ret / volume.replace(0, np.nan)\n    avg_impact = impact.rolling(20, min_periods=20).mean()\n    vol = ret.rolling(20, min_periods=20).std(ddof=1).replace(0, np.nan)\n    base_factor = avg_impact / vol\n    vwap = (volume * (high + low + close) / 3).rolling(20, min_periods=20).sum() / volume.rolling(20, min_periods=20).sum()\n    up_vol = volume * (close > vwap).astype(float)\n    down_vol = volume * (close < vwap).astype(float)\n    up_sum = up_vol.rolling(20, min_periods=20).sum()\n    down_sum = down_vol.rolling(20, min_periods=20).sum()\n    asymmetry = (down_sum - up_sum) / (down_sum + up_sum).replace(0, np.nan)\n    factor = base_factor * (1.0 + asymmetry.fillna(0))\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy['factor_price_impact_vol_adjusted_with_asymmetry'] = factor\n    return df_copy['factor_price_impact_vol_adjusted_with_asymmetry']",
+  "cross_sectional_rationale": "Rank transform enables cross-sectional comparison of relative price impact across stocks, essential for liquidity-focused ranking signals, and the asymmetry adjustment further benefits from cross-sectional comparison.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.8181818181818182,
+        "top_quantile_annualized_excess_return": 0.02390084027910211,
+        "top_quantile_excess_return": 0.06821085975270669,
+        "top_quantile_max_drawdown": -0.11148366028010315,
+        "top_quantile_turnover": 0.04695822308742781
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_price_impact_vol_adjusted_with_asymmetry",
+  "fitness_direction": 1,
+  "formula": "rolling_mean(|ret|/vol) / rolling_std(ret) * (1 + volume_tail_asymmetry)",
+  "metrics": {
+    "ic": 0.012092430287083022,
+    "icir": 0.11091445602216293,
+    "mi": 0.00915513094792253,
+    "rank_ic": 0.0245458072414394,
+    "rank_icir": 0.1875379773637107
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8181818181818182,
+    "top_quantile_annualized_excess_return": 0.02390084027910211,
+    "top_quantile_excess_return": 0.06821085975270669,
+    "top_quantile_max_drawdown": -0.11148366028010315,
+    "top_quantile_turnover": 0.04695822308742781
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.00022717919788305355,
+    "icir": 0.00424562923968273,
+    "mi": 0.011702491223471334,
+    "rank_ic": 0.0245458072414394,
+    "rank_icir": 0.1875379773637107
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.8181818181818182,
+    "top_quantile_annualized_excess_return": 0.02390084027910211,
+    "top_quantile_excess_return": 0.06821085975270669,
+    "top_quantile_max_drawdown": -0.11148366028010315,
+    "top_quantile_turnover": 0.04695822308742781
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.00022717919788305355,
+    "icir": 0.00424562923968273,
+    "mi": 0.011702491223471334,
+    "rank_ic": 0.0245458072414394,
+    "rank_icir": 0.1875379773637107
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "This factor combines a volatility-adjusted price impact measure (primary) with a volume tail asymmetry adjustment (lightweight modifier). The primary mechanism captures liquidity costs per unit volatility. The asymmetry modifier amplifies the signal when selling pressure is dominant (down volume > up volume relative to VWAP) and dampens it when buying pressure is dominant, as volume imbalance can indicate regime shifts in liquidity demand. This targets improvement in RankIC by sharpening cross-sectional differentiation in extreme volume conditions.",
+  "raw_metrics": {
+    "ic": 0.012092430287083022,
+    "icir": 0.11091445602216293,
+    "mi": 0.00915513094792253,
+    "rank_ic": 0.0245458072414394,
+    "rank_icir": 0.1875379773637107
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-20260730-011744-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-20260730-011744-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.2282590842661872,
+    "pre_transform_top_quantile_excess_return": 0.06821085975270669,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.34424580186231857,
+    "transformed_top_quantile_excess_return": 0.06821085975270669
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ts_mean(|ret|/vol) / ts_std(ret) * (1 + volume_tail_asymmetry)",
+  "fe_formula": "ts_mean(|ret|/vol) / ts_std(ret) * (1 + volume_tail_asymmetry)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "rolling_mean(|ret|/vol) / rolling_std(ret) * (1 + volume_tail_asymmetry)"
+}

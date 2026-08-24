@@ -1,0 +1,54 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "9214abb30689e40e451347ab062c0368460913e4f798bbe25ac6a908abe2ad27",
+  "candidate_ids": [
+    "crossover_asym_vol_attenuate_002"
+  ],
+  "code": "def factor_asym_vol_attenuate(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    down = ret < 0\n    up = ret >= 0\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    down_range = range_.where(down, 0)\n    up_range = range_.where(up, 0)\n    down_sum = down_range.rolling(20, min_periods=10).sum()\n    up_sum = up_range.rolling(20, min_periods=10).sum()\n    down_count = down.rolling(20, min_periods=10).sum()\n    up_count = up.rolling(20, min_periods=10).sum()\n    down_avg = down_sum / down_count.replace(0, np.nan)\n    up_avg = up_sum / up_count.replace(0, np.nan)\n    ratio = down_avg / up_avg.replace(0, np.nan)\n    asym = np.log(ratio.clip(lower=1e-6))\n    vol = df_copy[\"volume\"]\n    vol_ema = vol.ewm(span=20, min_periods=10).mean()\n    volu_dev = (vol - vol_ema) / vol_ema.replace(0, np.nan)\n    weight = np.clip(volu_dev, -1, 1)\n    factor = asym * (1 + 0.3 * weight)\n    vol_regime = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20, high_threshold=1.5, low_threshold=0.6)\n    # classify_volume_regime returns 0 for low volume, 1 for normal, 2 for high\n    low_vol = vol_regime == 0\n    factor = np.where(low_vol, factor * 0.7, factor)\n    df_copy[\"factor_asym_vol_attenuate\"] = factor\n    return df_copy[\"factor_asym_vol_attenuate\"]",
+  "cross_sectional_rationale": "Rank transform highlights stocks with most pronounced asymmetry and volume confirmation, aiding cross-sectional differentiation.",
+  "cross_sectional_transform": "cs_rank",
+  "factor_name": "factor_asym_vol_attenuate",
+  "fitness_direction": 1,
+  "formula": "log(avg_down_range/avg_up_range) * (1 + 0.3 * clip(vol_dev,-1,1)) * (0.7 if low_volume_regime else 1)",
+  "metrics": {
+    "ic": 0.014956958241880768,
+    "icir": 0.19081026598912726,
+    "mi": 0.006898960006848753,
+    "rank_ic": 0.03947166097311898,
+    "rank_icir": 0.42925639047949143
+  },
+  "rationale": "Preserves the asymmetric volatility core (log ratio of down/up range averages) with continuous volume confirmation. Uses the volume regime classification tool to attenuate the signal on low volume days (regime 0) when price moves may be less reliable, targeting improved IC and MI by reducing noise.",
+  "raw_metrics": {
+    "ic": 0.014956958241880768,
+    "icir": 0.19081026598912726,
+    "mi": 0.006898960006848753,
+    "rank_ic": 0.03947166097311898,
+    "rank_icir": 0.42925639047949143
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260625-030745-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260625-030745-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "lqtp_formula": "log(avg_down_range/avg_up_range) * (1 + 0.3 * clip(vol_dev,-1,1)) * (0.7 if low_volume_regime else 1)",
+  "fe_formula": "log(avg_down_range/avg_up_range) * (1 + 0.3 * clip(vol_dev,-1,1)) * (0.7 if low_volume_regime else 1)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "log(avg_down_range/avg_up_range) * (1 + 0.3 * clip(vol_dev,-1,1)) * (0.7 if low_volume_regime else 1)"
+}

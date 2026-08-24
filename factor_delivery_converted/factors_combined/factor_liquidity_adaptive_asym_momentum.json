@@ -1,0 +1,69 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "talib"
+  ],
+  "calculation_fingerprint": "feb905663359999884040f536b5d26fe0553b1a4fa3ea49471adf154d0df3db5",
+  "candidate_ids": [
+    "g2_crossover_g1_crossover_adt_002_ava_001_a7aaf5db_g1_mutatio_d6720873"
+  ],
+  "code": "def factor_liquidity_adaptive_asym_momentum(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    returns = close.pct_change()\n    mom = close / close.shift(21) - 1.0\n    down_ret = np.where(returns < 0, returns, np.nan)\n    down_ret_series = pd.Series(down_ret, index=df_copy.index)\n    vol_short = down_ret_series.rolling(21, min_periods=5).std(ddof=1)\n    vol_long = down_ret_series.rolling(63, min_periods=5).std(ddof=1)\n    high_liquidity = df_copy['style_gate_liquidity_high'] > 0\n    vol = np.where(high_liquidity, vol_short, vol_long)\n    vol = np.where(vol == 0.0, np.nan, vol)\n    upside = (df_copy['high'] - df_copy['open']).astype(float)\n    downside = (df_copy['open'] - df_copy['low']).astype(float)\n    ema_up = pd.Series(talib.EMA(upside.values, timeperiod=20), index=df_copy.index)\n    ema_down = pd.Series(talib.EMA(downside.values, timeperiod=20), index=df_copy.index)\n    ratio = ema_down / ema_up.replace(0, np.nan)\n    asym_weight = 1.0 / (1.0 + ratio.fillna(np.nan))\n    factor = mom / vol * asym_weight\n    df_copy['factor_liquidity_adaptive_asym_momentum'] = factor.fillna(np.nan)\n    return df_copy['factor_liquidity_adaptive_asym_momentum']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_liquidity_adaptive_asym_momentum",
+  "fitness_direction": -1,
+  "formula": "(close/shift(21)-1) / (if liquidity_high then std(negative_returns,21) else std(negative_returns,63)) * 1/(1+EMA(downside_open_low)/EMA(upside_high_open))",
+  "metrics": {
+    "ic": 0.021215759051939762,
+    "icir": 0.15646353713912864,
+    "mi": 0.017370274901134408,
+    "rank_ic": 0.034285922565960754,
+    "rank_icir": 0.23209506654746648
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6,
+    "top_quantile_annualized_excess_return": 0.05478375574513539,
+    "top_quantile_excess_return": 0.16042913471749265,
+    "top_quantile_max_drawdown": -0.07543669700090028,
+    "top_quantile_turnover": 0.1963164811062541
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Combines liquidity-adaptive downside volatility momentum (parent ADT-002) with intraday asymmetry weighting from parent ava_002. The momentum factor is normalized by downside volatility with window selected by liquidity regime. The intraday asymmetry ratio (EMA of downside/upside range) adjusts the signal continuously: when intraday downside pressure is high (sellers dominate), the momentum is attenuated, reducing false signals. This targets IC improvement while preserving the rank ICIR strength of the primary mechanism.",
+  "raw_metrics": {
+    "ic": -0.021215759051939762,
+    "icir": -0.15646353713912864,
+    "mi": 0.017370274901134408,
+    "rank_ic": -0.034285922565960754,
+    "rank_icir": -0.23209506654746648
+  },
+  "required_columns": [
+    "close",
+    "high",
+    "low",
+    "open",
+    "style_gate_liquidity_high"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260707-033414-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260707-033414-r2"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "Uses style_gate_liquidity_high to select the volatility window length for downside volatility normalization. High liquidity regime indicates order-flow fluidity where downside volatility is more informative over a shorter window (21-day); low liquidity regime trends are noisier and a longer (63-day) downside volatility estimate avoids over-adaptation. This conditional window maintains continuous factor values for all assets.",
+  "style_gates_used": [
+    "style_gate_liquidity_high"
+  ],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(close/delay(21)-1) / (if liquidity_high then ts_std(21, negative_returns) else ts_std(63, negative_returns)) * 1/(1+ema(downside_open_low)/ema(upside_high_open))",
+  "fe_formula": "(close/ts_delay(21)-1) / (if liquidity_high then ts_std(21, negative_returns) else ts_std(63, negative_returns)) * 1/(1+ema(downside_open_low)/ema(upside_high_open))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(close/shift(21)-1) / (if liquidity_high then std(negative_returns,21) else std(negative_returns,63)) * 1/(1+EMA(downside_open_low)/EMA(upside_high_open))"
+}

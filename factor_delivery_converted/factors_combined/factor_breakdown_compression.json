@@ -1,0 +1,124 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "cd8788150a05e563045efeb6c3ed2e3173fff8d3eecb53b61fbccbad587422b6",
+  "candidate_ids": [
+    "g1_mutation_crash_pred_001_ce6caff1"
+  ],
+  "code": "def factor_breakdown_compression(df):\n    df_copy = df.copy()\n    range_ = df_copy['high'] - df_copy['low']\n    close_ret = df_copy['close'].pct_change()\n    close_vol = close_ret.rolling(20, min_periods=10).std(ddof=1)\n    factor = - (range_ / close_vol.replace(0, np.nan))\n    factor = factor.rolling(2).mean()\n    df_copy['factor_breakdown_compression'] = factor\n    return df_copy['factor_breakdown_compression']",
+  "cross_sectional_rationale": "Crash signals are relative across assets; extreme range/vol divergence in one stock versus peers indicates idiosyncratic breakdown risk.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9757575757575757,
+        "top_quantile_annualized_excess_return": -0.02787934431102379,
+        "top_quantile_excess_return": -0.07688484473241963,
+        "top_quantile_max_drawdown": -0.17285953996110137,
+        "top_quantile_turnover": 0.18239992781306028
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_breakdown_compression",
+  "fitness_direction": 1,
+  "formula": "- range / close_vol, smoothed over 2 periods",
+  "metrics": {
+    "ic": 0.014928207842657392,
+    "icir": 0.1557592438978773,
+    "mi": 0.008298610197682521,
+    "rank_ic": 0.027400560910251122,
+    "rank_icir": 0.2326220276305896
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": -0.02787934431102379,
+    "top_quantile_excess_return": -0.07688484473241963,
+    "top_quantile_max_drawdown": -0.17285953996110137,
+    "top_quantile_turnover": 0.18239992781306028
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.001186688023888765,
+    "icir": 0.04683815475974381,
+    "mi": 0.011677998904216835,
+    "rank_ic": 0.027400560910251122,
+    "rank_icir": 0.2326220276305896
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": -0.02787934431102379,
+    "top_quantile_excess_return": -0.07688484473241963,
+    "top_quantile_max_drawdown": -0.17285953996110137,
+    "top_quantile_turnover": 0.18239992781306028
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.001186688023888765,
+    "icir": 0.04683815475974381,
+    "mi": 0.011677998904216835,
+    "rank_ic": 0.027400560910251122,
+    "rank_icir": 0.2326220276305896
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Range compression relative to close volatility: when intraday range is narrow compared to recent close-to-close volatility, it may precede a period of expansion. This factor reverses the original breakdwon_breadth signal to target positive payoff: the original top quantile (high range/vol) underperformed, so flipping selects stocks with low range/vol (compression) which tend to outperform. This direction adjustment preserves the predictive metrics while targeting the payoff bottleneck identified in the parent.",
+  "raw_metrics": {
+    "ic": 0.014928207842657392,
+    "icir": 0.1557592438978773,
+    "mi": 0.008298610197682521,
+    "rank_ic": 0.027400560910251122,
+    "rank_icir": 0.2326220276305896
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260717-061725-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260717-061725-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.31972543022869016,
+    "pre_transform_top_quantile_excess_return": -0.07688484473241963,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.4390086504790579,
+    "transformed_top_quantile_excess_return": -0.07688484473241963
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "- range / close_vol, smoothed over 2 periods",
+  "fe_formula": "- range / close_vol, smoothed over 2 periods",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "- range / close_vol, smoothed over 2 periods"
+}

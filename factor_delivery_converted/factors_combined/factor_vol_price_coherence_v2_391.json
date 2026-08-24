@@ -1,0 +1,67 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "76d5650b90ef14a076e591a1eb2194ebb38d530a2a4e9211360f3ce9819d60dd",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_apvc_001_a485e505_fc99b713"
+  ],
+  "code": "def factor_vol_price_coherence_v2(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_chg_pct = df_copy[\"volume\"].pct_change()\n    roll_corr = ret.rolling(20, min_periods=20).corr(vol_chg_pct)\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    factor = roll_corr * vol_ratio\n    factor = factor.fillna(0)\n    df_copy[\"factor_vol_price_coherence_v2\"] = factor\n    return df_copy[\"factor_vol_price_coherence_v2\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_vol_price_coherence_v2",
+  "fitness_direction": -1,
+  "formula": "corr(pct_return, pct_vol_change, 20) * vol_ratio_20",
+  "metrics": {
+    "ic": 0.010676806502881808,
+    "icir": 0.11753679285835507,
+    "mi": 0.01298134844994614,
+    "rank_ic": 0.03905839305993744,
+    "rank_icir": 0.38892544852716376
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.0538957441526029,
+    "top_quantile_excess_return": 0.1579469818595569,
+    "top_quantile_max_drawdown": -0.08053747097678221,
+    "top_quantile_turnover": 0.14265314922888486
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Mutates APVC-001 by using return-based price change (pct_change) and extending the correlation window to 20 days for more stable coherence estimation. Volume ratio continues to modulate weight. This targets higher IC and RankIC by reducing noise from price level drifts and improving stationarity. Parent strength target: price-volume coherence intuition.",
+  "raw_metrics": {
+    "ic": -0.010676806502881808,
+    "icir": -0.11753679285835507,
+    "mi": 0.01298134844994614,
+    "rank_ic": -0.03905839305993744,
+    "rank_icir": -0.38892544852716376
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260706-114750-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260706-114750-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ts_corr(pct_vol_change, pct_return, 20) * vol_ratio_20",
+  "fe_formula": "ts_corr(pct_vol_change, pct_return, 20) * vol_ratio_20",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "corr(pct_return, pct_vol_change, 20) * vol_ratio_20"
+}

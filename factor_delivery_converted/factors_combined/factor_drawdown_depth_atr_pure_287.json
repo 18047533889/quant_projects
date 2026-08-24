@@ -1,0 +1,122 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "615fa5fb357492343fca1bda996b566e25116aeef154fe49b5e3382106e27cf5",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_crossover_tr_stress_001_regime_gating_cand_0_476fa0d9"
+  ],
+  "code": "def factor_drawdown_depth_atr_pure(df):\n    df_copy = df.copy()\n    peak = df_copy[\"close\"].rolling(63, min_periods=63).max()\n    dd = (df_copy[\"close\"] - peak) / peak\n    depth = (-dd)\n    high_low = df_copy[\"high\"] - df_copy[\"low\"]\n    high_close = (df_copy[\"high\"] - df_copy[\"close\"].shift(1)).abs()\n    low_close = (df_copy[\"low\"] - df_copy[\"close\"].shift(1)).abs()\n    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)\n    atr = tr.rolling(63, min_periods=63).mean()\n    normalized_depth = depth / atr.replace(0, np.nan)\n    factor_values = pd.Series(normalized_depth, index=df_copy.index)\n    factor_values.name = \"factor_drawdown_depth_atr_pure\"\n    return factor_values",
+  "cross_sectional_rationale": "Ranking depth/ATR cross-sectionally captures which stocks have experienced the most severe drawdowns relative to own volatility, enhancing comparability and stability.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9757575757575757,
+        "top_quantile_annualized_excess_return": 0.06911004194884862,
+        "top_quantile_excess_return": 0.19190435682493145,
+        "top_quantile_max_drawdown": -0.0809594783880001,
+        "top_quantile_turnover": 0.07816480278104436
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_drawdown_depth_atr_pure",
+  "fitness_direction": 1,
+  "formula": "depth = -((close / rolling_max(close, 63) - 1)); normalized = depth / rolling_mean(true_range, 63); result = normalized",
+  "metrics": {
+    "ic": 0.019209409121714996,
+    "icir": 0.16875469156866982,
+    "mi": 0.01825770732345333,
+    "rank_ic": 0.03537041753400265,
+    "rank_icir": 0.2632115990713131
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.06911004194884862,
+    "top_quantile_excess_return": 0.19190435682493145,
+    "top_quantile_max_drawdown": -0.0809594783880001,
+    "top_quantile_turnover": 0.07816480278104436
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.010891931433011611,
+    "icir": 0.1361567864486539,
+    "mi": 0.014950928290267562,
+    "rank_ic": 0.03537041753400265,
+    "rank_icir": 0.2632115990713131
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.06911004194884862,
+    "top_quantile_excess_return": 0.19190435682493145,
+    "top_quantile_max_drawdown": -0.0809594783880001,
+    "top_quantile_turnover": 0.07816480278104436
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.010891931433011611,
+    "icir": 0.1361567864486539,
+    "mi": 0.014950928290267562,
+    "rank_ic": 0.03537041753400265,
+    "rank_icir": 0.2632115990713131
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "Simplified mutation of drawdown_depth_atr_gated: remove the resvol_high style gate to isolate the pure drawdown depth / ATR signal. The gate was dampening during high residual volatility; removing it tests whether the raw mechanism alone achieves stronger IC and MI without harming payoff. Core contrarian drawdown mechanism preserved.",
+  "raw_metrics": {
+    "ic": 0.019209409121714996,
+    "icir": 0.16875469156866982,
+    "mi": 0.01825770732345333,
+    "rank_ic": 0.03537041753400265,
+    "rank_icir": 0.2632115990713131
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260717-013716-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260717-013716-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.46058166277724877,
+    "pre_transform_top_quantile_excess_return": 0.19190435682493145,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.5048038246191539,
+    "transformed_top_quantile_excess_return": 0.19190435682493145
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "depth = -((close / ts_max(63, close) - 1)); normalized = depth / ts_mean(63, true_range); result = normalized",
+  "fe_formula": "depth = -((close / ts_max(63, close) - 1)); normalized = depth / ts_mean(63, true_range); result = normalized",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "depth = -((close / rolling_max(close, 63) - 1)); normalized = depth / rolling_mean(true_range, 63); result = normalized"
+}

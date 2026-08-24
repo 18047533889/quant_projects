@@ -1,0 +1,95 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "728a1c63c9e7a8eedaee05e5178d82488e265488d31b14b8dfe4043bf201560e",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_then_mutation_alpha_drawdown_0_1_am_7cf64cb0"
+  ],
+  "code": "def factor_drawdown_stress_longer_window(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(40, min_periods=40).max()\n    drawdown = (df_copy['close'] / rolling_max) - 1.0\n    high = df_copy['high'].values.astype(np.float64)\n    low = df_copy['low'].values.astype(np.float64)\n    close = df_copy['close'].values.astype(np.float64)\n    atr = pd.Series(talib.ATR(high, low, close, timeperiod=40), index=df_copy.index)\n    atr = atr.replace(0.0, np.nan)\n    normalized_dd = drawdown / atr\n    factor = normalized_dd.rolling(5, min_periods=5).sum()\n    df_copy['factor_drawdown_stress_longer_window'] = factor\n    return df_copy['factor_drawdown_stress_longer_window']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.1085640342344305,
+        "top_quantile_excess_return": 0.32063580932089053,
+        "top_quantile_max_drawdown": -0.07966994643289249,
+        "top_quantile_turnover": 0.05012360494129133
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_drawdown_stress_longer_window",
+  "fitness_direction": -1,
+  "formula": "sum(drawdown(40)/ATR(40), 5)",
+  "metrics": {
+    "ic": 0.010406064301408266,
+    "icir": 0.13493372852447502,
+    "mi": 0.006918192953413005,
+    "rank_ic": 0.031072040348602337,
+    "rank_icir": 0.23762009769463385
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.1085640342344305,
+    "top_quantile_excess_return": 0.32063580932089053,
+    "top_quantile_max_drawdown": -0.07966994643289249,
+    "top_quantile_turnover": 0.05012360494129133
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "Mutation of parent factor_drawdown_stress_simple: increased the drawdown and ATR windows from 20 to 40 days to capture longer-term volatility-adjusted drawdown stress, aiming to improve cross-sectional rank discrimination and RankIC while preserving the core payoff mechanism of volatility-scaled deep drawdown.",
+  "raw_metrics": {
+    "ic": -0.010406064301408266,
+    "icir": -0.13493372852447502,
+    "mi": 0.006918192953413005,
+    "rank_ic": -0.031072040348602337,
+    "rank_icir": -0.23762009769463385
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260720-002200-r4",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260720-002200-r4"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ts_sum(5, drawdown(40)/ATR(40)) 5)",
+  "fe_formula": "ts_sum(5, drawdown(40)/ATR(40))",
+  "lqtp_notes": "Unconverted: ['drawdown']",
+  "fe_notes": "Unconverted: ['drawdown']",
+  "source_formula": "sum(drawdown(40)/ATR(40), 5)"
+}

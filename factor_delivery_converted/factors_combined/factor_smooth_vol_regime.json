@@ -1,0 +1,38 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "fbc1339245652cf13743fe68877e4895deb198ac8c61d2560b79f730f799c444",
+  "candidate_ids": [
+    "VVR-MUT-001"
+  ],
+  "code": "def factor_smooth_vol_regime(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_20 = ret.rolling(20).std()\n    med_vol_60 = vol_20.rolling(60).median()\n    regime = ((vol_20 > med_vol_60).astype(int) * 2) - 1\n    ret_10 = df_copy['close'].pct_change(10)\n    med_vol_20 = df_copy['volume'].rolling(20).median()\n    vol_dev = np.log(df_copy['volume'] / med_vol_20)\n    factor = regime * ret_10 * (1 + 0.5 * vol_dev)\n    df_copy['factor_smooth_vol_regime'] = factor\n    return df_copy['factor_smooth_vol_regime']",
+  "factor_name": "factor_smooth_vol_regime",
+  "fitness_direction": -1,
+  "formula": "factor = regime * ret_10 * (1 + 0.5 * log(volume / med_vol_20)), where regime = sign(vol_20 - med_vol_60), ret_10 = 10-day percentage change",
+  "metrics": {
+    "ic": 0.027375843897132674,
+    "icir": 0.37308467804009404,
+    "mi": 0.015453214479848931,
+    "rank_ic": 0.022012356348676716,
+    "rank_icir": 0.28099786183855985
+  },
+  "rationale": "This factor mutates the parent by replacing absolute price change with a percentage return over 10 days for better cross-sectional comparability, and using log transformation on volume deviation to reduce outlier influence. The regime-switching component is preserved, targeting improved rank consistency (RankIC) and nonlinear information (MI) while maintaining the core economic intuition.",
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260609-072013-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260609-072013-r1"
+  ],
+  "lqtp_formula": "factor = regime * ret_10 * (1 + 0.5 * log(volume / med_vol_20)), where regime = sign(vol_20 - med_vol_60), ret_10 = 10-day percentage change",
+  "fe_formula": "factor = regime * ret_10 * (1 + 0.5 * log(volume / med_vol_20)), where regime = sign(vol_20 - med_vol_60), ret_10 = 10-day percentage change",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "factor = regime * ret_10 * (1 + 0.5 * log(volume / med_vol_20)), where regime = sign(vol_20 - med_vol_60), ret_10 = 10-day percentage change"
+}

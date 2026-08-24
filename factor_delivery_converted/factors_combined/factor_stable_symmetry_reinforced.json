@@ -1,0 +1,45 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "8786ee2f25f4a355503d1e0749dd6accf053949f6b762dc5affb313cccf2e4f7",
+  "candidate_ids": [
+    "crossover-gen1-001"
+  ],
+  "code": "def factor_stable_symmetry_reinforced(df):\n    df_copy = df.copy()\n    # Parent 1: smooth absolute return\n    ret = df_copy['close'].pct_change()\n    abs_ret = ret.abs()\n    smooth_abs_ret = abs_ret.ewm(span=21, min_periods=10).mean()\n    # Parent 2: symmetry rank * volume ratio\n    high = df_copy['high']\n    low = df_copy['low']\n    open_ = df_copy['open']\n    close = df_copy['close']\n    volume = df_copy['volume']\n    body_top = np.maximum(open_, close)\n    body_bottom = np.minimum(open_, close)\n    upper_shadow = high - body_top\n    lower_shadow = body_bottom - low\n    symmetry = (lower_shadow - upper_shadow) / (lower_shadow + upper_shadow + 1e-10)\n    symmetry_rank = symmetry.rolling(20, min_periods=10).rank(pct=True)\n    vol_ma = volume.rolling(20, min_periods=10).mean()\n    vol_ratio = volume / vol_ma.replace(0, np.nan)\n    # Combine: reinforce smooth return with shape-volume signal\n    factor = smooth_abs_ret * (symmetry_rank * vol_ratio)\n    factor = factor.fillna(0)\n    return factor.rename('factor_stable_symmetry_reinforced')",
+  "factor_name": "factor_stable_symmetry_reinforced",
+  "fitness_direction": -1,
+  "formula": "symmetry = (lower_shadow - upper_shadow) / (lower_shadow + upper_shadow); ts_rank_{20}(symmetry) * (volume / rolling_mean_{20}(volume)) * ewm_span21(|pct_change|)",
+  "metrics": {
+    "ic": 0.024936240587004062,
+    "icir": 0.25404701454941114,
+    "mi": 0.025907400167980654,
+    "rank_ic": 0.04056193252744139,
+    "rank_icir": 0.4380793035419752
+  },
+  "rationale": "Combines smooth absolute return (parent1: stable volume-confirmed return magnitude) with candlestick symmetry rank scaled by volume ratio (parent2: shape directional imbalance with volume confirmation). The product selects periods where both return consistency and shape extremity coincide, reinforcing signal strength when volume confirms. This preserves the rank stability and volume amplification of parent2 while incorporating the smooth return consistency of parent1.",
+  "raw_metrics": {
+    "ic": -0.024936240587004062,
+    "icir": -0.25404701454941114,
+    "mi": 0.025907400167980654,
+    "rank_ic": -0.04056193252744139,
+    "rank_icir": -0.4380793035419752
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260611-061826-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260611-061826-r1"
+  ],
+  "lqtp_formula": "symmetry = (lower_shadow - upper_shadow) / (lower_shadow + upper_shadow); ts_rank_{20}(symmetry) * (volume / rolling_mean_{20}(volume)) * ema(21, |pct_change|)",
+  "fe_formula": "symmetry = (lower_shadow - upper_shadow) / (lower_shadow + upper_shadow); ts_rank_{20}(symmetry) * (volume / rolling_mean_{20}(volume)) * ema(21, |pct_change|)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "symmetry = (lower_shadow - upper_shadow) / (lower_shadow + upper_shadow); ts_rank_{20}(symmetry) * (volume / rolling_mean_{20}(volume)) * ewm_span21(|pct_change|)"
+}

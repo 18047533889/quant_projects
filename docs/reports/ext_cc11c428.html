@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ext_cc11c428</title>
+<style>
+:root{--bg:#eef2f7;--panel:#fff;--fg:#0f172a;--muted:#64748b;--line:#e2e8f0;--primary:#1e4d8c;--shadow:0 4px 24px rgba(15,23,42,0.06)}
+* {box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;color:var(--fg);background:var(--bg)}
+header{background:linear-gradient(135deg,#0f2744,#1e4d8c 60%,#0d9488);color:#fff;padding:36px 48px 28px}
+header h1{margin:0 0 6px;font-size:1.7rem}
+header .meta{opacity:0.85;font-size:0.88rem}
+main{max-width:900px;margin:0 auto;padding:24px}
+.back{display:inline-block;margin-bottom:20px;color:#93c5fd;font-weight:500;text-decoration:none;font-size:0.9rem}
+.back:hover{text-decoration:underline}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.metric{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center;box-shadow:var(--shadow)}
+.metric b{display:block;font-size:1.5rem;color:var(--primary)}
+.metric span{color:var(--muted);font-size:0.78rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;box-shadow:var(--shadow);margin-bottom:16px}
+h2{font-size:1rem;color:var(--primary);margin:0 0 14px;border-bottom:1px solid var(--line);padding-bottom:8px}
+.formula-wrap{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:18px;font-family:"Courier New",monospace;font-size:0.9rem;word-break:break-all;line-height:1.9;color:var(--fg);overflow-x:auto}
+.meta-table{width:100%;border-collapse:collapse;font-size:0.85rem}
+.meta-table td{padding:7px 10px;border-bottom:1px solid var(--line)}
+.meta-table td:first-child{color:var(--muted);width:120px}
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:0.75rem;margin-right:6px}
+.badge-green{background:#dcfce7;color:#166534}
+.badge-red{background:#fee2e2;color:#991b1b}
+.badge-blue{background:#dbeafe;color:#1e40af}
+</style>
+</head>
+<body>
+<header>
+<a class="back" href="../index.html">← 返回列表</a>
+<h1><code>ext_cc11c428</code></h1>
+<div class="meta">本周新挖 · RankIC 0.0341 · IR 0.2506 · 覆盖率 99.8% · Sharpe 1.468</div>
+</header>
+<main>
+<div class="metrics">
+<div class="metric"><b>0.0341</b><span>Mean RankIC</span></div>
+<div class="metric"><b>0.2506</b><span>RankIC IR</span></div>
+<div class="metric"><b>99.8%</b><span>日覆盖率</span></div>
+<div class="metric"><b>1.468</b><span>多空 Sharpe</span></div>
+</div>
+<div class="card">
+<h2>LQTP 公式</h2>
+<pre class="formula-wrap">-(rank(ema((close/delay(close,1)-1), 12) / ts_std((close/delay(close,1)-1), 50)))</pre>
+</div>
+<div class="card">
+<h2>元数据</h2>
+<table class="meta-table">
+<tr><td>因子名称</td><td><code>ext_cc11c428</code></td></tr>
+<tr><td>来源</td><td>本周新挖</td></tr>
+<tr><td>公式符号</td><td>公式已取负</td></tr>
+<tr><td>平台</td><td>可转平台</td></tr>
+</table>
+</div>
+</main>
+</body>
+</html>

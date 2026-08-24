@@ -1,0 +1,126 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "alpha_tools"
+  ],
+  "b_id": "B3",
+  "c_id": "C301",
+  "calculation_fingerprint": "79f623d6a3eed04704a6c314c8382cc3da6bb376452969cb42e7b9bbb1c86317",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_c101_g0_breakout_retest_shrink_narrow_001_c301_g_6eec1db7"
+  ],
+  "code": "def factor_defended_close_high_retest_participation_20_5(df):\n    \"\"\"Idea: After a recent breakout to a new 20-day closing high, a retest that pierces the old close-based boundary but closes back above it, with shrinking volume and narrow bars, confirms a durable level hold.\n\n    Logic: Boundary is the previous 20-day close high, so wick-only breakouts are ignored. A retest-defense bar is low <= boundary and close > boundary. The score combines the same-bar recovery ratio, intraday close location, and participation quality (volume contraction and narrow daily range), then averages over 5 days so repeated defended retests accumulate.\n\n    Formula: S = mean_5( I[recent breakout] * I[low<=B & close>B] * ((close-B)/((B-low)+(close-B))) * close_loc * (1/(1+V/MA20(V))) * (1/(1+(H-L)/close)) ), B=rolling(20).max(close).shift(1)\n\n    Sub-mechanism tags: close_level_boundary, retest_defense, volume_contraction, breakout_continuation\n    \"\"\"\n    df_copy = df.copy()\n    boundary = df_copy[\"close\"].rolling(20).max().shift(1)\n    recent_breakout = (df_copy[\"close\"] > boundary).astype(float).rolling(10).max().shift(1)\n    retest_defense = ((df_copy[\"low\"] <= boundary) & (df_copy[\"close\"] > boundary)).astype(float)\n    penetration = (boundary - df_copy[\"low\"]).clip(lower=0.0)\n    recovery = (df_copy[\"close\"] - boundary).clip(lower=0.0)\n    recovery_ratio = recovery / (penetration + recovery).replace(0.0, np.nan)\n    close_loc = alpha_tools.intraday_close_location(df_copy)\n    vol_ma = df_copy[\"volume\"].rolling(20).mean().replace(0.0, np.nan)\n    vol_ratio = df_copy[\"volume\"] / vol_ma\n    narrow_bar = 1.0 / (1.0 + (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"])\n    participation = (1.0 / (1.0 + vol_ratio)) * narrow_bar\n    score = np.where(\n        (recent_breakout > 0) & (retest_defense > 0),\n        recovery_ratio.fillna(0.0) * close_loc * participation,\n        0.0,\n    )\n    df_copy[\"factor_defended_close_high_retest_participation_20_5\"] = pd.Series(score, index=df_copy.index).rolling(5, min_periods=1).mean()\n    return df_copy[\"factor_defended_close_high_retest_participation_20_5\"]",
+  "codegen_skill": "alpha-mutation",
+  "cross_sectional_rationale": "The raw score is an event-contingent retest-defense measure whose magnitude depends on boundary distance, daily range, and volume scale; same-day cross-sectional rank isolates relative retest level-hold quality across assets, which is the economically relevant comparison for boundary retest events.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "guidance_inconsistent": false,
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.6484848484848484,
+        "top_quantile_annualized_excess_return": -0.023203470998652498,
+        "top_quantile_excess_return": -0.0633945139888733,
+        "top_quantile_max_drawdown": -0.1953640070989877,
+        "top_quantile_turnover": 0.041982376516446575
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first",
+    "transform_applied": true
+  },
+  "factor_name": "factor_defended_close_high_retest_participation_20_5",
+  "fitness_direction": -1,
+  "formula": "S = mean_5( I[recent breakout] * I[low<=B & close>B] * ((close-B)/((B-low)+(close-B))) * close_loc * (1/(1+V/MA20(V))) * (1/(1+(H-L)/close)) ), B=rolling(20).max(close).shift(1)",
+  "manual_admission": null,
+  "metrics": {
+    "ic": 0.018605926545646922,
+    "icir": 0.20404482596588858,
+    "mi": 0.17188690294456244,
+    "rank_ic": 0.027481931334925172,
+    "rank_icir": 0.26749648778830326
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6484848484848484,
+    "top_quantile_annualized_excess_return": -0.023203470998652498,
+    "top_quantile_excess_return": -0.0633945139888733,
+    "top_quantile_max_drawdown": -0.1953640070989877,
+    "top_quantile_turnover": 0.041982376516446575
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.01665530003607083,
+    "icir": 0.20185402926957155,
+    "mi": 0.002867638976252085,
+    "rank_ic": 0.027481931334925172,
+    "rank_icir": 0.26749648778830326
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.6484848484848484,
+    "top_quantile_annualized_excess_return": -0.023203470998652498,
+    "top_quantile_excess_return": -0.0633945139888733,
+    "top_quantile_max_drawdown": -0.1953640070989877,
+    "top_quantile_turnover": 0.041982376516446575
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.01665530003607083,
+    "icir": -0.20185402926957155,
+    "mi": 0.002867638976252085,
+    "rank_ic": -0.027481931334925172,
+    "rank_icir": -0.26749648778830326
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "This mutation changes the event-definition axis from a traded-high boundary to a settlement-high boundary. The parent defined the broken range as the previous 20-day high, so a single extreme wick could define the boundary and the retest-defense event could be triggered by noise. The child defines the boundary as the previous 20-day close high, so only a genuine closing-price breakout establishes the regime. The retest event is a low that touches that close-based boundary while the close reclaims above it. Volume contraction and narrow daily bars remain the participation-quality proof, and the 5-day average keeps the signal durable. This targets the parent's weak long-side payoff by removing wick-defined overextension and keeping only settlement-confirmed level holds.",
+  "raw_metrics": {
+    "ic": -0.018605926545646922,
+    "icir": -0.20404482596588858,
+    "mi": 0.17188690294456244,
+    "rank_ic": -0.027481931334925172,
+    "rank_icir": -0.26749648778830326
+  },
+  "required_columns": [
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-routing-penalty-xalpha-light-v2-20260817-093932-r1",
+  "source_run_ids": [
+    "formal-routing-penalty-xalpha-light-v2-20260817-093932-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.5163553874051229,
+    "pre_transform_top_quantile_excess_return": -0.0633945139888733,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.6895160745793264,
+    "transformed_top_quantile_excess_return": -0.0633945139888733
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "S = ts_mean(5, I[recent breakout] * I[low<=B & close>B] * ((close-B)/((B-low)+(close-B))) * close_loc * (1/(1+V/MA20(V))) * (1/(1+(H-L)/close))), B=<rolling>(20).max(close).delay(1)",
+  "fe_formula": "S = ts_mean(5, I[recent breakout] * I[low<=B & close>B] * ((close-B)/((B-low)+(close-B))) * close_loc * (1/(1+V/MA20(V))) * (1/(1+(H-L)/close))), B=<rolling>(20).flex_max(close).ts_delay(1)",
+  "lqtp_notes": "Textual non-executable: I[...]-notation (indicator function, use Python code); Unconverted: ['MA20']",
+  "fe_notes": "Textual non-executable: I[...]-notation (indicator function, use Python code); Unconverted: ['MA20']",
+  "source_formula": "S = mean_5( I[recent breakout] * I[low<=B & close>B] * ((close-B)/((B-low)+(close-B))) * close_loc * (1/(1+V/MA20(V))) * (1/(1+(H-L)/close)) ), B=rolling(20).max(close).shift(1)"
+}

@@ -1,0 +1,34 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "1c7b787fde1fbb73d62c6669aa5328ab5deadba46e5047fd06f5c8e7bcaa1216",
+  "candidate_ids": [
+    "stability_0_mut_1"
+  ],
+  "code": "def factor_persistence_ewma(df):\n    df_copy = df.copy()\n    returns = df_copy[\"close\"].pct_change()\n    abs_return_diff = returns.diff().abs()\n    smoothness = -abs_return_diff.ewm(span=10, min_periods=1).mean()\n    df_copy[\"factor_persistence_ewma\"] = smoothness.fillna(0)\n    return df_copy[\"factor_persistence_ewma\"]",
+  "factor_name": "factor_persistence_ewma",
+  "fitness_direction": 1,
+  "formula": "-EWMA(|d(r)|, span=10)",
+  "metrics": {
+    "ic": 0.04048911498130427,
+    "icir": 0.3428246849650534,
+    "mi": 0.030561629474494367,
+    "rank_ic": 0.0755743470131323,
+    "rank_icir": 0.5378122968211468
+  },
+  "rationale": "This factor measures temporal consistency of returns using an exponentially weighted moving average of absolute consecutive return changes. The EWMA places more weight on recent observations, adapting faster to regime changes while still capturing persistence. Negative sign inverts so higher values indicate more persistent return direction.",
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-20260609-053202-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260609-053202-r1"
+  ],
+  "lqtp_formula": "-ema(span=10, |d(r)|)",
+  "fe_formula": "-ema(span=10, |d(r)|)",
+  "lqtp_notes": "Unconverted: ['d']",
+  "fe_notes": "Unconverted: ['d']",
+  "source_formula": "-EWMA(|d(r)|, span=10)"
+}

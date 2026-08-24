@@ -1,0 +1,116 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "0ebcc2e7f6e4183bcdeecf930e3235bcb1e0efd42f86702ea02cd790ab07d212",
+  "candidate_ids": [
+    "g2_crossover_g1_crossover_002_vgc_001_4746f842_g1_mutation_00_05e54e0d"
+  ],
+  "code": "def factor_book_yield_leverage_roa(df):\n    df_copy = df.copy()\n    book_yield = 1.0 / df_copy[\"pb_lf\"].replace(0, np.nan)\n    debt_ratio = df_copy[\"debttoassets\"] / 100.0\n    adj = (1 - debt_ratio).clip(lower=0.1, upper=1.0)\n    roa = df_copy[\"roa2_ttm2\"] / 100.0\n    roa_conf = (1 + roa).clip(lower=0.5, upper=2.0)\n    result = book_yield * adj * roa_conf\n    result.name = \"factor_book_yield_leverage_roa\"\n    return result",
+  "cross_sectional_rationale": "Rank transformation highlights relative value-quality adjusted for leverage across stocks, consistent with both parent mechanisms.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.11198132553051265,
+        "top_quantile_excess_return": 0.35655945117884724,
+        "top_quantile_max_drawdown": -0.08878969638906997,
+        "top_quantile_turnover": 0.023055208552179338
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_book_yield_leverage_roa",
+  "fitness_direction": 1,
+  "formula": "book_yield = 1/pb_lf; adj = (1 - debttoassets/100) clipped [0.1,1]; roa_conf = (1 + roa2_ttm2/100) clipped [0.5,2]; signal = book_yield * adj * roa_conf",
+  "metrics": {
+    "ic": 0.011827929829790466,
+    "icir": 0.1441120432034354,
+    "mi": 0.011470679905317027,
+    "rank_ic": 0.03302623225725021,
+    "rank_icir": 0.330001652734944
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.11198132553051265,
+    "top_quantile_excess_return": 0.35655945117884724,
+    "top_quantile_max_drawdown": -0.08878969638906997,
+    "top_quantile_turnover": 0.023055208552179338
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.010928221101422143,
+    "icir": 0.1336456368942766,
+    "mi": 0.015582466442601195,
+    "rank_ic": 0.03302623225725021,
+    "rank_icir": 0.330001652734944
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.11198132553051265,
+    "top_quantile_excess_return": 0.35655945117884724,
+    "top_quantile_max_drawdown": -0.08878969638906997,
+    "top_quantile_turnover": 0.023055208552179338
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.010928221101422143,
+    "icir": 0.1336456368942766,
+    "mi": 0.015582466442601195,
+    "rank_ic": 0.03302623225725021,
+    "rank_icir": 0.330001652734944
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Crossover of two book-yield-leverage factors: preserves the quality (ROA) confirmation from the primary parent while adopting the secondary parent's simplification by removing the bell-shaped size weight, which introduces nonlinear noise. The resulting factor focuses on book yield adjusted for financial distress and confirmed by profitability, aiming to improve continuous IC and ICIR while maintaining strong rank-based metrics.",
+  "raw_metrics": {
+    "ic": 0.011827929829790466,
+    "icir": 0.1441120432034354,
+    "mi": 0.011470679905317027,
+    "rank_ic": 0.03302623225725021,
+    "rank_icir": 0.330001652734944
+  },
+  "required_columns": [
+    "pb_lf",
+    "debttoassets",
+    "roa2_ttm2"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260717-20260718-115642-r15",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260717-20260718-115642-r15"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.5231842094304942,
+    "pre_transform_top_quantile_excess_return": 0.35655945117884724,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.530438537930737,
+    "transformed_top_quantile_excess_return": 0.35655945117884724
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "book_yield = 1/pb_lf; adj = (1 - debttoassets/100) clipped [0.1,1]; roa_conf = (1 + roa2_ttm2/100) clipped [0.5,2]; signal = book_yield * adj * roa_conf",
+  "fe_formula": "book_yield = 1/pb_lf; adj = (1 - debttoassets/100) clipped [0.1,1]; roa_conf = (1 + roa2_ttm2/100) clipped [0.5,2]; signal = book_yield * adj * roa_conf",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "book_yield = 1/pb_lf; adj = (1 - debttoassets/100) clipped [0.1,1]; roa_conf = (1 + roa2_ttm2/100) clipped [0.5,2]; signal = book_yield * adj * roa_conf"
+}

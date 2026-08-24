@@ -1,0 +1,101 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "b_id": "B3",
+  "c_id": "C301",
+  "calculation_fingerprint": "14759c43834071056c79b28b45df8836437b2cec9e9d6c62622be53403c6fd3e",
+  "candidate_ids": [
+    "g1_refinement_c301_b3_breakout_hold_confirm_001_fb05e033"
+  ],
+  "code": "def factor_breakout_hold_confirmation_20d_refined(df):\n    \"\"\"Idea: A close above the prior 20-day high, followed by two sessions holding that resistance, confirms supply absorption; the signal is stronger when the breakout day closed in the upper part of its range and volume was above its 20-day median.\n\n    Logic: The breakout resistance is built directly as the trailing 20-day high of high shifted three bars, so a single series represents the fixed resistance for the breakout bar and the two hold bars. The confirmed-breakout mask multiplies the percentage hold distance by the breakout-day close location and the breakout-day above-median volume flag. This preserves the parent mechanism while removing redundant shift operations on the prior-high series.\n\n    Sub-mechanism tags: breakout, hold-confirmation, close-location, volume-confirmation.\n\n    Formula: I(close_{t-2} > R) * I(close_{t-1} >= R) * I(close_t >= R) * (close_t / R - 1) * close_loc_{t-2} * I(vol_{t-2} > median20_{t-2}), R = max(high_{t-22..t-3})\n    \"\"\"\n    df_copy = df.copy()\n    resistance = df_copy[\"high\"].shift(3).rolling(20, min_periods=20).max()\n    breakout = (df_copy[\"close\"].shift(2) > resistance).astype(float)\n    hold1 = (df_copy[\"close\"].shift(1) >= resistance).astype(float)\n    hold2 = (df_copy[\"close\"] >= resistance).astype(float)\n    confirmed = breakout * hold1 * hold2\n    close_loc = ((df_copy[\"close\"] - df_copy[\"low\"]) / (df_copy[\"high\"] - df_copy[\"low\"]).replace(0.0, np.nan)).fillna(0.5)\n    volume_confirm = (df_copy[\"volume\"].shift(2) > df_copy[\"volume\"].rolling(20, min_periods=20).median().shift(2)).astype(float)\n    hold_dist = ((df_copy[\"close\"] - resistance) / resistance.replace(0.0, np.nan)).fillna(0.0)\n    factor = confirmed * hold_dist * close_loc.shift(2) * volume_confirm\n    return factor.rename(\"factor_breakout_hold_confirmation_20d_refined\")",
+  "codegen_skill": "alpha-refinement",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.6,
+        "top_quantile_annualized_excess_return": -0.019157110328392735,
+        "top_quantile_excess_return": -0.05187598517415892,
+        "top_quantile_max_drawdown": -0.18274096966792752,
+        "top_quantile_turnover": 0.024036443026886158
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_breakout_hold_confirmation_20d_refined",
+  "fitness_direction": -1,
+  "formula": "signal_t = I(close_{t-2} > R) * I(close_{t-1} >= R) * I(close_t >= R) * ((close_t / R) - 1) * close_loc_{t-2} * I(vol_{t-2} > median20_{t-2}), where R = max(high_{t-22..t-3})",
+  "manual_admission": null,
+  "metrics": {
+    "ic": 0.01865926458311176,
+    "icir": 0.2705161491464792,
+    "mi": 0.005806939923847176,
+    "rank_ic": 0.01841705737973533,
+    "rank_icir": 0.3430161695084476
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6,
+    "top_quantile_annualized_excess_return": -0.019157110328392735,
+    "top_quantile_excess_return": -0.05187598517415892,
+    "top_quantile_max_drawdown": -0.18274096966792752,
+    "top_quantile_turnover": 0.024036443026886158
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Refinement of C301_B3_breakout_hold_confirm_001. The core mechanism is unchanged: a close above the prior 20-day high, two subsequent holds at that resistance, and breakout-day close-location/volume multipliers. The implementation is leaner by constructing the fixed resistance directly as max(high[t-22..t-3]) via high.shift(3).rolling(20).max(), eliminating the separate prior-high shift and second lag. This reduces moving parts and improves interpretability without altering signal intent.",
+  "raw_metrics": {
+    "ic": -0.01865926458311176,
+    "icir": -0.2705161491464792,
+    "mi": 0.005806939923847176,
+    "rank_ic": -0.01841705737973533,
+    "rank_icir": -0.3430161695084476
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-light-xalpha-v3-20260807-055803-r1",
+  "source_run_ids": [
+    "formal-light-xalpha-v3-20260807-055803-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "signal_t = I(close_{t-2} > R) * I(close_{t-1} >= R) * I(close_t >= R) * ((close_t / R) - 1) * close_loc_{t-2} * I(vol_{t-2} > median20_{t-2}), where R = max(high_{t-22..t-3})",
+  "fe_formula": "signal_t = I(close_{t-2} > R) * I(close_{t-1} >= R) * I(close_t >= R) * ((close_t / R) - 1) * close_loc_{t-2} * I(vol_{t-2} > median20_{t-2}), where R = flex_max(high_{t-22..t-3})",
+  "lqtp_notes": "Unconverted: ['I']",
+  "fe_notes": "Unconverted: ['I']",
+  "source_formula": "signal_t = I(close_{t-2} > R) * I(close_{t-1} >= R) * I(close_t >= R) * ((close_t / R) - 1) * close_loc_{t-2} * I(vol_{t-2} > median20_{t-2}), where R = max(high_{t-22..t-3})"
+}

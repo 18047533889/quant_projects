@@ -1,0 +1,121 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "8868e101e02be62e4c283c342c5de5c7f05e333c37f04651d3780d9517041747",
+  "candidate_ids": [
+    "g2_crossover_alpha_drawdown_gen0_c2_g1_mutation_amc_001_61748_bbeb2b2c"
+  ],
+  "code": "def factor_drawdown_stress_vol_scaled(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    rolling_max = close.rolling(60, min_periods=60).max()\n    in_drawdown = close < rolling_max * 0.95\n    occupancy = in_drawdown.rolling(20, min_periods=20).sum() / 20.0\n    depth = (close / rolling_max) - 1.0\n    stress = -depth * occupancy\n    ret = close.pct_change()\n    vol = ret.rolling(20, min_periods=10).std(ddof=1).replace(0.0, np.nan)\n    vol_attenuation = 1.0 / (1.0 + vol)\n    stress_scaled = stress * vol_attenuation\n    stress_scaled = stress_scaled.fillna(0.0)\n    df_copy[\"factor_drawdown_stress_vol_scaled\"] = stress_scaled\n    return df_copy[\"factor_drawdown_stress_vol_scaled\"]",
+  "cross_sectional_rationale": "Ranking across stocks normalizes varying drawdown tolerances and stress magnitudes, highlighting relative stress levels.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.09928100719698163,
+        "top_quantile_excess_return": 0.2837526596715696,
+        "top_quantile_max_drawdown": -0.19771851031211762,
+        "top_quantile_turnover": 0.10411746487597716
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.09794456538083465,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.020554346191653527,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_drawdown_stress_vol_scaled",
+  "fitness_direction": 1,
+  "formula": "stress = -depth * occupancy; scaled = stress / (1 + 20d-rolling_std(ret))",
+  "metrics": {
+    "ic": 0.013702221744158612,
+    "icir": 0.09794456538083465,
+    "mi": 0.014289441919501655,
+    "rank_ic": 0.016872491236098363,
+    "rank_icir": 0.09665876247149537
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.09928100719698163,
+    "top_quantile_excess_return": 0.2837526596715696,
+    "top_quantile_max_drawdown": -0.19771851031211762,
+    "top_quantile_turnover": 0.10411746487597716
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.012851538401957255,
+    "icir": 0.09204018551074877,
+    "mi": 0.013051701479016131,
+    "rank_ic": 0.016872491236098363,
+    "rank_icir": 0.09665876247149537
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.09928100719698163,
+    "top_quantile_excess_return": 0.2837526596715696,
+    "top_quantile_max_drawdown": -0.19771851031211762,
+    "top_quantile_turnover": 0.10411746487597716
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.012851538401957255,
+    "icir": 0.09204018551074877,
+    "mi": 0.013051701479016131,
+    "rank_ic": 0.016872491236098363,
+    "rank_icir": 0.09665876247149537
+  },
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Preserves the primary drawdown stress mechanism (depth * occupancy) from parent1, which captures acute price pressure from multi-session drawdowns. Adds a lightweight volatility attenuation from parent2: scaling stress by 1/(1+20d rolling std of daily returns). This reduces false signals during high-volatility periods, a predictive weakness of the raw stress signal. The economic intuition is that drawdowns are more mean-reverting when volatility is low; in high-volatility regimes, price moves are noisier and the stress signal is attenuated.",
+  "raw_metrics": {
+    "ic": 0.013702221744158612,
+    "icir": 0.09794456538083465,
+    "mi": 0.014289441919501655,
+    "rank_ic": 0.016872491236098363,
+    "rank_icir": 0.09665876247149537
+  },
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260720-095718-r7",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260720-095718-r7"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.2314746790993159,
+    "pre_transform_top_quantile_excess_return": 0.2837526596715696,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.23946748275208862,
+    "transformed_top_quantile_excess_return": 0.2837526596715696
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "stress = -depth * occupancy; scaled = stress / (1 + 20d-ts_std(ret))",
+  "fe_formula": "stress = -depth * occupancy; scaled = stress / (1 + 20d-ts_std(ret))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "stress = -depth * occupancy; scaled = stress / (1 + 20d-rolling_std(ret))"
+}

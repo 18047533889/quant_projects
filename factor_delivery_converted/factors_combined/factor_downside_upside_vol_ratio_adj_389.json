@@ -1,0 +1,120 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "5693c55da078de923a1c4e66f3df01a652cae8ae27311c5ea049397715e08eae",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_alpha_drawdown_0_2_asym001_e09024b1_b94a26a4"
+  ],
+  "code": "def factor_downside_upside_vol_ratio_adj(df):\n    df_copy = df.copy()\n    returns = df_copy['close'].pct_change()\n    pos_ret = returns.where(returns > 0, 0.0)\n    neg_ret = returns.where(returns < 0, 0.0)\n    window = 60\n    vol_up = pos_ret.rolling(window, min_periods=int(window/2)).std(ddof=1)\n    vol_down = neg_ret.rolling(window, min_periods=int(window/2)).std(ddof=1)\n    ratio = vol_down / vol_up.replace(0, np.nan)\n    ratio = ratio.replace([np.inf, -np.inf], np.nan)\n    df_copy['factor_downside_upside_vol_ratio_adj'] = -ratio\n    return df_copy['factor_downside_upside_vol_ratio_adj']",
+  "cross_sectional_rationale": "The downside/upside volatility ratio varies across stocks; cross-sectional rank captures relative downside fragility in the cross-section. The sign adjustment ensures that high rank corresponds to low downside fragility (desirable), aligning with the economic hypothesis.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9151515151515152,
+        "top_quantile_annualized_excess_return": -0.00236122555486884,
+        "top_quantile_excess_return": -0.0064986027162042825,
+        "top_quantile_max_drawdown": -0.1948060795395843,
+        "top_quantile_turnover": 0.096677994913811
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_downside_upside_vol_ratio_adj",
+  "fitness_direction": -1,
+  "formula": "adjusted_ratio = - (σ(negative_returns) / σ(positive_returns)) over 60 days",
+  "metrics": {
+    "ic": 0.012907833832375318,
+    "icir": 0.11756703401399995,
+    "mi": 0.008740392907487404,
+    "rank_ic": 0.033253954187781314,
+    "rank_icir": 0.26580390849960245
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9151515151515152,
+    "top_quantile_annualized_excess_return": -0.00236122555486884,
+    "top_quantile_excess_return": -0.0064986027162042825,
+    "top_quantile_max_drawdown": -0.1948060795395843,
+    "top_quantile_turnover": 0.096677994913811
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.011686781580512728,
+    "icir": 0.11128603458035026,
+    "mi": 0.008557016161431008,
+    "rank_ic": 0.033253954187781314,
+    "rank_icir": 0.26580390849960245
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9151515151515152,
+    "top_quantile_annualized_excess_return": -0.00236122555486884,
+    "top_quantile_excess_return": -0.0064986027162042825,
+    "top_quantile_max_drawdown": -0.1948060795395843,
+    "top_quantile_turnover": 0.096677994913811
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.011686781580512728,
+    "icir": -0.11128603458035026,
+    "mi": 0.008557016161431008,
+    "rank_ic": -0.033253954187781314,
+    "rank_icir": -0.26580390849960245
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Mutation: Adjusted sign of the downside/upside volatility ratio to align with economic intuition that high downside fragility (high ratio) predicts negative returns. This targets improvement in payoff while preserving the core asymmetry mechanism and predictive strength from the parent (high RankIC, ICIR). Cross-sectional rank is retained to maintain relative comparison across stocks.",
+  "raw_metrics": {
+    "ic": -0.012907833832375318,
+    "icir": -0.11756703401399995,
+    "mi": 0.008740392907487404,
+    "rank_ic": -0.033253954187781314,
+    "rank_icir": -0.26580390849960245
+  },
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-v3-20260730-011744-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-20260730-011744-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.43058769500967775,
+    "pre_transform_top_quantile_excess_return": -0.0064986027162042825,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.43827312344124647,
+    "transformed_top_quantile_excess_return": -0.0064986027162042825
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "adjusted_ratio = - (σ(negative_returns) / σ(positive_returns)) over 60 days",
+  "fe_formula": "adjusted_ratio = - (σ(negative_returns) / σ(positive_returns)) over 60 days",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "adjusted_ratio = - (σ(negative_returns) / σ(positive_returns)) over 60 days"
+}

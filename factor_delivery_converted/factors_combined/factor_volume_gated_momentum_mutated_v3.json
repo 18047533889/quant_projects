@@ -1,0 +1,45 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "7544dc7f5b5a4ca58a11569de1b9f10604bfc99eb83c63302c55d6870db6bafa",
+  "candidate_ids": [
+    "mut_vol_gated_mom_gen5"
+  ],
+  "code": "def factor_volume_gated_momentum_mutated_v3(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    high = df_copy['high']\n    low = df_copy['low']\n    \n    # Core momentum: 5-day return\n    mom = close / close.shift(5) - 1\n    \n    # Range-based volatility: rolling std of high-low range / close over 10 days\n    range_ratio = (high - low) / close\n    range_vol = range_ratio.rolling(10, min_periods=5).std()\n    range_vol_mean = range_vol.rolling(20, min_periods=10).mean()\n    range_vol_std = range_vol.rolling(20, min_periods=10).std(ddof=1)\n    vol_z = (range_vol - range_vol_mean) / range_vol_std.replace(0, np.nan)\n    vol_z_clipped = np.clip(vol_z, -2, 2)\n    \n    # Trend persistence: EMA of returns with span 10, clipped\n    ret = close.pct_change()\n    ema_ret = ret.ewm(span=10, min_periods=10, adjust=False).mean()\n    persistence = np.clip(ema_ret * 3, -1, 1)\n    \n    # Volume components: rank percentile and trend ratio\n    vol_rank = volume.rolling(20).rank(pct=True)\n    vol_ma20 = volume.rolling(20).mean()\n    vol_trend = volume.rolling(5).mean() / vol_ma20.replace(0, np.nan)\n    \n    # Confidence: multiplicative product mapped to [0,2] via tanh\n    confidence = 1 + np.tanh(vol_rank * vol_trend)\n    \n    # Base factor: momentum adjusted by volatility and persistence\n    base = mom / (1 + vol_z_clipped.abs()) * (1 + persistence)\n    \n    # Final factor\n    factor = base * confidence\n    factor = factor.fillna(0.0).clip(-5, 5)\n    df_copy['factor_volume_gated_momentum_mutated_v3'] = factor\n    return df_copy['factor_volume_gated_momentum_mutated_v3']",
+  "factor_name": "factor_volume_gated_momentum_mutated_v3",
+  "fitness_direction": -1,
+  "formula": "factor = (momentum / (1 + |z(std(Range/Close,10))|)) * (1 + clip(3*EMA(ret,10),-1,1)) * (1 + tanh(vol_rank * vol_trend))",
+  "metrics": {
+    "ic": 0.020988838553866865,
+    "icir": 0.19511717820393634,
+    "mi": 0.02447370403347726,
+    "rank_ic": 0.032815894445895236,
+    "rank_icir": 0.2729392174841117
+  },
+  "rationale": "Mutation of factor_volume_gated_momentum_mutated_v2 (gen4). Preserves the volume-gated momentum structure to maintain RankIC stability. Targets improved IC and MI by replacing the ATR/close z-score with a more responsive range-based volatility (10-day rolling std of high-low range/close) and simplifying the persistence to a clipped EMA of returns. The volume confidence is retained but uses a multiplicative combination of rank and trend to sharpen the signal.",
+  "raw_metrics": {
+    "ic": -0.020988838553866865,
+    "icir": -0.19511717820393634,
+    "mi": 0.02447370403347726,
+    "rank_ic": -0.032815894445895236,
+    "rank_icir": -0.2729392174841117
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260611-090600-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260611-090600-r2"
+  ],
+  "lqtp_formula": "factor = (momentum / (1 + |cs_zscore(std(Range/Close,10))se))|)) * (1 + clip(3*ema(10, ret),-1,1)) * (1 + tanh(vol_rank * vol_trend))",
+  "fe_formula": "factor = (momentum / (1 + |zscore(std(Range/Close,10))se))|)) * (1 + clip(3*ema(10, ret),-1,1)) * (1 + tanh(vol_rank * vol_trend))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "factor = (momentum / (1 + |z(std(Range/Close,10))|)) * (1 + clip(3*EMA(ret,10),-1,1)) * (1 + tanh(vol_rank * vol_trend))"
+}

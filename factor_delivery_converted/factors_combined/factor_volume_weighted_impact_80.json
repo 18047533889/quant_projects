@@ -1,0 +1,103 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "math",
+    "minute_tools"
+  ],
+  "calculation_fingerprint": "legacy-unresolved:8",
+  "candidate_id": "g2_mutation_minute_amount_impact_gen0_v1_72122f6b",
+  "candidate_ids": [
+    "g2_mutation_minute_amount_impact_gen0_v1_72122f6b"
+  ],
+  "code": "def factor_volume_weighted_impact(df):\n    df_copy = df.copy()\n    ret = df_copy['close_price'].pct_change().fillna(0.0)\n    abs_ret = ret.abs()\n    volume = df_copy['volume']\n    total_volume = volume.sum()\n    if total_volume > 0:\n        impact = (abs_ret * volume).sum() / total_volume\n    else:\n        impact = 0.0\n    day = pd.Timestamp(df_copy['TradingDay'].iloc[0])\n    out = pd.Series([impact], index=[day], name='factor_volume_weighted_impact')\n    return out",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "domain_agent": "minute-mutation",
+  "factor_name": "factor_volume_weighted_impact",
+  "factor_value_contract": "minute_to_daily_panel",
+  "fitness_direction": -1,
+  "formula": "volume_weighted_mean(|close_price.pct_change()|, volume, TradingDay)",
+  "frequency": "minute",
+  "lineage": {
+    "agent_skill": "minute-mutation",
+    "generation": 2,
+    "guidance_mode": null,
+    "operation": "mutation",
+    "parent_ids": [
+      "minute_amount_impact_gen0_v1"
+    ]
+  },
+  "metadata": {
+    "fitness_direction": -1,
+    "fitness_metrics": {
+      "ic": 0.055539506932959,
+      "icir": 0.41351921701680733,
+      "mi": 0.05925393874611018,
+      "rank_ic": 0.10261010379811392,
+      "rank_icir": 0.5066938953544606
+    },
+    "llm_candidate_id": "minute_volume_weighted_impact_gen2_v1",
+    "minute_required_columns": [
+      "close_price",
+      "volume"
+    ],
+    "payoff_diagnostics": {
+      "quantile_monotonicity": 1.0,
+      "top_quantile_annualized_excess_return": 0.38593183122156227,
+      "top_quantile_excess_return": 0.011724366267846786,
+      "top_quantile_max_drawdown": -0.013250391597524613,
+      "top_quantile_turnover": 0.3446789917946611
+    },
+    "payoff_gate_passed": true,
+    "pre_transform_fitness_direction": 1,
+    "raw_fitness_metrics": {
+      "ic": -0.055539506932959,
+      "icir": -0.41351921701680733,
+      "mi": 0.05925393874611018,
+      "rank_ic": -0.10261010379811392,
+      "rank_icir": -0.5066938953544606
+    },
+    "transform_gate_passed": true
+  },
+  "metrics": {
+    "ic": 0.055539506932959,
+    "icir": 0.41351921701680733,
+    "mi": 0.05925393874611018,
+    "rank_ic": 0.10261010379811392,
+    "rank_icir": 0.5066938953544606
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.38593183122156227,
+    "top_quantile_excess_return": 0.011724366267846786,
+    "top_quantile_max_drawdown": -0.013250391597524613,
+    "top_quantile_turnover": 0.3446789917946611
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "rationale": "Volume-weighted absolute minute return captures the intensity of price impact per unit of trading volume. Switching from amount to volume weighting reduces the influence of high-price stocks, potentially providing a cleaner signal of trading activity. The signal remains continuous and dense across days.",
+  "raw_metrics": {
+    "ic": -0.055539506932959,
+    "icir": -0.41351921701680733,
+    "mi": 0.05925393874611018,
+    "rank_ic": -0.10261010379811392,
+    "rank_icir": -0.5066938953544606
+  },
+  "required_columns": [
+    "close_price",
+    "volume"
+  ],
+  "run_id": "minute-mvp-loop-20260630-104357-r3",
+  "source_run_ids": [
+    "minute-mvp-loop-20260630-104357-r3"
+  ],
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "volume_weighted_mean(|close_price.ts_pct()|, volume, TradingDay)",
+  "fe_formula": "volume_weighted_mean(|close_price.ts_pct()|, volume, TradingDay)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "volume_weighted_mean(|close_price.pct_change()|, volume, TradingDay)"
+}

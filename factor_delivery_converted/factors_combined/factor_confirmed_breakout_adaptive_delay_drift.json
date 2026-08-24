@@ -1,0 +1,128 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "b_id": "B14",
+  "c_id": "C1401",
+  "calculation_fingerprint": "79942e7f206d8c6631274137edb80942e1123a19048e385ca4d14cfb7c50118e",
+  "candidate_ids": [
+    "g2_crossover_c1001_pvc_004_g1_crossover_then_mutation_c1403_b_73c1f27d"
+  ],
+  "code": "def factor_confirmed_breakout_adaptive_delay_drift(df):\n    \"\"\"Idea: A volume-confirmed 20-day breakout authorizes the market to prolong delayed adjustment to a volume-impulse price extension; without confirmation only short delays are reliable.\n\n    Logic: Series from parent1 measure the daily lagged volume impulse weighted by the price stretch above the prior 5-day high, accumulated over short (5) and long (15) windows. Parent2's volume-confirmed breakout is compressed into a 10-day authorization memory that continuously interpolates between the two drift horizons. The original absorption amplifier (dry volume and tight range) remains as a quiet-baseline modifier.\n\n    Sub-mechanism tags: delayed_adjustment, volume_impulse_lag, breakout_authorization, adaptive_delay_horizon.\n\n    Formula:\n        stretch = max(close / prior_high5 - 1, 0)\n        impulse_lag = max(vol_lag / vol_ma20_lag - 1, 0)\n        daily_drift = stretch * impulse_lag\n        short_drift = sum(daily_drift, 5)\n        long_drift = sum(daily_drift, 15)\n        auth_t = max_{i=0..9}( max(close_{t-i}/prior_high20_{t-i} - 1, 0) * max(vol_{t-i}/vol_ma20_{t-i} - 1, 0) )\n        w_t = auth_t / (1 + auth_t)\n        drift_t = short_drift_t + w_t * (long_drift_t - short_drift_t)\n        signal = drift * (1 + max(1 - vol_ma5/vol_ma60, 0) * max(1 - range10/range60, 0))\n    \"\"\"\n    df_copy = df.copy()\n\n    prior_high5 = df_copy[\"high\"].shift(1).rolling(5, min_periods=5).max()\n    stretch = (df_copy[\"close\"] / prior_high5.replace(0.0, np.nan) - 1.0).replace([np.inf, -np.inf], np.nan)\n    stretch = np.maximum(stretch.ffill().fillna(0.0), 0.0)\n\n    vol_ma20 = df_copy[\"volume\"].rolling(20, min_periods=20).mean()\n    impulse_lag = np.maximum(df_copy[\"volume\"].shift(1) / vol_ma20.shift(1).replace(0.0, np.nan) - 1.0, 0.0)\n    impulse_lag = impulse_lag.replace([np.inf, -np.inf], np.nan).ffill().fillna(0.0)\n\n    daily_drift = stretch * impulse_lag\n    short_drift = daily_drift.rolling(5, min_periods=5).sum()\n    long_drift = daily_drift.rolling(15, min_periods=5).sum()\n\n    prior_high20 = df_copy[\"high\"].rolling(20, min_periods=20).max().shift(1)\n    breakout_dist = np.maximum((df_copy[\"close\"] / prior_high20.replace(0.0, np.nan) - 1.0).replace([np.inf, -np.inf], np.nan).ffill().fillna(0.0), 0.0)\n    vol_conf = np.maximum((df_copy[\"volume\"] / vol_ma20.replace(0.0, np.nan) - 1.0).replace([np.inf, -np.inf], np.nan).ffill().fillna(0.0), 0.0)\n    authorization = (breakout_dist * vol_conf).rolling(10, min_periods=1).max()\n\n    weight = authorization / (1.0 + authorization)\n    drift = short_drift + weight * (long_drift - short_drift)\n\n    vol_ma5 = df_copy[\"volume\"].rolling(5, min_periods=5).mean()\n    vol_ma60 = df_copy[\"volume\"].rolling(60, min_periods=60).mean()\n    dry = np.maximum((1.0 - vol_ma5 / vol_ma60.replace(0.0, np.nan)).replace([np.inf, -np.inf], np.nan).ffill().fillna(0.0), 0.0)\n\n    high10 = df_copy[\"close\"].rolling(10, min_periods=10).max()\n    low10 = df_copy[\"close\"].rolling(10, min_periods=10).min()\n    high60 = df_copy[\"close\"].rolling(60, min_periods=60).max()\n    low60 = df_copy[\"close\"].rolling(60, min_periods=60).min()\n    tight = np.maximum((1.0 - (high10 - low10) / (high60 - low60).replace(0.0, np.nan)).replace([np.inf, -np.inf], np.nan).ffill().fillna(0.0), 0.0)\n\n    absorption = dry * tight\n    signal = drift * (1.0 + absorption)\n    signal = signal.replace([np.inf, -np.inf], np.nan).ffill()\n    df_copy[\"factor_confirmed_breakout_adaptive_delay_drift\"] = signal\n    return df_copy[\"factor_confirmed_breakout_adaptive_delay_drift\"]",
+  "codegen_skill": "alpha-crossover",
+  "cross_sectional_rationale": "The raw factor is a per-stock accumulation of volume-impulse extension with different price and volume scales; cs_rank makes the authorized delayed-adjustment state comparable across stocks and emphasizes relative participation-confirmed underreaction on each date.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.6242424242424243,
+        "top_quantile_annualized_excess_return": 0.002685748181784575,
+        "top_quantile_excess_return": 0.0075211275606204,
+        "top_quantile_max_drawdown": -0.16896436190304576,
+        "top_quantile_turnover": 0.062105210534750536
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_confirmed_breakout_adaptive_delay_drift",
+  "fitness_direction": -1,
+  "formula": "stretch = max(close / prior_high5 - 1, 0)\nimpulse_lag = max(vol_lag / vol_ma20_lag - 1, 0)\ndaily_drift = stretch * impulse_lag\nshort_drift = sum(daily_drift, 5)\nlong_drift = sum(daily_drift, 15)\nauth_t = max_{i=0..9}( max(close_{t-i}/prior_high20_{t-i} - 1, 0) * max(vol_{t-i}/vol_ma20_{t-i} - 1, 0) )\nw_t = auth_t / (1 + auth_t)\ndrift_t = short_drift_t + w_t * (long_drift_t - short_drift_t)\nsignal = drift * (1 + max(1 - vol_ma5/vol_ma60, 0) * max(1 - range10/range60, 0))",
+  "manual_admission": null,
+  "metrics": {
+    "ic": 0.019275874114814337,
+    "icir": 0.1958870622954306,
+    "mi": 0.17029139559173245,
+    "rank_ic": 0.03622192118003778,
+    "rank_icir": 0.34221488753768636
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6242424242424243,
+    "top_quantile_annualized_excess_return": 0.002685748181784575,
+    "top_quantile_excess_return": 0.0075211275606204,
+    "top_quantile_max_drawdown": -0.16896436190304576,
+    "top_quantile_turnover": 0.062105210534750536
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.024961131827093405,
+    "icir": 0.2732266285269342,
+    "mi": 0.01391767699753732,
+    "rank_ic": 0.03622192118003778,
+    "rank_icir": 0.34221488753768636
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.6242424242424243,
+    "top_quantile_annualized_excess_return": 0.002685748181784575,
+    "top_quantile_excess_return": 0.0075211275606204,
+    "top_quantile_max_drawdown": -0.16896436190304576,
+    "top_quantile_turnover": 0.062105210534750536
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.024961131827093405,
+    "icir": -0.2732266285269342,
+    "mi": 0.01391767699753732,
+    "rank_ic": -0.03622192118003778,
+    "rank_icir": -0.34221488753768636
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Crossover of the volume-impulse lag/price-extension drift parent and the volume-confirmed 20-day breakout parent. The lagged volume impulse is preserved as the raw delayed-adjustment engine. The volume-confirmed breakout is not averaged in; instead its recent authorization memory continuously switches the drift accumulation from a short 5-day horizon to a prolonged 15-day horizon, making the delay horizon itself state-dependent. The original absorption amplifier (dry volume and tight range) remains to keep quiet-baseline drift. This directly characterizes the B14 information gap: prolonged versus short price adjustment to volume impulses depends on whether a range expansion was participation-confirmed.",
+  "raw_metrics": {
+    "ic": -0.019275874114814337,
+    "icir": -0.1958870622954306,
+    "mi": 0.17029139559173245,
+    "rank_ic": -0.03622192118003778,
+    "rank_icir": -0.34221488753768636
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-dynamic-evo-optimized-v3-20260812-072416-r1",
+  "source_run_ids": [
+    "formal-dynamic-evo-optimized-v3-20260812-072416-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.690542246069289,
+    "pre_transform_top_quantile_excess_return": 0.0075211275606204,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.7638911407197015,
+    "transformed_top_quantile_excess_return": 0.0075211275606204
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "stretch = max(close / prior_high5 - 1, 0)\nimpulse_lag = max(vol_lag / vol_ma20_lag - 1, 0)\ndaily_drift = stretch * impulse_lag\nshort_drift = ts_sum(5, daily_drift)\nlong_drift = ts_sum(15, daily_drift)\nauth_t = max_{i=0..9}( max(close_{t-i}/prior_high20_{t-i} - 1, 0) * max(vol_{t-i}/vol_ma20_{t-i} - 1, 0) )\nw_t = auth_t / (1 + auth_t)\ndrift_t = short_drift_t + w_t * (long_drift_t - short_drift_t)\nsignal = drift * (1 + max(1 - vol_ma5/vol_ma60, 0) * max(1 - range10/range60, 0))",
+  "fe_formula": "stretch = flex_max(close / prior_high5 - 1, 0)\nimpulse_lag = flex_max(vol_lag / vol_ma20_lag - 1, 0)\ndaily_drift = stretch * impulse_lag\nshort_drift = ts_sum(5, daily_drift)\nlong_drift = ts_sum(15, daily_drift)\nauth_t = max_{i=0..9}( flex_max(close_{t-i}/prior_high20_{t-i} - 1, 0) * flex_max(vol_{t-i}/vol_ma20_{t-i} - 1, 0) )\nw_t = auth_t / (1 + auth_t)\ndrift_t = short_drift_t + w_t * (long_drift_t - short_drift_t)\nsignal = drift * (1 + flex_max(1 - vol_ma5/vol_ma60, 0) * flex_max(1 - range10/range60, 0))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "stretch = max(close / prior_high5 - 1, 0)\nimpulse_lag = max(vol_lag / vol_ma20_lag - 1, 0)\ndaily_drift = stretch * impulse_lag\nshort_drift = sum(daily_drift, 5)\nlong_drift = sum(daily_drift, 15)\nauth_t = max_{i=0..9}( max(close_{t-i}/prior_high20_{t-i} - 1, 0) * max(vol_{t-i}/vol_ma20_{t-i} - 1, 0) )\nw_t = auth_t / (1 + auth_t)\ndrift_t = short_drift_t + w_t * (long_drift_t - short_drift_t)\nsignal = drift * (1 + max(1 - vol_ma5/vol_ma60, 0) * max(1 - range10/range60, 0))"
+}

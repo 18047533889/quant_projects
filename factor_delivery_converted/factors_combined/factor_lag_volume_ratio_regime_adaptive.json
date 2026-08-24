@@ -1,0 +1,64 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "08910d77b8166dfd830b3897260128042b6cf3eee332f248fff7df33ce6095d6",
+  "candidate_ids": [
+    "g2_crossover_g1_crossover_alpha_lag_response_001_pvc_002_5b02_4098f3fc"
+  ],
+  "code": "def factor_lag_volume_ratio_regime_adaptive(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    ret = close.pct_change()\n    ret_lag = ret.shift(1)\n    avg_vol = volume.rolling(20, min_periods=20).mean()\n    vol_ratio = np.log(volume / avg_vol)\n    vol_ratio = vol_ratio.replace([np.inf, -np.inf], np.nan).fillna(0)\n    core = ret_lag * vol_ratio\n    is_high_vol, is_low_vol, vol_ratio_cont = alpha_tools.classify_volume_regime(volume, window=20)\n    mult = np.where(is_high_vol > 0, vol_ratio_cont, 1.0)\n    mult = np.where(is_low_vol > 0, 0.3, mult)\n    factor = core * mult\n    factor = factor.rolling(5, min_periods=5).mean()\n    factor.name = 'factor_lag_volume_ratio_regime_adaptive'\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_lag_volume_ratio_regime_adaptive",
+  "fitness_direction": -1,
+  "formula": "EMA5( shift1(ret) * log(vol/SMA20(vol)) * classify_volume_regime_multiplier )",
+  "metrics": {
+    "ic": 0.01810296190239729,
+    "icir": 0.19342985678051888,
+    "mi": 0.027986748204314793,
+    "rank_ic": 0.029111386653323523,
+    "rank_icir": 0.32857482459764603
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.04705196914422061,
+    "top_quantile_excess_return": 0.13726984184956614,
+    "top_quantile_max_drawdown": -0.10203576314301754,
+    "top_quantile_turnover": 0.353985331510632
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Crossover: primary mechanism from parent1 (lagged return weighted by log volume ratio) captures delayed price adjustment in abnormal volume. Lightweight modifier from parent2: volume regime multiplier using classify_volume_regime attenuates signal in low-volume noise periods (mult=0.3) and amplifies in high-volume informed periods (mult=vol_ratio_cont). This aims to preserve parent1's IC and MI while improving RankICIR via noise reduction.",
+  "raw_metrics": {
+    "ic": -0.01810296190239729,
+    "icir": -0.19342985678051888,
+    "mi": 0.027986748204314793,
+    "rank_ic": -0.029111386653323523,
+    "rank_icir": -0.32857482459764603
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260707-065408-r4",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260707-065408-r4"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema(5, shift1(ret) * log(vol/SMA20(vol)) * classify_volume_regime_multiplier)",
+  "fe_formula": "ema(5, shift1(ret) * log(vol/SMA20(vol)) * classify_volume_regime_multiplier)",
+  "lqtp_notes": "Unconverted: ['SMA20', 'shift1']",
+  "fe_notes": "Unconverted: ['SMA20', 'shift1']",
+  "source_formula": "EMA5( shift1(ret) * log(vol/SMA20(vol)) * classify_volume_regime_multiplier )"
+}

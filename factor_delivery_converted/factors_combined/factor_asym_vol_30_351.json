@@ -1,0 +1,47 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "73a918c5b2ba604db66bde8fc135122ecebd2530b675832b8902a7b2b12c1c2e",
+  "candidate_ids": [
+    "alpha-mutation-2-002"
+  ],
+  "code": "def factor_asym_vol_30(df):\n    df_copy = df.copy()\n    returns = df_copy['close'].pct_change()\n    down_returns = returns.clip(upper=0)\n    up_returns = returns.clip(lower=0)\n    down_vol = down_returns.rolling(30, min_periods=15).std(ddof=0)\n    up_vol = up_returns.rolling(30, min_periods=15).std(ddof=0)\n    asym_vol = np.log(down_vol / up_vol.replace(0, np.nan))\n    df_copy['factor_asym_vol_30'] = asym_vol\n    return df_copy['factor_asym_vol_30']",
+  "cross_sectional_rationale": "Crash risk is inherently cross-sectional; ranking emphasizes relative fragility across stocks.",
+  "cross_sectional_transform": "cs_rank",
+  "factor_name": "factor_asym_vol_30",
+  "fitness_direction": 1,
+  "formula": "log(down_vol(30)/up_vol(30))",
+  "metrics": {
+    "ic": 0.015155926419379661,
+    "icir": 0.1421483728736049,
+    "mi": 0.007761553563039314,
+    "rank_ic": 0.03785978829358128,
+    "rank_icir": 0.3134144890949806
+  },
+  "rationale": "Asymmetric volatility over 30-day window captures downside vs upside risk, simplified from the parent by removing the volume z-score which added noise. A shorter window improves responsiveness while maintaining the core risk asymmetry. Cross-sectional rank identifies stocks with greatest fragility relative to peers.",
+  "raw_metrics": {
+    "ic": 0.015155926419379661,
+    "icir": 0.1421483728736049,
+    "mi": 0.007761553563039314,
+    "rank_ic": 0.03785978829358128,
+    "rank_icir": 0.3134144890949806
+  },
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-20260624-033040-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260624-033040-r1"
+  ],
+  "lqtp_formula": "log(down_vol(30)/up_vol(30))",
+  "fe_formula": "log(down_vol(30)/up_vol(30))",
+  "lqtp_notes": "Unconverted: ['down_vol', 'up_vol']",
+  "fe_notes": "Unconverted: ['down_vol', 'up_vol']",
+  "source_formula": "log(down_vol(30)/up_vol(30))"
+}

@@ -1,0 +1,95 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "e9111709e7230d7b7690b3ff7898e13bb0bdbf91c9c9256de913e0539d12dd32",
+  "candidate_ids": [
+    "g2_mutation_amc_g0_signed_path_efficiency_cycle_f19aae3e"
+  ],
+  "code": "def factor_signed_path_efficiency_cycle_smooth_confirm_63(df):\n    \"\"\"Measure persistent directional price movement with a smoothed recent path confirmation.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    net_move = close - close.shift(126)\n    path_length = close.diff().abs().rolling(126, min_periods=126).sum()\n    efficiency = net_move / path_length.replace(0.0, np.nan)\n    recent_net_move = close - close.shift(63)\n    recent_path_length = close.diff().abs().rolling(63, min_periods=63).sum()\n    recent_efficiency = recent_net_move / recent_path_length.replace(0.0, np.nan)\n    confirmation = recent_efficiency.abs().rolling(3, min_periods=3).mean()\n    signal = efficiency * confirmation\n    df_copy[\"factor_signed_path_efficiency_cycle_smooth_confirm_63\"] = signal.replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_signed_path_efficiency_cycle_smooth_confirm_63\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.07707004156768349,
+        "top_quantile_excess_return": 0.1926565463190124,
+        "top_quantile_max_drawdown": -0.17502600419444747,
+        "top_quantile_turnover": 0.1115878637583564
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_signed_path_efficiency_cycle_smooth_confirm_63",
+  "fitness_direction": -1,
+  "formula": "[(C_t-C_{t-126}) / sum_{i=0}^{125}|Delta C_{t-i}|] * mean_{3}(|(C_t-C_{t-63}) / sum_{i=0}^{62}|Delta C_{t-i}||)",
+  "metrics": {
+    "ic": 0.023465440101170902,
+    "icir": 0.17621873654717563,
+    "mi": 0.014914998590846551,
+    "rank_ic": 0.03445832353143095,
+    "rank_icir": 0.2218735987033125
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.07707004156768349,
+    "top_quantile_excess_return": 0.1926565463190124,
+    "top_quantile_max_drawdown": -0.17502600419444747,
+    "top_quantile_turnover": 0.1115878637583564
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "Mutation of the qualified signed path-efficiency parent. The long-horizon signed efficiency remains the core economic mechanism and preserves the parent's positive cost-adjusted payoff and low-turnover profile. The recent confirmation window is extended to 63 bars and its absolute efficiency is averaged over three trailing observations, reducing sensitivity to isolated path-shape fluctuations and targeting the weaker predictive stability metrics ICIR and RankICIR without adding a new feature family.",
+  "raw_metrics": {
+    "ic": -0.023465440101170902,
+    "icir": -0.17621873654717563,
+    "mi": 0.014914998590846551,
+    "rank_ic": -0.03445832353143095,
+    "rank_icir": -0.2218735987033125
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260807-092149-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260807-092149-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "[(C_t-C_{t-126}) / sum_{i=0}^{125}|Delta C_{t-i}|] * mean_{3}(|(C_t-C_{t-63}) / sum_{i=0}^{62}|Delta C_{t-i}||)",
+  "fe_formula": "[(C_t-C_{t-126}) / sum_{i=0}^{125}|Delta C_{t-i}|] * mean_{3}(|(C_t-C_{t-63}) / sum_{i=0}^{62}|Delta C_{t-i}||)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "[(C_t-C_{t-126}) / sum_{i=0}^{125}|Delta C_{t-i}|] * mean_{3}(|(C_t-C_{t-63}) / sum_{i=0}^{62}|Delta C_{t-i}||)"
+}

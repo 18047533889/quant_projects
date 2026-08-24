@@ -99,6 +99,7 @@ class FeatureManifest:
         channel_offsets: Dict[str, int],
         channel_sizes: Dict[str, int],
         _allow_aux_channels: bool = False,
+        feature_channels: Optional[List[str]] = None,
     ):
         """
         Initialize feature manifest.
@@ -115,6 +116,16 @@ class FeatureManifest:
             Internal: when True, the manifest may carry auxiliary channels
             (missing/freshness/exposure) whose columns are not features, so
             ``total_width`` may exceed ``len(feature_ids)``.
+        feature_channels : List[str] | None
+            Ordered list of channel names (in channel-offset order) whose
+            entries are features. When provided (multi-channel layouts with
+            auxiliary channels present), the physical column index of a
+            feature is its position within its channel plus the channel
+            offset, NOT its position in ``feature_ids``. When None, the
+            feature channels are assumed to tile the axis starting at column
+            0 with no auxiliary channels ahead, so logical index == physical
+            index. Required whenever auxiliary channels come before feature
+            channels (FP-P0-12).
         """
         self._feature_ids: Tuple[str, ...] = tuple(feature_ids)
         # Snapshot-copy caller dicts before wrapping so later mutation of the
@@ -184,10 +195,66 @@ class FeatureManifest:
                 f"occupied columns {sorted(occupied)} != {list(range(max_end))}"
             )
 
-        # Build reverse lookup: feature_id -> column index
+        # Build reverse lookup: feature_id -> physical column index.
         self._feature_to_col: Dict[str, int] = {}
-        for i, fid in enumerate(self._feature_ids):
-            self._feature_to_col[fid] = i
+
+        if feature_channels is not None:
+            # FP-P0-12: with auxiliary channels (missing/freshness/exposure)
+            # present, physical column index != logical feature index. A
+            # feature channel's entries are consecutive starting at its
+            # channel offset, so fid -> offset + local position. Fail closed
+            # on any mismatch between the declared feature channels and the
+            # passed feature_ids.
+            if len(feature_channels) == 0:
+                raise InvalidContractError(
+                    "feature_channels cannot be empty when provided"
+                )
+            if len(set(feature_channels)) != len(feature_channels):
+                raise InvalidContractError(
+                    "feature_channels contains duplicate channel names"
+                )
+            for ch in feature_channels:
+                if ch not in self._channel_offsets:
+                    raise InvalidContractError(
+                        f"feature channel '{ch}' not present in channel_offsets"
+                    )
+                if self._channel_sizes[ch] <= 0:
+                    raise InvalidContractError(
+                        f"feature channel '{ch}' must have size > 0"
+                    )
+
+            # The concatenated feature ids of the feature channels (in offset
+            # order) must exactly equal the passed feature_ids. The caller
+            # guarantees ordering; the feature_ids are consumed positionally
+            # across the feature channels, so a length mismatch fails closed.
+            total = sum(self._channel_sizes[ch] for ch in feature_channels)
+            if total != len(self._feature_ids):
+                raise InvalidContractError(
+                    "feature_channels total size does not match len(feature_ids): "
+                    f"{total} != {len(self._feature_ids)}"
+                )
+
+            # Positional mapping: features are consecutive within each channel.
+            pos = 0
+            for ch in feature_channels:
+                offset = self._channel_offsets[ch]
+                size = self._channel_sizes[ch]
+                for local in range(size):
+                    if pos >= len(self._feature_ids):
+                        raise InvalidContractError("feature channel exceeds feature_ids")
+                    fid = self._feature_ids[pos]
+                    self._feature_to_col[fid] = offset + local
+                    pos += 1
+            if pos != len(self._feature_ids):
+                raise InvalidContractError(
+                    "feature_channels do not account for all feature_ids "
+                    f"({pos} != {len(self._feature_ids)})"
+                )
+        else:
+            # No auxiliary channels: feature channels tile the axis from
+            # column 0, so logical index == physical index.
+            for i, fid in enumerate(self._feature_ids):
+                self._feature_to_col[fid] = i
 
     @classmethod
     def from_channels(cls, channels: Dict[str, ChannelRef]) -> "FeatureManifest":
@@ -199,6 +266,7 @@ class FeatureManifest:
         multi-channel layouts (FP-P0-02).
         """
         feature_ids: List[str] = []
+        feature_channels: List[str] = []
         channel_offsets: Dict[str, int] = {}
         channel_sizes: Dict[str, int] = {}
         offset = 0
@@ -207,6 +275,7 @@ class FeatureManifest:
             channel_offsets[name] = offset
             channel_sizes[name] = len(fids)
             if ref.channel_type == "feature":
+                feature_channels.append(name)
                 feature_ids.extend(fids)
             offset += len(fids)
         return cls(
@@ -214,6 +283,7 @@ class FeatureManifest:
             channel_offsets,
             channel_sizes,
             _allow_aux_channels=True,
+            feature_channels=feature_channels,
         )
 
     @property
@@ -243,7 +313,12 @@ class FeatureManifest:
 
     def get_column_index(self, feature_id: str) -> int:
         """
-        Get column index for a feature ID.
+        Get the physical column index for a feature ID.
+
+        The column index is the position of the feature within its channel
+        plus the channel's offset, so it is correct even when auxiliary
+        channels (missing/freshness/exposure) precede feature channels
+        (FP-P0-12).
 
         Parameters
         ----------

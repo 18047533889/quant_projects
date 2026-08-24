@@ -1,0 +1,122 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "562d1a9db221cc9d14abbcdeee0105641d9369831e63fdcba20f08dded77f010",
+  "candidate_ids": [
+    "g2_mutation_ad_1_03bfc67b"
+  ],
+  "code": "def factor_drawdown_depth_atr_smoothed(df):\n    df_copy = df.copy()\n    peak = df_copy[\"close\"].rolling(63, min_periods=63).max()\n    dd = (df_copy[\"close\"] - peak) / peak\n    depth = (-dd)\n    high_low = df_copy[\"high\"] - df_copy[\"low\"]\n    high_close = (df_copy[\"high\"] - df_copy[\"close\"].shift(1)).abs()\n    low_close = (df_copy[\"low\"] - df_copy[\"close\"].shift(1)).abs()\n    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)\n    atr = tr.rolling(63, min_periods=63).mean()\n    normalized_depth = depth / atr.replace(0, np.nan)\n    smoothed = normalized_depth.rolling(5, min_periods=5).mean()\n    factor = smoothed.fillna(0)\n    df_copy[\"factor_drawdown_depth_atr_smoothed\"] = factor\n    return df_copy[\"factor_drawdown_depth_atr_smoothed\"]",
+  "cross_sectional_rationale": "Ranking depth/ATR cross-sectionally captures which stocks have experienced the most severe drawdowns relative to own volatility, enhancing comparability and stability.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9757575757575757,
+        "top_quantile_annualized_excess_return": 0.10265526251941459,
+        "top_quantile_excess_return": 0.2906691055650874,
+        "top_quantile_max_drawdown": -0.08294807747001232,
+        "top_quantile_turnover": 0.039050860592602925
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_drawdown_depth_atr_smoothed",
+  "fitness_direction": 1,
+  "formula": "depth = (close / rolling_max(close, 63) - 1) * -1; normalized = depth / rolling_mean(true_range, 63); smoothed = ts_mean(normalized, 5)",
+  "metrics": {
+    "ic": 0.01794572308720451,
+    "icir": 0.16452849371595626,
+    "mi": 0.008806868539949164,
+    "rank_ic": 0.03230470515120985,
+    "rank_icir": 0.24779984594552282
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.10265526251941459,
+    "top_quantile_excess_return": 0.2906691055650874,
+    "top_quantile_max_drawdown": -0.08294807747001232,
+    "top_quantile_turnover": 0.039050860592602925
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.010295324766826205,
+    "icir": 0.13079936984528648,
+    "mi": 0.006992309248139428,
+    "rank_ic": 0.03230470515120985,
+    "rank_icir": 0.24779984594552282
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.10265526251941459,
+    "top_quantile_excess_return": 0.2906691055650874,
+    "top_quantile_max_drawdown": -0.08294807747001232,
+    "top_quantile_turnover": 0.039050860592602925
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.010295324766826205,
+    "icir": 0.13079936984528648,
+    "mi": 0.006992309248139428,
+    "rank_ic": 0.03230470515120985,
+    "rank_icir": 0.24779984594552282
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "Drawdown depth normalized by ATR, smoothed with a 5-day moving average to reduce noise while preserving the core contrarian signal. The smoothing stabilizes the factor and improves predictive consistency.",
+  "raw_metrics": {
+    "ic": 0.01794572308720451,
+    "icir": 0.16452849371595626,
+    "mi": 0.008806868539949164,
+    "rank_ic": 0.03230470515120985,
+    "rank_icir": 0.24779984594552282
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260717-013716-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260717-013716-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.4281915549569848,
+    "pre_transform_top_quantile_excess_return": 0.2906691055650874,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.4713856364398426,
+    "transformed_top_quantile_excess_return": 0.2906691055650874
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "depth = (close / ts_max(63, close) - 1) * -1; normalized = depth / ts_mean(63, true_range); smoothed = ts_mean(normalized, 5)",
+  "fe_formula": "depth = (close / ts_max(63, close) - 1) * -1; normalized = depth / ts_mean(63, true_range); smoothed = ts_mean(normalized, 5)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "depth = (close / rolling_max(close, 63) - 1) * -1; normalized = depth / rolling_mean(true_range, 63); smoothed = ts_mean(normalized, 5)"
+}

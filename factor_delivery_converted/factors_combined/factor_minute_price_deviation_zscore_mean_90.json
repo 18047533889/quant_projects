@@ -1,0 +1,139 @@
+{
+  "allowed_libraries": [],
+  "calculation_fingerprint": "7cce781f9fa2a27e6bf6c66efea084fe9ef7bae081d82888637200379b6076bb",
+  "candidate_id": "g2_mutation_minute_price_deviation_zscore_71b40147",
+  "candidate_ids": [
+    "g2_mutation_minute_price_deviation_zscore_71b40147"
+  ],
+  "code": "def factor_minute_price_deviation_zscore_mean(df):\n    \"\"\"Minute DSL factor — executed via /api/calculate/minute.\"\"\"\n    raise NotImplementedError(\"minute DSL expression; use metadata.expression\")\n    # expression = \"\"\"daily_mean(m_zscore(get('close'), 390))\"\"\"\n",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "domain_agent": "minute-price-deviation",
+  "expression": "daily_mean(m_zscore(get('close'), 390))",
+  "factor_name": "factor_minute_price_deviation_zscore_mean",
+  "factor_value_contract": "minute_to_daily_panel",
+  "fitness_direction": -1,
+  "formula": "daily_mean(m_zscore(get('close'), 390))",
+  "frequency": "minute",
+  "lineage": {
+    "agent_skill": "minute-mutation",
+    "generation": 2,
+    "guidance_mode": null,
+    "operation": "mutation",
+    "parent_ids": [
+      "minute_price_deviation_zscore"
+    ]
+  },
+  "metadata": {
+    "evolution_guidance": {
+      "preserve": {
+        "passed_predictive_metrics": [
+          "ic",
+          "rank_ic",
+          "icir",
+          "rank_icir",
+          "mi"
+        ],
+        "payoff_diagnostics": {
+          "quantile_monotonicity": 0.6363636363636364,
+          "top_quantile_annualized_excess_return": -0.32712372647164734,
+          "top_quantile_excess_return": -0.0355145633220566,
+          "top_quantile_max_drawdown": -0.03781295926056205,
+          "top_quantile_turnover": 0.8763975155279502
+        },
+        "payoff_gate_passed": false
+      },
+      "primary_target": {
+        "kind": "preserve_balanced_strength"
+      },
+      "qualification_track": null
+    },
+    "execution_feedback": {
+      "days": 0,
+      "expression_hash": "9d3380eeeb1f6cb63c1b96ac81c58b57331bfb583b683e8a3200f7e8dee9a99d",
+      "reason": "probe_budget_exhausted",
+      "repairable": false,
+      "retryable": true,
+      "shape_hash": "95a3cd7d4bcd2d882a269ca26269b2047e40cfbdf6c9ba9fc02fb3191bcaaeeb",
+      "stage": "quality_probe",
+      "status": "inconclusive"
+    },
+    "expression": "daily_mean(m_zscore(get('close'), 390))",
+    "fitness_direction": -1,
+    "fitness_metrics": {
+      "ic": 0.01713489913194288,
+      "icir": 0.12414315127075681,
+      "mi": 0.014491812757373879,
+      "rank_ic": 0.03512099501322726,
+      "rank_icir": 0.21395975542921922
+    },
+    "infrastructure_recovery": true,
+    "llm_candidate_id": "minute_price_deviation_zscore_mean",
+    "payoff_diagnostics": {
+      "quantile_monotonicity": 0.6363636363636364,
+      "top_quantile_annualized_excess_return": -0.32712372647164734,
+      "top_quantile_excess_return": -0.0355145633220566,
+      "top_quantile_max_drawdown": -0.03781295926056205,
+      "top_quantile_turnover": 0.8763975155279502
+    },
+    "payoff_gate_passed": false,
+    "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+    "pre_transform_fitness_direction": 1,
+    "predictive_gate_passed": true,
+    "qualification_track": null,
+    "raw_fitness_metrics": {
+      "ic": -0.01713489913194288,
+      "icir": -0.12414315127075681,
+      "mi": 0.014491812757373879,
+      "rank_ic": -0.03512099501322726,
+      "rank_icir": -0.21395975542921922
+    },
+    "transform_gate_passed": true
+  },
+  "metrics": {
+    "ic": 0.01713489913194288,
+    "icir": 0.12414315127075681,
+    "mi": 0.014491812757373879,
+    "rank_ic": 0.03512099501322726,
+    "rank_icir": 0.21395975542921922
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6363636363636364,
+    "top_quantile_annualized_excess_return": -0.32712372647164734,
+    "top_quantile_excess_return": -0.0355145633220566,
+    "top_quantile_max_drawdown": -0.03781295926056205,
+    "top_quantile_turnover": 0.8763975155279502
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "post_transforms": null,
+  "rationale": "Changed the daily reducer from daily_last to daily_mean to capture the average intraday z-score of close prices, rather than just the final minute value. This may reduce noise from end-of-day effects.",
+  "raw_metrics": {
+    "ic": -0.01713489913194288,
+    "icir": -0.12414315127075681,
+    "mi": 0.014491812757373879,
+    "rank_ic": -0.03512099501322726,
+    "rank_icir": -0.21395975542921922
+  },
+  "required_columns": [
+    "trading_datetime",
+    "TradingDay",
+    "open_price",
+    "high_price",
+    "low_price",
+    "close_price",
+    "volume",
+    "amount"
+  ],
+  "run_id": "minute-hs300-probe-repair-20260722-034558-r1",
+  "source_run_ids": [
+    "minute-hs300-probe-repair-20260722-034558-r1"
+  ],
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "<daily_mean>(m_zscore(get('close'), 390))",
+  "fe_formula": "<daily_mean>(m_zscore(get('close'), 390))",
+  "lqtp_notes": "Unconverted: ['m_zscore']",
+  "fe_notes": "Unconverted: ['m_zscore']",
+  "source_formula": "daily_mean(m_zscore(get('close'), 390))"
+}

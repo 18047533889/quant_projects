@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "5679856ba2fdef7418117d2ff98d33fcd4e54bee7aa139e6d417e2f205e41687",
+  "candidate_ids": [
+    "trend_volume_tanh_v3"
+  ],
+  "code": "def factor_trend_volume_tanh_rank(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    open_ = df_copy['open']\n    volume = df_copy['volume']\n    pressure = (close - open_) * volume\n    rank_p = pressure.rolling(40, min_periods=40).rank(pct=True)\n    scaled_rank = (rank_p - 0.5) * 2\n    trend = close / close.shift(5) - 1\n    trend_tanh = np.tanh(trend)\n    factor = scaled_rank * trend_tanh\n    df_copy['factor_trend_volume_tanh_rank'] = factor.fillna(0)\n    return df_copy['factor_trend_volume_tanh_rank']",
+  "factor_name": "factor_trend_volume_tanh_rank",
+  "fitness_direction": -1,
+  "formula": "rank_p = rolling_rank(pressure,40); scaled_rank = (rank_p - 0.5)*2; factor = scaled_rank * tanh(trend); trend = close/shift(close,5)-1; pressure = (close-open)*volume",
+  "metrics": {
+    "ic": 0.021913477914463683,
+    "icir": 0.3006755516341616,
+    "mi": 0.03320879176206315,
+    "rank_ic": 0.01978640485825297,
+    "rank_icir": 0.26574295968966627
+  },
+  "rationale": "Mutate from trend_volume_tanh_v2 by replacing z-score normalization of pressure with time-series rank (40-day percentile) scaled to [-1,1]. This reduces outlier impact and maintains monotonic signal, targeting improved IC and RankIC while preserving the parent's strong ICIR and RankICIR consistency. The core mechanism (pressure modulated by tanh trend) and all other parameters remain unchanged.",
+  "raw_metrics": {
+    "ic": -0.021913477914463683,
+    "icir": -0.3006755516341616,
+    "mi": 0.03320879176206315,
+    "rank_ic": -0.01978640485825297,
+    "rank_icir": -0.26574295968966627
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260612-014632-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260612-014632-r1"
+  ],
+  "lqtp_formula": "rank_p = ts_rank(40, pressure); scaled_rank = (rank_p - 0.5)*2; factor = scaled_rank * tanh(trend); trend = close/delay(close, 5)-1; pressure = (close-open)*volume",
+  "fe_formula": "rank_p = ts_rank(40, pressure); scaled_rank = (rank_p - 0.5)*2; factor = scaled_rank * tanh(trend); trend = close/ts_delay(close, 5)-1; pressure = (close-open)*volume",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "rank_p = rolling_rank(pressure,40); scaled_rank = (rank_p - 0.5)*2; factor = scaled_rank * tanh(trend); trend = close/shift(close,5)-1; pressure = (close-open)*volume"
+}

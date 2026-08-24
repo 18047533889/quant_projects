@@ -1,0 +1,93 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "ed7c20b03b76f8f3752ecc2da10bd13d06ae64155d56eff6f014695880c06d96",
+  "candidate_ids": [
+    "g1_mutation_alpha_vol_asymmetry_g0_a_8a96c104"
+  ],
+  "code": "def factor_impact_weighted_asymmetry_normalized(df):\n    \"\"\"Normalize impact-weighted downside asymmetry by total impact-weighted volatility.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    safe_close = close.where(close > 0.0)\n    prev_close = safe_close.shift(1)\n    safe_volume = volume.where(volume > 0.0)\n    ret = (safe_close / prev_close - 1.0).replace([np.inf, -np.inf], np.nan)\n    dollar_volume = (prev_close * safe_volume).replace([np.inf, -np.inf], np.nan)\n    impact = (ret.abs() / dollar_volume).replace([np.inf, -np.inf], np.nan)\n    impact_base = impact.rolling(20, min_periods=10).median()\n    impact_base = impact_base.where(np.isfinite(impact_base) & (impact_base > 0.0))\n    relative_impact = (impact / impact_base).replace([np.inf, -np.inf], np.nan).clip(upper=10.0)\n    downside = ret.clip(upper=0.0).pow(2) * relative_impact\n    upside = ret.clip(lower=0.0).pow(2) * relative_impact\n    asymmetry = downside.rolling(20, min_periods=10).mean() - upside.rolling(20, min_periods=10).mean()\n    total_stress = (downside + upside).rolling(20, min_periods=10).mean()\n    df_copy[\"factor_impact_weighted_asymmetry_normalized\"] = (asymmetry / total_stress.replace(0.0, np.nan)).replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_impact_weighted_asymmetry_normalized\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": -0.00224825222875058,
+        "top_quantile_excess_return": -0.00627705083514174,
+        "top_quantile_max_drawdown": -0.16235310698334493,
+        "top_quantile_turnover": 0.19574687161040294
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_impact_weighted_asymmetry_normalized",
+  "fitness_direction": 1,
+  "formula": "[E20((r^-_t)^2 I_t) - E20((r^+_t)^2 I_t)] / E20((r^-_t)^2 I_t + (r^+_t)^2 I_t), where I_t is capped relative price impact against its trailing 20-bar median.",
+  "metrics": {
+    "ic": 0.021018308266858528,
+    "icir": 0.1890474521257302,
+    "mi": 0.008021221920280652,
+    "rank_ic": 0.040156123276564926,
+    "rank_icir": 0.31340055591628185
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": -0.00224825222875058,
+    "top_quantile_excess_return": -0.00627705083514174,
+    "top_quantile_max_drawdown": -0.16235310698334493,
+    "top_quantile_turnover": 0.19574687161040294
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Mutation preserves the parent's core economic mechanism—impact-weighted downside versus upside volatility asymmetry—while targeting its weak predictive robustness and failed payoff evidence through scale normalization. Dividing by total impact-weighted volatility bounds the signal and prevents unusually volatile or high-impact stocks from dominating the raw amplitude, without adding a second feature family or increasing turnover through a short-horizon trigger. The raw normalized signal is retained and no cross-sectional transform is applied because the parent supplied no evidence that ranking repaired the underlying mechanism.",
+  "raw_metrics": {
+    "ic": 0.021018308266858528,
+    "icir": 0.1890474521257302,
+    "mi": 0.008021221920280652,
+    "rank_ic": 0.040156123276564926,
+    "rank_icir": 0.31340055591628185
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260806-094519-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260806-094519-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "[E20((r^-_t)^2 I_t) - E20((r^+_t)^2 I_t)] / E20((r^-_t)^2 I_t + (r^+_t)^2 I_t), where I_t is capped relative price impact against its trailing 20-bar median.",
+  "fe_formula": "[E20((r^-_t)^2 I_t) - E20((r^+_t)^2 I_t)] / E20((r^-_t)^2 I_t + (r^+_t)^2 I_t), where I_t is capped relative price impact against its trailing 20-bar median.",
+  "lqtp_notes": "Unconverted: ['E20']",
+  "fe_notes": "Unconverted: ['E20']",
+  "source_formula": "[E20((r^-_t)^2 I_t) - E20((r^+_t)^2 I_t)] / E20((r^-_t)^2 I_t + (r^+_t)^2 I_t), where I_t is capped relative price impact against its trailing 20-bar median."
+}

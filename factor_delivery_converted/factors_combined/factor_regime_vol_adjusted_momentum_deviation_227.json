@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "7b08c38dedd4219fb746fbff0925bf1d782402088bbe6063716338f7a4a3969b",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_mutation_alpha_market_cycle_candidate_2_5d277_1f4ee486"
+  ],
+  "code": "def factor_regime_vol_adjusted_momentum_deviation(df):\n    df_copy = df.copy()\n    high_resvol = df_copy[\"style_gate_resvol_high\"]\n    short_mom = talib.ROC(df_copy[\"close\"], timeperiod=10)\n    long_mom = talib.ROC(df_copy[\"close\"], timeperiod=20)\n    short_vol = short_mom.rolling(20, min_periods=20).std().replace(0, np.nan)\n    long_vol = long_mom.rolling(20, min_periods=20).std().replace(0, np.nan)\n    short_mom_norm = short_mom / short_vol\n    long_mom_norm = long_mom / long_vol\n    mom = np.where(high_resvol > 0, long_mom_norm, short_mom_norm)\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    factor = mom * (vol_ratio - 1)\n    df_copy[\"factor_regime_vol_adjusted_momentum_deviation\"] = factor\n    return df_copy[\"factor_regime_vol_adjusted_momentum_deviation\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_regime_vol_adjusted_momentum_deviation",
+  "fitness_direction": -1,
+  "formula": "if resvol_high: normalized(ROC(close,20)/volatility) else normalized(ROC(close,10)/volatility) * (vol_ratio - 1)",
+  "metrics": {
+    "ic": 0.01667240680881147,
+    "icir": 0.1884292938200207,
+    "mi": 0.019199783934935155,
+    "rank_ic": 0.01528136424797944,
+    "rank_icir": 0.1954186772545863
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.027103238474399216,
+    "top_quantile_excess_return": 0.07654192180292041,
+    "top_quantile_max_drawdown": -0.09037237547549781,
+    "top_quantile_turnover": 0.5453322287065082
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Mutates the regime-gated momentum with volume deviation by normalizing momentum by its own trailing volatility to improve signal-to-noise ratio. Preserves the core regime-adaptive momentum window selection and volume confirmation via classify_volume_regime tool. The volatility adjustment targets improved RankIC and MI stability without altering the economic intuition. Parent strength: regime-adaptive momentum mechanism. Bottleneck: stability and nonlinear information.",
+  "raw_metrics": {
+    "ic": -0.01667240680881147,
+    "icir": -0.1884292938200207,
+    "mi": 0.019199783934935155,
+    "rank_ic": -0.01528136424797944,
+    "rank_icir": -0.1954186772545863
+  },
+  "required_columns": [
+    "close",
+    "volume",
+    "style_gate_resvol_high"
+  ],
+  "run_id": "formal-mvp-loop-20260629-055342-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260629-055342-r1"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "Uses style_gate_resvol_high to select momentum window length based on residual volatility regime. In high residual volatility periods, prices are noisier, so a longer lookback (20 days) with volatility normalization reduces noise; in low residual volatility periods, a shorter lookback (10 days) captures quicker trend changes.",
+  "style_gates_used": [
+    "style_gate_resvol_high"
+  ],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "if resvol_high: normalized(ts_pct(20, close)/volatility) else normalized(ts_pct(10, close)/volatility) * (vol_ratio - 1)",
+  "fe_formula": "if resvol_high: normalized(ts_pct(20, close)/volatility) else normalized(ts_pct(10, close)/volatility) * (vol_ratio - 1)",
+  "lqtp_notes": "Unconverted: ['normalized']",
+  "fe_notes": "Unconverted: ['normalized']",
+  "source_formula": "if resvol_high: normalized(ROC(close,20)/volatility) else normalized(ROC(close,10)/volatility) * (vol_ratio - 1)"
+}

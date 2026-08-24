@@ -1,0 +1,13 @@
+{
+  "run_id": "core-201601",
+  "status": "STAGED_LOCAL",
+  "started_at": "core",
+  "workdir": "/home/sunhaiwei/quantsociety/runs/status-core-201601",
+  "source_partitions": 20,
+  "resource": {
+    "rss_bytes": 180744192,
+    "available_bytes": 60319899648,
+    "total_bytes": 99119288320,
+    "worker_count": 1
+  }
+}

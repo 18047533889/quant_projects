@@ -1,0 +1,88 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "82a4c2eb01ce18ef229b17d78b80e8e0c8b92a137faddd4a2edb0662772c1c50",
+  "candidate_ids": [
+    "g2_mutation_candidate_1_7dff3718"
+  ],
+  "code": "def factor_growth_adjusted_earnings_yield_rolling(df):\n    df_copy = df.copy()\n    inv_pe = 1.0 / df_copy[\"pe_ttm\"].replace(0, np.nan)\n    growth = df_copy[\"forecast_incap_chgr_mid\"]\n    inv_pe_rank = inv_pe.rolling(60, min_periods=20).rank(pct=True)\n    growth_rank = growth.rolling(60, min_periods=20).rank(pct=True)\n    factor = inv_pe_rank * (1 + growth_rank)\n    factor.name = \"factor_growth_adjusted_earnings_yield_rolling\"\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.44242424242424244,
+        "top_quantile_annualized_excess_return": 0.01797292109381332,
+        "top_quantile_excess_return": 0.05161774834124189,
+        "top_quantile_max_drawdown": -0.08794788898047234,
+        "top_quantile_turnover": 0.3506200615152945
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_growth_adjusted_earnings_yield_rolling",
+  "fitness_direction": 1,
+  "formula": "rank_trailing(1/pe_ttm) * (1 + rank_trailing(forecast_incap_chgr_mid))",
+  "metrics": {
+    "ic": 0.00905343070404743,
+    "icir": 0.09970159935555127,
+    "mi": 0.011868548501131393,
+    "rank_ic": 0.024160738138502707,
+    "rank_icir": 0.21562362061959023
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.44242424242424244,
+    "top_quantile_annualized_excess_return": 0.01797292109381332,
+    "top_quantile_excess_return": 0.05161774834124189,
+    "top_quantile_max_drawdown": -0.08794788898047234,
+    "top_quantile_turnover": 0.3506200615152945
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Trailing 60-day rolling rank reduces NaN fraction while preserving the core growth-adjusted earnings yield mechanism that combines cheapness and forward earnings growth.",
+  "raw_metrics": {
+    "ic": 0.00905343070404743,
+    "icir": 0.09970159935555127,
+    "mi": 0.011868548501131393,
+    "rank_ic": 0.024160738138502707,
+    "rank_icir": 0.21562362061959023
+  },
+  "required_columns": [
+    "pe_ttm",
+    "forecast_incap_chgr_mid"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260719-20260720-094114-r11",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260719-20260720-094114-r11"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "rank_trailing(1/pe_ttm) * (1 + rank_trailing(forecast_incap_chgr_mid))",
+  "fe_formula": "rank_trailing(1/pe_ttm) * (1 + rank_trailing(forecast_incap_chgr_mid))",
+  "lqtp_notes": "Unconverted: ['rank_trailing']",
+  "fe_notes": "Unconverted: ['rank_trailing']",
+  "source_formula": "rank_trailing(1/pe_ttm) * (1 + rank_trailing(forecast_incap_chgr_mid))"
+}

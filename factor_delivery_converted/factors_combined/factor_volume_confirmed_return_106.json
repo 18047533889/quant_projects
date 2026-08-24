@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "4b4edbeae368326b4223f718c72a4e98945347808b882aaf094c6c813fc57e91",
+  "candidate_ids": [
+    "APVC_001_repair_0"
+  ],
+  "code": "def factor_volume_confirmed_return(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change(5)\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20).mean().replace(0, np.nan)\n    vol_rank = vol_ratio.rolling(20).rank(pct=True)\n    factor = ret * vol_rank\n    factor.name = 'factor_volume_confirmed_return'\n    return factor",
+  "factor_name": "factor_volume_confirmed_return",
+  "fitness_direction": -1,
+  "formula": "factor = ret(5) * rank_{20}(volume / sma(volume, 20))",
+  "metrics": {
+    "ic": 0.02413694783848311,
+    "icir": 0.21803444646639986,
+    "mi": 0.04333164871024575,
+    "rank_ic": 0.03437359352239337,
+    "rank_icir": 0.28729299451317847
+  },
+  "rationale": "Short-term price return confirmed by rank-transformed volume ratio: when price moves with above-average volume, the move is more coherent and likely persistent. Rank transform stabilizes the volume multiplier, improving RankIC and MI.",
+  "raw_metrics": {
+    "ic": -0.02413694783848311,
+    "icir": -0.21803444646639986,
+    "mi": 0.04333164871024575,
+    "rank_ic": -0.03437359352239337,
+    "rank_icir": -0.28729299451317847
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260615-034100-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260615-034100-r1"
+  ],
+  "lqtp_formula": "factor = (close / lag(close) - 1) * (volume / ts_mean(20, volume) - 1) * 10000",
+  "fe_formula": "factor = (close / lag(close) - 1) * (volume / ts_mean(20, volume) - 1) * 10000",
+  "lqtp_notes": "Unconverted: ['lag']",
+  "fe_notes": "Unconverted: ['lag']",
+  "source_formula": "factor = (close / lag(close) - 1) * (volume / rolling_mean(volume, 20) - 1) * 10000"
+}

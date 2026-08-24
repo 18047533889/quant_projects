@@ -1,0 +1,92 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "3e4fb94e0b1f337d4509d5a9b6915ea9c0f325154670a1be45d97f9fa085ee64",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_mutation_alpha_tail_risk_001_68dcfb9c_g1_cros_679efb17"
+  ],
+  "code": "def factor_volume_trend_stress_volscaled_v2(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    abs_ret = close.pct_change().abs()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(volume, window=20)\n    vol_trend = vol_ratio - 1.0\n    stress = abs_ret * vol_trend\n    stress_accum = stress.rolling(20, min_periods=20).sum()\n    returns = close.pct_change()\n    vol_60 = returns.rolling(60, min_periods=60).std()\n    factor = stress_accum / vol_60.replace(0.0, np.nan)\n    factor = factor.where(np.isfinite(factor), 0.0)\n    factor.name = 'factor_volume_trend_stress_volscaled_v2'\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.7818181818181819,
+        "top_quantile_annualized_excess_return": 0.0269526726029643,
+        "top_quantile_excess_return": 0.07259178154750301,
+        "top_quantile_max_drawdown": -0.10749680345619061,
+        "top_quantile_turnover": 0.12456465029669836
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_volume_trend_stress_volscaled_v2",
+  "fitness_direction": -1,
+  "formula": "sum_{i=0}^{19} (|r_{t-i}| * (V_{t-i}/EMA_{20}(V_{t-i}) - 1)) / std_{60}(r_t)",
+  "metrics": {
+    "ic": 0.010309257289738086,
+    "icir": 0.10390659002533577,
+    "mi": 0.010823453006126194,
+    "rank_ic": 0.028127549043851424,
+    "rank_icir": 0.29297769906282495
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7818181818181819,
+    "top_quantile_annualized_excess_return": 0.0269526726029643,
+    "top_quantile_excess_return": 0.07259178154750301,
+    "top_quantile_max_drawdown": -0.10749680345619061,
+    "top_quantile_turnover": 0.12456465029669836
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Mutation of the crossover parent to replace the manual volume EMA ratio with the active tool classify_volume_regime, which provides a standardized, bounded volume ratio (volume / 20-day EMA). This improves robustness and reduces parameter sensitivity while preserving the core tail risk accumulation mechanism: large absolute returns combined with elevated volume signal informed pressure. The 60-day volatility scaling remains to normalize across regimes. This mutation targets improved volume signal stability and interpretability.",
+  "raw_metrics": {
+    "ic": -0.010309257289738086,
+    "icir": -0.10390659002533577,
+    "mi": 0.010823453006126194,
+    "rank_ic": -0.028127549043851424,
+    "rank_icir": -0.29297769906282495
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260720-210415-r10",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260720-210415-r10"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "sum_{i=0}^{19} (|r_{t-i}| * (V_{t-i}/EMA_{20}(V_{t-i}) - 1)) / std_{60}(r_t)",
+  "fe_formula": "sum_{i=0}^{19} (|r_{t-i}| * (V_{t-i}/EMA_{20}(V_{t-i}) - 1)) / std_{60}(r_t)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "sum_{i=0}^{19} (|r_{t-i}| * (V_{t-i}/EMA_{20}(V_{t-i}) - 1)) / std_{60}(r_t)"
+}

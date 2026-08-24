@@ -1,0 +1,119 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "794dd6c40e3130a112fc413667cf821346dbf0fcc8b1a865d8418b36faf3ea45",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_mutation_c2_04f9c651_lev_risk_001_2fd2c76c"
+  ],
+  "code": "def factor_simplified_leverage_adjusted_book_yield(df):\n    df_copy = df.copy()\n    book_yield = 1.0 / df_copy[\"pb_lf\"].replace(0, np.nan)\n    debt_ratio = df_copy[\"debttoassets\"] / 100.0\n    adjustment = np.clip(1.0 - debt_ratio, 0.0, 1.0)\n    factor = book_yield * adjustment\n    factor = factor.fillna(0.0)\n    df_copy[\"factor_simplified_leverage_adjusted_book_yield\"] = factor\n    return df_copy[\"factor_simplified_leverage_adjusted_book_yield\"]",
+  "cross_sectional_rationale": "Book yield is a relative cheapness metric; cross-sectional rank standardizes across stocks and improves monotonicity.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.12335378074511505,
+        "top_quantile_excess_return": 0.3968020177972824,
+        "top_quantile_max_drawdown": -0.07673450719334163,
+        "top_quantile_turnover": 0.02297456172683834
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_simplified_leverage_adjusted_book_yield",
+  "fitness_direction": 1,
+  "formula": "factor = (1/pb_lf) * max(0, 1 - debttoassets/100)",
+  "metrics": {
+    "ic": 0.012582084189681637,
+    "icir": 0.15867754256595468,
+    "mi": 0.011124660740449599,
+    "rank_ic": 0.0320784374414644,
+    "rank_icir": 0.3332810413489693
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.12335378074511505,
+    "top_quantile_excess_return": 0.3968020177972824,
+    "top_quantile_max_drawdown": -0.07673450719334163,
+    "top_quantile_turnover": 0.02297456172683834
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.011574005411578577,
+    "icir": 0.14747589072263242,
+    "mi": 0.014795357143887244,
+    "rank_ic": 0.0320784374414644,
+    "rank_icir": 0.3332810413489693
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.12335378074511505,
+    "top_quantile_excess_return": 0.3968020177972824,
+    "top_quantile_max_drawdown": -0.07673450719334163,
+    "top_quantile_turnover": 0.02297456172683834
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.011574005411578577,
+    "icir": 0.14747589072263242,
+    "mi": 0.014795357143887244,
+    "rank_ic": 0.0320784374414644,
+    "rank_icir": 0.3332810413489693
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Simplification by removing the 4-period rolling mean from the parent's book yield calculation. The parent used smoothing to reduce noise, but the smoothing introduces lag and may dampen the contemporaneous IC. The raw book yield retains the same economic interpretation (cheapness relative to book value) and interacts with the leverage discount identically. This mutation targets the IC bottleneck by eliminating a lag-inducing transformation while preserving the strong rank correlation and payoff profile.",
+  "raw_metrics": {
+    "ic": 0.012582084189681637,
+    "icir": 0.15867754256595468,
+    "mi": 0.011124660740449599,
+    "rank_ic": 0.0320784374414644,
+    "rank_icir": 0.3332810413489693
+  },
+  "required_columns": [
+    "pb_lf",
+    "debttoassets"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260719-20260720-045715-r9",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260719-20260720-045715-r9"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.5392047320685319,
+    "pre_transform_top_quantile_excess_return": 0.3968020177972824,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.5477437662865197,
+    "transformed_top_quantile_excess_return": 0.3968020177972824
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "factor = (1/pb_lf) * max(0, 1 - debttoassets/100)",
+  "fe_formula": "factor = (1/pb_lf) * flex_max(0, 1 - debttoassets/100)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "factor = (1/pb_lf) * max(0, 1 - debttoassets/100)"
+}

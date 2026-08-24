@@ -1,0 +1,124 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "231df87a5e132144ee519ab41514c94ae765c0d7613ca2668ca3f04628a6e446",
+  "candidate_ids": [
+    "g1_crossover_alphacycle_001_order_imbalance_vol_confirmed_dir_20fff222"
+  ],
+  "code": "def factor_directional_imbalance_trend_gated(df):\n    df_copy = df.copy()\n    prev_close = df_copy['close'].shift(1)\n    buy = (df_copy['high'] - prev_close) * df_copy['volume']\n    sell = (prev_close - df_copy['low']) * df_copy['volume']\n    window = 20\n    net = (buy.rolling(window).sum() - sell.rolling(window).sum()) / df_copy['volume'].rolling(window).sum().replace(0, np.nan)\n    adx = pd.Series(talib.ADX(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=50), index=df_copy.index)\n    factor = np.where(adx > 25, net, net * 0.5)\n    factor = pd.Series(factor, index=df_copy.index).ewm(span=10).mean()\n    factor.name = \"factor_directional_imbalance_trend_gated\"\n    return factor",
+  "cross_sectional_rationale": "Cross-sectional rank reveals which stocks have the strongest net directional movement on each date, improving comparability across stocks with different volume scales.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.7818181818181819,
+        "top_quantile_annualized_excess_return": -0.007585744928526372,
+        "top_quantile_excess_return": -0.021048041248889593,
+        "top_quantile_max_drawdown": -0.13805787843421913,
+        "top_quantile_turnover": 0.07192990570940191
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_directional_imbalance_trend_gated",
+  "fitness_direction": -1,
+  "formula": "((high-prev_close)*volume - (prev_close-low)*volume).rolling(20).sum() / volume.rolling(20).sum(), gated by ADX(50) > 25 (full) vs *0.5, then 10-day EMA",
+  "metrics": {
+    "ic": 0.015232685292903876,
+    "icir": 0.1488703685510091,
+    "mi": 0.009380937528824518,
+    "rank_ic": 0.03840767111897104,
+    "rank_icir": 0.33369398400537914
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7818181818181819,
+    "top_quantile_annualized_excess_return": -0.007585744928526372,
+    "top_quantile_excess_return": -0.021048041248889593,
+    "top_quantile_max_drawdown": -0.13805787843421913,
+    "top_quantile_turnover": 0.07192990570940191
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.002205400586579266,
+    "icir": 0.07635083895967382,
+    "mi": 0.01891500386281031,
+    "rank_ic": 0.03840767111897104,
+    "rank_icir": 0.33369398400537914
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.7818181818181819,
+    "top_quantile_annualized_excess_return": -0.007585744928526372,
+    "top_quantile_excess_return": -0.021048041248889593,
+    "top_quantile_max_drawdown": -0.13805787843421913,
+    "top_quantile_turnover": 0.07192990570940191
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.002205400586579266,
+    "icir": -0.07635083895967382,
+    "mi": 0.01891500386281031,
+    "rank_ic": -0.03840767111897104,
+    "rank_icir": -0.33369398400537914
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Net volume-weighted directional movement is kept as primary mechanism; a lightweight ADX trend-strength gate attenuates the signal in non-trending markets to reduce false directional pressure signals, targeting the payoff weakness of the parent.",
+  "raw_metrics": {
+    "ic": -0.015232685292903876,
+    "icir": -0.1488703685510091,
+    "mi": 0.009380937528824518,
+    "rank_ic": -0.03840767111897104,
+    "rank_icir": -0.33369398400537914
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260720-053953-r6",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260720-053953-r6"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.46957289853341355,
+    "pre_transform_top_quantile_excess_return": -0.021048041248889593,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.5455856464970876,
+    "transformed_top_quantile_excess_return": -0.021048041248889593
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "((high-prev_close)*volume - (prev_close-low)*volume).<rolling>(20).ts_sum() / volume.<rolling>(20).ts_sum(), gated by ts_adx(50) > 25 (full) vs *0.5, then 10-day EMA",
+  "fe_formula": "((high-prev_close)*volume - (prev_close-low)*volume).<rolling>(20).ts_sum() / volume.<rolling>(20).ts_sum(), gated by ADX(50) > 25 (full) vs *0.5, then 10-day EMA",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "((high-prev_close)*volume - (prev_close-low)*volume).rolling(20).sum() / volume.rolling(20).sum(), gated by ADX(50) > 25 (full) vs *0.5, then 10-day EMA"
+}

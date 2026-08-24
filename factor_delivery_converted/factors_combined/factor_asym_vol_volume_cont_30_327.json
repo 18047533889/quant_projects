@@ -1,0 +1,51 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "48ab40a4a445519896df353918875231d52f7a08b8583bf61d0d065a701135a2",
+  "candidate_ids": [
+    "asym_vol_volume_cont_30_001"
+  ],
+  "code": "def factor_asym_vol_volume_cont_30(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    returns = close.pct_change()\n    up_returns = returns.copy()\n    up_returns[up_returns < 0] = 0\n    down_returns = returns.copy()\n    down_returns[down_returns > 0] = 0\n    up_vol = up_returns.rolling(30, min_periods=30).std()\n    down_vol = down_returns.abs().rolling(30, min_periods=30).std()\n    asym = np.log(down_vol / up_vol.replace(0, np.nan))\n    vol_ma = volume.rolling(20, min_periods=20).mean()\n    vol_ratio = volume / vol_ma.replace(0, np.nan)\n    factor = asym * vol_ratio\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy['factor_asym_vol_volume_cont_30'] = factor\n    return df_copy['factor_asym_vol_volume_cont_30']",
+  "cross_sectional_rationale": "Crash risk is inherently cross-sectional; ranking identifies stocks with greatest fragility relative to peers.",
+  "cross_sectional_transform": "cs_rank",
+  "factor_name": "factor_asym_vol_volume_cont_30",
+  "fitness_direction": 1,
+  "formula": "log(sigma_down(30)/sigma_up(30)) * (volume / MA_volume(20))",
+  "metrics": {
+    "ic": 0.01627439377500521,
+    "icir": 0.15026437527450137,
+    "mi": 0.011522762325242297,
+    "rank_ic": 0.04185672130561679,
+    "rank_icir": 0.34598889721260334
+  },
+  "rationale": "Continuous volume scaling replaces hard threshold to capture finer participation dynamics, enhancing nonlinear interaction while preserving asymmetric volatility as core risk signal. Targets improved IC and MI, maintains RankIC stability.",
+  "raw_metrics": {
+    "ic": 0.01627439377500521,
+    "icir": 0.15026437527450137,
+    "mi": 0.011522762325242297,
+    "rank_ic": 0.04185672130561679,
+    "rank_icir": 0.34598889721260334
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260624-033040-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260624-033040-r1"
+  ],
+  "lqtp_formula": "log(sigma_down(30)/sigma_up(30)) * (volume / <MA_volume(20)>)",
+  "fe_formula": "log(sigma_down(30)/sigma_up(30)) * (volume / <MA_volume(20)>)",
+  "lqtp_notes": "Unconverted: ['MA_volume', 'sigma_down', 'sigma_up']",
+  "fe_notes": "Unconverted: ['MA_volume', 'sigma_down', 'sigma_up']",
+  "source_formula": "log(sigma_down(30)/sigma_up(30)) * (volume / MA_volume(20))"
+}

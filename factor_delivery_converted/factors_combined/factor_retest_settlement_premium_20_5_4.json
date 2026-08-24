@@ -1,0 +1,123 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "b_id": "B3",
+  "c_id": "C101",
+  "calculation_fingerprint": "11d9814d5ca1c7306449165eebf94beb2ddd3faea3544d7dcd5f4c68be9f3e5b",
+  "candidate_ids": [
+    "g2_crossover_c301_gen0_boundary_settlement_premium_5d_20d_hig_4f88c5ab"
+  ],
+  "code": "def factor_retest_settlement_premium_20_5(df):\n    \"\"\"Idea: Genuine post-breakout level-hold requires a shallow retest of the broken 20-day high with shrinking participation, and the close settling well above the boundary relative to the day's range confirms the hold.\n\n    Logic: The boundary is the prior 20-day high shifted one day. A recent breakout state is active when any close exceeded the boundary in the prior five days. Retest depth peaks when today's low is near the boundary. Participation quality rewards volume contraction and narrow bars. The settlement premium from the first parent replaces a binary close-above flag: it measures how far the close finishes above the boundary in units of the day's range. The product of breakout state, retest depth, participation quality, and settlement premium is averaged over five days for durability.\n\n    Formula: S = mean_5( I[prior 5d breakout] * max(0, 1 - |low-B|/B) * (1/(1+V/MA20(V))) * (1/(1+(H-L)/close)) * I[close>B] * (close-B)/(H-L) ), B = rolling20(max(high)).shift(1)\n    Sub-mechanism tags: range_boundary_retest, settlement_premium, volume_contraction, breakout_hold\n    \"\"\"\n    df_copy = df.copy()\n    boundary = df_copy[\"high\"].rolling(20).max().shift(1)\n    recent_breakout = (df_copy[\"close\"] > boundary).astype(float).rolling(5).max().shift(1)\n    retest_depth = (1.0 - ((df_copy[\"low\"] - boundary) / boundary).abs()).clip(lower=0.0, upper=1.0)\n    vol_ratio = df_copy[\"volume\"] / df_copy[\"volume\"].rolling(20).mean()\n    narrow_bar = 1.0 / (1.0 + (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"])\n    participation = (1.0 / (1.0 + vol_ratio)) * narrow_bar\n    day_range = (df_copy[\"high\"] - df_copy[\"low\"]).replace(0.0, np.nan)\n    settlement_premium = pd.Series(\n        np.where(df_copy[\"close\"] > boundary, (df_copy[\"close\"] - boundary) / day_range, 0.0),\n        index=df_copy.index\n    )\n    score = recent_breakout * retest_depth * participation * settlement_premium\n    df_copy[\"factor_retest_settlement_premium_20_5\"] = pd.Series(score, index=df_copy.index).rolling(5).mean()\n    return df_copy[\"factor_retest_settlement_premium_20_5\"]",
+  "codegen_skill": "alpha-crossover",
+  "cross_sectional_rationale": "The raw score is an event-contingent retest settlement measure whose magnitude depends on boundary distance, day range, and volume scale; same-day cross-sectional rank isolates relative retest hold quality across assets, which is the economically relevant comparison for a boundary retest event.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "guidance_inconsistent": false,
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.24848484848484848,
+        "top_quantile_annualized_excess_return": 0.010240612169646335,
+        "top_quantile_excess_return": 0.028705770612077686,
+        "top_quantile_max_drawdown": -0.17597215220300777,
+        "top_quantile_turnover": 0.020740129904279075
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced",
+    "transform_applied": true
+  },
+  "factor_name": "factor_retest_settlement_premium_20_5",
+  "fitness_direction": -1,
+  "formula": "S = mean_5( I[prior 5d breakout] * max(0, 1 - |low-B|/B) * (1/(1+V/MA20(V))) * (1/(1+(H-L)/close)) * I[close>B] * (close-B)/(H-L) ), B = rolling20(max(high)).shift(1)",
+  "manual_admission": null,
+  "metrics": {
+    "ic": 0.0216965477576549,
+    "icir": 0.2828235437990537,
+    "mi": 0.17015248260321858,
+    "rank_ic": 0.026466305644745062,
+    "rank_icir": 0.36051812279297957
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.24848484848484848,
+    "top_quantile_annualized_excess_return": 0.010240612169646335,
+    "top_quantile_excess_return": 0.028705770612077686,
+    "top_quantile_max_drawdown": -0.17597215220300777,
+    "top_quantile_turnover": 0.020740129904279075
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.016758175153646374,
+    "icir": 0.27060479626083,
+    "mi": 0.006168371070343737,
+    "rank_ic": 0.026466305644745062,
+    "rank_icir": 0.36051812279297957
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.24848484848484848,
+    "top_quantile_annualized_excess_return": 0.010240612169646335,
+    "top_quantile_excess_return": 0.028705770612077686,
+    "top_quantile_max_drawdown": -0.17597215220300777,
+    "top_quantile_turnover": 0.020740129904279075
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.016758175153646374,
+    "icir": -0.27060479626083,
+    "mi": 0.006168371070343737,
+    "rank_ic": -0.026466305644745062,
+    "rank_icir": -0.36051812279297957
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Crossover between C301 boundary settlement premium and C101 retest confirmation. The settlement premium measures how decisively closes hold above the broken 20-day high, but alone it rewards overextended closes without a genuine retest. The retest confirmation mechanism supplies retest depth, recent-breakout context, and participation quality (volume contraction and narrow bars). Replacing parent C101's binary close-above flag with the settlement premium creates an interaction: a close far above the boundary only counts when the low recently tested the boundary and participation is shrinking. Smoothed over 5 days, the signal separates genuine level-hold continuation from both overextended closes and weak failed retests.",
+  "raw_metrics": {
+    "ic": -0.0216965477576549,
+    "icir": -0.2828235437990537,
+    "mi": 0.17015248260321858,
+    "rank_ic": -0.026466305644745062,
+    "rank_icir": -0.36051812279297957
+  },
+  "required_columns": [
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-routing-penalty-xalpha-light-v2-20260817-093932-r1",
+  "source_run_ids": [
+    "formal-routing-penalty-xalpha-light-v2-20260817-093932-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.6805157709225448,
+    "pre_transform_top_quantile_excess_return": 0.028705770612077686,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.8616570025976519,
+    "transformed_top_quantile_excess_return": 0.028705770612077686
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "S = ts_mean(5, I[prior 5d breakout] * max(0, 1 - |low-B|/B) * (1/(1+V/MA20(V))) * (1/(1+(H-L)/close)) * I[close>B] * (close-B)/(H-L)), B = rolling20(max(high)).delay(1)",
+  "fe_formula": "S = ts_mean(5, I[prior 5d breakout] * flex_max(0, 1 - |low-B|/B) * (1/(1+V/MA20(V))) * (1/(1+(H-L)/close)) * I[close>B] * (close-B)/(H-L)), B = rolling20(flex_max(high)).ts_delay(1)",
+  "lqtp_notes": "Textual non-executable: I[...]-notation (indicator function, use Python code); Unconverted: ['MA20', 'rolling20']",
+  "fe_notes": "Textual non-executable: I[...]-notation (indicator function, use Python code); Unconverted: ['MA20', 'rolling20']",
+  "source_formula": "S = mean_5( I[prior 5d breakout] * max(0, 1 - |low-B|/B) * (1/(1+V/MA20(V))) * (1/(1+(H-L)/close)) * I[close>B] * (close-B)/(H-L) ), B = rolling20(max(high)).shift(1)"
+}

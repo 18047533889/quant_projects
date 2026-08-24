@@ -1,0 +1,127 @@
+{
+  "allowed_libraries": [],
+  "calculation_fingerprint": "bdd87b878a114d671c5aaed59e14e0d4a1eacf3a6e09683457880ad78dccf28a",
+  "candidate_id": "minute_amount_volume_corr",
+  "candidate_ids": [
+    "minute_amount_volume_corr"
+  ],
+  "code": "def factor_amount_volume_corr(df):\n    \"\"\"Minute DSL factor — executed via /api/calculate/minute.\"\"\"\n    raise NotImplementedError(\"minute DSL expression; use metadata.expression\")\n    # expression = \"\"\"daily_corr(get('amount'), get('volume'))\"\"\"\n",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "domain_agent": "minute-amount-impact",
+  "expression": "daily_corr(get('amount'), get('volume'))",
+  "factor_name": "factor_amount_volume_corr",
+  "factor_value_contract": "minute_to_daily_panel",
+  "fitness_direction": 1,
+  "formula": "daily_corr(get('amount'), get('volume'))",
+  "frequency": "minute",
+  "lineage": {
+    "agent_skill": "minute-amount-impact",
+    "generation": 0,
+    "guidance_mode": null,
+    "operation": null,
+    "parent_ids": []
+  },
+  "metadata": {
+    "evolution_guidance": {
+      "preserve": {
+        "passed_predictive_metrics": [
+          "rank_ic",
+          "rank_icir",
+          "mi"
+        ],
+        "payoff_diagnostics": {
+          "quantile_monotonicity": 0.2727272727272727,
+          "top_quantile_annualized_excess_return": -0.26492145758289076,
+          "top_quantile_excess_return": -0.05347731725857674,
+          "top_quantile_max_drawdown": -0.07307465240859023,
+          "top_quantile_turnover": 0.6577777777777779
+        },
+        "payoff_gate_passed": true
+      },
+      "primary_target": {
+        "current": -0.02313163004623568,
+        "field": "ic",
+        "kind": "predictive_metric",
+        "normalized_gap": 3.3131630046235676,
+        "threshold": 0.01
+      },
+      "qualification_track": "payoff_first"
+    },
+    "expression": "daily_corr(get('amount'), get('volume'))",
+    "fitness_direction": 1,
+    "fitness_metrics": {
+      "ic": -0.02313163004623568,
+      "icir": -0.0950782026134374,
+      "mi": 0.051949155273591785,
+      "rank_ic": 0.05092421729202155,
+      "rank_icir": 0.18881292912404124
+    },
+    "payoff_diagnostics": {
+      "quantile_monotonicity": 0.2727272727272727,
+      "top_quantile_annualized_excess_return": -0.26492145758289076,
+      "top_quantile_excess_return": -0.05347731725857674,
+      "top_quantile_max_drawdown": -0.07307465240859023,
+      "top_quantile_turnover": 0.6577777777777779
+    },
+    "payoff_gate_passed": true,
+    "post_transforms": [],
+    "pre_transform_fitness_direction": 1,
+    "predictive_gate_passed": false,
+    "qualification_track": "payoff_first",
+    "raw_fitness_metrics": {
+      "ic": -0.02313163004623568,
+      "icir": -0.0950782026134374,
+      "mi": 0.051949155273591785,
+      "rank_ic": 0.05092421729202155,
+      "rank_icir": 0.18881292912404124
+    },
+    "transform_gate_passed": true
+  },
+  "metrics": {
+    "ic": -0.02313163004623568,
+    "icir": -0.0950782026134374,
+    "mi": 0.051949155273591785,
+    "rank_ic": 0.05092421729202155,
+    "rank_icir": 0.18881292912404124
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.2727272727272727,
+    "top_quantile_annualized_excess_return": -0.26492145758289076,
+    "top_quantile_excess_return": -0.05347731725857674,
+    "top_quantile_max_drawdown": -0.07307465240859023,
+    "top_quantile_turnover": 0.6577777777777779
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "post_transforms": [],
+  "rationale": "Correlation between traded amount and volume within a day; captures whether larger volumes are associated with higher traded values (i.e., price level).",
+  "raw_metrics": {
+    "ic": -0.02313163004623568,
+    "icir": -0.0950782026134374,
+    "mi": 0.051949155273591785,
+    "rank_ic": 0.05092421729202155,
+    "rank_icir": 0.18881292912404124
+  },
+  "required_columns": [
+    "trading_datetime",
+    "TradingDay",
+    "open_price",
+    "high_price",
+    "low_price",
+    "close_price",
+    "volume",
+    "amount"
+  ],
+  "run_id": "minute-hs300-formal-20260730-075139-r1",
+  "source_run_ids": [
+    "minute-hs300-formal-20260730-075139-r1"
+  ],
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "daily_corr(get('amount'), get('volume'))",
+  "fe_formula": "daily_corr(get('amount'), get('volume'))",
+  "lqtp_notes": "Textual non-executable: daily_corr (pandas method, not LQTP executable); Unconverted: ['daily_corr']",
+  "fe_notes": "Textual non-executable: daily_corr (pandas method, not LQTP executable); Unconverted: ['daily_corr']",
+  "source_formula": "daily_corr(get('amount'), get('volume'))"
+}

@@ -1,0 +1,125 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "ef31e0d39d7a7e37261578a5c448fe7be8a155612bbb288ccebc48dbb0d6205d",
+  "candidate_ids": [
+    "g1_crossover_then_mutation_amc_002_ava_001_05c0e38c"
+  ],
+  "code": "def factor_cyclical_pressure_drawdown_smoothed(df):\n    df_copy = df.copy()\n    high_low = df_copy[\"high\"] - df_copy[\"low\"]\n    high_pc = (df_copy[\"high\"] - df_copy[\"close\"].shift(1)).abs()\n    low_pc = (df_copy[\"low\"] - df_copy[\"close\"].shift(1)).abs()\n    true_range = pd.concat([high_low, high_pc, low_pc], axis=1).max(axis=1)\n    atr_ema = true_range.ewm(span=90, min_periods=90).mean()\n    atr_change = atr_ema / atr_ema.shift(20) - 1\n    rolling_max = df_copy[\"close\"].rolling(40, min_periods=20).max()\n    drawdown = (rolling_max - df_copy[\"close\"]) / rolling_max\n    factor = atr_change * (1 + drawdown)\n    return factor.fillna(0).rename('factor_cyclical_pressure_drawdown_smoothed')",
+  "cross_sectional_rationale": "Z-score normalizes cyclical pressure for same-date cross-sectional comparison, identifying stocks with relative expansion in volatility cycles, now conditioned on drawdown depth.",
+  "cross_sectional_transform": "cs_zscore",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.025650193553180545,
+        "top_quantile_excess_return": 0.06375949007234571,
+        "top_quantile_max_drawdown": -0.14321200207353457,
+        "top_quantile_turnover": 0.0951232310032754
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.07934735006326903,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.2065264993673098,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_cyclical_pressure_drawdown_smoothed",
+  "fitness_direction": -1,
+  "formula": "ATR_EMA90(change over 20d) * (1 + drawdown40d)",
+  "metrics": {
+    "ic": 0.01105987043169524,
+    "icir": 0.07934735006326903,
+    "mi": 0.014360509434640178,
+    "rank_ic": 0.031108781118508573,
+    "rank_icir": 0.22333886399207678
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.025650193553180545,
+    "top_quantile_excess_return": 0.06375949007234571,
+    "top_quantile_max_drawdown": -0.14321200207353457,
+    "top_quantile_turnover": 0.0951232310032754
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.011059870431695241,
+    "icir": 0.07934735006326903,
+    "mi": 0.022682500009836737,
+    "rank_ic": 0.031108781118508573,
+    "rank_icir": 0.22333886399207678
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.025650193553180545,
+    "top_quantile_excess_return": 0.06375949007234571,
+    "top_quantile_max_drawdown": -0.14321200207353457,
+    "top_quantile_turnover": 0.0951232310032754
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.011059870431695241,
+    "icir": -0.07934735006326903,
+    "mi": 0.022682500009836737,
+    "rank_ic": -0.031108781118508573,
+    "rank_icir": -0.22333886399207678
+  },
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Mutation of factor_cyclical_pressure_drawdown: replaced 90-day simple moving average of true range with an exponential moving average (span=90) to produce a smoother, more responsive ATR. This preserves the core cyclical pressure mechanism and drawdown sensitivity while potentially improving signal stability and IC through reduced noise. Cross-sectional z-score remains for same-date comparison.",
+  "raw_metrics": {
+    "ic": -0.01105987043169524,
+    "icir": -0.07934735006326903,
+    "mi": 0.014360509434640178,
+    "rank_ic": -0.031108781118508573,
+    "rank_icir": -0.22333886399207678
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260717-204608-r6",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260717-204608-r6"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.36753736561538636,
+    "pre_transform_top_quantile_excess_return": 0.06375949007234571,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.3592153750401898,
+    "transformed_top_quantile_excess_return": 0.06375949007234571
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ATR_EMA90(change over 20d) * (1 + drawdown40d)",
+  "fe_formula": "ATR_EMA90(change over 20d) * (1 + drawdown40d)",
+  "lqtp_notes": "Unconverted: ['ATR_EMA90']",
+  "fe_notes": "Unconverted: ['ATR_EMA90']",
+  "source_formula": "ATR_EMA90(change over 20d) * (1 + drawdown40d)"
+}

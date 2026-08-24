@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "77c35cd2dac1a53d0cb4a6647fabfafe509adb40b0be0497b7e59ff44cbd9cad",
+  "candidate_ids": [
+    "g2_crossover_g1_crossover_cand_002_alpha_price_volume_coheren_8c1f46d2"
+  ],
+  "code": "def factor_volume_adaptive_momentum_smoothed_v3(df):\n    df_copy = df.copy()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20, high_threshold=1.5, low_threshold=0.6)\n    ret5 = df_copy[\"close\"] / df_copy[\"close\"].shift(5) - 1\n    vol_weight = np.log(vol_ratio.clip(lower=0.1, upper=10))\n    weighted_ret = ret5 * vol_weight\n    factor = weighted_ret.ewm(span=15, min_periods=15).mean()\n    df_copy[\"factor_volume_adaptive_momentum_smoothed_v3\"] = factor\n    return df_copy[\"factor_volume_adaptive_momentum_smoothed_v3\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_volume_adaptive_momentum_smoothed_v3",
+  "fitness_direction": -1,
+  "formula": "factor = EMA( (close/shift(close,5)-1) * log(vol_ratio) , span=15)",
+  "metrics": {
+    "ic": 0.021005495247795013,
+    "icir": 0.16990801985868972,
+    "mi": 0.037546953430766195,
+    "rank_ic": 0.04460804572661798,
+    "rank_icir": 0.3705284730619902
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.08160490782620666,
+    "top_quantile_excess_return": 0.2454064253344519,
+    "top_quantile_max_drawdown": -0.1341282408536184,
+    "top_quantile_turnover": 0.14067093909265807
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Preserves the primary mechanism from parent 1: 5-day momentum weighted by log volume ratio. Borrows from parent 2 the longer EMA smoothing span of 15 to further reduce noise and improve ICIR and RankICIR stability, while retaining the core volume-adaptive momentum strength.",
+  "raw_metrics": {
+    "ic": -0.021005495247795013,
+    "icir": -0.16990801985868972,
+    "mi": 0.037546953430766195,
+    "rank_ic": -0.04460804572661798,
+    "rank_icir": -0.3705284730619902
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260707-085157-r5",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260707-085157-r5"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "factor = ema(span=15, (close/shift(close,5)-1) * log(vol_ratio)))",
+  "fe_formula": "factor = ema(span=15, (close/shift(close,5)-1) * log(vol_ratio))=15)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "factor = EMA( (close/shift(close,5)-1) * log(vol_ratio) , span=15)"
+}

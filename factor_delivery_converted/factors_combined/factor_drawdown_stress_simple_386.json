@@ -1,0 +1,98 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "06111d65ce882607cc050114f371156fcfd8b7417685fdfdc83e9d480d14b1a3",
+  "candidate_ids": [
+    "g1_crossover_then_mutation_alpha_drawdown_0_1_amc_002_de419a49"
+  ],
+  "code": "def factor_drawdown_stress_simple(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(20, min_periods=20).max()\n    drawdown = (df_copy['close'] / rolling_max) - 1.0\n    high = df_copy['high'].values.astype(np.float64)\n    low = df_copy['low'].values.astype(np.float64)\n    close = df_copy['close'].values.astype(np.float64)\n    atr = pd.Series(talib.ATR(high, low, close, timeperiod=20), index=df_copy.index)\n    atr = atr.replace(0.0, np.nan)\n    normalized_dd = drawdown / atr\n    factor = normalized_dd.rolling(5, min_periods=5).sum()\n    df_copy['factor_drawdown_stress_simple'] = factor\n    return df_copy['factor_drawdown_stress_simple']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.05540037377186491,
+        "top_quantile_excess_return": 0.1615767188956303,
+        "top_quantile_max_drawdown": -0.09727916468983566,
+        "top_quantile_turnover": 0.0747070985115343
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.009097097721066285,
+      "field": "ic",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.09029022789337152,
+      "threshold": 0.01
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_drawdown_stress_simple",
+  "fitness_direction": -1,
+  "formula": "sum(drawdown/ATR(20), 5)",
+  "metrics": {
+    "ic": 0.009097097721066285,
+    "icir": 0.11802936310397177,
+    "mi": 0.006945680661665676,
+    "rank_ic": 0.028273021107552927,
+    "rank_icir": 0.21605636273253556
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.05540037377186491,
+    "top_quantile_excess_return": 0.1615767188956303,
+    "top_quantile_max_drawdown": -0.09727916468983566,
+    "top_quantile_turnover": 0.0747070985115343
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Simplified version of parent: removes the skew-weight modifier to focus purely on volatility-adjusted drawdown stress. The parent's skew weight added complexity without clear rank IC benefit; stripping it may improve rank stability while preserving the core payoff mechanism from the original qualified drawdown factor.",
+  "raw_metrics": {
+    "ic": -0.009097097721066285,
+    "icir": -0.11802936310397177,
+    "mi": 0.006945680661665676,
+    "rank_ic": -0.028273021107552927,
+    "rank_icir": -0.21605636273253556
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260720-002200-r4",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260720-002200-r4"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ts_sum(5, drawdown/ATR(20)) 5)",
+  "fe_formula": "ts_sum(5, drawdown/ATR(20))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "sum(drawdown/ATR(20), 5)"
+}

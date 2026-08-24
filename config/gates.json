@@ -48,7 +48,7 @@
     },
     {
       "name": "FRESH_WHEEL",
-      "description": "Package installs from a freshly built wheel and passes import/smoke.",
+      "description": "Package installs from a freshly built wheel and passes import/smoke. Superseded at release level by the FRESH_WHEEL_MATRIX gate (matrix across all release packages).",
       "default_status": "NOT_RUN"
     },
     {
@@ -74,6 +74,31 @@
     {
       "name": "ASHARE_REAL_DATA_SHADOW",
       "description": "Real-data shadow: A-share semantics reproduced against REAL pinned parquet rows (data/a_share/lqtp_data mirror). Requires actual local A-share data; any skip/NEEDS-WIRING/synthetic-only evidence is NOT a pass.",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "SOURCE_AUTHORITY",
+      "description": "Every source snapshot / manifest input is bound to a verifiable authority (real git SHA, real artifact digest), never a fabricated string.",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "SUPPLY_CHAIN",
+      "description": "The dependency/install supply chain is pinned and reproducible (dependency lock hash, wheel provenance).",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "SUBMODULE_REACHABILITY",
+      "description": "Any declared submodule pin is reachable/present in this checkout. With no submodules declared there is nothing pinned to prove -> NOT_RUN (never PASS).",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "FRESH_WHEEL_MATRIX",
+      "description": "Matrix of fresh-wheel clean-install smoke checks across the release packages (supersedes the single-package FRESH_WHEEL gate).",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "EVIDENCE_CURRENT",
+      "description": "evidence/current.py --check reports every artifact CURRENT (bound inputs == live inputs, executed_at present).",
       "default_status": "NOT_RUN"
     }
   ]

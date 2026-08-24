@@ -83,7 +83,7 @@ include = [
     "factor_engine.api*",
     "factor_engine.backend*",
     "factor_engine.cache*",
-    "factor_engine.cleaned_operators*",
+    "factor_engine.cleaned_operators",
     "factor_engine.docs*",
     "factor_engine.evidence*",
     "factor_engine.expr*",

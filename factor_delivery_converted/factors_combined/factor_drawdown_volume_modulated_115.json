@@ -1,0 +1,42 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "ebee3dcc6d53540d68d576ec988c39d1395252df59cfb07288f6f08aad43c3cb",
+  "candidate_ids": [
+    "drawdown-volume-mod-gen2-1"
+  ],
+  "code": "def factor_drawdown_volume_modulated(df):\n    df_copy = df.copy()\n    rolling_high = df_copy[\"close\"].rolling(window=252, min_periods=20).max()\n    drawdown = (rolling_high - df_copy[\"close\"]) / rolling_high\n    new_peak = df_copy[\"close\"] >= rolling_high\n    group = new_peak.cumsum()\n    duration = new_peak.groupby(group).cumcount()\n    recovery = -drawdown.diff(5)\n    vol_ma = df_copy[\"volume\"].rolling(20).mean()\n    vol_ratio = df_copy[\"volume\"] / vol_ma\n    rank_dd = drawdown.rank(pct=True)\n    rank_dur = duration.rank(pct=True)\n    rank_rec = recovery.rank(pct=True)\n    rank_vol = vol_ratio.rank(pct=True)\n    drawdown_score = (rank_dd + rank_dur + rank_rec) / 3.0\n    df_copy[\"factor_drawdown_volume_modulated\"] = drawdown_score * (1 + rank_vol)\n    return df_copy[\"factor_drawdown_volume_modulated\"]",
+  "factor_name": "factor_drawdown_volume_modulated",
+  "fitness_direction": 1,
+  "formula": "(R(DD)+R(Dur)+R(Rec))/3 * (1+R(V/MA20))",
+  "metrics": {
+    "ic": 0.04684966644895256,
+    "icir": 0.5260965206310151,
+    "mi": 0.007933212058631511,
+    "rank_ic": 0.056730592398142626,
+    "rank_icir": 0.5666811267109186
+  },
+  "rationale": "Preserves the rank-normalized drawdown geometry strength (high RankICIR) while introducing a multiplicative modulation with volume ratio to amplify signal when trading activity confirms drawdown structure. This targets improvement in IC and MI by capturing nonlinear volume-price interactions without sacrificing rank stability.",
+  "raw_metrics": null,
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260609-093208-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260609-093208-r2"
+  ],
+  "lqtp_formula": "(R(DD)+R(Dur)+R(Rec))/3 * (1+R(V/MA20))",
+  "fe_formula": "(R(DD)+R(Dur)+R(Rec))/3 * (1+R(V/MA20))",
+  "lqtp_notes": "Textual non-executable: R(...)-notation (rank, use Python code); Unconverted: ['R']",
+  "fe_notes": "Textual non-executable: R(...)-notation (rank, use Python code); Unconverted: ['R']",
+  "source_formula": "(R(DD)+R(Dur)+R(Rec))/3 * (1+R(V/MA20))"
+}

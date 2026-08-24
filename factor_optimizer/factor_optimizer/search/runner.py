@@ -25,6 +25,12 @@ from factor_optimizer.contracts.splits import (
     SplitPlan,
     validate_split_plan,
 )
+from factor_optimizer.contracts.validator import TrialValidatorIdentity
+from factor_optimizer.data_capabilities import (
+    DataScope,
+    TestDataCapability,
+    build_data_capabilities,
+)
 from factor_optimizer.search.multifidelity import FidelityTier, MultiFidelityScheduler
 from factor_optimizer.search.plateau import PlateauConfig, PlateauDetector
 from factor_optimizer.search.strategies import SearchStrategy
@@ -817,6 +823,19 @@ class SearchRunner:
     ):
         if config.execution_mode is ExecutionMode.PRODUCTION:
             require_production_capability()
+            if trial_validator is None:
+                raise TypeError(
+                    "production search requires a trial_validator with a "
+                    "TrialValidatorIdentity; refusing to evaluate without a "
+                    "grammar/legality validator"
+                )
+            identity = getattr(trial_validator, "identity", None)
+            if not isinstance(identity, TrialValidatorIdentity):
+                raise TypeError(
+                    "production search requires a trial_validator exposing an "
+                    "identity that is a TrialValidatorIdentity; got "
+                    f"{type(identity).__name__ if identity is not None else None!r}"
+                )
         if not isinstance(evaluation_fn, EvaluationProtocol):
             if config.execution_mode is ExecutionMode.PRODUCTION:
                 raise TypeError(
@@ -855,11 +874,20 @@ class SearchRunner:
                 )
         # Lazily-built default PlateauDetector (package semantics).
         self._default_plateau_detector: Optional[PlateauDetector] = None
+        # P0-10: capability-only data boundary.  The runner builds one
+        # authorization per scope from the protocol's split plan; the train and
+        # validation contexts receive ONLY their scope capability, so the
+        # search-process object graph never contains a TestDataCapability or
+        # any test payload.
+        self._data_capabilities = None
         if isinstance(evaluation_fn, EvaluationProtocol):
             # Record the search-time data boundary so freeze_for_sealed_test
             # can reject sealed plans that overlap search data.
             object.__setattr__(
                 self.config, "_search_split_plan", evaluation_fn.split_plan
+            )
+            self._data_capabilities = build_data_capabilities(
+                evaluation_fn.split_plan
             )
 
     def run(self, session_id: str) -> SearchSession:
@@ -1111,10 +1139,39 @@ class SearchRunner:
                 return {"is_legal": False, "errors": [f"validator error: {exc}"]}
             if not isinstance(result, dict) or not isinstance(result.get("is_legal"), bool):
                 return {"is_legal": False, "errors": ["validator must return boolean is_legal"]}
+            # P0-11 audit trail: pin the validator identity onto the legality
+            # result so every admission decision is attributable.
+            identity = getattr(self.trial_validator, "identity", None)
+            if isinstance(identity, TrialValidatorIdentity):
+                result["validator_id"] = identity.validator_id
+                result["validator_version"] = identity.validator_version
+                result["implementation_hash"] = identity.implementation_hash
+            # P0-11: a research_only legality verdict is not acceptable in
+            # production; the trial must not proceed.
+            if (
+                self.config.execution_mode is ExecutionMode.PRODUCTION
+                and result.get("research_only") is True
+            ):
+                return {
+                    "is_legal": False,
+                    "errors": [
+                        "research_only legality is not acceptable in production"
+                    ],
+                    "research_only": False,
+                    "validator_id": result.get("validator_id"),
+                    "validator_version": result.get("validator_version"),
+                    "implementation_hash": result.get("implementation_hash"),
+                }
             return result
         if self.trial_validator is None:
             # Structural validation is the only honest fallback; it is not a
             # production legality claim and callers should supply the grammar validator.
+            if self.config.execution_mode is ExecutionMode.PRODUCTION:
+                return {
+                    "is_legal": False,
+                    "errors": ["production requires a trial_validator"],
+                    "research_only": False,
+                }
             return {
                 "is_legal": not errors,
                 "checks_passed": ["trial_structure"] if not errors else [],

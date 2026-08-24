@@ -1,0 +1,126 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "1764fdd622dc41ce9a020660626a17e37b481cc7384c0fc2b7b2faa9579b1e9c",
+  "candidate_ids": [
+    "alpha-market-cycle-gen0-2",
+    "g2_crossover_then_mutation_alpha_market_cycle_gen0_2_g1_mutation_ad_1_68851_05c6cd81"
+  ],
+  "code": "def factor_market_phase_atr_expansion(df):\n    df_copy = df.copy()\n    import talib\n    true_range = talib.TRANGE(df_copy['high'], df_copy['low'], df_copy['close'])\n    atr = true_range.rolling(20).mean()\n    atr_long_mean = atr.rolling(120).mean()\n    signal = atr / atr_long_mean\n    signal = signal.fillna(1.0)\n    signal.name = 'factor_market_phase_atr_expansion'\n    return signal",
+  "cross_sectional_rationale": "Volatility expansion ratio captures relative phase across stocks; cross-sectional rank improves monotonic ordering and reduces sector bias.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.06343543286837927,
+        "top_quantile_excess_return": 0.15347443218170742,
+        "top_quantile_max_drawdown": -0.13049354514182754,
+        "top_quantile_turnover": 0.07958736097647105
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.0891187382942621,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.10881261705737902,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_market_phase_atr_expansion",
+  "fitness_direction": -1,
+  "formula": "ATR(20) / SMA(ATR(20), 120)",
+  "metrics": {
+    "ic": 0.011148311105748553,
+    "icir": 0.0891187382942621,
+    "mi": 0.013589543307337415,
+    "rank_ic": 0.032717510263447776,
+    "rank_icir": 0.23393957505531057
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.06343543286837927,
+    "top_quantile_excess_return": 0.15347443218170742,
+    "top_quantile_max_drawdown": -0.13049354514182754,
+    "top_quantile_turnover": 0.07958736097647105
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.013537728746070279,
+    "icir": 0.09122394245247817,
+    "mi": 0.02115448334206782,
+    "rank_ic": 0.032717510263447776,
+    "rank_icir": 0.23393957505531057
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.06343543286837927,
+    "top_quantile_excess_return": 0.15347443218170742,
+    "top_quantile_max_drawdown": -0.13049354514182754,
+    "top_quantile_turnover": 0.07958736097647105
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.013537728746070279,
+    "icir": -0.09122394245247817,
+    "mi": 0.02115448334206782,
+    "rank_ic": -0.032717510263447776,
+    "rank_icir": -0.23393957505531057
+  },
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Market phase detection via volatility expansion: ratio of current average true range to its long-term moving average. High ratio indicates volatile/late-cycle phase; low ratio indicates calm/early-cycle phase. This captures cyclical state transitions in volatility regime.",
+  "raw_metrics": {
+    "ic": -0.011148311105748553,
+    "icir": -0.0891187382942621,
+    "mi": 0.013589543307337415,
+    "rank_ic": -0.032717510263447776,
+    "rank_icir": -0.23393957505531057
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260717-013716-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260717-013716-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.39257323985937465,
+    "pre_transform_top_quantile_excess_return": 0.15347443218170742,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.3805136780261064,
+    "transformed_top_quantile_excess_return": 0.15347443218170742
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ts_atr(20) / ts_mean(120, ATR(20))20)",
+  "fe_formula": "ATR(20) / ts_mean(120, ATR(20))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "ATR(20) / SMA(ATR(20), 120)"
+}

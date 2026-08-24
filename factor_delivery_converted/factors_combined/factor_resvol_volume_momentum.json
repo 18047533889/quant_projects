@@ -1,0 +1,71 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "talib",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "f4baf0056541b605e4dbeaac943ee020bbb36df15131923a9b749b3e245de49a",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_alpha_market_cycle_candidate_2_alph_b329ad73"
+  ],
+  "code": "def factor_resvol_volume_momentum(df):\n    df_copy = df.copy()\n    high_resvol = df_copy[\"style_gate_resvol_high\"] > 0\n    fast_mom = pd.Series(talib.ROC(df_copy[\"close\"], timeperiod=5), index=df_copy.index)\n    slow_mom = pd.Series(talib.ROC(df_copy[\"close\"], timeperiod=20), index=df_copy.index)\n    raw_mom = np.where(high_resvol, slow_mom, fast_mom)\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20, high_threshold=1.5, low_threshold=0.6)\n    factor = raw_mom * vol_ratio\n    return pd.Series(factor, index=df_copy.index, name='factor_resvol_volume_momentum')",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_resvol_volume_momentum",
+  "fitness_direction": -1,
+  "formula": "If style_gate_resvol_high then ROC20 else ROC5, multiplied by volume ratio from classify_volume_regime",
+  "metrics": {
+    "ic": 0.030309544370279308,
+    "icir": 0.23808179040897529,
+    "mi": 0.05065345787369857,
+    "rank_ic": 0.03166763412338858,
+    "rank_icir": 0.2196300739557912
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.09554133970905476,
+    "top_quantile_excess_return": 0.29738179742990734,
+    "top_quantile_max_drawdown": -0.14568555780217873,
+    "top_quantile_turnover": 0.3054729575774094
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Combines residual volatility regime gating with volume confirmation for momentum. In high residual volatility regimes, a longer momentum window (20-day ROC) reduces noise; otherwise, a shorter window (5-day ROC) captures faster trends. Volume ratio from the classify_volume_regime tool confirms the signal, preserving the parent's core volume-confirmed momentum intuition while adding regime adaptation via an external style gate.",
+  "raw_metrics": {
+    "ic": -0.030309544370279308,
+    "icir": -0.23808179040897529,
+    "mi": 0.05065345787369857,
+    "rank_ic": -0.03166763412338858,
+    "rank_icir": -0.2196300739557912
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "style_gate_resvol_high"
+  ],
+  "run_id": "formal-mvp-loop-20260629-055342-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260629-055342-r1"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "Use style_gate_resvol_high to select momentum lookback length. In high residual volatility regimes, price noise is elevated, so a longer lookback (20 days) provides a smoother signal; in low volatility regimes, a shorter lookback (5 days) captures faster trend changes. This adapts the momentum horizon to market noise conditions.",
+  "style_gates_used": [
+    "style_gate_resvol_high"
+  ],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "If style_gate_resvol_high then ROC20 else ROC5, multiplied by volume ratio from classify_volume_regime",
+  "fe_formula": "If style_gate_resvol_high then ROC20 else ROC5, multiplied by volume ratio from classify_volume_regime",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "If style_gate_resvol_high then ROC20 else ROC5, multiplied by volume ratio from classify_volume_regime"
+}

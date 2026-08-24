@@ -1,0 +1,51 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "0ce26bbe68d6912480c7cacf2aec250acb0e66c3d08f367929b5ebd199e50404",
+  "candidate_ids": [
+    "SIMPLE-MUT-001"
+  ],
+  "code": "def factor_simplified_robust_volume_momentum(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change(10)\n    vol_median = df_copy['volume'].rolling(20).median()\n    vol_mad = (df_copy['volume'] - vol_median).abs().rolling(20).median()\n    vol_robust_z = (df_copy['volume'] - vol_median) / vol_mad.replace(0, np.nan)\n    vol_robust_z = vol_robust_z.clip(-3, 3)\n    factor = ret * vol_robust_z\n    factor.name = \"factor_simplified_robust_volume_momentum\"\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_simplified_robust_volume_momentum",
+  "fitness_direction": -1,
+  "formula": "factor = close_10d_return * robust_zscore(volume, 20d)",
+  "metrics": {
+    "ic": 0.024789299719938773,
+    "icir": 0.22019265292444912,
+    "mi": 0.03618915244668308,
+    "rank_ic": 0.02649082116593425,
+    "rank_icir": 0.2893295595980581
+  },
+  "rationale": "Mutation of CROSS-002: preserves the core robust volume momentum mechanism (10-day return multiplied by robust z-score of volume relative to 20-day median/MAD). Removes the downside stress dampener to simplify and focus on the primary price-volume coherence signal. This targets improved interpretability and metric stability by reducing unnecessary complexity. The parent strength of robust volume z-score for outlier resistance is preserved.",
+  "raw_metrics": {
+    "ic": -0.024789299719938773,
+    "icir": -0.22019265292444912,
+    "mi": 0.03618915244668308,
+    "rank_ic": -0.02649082116593425,
+    "rank_icir": -0.2893295595980581
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260622-103436-r4",
+  "source_run_ids": [
+    "formal-mvp-loop-20260622-103436-r4"
+  ],
+  "lqtp_formula": "factor = close_10d_return * cs_zscore(volume, 20d)",
+  "fe_formula": "factor = close_10d_return * zscore(volume, 20d)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "factor = close_10d_return * robust_zscore(volume, 20d)"
+}

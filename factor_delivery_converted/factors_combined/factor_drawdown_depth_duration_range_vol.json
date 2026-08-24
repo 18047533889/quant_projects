@@ -1,0 +1,97 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "82cdfec1b1cc0cdea26d533145fbc5b8380b15c07153d4ce85a15fedb7a7cc71",
+  "candidate_ids": [
+    "g2_crossover_g1_crossover_then_mutation_drawdown_001_fractal_ff8aa456"
+  ],
+  "code": "def factor_drawdown_depth_duration_range_vol(df):\n    df_copy = df.copy()\n    high20 = df_copy['close'].rolling(20).max()\n    depth = (high20 - df_copy['close']) / high20.replace(0.0, np.nan)\n    in_dd = df_copy['close'] < high20\n    duration = in_dd.rolling(20, min_periods=20).sum() / 20.0\n    range_ = df_copy['high'] - df_copy['low']\n    avg_short = range_.rolling(5, min_periods=5).mean()\n    avg_long = range_.rolling(30, min_periods=30).mean()\n    range_ratio = avg_short / avg_long.replace(0.0, np.nan)\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean().replace(0.0, np.nan)\n    factor = (1.0 - depth) * (1.0 - duration) * range_ratio * vol_ratio\n    df_copy['factor_drawdown_depth_duration_range_vol'] = factor\n    return df_copy['factor_drawdown_depth_duration_range_vol']",
+  "cross_sectional_rationale": "Cross-sectional rank standardizes the raw composite score, enabling relative comparison of drawdown geometry and volume confirmation across assets on the same date, which stabilizes rank-order predictive power (parent strength).",
+  "cross_sectional_transform": "cs_rank",
+  "factor_name": "factor_drawdown_depth_duration_range_vol",
+  "fitness_direction": -1,
+  "formula": "(1 - depth_20) * (1 - duration_20) * (SMA(range,5)/SMA(range,30)) * (volume/SMA(volume,20))",
+  "metrics": {
+    "ic": 0.013232173775409643,
+    "icir": 0.11482940031760136,
+    "mi": 0.1098673574573743,
+    "rank_ic": 0.0354145403092245,
+    "rank_icir": 0.2691772927393867
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9151515151515152,
+    "top_quantile_annualized_excess_return": 0.06547204985833388,
+    "top_quantile_excess_return": 0.19113025766657366,
+    "top_quantile_max_drawdown": -0.17691691558775413,
+    "top_quantile_turnover": 0.08561656345653278
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.022421267843394474,
+    "icir": 0.19509231997019347,
+    "mi": 0.01432410776123838,
+    "rank_ic": 0.0354145403092245,
+    "rank_icir": 0.2691772927393867
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9151515151515152,
+    "top_quantile_annualized_excess_return": 0.06547204985833388,
+    "top_quantile_excess_return": 0.19113025766657366,
+    "top_quantile_max_drawdown": -0.17691691558775413,
+    "top_quantile_turnover": 0.08561656345653278
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.022421267843394474,
+    "icir": -0.19509231997019347,
+    "mi": 0.01432410776123838,
+    "rank_ic": -0.0354145403092245,
+    "rank_icir": -0.2691772927393867
+  },
+  "rationale": "Crossover preserves the primary drawdown geometry mechanism from the qualified parent (depth, duration, range ratio) which provides strong RankIC and RankICIR. The lightweight volume ratio from the secondary parent adds a volume confirmation dimension to improve linear IC and ICIR, targeting the bottleneck of low IC. The composite signal is high when drawdowns are shallow, short, and accompanied by elevated volume (panic-driven reversals), and low when drawdowns are deep, prolonged, or occur on low volume. Cross-sectional rank standardizes the raw composite for consistent ordinal comparison across assets.",
+  "raw_metrics": {
+    "ic": -0.013232173775409643,
+    "icir": -0.11482940031760136,
+    "mi": 0.1098673574573743,
+    "rank_ic": -0.0354145403092245,
+    "rank_icir": -0.2691772927393867
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260710-120043-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260710-120043-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.5364295286234375,
+    "pre_transform_top_quantile_excess_return": 0.19113025766657366,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.5425207645989965,
+    "transformed_top_quantile_excess_return": 0.19113025766657366
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(1 - depth_20) * (1 - duration_20) * (ts_mean(5, range)/ts_mean(30, range)) * (volume/ts_mean(20, volume))",
+  "fe_formula": "(1 - depth_20) * (1 - duration_20) * (ts_mean(5, range)/ts_mean(30, range)) * (volume/ts_mean(20, volume))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(1 - depth_20) * (1 - duration_20) * (SMA(range,5)/SMA(range,30)) * (volume/SMA(volume,20))"
+}

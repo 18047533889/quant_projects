@@ -1,0 +1,125 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "d429441af7df13d32c73a725e2f7134b0b60ea14d47c6772c95e483f438e3a39",
+  "candidate_ids": [
+    "g2_crossover_mc_cycle_pos_1_alpha_herding_2_c665e7b5"
+  ],
+  "code": "def factor_trend_directional_confidence(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    # primary: trend cycle position\n    sma200 = close.rolling(200, min_periods=200).mean()\n    tr = pd.concat([high - low, (high - close.shift(1)).abs(), (low - close.shift(1)).abs()], axis=1).max(axis=1)\n    atr20 = tr.rolling(20, min_periods=20).mean()\n    position = (close - sma200) / atr20.replace(0, np.nan)\n    # lightweight modifier: directional efficiency\n    ret_abs = close.pct_change().abs()\n    range_ = high - low\n    range_ = range_.clip(lower=1e-8)\n    efficiency = ret_abs / range_\n    eff_smooth = efficiency.rolling(10).median()\n    factor = position * eff_smooth\n    df_copy[\"factor_trend_directional_confidence\"] = factor\n    return df_copy[\"factor_trend_directional_confidence\"]",
+  "cross_sectional_rationale": "Cross-sectional rank helps identify stocks that are most overextended or oversold relative to their long-term trend, improving comparability across assets for cycle-based mean-reversion.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9515151515151515,
+        "top_quantile_annualized_excess_return": 0.06650412113957116,
+        "top_quantile_excess_return": 0.14355034022498758,
+        "top_quantile_max_drawdown": -0.10239825766204491,
+        "top_quantile_turnover": 0.09872376021354487
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.09207980930067126,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.07920190699328741,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_trend_directional_confidence",
+  "fitness_direction": -1,
+  "formula": "(close - SMA(close,200)) / ATR(20) * median10(|close_pct_change| / (high-low))",
+  "metrics": {
+    "ic": 0.012178966925904762,
+    "icir": 0.09207980930067126,
+    "mi": 0.007516854589801447,
+    "rank_ic": 0.02783834981666514,
+    "rank_icir": 0.17860001577876672
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": 0.06650412113957116,
+    "top_quantile_excess_return": 0.14355034022498758,
+    "top_quantile_max_drawdown": -0.10239825766204491,
+    "top_quantile_turnover": 0.09872376021354487
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.0012701231357818135,
+    "icir": 0.017560890417506716,
+    "mi": 0.014577353009958216,
+    "rank_ic": 0.02783834981666514,
+    "rank_icir": 0.17860001577876672
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": 0.06650412113957116,
+    "top_quantile_excess_return": 0.14355034022498758,
+    "top_quantile_max_drawdown": -0.10239825766204491,
+    "top_quantile_turnover": 0.09872376021354487
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.0012701231357818135,
+    "icir": -0.017560890417506716,
+    "mi": 0.014577353009958216,
+    "rank_ic": -0.02783834981666514,
+    "rank_icir": -0.17860001577876672
+  },
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Long-term trend cycle position weighted by directional efficiency. The trend deviation from SMA200 normalized by ATR20 captures overextended/oversold conditions. Multiplying by directional efficiency (median of absolute close return / intraday range over 10 days) amplifies the signal when price moves are directionally strong and attenuates it on noisy, range-bound days. Cross-sectional rank identifies stocks with the most reliable trend extremes.",
+  "raw_metrics": {
+    "ic": -0.012178966925904762,
+    "icir": -0.09207980930067126,
+    "mi": 0.007516854589801447,
+    "rank_ic": -0.02783834981666514,
+    "rank_icir": -0.17860001577876672
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260715-060858-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260715-060858-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.2398467321586786,
+    "pre_transform_top_quantile_excess_return": 0.14355034022498758,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.31821399641180936,
+    "transformed_top_quantile_excess_return": 0.14355034022498758
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(close - ts_mean(200, close)) / ts_atr(20) * ts_median(10, |close_pct_change| / (high-low))",
+  "fe_formula": "(close - ts_mean(200, close)) / ATR(20) * ts_median(10, |close_pct_change| / (high-low))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(close - SMA(close,200)) / ATR(20) * median10(|close_pct_change| / (high-low))"
+}

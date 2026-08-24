@@ -1,0 +1,45 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "110f58eeb4160625d7214807ca455ea1345cd22e42288c2a43f51eb7eb249520",
+  "candidate_ids": [
+    "mut_vol_weighted_shape_dir_001"
+  ],
+  "code": "def factor_mut_vol_weighted_shape_dir(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    sign_ret = np.sign(ret)\n    net_dir = sign_ret.rolling(5, min_periods=5).sum()\n    mom = df_copy[\"close\"] / df_copy[\"close\"].shift(20) - 1\n    direction = net_dir * mom\n    vol_20_mean = df_copy[\"volume\"].rolling(20).mean()\n    vol_20_std = df_copy[\"volume\"].rolling(20).std(ddof=1)\n    vol_z = (df_copy[\"volume\"] - vol_20_mean) / vol_20_std.replace(0.0, np.nan)\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    range_20_mean = range_.rolling(20).mean()\n    range_ratio = range_ / range_20_mean.replace(0.0, np.nan)\n    rank_vol_z = vol_z.rolling(20, min_periods=10).rank(pct=True)\n    rank_range_ratio = range_ratio.rolling(20, min_periods=10).rank(pct=True)\n    rank_conf = rank_vol_z * rank_range_ratio\n    raw_conf = vol_z * range_ratio\n    tanh_conf = np.tanh(raw_conf)\n    combined_conf = rank_conf + 0.5 * tanh_conf\n    vol_ratio = df_copy[\"volume\"] / vol_20_mean.replace(0.0, np.nan)\n    body_top = np.maximum(df_copy[\"open\"], df_copy[\"close\"])\n    body_bottom = np.minimum(df_copy[\"open\"], df_copy[\"close\"])\n    upper_shadow = df_copy[\"high\"] - body_top\n    lower_shadow = body_bottom - df_copy[\"low\"]\n    symmetry = (lower_shadow - upper_shadow) / (lower_shadow + upper_shadow + 1e-10)\n    tanh_symmetry = np.tanh(symmetry)\n    vol_weighted_shape = 1 + 0.25 * tanh_symmetry * np.tanh(vol_ratio - 1)\n    factor = direction * combined_conf * vol_weighted_shape\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy[\"factor_mut_vol_weighted_shape_dir\"] = factor\n    return df_copy[\"factor_mut_vol_weighted_shape_dir\"]",
+  "factor_name": "factor_mut_vol_weighted_shape_dir",
+  "fitness_direction": -1,
+  "formula": "factor = direction * [rank(vol_z,20)*rank(range_ratio,20) + 0.5*tanh(vol_z*range_ratio)] * [1 + 0.25*tanh(symmetry)*tanh(vol_ratio-1)]",
+  "metrics": {
+    "ic": 0.016486057832924447,
+    "icir": 0.2062701457702475,
+    "mi": 0.019095906149008357,
+    "rank_ic": 0.017680839364172397,
+    "rank_icir": 0.31500317949473616
+  },
+  "rationale": "Mutation of crossover_dir_vol_conf_shape_001. Preserves the core directional persistence and volume-range confirmation structure. Replaces the unconditional shape modulation with a volume-weighted version: shape asymmetry (tanh(symmetry)) is multiplied by tanh(vol_ratio-1) such that shape only contributes when volume is above its 20-day mean. This targets the bottleneck of ICIR by filtering noisy shape signals during low-volume periods, while maintaining the parent's strong RankIC and RankICIR.",
+  "raw_metrics": {
+    "ic": -0.016486057832924447,
+    "icir": -0.2062701457702475,
+    "mi": 0.019095906149008357,
+    "rank_ic": -0.017680839364172397,
+    "rank_icir": -0.31500317949473616
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260611-061826-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260611-061826-r1"
+  ],
+  "lqtp_formula": "factor = direction * [cs_rank(vol_z, 20)*cs_rank(range_ratio, 20) + 0.5*tanh(vol_z*range_ratio)] * [1 + 0.25*tanh(symmetry)*tanh(vol_ratio-1)]",
+  "fe_formula": "factor = direction * [rank(vol_z,20)*rank(range_ratio,20) + 0.5*tanh(vol_z*range_ratio)] * [1 + 0.25*tanh(symmetry)*tanh(vol_ratio-1)]",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "factor = direction * [rank(vol_z,20)*rank(range_ratio,20) + 0.5*tanh(vol_z*range_ratio)] * [1 + 0.25*tanh(symmetry)*tanh(vol_ratio-1)]"
+}

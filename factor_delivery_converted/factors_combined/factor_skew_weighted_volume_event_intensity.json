@@ -1,0 +1,102 @@
+{
+  "allowed_libraries": [
+    "numpy",
+    "pandas",
+    "minute_tools"
+  ],
+  "calculation_fingerprint": "legacy-unresolved:0",
+  "candidate_id": "g2_crossover_g1_mutation_minute_high_volume_event_v1_aa47ee14_4fd61981",
+  "candidate_ids": [
+    "g2_crossover_g1_mutation_minute_high_volume_event_v1_aa47ee14_4fd61981"
+  ],
+  "code": "def factor_skew_weighted_volume_event_intensity(df):\n    df_copy = df.copy()\n    ret = df_copy['close_price'].pct_change().fillna(0.0)\n    med = np.median(ret)\n    mean = np.mean(ret)\n    mad = np.median(np.abs(ret - med))\n    if mad == 0:\n        skew = 0.0\n    else:\n        skew = (mean - med) / mad\n    is_high, volume_z = minute_tools.get_up_space(df_copy['volume'], df_copy['TradingDay'], std_multiplier=1.5)\n    volume_z = volume_z.fillna(0.0)\n    pulse = minute_tools.pulse_start(is_high)\n    intensity = (volume_z * skew).where(pulse > 0).fillna(0.0)\n    value = float(intensity.sum())\n    day = pd.Timestamp(df_copy['TradingDay'].iloc[0])\n    out = pd.Series([value], index=[day], name='factor_skew_weighted_volume_event_intensity')\n    return out",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "domain_agent": "minute-crossover",
+  "factor_name": "factor_skew_weighted_volume_event_intensity",
+  "factor_value_contract": "minute_to_daily_panel",
+  "fitness_direction": 1,
+  "formula": null,
+  "frequency": "minute",
+  "lineage": {
+    "agent_skill": "minute-crossover",
+    "generation": 2,
+    "guidance_mode": null,
+    "operation": "crossover",
+    "parent_ids": [
+      "g1_mutation_minute_high_volume_event_v1_aa47ee14",
+      "g1_mutation_minute_robust_shape_001_aa47507e"
+    ]
+  },
+  "metadata": {
+    "fitness_direction": 1,
+    "fitness_metrics": {
+      "ic": 0.03008313582971678,
+      "icir": 0.29490518707966695,
+      "mi": 0.030117465579380998,
+      "rank_ic": 0.03301277426192978,
+      "rank_icir": 0.19511991109137233
+    },
+    "llm_candidate_id": "g2_crossover_minute_skew_weighted_volume_event_intensity_001",
+    "minute_required_columns": [
+      "close_price",
+      "volume"
+    ],
+    "payoff_diagnostics": {
+      "quantile_monotonicity": 0.9,
+      "top_quantile_annualized_excess_return": 0.48808080154722555,
+      "top_quantile_excess_return": 0.014297214078792253,
+      "top_quantile_max_drawdown": -0.010840070762308751,
+      "top_quantile_turnover": 0.7388786590695782
+    },
+    "payoff_gate_passed": true,
+    "pre_transform_fitness_direction": 1,
+    "raw_fitness_metrics": {
+      "ic": 0.03008313582971678,
+      "icir": 0.29490518707966695,
+      "mi": 0.030117465579380998,
+      "rank_ic": 0.03301277426192978,
+      "rank_icir": 0.19511991109137233
+    },
+    "transform_gate_passed": true
+  },
+  "metrics": {
+    "ic": 0.03008313582971678,
+    "icir": 0.29490518707966695,
+    "mi": 0.030117465579380998,
+    "rank_ic": 0.03301277426192978,
+    "rank_icir": 0.19511991109137233
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.48808080154722555,
+    "top_quantile_excess_return": 0.014297214078792253,
+    "top_quantile_max_drawdown": -0.010840070762308751,
+    "top_quantile_turnover": 0.7388786590695782
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "rationale": "Crossover: main mechanism from parent1 (high-volume event detection with std_multiplier=1.5) with robust intraday skew weighting borrowed from parent2 (mean-median/MAD). Skew direction modulates event intensity, potentially capturing asymmetric volume surges.",
+  "raw_metrics": {
+    "ic": 0.03008313582971678,
+    "icir": 0.29490518707966695,
+    "mi": 0.030117465579380998,
+    "rank_ic": 0.03301277426192978,
+    "rank_icir": 0.19511991109137233
+  },
+  "required_columns": [
+    "close_price",
+    "volume"
+  ],
+  "run_id": "minute-mvp-loop-20260630-070504-r1",
+  "source_run_ids": [
+    "minute-mvp-loop-20260630-070504-r1"
+  ],
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "",
+  "fe_formula": "",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": ""
+}

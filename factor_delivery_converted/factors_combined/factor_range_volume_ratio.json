@@ -1,0 +1,75 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "48ef0ce27fdafbbde8cbe88fee049002a3e495547688d76bd1b934297b79121b",
+  "candidate_ids": [
+    "ABS_001",
+    "ACP-G-0-2",
+    "APVC_002",
+    "ARG-1",
+    "PV_COH_002",
+    "acp-001",
+    "alpha-order-imbalance-002",
+    "alpha-stability-001",
+    "cand_001",
+    "composite_fusion_002",
+    "drawdown_001",
+    "g1_mutation_cand_001_b459ab3e",
+    "g2_crossover_g1_crossover_regime_gate_002_regime_gate_001_272_d2d68174",
+    "g2_mutation_g1_mutation_cand_001_b459ab3e_3f1d6c14",
+    "tail_risk_001"
+  ],
+  "code": "def factor_range_volume_ratio(df):\n    df_copy = df.copy()\n    range_ratio = (df_copy['high'] - df_copy['low']) / df_copy['close']\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20).mean().replace(0, np.nan)\n    factor = range_ratio * vol_ratio\n    factor.name = 'factor_range_volume_ratio'\n    return factor",
+  "cross_sectional_rationale": "Cross-sectional rank isolates stocks experiencing outsized range-volume pressure relative to peers, a common crash precursor signal.",
+  "cross_sectional_transform": "cs_rank",
+  "factor_name": "factor_range_volume_ratio",
+  "fitness_direction": -1,
+  "formula": null,
+  "metrics": {
+    "ic": 0.007380481174029311,
+    "icir": 0.06606461187946368,
+    "mi": 0.02958287193692044,
+    "rank_ic": 0.0475110899148128,
+    "rank_icir": 0.3852987792940864
+  },
+  "rationale": "Measures crash precursor via wide daily range relative to close, amplified by abnormal volume. Regime breakdown often accompanied by sudden volatility expansion and elevated participation.",
+  "raw_metrics": {
+    "ic": -0.007380481174029311,
+    "icir": -0.06606461187946368,
+    "mi": 0.02958287193692044,
+    "rank_ic": -0.0475110899148128,
+    "rank_icir": -0.3852987792940864
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260623-024107-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260623-024107-r1",
+    "formal-mvp-loop-20260626-020403-r1",
+    "formal-mvp-loop-admitted-v2-20260708-211634-r7",
+    "formal-mvp-loop-admitted-v2-20260711-202001-r4",
+    "formal-mvp-loop-admitted-v2-20260712-072320-r13",
+    "formal-mvp-loop-v3-20260714-051609-r1",
+    "formal-mvp-loop-v3-20260730-011744-r1",
+    "formal-mvp-loop-v3-guarded-or-20260716-080935-r1",
+    "formal-mvp-loop-v3-guarded-or-20260717-061725-r2",
+    "formal-mvp-loop-v3-guarded-or-20260717-143914-r4",
+    "formal-mvp-loop-v3-guarded-or-20260720-032707-r5"
+  ],
+  "lqtp_formula": "",
+  "fe_formula": "",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": ""
+}

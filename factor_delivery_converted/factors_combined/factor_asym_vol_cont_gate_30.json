@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "ad0a771c88a7a99253966fc19627f23583d686b025466f639f434bf2b5254006",
+  "candidate_ids": [
+    "alpha-mutation-3-001"
+  ],
+  "code": "def factor_asym_vol_cont_gate_30(df):\n    df_copy = df.copy()\n    returns = df_copy['close'].pct_change()\n    down_returns = returns.clip(upper=0)\n    up_returns = returns.clip(lower=0)\n    down_vol = down_returns.rolling(60, min_periods=20).std(ddof=0).clip(lower=1e-10)\n    up_vol = up_returns.rolling(60, min_periods=20).std(ddof=0).clip(lower=1e-10)\n    asym_vol = np.log(down_vol / up_vol)\n    vol_ma = df_copy['volume'].rolling(20, min_periods=20).mean().replace(0, np.nan)\n    vol_ratio = (df_copy['volume'] / vol_ma).clip(upper=3.0, lower=0.0)\n    factor = asym_vol * vol_ratio\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy['factor_asym_vol_cont_gate_30'] = factor\n    return df_copy['factor_asym_vol_cont_gate_30']",
+  "cross_sectional_rationale": "Cross-sectional standardization highlights relative risk asymmetry across stocks, improving rank stability.",
+  "cross_sectional_transform": "cs_zscore",
+  "factor_name": "factor_asym_vol_cont_gate_30",
+  "fitness_direction": 1,
+  "formula": "log(down_vol(60) / up_vol(60)) * (volume / MA_volume(20))",
+  "metrics": {
+    "ic": 0.01915208709157378,
+    "icir": 0.16456948716550437,
+    "mi": 0.014265313660263956,
+    "rank_ic": 0.03763397509873174,
+    "rank_icir": 0.31001998316346496
+  },
+  "rationale": "Mutation: replaced binary volume gate (1.0 or 0.5) with a continuous volume ratio (volume / 20-day MA) to improve IC and ICIR by capturing finer participation dynamics, while preserving the parent's core asymmetric volatility mechanism and rank stability. The ratio is clipped to avoid extreme values.",
+  "raw_metrics": {
+    "ic": 0.01915208709157378,
+    "icir": 0.16456948716550437,
+    "mi": 0.014265313660263956,
+    "rank_ic": 0.03763397509873174,
+    "rank_icir": 0.31001998316346496
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260624-033040-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260624-033040-r1"
+  ],
+  "lqtp_formula": "log(down_vol(60) / up_vol(60)) * (volume / <MA_volume(20)>)",
+  "fe_formula": "log(down_vol(60) / up_vol(60)) * (volume / <MA_volume(20)>)",
+  "lqtp_notes": "Unconverted: ['MA_volume', 'down_vol', 'up_vol']",
+  "fe_notes": "Unconverted: ['MA_volume', 'down_vol', 'up_vol']",
+  "source_formula": "log(down_vol(60) / up_vol(60)) * (volume / MA_volume(20))"
+}

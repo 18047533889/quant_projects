@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "8e99e92c8ed2bb51f7991623f7f2de0fd99828bea441268b7b307ef538be8970",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_mutation_alpha_drawdown_gen0_1_fc2cacbd_g1_mu_935104b1"
+  ],
+  "code": "def factor_drawdown_atr_recovery(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(60, min_periods=60).max()\n    drawdown = df_copy['close'] / rolling_max - 1.0\n    high = df_copy['high'].values.astype('float64')\n    low = df_copy['low'].values.astype('float64')\n    close = df_copy['close'].values.astype('float64')\n    atr20 = talib.ATR(high, low, close, timeperiod=20)\n    atr20 = pd.Series(atr20, index=df_copy.index).replace(0, np.nan)\n    normalized_drawdown = drawdown / atr20\n    factor = normalized_drawdown.replace([np.inf, -np.inf], np.nan).fillna(0)\n    factor.name = \"factor_drawdown_atr_recovery\"\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_drawdown_atr_recovery",
+  "fitness_direction": -1,
+  "formula": "drawdown = close/rolling_max(close,60)-1; normalized_drawdown = drawdown / ATR(20); factor = fillna(replace(normalized_drawdown, inf, nan),0)",
+  "metrics": {
+    "ic": 0.011031876544933365,
+    "icir": 0.1392755392747842,
+    "mi": 0.01109004167565164,
+    "rank_ic": 0.038575737837980024,
+    "rank_icir": 0.2904058079027678
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.07918055065772367,
+    "top_quantile_excess_return": 0.22273312686009494,
+    "top_quantile_max_drawdown": -0.0837346190323296,
+    "top_quantile_turnover": 0.07627648225164627
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Simplify the parent's dual-mechanism (drawdown normalized by returns std multiplied by volatility persistence ratio) to a single core mechanism: drawdown depth normalized by ATR. ATR captures recent true-range volatility more robustly than returns std, and the removal of the persistence ratio halves the number of tunable windows, reducing overfitting risk while preserving the mean-reversion intuition. This targets improved IC without sacrificing the parent's strong RankICIR.",
+  "raw_metrics": {
+    "ic": -0.011031876544933365,
+    "icir": -0.1392755392747842,
+    "mi": 0.01109004167565164,
+    "rank_ic": -0.038575737837980024,
+    "rank_icir": -0.2904058079027678
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260711-061229-r12",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260711-061229-r12"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "drawdown = close/ts_max(60, close)-1; normalized_drawdown = drawdown / ts_atr(20); factor = fillna(replace(normalized_drawdown, inf, nan),0)",
+  "fe_formula": "drawdown = close/ts_max(60, close)-1; normalized_drawdown = drawdown / ATR(20); factor = fillna(replace(normalized_drawdown, inf, nan),0)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "drawdown = close/rolling_max(close,60)-1; normalized_drawdown = drawdown / ATR(20); factor = fillna(replace(normalized_drawdown, inf, nan),0)"
+}

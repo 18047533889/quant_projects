@@ -1,0 +1,47 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "5ec70a8d009c8b16abfef66c7eccd8adb755bc5eded44027b8a5ba9182bc9c68",
+  "candidate_ids": [
+    "alpha-mutation-gen2-001"
+  ],
+  "code": "def factor_downside_vol_asymmetry_smoothed(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    negative_sq = ret.where(ret < 0, 0) ** 2\n    positive_sq = ret.where(ret > 0, 0) ** 2\n    window = 20\n    down_var = negative_sq.rolling(window=window, min_periods=window).mean()\n    up_var = positive_sq.rolling(window=window, min_periods=window).mean()\n    ratio = np.sqrt(down_var) / np.sqrt(up_var.replace(0, np.nan))\n    smoothed_ratio = ratio.rolling(window=5, min_periods=5).mean()\n    factor = np.log(smoothed_ratio + 1e-10)\n    factor.name = \"factor_downside_vol_asymmetry_smoothed\"\n    return factor.fillna(0)",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_downside_vol_asymmetry_smoothed",
+  "fitness_direction": 1,
+  "formula": "log( SMA_5( sqrt(mean_{20}(neg_ret^2)) / sqrt(mean_{20}(pos_ret^2)) ) )",
+  "metrics": {
+    "ic": 0.013215181352434218,
+    "icir": 0.11442470573590234,
+    "mi": 0.006723651734096947,
+    "rank_ic": 0.03289731117322232,
+    "rank_icir": 0.25043397785669547
+  },
+  "rationale": "Smoothed downside volatility asymmetry: apply a 5-day moving average to the ratio of downside to upside volatility to reduce noise and improve linear correlation with returns, targeting IC and MI improvement while preserving the stable rank characteristics from the parent.",
+  "raw_metrics": {
+    "ic": 0.013215181352434218,
+    "icir": 0.11442470573590234,
+    "mi": 0.006723651734096947,
+    "rank_ic": 0.03289731117322232,
+    "rank_icir": 0.25043397785669547
+  },
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-20260622-071348-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260622-071348-r2"
+  ],
+  "lqtp_formula": "log( SMA_5( sqrt(mean_{20}(neg_ret^2)) / sqrt(mean_{20}(pos_ret^2)) ) )",
+  "fe_formula": "log( SMA_5( sqrt(mean_{20}(neg_ret^2)) / sqrt(mean_{20}(pos_ret^2)) ) )",
+  "lqtp_notes": "Unconverted: ['SMA_5']",
+  "fe_notes": "Unconverted: ['SMA_5']",
+  "source_formula": "log( SMA_5( sqrt(mean_{20}(neg_ret^2)) / sqrt(mean_{20}(pos_ret^2)) ) )"
+}

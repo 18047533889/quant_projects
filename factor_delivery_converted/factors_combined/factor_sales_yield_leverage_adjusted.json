@@ -1,0 +1,115 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "85b746c4e030d1d22f751f1a9e3c0036a865825b6abf4797cf636801d7d8d4e7",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_mutation_float_cheap_leverage_1_6bde6ca3_roe_61989372"
+  ],
+  "code": "def factor_sales_yield_leverage_adjusted(df):\n    df_copy = df.copy()\n    sales_yield = 1.0 / df_copy[\"ps_ttm\"].replace(0, np.nan)\n    safe_debt = np.clip(1.0 - df_copy[\"debttoassets\"] / 100.0, 0.0, 1.0)\n    factor = sales_yield * safe_debt\n    return pd.Series(factor, index=df_copy.index, name=\"factor_sales_yield_leverage_adjusted\")",
+  "cross_sectional_rationale": "Sales yield and leverage are inherently cross-sectional concepts; ranking ensures relative value comparability across stocks, preserving the strong rank-based performance of the parent.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9515151515151515,
+        "top_quantile_annualized_excess_return": 0.056751984578314874,
+        "top_quantile_excess_return": 0.171858074173302,
+        "top_quantile_max_drawdown": -0.09394313425181655,
+        "top_quantile_turnover": 0.015651271928872085
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_sales_yield_leverage_adjusted",
+  "fitness_direction": 1,
+  "formula": "(1/ps_ttm) * clip(1 - debttoassets/100, 0, 1)",
+  "metrics": {
+    "ic": 0.009291241076576112,
+    "icir": 0.11242564384509182,
+    "mi": 0.008714298666832931,
+    "rank_ic": 0.024533197365266032,
+    "rank_icir": 0.24634294951455551
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": 0.056751984578314874,
+    "top_quantile_excess_return": 0.171858074173302,
+    "top_quantile_max_drawdown": -0.09394313425181655,
+    "top_quantile_turnover": 0.015651271928872085
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.0042987459659157,
+    "icir": 0.06730968459192306,
+    "mi": 0.014494809938446096,
+    "rank_ic": 0.024533197365266032,
+    "rank_icir": 0.24634294951455551
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": 0.056751984578314874,
+    "top_quantile_excess_return": 0.171858074173302,
+    "top_quantile_max_drawdown": -0.09394313425181655,
+    "top_quantile_turnover": 0.015651271928872085
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.0042987459659157,
+    "icir": 0.06730968459192306,
+    "mi": 0.014494809938446096,
+    "rank_ic": 0.024533197365266032,
+    "rank_icir": 0.24634294951455551
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Mutation of the momentum-gated value-quality crossover: simplify by removing the quality leg and the regime gate, retaining only the core value mechanism (sales yield discounted by financial leverage). This preserves the strong RankIC/ICIR from the value component while reducing complexity. The leverage penalty ensures cheapness is not spurious from high debt.",
+  "raw_metrics": {
+    "ic": 0.009291241076576112,
+    "icir": 0.11242564384509182,
+    "mi": 0.008714298666832931,
+    "rank_ic": 0.024533197365266032,
+    "rank_icir": 0.24634294951455551
+  },
+  "required_columns": [
+    "ps_ttm",
+    "debttoassets"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260717-20260718-074009-r13",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260717-20260718-074009-r13"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.3569793873761064,
+    "pre_transform_top_quantile_excess_return": 0.171858074173302,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.40130733046832245,
+    "transformed_top_quantile_excess_return": 0.171858074173302
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(1/ps_ttm) * clip(1 - debttoassets/100, 0, 1)",
+  "fe_formula": "(1/ps_ttm) * clip(1 - debttoassets/100, 0, 1)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(1/ps_ttm) * clip(1 - debttoassets/100, 0, 1)"
+}

@@ -1,0 +1,117 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "38e258314374367d8368d8b0a25ee8dc1e91e3d455623331ef7673b031f43750",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_crossover_vsi_g0_c1_alr_g0_001_d67f175f_g1_cr_41057500"
+  ],
+  "code": "def factor_size_adaptive_ey_zscore_no_large_lev(df):\n    df_copy = df.copy()\n    size_rank = df_copy[\"mkt_cap_float\"].rolling(252, min_periods=60).rank(pct=True)\n    w_large = 1.0 / (1.0 + np.exp(-10.0 * (size_rank - 0.5)))\n    w_small = 1.0 - w_large\n    # small cap: book yield with leverage penalty\n    pb_pos = df_copy[\"pb_lf\"].where(df_copy[\"pb_lf\"] > 0, np.nan)\n    book_yield = 1.0 / pb_pos\n    debt_ratio = df_copy[\"debttoassets\"] / 100.0\n    small_val = book_yield * (1.0 - debt_ratio)\n    # large cap: earnings yield time-series z-score (no leverage penalty)\n    pe_pos = df_copy[\"pe_ttm\"].where(df_copy[\"pe_ttm\"] > 0, np.nan)\n    earnings_yield = 1.0 / pe_pos\n    mean_ey = earnings_yield.rolling(126, min_periods=63).mean()\n    std_ey = earnings_yield.rolling(126, min_periods=63).std(ddof=1)\n    zscore_ey = (earnings_yield - mean_ey) / std_ey.replace(0, np.nan)\n    large_val = zscore_ey\n    factor = w_small * small_val + w_large * large_val\n    df_copy[\"factor_size_adaptive_ey_zscore_no_large_lev\"] = factor\n    return df_copy[\"factor_size_adaptive_ey_zscore_no_large_lev\"]",
+  "cross_sectional_rationale": "Cross-sectional rank converts the blended size-adaptive value and time-series earnings yield into relative cheapness across stocks, enhancing comparability and reducing idiosyncratic time-series noise.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.8303030303030303,
+        "top_quantile_annualized_excess_return": 0.06401808682955457,
+        "top_quantile_excess_return": 0.1840258797443104,
+        "top_quantile_max_drawdown": -0.08884386859244897,
+        "top_quantile_turnover": 0.12096706767511717
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_size_adaptive_ey_zscore_no_large_lev",
+  "fitness_direction": 1,
+  "formula": "Small: (1/pb_pos)*(1-debt/assets); Large: zscore(1/pe, 126); blend via sigmoid(size_rank)",
+  "metrics": {
+    "ic": 0.01416914095367641,
+    "icir": 0.14024104194298823,
+    "mi": 0.010071290797640131,
+    "rank_ic": 0.03451648822243992,
+    "rank_icir": 0.3077052280069746
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8303030303030303,
+    "top_quantile_annualized_excess_return": 0.06401808682955457,
+    "top_quantile_excess_return": 0.1840258797443104,
+    "top_quantile_max_drawdown": -0.08884386859244897,
+    "top_quantile_turnover": 0.12096706767511717
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.019250604756457297,
+    "icir": 0.18129729809912057,
+    "mi": 0.010595183888705506,
+    "rank_ic": 0.03451648822243992,
+    "rank_icir": 0.3077052280069746
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.8303030303030303,
+    "top_quantile_annualized_excess_return": 0.06401808682955457,
+    "top_quantile_excess_return": 0.1840258797443104,
+    "top_quantile_max_drawdown": -0.08884386859244897,
+    "top_quantile_turnover": 0.12096706767511717
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.019250604756457297,
+    "icir": 0.18129729809912057,
+    "mi": 0.010595183888705506,
+    "rank_ic": 0.03451648822243992,
+    "rank_icir": 0.3077052280069746
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Mutation of qualified crossover candidate: removed the leverage penalty (debt ratio multiplier) from the large-cap earnings yield z-score component to simplify the mechanism and reduce potential noise. The small-cap side retains the leverage adjustment as it is a direct valuation ratio. The size-adaptive sigmoid blend remains. The cross-sectional rank post-transform is retained to enhance cross-sectional comparability. Target parent strength: preserve the qualified predictive profile while improving robustness through simplification.",
+  "raw_metrics": {
+    "ic": 0.01416914095367641,
+    "icir": 0.14024104194298823,
+    "mi": 0.010071290797640131,
+    "rank_ic": 0.03451648822243992,
+    "rank_icir": 0.3077052280069746
+  },
+  "required_columns": [
+    "pe_ttm",
+    "pb_lf",
+    "debttoassets",
+    "mkt_cap_float"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260719-20260720-062738-r10",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260719-20260720-062738-r10"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.553364802973698,
+    "pre_transform_top_quantile_excess_return": 0.1840258797443104,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.5067031899237193,
+    "transformed_top_quantile_excess_return": 0.1840258797443104
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "Small: (1/pb_pos)*(1-debt/assets); Large: cs_zscore(1/pe, 126); blend via sigmoid(size_rank)",
+  "fe_formula": "Small: (1/pb_pos)*(1-debt/assets); Large: zscore(1/pe, 126); blend via sigmoid(size_rank)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "Small: (1/pb_pos)*(1-debt/assets); Large: zscore(1/pe, 126); blend via sigmoid(size_rank)"
+}

@@ -1,0 +1,95 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "240b30e6a0ee17b936d7a3d5e5247ba3396b87aff1beb5f58d505cb77c47da5f",
+  "candidate_ids": [
+    "alpha_vol_asym_0002"
+  ],
+  "code": "def factor_overnight_intraday_downside_amplification(df):\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    down_overnight = (-overnight_ret.clip(upper=0.0)).rolling(12, min_periods=12).mean()\n    up_intraday = intraday_ret.clip(lower=0.0).rolling(12, min_periods=12).mean()\n    intraday_vol = (df_copy[\"high\"] - df_copy[\"low\"]).rolling(12, min_periods=12).std(ddof=1)\n    close_vol = df_copy[\"close\"].pct_change().abs().rolling(12, min_periods=12).mean()\n    asym = (down_overnight + close_vol) / (up_intraday + intraday_vol + 1e-12)\n    df_copy[\"factor_overnight_intraday_downside_amplification\"] = np.log1p(asym)\n    return df_copy[\"factor_overnight_intraday_downside_amplification\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.06514614582596567,
+        "top_quantile_excess_return": 0.19520353050594652,
+        "top_quantile_max_drawdown": -0.08149276852352982,
+        "top_quantile_turnover": 0.10098540975707289
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_overnight_intraday_downside_amplification",
+  "fitness_direction": 1,
+  "formula": "log(1 + (mean(-min(overnight_ret,0)) + mean(abs(close_ret))) / (mean(max(intraday_ret,0)) + std(high-low)))",
+  "metrics": {
+    "ic": 0.012265698216708506,
+    "icir": 0.1587228429885755,
+    "mi": 0.007879328832933297,
+    "rank_ic": 0.024970844502266165,
+    "rank_icir": 0.21319859165174088
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.06514614582596567,
+    "top_quantile_excess_return": 0.19520353050594652,
+    "top_quantile_max_drawdown": -0.08149276852352982,
+    "top_quantile_turnover": 0.10098540975707289
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Expresses asymmetric volatility through the split between overnight downside pressure and intraday upside absorption. When negative overnight moves dominate while positive intraday moves remain muted, the stock exhibits a stronger downside-volatility regime than upside-volatility regime. Using the decomposition tool keeps the mechanism focused on present/past OHLCV structure and avoids stacking unrelated indicators.",
+  "raw_metrics": {
+    "ic": 0.012265698216708506,
+    "icir": 0.1587228429885755,
+    "mi": 0.007879328832933297,
+    "rank_ic": 0.024970844502266165,
+    "rank_icir": 0.21319859165174088
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-20260729-071718-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-20260729-071718-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "log(1 + (ts_mean(-min(overnight_ret,0)) + ts_mean(abs(close_ret))) / (ts_mean(max(intraday_ret,0)) + ts_std(high-low)))",
+  "fe_formula": "log(1 + (ts_mean(-min(overnight_ret,0))t, 0)) + ts_mean(abs(close_ret))) / (ts_mean(max(intraday_ret,0))t, 0)) + ts_std(high-low)))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "log(1 + (mean(-min(overnight_ret,0)) + mean(abs(close_ret))) / (mean(max(intraday_ret,0)) + std(high-low)))"
+}

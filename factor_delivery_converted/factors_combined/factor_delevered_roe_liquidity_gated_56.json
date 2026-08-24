@@ -1,0 +1,118 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "abfc36727d16ee5c02d160ac022ba5b5f0b2fea2b6ffda3c80c0c452985dc51f",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_then_mutation_sv_002_roe_q_001_ce7b_ce20b804"
+  ],
+  "code": "def factor_delevered_roe_liquidity_gated(df):\n    df_copy = df.copy()\n    debt_ratio = df_copy[\"debttoassets\"] / 100.0\n    unlevered_roe = df_copy[\"roe_ttm2\"] * (1.0 - debt_ratio)\n    liquid = df_copy[\"style_gate_liquidity_high\"].fillna(0)\n    weight = np.where(liquid == 1, 1.0, 0.5)\n    factor = unlevered_roe * weight\n    factor.name = \"factor_delevered_roe_liquidity_gated\"\n    return factor",
+  "cross_sectional_rationale": "Ranking enhances cross-sectional comparability of the delevered profitability signal, emphasizing relative attractiveness.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9757575757575757,
+        "top_quantile_annualized_excess_return": 0.06552229917056351,
+        "top_quantile_excess_return": 0.20001762201019524,
+        "top_quantile_max_drawdown": -0.18611593101996715,
+        "top_quantile_turnover": 0.007663485452185785
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_delevered_roe_liquidity_gated",
+  "fitness_direction": -1,
+  "formula": "roe_ttm2 * (1 - debttoassets/100) * (liquidity_high ? 1.0 : 0.5)",
+  "metrics": {
+    "ic": 0.011444790876759868,
+    "icir": 0.11905790059998862,
+    "mi": 0.014386543085647574,
+    "rank_ic": 0.011503124726705715,
+    "rank_icir": 0.09815263889788287
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.06552229917056351,
+    "top_quantile_excess_return": 0.20001762201019524,
+    "top_quantile_max_drawdown": -0.18611593101996715,
+    "top_quantile_turnover": 0.007663485452185785
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.00719080626367336,
+    "icir": 0.10117905870131004,
+    "mi": 0.03876010207070024,
+    "rank_ic": 0.011503124726705715,
+    "rank_icir": 0.09815263889788287
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.06552229917056351,
+    "top_quantile_excess_return": 0.20001762201019524,
+    "top_quantile_max_drawdown": -0.18611593101996715,
+    "top_quantile_turnover": 0.007663485452185785
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.00719080626367336,
+    "icir": -0.10117905870131004,
+    "mi": 0.03876010207070024,
+    "rank_ic": -0.011503124726705715,
+    "rank_icir": -0.09815263889788287
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Delevered ROE isolates sustainable operating profitability by penalizing high leverage. The addition of a liquidity gate attenuates the signal in low-liquidity regimes, where fundamental signals are noisier. This lightweight modifier targets improved IC/ICIR while preserving the core economic intuition and ranking strength.",
+  "raw_metrics": {
+    "ic": -0.011444790876759868,
+    "icir": -0.11905790059998862,
+    "mi": 0.014386543085647574,
+    "rank_ic": -0.011503124726705715,
+    "rank_icir": -0.09815263889788287
+  },
+  "required_columns": [
+    "roe_ttm2",
+    "debttoassets",
+    "style_gate_liquidity_high"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260717-20260717-140926-r4",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260717-20260717-140926-r4"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "style_gate_liquidity_high is used because high liquidity reduces information asymmetry and enhances the reliability of fundamental signals. When liquidity is low, the delevered ROE signal is attenuated by a 0.5 weight to reduce noise in periods of market stress.",
+  "style_gates_used": [
+    "style_gate_liquidity_high"
+  ],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.2567857306602722,
+    "pre_transform_top_quantile_excess_return": 0.20001762201019524,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.2545449981869846,
+    "transformed_top_quantile_excess_return": 0.20001762201019524
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "roe_ttm2 * (1 - debttoassets/100) * (liquidity_high ? 1.0 : 0.5)",
+  "fe_formula": "roe_ttm2 * (1 - debttoassets/100) * (liquidity_high ? 1.0 : 0.5)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "roe_ttm2 * (1 - debttoassets/100) * (liquidity_high ? 1.0 : 0.5)"
+}

@@ -1,0 +1,98 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "a4d284da739eee68511f9857e426cfe8537e34cbd4e3fdf56c5c4160e8902f2d",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_then_mutation_amc_001_stable_vol_tr_5da49c1d"
+  ],
+  "code": "def factor_trend_vol_scaled_short(df):\n    df_copy = df.copy()\n    ema20 = talib.EMA(df_copy[\"close\"], timeperiod=20)\n    ema50 = talib.EMA(df_copy[\"close\"], timeperiod=50)\n    trend = (ema20 - ema50) / df_copy[\"close\"]\n    returns = df_copy[\"close\"].pct_change()\n    vol = returns.rolling(60).std()\n    factor = trend / vol.replace(0.0, np.nan)\n    df_copy[\"factor_trend_vol_scaled_short\"] = factor.fillna(0.0)\n    return df_copy[\"factor_trend_vol_scaled_short\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.08979438550948537,
+        "top_quantile_excess_return": 0.2542957996683768,
+        "top_quantile_max_drawdown": -0.1348678553593855,
+        "top_quantile_turnover": 0.055978897317916276
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.09010325842428187,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.0989674157571814,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_trend_vol_scaled_short",
+  "fitness_direction": -1,
+  "formula": "(EMA20-EMA50)/Close / RollingStd60(Returns)",
+  "metrics": {
+    "ic": 0.012687785530505587,
+    "icir": 0.09010325842428187,
+    "mi": 0.011041794737207233,
+    "rank_ic": 0.030449077047429676,
+    "rank_icir": 0.1843957327055301
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.08979438550948537,
+    "top_quantile_excess_return": 0.2542957996683768,
+    "top_quantile_max_drawdown": -0.1348678553593855,
+    "top_quantile_turnover": 0.055978897317916276
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Shortened the EMA windows from 50/200 to 20/50 to increase responsiveness to trend changes while preserving the long-term volatility normalization. The parent's weakness in IC and RankIC suggests the slow trend signal missed shorter-term momentum shifts. By using faster EMAs, the factor captures more timely trend reversals while the 60-day volatility scaling maintains risk-adjusted comparability. This targets improvement in predictive metrics without materially altering the payoff profile or increasing turnover significantly.",
+  "raw_metrics": {
+    "ic": -0.012687785530505587,
+    "icir": -0.09010325842428187,
+    "mi": 0.011041794737207233,
+    "rank_ic": -0.030449077047429676,
+    "rank_icir": -0.1843957327055301
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260720-210415-r10",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260720-210415-r10"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(EMA20-EMA50)/Close / RollingStd60(Returns)",
+  "fe_formula": "(EMA20-EMA50)/Close / RollingStd60(Returns)",
+  "lqtp_notes": "Unconverted: ['RollingStd60']",
+  "fe_notes": "Unconverted: ['RollingStd60']",
+  "source_formula": "(EMA20-EMA50)/Close / RollingStd60(Returns)"
+}

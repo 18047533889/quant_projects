@@ -1,0 +1,93 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "a9f5e842d08b5580dfb6eed231070d8f8416edf2bffc40108946606f514932c0",
+  "candidate_ids": [
+    "g1_mutation_alpha_composite_0002_0531e74d"
+  ],
+  "code": "def factor_smoothed_drawdown_recovery_participation(df):\n    \"\"\"Measure sustained recovery from a prior drawdown with smoothed participation confirmation.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    low = df_copy[\"low\"]\n    volume = df_copy[\"volume\"]\n    prior_peak = close.rolling(30, min_periods=30).max().shift(5)\n    drawdown_depth = (1.0 - close.shift(5) / prior_peak).clip(lower=0.0, upper=0.8)\n    prior_low = low.rolling(15, min_periods=15).min().shift(1).replace(0.0, np.nan)\n    recovery = close / prior_low - 1.0\n    recovery_score = recovery.ewm(span=4, adjust=False, min_periods=4).mean() - 0.5 * drawdown_depth\n    volume_base = volume.ewm(span=20, adjust=False, min_periods=20).mean().replace(0.0, np.nan)\n    participation = (volume / volume_base - 1.0).clip(-1.0, 2.0)\n    factor = recovery_score * (0.75 + 0.75 * drawdown_depth) * (1.0 + 0.3 * np.tanh(participation))\n    df_copy[\"factor_smoothed_drawdown_recovery_participation\"] = factor\n    return df_copy[\"factor_smoothed_drawdown_recovery_participation\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9151515151515152,
+        "top_quantile_annualized_excess_return": 0.008464830771498066,
+        "top_quantile_excess_return": 0.023348369408589642,
+        "top_quantile_max_drawdown": -0.13730250168614766,
+        "top_quantile_turnover": 0.16831724985065855
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_smoothed_drawdown_recovery_participation",
+  "fitness_direction": -1,
+  "formula": "EMA4(close / prior 15-bar low - 1) minus 0.5 × prior drawdown depth, scaled by drawdown depth and a bounded EMA20 volume-participation modifier",
+  "metrics": {
+    "ic": 0.034347543782068266,
+    "icir": 0.23871119686722747,
+    "mi": 0.03107643933191806,
+    "rank_ic": 0.04275752655680352,
+    "rank_icir": 0.2688292653851958
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9151515151515152,
+    "top_quantile_annualized_excess_return": 0.008464830771498066,
+    "top_quantile_excess_return": 0.023348369408589642,
+    "top_quantile_max_drawdown": -0.13730250168614766,
+    "top_quantile_turnover": 0.16831724985065855
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Mutation target: improve payoff robustness and reduce the parent's sensitivity to noisy local lows and abrupt volume changes while preserving its recovery-after-drawdown mechanism. The recovery anchor now uses a lagged 15-bar low, the recovery score is lightly smoothed, and volume confirmation is reduced to a bounded auxiliary weight. This should produce a more persistent, less reactive signal without adding a new economic feature family.",
+  "raw_metrics": {
+    "ic": -0.034347543782068266,
+    "icir": -0.23871119686722747,
+    "mi": 0.03107643933191806,
+    "rank_ic": -0.04275752655680352,
+    "rank_icir": -0.2688292653851958
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260806-094519-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260806-094519-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema(4, close / prior 15-bar low - 1) minus 0.5 × prior drawdown depth, scaled by drawdown depth and a bounded EMA20 volume-participation modifier",
+  "fe_formula": "ema(4, close / prior 15-bar low - 1) minus 0.5 × prior drawdown depth, scaled by drawdown depth and a bounded EMA20 volume-participation modifier",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "EMA4(close / prior 15-bar low - 1) minus 0.5 × prior drawdown depth, scaled by drawdown depth and a bounded EMA20 volume-participation modifier"
+}

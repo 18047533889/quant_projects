@@ -1,0 +1,73 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "2363ed337a634c81f25d51d15810c8d9fd178feefe43e8d97e632d8eeff5dfd6",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_then_mutation_regime_gating_001_com_f68e3906"
+  ],
+  "code": "def factor_regime_vol_adaptive_trend_v4(df):\n    df_copy = df.copy()\n    high_resvol = df_copy['style_gate_resvol_high'] > 0\n    imp = (df_copy['close'] - df_copy['open']) / (df_copy['high'] - df_copy['low'] + 1e-8)\n    imp = imp.rolling(5, min_periods=5).mean()\n    mom = df_copy['close'] / df_copy['close'].shift(10) - 1\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy['volume'], window=20)\n    factor = np.where(high_resvol, imp * vol_ratio, mom * vol_ratio)\n    factor = pd.Series(factor, index=df_copy.index)\n    factor = factor.replace([np.inf, -np.inf], np.nan)\n    df_copy['factor_regime_vol_adaptive_trend_v4'] = factor\n    return df_copy['factor_regime_vol_adaptive_trend_v4']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_regime_vol_adaptive_trend_v4",
+  "fitness_direction": -1,
+  "formula": "if resvol_high: factor = mean(5, (close-open)/(high-low)) * vol_ratio; else: factor = ROC(10) * vol_ratio",
+  "metrics": {
+    "ic": 0.023414919123119757,
+    "icir": 0.18653772705074767,
+    "mi": 0.042040652496182496,
+    "rank_ic": 0.027427778193292594,
+    "rank_icir": 0.19190131771501145
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.2727272727272727,
+    "top_quantile_annualized_excess_return": 0.048352985151444816,
+    "top_quantile_excess_return": 0.14443982029742353,
+    "top_quantile_max_drawdown": -0.14137014685755134,
+    "top_quantile_turnover": 0.3928995144111682
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Mutation of regime_vol_adaptive_trend_v3: increased intraday pressure window to 5 for smoother mean-reversion signal, and simplified momentum branch to use raw 10-day rate of change (removed double smoothing) for more responsive trend capture. Volume ratio scaling is preserved as the lightweight modifier, and regime switching via style_gate_resvol_high remains the core mechanism.",
+  "raw_metrics": {
+    "ic": -0.023414919123119757,
+    "icir": -0.18653772705074767,
+    "mi": 0.042040652496182496,
+    "rank_ic": -0.027427778193292594,
+    "rank_icir": -0.19190131771501145
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "style_gate_resvol_high"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260709-014358-r9",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260709-014358-r9"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "Uses style_gate_resvol_high to switch between intraday pressure (high residual volatility, short-term mean reversion) and momentum (low residual volatility, trend persistence). The vol_ratio from classify_volume_regime adds a continuous confidence weight within each regime.",
+  "style_gates_used": [
+    "style_gate_resvol_high"
+  ],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "if resvol_high: factor = ts_mean((close-open)/(high-low), 5) * vol_ratio; else: factor = ts_pct(10) * vol_ratio",
+  "fe_formula": "if resvol_high: factor = ts_mean((close-open)/(high-low), 5) * vol_ratio; else: factor = ts_pct(10) * vol_ratio",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "if resvol_high: factor = mean(5, (close-open)/(high-low)) * vol_ratio; else: factor = ROC(10) * vol_ratio"
+}

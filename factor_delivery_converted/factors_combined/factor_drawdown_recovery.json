@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "415d75481d0bce754c67376d95353090e50947809cce9f19a94dc688a8c76306",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_alpha_drawdown_gen0_1_avs_002_eef4b_b755463c"
+  ],
+  "code": "def factor_drawdown_recovery(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(60, min_periods=60).max()\n    drawdown = df_copy['close'] / rolling_max - 1.0\n    returns = df_copy['close'].pct_change()\n    vol = returns.rolling(20, min_periods=20).std().replace(0, np.nan)\n    factor = drawdown / vol\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    factor.name = \"factor_drawdown_recovery\"\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_drawdown_recovery",
+  "fitness_direction": -1,
+  "formula": "drawdown = close / rolling_max(close,60) - 1; normalized_drawdown = drawdown / rolling_std(returns,20); factor = normalized_drawdown",
+  "metrics": {
+    "ic": 0.013420500899447086,
+    "icir": 0.11316503045217903,
+    "mi": 0.008554765997954128,
+    "rank_ic": 0.03733210454777796,
+    "rank_icir": 0.25772926250830575
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9151515151515152,
+    "top_quantile_annualized_excess_return": 0.016794451100993202,
+    "top_quantile_excess_return": 0.04493078766751957,
+    "top_quantile_max_drawdown": -0.17450149619636535,
+    "top_quantile_turnover": 0.13507321743505768
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Pure drawdown depth normalized by trailing volatility. Removes the volume consistency multiplier which introduced threshold instability, targeting robustness. Drawdown signals mean-reversion potential after severe drops.",
+  "raw_metrics": {
+    "ic": -0.013420500899447086,
+    "icir": -0.11316503045217903,
+    "mi": 0.008554765997954128,
+    "rank_ic": -0.03733210454777796,
+    "rank_icir": -0.25772926250830575
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260711-061229-r12",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260711-061229-r12"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "drawdown = close / ts_max(60, close) - 1; normalized_drawdown = drawdown / ts_std(20, returns); factor = normalized_drawdown",
+  "fe_formula": "drawdown = close / ts_max(60, close) - 1; normalized_drawdown = drawdown / ts_std(20, returns); factor = normalized_drawdown",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "drawdown = close / rolling_max(close,60) - 1; normalized_drawdown = drawdown / rolling_std(returns,20); factor = normalized_drawdown"
+}

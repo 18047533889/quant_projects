@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "76abed1a9758925256d709dd53ac66ada2f1fede5a056e63d375abe5d331bfd5",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_mutation_alpha_lag_response_001_d79ce9e3_g1_c_d8e41e37"
+  ],
+  "code": "def factor_lag_vol_robust_volratio(df):\n    df_copy = df.copy()\n    ret = df_copy['close'] / df_copy['close'].shift(5) - 1\n    range_ = df_copy['high'] - df_copy['low']\n    range_med = range_.rolling(window=20, min_periods=20).median()\n    range_mad = (range_ - range_med).abs().rolling(window=20, min_periods=20).mean()\n    range_z = (range_ - range_med) / range_mad.replace(0.0, np.nan)\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy['volume'], window=20)\n    raw = ret * range_z * vol_ratio\n    factor = talib.EMA(raw, timeperiod=10)\n    df_copy['factor_lag_vol_robust_volratio'] = factor\n    return df_copy['factor_lag_vol_robust_volratio']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_lag_vol_robust_volratio",
+  "fitness_direction": -1,
+  "formula": "EMA(ret(5) * robust_z(range,20) * vol_ratio(volume,20), 10)",
+  "metrics": {
+    "ic": 0.02416997177195048,
+    "icir": 0.20660612328558287,
+    "mi": 0.03910825371707283,
+    "rank_ic": 0.049760931677246135,
+    "rank_icir": 0.414887951657282
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.09370454586609567,
+    "top_quantile_excess_return": 0.27205299544441486,
+    "top_quantile_max_drawdown": -0.1306109030319953,
+    "top_quantile_turnover": 0.16621079952557555
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Simplifies the parent by removing the log transform of vol_ratio, using the continuous volume/EMA ratio directly. Preserves the core mechanism of robust range z-score and lagged return multiplied by relative volume intensity. The log transform may add noise; removing it targets improvement in IC and ICIR while maintaining the economic intuition of delayed adjustment following volume- and volatility-driven moves. Parent strength: robust range normalization and vol_ratio.",
+  "raw_metrics": {
+    "ic": -0.02416997177195048,
+    "icir": -0.20660612328558287,
+    "mi": 0.03910825371707283,
+    "rank_ic": -0.049760931677246135,
+    "rank_icir": -0.414887951657282
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260707-123212-r7",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260707-123212-r7"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema(10, ret(5) * robust_z(range,20) * vol_ratio(volume,20))10)",
+  "fe_formula": "ema(10, ret(5) * robust_z(range,20) * vol_ratio(volume,20))10)",
+  "lqtp_notes": "Unconverted: ['robust_z']",
+  "fe_notes": "Unconverted: ['robust_z']",
+  "source_formula": "EMA(ret(5) * robust_z(range,20) * vol_ratio(volume,20), 10)"
+}

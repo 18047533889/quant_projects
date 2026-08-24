@@ -1,0 +1,120 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "9101cfe5f45dbea31b21211bc5e1d63170e68ae12091c5917777eab9971f1eb8",
+  "candidate_ids": [
+    "alpha-stability-002"
+  ],
+  "code": "def factor_volume_state_persistence(df):\n    df_copy = df.copy()\n    volume = df_copy[\"volume\"]\n    vol_ema = volume.ewm(span=20, adjust=False).mean()\n    vol_above = (volume > vol_ema).astype(float)\n    persistence = vol_above.rolling(20, min_periods=20).sum() / 20.0\n    factor = persistence.fillna(0.5)\n    df_copy[\"factor_volume_state_persistence\"] = factor\n    return df_copy[\"factor_volume_state_persistence\"]",
+  "cross_sectional_rationale": "Volume levels differ across stocks; cross-sectional rank reveals relative volume persistence.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.8303030303030303,
+        "top_quantile_annualized_excess_return": 0.011121643390002323,
+        "top_quantile_excess_return": 0.031426064747618776,
+        "top_quantile_max_drawdown": -0.10084970808135107,
+        "top_quantile_turnover": 0.12426144939799973
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.007079892432770689,
+      "field": "ic",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.2920107567229311,
+      "threshold": 0.01
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_volume_state_persistence",
+  "fitness_direction": -1,
+  "formula": "mean(binary(volume > EMA(volume,20)), 20)",
+  "metrics": {
+    "ic": 0.007079892432770689,
+    "icir": 0.07623100593469224,
+    "mi": 0.06571316886424583,
+    "rank_ic": 0.027248871019834715,
+    "rank_icir": 0.25776524757526753
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8303030303030303,
+    "top_quantile_annualized_excess_return": 0.011121643390002323,
+    "top_quantile_excess_return": 0.031426064747618776,
+    "top_quantile_max_drawdown": -0.10084970808135107,
+    "top_quantile_turnover": 0.12426144939799973
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.008906397945274511,
+    "icir": 0.09118905299836248,
+    "mi": 0.011563864729346562,
+    "rank_ic": 0.027248871019834715,
+    "rank_icir": 0.25776524757526753
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.8303030303030303,
+    "top_quantile_annualized_excess_return": 0.011121643390002323,
+    "top_quantile_excess_return": 0.031426064747618776,
+    "top_quantile_max_drawdown": -0.10084970808135107,
+    "top_quantile_turnover": 0.12426144939799973
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.008906397945274511,
+    "icir": -0.09118905299836248,
+    "mi": 0.011563864729346562,
+    "rank_ic": -0.027248871019834715,
+    "rank_icir": -0.25776524757526753
+  },
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Measures the fraction of days in the past 20 where volume exceeded its 20-day EMA, capturing the persistence of elevated volume. Consistently high volume indicates sustained interest and price stability, contributing to temporal persistence in the Stability layer.",
+  "raw_metrics": {
+    "ic": -0.007079892432770689,
+    "icir": -0.07623100593469224,
+    "mi": 0.06571316886424583,
+    "rank_ic": -0.027248871019834715,
+    "rank_icir": -0.25776524757526753
+  },
+  "required_columns": [
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260720-053953-r6",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260720-053953-r6"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.39667343426808577,
+    "pre_transform_top_quantile_excess_return": 0.031426064747618776,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.434038185826811,
+    "transformed_top_quantile_excess_return": 0.031426064747618776
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ts_mean(20, binary(volume > EMA(volume,20))))",
+  "fe_formula": "ts_mean(20, binary(volume > EMA(volume,20))))",
+  "lqtp_notes": "Unconverted: ['binary']",
+  "fe_notes": "Unconverted: ['binary']",
+  "source_formula": "mean(binary(volume > EMA(volume,20)), 20)"
+}

@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "95716f6c679eab49f8b50c6420dc01f04680f09c6c89f2068c4228c85a0e8f35",
+  "candidate_ids": [
+    "reversal-volume-simple-mut-001"
+  ],
+  "code": "def factor_reversal_volume_simple(df):\n    df_copy = df.copy()\n    # core: reversal via smoothed close position\n    range_ = df_copy['high'] - df_copy['low']\n    safe_range = range_.replace(0.0, np.nan)\n    intra_pos = (df_copy['close'] - df_copy['low']) / safe_range\n    smoothed = intra_pos.ewm(span=3, adjust=False).mean()\n    reversal = 0.5 - smoothed\n    # volume confirmation: rank of volume/SMA(21) over 21 days\n    vol_sma_21 = df_copy['volume'].rolling(21, min_periods=21).mean()\n    vol_ratio = df_copy['volume'] / vol_sma_21.replace(0, np.nan)\n    vol_rank = vol_ratio.rolling(21, min_periods=21).rank(pct=True)\n    # combine\n    factor = reversal * vol_rank\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy['factor_reversal_volume_simple'] = factor\n    return df_copy['factor_reversal_volume_simple']",
+  "factor_name": "factor_reversal_volume_simple",
+  "fitness_direction": 1,
+  "formula": "(0.5 - EWMA((close-low)/(high-low), span=3)) * rank_21(volume/SMA_21(volume))",
+  "metrics": {
+    "ic": 0.025596004804858456,
+    "icir": 0.33208458102229227,
+    "mi": 0.0056537101590707906,
+    "rank_ic": 0.029348789149821062,
+    "rank_icir": 0.3207930564944101
+  },
+  "rationale": "Mutated from crossover-reversal-volume-002 by removing the volatility regime modifier (roughness/ATR ratio) to simplify the factor to one core mechanism (intraday reversal) and one lightweight modifier (volume confirmation rank). The volume rank window is reduced from 63 to 21 to match the volume SMA window, improving consistency and reducing lookback. This targets improved IC and RankIC by focusing on the most robust reversal-volume interaction without the volatility regime complexity.",
+  "raw_metrics": {
+    "ic": 0.025596004804858456,
+    "icir": 0.33208458102229227,
+    "mi": 0.0056537101590707906,
+    "rank_ic": 0.029348789149821062,
+    "rank_icir": 0.3207930564944101
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260616-091905-r5",
+  "source_run_ids": [
+    "formal-mvp-loop-20260616-091905-r5"
+  ],
+  "lqtp_formula": "(0.5 - ema(span=3, (close-low)/(high-low))) * ts_rank(21, volume/SMA_21(volume))",
+  "fe_formula": "(0.5 - ema(span=3, (close-low)/(high-low))) * ts_rank(21, volume/SMA_21(volume))",
+  "lqtp_notes": "Unconverted: ['SMA_21']",
+  "fe_notes": "Unconverted: ['SMA_21']",
+  "source_formula": "(0.5 - EWMA((close-low)/(high-low), span=3)) * rank_21(volume/SMA_21(volume))"
+}

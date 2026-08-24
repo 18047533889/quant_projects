@@ -1,0 +1,44 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "967f0108fbfa2309dc0433bef3aa844876009afe689ff5cf55c97c43018868d8",
+  "candidate_ids": [
+    "alpha-mutation-gen3-001"
+  ],
+  "code": "def factor_regime_switch_simple(df):\n    df_copy = df.copy()\n    sma20 = df_copy['close'].rolling(20, min_periods=20).mean()\n    mom = df_copy['close'] / df_copy['close'].shift(10) - 1\n    rev = (df_copy['open'] - df_copy['close']) / df_copy['open']\n    trend_up = df_copy['close'] > sma20\n    factor = np.where(trend_up, mom, rev)\n    df_copy['factor_regime_switch_simple'] = factor\n    return df_copy['factor_regime_switch_simple']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_regime_switch_simple",
+  "fitness_direction": -1,
+  "formula": "if close > SMA20 then (close/shift(close,10)-1) else ((open-close)/open)",
+  "metrics": {
+    "ic": 0.025162936426741944,
+    "icir": 0.1936904712505868,
+    "mi": 0.1923224815176443,
+    "rank_ic": 0.029963951779338818,
+    "rank_icir": 0.22637476401307893
+  },
+  "rationale": "Simplified adaptive regime-switching factor: in uptrend (close above 20-day SMA) use 10-day momentum, otherwise use intraday mean reversion (open-close)/open. Removes volatility normalization to reduce noise and target improved IC and MI while preserving the core economic intuition of the parent and RankIC stability.",
+  "raw_metrics": {
+    "ic": -0.025162936426741944,
+    "icir": -0.1936904712505868,
+    "mi": 0.1923224815176443,
+    "rank_ic": -0.029963951779338818,
+    "rank_icir": -0.22637476401307893
+  },
+  "required_columns": [
+    "open",
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-20260622-085308-r3",
+  "source_run_ids": [
+    "formal-mvp-loop-20260622-085308-r3"
+  ],
+  "lqtp_formula": "if close > SMA20 then (close/delay(close, 10)-1) else ((open-close)/open)",
+  "fe_formula": "if close > SMA20 then (close/ts_delay(close, 10)-1) else ((open-close)/open)",
+  "lqtp_notes": "Unconverted: ['then']",
+  "fe_notes": "Unconverted: ['then']",
+  "source_formula": "if close > SMA20 then (close/shift(close,10)-1) else ((open-close)/open)"
+}

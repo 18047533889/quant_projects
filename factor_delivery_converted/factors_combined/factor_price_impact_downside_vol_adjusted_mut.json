@@ -1,0 +1,125 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "0ef56935345f5c2b0616efa710aad050c94eebe05dfe33bd1999bda9f53594ce",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_crossover_then_mutation_alpha_liquidity_gen0_01f3543c"
+  ],
+  "code": "def factor_price_impact_downside_vol_adjusted_mut(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    ret = close.pct_change()\n    abs_ret = ret.abs()\n    impact = abs_ret / volume.replace(0, np.nan)\n    avg_impact = impact.ewm(span=20, min_periods=20).mean()\n    vol = ret.ewm(span=20, min_periods=20).std()\n    factor = avg_impact / vol.replace(0, np.nan)\n    # Downside/upside return magnitude ratio over longer window for stability\n    pos_sum = ret.where(ret > 0, 0).rolling(60, min_periods=30).sum()\n    neg_sum = ret.where(ret < 0, 0).rolling(60, min_periods=30).sum()\n    ratio = (-neg_sum) / pos_sum.replace(0, np.nan)\n    ratio = ratio.replace([np.inf, -np.inf], np.nan).fillna(1.0)\n    # Use ratio as a dampener when upside dominant (ratio<1) to reduce false signals\n    factor = factor * np.where(ratio >= 1.0, 1.0, ratio)\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy['factor_price_impact_downside_vol_adjusted_mut'] = factor\n    return df_copy['factor_price_impact_downside_vol_adjusted_mut']",
+  "cross_sectional_rationale": "The price impact per unit volatility ratio varies across stocks; cross-sectional rank captures relative downside fragility in the cross-section.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9636363636363636,
+        "top_quantile_annualized_excess_return": 0.04423927735503197,
+        "top_quantile_excess_return": 0.12854973533974356,
+        "top_quantile_max_drawdown": -0.10573223613156069,
+        "top_quantile_turnover": 0.0359867779834619
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.09796357378270125,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.020364262172987563,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_price_impact_downside_vol_adjusted_mut",
+  "fitness_direction": 1,
+  "formula": "factor = EWM(|ret|/vol, 20) / EWM_std(ret, 20) * dampener, dampener = 1 if ratio>=1 else ratio, ratio = -rolling_sum(neg_ret,60)/rolling_sum(pos_ret,60)",
+  "metrics": {
+    "ic": 0.010155208938334897,
+    "icir": 0.09796357378270125,
+    "mi": 0.006080054156759829,
+    "rank_ic": 0.018711860157661023,
+    "rank_icir": 0.14740480503347608
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.04423927735503197,
+    "top_quantile_excess_return": 0.12854973533974356,
+    "top_quantile_max_drawdown": -0.10573223613156069,
+    "top_quantile_turnover": 0.0359867779834619
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.0007559848513541128,
+    "icir": 0.013381403729909386,
+    "mi": 0.013948873110525284,
+    "rank_ic": 0.018711860157661023,
+    "rank_icir": 0.14740480503347608
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.04423927735503197,
+    "top_quantile_excess_return": 0.12854973533974356,
+    "top_quantile_max_drawdown": -0.10573223613156069,
+    "top_quantile_turnover": 0.0359867779834619
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.0007559848513541128,
+    "icir": 0.013381403729909386,
+    "mi": 0.013948873110525284,
+    "rank_ic": 0.018711860157661023,
+    "rank_icir": 0.14740480503347608
+  },
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Mutation of the parent crossover factor. The parent combined price impact per unit volatility with a downside/upside return magnitude ratio, but failed the payoff gate on top quantile excess return. To address this, I simplified the modifier: changed the asymmetry window from 20 to 60 for more stable estimates, and replaced multiplicative scaling with a dampener that reduces the signal when upside returns dominate (ratio<1) rather than amplifying it. This preserves the core economic intuition of downside fragility and targets improved top-quantile payoff by reducing false positive signals. Cross-sectional rank is retained for comparability.",
+  "raw_metrics": {
+    "ic": 0.010155208938334897,
+    "icir": 0.09796357378270125,
+    "mi": 0.006080054156759829,
+    "rank_ic": 0.018711860157661023,
+    "rank_icir": 0.14740480503347608
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-20260730-011744-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-20260730-011744-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.1942029268829259,
+    "pre_transform_top_quantile_excess_return": 0.12854973533974356,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.2803155020689331,
+    "transformed_top_quantile_excess_return": 0.12854973533974356
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "factor = ema(20, |ret|/vol) / EWM_std(ret, 20) * dampener, dampener = 1 if ratio>=1 else ratio, ratio = -ts_sum(60, neg_ret)/ts_sum(60, pos_ret)",
+  "fe_formula": "factor = ema(20, |ret|/vol) / EWM_std(ret, 20) * dampener, dampener = 1 if ratio>=1 else ratio, ratio = -ts_sum(60, neg_ret)/ts_sum(60, pos_ret)",
+  "lqtp_notes": "Unconverted: ['EWM_std']",
+  "fe_notes": "Unconverted: ['EWM_std']",
+  "source_formula": "factor = EWM(|ret|/vol, 20) / EWM_std(ret, 20) * dampener, dampener = 1 if ratio>=1 else ratio, ratio = -rolling_sum(neg_ret,60)/rolling_sum(pos_ret,60)"
+}

@@ -1,0 +1,42 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "f7c1a63e5635aeb9ff06294072a1796100c8ee87a582798c3677fc344a311be0",
+  "candidate_ids": [
+    "mut_volume_confirmed_momentum_v3"
+  ],
+  "code": "def factor_volume_confirmed_momentum_v3(df):\n    df_copy = df.copy()\n    price_ret = df_copy['close'].pct_change(5)\n    volume_20_avg = df_copy['volume'].rolling(20).mean().replace(0, np.nan)\n    volume_ratio = df_copy['volume'] / volume_20_avg\n    volume_rank = volume_ratio.rolling(20).rank(pct=True)\n    factor = price_ret * volume_rank\n    factor.name = 'factor_volume_confirmed_momentum_v3'\n    return factor",
+  "factor_name": "factor_volume_confirmed_momentum_v3",
+  "fitness_direction": -1,
+  "formula": "price_ret_5 * rank(volume / sma(volume,20)) over 20-day window",
+  "metrics": {
+    "ic": 0.02413694783848311,
+    "icir": 0.21803444646639986,
+    "mi": 0.04333164871024575,
+    "rank_ic": 0.03437359352239337,
+    "rank_icir": 0.28729299451317847
+  },
+  "rationale": "Mutated from factor_volume_confirmed_momentum_v2 by increasing the volume rank window from 10 to 20 days. This captures longer-term volume patterns, reducing noise and potentially improving IC and MI while preserving the parent's strong RankIC stability from rank-based volume confirmation. Core mechanism remains unchanged: price momentum confirmed by volume percentile.",
+  "raw_metrics": {
+    "ic": -0.02413694783848311,
+    "icir": -0.21803444646639986,
+    "mi": 0.04333164871024575,
+    "rank_ic": -0.03437359352239337,
+    "rank_icir": -0.28729299451317847
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260612-014632-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260612-014632-r1"
+  ],
+  "lqtp_formula": "price_ret_5 * cs_rank(volume / sma(volume,20)) 20)) over 20-day window",
+  "fe_formula": "price_ret_5 * rank(volume / ts_mean(volume, 20)) over 20-day window",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "price_ret_5 * rank(volume / sma(volume,20)) over 20-day window"
+}

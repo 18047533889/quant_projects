@@ -6,6 +6,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Mapping, Optional
 
+import base64
+
 import numpy as np
 
 from factor_preprocess.errors import (
@@ -61,7 +63,12 @@ def _freeze(value: Any) -> Any:
 
 
 def _stable_repr(value: Any) -> str:
-    """Deterministic canonical string form of a value for content hashing."""
+    """Deterministic canonical string form of a value for content hashing.
+
+    Fail-closed: unsupported object types raise ``TypeError`` instead of
+    falling back to ``repr`` (which may embed memory addresses and is not
+    cross-process stable) — FP-P0-13.
+    """
     if isinstance(value, Mapping):
         return "{" + ",".join(
             f"{_stable_repr(k)}:{_stable_repr(v)}" for k, v in sorted(
@@ -69,6 +76,13 @@ def _stable_repr(value: Any) -> str:
             )
         ) + "}"
     if isinstance(value, np.ndarray):
+        # Object-dtype arrays are not content-stable (elements hash via
+        # identity) -> fail closed.
+        if value.dtype.hasobject:
+            raise TypeError(
+                "_stable_repr does not support object-dtype arrays "
+                f"(shape={value.shape}, dtype={value.dtype})"
+            )
         return (
             f"nd:{value.dtype.str}:{value.shape}:"
             + _stable_repr(value.ravel().tolist())
@@ -81,7 +95,13 @@ def _stable_repr(value: Any) -> str:
         return repr(value)
     if isinstance(value, datetime):
         return value.isoformat()
-    return repr(value)
+    if isinstance(value, bytes):
+        # Base64 is content-stable and cross-process deterministic.
+        return "b64:" + base64.b64encode(value).decode("ascii")
+    raise TypeError(
+        "_stable_repr does not support type "
+        f"{type(value).__module__}.{type(value).__qualname__}"
+    )
 
 
 def _content_hash(value: Any) -> str:
@@ -156,6 +176,27 @@ class FittedState:
         if self.fit_start_time >= self.fit_end_time:
             raise TimingContractError("fit_start_time must be before fit_end_time")
 
+        # FP-P0-13: strictly normalize state_kind BEFORE the FITTED feature
+        # contract check so a caller passing the STRING "fitted" cannot bypass
+        # the fail-closed FITTED contract.
+        if isinstance(self.state_kind, StateKind):
+            state_kind = self.state_kind
+        elif isinstance(self.state_kind, str):
+            try:
+                state_kind = StateKind(self.state_kind)
+            except ValueError:
+                raise InvalidContractError(
+                    f"Invalid state_kind string: {self.state_kind!r}. "
+                    f"Valid values: {[k.value for k in StateKind]}"
+                )
+        else:
+            raise InvalidContractError(
+                "state_kind must be a StateKind or its value string, got "
+                f"{type(self.state_kind).__module__}."
+                f"{type(self.state_kind).__qualname__}"
+            )
+        object.__setattr__(self, "state_kind", state_kind)
+
         # Feature contract validation
         if self.feature_ids and not self.feature_order:
             raise InvalidContractError("feature_order required when feature_ids provided")
@@ -168,7 +209,7 @@ class FittedState:
 
         # FP-P0-05: a FITTED transform must carry a non-empty feature contract.
         # Empty feature_ids must NOT fail-open for stateful transforms.
-        if self.state_kind == StateKind.FITTED and not self.feature_ids:
+        if state_kind == StateKind.FITTED and not self.feature_ids:
             raise InvalidContractError(
                 "FITTED state requires a non-empty feature contract (fail-closed)"
             )

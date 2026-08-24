@@ -1,0 +1,122 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "df091aa9e5c0dec251a8c1d127607b08f9f6522588222e6dea50501f1742469f",
+  "candidate_ids": [
+    "avsi_gen0_a"
+  ],
+  "code": "def factor_size_gated_value_sales_cf(df):\n    df_copy = df.copy()\n    # Cash flow yield for large caps (safe inverse of P/CF)\n    cf_yield = 1.0 / df_copy[\"pcf_ocf_ttm\"].replace(0, np.nan)\n    # Sales yield for small caps (safe inverse of P/S)\n    sales_yield = 1.0 / df_copy[\"ps_ttm\"].replace(0, np.nan)\n    # Leverage penalty for small caps: discount sales yield when debt is high\n    debt_ratio = df_copy[\"debttoassets\"] / 100.0\n    # Bound debt ratio between 0 and 1\n    debt_ratio = debt_ratio.clip(0, 1)\n    small_value = sales_yield * (1.0 - debt_ratio)\n    # Use style gates: size_large and size_small as soft conditions\n    # If no gate column, fallback to unconditional yield blend\n    if \"style_gate_size_large\" in df_copy.columns and \"style_gate_size_small\" in df_copy.columns:\n        large_cond = df_copy[\"style_gate_size_large\"] == 1\n        small_cond = df_copy[\"style_gate_size_small\"] == 1\n        # Where both false, use a neutral blend (0.5 of each)\n        neutral = (cf_yield + small_value) / 2.0\n        signal = np.where(large_cond, cf_yield, np.where(small_cond, small_value, neutral))\n    else:\n        signal = (cf_yield + small_value) / 2.0\n    df_copy[\"factor_size_gated_value_sales_cf\"] = signal\n    return df_copy[\"factor_size_gated_value_sales_cf\"]",
+  "cross_sectional_rationale": "Cross-sectional ranking makes raw valuation yields from different metrics (P/CF vs P/S) comparable across stocks and removes scale differences.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.13391044224015647,
+        "top_quantile_excess_return": 0.4348471146566728,
+        "top_quantile_max_drawdown": -0.07178095155344055,
+        "top_quantile_turnover": 0.025229616584625924
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_size_gated_value_sales_cf",
+  "fitness_direction": 1,
+  "formula": "If size_large: 1/pcf_ocf_ttm. If size_small: (1/ps_ttm) * (1 - debttoassets/100). Else average.",
+  "metrics": {
+    "ic": 0.018343705175026013,
+    "icir": 0.182825292366624,
+    "mi": 0.009162181516607859,
+    "rank_ic": 0.03330038638553805,
+    "rank_icir": 0.2668939814023482
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.13391044224015647,
+    "top_quantile_excess_return": 0.4348471146566728,
+    "top_quantile_max_drawdown": -0.07178095155344055,
+    "top_quantile_turnover": 0.025229616584625924
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.010825024918495185,
+    "icir": 0.1630053207127581,
+    "mi": 0.015090451615297873,
+    "rank_ic": 0.03330038638553805,
+    "rank_icir": 0.2668939814023482
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.13391044224015647,
+    "top_quantile_excess_return": 0.4348471146566728,
+    "top_quantile_max_drawdown": -0.07178095155344055,
+    "top_quantile_turnover": 0.025229616584625924
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.010825024918495185,
+    "icir": 0.1630053207127581,
+    "mi": 0.015090451615297873,
+    "rank_ic": 0.03330038638553805,
+    "rank_icir": 0.2668939814023482
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Value signals conditioned on market cap size: for large caps use cash flow yield (1/P/CF), for small caps use sales yield (1/P/S) adjusted by leverage (debt-to-assets) to penalize financially distressed small firms. This avoids the failed mechanism of dividing value by size directly; instead, the size context selects the appropriate valuation metric and applies a leverage penalty only for small caps. The raw information pathway uses cash flow yield and sales yield, differing from supported evidence which used earnings yield and book yield.",
+  "raw_metrics": {
+    "ic": 0.018343705175026013,
+    "icir": 0.182825292366624,
+    "mi": 0.009162181516607859,
+    "rank_ic": 0.03330038638553805,
+    "rank_icir": 0.2668939814023482
+  },
+  "required_columns": [
+    "pcf_ocf_ttm",
+    "ps_ttm",
+    "debttoassets",
+    "mkt_cap_float",
+    "style_gate_size_large",
+    "style_gate_size_small"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260719-20260719-174251-r2",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260719-20260719-174251-r2"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "Uses style_gate_size_large and style_gate_size_small to select the appropriate value metric for large vs small cap regimes, maintaining the size-conditioned value mechanism.",
+  "style_gates_used": [
+    "style_gate_size_large",
+    "style_gate_size_small"
+  ],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.4891151650344374,
+    "pre_transform_top_quantile_excess_return": 0.4348471146566728,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.5105255468461442,
+    "transformed_top_quantile_excess_return": 0.4348471146566728
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "If size_large: 1/pcf_ocf_ttm. If size_small: (1/ps_ttm) * (1 - debttoassets/100). Else average.",
+  "fe_formula": "If size_large: 1/pcf_ocf_ttm. If size_small: (1/ps_ttm) * (1 - debttoassets/100). Else average.",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "If size_large: 1/pcf_ocf_ttm. If size_small: (1/ps_ttm) * (1 - debttoassets/100). Else average."
+}

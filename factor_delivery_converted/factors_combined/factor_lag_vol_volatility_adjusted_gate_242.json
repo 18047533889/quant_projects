@@ -1,0 +1,73 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "6a818783cb6ea8865348f0e88f3718a66c34848231986c0b7076078cd2978245",
+  "candidate_ids": [
+    "g2_mutation_alpha_lag_response_0_1_1e85cf11"
+  ],
+  "code": "def factor_lag_vol_volatility_adjusted_gate(df):\n    df_copy = df.copy()\n    ret_5 = df_copy[\"close\"] / df_copy[\"close\"].shift(5) - 1\n    ema_vol = df_copy[\"volume\"].ewm(span=30, min_periods=30, adjust=False).mean()\n    log_vol_ratio = np.log(df_copy[\"volume\"] / ema_vol.replace(0, np.nan))\n    atr_20 = talib.ATR(df_copy[\"high\"], df_copy[\"low\"], df_copy[\"close\"], timeperiod=20)\n    vol_adj = atr_20 / df_copy[\"close\"].replace(0, np.nan)\n    raw = ret_5 * log_vol_ratio * vol_adj\n    high_resvol = df_copy[\"style_gate_resvol_high\"] > 0\n    factor = np.where(high_resvol, raw.ewm(span=10, min_periods=10, adjust=False).mean(), raw.ewm(span=5, min_periods=5, adjust=False).mean())\n    df_copy[\"factor_lag_vol_volatility_adjusted_gate\"] = factor\n    return df_copy[\"factor_lag_vol_volatility_adjusted_gate\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_lag_vol_volatility_adjusted_gate",
+  "fitness_direction": -1,
+  "formula": "raw = (close/shift(close,5)-1) * log(volume/EMA30(volume)) * (ATR20/close); factor = if high_resvol then EMA10(raw) else EMA5(raw)",
+  "metrics": {
+    "ic": 0.022523408181991902,
+    "icir": 0.18140576109704856,
+    "mi": 0.046479437651917976,
+    "rank_ic": 0.04421754009758397,
+    "rank_icir": 0.36318397240212885
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8424242424242424,
+    "top_quantile_annualized_excess_return": 0.042792964603581396,
+    "top_quantile_excess_return": 0.1217609690859991,
+    "top_quantile_max_drawdown": -0.17871181730057228,
+    "top_quantile_turnover": 0.30613429591171926
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Preserves the core mechanism of lagged return amplified by log volume ratio and volatility adjustment. Adds a lightweight regime adaptation: in high residual volatility states (style_gate_resvol_high), a longer EMA smoothing (10 days) reduces noise; otherwise, the original EMA5 preserves responsiveness. This targets improved stability in turbulent periods without weakening the parent's strength.",
+  "raw_metrics": {
+    "ic": -0.022523408181991902,
+    "icir": -0.18140576109704856,
+    "mi": 0.046479437651917976,
+    "rank_ic": -0.04421754009758397,
+    "rank_icir": -0.36318397240212885
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "style_gate_resvol_high"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260708-061501-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260708-061501-r1"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "style_gate_resvol_high: In high residual volatility states, information diffusion is noisier, so a longer smoothing window (EMA10) filters out rapid fluctuations while retaining the core signal. In low residual volatility, the original EMA5 keeps the factor responsive to recent changes. This regime adaptation improves the factor's robustness without altering the economic mechanism.",
+  "style_gates_used": [
+    "style_gate_resvol_high"
+  ],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "raw = (close/delay(close, 5)-1) * log(volume/EMA30(volume)) * (ATR20/close); factor = if high_resvol then ema(10, raw) else ema(5, raw)",
+  "fe_formula": "raw = (close/ts_delay(close, 5)-1) * log(volume/EMA30(volume)) * (ATR20/close); factor = if high_resvol then ema(10, raw) else ema(5, raw)",
+  "lqtp_notes": "Unconverted: ['EMA30']",
+  "fe_notes": "Unconverted: ['EMA30']",
+  "source_formula": "raw = (close/shift(close,5)-1) * log(volume/EMA30(volume)) * (ATR20/close); factor = if high_resvol then EMA10(raw) else EMA5(raw)"
+}

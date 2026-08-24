@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "35052485676ec157c0817182a304d5517670d8b7333a1a82065d651ed54812d1",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_alpha_creative_2_vwap_divergence_he_fd13cd9f"
+  ],
+  "code": "def factor_vwap_adjusted_range_tanh_smooth(df):\n    df_copy = df.copy()\n    # Increased ATR window from 14 to 20 for smoother volatility estimate\n    atr = talib.ATR(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=20)\n    # Increased VWAP window from 20 to 30 for more stable anchor\n    vwap = (df_copy['close'] * df_copy['volume']).rolling(30, min_periods=30).sum() / df_copy['volume'].rolling(30, min_periods=30).sum().replace(0, np.nan)\n    norm_atr = atr / vwap\n    # Increased volume EMA window from 20 to 30 for smoother ratio\n    vol_ema = talib.EMA(df_copy['volume'], timeperiod=30)\n    vol_ratio = df_copy['volume'] / vol_ema\n    raw = norm_atr * vol_ratio\n    factor = np.tanh(raw)\n    df_copy['factor_vwap_adjusted_range_tanh_smooth'] = factor\n    return df_copy['factor_vwap_adjusted_range_tanh_smooth']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_vwap_adjusted_range_tanh_smooth",
+  "fitness_direction": -1,
+  "formula": "tanh( (ATR(20) / VWAP(30)) * (volume / EMA(volume, 30)) )",
+  "metrics": {
+    "ic": 0.01944717198099281,
+    "icir": 0.1395347662746922,
+    "mi": 0.06662819518679086,
+    "rank_ic": 0.0600879153926914,
+    "rank_icir": 0.41682908638385624
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.3,
+    "top_quantile_annualized_excess_return": 0.01835428411826734,
+    "top_quantile_excess_return": 0.05144037614526664,
+    "top_quantile_max_drawdown": -0.12316404775720657,
+    "top_quantile_turnover": 0.38334920635844655
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Mutation of factor_vwap_adjusted_range_tanh by extending all lookback windows (ATR to 20, VWAP to 30, volume EMA to 30) to produce a smoother, less noisy signal. This targets improved ICIR and RankICIR while preserving the core volatility-volume confirmation mechanism anchored to VWAP.",
+  "raw_metrics": {
+    "ic": -0.01944717198099281,
+    "icir": -0.1395347662746922,
+    "mi": 0.06662819518679086,
+    "rank_ic": -0.0600879153926914,
+    "rank_icir": -0.41682908638385624
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260707-013704-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260707-013704-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "tanh( (ts_atr(20) / VWAP(30)) * (volume / ema(30, volume)) )",
+  "fe_formula": "tanh( (ATR(20) / VWAP(30)) * (volume / ema(30, volume)) )",
+  "lqtp_notes": "Unconverted: ['VWAP']",
+  "fe_notes": "Unconverted: ['VWAP']",
+  "source_formula": "tanh( (ATR(20) / VWAP(30)) * (volume / EMA(volume, 30)) )"
+}

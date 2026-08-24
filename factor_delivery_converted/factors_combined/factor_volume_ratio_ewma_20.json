@@ -1,0 +1,97 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "490434b357d1fa8d494aa4e61b458da6df000ce3467552b45a34b40997c3c721",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_then_mutation_alpha_stability_0_0_c_25c5036c"
+  ],
+  "code": "def factor_volume_ratio_ewma_20(df):\n    df_copy = df.copy()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    persistence = vol_ratio.ewm(span=20, min_periods=10).mean()\n    df_copy[\"factor_volume_ratio_ewma_20\"] = persistence\n    return df_copy[\"factor_volume_ratio_ewma_20\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.8787878787878788,
+        "top_quantile_annualized_excess_return": -0.014651017749207407,
+        "top_quantile_excess_return": -0.04101215610373665,
+        "top_quantile_max_drawdown": -0.11077525978606306,
+        "top_quantile_turnover": 0.1210848385523548
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_volume_ratio_ewma_20",
+  "fitness_direction": -1,
+  "formula": "EWMA of vol_ratio (volume/EMA) over span 20",
+  "metrics": {
+    "ic": 0.01257697877895973,
+    "icir": 0.1103309817945937,
+    "mi": 0.019148377319375243,
+    "rank_ic": 0.03333168610999858,
+    "rank_icir": 0.30405754603284446
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8787878787878788,
+    "top_quantile_annualized_excess_return": -0.014651017749207407,
+    "top_quantile_excess_return": -0.04101215610373665,
+    "top_quantile_max_drawdown": -0.11077525978606306,
+    "top_quantile_turnover": 0.1210848385523548
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Mutation from parent's simple rolling mean to exponential weighted moving average. EWMA places higher weight on recent volume observations, improving responsiveness to changes in trading activity while preserving the core economic mechanism of sustained relative volume smoothing. This targets the parent's low IC and RankIC by making the signal more timely without adding new features or increasing turnover materially.",
+  "raw_metrics": {
+    "ic": -0.01257697877895973,
+    "icir": -0.1103309817945937,
+    "mi": 0.019148377319375243,
+    "rank_ic": -0.03333168610999858,
+    "rank_icir": -0.30405754603284446
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-20260730-055319-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-20260730-055319-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "EWMA of <vol_ratio>(volume/EMA) over span 20",
+  "fe_formula": "EWMA of <vol_ratio>(volume/EMA) over span 20",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "EWMA of vol_ratio (volume/EMA) over span 20"
+}

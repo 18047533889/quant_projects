@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "efb7113d7e99c0e6ed2ae2b15a863364e4aee87081165bffbf0f92fd738c2934",
+  "candidate_ids": [
+    "alpha-crossover-gen2-001"
+  ],
+  "code": "def factor_roughness_trend_vol_short(df):\n    df_copy = df.copy()\n    tr = talib.TRANGE(df_copy['high'], df_copy['low'], df_copy['close'])\n    atr_short = tr.rolling(5, min_periods=5).mean()\n    atr_long = tr.rolling(20, min_periods=20).mean()\n    roughness_ratio = atr_short / atr_long.replace(0, np.nan)\n    sma_20 = df_copy['close'].rolling(20, min_periods=20).mean()\n    trend = (df_copy['close'] / sma_20) - 1\n    vol_ma = df_copy['volume'].rolling(10).mean()\n    vol_ratio = df_copy['volume'] / vol_ma.replace(0, np.nan)\n    factor = roughness_ratio * trend * vol_ratio\n    df_copy['factor_roughness_trend_vol_short'] = factor\n    return df_copy['factor_roughness_trend_vol_short']",
+  "factor_name": "factor_roughness_trend_vol_short",
+  "fitness_direction": -1,
+  "formula": "Roughness_Ratio = ATR(5) / ATR(20), Trend = Close / SMA(20) - 1, Volume_Ratio = Volume / SMA(10), Factor = Roughness_Ratio * Trend * Volume_Ratio",
+  "metrics": {
+    "ic": 0.022553494356689525,
+    "icir": 0.20349466051644227,
+    "mi": 0.02656476044413658,
+    "rank_ic": 0.03522116515495012,
+    "rank_icir": 0.25627918633464236
+  },
+  "rationale": "Crossover: primary mechanism from parent alpha-mutation-gen2-001 (roughness * trend), borrows lightweight volume confirmation from parent alpha-crossover-gen1-001 but with a shorter 10-day volume average to capture immediate volume spikes, aiming to improve IC and RankIC while preserving the MI strength of the ablation parent.",
+  "raw_metrics": {
+    "ic": -0.022553494356689525,
+    "icir": -0.20349466051644227,
+    "mi": 0.02656476044413658,
+    "rank_ic": -0.03522116515495012,
+    "rank_icir": -0.25627918633464236
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260615-064629-r3",
+  "source_run_ids": [
+    "formal-mvp-loop-20260615-064629-r3"
+  ],
+  "lqtp_formula": "Roughness_Ratio = ts_atr(5) / ts_atr(20), Trend = Close / ts_mean(20) - 1, Volume_Ratio = Volume / ts_mean(10), Factor = Roughness_Ratio * Trend * Volume_Ratio",
+  "fe_formula": "Roughness_Ratio = ATR(5) / ATR(20), Trend = Close / ts_mean(20) - 1, Volume_Ratio = Volume / ts_mean(10), Factor = Roughness_Ratio * Trend * Volume_Ratio",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "Roughness_Ratio = ATR(5) / ATR(20), Trend = Close / SMA(20) - 1, Volume_Ratio = Volume / SMA(10), Factor = Roughness_Ratio * Trend * Volume_Ratio"
+}

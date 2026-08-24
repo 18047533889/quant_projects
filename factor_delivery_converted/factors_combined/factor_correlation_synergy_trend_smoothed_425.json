@@ -1,0 +1,125 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "b9ddfb3faf929c301f397dfd27b722aff024b67f5241c6731cee618c197a864b",
+  "candidate_ids": [
+    "g1_crossover_ac_002_alpha_stability_2_476944cc"
+  ],
+  "code": "def factor_correlation_synergy_trend_smoothed(df):\n    df_copy = df.copy()\n    price_roc = df_copy['close'].pct_change(20)\n    volume_roc = df_copy['volume'].pct_change(20)\n    corr = price_roc.rolling(30, min_periods=30).corr(volume_roc).fillna(0)\n    # lightweight ewma smoothing from alpha-stability-2\n    smooth_corr = corr.ewm(span=5, adjust=False).mean().clip(0, 1)\n    short_trend = (df_copy['close'].rolling(10).mean() / df_copy['close'].rolling(40).mean() - 1)\n    long_trend = (df_copy['close'].rolling(20).mean() / df_copy['close'].rolling(80).mean() - 1)\n    factor = short_trend * smooth_corr + long_trend * (1 - smooth_corr)\n    factor.name = 'factor_correlation_synergy_trend_smoothed'\n    return factor",
+  "cross_sectional_rationale": "Gaussian rank normalization ensures cross-sectional comparability of the synergy-weighted trend signal, which is economically relevant as it reflects relative alignment across stocks.",
+  "cross_sectional_transform": "cs_rank_gauss",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9757575757575757,
+        "top_quantile_annualized_excess_return": 0.09259277760379026,
+        "top_quantile_excess_return": 0.2543969790391636,
+        "top_quantile_max_drawdown": -0.12312577955723336,
+        "top_quantile_turnover": 0.04965841947072322
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.09808531859055075,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.019146814094492537,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_correlation_synergy_trend_smoothed",
+  "fitness_direction": -1,
+  "formula": "smooth_corr = ewma(clip(corr(roc(close,20), roc(volume,20), 30), 0,1), span=5); factor = short_trend * smooth_corr + long_trend * (1-smooth_corr)",
+  "metrics": {
+    "ic": 0.01520757414840545,
+    "icir": 0.09808531859055075,
+    "mi": 0.012813021803305347,
+    "rank_ic": 0.03140366650377227,
+    "rank_icir": 0.1787227213366092
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.09259277760379026,
+    "top_quantile_excess_return": 0.2543969790391636,
+    "top_quantile_max_drawdown": -0.12312577955723336,
+    "top_quantile_turnover": 0.04965841947072322
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.017462791419346223,
+    "icir": 0.10850184317798567,
+    "mi": 0.028478317487550697,
+    "rank_ic": 0.03140366650377227,
+    "rank_icir": 0.1787227213366092
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.09259277760379026,
+    "top_quantile_excess_return": 0.2543969790391636,
+    "top_quantile_max_drawdown": -0.12312577955723336,
+    "top_quantile_turnover": 0.04965841947072322
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.017462791419346223,
+    "icir": -0.10850184317798567,
+    "mi": 0.028478317487550697,
+    "rank_ic": -0.03140366650377227,
+    "rank_icir": -0.1787227213366092
+  },
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Preserves the synergy fusion from AC-002: adaptive trend weighting via price-volume correlation. Adds an ewma smoothing step (borrowed from alpha-stability-2) to reduce noise in the correlation estimate, targeting more stable signal transitions and improved ICIR/RankICIR while preserving the strong payoff evidence of the primary parent.",
+  "raw_metrics": {
+    "ic": -0.01520757414840545,
+    "icir": -0.09808531859055075,
+    "mi": 0.012813021803305347,
+    "rank_ic": -0.03140366650377227,
+    "rank_icir": -0.1787227213366092
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260719-181655-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260719-181655-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.3645693399252641,
+    "pre_transform_top_quantile_excess_return": 0.2543969790391636,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.336232302382643,
+    "transformed_top_quantile_excess_return": 0.2543969790391636
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "smooth_corr = ema(span=5, clip(corr(roc(close,20), roc(volume,20), 30), 0,1))1), span=5); factor = short_trend * smooth_corr + long_trend * (1-smooth_corr)",
+  "fe_formula": "smooth_corr = ema(span=5, clip(corr(roc(close,20), roc(volume,20), 30), 0,1))1), span=5); factor = short_trend * smooth_corr + long_trend * (1-smooth_corr)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "smooth_corr = ewma(clip(corr(roc(close,20), roc(volume,20), 30), 0,1), span=5); factor = short_trend * smooth_corr + long_trend * (1-smooth_corr)"
+}

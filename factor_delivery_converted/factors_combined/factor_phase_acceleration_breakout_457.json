@@ -1,0 +1,98 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "235209f0813d9ae9ec5e50e94491fef4a1bf4471ec0f07d9db783f7509f925ac",
+  "candidate_ids": [
+    "alpha_market_cycle_0001"
+  ],
+  "code": "def factor_phase_acceleration_breakout(df):\n    \"\"\"Long-horizon trend phase transition: detect when price breaks above its slow trend while the slow trend itself is accelerating, capturing market expansion from consolidation into a sustained cycle upswing.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n\n    slow_ma = close.rolling(60, min_periods=60).mean()\n    fast_ma = close.rolling(20, min_periods=20).mean()\n    trend_slope = slow_ma - slow_ma.shift(20)\n    range_ = (high - low).rolling(20, min_periods=20).mean()\n    range_ = range_.replace(0.0, np.nan)\n\n    breakout = (close - slow_ma) / slow_ma.replace(0.0, np.nan)\n    acceleration = trend_slope / range_\n    factor = breakout + 0.5 * acceleration + 0.25 * ((fast_ma - slow_ma) / slow_ma.replace(0.0, np.nan))\n    df_copy[\"factor_phase_acceleration_breakout\"] = factor\n    return df_copy[\"factor_phase_acceleration_breakout\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9636363636363636,
+        "top_quantile_annualized_excess_return": 0.0701506958357323,
+        "top_quantile_excess_return": 0.1895015722687854,
+        "top_quantile_max_drawdown": -0.129909666653242,
+        "top_quantile_turnover": 0.050358123976950706
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.08416887369992448,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.1583112630007552,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_phase_acceleration_breakout",
+  "fitness_direction": -1,
+  "formula": "(close - SMA60)/SMA60 + 0.5*(SMA60 - SMA60[20]) / mean(range20) + 0.25*(SMA20 - SMA60)/SMA60",
+  "metrics": {
+    "ic": 0.011457182474985958,
+    "icir": 0.08416887369992448,
+    "mi": 0.008446990669957799,
+    "rank_ic": 0.02472544817186854,
+    "rank_icir": 0.15537745408214165
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.0701506958357323,
+    "top_quantile_excess_return": 0.1895015722687854,
+    "top_quantile_max_drawdown": -0.129909666653242,
+    "top_quantile_turnover": 0.050358123976950706
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "This factor targets a market-phase transition mechanism: long-term uptrends become more valuable when the slow trend is accelerating and price is breaking above the slow average. It is not a generic momentum stack; the signal emphasizes expansion out of a neutral phase into a sustained cycle upswing, which is characteristic of the Market Structure & Cycle layer.",
+  "raw_metrics": {
+    "ic": -0.011457182474985958,
+    "icir": -0.08416887369992448,
+    "mi": 0.008446990669957799,
+    "rank_ic": -0.02472544817186854,
+    "rank_icir": -0.15537745408214165
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-20260729-071718-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-20260729-071718-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(close - SMA60)/SMA60 + 0.5*(SMA60 - SMA60[20]) / ts_mean(range20) + 0.25*(SMA20 - SMA60)/SMA60",
+  "fe_formula": "(close - SMA60)/SMA60 + 0.5*(SMA60 - SMA60[20]) / ts_mean(range20) + 0.25*(SMA20 - SMA60)/SMA60",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(close - SMA60)/SMA60 + 0.5*(SMA60 - SMA60[20]) / mean(range20) + 0.25*(SMA20 - SMA60)/SMA60"
+}

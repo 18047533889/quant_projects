@@ -1,0 +1,73 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "9ff4ba73cf3dd5aec0ea73944169dc3514642d0615df403124568c73fec34963",
+  "candidate_ids": [
+    "g2_crossover_alpha_lag_response_0_1_g1_mutation_alpha_lag_res_7a7ae830"
+  ],
+  "code": "def factor_lag_volatility_regime_adapted(df):\n    df_copy = df.copy()\n    ret_5 = df_copy[\"close\"] / df_copy[\"close\"].shift(5) - 1\n    ema_vol = df_copy[\"volume\"].ewm(span=30, min_periods=30, adjust=False).mean()\n    log_vol_ratio = np.log(df_copy[\"volume\"] / ema_vol.replace(0, np.nan))\n    atr_short = talib.ATR(df_copy[\"high\"], df_copy[\"low\"], df_copy[\"close\"], timeperiod=10)\n    atr_long = talib.ATR(df_copy[\"high\"], df_copy[\"low\"], df_copy[\"close\"], timeperiod=20)\n    vol_adj_short = atr_short / df_copy[\"close\"].replace(0, np.nan)\n    vol_adj_long = atr_long / df_copy[\"close\"].replace(0, np.nan)\n    resvol_high = df_copy[\"style_gate_resvol_high\"]\n    vol_adj = np.where(resvol_high > 0, vol_adj_short, vol_adj_long)\n    raw = ret_5 * log_vol_ratio * vol_adj\n    factor = raw.ewm(span=5, min_periods=5, adjust=False).mean()\n    df_copy[\"factor_lag_volatility_regime_adapted\"] = factor\n    return df_copy[\"factor_lag_volatility_regime_adapted\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_lag_volatility_regime_adapted",
+  "fitness_direction": -1,
+  "formula": "EMA5( (close/shift(close,5)-1) * log(volume/EMA30(volume)) * np.where(resvol_high, ATR10/close, ATR20/close) )",
+  "metrics": {
+    "ic": 0.025481828072036233,
+    "icir": 0.21749549101468343,
+    "mi": 0.04668337488802177,
+    "rank_ic": 0.04093426960135419,
+    "rank_icir": 0.3507094349044217
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8666666666666667,
+    "top_quantile_annualized_excess_return": 0.030591118668054085,
+    "top_quantile_excess_return": 0.08613479646014888,
+    "top_quantile_max_drawdown": -0.18045962426138928,
+    "top_quantile_turnover": 0.32860983437884767
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Preserves the core mechanism of lagged return amplified by log volume ratio. Adds a lightweight regime adaptation: in high residual volatility states, a shorter ATR window (10) is used to adjust the volatility scaling, making the factor more responsive to recent volatility spikes; in low residual volatility, a longer ATR window (20) provides stable scaling. This targets improved adaptation to changing volatility regimes without altering the core economic signal.",
+  "raw_metrics": {
+    "ic": -0.025481828072036233,
+    "icir": -0.21749549101468343,
+    "mi": 0.04668337488802177,
+    "rank_ic": -0.04093426960135419,
+    "rank_icir": -0.3507094349044217
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "style_gate_resvol_high"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260708-061501-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260708-061501-r1"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "style_gate_resvol_high: In high residual volatility states, volatility scaling from a short ATR (10) captures rapid changes in price range, making the factor more adaptive to turbulent conditions. In low residual volatility, a longer ATR (20) provides smoother, more representative volatility scaling. This regime switch targets improved factor robustness without weakening the core lagged return and volume interaction.",
+  "style_gates_used": [
+    "style_gate_resvol_high"
+  ],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema(5, (close/delay(close, 5)-1) * log(volume/EMA30(volume)) * np.where(resvol_high, ATR10/close, ATR20/close))",
+  "fe_formula": "ema(5, (close/ts_delay(close, 5)-1) * log(volume/EMA30(volume)) * np.where(resvol_high, ATR10/close, ATR20/close))",
+  "lqtp_notes": "Unconverted: ['EMA30']",
+  "fe_notes": "Unconverted: ['EMA30']",
+  "source_formula": "EMA5( (close/shift(close,5)-1) * log(volume/EMA30(volume)) * np.where(resvol_high, ATR10/close, ATR20/close) )"
+}

@@ -1,0 +1,116 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "cfd36cd8f8d6dc622ef9a1e2c085e3285e50d6691c7f4c7d317ce5a5b6763a38",
+  "candidate_ids": [
+    "g1_crossover_then_mutation_float_elasticity_candidate1_alr_001_r1_817a4ecd"
+  ],
+  "code": "def factor_float_conditioned_cheapness_winsorized(df):\n    df_copy = df.copy()\n    cheapness = 1.0 / df_copy[\"pb_lf\"].replace(0, np.nan)\n    float_adj = 1.0 / np.log1p(df_copy[\"free_float_shares\"].clip(lower=1e6))\n    debt_ratio = df_copy[\"debttoassets\"] / 100.0\n    penalty = 1.0 / (1.0 + debt_ratio)\n    raw = cheapness * float_adj * penalty\n    low = raw.rolling(252, min_periods=60).quantile(0.01)\n    high = raw.rolling(252, min_periods=60).quantile(0.99)\n    winsorized = raw.clip(lower=low, upper=high)\n    return winsorized.rename(\"factor_float_conditioned_cheapness_winsorized\")",
+  "cross_sectional_rationale": "Cross-sectional rank normalizes the multiplicative combination of different units (inverse PB, float adjustment, leverage penalty) to a common interpretable scale, isolating the relative ordering of float-conditioned cheapness.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.1239163109336392,
+        "top_quantile_excess_return": 0.39881252583144033,
+        "top_quantile_max_drawdown": -0.11844427689172599,
+        "top_quantile_turnover": 0.022002176162268555
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_float_conditioned_cheapness_winsorized",
+  "fitness_direction": 1,
+  "formula": "raw = (1/pb_lf) / log(1+free_float_shares) * 1/(1+debttoassets/100); then clip to rolling 1st-99th percentile over 252 days",
+  "metrics": {
+    "ic": 0.014495447490542978,
+    "icir": 0.13902607651553428,
+    "mi": 0.015518323610958618,
+    "rank_ic": 0.03701323298051034,
+    "rank_icir": 0.283424211569766
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.1239163109336392,
+    "top_quantile_excess_return": 0.39881252583144033,
+    "top_quantile_max_drawdown": -0.11844427689172599,
+    "top_quantile_turnover": 0.022002176162268555
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.012946625100338406,
+    "icir": 0.12422680123146047,
+    "mi": 0.018973181575113074,
+    "rank_ic": 0.03701323298051034,
+    "rank_icir": 0.283424211569766
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.1239163109336392,
+    "top_quantile_excess_return": 0.39881252583144033,
+    "top_quantile_max_drawdown": -0.11844427689172599,
+    "top_quantile_turnover": 0.022002176162268555
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.012946625100338406,
+    "icir": 0.12422680123146047,
+    "mi": 0.018973181575113074,
+    "rank_ic": 0.03701323298051034,
+    "rank_icir": 0.283424211569766
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Mutated from the size-gated parent by removing the size gate (simplification) and adding time-series winsorization (local outlier control). The core float-conditioned cheapness with a universal leverage penalty preserves the economic mechanism: stocks with low PB, low free-float shares, and low debt are attractive. The winsorization reduces extreme values to improve the continuous IC without damaging the strong RankIC/RankICIR. This targets the parent's IC bottleneck while preserving its rank and MI strengths.",
+  "raw_metrics": {
+    "ic": 0.014495447490542978,
+    "icir": 0.13902607651553428,
+    "mi": 0.015518323610958618,
+    "rank_ic": 0.03701323298051034,
+    "rank_icir": 0.283424211569766
+  },
+  "required_columns": [
+    "pb_lf",
+    "free_float_shares",
+    "debttoassets"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260721-20260721-205925-r5",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260721-20260721-205925-r5"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.47658405245718827,
+    "pre_transform_top_quantile_excess_return": 0.39881252583144033,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.4894772921673122,
+    "transformed_top_quantile_excess_return": 0.39881252583144033
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "raw = (1/pb_lf) / log(1+free_float_shares) * 1/(1+debttoassets/100); then clip to rolling 1st-99th percentile over 252 days",
+  "fe_formula": "raw = (1/pb_lf) / log(1+free_float_shares) * 1/(1+debttoassets/100); then clip to rolling 1st-99th percentile over 252 days",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "raw = (1/pb_lf) / log(1+free_float_shares) * 1/(1+debttoassets/100); then clip to rolling 1st-99th percentile over 252 days"
+}

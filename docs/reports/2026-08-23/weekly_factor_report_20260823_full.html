@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>因子周报 2026-08-23</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:"PingFang SC","Microsoft YaHei",Arial,sans-serif; background:#0f1419; color:#e6e8ea; padding:24px; }
+h1 { color:#1d9bf0; font-size:1.8em; margin-bottom:6px; }
+h2 { color:#e6e8ea; font-size:1.1em; border-left:4px solid #1d9bf0; padding-left:12px; margin:28px 0 14px; }
+h3 { color:#8b949e; font-size:0.9em; margin:20px 0 8px; }
+.subtitle { color:#71767b; font-size:0.85em; margin-bottom:24px; }
+.metrics { display:flex; gap:20px; flex-wrap:wrap; margin-bottom:28px; }
+.metric { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:18px 28px; text-align:center; flex:1; min-width:120px; }
+.metric b { display:block; font-size:2.4em; color:#1d9bf0; font-weight:700; }
+.metric span { display:block; font-size:0.78em; color:#71767b; margin-top:4px; }
+.chart-block { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:16px; margin-bottom:20px; }
+.chart-block img { width:100%; border-radius:6px; }
+table { width:100%; border-collapse:collapse; background:#161b22; border-radius:10px; overflow:hidden; }
+th { background:#21262d; color:#71767b; font-size:0.75em; text-align:left; padding:12px 14px; font-weight:400; letter-spacing:0.05em; }
+td { padding:11px 14px; font-size:0.84em; border-top:1px solid #21262d; }
+tr:hover td { background:#1c2128; }
+tr.flipped td { color:#8b949e; }
+.pos { color:#3ba55c; font-weight:bold; }
+.neg { color:#f4212e; }
+.sharge { font-weight:bold; }
+.tag {
+    display:inline-block;
+    background:#21262d;
+    color:#71767b;
+    font-size:0.7em;
+    padding:2px 6px;
+    border-radius:4px;
+    margin-left:4px;
+    vertical-align:middle;
+}
+.tag-flip { background:#1d3a5f; color:#1d9bf0; }
+</style>
+</head>
+<body>
+<h1>因子周报</h1>
+<div class="subtitle">生成: 2026-08-23 &nbsp;|&nbsp; 区间: 2024-01-02 ~ 2025-12-31 &nbsp;|&nbsp; IC 负因子已通过因子值*-1 翻转</div>
+
+<div class="metrics">
+  <div class="metric"><b>61</b><span>总因子</span></div>
+  <div class="metric"><b>44</b><span>正夏普</span></div>
+  <div class="metric"><b>17</b><span>负夏普</span></div>
+  <div class="metric"><b>30</b><span>翻转版贡献</span></div>
+</div>
+
+<h2>净值曲线（Top 10 因子）</h2>
+<div class="chart-block">
+  <img src="fig_nav_curves.png" alt="净值曲线">
+</div>
+
+<h2>IC / RankIC 时序（Top 8 因子，20日均线）</h2>
+<div class="chart-block">
+  <img src="fig_ic_timeseries.png" alt="IC时序">
+</div>
+
+<h2>月度 IC 热力图（Top 20 因子）</h2>
+<div class="chart-block">
+  <img src="fig_ic_heatmap.png" alt="IC热力图">
+</div>
+
+<h2>IC_IR 滚动（60日，Top 6 因子）</h2>
+<div class="chart-block">
+  <img src="fig_icir.png" alt="IC_IR">
+</div>
+
+<h2>因子相关性矩阵（Top 20）</h2>
+<div class="chart-block">
+  <img src="fig_correlation.png" alt="相关性">
+</div>
+
+<h2>统计分布</h2>
+<div class="chart-block">
+  <img src="fig_statistics.png" alt="统计分布">
+</div>
+
+<h2>正 Sharpe 因子（44 个）</h2>
+<table>
+<thead><tr>
+  <th>#</th><th>因子</th><th>Sharpe</th><th>年化收益</th><th>最大回撤</th><th>IC</th><th>RankIC</th><th>胜率</th>
+</tr></thead>
+<tbody>
+<tr >
+  <td>1</td>
+  <td>factor_drawdown_volume_complexity</td>
+  <td class="pos sharge">+4.65</td>
+  <td class="pos">+65.8%</td>
+  <td class="neg">-6.2%</td>
+  <td class="pos">+0.0322</td>
+  <td class="pos">+0.0341</td>
+  <td>55.7%</td>
+</tr><tr class="flipped">
+  <td>2</td>
+  <td>factor_vol_volume_asym_ewma_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+3.99</td>
+  <td class="pos">+42.8%</td>
+  <td class="neg">-7.2%</td>
+  <td class="pos">+0.0227</td>
+  <td class="pos">+0.0226</td>
+  <td>56.3%</td>
+</tr><tr >
+  <td>3</td>
+  <td>factor_overnight_repricing_ewm_stability</td>
+  <td class="pos sharge">+3.53</td>
+  <td class="pos">+38.2%</td>
+  <td class="neg">-6.9%</td>
+  <td class="pos">+0.0252</td>
+  <td class="pos">+0.0433</td>
+  <td>51.5%</td>
+</tr><tr >
+  <td>4</td>
+  <td>factor_ewma_smoothness_volume</td>
+  <td class="pos sharge">+3.06</td>
+  <td class="pos">+47.2%</td>
+  <td class="neg">-16.1%</td>
+  <td class="pos">+0.0276</td>
+  <td class="pos">+0.0697</td>
+  <td>58.8%</td>
+</tr><tr >
+  <td>5</td>
+  <td>factor_drawdown_volume_modulated</td>
+  <td class="pos sharge">+2.96</td>
+  <td class="pos">+43.7%</td>
+  <td class="neg">-7.6%</td>
+  <td class="pos">+0.0216</td>
+  <td class="pos">+0.0129</td>
+  <td>52.8%</td>
+</tr><tr class="flipped">
+  <td>6</td>
+  <td>factor_volume_adjusted_price_range_regime_smoothed_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+2.90</td>
+  <td class="pos">+40.3%</td>
+  <td class="neg">-9.3%</td>
+  <td class="pos">+0.0256</td>
+  <td class="pos">+0.0466</td>
+  <td>55.3%</td>
+</tr><tr class="flipped">
+  <td>7</td>
+  <td>factor_volume_adjusted_price_range_regime_v3_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+2.90</td>
+  <td class="pos">+40.3%</td>
+  <td class="neg">-9.3%</td>
+  <td class="pos">+0.0256</td>
+  <td class="pos">+0.0466</td>
+  <td>55.3%</td>
+</tr><tr class="flipped">
+  <td>8</td>
+  <td>factor_lag_vol_robust_volratio_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+2.81</td>
+  <td class="pos">+37.9%</td>
+  <td class="neg">-9.5%</td>
+  <td class="pos">+0.0323</td>
+  <td class="pos">+0.0580</td>
+  <td>52.2%</td>
+</tr><tr >
+  <td>9</td>
+  <td>factor_drawdown_volume_geometry</td>
+  <td class="pos sharge">+2.61</td>
+  <td class="pos">+39.1%</td>
+  <td class="neg">-9.1%</td>
+  <td class="pos">+0.0207</td>
+  <td class="pos">+0.0115</td>
+  <td>52.4%</td>
+</tr><tr class="flipped">
+  <td>10</td>
+  <td>factor_range_volume_ratio_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+2.60</td>
+  <td class="pos">+43.6%</td>
+  <td class="neg">-15.6%</td>
+  <td class="pos">+0.0565</td>
+  <td class="pos">+0.0663</td>
+  <td>55.7%</td>
+</tr><tr class="flipped">
+  <td>11</td>
+  <td>factor_volume_adjusted_price_range_regime_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+2.50</td>
+  <td class="pos">+34.0%</td>
+  <td class="neg">-11.1%</td>
+  <td class="pos">+0.0205</td>
+  <td class="pos">+0.0427</td>
+  <td>53.2%</td>
+</tr><tr class="flipped">
+  <td>12</td>
+  <td>factor_volume_adjusted_price_range_gated_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+2.50</td>
+  <td class="pos">+34.0%</td>
+  <td class="neg">-11.1%</td>
+  <td class="pos">+0.0205</td>
+  <td class="pos">+0.0427</td>
+  <td>53.2%</td>
+</tr><tr class="flipped">
+  <td>13</td>
+  <td>factor_lag_vol_ratio_smoothed_v2_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+2.47</td>
+  <td class="pos">+34.0%</td>
+  <td class="neg">-10.0%</td>
+  <td class="pos">+0.0376</td>
+  <td class="pos">+0.0565</td>
+  <td>47.6%</td>
+</tr><tr class="flipped">
+  <td>14</td>
+  <td>factor_vwap_adjusted_range_tanh_mutated_v2_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+2.47</td>
+  <td class="pos">+44.1%</td>
+  <td class="neg">-14.7%</td>
+  <td class="pos">+0.0518</td>
+  <td class="pos">+0.0763</td>
+  <td>55.9%</td>
+</tr><tr class="flipped">
+  <td>15</td>
+  <td>factor_volume_adjusted_price_range_regime_smoothed_v2_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+2.47</td>
+  <td class="pos">+34.7%</td>
+  <td class="neg">-10.0%</td>
+  <td class="pos">+0.0220</td>
+  <td class="pos">+0.0431</td>
+  <td>55.1%</td>
+</tr><tr class="flipped">
+  <td>16</td>
+  <td>factor_abnormality_asymmetry_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+2.45</td>
+  <td class="pos">+31.6%</td>
+  <td class="neg">-8.8%</td>
+  <td class="pos">+0.0222</td>
+  <td class="pos">+0.0471</td>
+  <td>53.4%</td>
+</tr><tr >
+  <td>17</td>
+  <td>factor_vol_asym_confirmed_range_v2</td>
+  <td class="pos sharge">+2.26</td>
+  <td class="pos">+36.1%</td>
+  <td class="neg">-14.9%</td>
+  <td class="pos">+0.0371</td>
+  <td class="pos">+0.0500</td>
+  <td>51.1%</td>
+</tr><tr class="flipped">
+  <td>18</td>
+  <td>factor_vwap_adjusted_range_tanh_smooth_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+2.21</td>
+  <td class="pos">+37.8%</td>
+  <td class="neg">-10.9%</td>
+  <td class="pos">+0.0510</td>
+  <td class="pos">+0.0765</td>
+  <td>53.6%</td>
+</tr><tr >
+  <td>19</td>
+  <td>factor_persistence_ewma</td>
+  <td class="pos sharge">+2.18</td>
+  <td class="pos">+36.7%</td>
+  <td class="neg">-20.3%</td>
+  <td class="pos">+0.0183</td>
+  <td class="pos">+0.0571</td>
+  <td>53.8%</td>
+</tr><tr class="flipped">
+  <td>20</td>
+  <td>factor_volume_adjusted_price_range_ema_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+2.16</td>
+  <td class="pos">+30.2%</td>
+  <td class="neg">-10.7%</td>
+  <td class="pos">+0.0204</td>
+  <td class="pos">+0.0416</td>
+  <td>53.2%</td>
+</tr><tr class="flipped">
+  <td>21</td>
+  <td>factor_squared_range_volume_rank_smoothed_no_cuberoot_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+2.16</td>
+  <td class="pos">+31.9%</td>
+  <td class="neg">-8.5%</td>
+  <td class="pos">+0.0274</td>
+  <td class="pos">+0.0534</td>
+  <td>51.3%</td>
+</tr><tr >
+  <td>22</td>
+  <td>factor_asym_vol_volume_cont_30</td>
+  <td class="pos sharge">+2.11</td>
+  <td class="pos">+34.1%</td>
+  <td class="neg">-10.8%</td>
+  <td class="pos">+0.0237</td>
+  <td class="pos">+0.0457</td>
+  <td>54.2%</td>
+</tr><tr class="flipped">
+  <td>23</td>
+  <td>factor_volume_adjusted_price_range_regime_v2_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+2.00</td>
+  <td class="pos">+28.1%</td>
+  <td class="neg">-14.4%</td>
+  <td class="pos">+0.0168</td>
+  <td class="pos">+0.0384</td>
+  <td>52.8%</td>
+</tr><tr class="flipped">
+  <td>24</td>
+  <td>factor_squared_range_close_ema_cuberoot_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+1.94</td>
+  <td class="pos">+31.6%</td>
+  <td class="neg">-15.0%</td>
+  <td class="pos">+0.0150</td>
+  <td class="pos">+0.0468</td>
+  <td>53.6%</td>
+</tr><tr >
+  <td>25</td>
+  <td>factor_vol_asym_confirmed_range</td>
+  <td class="pos sharge">+1.84</td>
+  <td class="pos">+28.8%</td>
+  <td class="neg">-15.3%</td>
+  <td class="pos">+0.0375</td>
+  <td class="pos">+0.0476</td>
+  <td>48.5%</td>
+</tr><tr >
+  <td>26</td>
+  <td>factor_persistence</td>
+  <td class="pos sharge">+1.58</td>
+  <td class="pos">+29.1%</td>
+  <td class="neg">-17.4%</td>
+  <td class="pos">+0.0134</td>
+  <td class="pos">+0.0519</td>
+  <td>52.0%</td>
+</tr><tr class="flipped">
+  <td>27</td>
+  <td>factor_vol_regime_impact_ema_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+1.48</td>
+  <td class="pos">+26.5%</td>
+  <td class="neg">-16.3%</td>
+  <td class="pos">+0.0341</td>
+  <td class="pos">+0.0637</td>
+  <td>53.8%</td>
+</tr><tr class="flipped">
+  <td>28</td>
+  <td>factor_smoothed_energy_downside_resilience_8span_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+1.39</td>
+  <td class="pos">+21.2%</td>
+  <td class="neg">-8.3%</td>
+  <td class="pos">+0.0067</td>
+  <td class="pos">+0.0434</td>
+  <td>49.5%</td>
+</tr><tr class="flipped">
+  <td>29</td>
+  <td>factor_price_impact_stable_5d_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+1.38</td>
+  <td class="pos">+25.7%</td>
+  <td class="neg">-20.2%</td>
+  <td class="pos">+0.0111</td>
+  <td class="pos">+0.0451</td>
+  <td>51.5%</td>
+</tr><tr >
+  <td>30</td>
+  <td>factor_downside_semivariance_smoothed</td>
+  <td class="pos sharge">+1.38</td>
+  <td class="pos">+23.1%</td>
+  <td class="neg">-9.6%</td>
+  <td class="pos">+0.0071</td>
+  <td class="pos">+0.0430</td>
+  <td>49.3%</td>
+</tr><tr class="flipped">
+  <td>31</td>
+  <td>factor_smoothed_downside_variance_resilience_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+1.38</td>
+  <td class="pos">+23.1%</td>
+  <td class="neg">-9.6%</td>
+  <td class="pos">+0.0071</td>
+  <td class="pos">+0.0430</td>
+  <td>49.3%</td>
+</tr><tr class="flipped">
+  <td>32</td>
+  <td>factor_volume_transition_stress_attenuated_30d_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+1.17</td>
+  <td class="pos">+13.6%</td>
+  <td class="neg">-18.2%</td>
+  <td class="pos">+0.0046</td>
+  <td class="pos">+0.0340</td>
+  <td>46.8%</td>
+</tr><tr class="flipped">
+  <td>33</td>
+  <td>factor_volume_transition_raw_carry_30d_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+1.15</td>
+  <td class="pos">+13.4%</td>
+  <td class="neg">-18.2%</td>
+  <td class="pos">+0.0046</td>
+  <td class="pos">+0.0341</td>
+  <td>46.2%</td>
+</tr><tr class="flipped">
+  <td>34</td>
+  <td>factor_smoothed_energy_downside_resilience_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+1.10</td>
+  <td class="pos">+18.5%</td>
+  <td class="neg">-9.1%</td>
+  <td class="pos">+0.0058</td>
+  <td class="pos">+0.0435</td>
+  <td>48.7%</td>
+</tr><tr >
+  <td>35</td>
+  <td>factor_session_asymmetry_smooth_confirmed_30d</td>
+  <td class="pos sharge">+1.09</td>
+  <td class="pos">+16.2%</td>
+  <td class="neg">-14.0%</td>
+  <td class="pos">+0.0074</td>
+  <td class="pos">+0.0471</td>
+  <td>47.2%</td>
+</tr><tr class="flipped">
+  <td>36</td>
+  <td>factor_smoothed_drawdown_recovery_participation_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+0.81</td>
+  <td class="pos">+13.0%</td>
+  <td class="neg">-14.3%</td>
+  <td class="pos">+0.0096</td>
+  <td class="pos">+0.0415</td>
+  <td>46.8%</td>
+</tr><tr class="flipped">
+  <td>37</td>
+  <td>factor_volume_impact_elasticity_smooth_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+0.77</td>
+  <td class="pos">+7.8%</td>
+  <td class="neg">-11.4%</td>
+  <td class="pos">+0.0010</td>
+  <td class="pos">+0.0250</td>
+  <td>47.0%</td>
+</tr><tr >
+  <td>38</td>
+  <td>factor_impact_weighted_asymmetry_slow</td>
+  <td class="pos sharge">+0.48</td>
+  <td class="pos">+6.8%</td>
+  <td class="neg">-15.5%</td>
+  <td class="pos">+0.0039</td>
+  <td class="pos">+0.0371</td>
+  <td>46.2%</td>
+</tr><tr class="flipped">
+  <td>39</td>
+  <td>factor_volume_state_transition_carry_smooth_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+0.39</td>
+  <td class="pos">+4.4%</td>
+  <td class="neg">-17.7%</td>
+  <td class="pos">+0.0009</td>
+  <td class="pos">+0.0329</td>
+  <td>44.1%</td>
+</tr><tr class="flipped">
+  <td>40</td>
+  <td>factor_impact_downside_asymmetry_smoothed_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+0.38</td>
+  <td class="pos">+6.0%</td>
+  <td class="neg">-22.0%</td>
+  <td class="pos">+0.0211</td>
+  <td class="neg">-0.0387</td>
+  <td>47.6%</td>
+</tr><tr class="flipped">
+  <td>41</td>
+  <td>factor_smoothed_left_tail_variance_share_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+0.27</td>
+  <td class="pos">+5.0%</td>
+  <td class="neg">-26.3%</td>
+  <td class="pos">+0.0061</td>
+  <td class="neg">-0.0436</td>
+  <td>48.2%</td>
+</tr><tr class="flipped">
+  <td>42</td>
+  <td>factor_impact_asymmetry_slow_recovery_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+0.18</td>
+  <td class="pos">+2.9%</td>
+  <td class="neg">-23.2%</td>
+  <td class="pos">+0.0237</td>
+  <td class="neg">-0.0411</td>
+  <td>47.0%</td>
+</tr><tr >
+  <td>43</td>
+  <td>factor_ewm_downside_variance_resilience</td>
+  <td class="pos sharge">+0.08</td>
+  <td class="pos">+1.5%</td>
+  <td class="neg">-26.1%</td>
+  <td class="pos">+0.0042</td>
+  <td class="neg">-0.0462</td>
+  <td>47.0%</td>
+</tr><tr class="flipped">
+  <td>44</td>
+  <td>factor_persistent_left_tail_variance_share_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="pos sharge">+0.01</td>
+  <td class="pos">+0.1%</td>
+  <td class="neg">-26.0%</td>
+  <td class="pos">+0.0061</td>
+  <td class="neg">-0.0437</td>
+  <td>47.2%</td>
+</tr></tbody></table>
+
+<h2>负 Sharpe 因子（17 个）</h2>
+<table>
+<thead><tr>
+  <th>#</th><th>因子</th><th>Sharpe</th><th>年化收益</th><th>IC</th><th>RankIC</th>
+</tr></thead>
+<tbody>
+<tr >
+  <td>1</td>
+  <td>factor_volatility_adjusted_dollar_pressure</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr >
+  <td>2</td>
+  <td>factor_ts_size_adaptive_earnings_book_smooth</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr >
+  <td>3</td>
+  <td>factor_volume_adaptive_momentum_smoothed_v3</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr >
+  <td>4</td>
+  <td>factor_asym_intraday_sma</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr >
+  <td>5</td>
+  <td>factor_lag_response_vol_tool_adaptive</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr >
+  <td>6</td>
+  <td>factor_fear_adjusted_dollar_pressure_short_ema</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr >
+  <td>7</td>
+  <td>factor_volume_adaptive_momentum_fast_vol</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr >
+  <td>8</td>
+  <td>factor_lag_vol_volatility_adjusted_gate</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr >
+  <td>9</td>
+  <td>factor_book_attention</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr >
+  <td>10</td>
+  <td>factor_drawdown_depth_atr_gated</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr >
+  <td>11</td>
+  <td>factor_amount_weighted_squared_impact</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr >
+  <td>12</td>
+  <td>factor_volume_weighted_squared_impact</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr >
+  <td>13</td>
+  <td>factor_volume_adjusted_price_range</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr >
+  <td>14</td>
+  <td>factor_volume_adjusted_price_range_ema_gated</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr >
+  <td>15</td>
+  <td>factor_volume_weighted_impact</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr >
+  <td>16</td>
+  <td>factor_pressure_ema_mutation</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr class="flipped">
+  <td>17</td>
+  <td>factor_session_magnitude_imbalance_volume_weighted_42d_flipped<span class="tag tag-flip">FLIP</span></td>
+  <td class="neg sharge">-0.41</td>
+  <td class="neg">-6.2%</td>
+  <td class="pos">+0.0047</td>
+  <td class="neg">-0.0359</td>
+</tr></tbody></table>
+</body></html>

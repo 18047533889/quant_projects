@@ -1,0 +1,66 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "1167b5c6dc2e80ebeccf37ae81c62c5ec176abc93cc90ab8272fe6dd71dae4e3",
+  "candidate_ids": [
+    "mutation_factor_002"
+  ],
+  "code": "def factor_drawdown_vol_simple(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    running_max = close.expanding().max()\n    drawdown = (running_max - close) / running_max\n    vol_ma = volume.rolling(20).mean()\n    vol_ratio = volume / vol_ma\n    rank_dd = drawdown.rank(pct=True)\n    rank_vol = vol_ratio.rank(pct=True)\n    factor = rank_dd * rank_vol\n    factor.name = \"factor_drawdown_vol_simple\"\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_drawdown_vol_simple",
+  "fitness_direction": 1,
+  "formula": "R(drawdown) * R(V/MA20)",
+  "metrics": {
+    "ic": 0.030045661089925447,
+    "icir": 0.3353103456726333,
+    "mi": 0.010570981041471583,
+    "rank_ic": 0.030782132074435222,
+    "rank_icir": 0.27988442349213855
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.36771886166103673,
+    "top_quantile_excess_return": 1.4014156644412736,
+    "top_quantile_max_drawdown": -0.03446157444693154,
+    "top_quantile_turnover": 0.37610919087243294
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Simplified mutation of crossover_factor_001: removed duration and recovery components to focus on the core drawdown-volume interaction. Preserves rank stability through rank transforms while concentrating the economic signal on volume-confirmed drawdown depth. Aims to improve IC and MI by reducing noise from auxiliary terms.",
+  "raw_metrics": {
+    "ic": 0.030045661089925447,
+    "icir": 0.3353103456726333,
+    "mi": 0.010570981041471583,
+    "rank_ic": 0.030782132074435222,
+    "rank_icir": 0.27988442349213855
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "seed-evo-raw-6-20260629-091602",
+  "source_run_ids": [
+    "seed-evo-raw-6-20260629-091602"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "R(drawdown) * R(V/MA20)",
+  "fe_formula": "R(drawdown) * R(V/MA20)",
+  "lqtp_notes": "Textual non-executable: R(...)-notation (rank, use Python code); Unconverted: ['R']",
+  "fe_notes": "Textual non-executable: R(...)-notation (rank, use Python code); Unconverted: ['R']",
+  "source_formula": "R(drawdown) * R(V/MA20)"
+}

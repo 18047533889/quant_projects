@@ -1,0 +1,42 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "9c53d0a995cc50dd3c1b7b085a56950be8090cf2256f40b1614c07bcdc71d2cc",
+  "candidate_ids": [
+    "CO_002"
+  ],
+  "code": "def factor_crash_volume_gate(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change(5)\n    vol_ma = df_copy['volume'].rolling(20).mean()\n    vol_ratio = df_copy['volume'] / vol_ma.replace(0, np.nan)\n    vol_rank = vol_ratio.rolling(20, min_periods=20).rank(pct=True)\n    signal = np.where(vol_rank > 0.5, -ret * vol_ratio, 0.0)\n    signal = pd.Series(signal, index=df_copy.index).fillna(0)\n    signal.name = 'factor_crash_volume_gate'\n    return signal",
+  "factor_name": "factor_crash_volume_gate",
+  "fitness_direction": 1,
+  "formula": "-ret_5d * vol_ratio if rank(vol_ratio,20) > 0.5 else 0",
+  "metrics": {
+    "ic": 0.021512031418960943,
+    "icir": 0.22298816897779575,
+    "mi": 0.015384647638716054,
+    "rank_ic": 0.02878171768072153,
+    "rank_icir": 0.30483567954812457
+  },
+  "rationale": "Combines crash_001's raw volume ratio weighted reversal with CO_001's rank normalization to only activate during extreme volume periods (top half of 20-day rank). This preserves the crash precursor mechanism while filtering out low volume noise, aiming to improve IC and RankIC.",
+  "raw_metrics": {
+    "ic": 0.021512031418960943,
+    "icir": 0.22298816897779575,
+    "mi": 0.015384647638716054,
+    "rank_ic": 0.02878171768072153,
+    "rank_icir": 0.30483567954812457
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260615-051510-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260615-051510-r2"
+  ],
+  "lqtp_formula": "-ret_5d * vol_ratio if cs_rank(vol_ratio, 20) > 0.5 else 0",
+  "fe_formula": "-ret_5d * vol_ratio if rank(vol_ratio,20) > 0.5 else 0",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "-ret_5d * vol_ratio if rank(vol_ratio,20) > 0.5 else 0"
+}

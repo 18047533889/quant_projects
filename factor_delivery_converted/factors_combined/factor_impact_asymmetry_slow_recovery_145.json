@@ -1,0 +1,91 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "97d6a99766ddb2cb774937978a7ea685a1d1545c0abae4f63abb14aba1be9c1c",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_crossover_then_mutation_alpha_vol_asymmetry_g_debd8bb5"
+  ],
+  "code": "def factor_impact_asymmetry_slow_recovery(df):\n    \"\"\"Liquidity-sensitive downside-impact asymmetry with a slower, bounded recovery modifier.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"].where(df_copy[\"close\"] > 0.0)\n    volume = df_copy[\"volume\"].where(df_copy[\"volume\"] > 0.0)\n    prev_close = close.shift(1)\n    ret = (close / prev_close - 1.0).replace([np.inf, -np.inf], np.nan)\n    dollar_volume = (prev_close * volume).replace([np.inf, -np.inf], np.nan)\n    impact = (ret.abs() / dollar_volume).replace([np.inf, -np.inf], np.nan)\n    impact_base = impact.rolling(30, min_periods=15).median()\n    impact_base = impact_base.where(np.isfinite(impact_base) & (impact_base > 0.0))\n    relative_impact = (impact / impact_base).replace([np.inf, -np.inf], np.nan).clip(upper=10.0)\n    downside_impact = ret.clip(upper=0.0).pow(2) * relative_impact\n    upside_impact = ret.clip(lower=0.0).pow(2) * relative_impact\n    raw_asymmetry = downside_impact - upside_impact\n    signal = raw_asymmetry.ewm(span=30, min_periods=15, adjust=False).mean()\n    prior_low = close.rolling(30, min_periods=20).min().shift(1)\n    recovery = ((close / prior_low) - 1.0).replace([np.inf, -np.inf], np.nan).clip(lower=0.0, upper=0.20)\n    recovery_weight = 0.95 + 0.45 * (recovery / 0.20)\n    factor = (signal * recovery_weight).replace([np.inf, -np.inf], np.nan)\n    df_copy[\"factor_impact_asymmetry_slow_recovery\"] = factor\n    return df_copy[\"factor_impact_asymmetry_slow_recovery\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.03566597840769137,
+        "top_quantile_excess_return": 0.10147588552120945,
+        "top_quantile_max_drawdown": -0.12117091704950578,
+        "top_quantile_turnover": 0.1201969742107212
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_impact_asymmetry_slow_recovery",
+  "fitness_direction": 1,
+  "formula": "EWMA30[(r^-^2-r^+^2) * |r|/Median30(|r|/dollar_volume)] * [0.95 + 0.45 * clip((close/Low30_lagged)-1, 0, 0.20)/0.20]",
+  "metrics": {
+    "ic": 0.022020536053707344,
+    "icir": 0.24349285505833684,
+    "mi": 0.04704960594345575,
+    "rank_ic": 0.04671850488761287,
+    "rank_icir": 0.34443169495247766
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.03566597840769137,
+    "top_quantile_excess_return": 0.10147588552120945,
+    "top_quantile_max_drawdown": -0.12117091704950578,
+    "top_quantile_turnover": 0.1201969742107212
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Mutation preserves the parent's primary liquidity-sensitive downside-impact asymmetry and its demonstrated payoff monotonicity while targeting robustness of the recovery modifier. The lagged recovery anchor is extended from 15 to 30 bars and its weight range is narrowed from 0.85-1.60 to 0.95-1.40, reducing sensitivity to local lows and abrupt post-drawdown changes. This is one lightweight smoothing/normalization change, intended to retain predictive ordering and positive cost-adjusted payoff while improving turnover discipline.",
+  "raw_metrics": {
+    "ic": 0.022020536053707344,
+    "icir": 0.24349285505833684,
+    "mi": 0.04704960594345575,
+    "rank_ic": 0.04671850488761287,
+    "rank_icir": 0.34443169495247766
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260806-094519-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260806-094519-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "EWMA30[(r^-^2-r^+^2) * |r|/ts_median(30, |r|/dollar_volume)] * [0.95 + 0.45 * clip((close/Low30_lagged)-1, 0, 0.20)/0.20]",
+  "fe_formula": "EWMA30[(r^-^2-r^+^2) * |r|/ts_median(30, |r|/dollar_volume)] * [0.95 + 0.45 * clip((close/Low30_lagged)-1, 0, 0.20)/0.20]",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "EWMA30[(r^-^2-r^+^2) * |r|/Median30(|r|/dollar_volume)] * [0.95 + 0.45 * clip((close/Low30_lagged)-1, 0, 0.20)/0.20]"
+}

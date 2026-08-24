@@ -1,0 +1,127 @@
+{
+  "allowed_libraries": [],
+  "calculation_fingerprint": "05d1a5db2c5e4a4a6c9495514afd3556f40c09789323387c36c0e6f69b31c8c2",
+  "candidate_id": "minute_robust_shape_skew_intraday_range",
+  "candidate_ids": [
+    "minute_robust_shape_skew_intraday_range"
+  ],
+  "code": "def factor_skew_intraday_range(df):\n    \"\"\"Minute DSL factor — executed via /api/calculate/minute.\"\"\"\n    raise NotImplementedError(\"minute DSL expression; use metadata.expression\")\n    # expression = \"\"\"daily_skew(ifnan(get('high')-get('low'), 0.0))\"\"\"\n",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "domain_agent": "minute-robust-shape",
+  "expression": "daily_skew(ifnan(get('high')-get('low'), 0.0))",
+  "factor_name": "factor_skew_intraday_range",
+  "factor_value_contract": "minute_to_daily_panel",
+  "fitness_direction": -1,
+  "formula": "daily_skew(ifnan(get('high')-get('low'), 0.0))",
+  "frequency": "minute",
+  "lineage": {
+    "agent_skill": "minute-robust-shape",
+    "generation": 0,
+    "guidance_mode": null,
+    "operation": null,
+    "parent_ids": []
+  },
+  "metadata": {
+    "evolution_guidance": {
+      "preserve": {
+        "passed_predictive_metrics": [
+          "ic",
+          "rank_ic",
+          "icir",
+          "rank_icir",
+          "mi"
+        ],
+        "payoff_diagnostics": {
+          "quantile_monotonicity": 0.9151515151515152,
+          "top_quantile_annualized_excess_return": -0.1458821307881516,
+          "top_quantile_excess_return": -0.014288913459349573,
+          "top_quantile_max_drawdown": -0.04338599316054803,
+          "top_quantile_turnover": 0.49565217391304356
+        },
+        "payoff_gate_passed": false
+      },
+      "primary_target": {
+        "kind": "preserve_balanced_strength"
+      },
+      "qualification_track": null
+    },
+    "expression": "daily_skew(ifnan(get('high')-get('low'), 0.0))",
+    "fitness_direction": -1,
+    "fitness_metrics": {
+      "ic": 0.037528070224502275,
+      "icir": 0.4333969777691795,
+      "mi": 0.015609620384206657,
+      "rank_ic": 0.06286083644494746,
+      "rank_icir": 0.5700065697262522
+    },
+    "infrastructure_recovery": true,
+    "payoff_diagnostics": {
+      "quantile_monotonicity": 0.9151515151515152,
+      "top_quantile_annualized_excess_return": -0.1458821307881516,
+      "top_quantile_excess_return": -0.014288913459349573,
+      "top_quantile_max_drawdown": -0.04338599316054803,
+      "top_quantile_turnover": 0.49565217391304356
+    },
+    "payoff_gate_passed": false,
+    "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+    "post_transforms": [],
+    "pre_transform_fitness_direction": 1,
+    "predictive_gate_passed": true,
+    "qualification_track": null,
+    "raw_fitness_metrics": {
+      "ic": -0.037528070224502275,
+      "icir": -0.4333969777691795,
+      "mi": 0.015609620384206657,
+      "rank_ic": -0.06286083644494746,
+      "rank_icir": -0.5700065697262522
+    },
+    "transform_gate_passed": true
+  },
+  "metrics": {
+    "ic": 0.037528070224502275,
+    "icir": 0.4333969777691795,
+    "mi": 0.015609620384206657,
+    "rank_ic": 0.06286083644494746,
+    "rank_icir": 0.5700065697262522
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9151515151515152,
+    "top_quantile_annualized_excess_return": -0.1458821307881516,
+    "top_quantile_excess_return": -0.014288913459349573,
+    "top_quantile_max_drawdown": -0.04338599316054803,
+    "top_quantile_turnover": 0.49565217391304356
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "post_transforms": [],
+  "rationale": "Skewness of per-minute price range (high-low) captures asymmetry in intraday volatility. Positive skew indicates frequent small ranges with occasional large expansions, which may precede volatile sessions.",
+  "raw_metrics": {
+    "ic": -0.037528070224502275,
+    "icir": -0.4333969777691795,
+    "mi": 0.015609620384206657,
+    "rank_ic": -0.06286083644494746,
+    "rank_icir": -0.5700065697262522
+  },
+  "required_columns": [
+    "trading_datetime",
+    "TradingDay",
+    "open_price",
+    "high_price",
+    "low_price",
+    "close_price",
+    "volume",
+    "amount"
+  ],
+  "run_id": "minute-hs300-probe-repair-20260722-034558-r1",
+  "source_run_ids": [
+    "minute-hs300-probe-repair-20260722-034558-r1"
+  ],
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "daily_skew(<ifnan>(get('high')-get('low'), 0.0))",
+  "fe_formula": "daily_skew(<ifnan>(get('high')-get('low'), 0.0))",
+  "lqtp_notes": "Textual non-executable: daily_skew (pandas method, not LQTP executable); ifnan (pandas method, not LQTP executable); Unconverted: ['daily_skew']",
+  "fe_notes": "Textual non-executable: daily_skew (pandas method, not LQTP executable); ifnan (pandas method, not LQTP executable); Unconverted: ['daily_skew']",
+  "source_formula": "daily_skew(ifnan(get('high')-get('low'), 0.0))"
+}

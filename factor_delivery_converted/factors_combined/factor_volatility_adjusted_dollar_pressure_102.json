@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "fa3989a3845074c76fe9f23acdf708c9997322c4daccad2cc64746ee33feb8a6",
+  "candidate_ids": [
+    "aob_002"
+  ],
+  "code": "def factor_volatility_adjusted_dollar_pressure(df):\n    df_copy = df.copy()\n    dollar_imb = (df_copy['close'] - df_copy['open']) * df_copy['volume']\n    smoothed_imb = dollar_imb.ewm(span=21, adjust=False).mean()\n    high = df_copy['high'].values.astype(np.float64)\n    low = df_copy['low'].values.astype(np.float64)\n    close = df_copy['close'].values.astype(np.float64)\n    atr = talib.ATR(high, low, close, timeperiod=21)\n    atr_series = pd.Series(atr, index=df_copy.index)\n    raw = smoothed_imb / atr_series.replace(0, np.nan)\n    df_copy['factor_volatility_adjusted_dollar_pressure'] = raw.rank(pct=True) * 2 - 1\n    return df_copy['factor_volatility_adjusted_dollar_pressure']",
+  "factor_name": "factor_volatility_adjusted_dollar_pressure",
+  "fitness_direction": -1,
+  "formula": "EMA((C-O)*V, 21) / ATR(21) then rank[-1,1]",
+  "metrics": {
+    "ic": 0.02165164637562591,
+    "icir": 0.22535793223755926,
+    "mi": 0.023525142872498073,
+    "rank_ic": 0.04575903882440777,
+    "rank_icir": 0.42217298563287114
+  },
+  "rationale": "Volatility-adjusted dollar pressure measures directional dollar imbalance scaled by recent volatility, capturing risk-adjusted buying/selling pressure. EMA smoothing reduces noise, and ATR provides volatility normalization. The rank transform delivers a stable cross-sectional ordering suitable for balanced IC, RankIC, and MI.",
+  "raw_metrics": {
+    "ic": -0.02165164637562591,
+    "icir": -0.22535793223755926,
+    "mi": 0.023525142872498073,
+    "rank_ic": -0.04575903882440777,
+    "rank_icir": -0.42217298563287114
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260616-060730-r3",
+  "source_run_ids": [
+    "formal-mvp-loop-20260616-060730-r3"
+  ],
+  "lqtp_formula": "ema(21, (C-O)*V) / ts_atr(21) then rank[-1,1]",
+  "fe_formula": "ema(21, (C-O)*V) / ATR(21) then rank[-1,1]",
+  "lqtp_notes": "Textual non-executable: C (close shorthand in text, not executable)",
+  "fe_notes": "Textual non-executable: C (close shorthand in text, not executable)",
+  "source_formula": "EMA((C-O)*V, 21) / ATR(21) then rank[-1,1]"
+}

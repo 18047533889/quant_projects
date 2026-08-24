@@ -1,0 +1,42 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "ed5e0d98fecccc97505ade0408338d3b227e2fc734291776bbeb56b5aacab3ca",
+  "candidate_ids": [
+    "mutant_liquidity_mom_simple_2_v2"
+  ],
+  "code": "def factor_liquidity_mom_simple_2_mutated(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    mom = close - close.shift(5)\n    vol_ratio = volume / volume.rolling(20, min_periods=20).mean().replace(0, np.nan)\n    factor = mom * vol_ratio\n    df_copy[\"factor_liquidity_mom_simple_2_mutated\"] = factor\n    return df_copy[\"factor_liquidity_mom_simple_2_mutated\"]",
+  "factor_name": "factor_liquidity_mom_simple_2_mutated",
+  "fitness_direction": -1,
+  "formula": "(close - ts_delay(close,5)) * (volume / ts_mean(volume,20))",
+  "metrics": {
+    "ic": 0.01745626396789791,
+    "icir": 0.22695080145963425,
+    "mi": 0.033989048559949,
+    "rank_ic": 0.037470054227901006,
+    "rank_icir": 0.3048504515902497
+  },
+  "rationale": "Mutation of crossover_liquidity_mom_simple_2: replaced volume rolling median with rolling mean to potentially improve linear correlation (IC) by using a more responsive denominator, while preserving the core liquidity-gated momentum mechanism that provides RankIC stability. The parent strength is the volume-based rank ordering; the bottleneck is low IC. This small window change from median to mean aims to enhance the linear signal without adding complexity.",
+  "raw_metrics": {
+    "ic": -0.01745626396789791,
+    "icir": -0.22695080145963425,
+    "mi": 0.033989048559949,
+    "rank_ic": -0.037470054227901006,
+    "rank_icir": -0.3048504515902497
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260616-074520-r4",
+  "source_run_ids": [
+    "formal-mvp-loop-20260616-074520-r4"
+  ],
+  "lqtp_formula": "(close - delay(close, 5)) * (volume / ts_mean(volume,20))",
+  "fe_formula": "(close - ts_delay(close,5)) * (volume / ts_mean(volume,20))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(close - ts_delay(close,5)) * (volume / ts_mean(volume,20))"
+}

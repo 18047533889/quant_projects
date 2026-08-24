@@ -1,0 +1,126 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "fcdc8862b48051f112d33833f63b74e3956efd1d509c4ece7f9a494ac8386a85",
+  "candidate_ids": [
+    "g2_mutation_cand_001_2d0c60b2"
+  ],
+  "code": "def factor_volume_adjusted_price_range(df):\n    df_copy = df.copy()\n    high_low = df_copy['high'] - df_copy['low']\n    volume_ema = df_copy['volume'].ewm(span=10, adjust=False).mean().replace(0, np.nan)\n    volume_ratio = df_copy['volume'] / volume_ema\n    volume_ratio = volume_ratio.replace([np.inf, -np.inf], np.nan)\n    raw_signal = high_low * volume_ratio\n    smoothed = raw_signal.rolling(window=5, min_periods=5).mean()\n    gate = df_copy['style_gate_resvol_high']\n    factor = np.where(gate > 0, smoothed * 1.2, smoothed * 0.8)\n    df_copy['factor_volume_adjusted_price_range'] = factor\n    return df_copy['factor_volume_adjusted_price_range']",
+  "cross_sectional_rationale": "Rank normalization enhances cross-sectional comparability of volume-adjusted price range, which is a relative measure of volatility intensity. Same-date ranking isolates stocks with unusually strong price-volume coherence relative to peers.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9393939393939394,
+        "top_quantile_annualized_excess_return": 0.028528046935455187,
+        "top_quantile_excess_return": 0.08368547946265448,
+        "top_quantile_max_drawdown": -0.107484428353666,
+        "top_quantile_turnover": 0.10779870305289868
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_excess_percentile",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_percentile"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_volume_adjusted_price_range",
+  "fitness_direction": -1,
+  "formula": "SMA_5( (high-low) * (volume / EMA_10(volume)) ) * (1.2 if resvol_high else 0.8)",
+  "metrics": {
+    "ic": 0.020448748881846193,
+    "icir": 0.17693653999006428,
+    "mi": 0.02334961178995343,
+    "rank_ic": 0.051124972129773856,
+    "rank_icir": 0.37479176007876397
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9393939393939394,
+    "top_quantile_annualized_excess_return": 0.028528046935455187,
+    "top_quantile_excess_return": 0.08368547946265448,
+    "top_quantile_max_drawdown": -0.107484428353666,
+    "top_quantile_turnover": 0.10779870305289868
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_percentile",
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.0031857276718614573,
+    "icir": 0.09500085762104132,
+    "mi": 0.039371680336151016,
+    "rank_ic": 0.051124972129773856,
+    "rank_icir": 0.37479176007876397
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9393939393939394,
+    "top_quantile_annualized_excess_return": 0.028528046935455187,
+    "top_quantile_excess_return": 0.08368547946265448,
+    "top_quantile_max_drawdown": -0.107484428353666,
+    "top_quantile_turnover": 0.10779870305289868
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.0031857276718614573,
+    "icir": -0.09500085762104132,
+    "mi": 0.039371680336151016,
+    "rank_ic": -0.051124972129773856,
+    "rank_icir": -0.37479176007876397
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Mutation of parent: reduced smoothing window from 10 to 5 and volume EMA span from 20 to 10 to increase responsiveness of price-volume coherence signal, targeting improved IC while preserving the core economic mechanism and style gate regime adaptation.",
+  "raw_metrics": {
+    "ic": -0.020448748881846193,
+    "icir": -0.17693653999006428,
+    "mi": 0.02334961178995343,
+    "rank_ic": -0.051124972129773856,
+    "rank_icir": -0.37479176007876397
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260716-080935-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260716-080935-r1"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "style_gate_resvol_high identifies high residual volatility periods; in such regimes, the volume-adjusted price range carries stronger predictive signal due to amplified volatility dynamics, so the raw signal is scaled up by 1.2. In low residual volatility regimes, the signal is attenuated to 0.8 to reduce noise, preserving cross-sectional variation.",
+  "style_gates_used": [
+    "style_gate_resvol_high"
+  ],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.5634749978375916,
+    "pre_transform_top_quantile_excess_return": 0.08368547946265448,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.6466516328704017,
+    "transformed_top_quantile_excess_return": 0.08368547946265448
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ts_mean(5, (high-low) * (volume / EMA_10(volume))) * (1.2 if resvol_high else 0.8)",
+  "fe_formula": "ts_mean(5, (high-low) * (volume / EMA_10(volume))) * (1.2 if resvol_high else 0.8)",
+  "lqtp_notes": "Unconverted: ['EMA_10']",
+  "fe_notes": "Unconverted: ['EMA_10']",
+  "source_formula": "SMA_5( (high-low) * (volume / EMA_10(volume)) ) * (1.2 if resvol_high else 0.8)"
+}

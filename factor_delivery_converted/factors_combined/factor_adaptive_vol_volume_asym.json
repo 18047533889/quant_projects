@@ -1,0 +1,42 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "5648cacb0321ecd4b572d73e308f0bca1d78ac5ae92ceba392705f7407fd2bb2",
+  "candidate_ids": [
+    "adaptive-asym-001"
+  ],
+  "code": "def factor_adaptive_vol_volume_asym(df):\n    df_copy = df.copy()\n    # Log returns for volatility estimation\n    log_ret = np.log(df_copy['close'] / df_copy['close'].shift(1))\n    # Rolling 20-day volatility (std of log returns)\n    vol = log_ret.rolling(window=20, min_periods=10).std()\n    # Adaptive span: base 10, increase with volatility, bounded between 5 and 30\n    vol_ratio = vol / vol.rolling(window=60, min_periods=20).mean()\n    span = (10 * (1 + vol_ratio)).clip(5, 30)\n    # Handle NaNs at the start\n    span = span.fillna(10)\n    # Up and down days\n    up_day = df_copy['close'] >= df_copy['open']\n    down_day = ~up_day\n    # Volume on up/down days (zero otherwise)\n    vol_up = df_copy['volume'].where(up_day, 0)\n    vol_down = df_copy['volume'].where(down_day, 0)\n    # Compute EWMA with adaptive span using ewm (span must be scalar, so we loop over each row - but vectorized alternative: use expanding window approach?)\n    # Since span is a series, we need to compute EWMA for each row with different decay. This is not directly vectorizable with ewm.\n    # Alternative: Use a fixed span of 10 and add a volatility modulation factor to the ratio.\n    # Simpler mutation: use fixed span 10, but take log of ratio and scale by rank of range.\n    # Let's simplify: keep span fixed at 10, but use log ratio and rank scale.\n    span = 10\n    alpha = 2.0 / (span + 1)\n    ewma_up = vol_up.ewm(span=span, adjust=False).mean()\n    ewma_down = vol_down.ewm(span=span, adjust=False).mean()\n    # Avoid division by zero\n    ratio = np.where(ewma_down > 0, ewma_up / ewma_down, 1.0)\n    # Log ratio for nonlinearity\n    log_ratio = np.log(ratio + 1e-10)\n    # Range\n    range_ = df_copy['high'] - df_copy['low']\n    # Rank-normalize range to preserve rank stability\n    range_rank = range_.rank(pct=True)\n    factor = log_ratio * range_rank\n    df_copy['factor_adaptive_vol_volume_asym'] = factor\n    return df_copy['factor_adaptive_vol_volume_asym']",
+  "factor_name": "factor_adaptive_vol_volume_asym",
+  "fitness_direction": -1,
+  "formula": "factor = log(EWMA_up_vol / EWMA_down_vol) * rank_pct(high - low)",
+  "metrics": {
+    "ic": 0.02869145913187024,
+    "icir": 0.41295041426889895,
+    "mi": 0.007016928153765534,
+    "rank_ic": 0.03834287493607463,
+    "rank_icir": 0.4577617976025621
+  },
+  "rationale": "Mutates parent lag-response-001 by introducing log transformation of the up/down volume ratio to capture multiplicative asymmetry and nonlinear information, and rank-scaling the range to preserve the parent's strong RankIC/RankICIR. The log ratio enhances MI potential while the rank-normalized range maintains robust cross-sectional ordering. This targets improved MI without sacrificing rank stability.",
+  "raw_metrics": null,
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260609-093208-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260609-093208-r2"
+  ],
+  "lqtp_formula": "factor = log(EWMA_up_vol / EWMA_down_vol) * cs_rank(high - low)",
+  "fe_formula": "factor = log(EWMA_up_vol / EWMA_down_vol) * rank(high - low)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "factor = log(EWMA_up_vol / EWMA_down_vol) * rank_pct(high - low)"
+}

@@ -1,0 +1,118 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "55cf1a44a786e66f0531a83261225a832ab08ab8ae6ec742d074924097037bff",
+  "candidate_ids": [
+    "alpha-stability-gen0-b"
+  ],
+  "code": "def factor_price_smoothness(df):\n    df_copy = df.copy()\n    # Daily return magnitude relative to intraday range\n    daily_ret = df_copy[\"close\"] / df_copy[\"close\"].shift(1) - 1\n    daily_range = df_copy[\"high\"] - df_copy[\"low\"]\n    # Ratio of squared return to squared range; small when price moves smoothly within range\n    smoothness_ratio = (daily_ret ** 2) / (daily_range ** 2).replace(0, np.nan)\n    # Rolling average of smoothness ratio over 20 days\n    avg_ratio = smoothness_ratio.rolling(20, min_periods=10).mean()\n    # Negative so high factor = smooth\n    factor = -avg_ratio\n    df_copy[\"factor_price_smoothness\"] = factor\n    return df_copy[\"factor_price_smoothness\"]",
+  "cross_sectional_rationale": "Cross-sectional rank highlights relative smoothness across assets, improving rank-order stability and making the factor comparable regardless of asset volatility.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.08460889517497838,
+        "top_quantile_excess_return": 0.2587533092899388,
+        "top_quantile_max_drawdown": -0.1133558562861402,
+        "top_quantile_turnover": 0.030026461296864166
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_price_smoothness",
+  "fitness_direction": -1,
+  "formula": "-rolling_mean( (close/shift(close)-1)^2 / (high-low)^2 , 20)",
+  "metrics": {
+    "ic": 0.013354470912737585,
+    "icir": 0.13065907301936866,
+    "mi": 0.008660773487298101,
+    "rank_ic": 0.017359733784743783,
+    "rank_icir": 0.13949421457709774
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.08460889517497838,
+    "top_quantile_excess_return": 0.2587533092899388,
+    "top_quantile_max_drawdown": -0.1133558562861402,
+    "top_quantile_turnover": 0.030026461296864166
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": -0.0007739609179034737,
+    "icir": -0.022132122391229858,
+    "mi": 0.011847478735899308,
+    "rank_ic": 0.017359733784743783,
+    "rank_icir": 0.13949421457709774
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.08460889517497838,
+    "top_quantile_excess_return": 0.2587533092899388,
+    "top_quantile_max_drawdown": -0.1133558562861402,
+    "top_quantile_turnover": 0.030026461296864166
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.0007739609179034737,
+    "icir": 0.022132122391229858,
+    "mi": 0.011847478735899308,
+    "rank_ic": -0.017359733784743783,
+    "rank_icir": -0.13949421457709774
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Measures smoothness of daily price action by comparing return magnitude to high-low range. Low ratio indicates the close is near the midpoint (choppy/smooth), high ratio indicates strong directional movement. Negative rolling average assigns high values to periods of smooth, consistent pricing, aligning with temporal stability.",
+  "raw_metrics": {
+    "ic": -0.013354470912737585,
+    "icir": -0.13065907301936866,
+    "mi": 0.008660773487298101,
+    "rank_ic": -0.017359733784743783,
+    "rank_icir": -0.13949421457709774
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260720-032707-r5",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260720-032707-r5"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.1457953437886075,
+    "pre_transform_top_quantile_excess_return": 0.2587533092899388,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.30952826578124587,
+    "transformed_top_quantile_excess_return": 0.2587533092899388
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "-ts_mean(20, (close/shift(close)-1)^2 / (high-low)^2)",
+  "fe_formula": "-ts_mean(20, (close/shift(close)-1)^2 / (high-low)^2)20)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "-rolling_mean( (close/shift(close)-1)^2 / (high-low)^2 , 20)"
+}

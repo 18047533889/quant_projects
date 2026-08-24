@@ -1,0 +1,95 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "40d20d4e41852fd0728c626b4f786e9a9099f316a93a6de4172940c558b4ec6c",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_pvcoh_g0_volume_impact_002_597be2a5_9a0a38ac"
+  ],
+  "code": "def factor_bounded_directional_price_impact_per_volume(df):\n    \"\"\"Bounded and smoothed directional intraday price impact per normalized volume.\"\"\"\n    df_copy = df.copy()\n    body_return = (df_copy[\"close\"] - df_copy[\"open\"]) / df_copy[\"open\"].replace(0.0, np.nan)\n    typical_volume = df_copy[\"volume\"].rolling(20, min_periods=10).median()\n    normalized_volume = df_copy[\"volume\"] / typical_volume.replace(0.0, np.nan)\n    impact_efficiency = body_return / normalized_volume.replace(0.0, np.nan)\n    bounded_impact = impact_efficiency / (1.0 + impact_efficiency.abs())\n    factor = bounded_impact.ewm(span=30, min_periods=18, adjust=False).mean()\n    df_copy[\"factor_bounded_directional_price_impact_per_volume\"] = factor.replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_bounded_directional_price_impact_per_volume\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.036372499506727385,
+        "top_quantile_excess_return": 0.10401894417127866,
+        "top_quantile_max_drawdown": -0.15053187825294057,
+        "top_quantile_turnover": 0.21788033812123225
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_bounded_directional_price_impact_per_volume",
+  "fitness_direction": -1,
+  "formula": "EWMA_30[impact_efficiency / (1 + |impact_efficiency|)], where impact_efficiency=((close-open)/open)/(volume/rolling_20_median(volume))",
+  "metrics": {
+    "ic": 0.02943737075703794,
+    "icir": 0.22938374209415716,
+    "mi": 0.02205530545469081,
+    "rank_ic": 0.03235517979344934,
+    "rank_icir": 0.21385929792105515
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.036372499506727385,
+    "top_quantile_excess_return": 0.10401894417127866,
+    "top_quantile_max_drawdown": -0.15053187825294057,
+    "top_quantile_turnover": 0.21788033812123225
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "Mutates the parent's directional price-impact efficiency mechanism with a monotonic bounded compression before slower EWMA smoothing. The compression preserves the sign and relative ordering of ordinary observations while limiting the influence of extreme candle-volume shocks that likely contributed to weak payoff robustness and elevated churn. The longer 30-bar smoother preserves the parent's predictive information and targets stability and turnover discipline without adding a new feature family.",
+  "raw_metrics": {
+    "ic": -0.02943737075703794,
+    "icir": -0.22938374209415716,
+    "mi": 0.02205530545469081,
+    "rank_ic": -0.03235517979344934,
+    "rank_icir": -0.21385929792105515
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260806-094519-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260806-094519-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "EWMA_30[impact_efficiency / (1 + |impact_efficiency|)], where impact_efficiency=((close-open)/open)/(volume/rolling_20_median(volume))",
+  "fe_formula": "EWMA_30[impact_efficiency / (1 + |impact_efficiency|)], where impact_efficiency=((close-open)/open)/(volume/rolling_20_median(volume))",
+  "lqtp_notes": "Unconverted: ['rolling_20_median']",
+  "fe_notes": "Unconverted: ['rolling_20_median']",
+  "source_formula": "EWMA_30[impact_efficiency / (1 + |impact_efficiency|)], where impact_efficiency=((close-open)/open)/(volume/rolling_20_median(volume))"
+}

@@ -1,0 +1,44 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "1e12caad5e7a25029e5127b61b3c41ce324fe78ac38109629a134bc529b203fd",
+  "candidate_ids": [
+    "MUT-002"
+  ],
+  "code": "def factor_window_adjusted_momentum(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    momentum = close / close.shift(15) - 1\n    vol_mean = volume.rolling(15, min_periods=15).mean()\n    vol_regime = volume / vol_mean.replace(0.0, np.nan)\n    factor = momentum * vol_regime\n    smoothed = factor.ewm(span=5, adjust=False).mean()\n    smoothed = smoothed.fillna(0.0)\n    df_copy['factor_window_adjusted_momentum'] = smoothed\n    return df_copy['factor_window_adjusted_momentum']",
+  "cross_sectional_rationale": "Cross-sectional z-score standardizes the product of momentum and volume ratio which vary in scale across assets.",
+  "cross_sectional_transform": "cs_zscore",
+  "factor_name": "factor_window_adjusted_momentum",
+  "fitness_direction": -1,
+  "formula": "EMA( (close/shift(close,15)-1) * (volume/rolling_mean(volume,15)), 5 )",
+  "metrics": {
+    "ic": 0.024175483649493738,
+    "icir": 0.1690626759832001,
+    "mi": 0.021656854296321804,
+    "rank_ic": 0.03366144781261282,
+    "rank_icir": 0.21065318593060553
+  },
+  "rationale": "Increased windows from 10 to 15 for momentum and volume ratio, and EMA span from 3 to 5, to capture longer-term volume-confirmed trends. Targets improved IC while preserving the parent's RankIC stability. Mutation from MUT-001 (window adjustment).",
+  "raw_metrics": {
+    "ic": -0.024175483649493738,
+    "icir": -0.1690626759832001,
+    "mi": 0.021656854296321804,
+    "rank_ic": -0.03366144781261282,
+    "rank_icir": -0.21065318593060553
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260623-054548-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260623-054548-r1"
+  ],
+  "lqtp_formula": "ema(5, (close/shift(close,15)-1) * (volume/rolling_mean(volume,15)))",
+  "fe_formula": "ema(5, (close/shift(close,15)-1) * (volume/rolling_mean(volume,15)))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "EMA( (close/shift(close,15)-1) * (volume/rolling_mean(volume,15)), 5 )"
+}

@@ -1,0 +1,116 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "446f610f1950ce5e49ea4aa2676df19e0544e1599667121574e88103872d1c7e",
+  "candidate_ids": [
+    "float_elasticity_candidate1"
+  ],
+  "code": "def factor_float_conditioned_book_cheapness(df):\n    df_copy = df.copy()\n    # Cheapness: 1 / pb_lf\n    cheapness = 1.0 / df_copy[\"pb_lf\"].replace(0, np.nan)\n    # Float context: smaller free-float implies higher re-rating elasticity\n    float_adj = 1.0 / np.log1p(df_copy[\"free_float_shares\"].clip(lower=1e6))\n    # Health: low debt is positive\n    health = 1.0 - df_copy[\"debttoassets\"] / 100.0\n    # Combine\n    factor = cheapness * float_adj * health\n    return factor.rename(\"factor_float_conditioned_book_cheapness\")",
+  "cross_sectional_rationale": "Cross-sectional rank normalizes the multiplicative combination of units (inverse PB, float adjustment, health) to a common interpretable scale, isolating the relative ordering of float-conditioned cheapness.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.13874108524439177,
+        "top_quantile_excess_return": 0.45247910052211604,
+        "top_quantile_max_drawdown": -0.06479571063913458,
+        "top_quantile_turnover": 0.024145369659417246
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_float_conditioned_book_cheapness",
+  "fitness_direction": 1,
+  "formula": "(1 / pb_lf) * (1 / log(1 + free_float_shares)) * (1 - debttoassets/100)",
+  "metrics": {
+    "ic": 0.012743511103927883,
+    "icir": 0.1641162413607345,
+    "mi": 0.008500956797011128,
+    "rank_ic": 0.031099587756387204,
+    "rank_icir": 0.3300476736520515
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.13874108524439177,
+    "top_quantile_excess_return": 0.45247910052211604,
+    "top_quantile_max_drawdown": -0.06479571063913458,
+    "top_quantile_turnover": 0.024145369659417246
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.012075252672703901,
+    "icir": 0.15860877108365826,
+    "mi": 0.012182323076439516,
+    "rank_ic": 0.031099587756387204,
+    "rank_icir": 0.3300476736520515
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.13874108524439177,
+    "top_quantile_excess_return": 0.45247910052211604,
+    "top_quantile_max_drawdown": -0.06479571063913458,
+    "top_quantile_turnover": 0.024145369659417246
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.012075252672703901,
+    "icir": 0.15860877108365826,
+    "mi": 0.012182323076439516,
+    "rank_ic": 0.031099587756387204,
+    "rank_icir": 0.3300476736520515
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Free-float size conditions the re-rating elasticity of book-value cheapness. Smaller free-float stocks have higher sensitivity to fundamental improvements. A debt-to-assets screen protects against financial distress. The mechanism tests whether cheapness amplified by float context and filtered by health predicts returns.",
+  "raw_metrics": {
+    "ic": 0.012743511103927883,
+    "icir": 0.1641162413607345,
+    "mi": 0.008500956797011128,
+    "rank_ic": 0.031099587756387204,
+    "rank_icir": 0.3300476736520515
+  },
+  "required_columns": [
+    "pb_lf",
+    "free_float_shares",
+    "debttoassets"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260721-20260721-205925-r5",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260721-20260721-205925-r5"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.5440136082412403,
+    "pre_transform_top_quantile_excess_return": 0.45247910052211604,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.5465079706701123,
+    "transformed_top_quantile_excess_return": 0.45247910052211604
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(1 / pb_lf) * (1 / log(1 + free_float_shares)) * (1 - debttoassets/100)",
+  "fe_formula": "(1 / pb_lf) * (1 / log(1 + free_float_shares)) * (1 - debttoassets/100)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(1 / pb_lf) * (1 / log(1 + free_float_shares)) * (1 - debttoassets/100)"
+}

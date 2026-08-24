@@ -1,0 +1,98 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "5cfbec25a6e772c8ac05c72c234463143721a294fb0f3cda7b842d1d19d10f27",
+  "candidate_ids": [
+    "g1_mutation_alphacycle_001_a299e42a"
+  ],
+  "code": "def factor_cyclical_trend_confidence(df):\n    df_copy = df.copy()\n    pdi = pd.Series(talib.PLUS_DI(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=50), index=df_copy.index)\n    mdi = pd.Series(talib.MINUS_DI(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=50), index=df_copy.index)\n    adx = pd.Series(talib.ADX(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=50), index=df_copy.index)\n    di_spread = pdi - mdi\n    raw_signal = di_spread * (adx / 100.0)\n    factor = pd.Series(talib.EMA(raw_signal, timeperiod=20), index=df_copy.index)\n    df_copy[\"factor_cyclical_trend_confidence\"] = factor\n    return df_copy[\"factor_cyclical_trend_confidence\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.06031928342264936,
+        "top_quantile_excess_return": 0.15124858745536618,
+        "top_quantile_max_drawdown": -0.12206557870543822,
+        "top_quantile_turnover": 0.026103583048832927
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.07481066261751826,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.25189337382481747,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_cyclical_trend_confidence",
+  "fitness_direction": -1,
+  "formula": "(PLUS_DI(50) - MINUS_DI(50)) * (ADX(50) / 100), then EMA(20)",
+  "metrics": {
+    "ic": 0.01028600929820296,
+    "icir": 0.07481066261751826,
+    "mi": 0.011807090244145613,
+    "rank_ic": 0.029777569019802306,
+    "rank_icir": 0.2024016299104302
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.06031928342264936,
+    "top_quantile_excess_return": 0.15124858745536618,
+    "top_quantile_max_drawdown": -0.12206557870543822,
+    "top_quantile_turnover": 0.026103583048832927
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Replace binary ADX threshold with a continuous ADX-weighted DI spread. This preserves directional strength as a gradient, improving cross-sectional differentiation and payoff thickness while maintaining trend-following intuition.",
+  "raw_metrics": {
+    "ic": -0.01028600929820296,
+    "icir": -0.07481066261751826,
+    "mi": 0.011807090244145613,
+    "rank_ic": -0.029777569019802306,
+    "rank_icir": -0.2024016299104302
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260720-053953-r6",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260720-053953-r6"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(<PLUS_DI(50)> - <MINUS_DI(50)>) * (ts_adx(50) / 100), then ema(20)",
+  "fe_formula": "(<PLUS_DI(50)> - <MINUS_DI(50)>) * (ADX(50) / 100), then ema(20)",
+  "lqtp_notes": "Textual non-executable: PLUS_DI/MINUS_DI (ADX sub-component, not in LQTP); Unconverted: ['MINUS_DI', 'PLUS_DI']",
+  "fe_notes": "Textual non-executable: PLUS_DI/MINUS_DI (ADX sub-component, not in LQTP); Unconverted: ['MINUS_DI', 'PLUS_DI']",
+  "source_formula": "(PLUS_DI(50) - MINUS_DI(50)) * (ADX(50) / 100), then EMA(20)"
+}

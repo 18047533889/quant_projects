@@ -1,0 +1,95 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "46745cd620cf41a21a76733a20a9bec6e02fa7dae15ec5417fe6762e8c4b3cbe",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_mutation_alpha_drawdown_g0_wick_absorption_1a_4ae93a1a"
+  ],
+  "code": "def factor_drawdown_wick_absorption_simplified(df):\n    \"\"\"Smooth lower-wick absorption in drawdowns while removing a noisy auxiliary attenuation block.\"\"\"\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    open_ = df_copy[\"open\"]\n    close = df_copy[\"close\"]\n    eps = np.finfo(float).eps\n    safe_close = close.clip(lower=eps)\n    bar_range = (high - low).replace(0.0, np.nan)\n    lower_wick = ((np.minimum(open_, close) - low) / bar_range).clip(lower=0.0, upper=1.0)\n    close_location = ((close - low) / bar_range).clip(lower=0.0, upper=1.0)\n    absorption = (lower_wick * close_location).rolling(16, min_periods=16).mean()\n    high_water = safe_close.rolling(50, min_periods=50).max().clip(lower=eps)\n    depth = (1.0 - safe_close / high_water).clip(lower=0.0)\n    prior_close = safe_close.shift(1)\n    downside_damage = (-np.log(safe_close / prior_close)).clip(lower=0.0).rolling(12, min_periods=12).sum()\n    signal = depth * absorption / (1.0 + downside_damage)\n    df_copy[\"factor_drawdown_wick_absorption_simplified\"] = signal.replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_drawdown_wick_absorption_simplified\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.05998106184469809,
+        "top_quantile_excess_return": 0.16886077303486013,
+        "top_quantile_max_drawdown": -0.09928465257391206,
+        "top_quantile_turnover": 0.1628817254619803
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_drawdown_wick_absorption_simplified",
+  "fitness_direction": 1,
+  "formula": "drawdown_depth_50 × mean_16(lower_wick_fraction × close_location) / (1 + downside_damage_12)",
+  "metrics": {
+    "ic": 0.019320708995506815,
+    "icir": 0.1617559692632996,
+    "mi": 0.01048053449012265,
+    "rank_ic": 0.026119720481533194,
+    "rank_icir": 0.16812669583996886
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.05998106184469809,
+    "top_quantile_excess_return": 0.16886077303486013,
+    "top_quantile_max_drawdown": -0.09928465257391206,
+    "top_quantile_turnover": 0.1628817254619803
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Simplifies the parent by removing the unvalidated downside-energy attenuation modifier while preserving the core smoothed lower-wick absorption mechanism, 50-session drawdown depth, and downside-damage suppression. This targets the parent's weaker predictive stability, especially RankICIR, by reducing an additional noisy regime interaction and should avoid materially increasing turnover while retaining the parent's positive payoff and monotonicity strengths.",
+  "raw_metrics": {
+    "ic": 0.019320708995506815,
+    "icir": 0.1617559692632996,
+    "mi": 0.01048053449012265,
+    "rank_ic": 0.026119720481533194,
+    "rank_icir": 0.16812669583996886
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260807-060418-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260807-060418-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "drawdown_depth_50 × mean_16[lower_wick × close_location] ÷ [1 + downside_damage_12]",
+  "fe_formula": "drawdown_depth_50 × mean_16[lower_wick × close_location] ÷ [1 + downside_damage_12]",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "drawdown_depth_50 × mean_16[lower_wick × close_location] ÷ [1 + downside_damage_12]"
+}

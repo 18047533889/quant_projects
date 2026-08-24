@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "generated_by": "fresh_wheel_matrix",
+  "packages": {
+    "factor_engine": {
+      "pkg": "factor_engine",
+      "wheel_sha256": "ebb7ce020489944bb641f8b6a9060f2b9005c877c59644efec466531b9b649c7",
+      "built": true,
+      "installed_import_ok": false,
+      "integration_ok": false,
+      "status": "BLOCKED",
+      "reason": "clean-venv import failed: factor_engine, factor_engine.runtime, factor_engine.ir, factor_engine.modeling, factor_engine.api"
+    },
+    "quant_evaluator": {
+      "pkg": "quant_evaluator",
+      "wheel_sha256": "9be9822ed8c8866f92e4202321e8dcb9bd76d58eda095aa5707f605ff6affded",
+      "built": true,
+      "installed_import_ok": true,
+      "integration_ok": true,
+      "status": "PASS",
+      "reason": ""
+    },
+    "factor_optimizer": {
+      "pkg": "factor_optimizer",
+      "wheel_sha256": "2b173adcc0335868c5d53e1967528b97bd6468d5fc165d0939120d3fe9dc176a",
+      "built": true,
+      "installed_import_ok": true,
+      "integration_ok": true,
+      "status": "PASS",
+      "reason": ""
+    },
+    "factor_assets": {
+      "pkg": "factor_assets",
+      "wheel_sha256": "eb7e37d249dc17b5071df1d41b9025be38cb9184ee4b42bc48b7810ad4d580b4",
+      "built": true,
+      "installed_import_ok": true,
+      "integration_ok": true,
+      "status": "PASS",
+      "reason": ""
+    },
+    "factor_preprocess": {
+      "pkg": "factor_preprocess",
+      "wheel_sha256": "35c73dd08c7b5e15c920ea2ebd6ef6c15edbd111aea57f9c74353dfaab0057f8",
+      "built": true,
+      "installed_import_ok": true,
+      "integration_ok": true,
+      "status": "PASS",
+      "reason": ""
+    },
+    "dataaccess": {
+      "pkg": "dataaccess",
+      "wheel_sha256": "182d5c84390937182f3073891498f566aa73d1eea8b5dbe4bf5415938e95b5db",
+      "built": true,
+      "installed_import_ok": true,
+      "integration_ok": true,
+      "status": "PASS",
+      "reason": ""
+    }
+  },
+  "integration_rc": 1,
+  "all_pass": false
+}

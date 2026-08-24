@@ -1,0 +1,37 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "3b0331f8b9765961d3313dfa7b9f14ef44a15ae8ecf5114c14ea97757530a40b",
+  "candidate_ids": [
+    "crossover_gen1_001"
+  ],
+  "code": "def factor_imbalance_volume_interaction(df):\n    \"\"\"Combine order imbalance with volume abnormality to enhance predictive information.\"\"\"\n    df_copy = df.copy()\n    clv = np.where(df_copy['high'] - df_copy['low'] != 0,\n                   (2*df_copy['close'] - df_copy['high'] - df_copy['low']) / (df_copy['high'] - df_copy['low']),\n                   0)\n    money_flow = clv * df_copy['volume']\n    order_imbalance = money_flow.rolling(window=20, min_periods=1).sum()\n    vol_mean = df_copy['volume'].rolling(window=20, min_periods=10).mean()\n    vol_std = df_copy['volume'].rolling(window=20, min_periods=10).std()\n    vol_z = (df_copy['volume'] - vol_mean) / (vol_std + 1e-8)\n    norm_range = (df_copy['high'] - df_copy['low']) / (df_copy['close'] + 1e-8)\n    vol_abnormality = vol_z * norm_range\n    df_copy['factor_imbalance_volume_interaction'] = order_imbalance * vol_abnormality\n    return df_copy['factor_imbalance_volume_interaction']",
+  "factor_name": "factor_imbalance_volume_interaction",
+  "fitness_direction": -1,
+  "formula": "OI * (vol_z * norm_range), where OI = sum_{i=t-19}^{t}(CLV_i * volume_i), CLV = (2*close - high - low)/(high - low), vol_z = (volume - rolling_mean_20)/rolling_std_20, norm_range = (high - low)/close",
+  "metrics": {
+    "ic": 0.019598433278633108,
+    "icir": 0.375438516322354,
+    "mi": 0.010162428388360567,
+    "rank_ic": 0.02074459642197887,
+    "rank_icir": 0.3843427056210561
+  },
+  "rationale": "This factor multiplies cumulative order imbalance (directional pressure) by a volume abnormality signal (z-score times normalized range). Order imbalance alone captures buying/selling pressure, but its predictive power is enhanced when volume is abnormal and price range is wide, indicating informed trading. The product amplifies signals during high conviction periods while reducing noise during normal trading, potentially improving RankIC and MI.",
+  "required_columns": [
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260609-053202-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260609-053202-r1"
+  ],
+  "lqtp_formula": "OI * (vol_z * norm_range), where OI = sum_{i=t-19}^{t}(CLV_i * volume_i), CLV = (2*close - high - low)/(high - low), vol_z = (volume - rolling_mean_20)/rolling_std_20, norm_range = (high - low)/close",
+  "fe_formula": "OI * (vol_z * norm_range), where OI = sum_{i=t-19}^{t}(CLV_i * volume_i), CLV = (2*close - high - low)/(high - low), vol_z = (volume - rolling_mean_20)/rolling_std_20, norm_range = (high - low)/close",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "OI * (vol_z * norm_range), where OI = sum_{i=t-19}^{t}(CLV_i * volume_i), CLV = (2*close - high - low)/(high - low), vol_z = (volume - rolling_mean_20)/rolling_std_20, norm_range = (high - low)/close"
+}

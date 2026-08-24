@@ -1,0 +1,43 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "d3ba24fd92f50d6058698c3d4d844a87e93b2a68981475867787bed2ec3bb1d7",
+  "candidate_ids": [
+    "alpha_mutation_drawdown_ablation_001"
+  ],
+  "code": "def factor_drawdown_normalized(df):\n    df_copy = df.copy()\n    trailing_high = df_copy['close'].rolling(60, min_periods=60).max()\n    drawdown = (df_copy['close'] - trailing_high) / trailing_high\n    vol = df_copy['close'].rolling(20, min_periods=20).std(ddof=1)\n    vol = vol.replace(0.0, np.nan)\n    factor = - drawdown / vol\n    factor = factor.replace([np.inf, -np.inf], np.nan)\n    df_copy['factor_drawdown_normalized'] = factor\n    return df_copy['factor_drawdown_normalized']",
+  "cross_sectional_rationale": "Cross-sectional rank identifies stocks with the most extreme normalized drawdown relative to peers, enabling relative comparison and improving rank-order stability.",
+  "cross_sectional_transform": "cs_rank",
+  "factor_name": "factor_drawdown_normalized",
+  "fitness_direction": 1,
+  "formula": "drawdown = (close - rolling_max(close,60)) / rolling_max(close,60); vol = rolling_std(close,20); factor = - drawdown / vol",
+  "metrics": {
+    "ic": 0.01871723143398656,
+    "icir": 0.16778891396188625,
+    "mi": 0.02014799388991584,
+    "rank_ic": 0.036527255733035544,
+    "rank_icir": 0.28049852864428815
+  },
+  "rationale": "Simplified drawdown depth normalized by volatility, removing the volume trend component to focus on the core mean-reversion mechanism. The drawdown (relative to 60-day high) divided by 20-day volatility captures the severity of recent decline relative to recent noise. Negative sign ensures that deep drawdown yields a positive signal. The ablation reduces complexity and aims to improve IC and ICIR while preserving the rank-order stability (RankIC) from the parent. Cross-sectional rank is retained to standardize relative comparison across stocks.",
+  "raw_metrics": {
+    "ic": 0.01871723143398656,
+    "icir": 0.16778891396188625,
+    "mi": 0.02014799388991584,
+    "rank_ic": 0.036527255733035544,
+    "rank_icir": 0.28049852864428815
+  },
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-20260622-085308-r3",
+  "source_run_ids": [
+    "formal-mvp-loop-20260622-085308-r3"
+  ],
+  "lqtp_formula": "factor = drawdown / vol, where drawdown = close/ts_max(60)-1, vol = ts_std(20, returns)",
+  "fe_formula": "factor = drawdown / vol, where drawdown = close/ts_max(60)-1, vol = ts_std(20, returns)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "factor = drawdown / vol, where drawdown = close/rolling_max(60)-1, vol = rolling_std(returns,20)"
+}

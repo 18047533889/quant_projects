@@ -1,0 +1,45 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "cb220d099c0dc52cbac453fdb63e8129bb19abb67dc833d2df1125fff6bed1f6",
+  "candidate_ids": [
+    "mut_vol_gated_herding_gen5"
+  ],
+  "code": "def factor_vol_gated_herding_mutated(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    high = df_copy['high']\n    low = df_copy['low']\n    \n    # Parent1: momentum and volatility adjustment (same as parent)\n    mom = close / close.shift(5) - 1\n    tr = np.maximum(high - low, np.maximum((high - close.shift(1)).abs(), (low - close.shift(1)).abs()))\n    atr = tr.rolling(20, min_periods=10).mean()\n    vol_adj = atr / close\n    vol_mean = vol_adj.rolling(20, min_periods=10).mean()\n    vol_std = vol_adj.rolling(20, min_periods=10).std(ddof=1)\n    vol_z = (vol_adj - vol_mean) / vol_std.replace(0, np.nan)\n    vol_z_clipped = np.clip(vol_z, -2, 2)\n    \n    ret = close.pct_change()\n    ema_ret = ret.ewm(span=7, min_periods=7, adjust=False).mean()\n    persistence = np.tanh(ema_ret * 5)\n    \n    base_mom = (mom / (1 + vol_z_clipped.abs())) * (1 + persistence)\n    \n    # Mutated herding: volume-signed return strength\n    vol_ma20 = volume.rolling(20).mean()\n    volume_dev = (volume - vol_ma20) / vol_ma20.replace(0, np.nan)\n    herding = np.sign(ret) * np.tanh(volume_dev * 3)\n    \n    # Volume confidence with shorter windows\n    vol_rank = volume.rolling(12).rank(pct=True)\n    vol_ma10 = volume.rolling(10).mean()\n    vol_trend = volume.rolling(3).mean() / vol_ma10.replace(0, np.nan)\n    confidence = 1 + np.tanh(vol_rank * vol_trend)\n    \n    # Combine\n    factor = base_mom * (1 + np.tanh(herding)) * confidence\n    factor = factor.fillna(0.0).clip(-5, 5)\n    df_copy['factor_vol_gated_herding_mutated'] = factor\n    return df_copy['factor_vol_gated_herding_mutated']",
+  "factor_name": "factor_vol_gated_herding_mutated",
+  "fitness_direction": -1,
+  "formula": "factor = (mom/(1+|z(ATR/close)|)) * (1+tanh(5*EMA(ret))) * (1+tanh(sign(ret)*tanh(3*(vol/vol_ma20-1)))) * (1+tanh(vol_rank * vol_trend))",
+  "metrics": {
+    "ic": 0.02266294249960979,
+    "icir": 0.2226908597033786,
+    "mi": 0.018189565991744594,
+    "rank_ic": 0.03334977884547501,
+    "rank_icir": 0.2904602659419668
+  },
+  "rationale": "Mutation of factor_vol_gated_herding_crossover. Preserves core momentum with volatility adjustment and persistence. Replaces the complex correlation-based herding with a simpler volume-signed return strength using volume deviation from its 20-period mean, making the herding signal more direct and responsive. Also adjusts volume confidence windows to shorter periods (12 for rank, 10 for trend, 3 for short-term volume) to increase sensitivity. These changes target improved IC and ICIR while maintaining the strong RankIC/RankICIR from the parent. The parent strength target is the rank stability (RankIC/RankICIR) from the herding and volume-gated combination.",
+  "raw_metrics": {
+    "ic": -0.02266294249960979,
+    "icir": -0.2226908597033786,
+    "mi": 0.018189565991744594,
+    "rank_ic": -0.03334977884547501,
+    "rank_icir": -0.2904602659419668
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260611-090600-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260611-090600-r2"
+  ],
+  "lqtp_formula": "factor = (mom/(1+|cs_zscore(ATR/close)|)) * (1+tanh(5*ema(ret))) * (1+tanh(sign(ret)*tanh(3*(vol/vol_ma20-1)))) * (1+tanh(vol_rank * vol_trend))",
+  "fe_formula": "factor = (mom/(1+|zscore(ATR/close)|)) * (1+tanh(5*ema(ret))) * (1+tanh(sign(ret)*tanh(3*(vol/vol_ma20-1)))) * (1+tanh(vol_rank * vol_trend))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "factor = (mom/(1+|z(ATR/close)|)) * (1+tanh(5*EMA(ret))) * (1+tanh(sign(ret)*tanh(3*(vol/vol_ma20-1)))) * (1+tanh(vol_rank * vol_trend))"
+}

@@ -1,0 +1,125 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "bd5ef24711d74f015798a4c40dbfa876a8eb30efb79a6ed8fb0546824b664c53",
+  "candidate_ids": [
+    "g1_crossover_then_mutation_alpha_drawdown_002_crash_pred_001_da78a163",
+    "g2_crossover_then_mutation_alpha_drawdown_002_g1_crossover_then_mutation_al_ac8f7380"
+  ],
+  "code": "def factor_drawdown_atr_ratio(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(20, min_periods=10).max()\n    max_drawdown_20 = (df_copy['close'] - rolling_max) / rolling_max\n    atr = talib.ATR(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=20)\n    stress_ratio = -max_drawdown_20 / atr.replace(0.0, np.nan)\n    df_copy['factor_drawdown_atr_ratio'] = stress_ratio.fillna(0.0)\n    return df_copy['factor_drawdown_atr_ratio']",
+  "cross_sectional_rationale": "CS rank standardizes the stress ratio across stocks, highlighting relative stress. Keep from parent.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9393939393939394,
+        "top_quantile_annualized_excess_return": -0.008793856315455706,
+        "top_quantile_excess_return": -0.02437366594228818,
+        "top_quantile_max_drawdown": -0.1273064488496083,
+        "top_quantile_turnover": 0.14616674954300055
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_drawdown_atr_ratio",
+  "fitness_direction": 1,
+  "formula": "stress_ratio = -(close / rolling_max(20) - 1) / ATR(20)",
+  "metrics": {
+    "ic": 0.015814349414593802,
+    "icir": 0.14409622495314886,
+    "mi": 0.026681317390641723,
+    "rank_ic": 0.030960461458749422,
+    "rank_icir": 0.23309665271218358
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9393939393939394,
+    "top_quantile_annualized_excess_return": -0.008793856315455706,
+    "top_quantile_excess_return": -0.02437366594228818,
+    "top_quantile_max_drawdown": -0.1273064488496083,
+    "top_quantile_turnover": 0.14616674954300055
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.008224756621140585,
+    "icir": 0.10641217089856062,
+    "mi": 0.011867490205943909,
+    "rank_ic": 0.030960461458749422,
+    "rank_icir": 0.23309665271218358
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9393939393939394,
+    "top_quantile_annualized_excess_return": -0.008793856315455706,
+    "top_quantile_excess_return": -0.02437366594228818,
+    "top_quantile_max_drawdown": -0.1273064488496083,
+    "top_quantile_turnover": 0.14616674954300055
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.008224756621140585,
+    "icir": 0.10641217089856062,
+    "mi": 0.011867490205943909,
+    "rank_ic": 0.030960461458749422,
+    "rank_icir": 0.23309665271218358
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Measures drawdown severity normalized by average true range instead of close volatility. ATR captures intraday and gap volatility, providing a more robust stress metric that may improve cross-sectional ranking and long-only payoff by reducing noise from close-only volatility.",
+  "raw_metrics": {
+    "ic": 0.015814349414593802,
+    "icir": 0.14409622495314886,
+    "mi": 0.026681317390641723,
+    "rank_ic": 0.030960461458749422,
+    "rank_icir": 0.23309665271218358
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260717-061725-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260717-061725-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.3905615318965781,
+    "pre_transform_top_quantile_excess_return": -0.02437366594228818,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.4506490059293174,
+    "transformed_top_quantile_excess_return": -0.02437366594228818
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "stress_ratio = -(close / ts_max(20) - 1) / ts_atr(20)",
+  "fe_formula": "stress_ratio = -(close / ts_max(20) - 1) / ATR(20)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "stress_ratio = -(close / rolling_max(20) - 1) / ATR(20)"
+}

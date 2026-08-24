@@ -1,0 +1,73 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "cc58afa4e59fdad5614ab25b0ad2eb01623c0fdbf4d55de7bc2ce14548f266e4",
+  "candidate_ids": [
+    "g2_crossover_g1_mutation_alpha_liquidity_gen0_1_8b6de0fd_g1_c_8c2a636b"
+  ],
+  "code": "def factor_crossover_vol_impact_trend_gated(df):\n    df_copy = df.copy()\n    high_resvol = df_copy[\"style_gate_resvol_high\"] > 0\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    vol_factor = vol_ratio.clip(lower=0.5, upper=2.0)\n    ema_short = df_copy[\"close\"].ewm(span=10, adjust=False).mean()\n    ema_long = df_copy[\"close\"].ewm(span=30, adjust=False).mean()\n    slow_trend = (ema_short - ema_long) / ema_long\n    slow_trend_adjusted = slow_trend * vol_factor\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    total_ret = overnight_ret + intraday_ret\n    fast_impact = np.abs(total_ret) * vol_ratio\n    df_copy[\"factor_crossover_vol_impact_trend_gated\"] = np.where(high_resvol, fast_impact, slow_trend_adjusted)\n    return df_copy[\"factor_crossover_vol_impact_trend_gated\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_crossover_vol_impact_trend_gated",
+  "fitness_direction": -1,
+  "formula": "if style_gate_resvol_high > 0 then |overnight_ret+intraday_ret| * vol_ratio else (ema(close,10)-ema(close,30))/ema(close,30) * clip(vol_ratio, 0.5, 2.0)",
+  "metrics": {
+    "ic": 0.017779207108193616,
+    "icir": 0.15121476595941774,
+    "mi": 0.04032239902089163,
+    "rank_ic": 0.03866333051071365,
+    "rank_icir": 0.3162942605630086
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9272727272727272,
+    "top_quantile_annualized_excess_return": 0.04805461447338333,
+    "top_quantile_excess_return": 0.14414856771980777,
+    "top_quantile_max_drawdown": -0.19894467389689963,
+    "top_quantile_turnover": 0.2598195053688321
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Preserves the regime-gated structure from parent 2 (fast mean-reversion in high resvol, slow trend in low resvol) but replaces the fast signal with the total daily price impact (absolute overnight+intraday return scaled by volume ratio) borrowed from parent 1. This substitution captures a more comprehensive price impact signal in volatile periods, aiming to improve IC while maintaining rank stability from the trend component.",
+  "raw_metrics": {
+    "ic": -0.017779207108193616,
+    "icir": -0.15121476595941774,
+    "mi": 0.04032239902089163,
+    "rank_ic": -0.03866333051071365,
+    "rank_icir": -0.3162942605630086
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "style_gate_resvol_high"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260708-233155-r8",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260708-233155-r8"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "Uses style_gate_resvol_high to switch between two OHLCV-derived signals based on residual volatility regime. In high residual volatility, the price impact mechanism captures overreaction and quick stabilization; in low residual volatility, a volume-modulated trend signal captures sustained movements. The gate preserves continuous signals in both branches.",
+  "style_gates_used": [
+    "style_gate_resvol_high"
+  ],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "if style_gate_resvol_high > 0 then |overnight_ret+intraday_ret| * vol_ratio else (ema(close,10)-ema(close,30))/ema(close,30) * clip(vol_ratio, 0.5, 2.0)",
+  "fe_formula": "if style_gate_resvol_high > 0 then |overnight_ret+intraday_ret| * vol_ratio else (ema(close,10)-ema(close,30))/ema(close,30) * clip(vol_ratio, 0.5, 2.0)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "if style_gate_resvol_high > 0 then |overnight_ret+intraday_ret| * vol_ratio else (ema(close,10)-ema(close,30))/ema(close,30) * clip(vol_ratio, 0.5, 2.0)"
+}

@@ -1,0 +1,42 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "6ed47ed97832e5db7f805ed762e732fcc4aaac45bddc2048205ca18c95f441e4",
+  "candidate_ids": [
+    "b28f3e7b-9d7c-4f2a-8b1d-3e6f9c0a2b5e"
+  ],
+  "code": "def factor_smooth_abs_return_volume(df):\n    df_copy = df.copy()\n    returns = df_copy['close'].pct_change().abs()\n    smooth_abs = returns.ewm(span=20, min_periods=20).mean()\n    volume_ma = df_copy['volume'].rolling(window=20, min_periods=20).mean()\n    volume_ratio = df_copy['volume'] / volume_ma\n    factor = smooth_abs * volume_ratio\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy['factor_smooth_abs_return_volume'] = factor\n    return df_copy['factor_smooth_abs_return_volume']",
+  "factor_name": "factor_smooth_abs_return_volume",
+  "fitness_direction": -1,
+  "formula": "$\\text{EWMA}_{20}(|r_t|) \\times \\frac{\\text{volume}_t}{\\text{rollingmean}_{20}(\\text{volume})}$",
+  "metrics": {
+    "ic": 0.017207420267092603,
+    "icir": 0.14670619606429633,
+    "mi": 0.048385461360202164,
+    "rank_ic": 0.04137305634059518,
+    "rank_icir": 0.32151015828016405
+  },
+  "rationale": "Combines the smooth absolute return persistence with volume confirmation. Stocks with low absolute return smoothness (stable) but high relative volume indicate calm periods interrupted by high-volume moves, which may signal information-driven volatility. This preserves the temporal stability concept while adding volume to improve cross-sectional ranking.",
+  "raw_metrics": {
+    "ic": -0.017207420267092603,
+    "icir": -0.14670619606429633,
+    "mi": 0.048385461360202164,
+    "rank_ic": -0.04137305634059518,
+    "rank_icir": -0.32151015828016405
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260610-073501-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260610-073501-r1"
+  ],
+  "lqtp_formula": "$\\text{EWMA}_{20}(|r_t|) \\times \\frac{\\text{volume}_t}{\\text{rollingmean}_{20}(\\text{volume})}$",
+  "fe_formula": "$\\text{EWMA}_{20}(|r_t|) \\times \\frac{\\text{volume}_t}{\\text{rollingmean}_{20}(\\text{volume})}$",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "$\\text{EWMA}_{20}(|r_t|) \\times \\frac{\\text{volume}_t}{\\text{rollingmean}_{20}(\\text{volume})}$"
+}

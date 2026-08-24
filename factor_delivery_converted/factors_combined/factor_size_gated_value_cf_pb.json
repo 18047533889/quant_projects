@@ -1,0 +1,121 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "177423c69eb706c19e4d372c01c451292af59c2e87f1de7c98e718e089c60bc5",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_avsi_gen0_a_1d417200_582298e9"
+  ],
+  "code": "def factor_size_gated_value_cf_pb(df):\n    df_copy = df.copy()\n    # Cash flow yield for large caps\n    cf_yield = 1.0 / df_copy[\"pcf_ocf_ttm\"].replace(0, np.nan)\n    # Book yield for small caps\n    pb_yield = 1.0 / df_copy[\"pb_lf\"].replace(0, np.nan)\n    # Smooth yields\n    cf_yield_sm = cf_yield.rolling(5, min_periods=3).mean()\n    pb_yield_sm = pb_yield.rolling(5, min_periods=3).mean()\n    # Leverage penalty for small caps\n    debt_ratio = df_copy[\"debttoassets\"] / 100.0\n    debt_ratio = debt_ratio.clip(0, 1)\n    small_value = pb_yield_sm * (1.0 - debt_ratio)\n    # Style gates\n    if \"style_gate_size_large\" in df_copy.columns and \"style_gate_size_small\" in df_copy.columns:\n        large_cond = df_copy[\"style_gate_size_large\"] == 1\n        small_cond = df_copy[\"style_gate_size_small\"] == 1\n        neutral = (cf_yield_sm + small_value) / 2.0\n        signal = np.where(large_cond, cf_yield_sm, np.where(small_cond, small_value, neutral))\n    else:\n        signal = (cf_yield_sm + small_value) / 2.0\n    df_copy[\"factor_size_gated_value_cf_pb\"] = signal\n    return df_copy[\"factor_size_gated_value_cf_pb\"]",
+  "cross_sectional_rationale": "Cross-sectional ranking makes raw valuation yields from different metrics (P/CF vs P/B) comparable across stocks and removes scale differences.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.17568241433140397,
+        "top_quantile_excess_return": 0.5920047138207456,
+        "top_quantile_max_drawdown": -0.10462483108474074,
+        "top_quantile_turnover": 0.020634873610615688
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_size_gated_value_cf_pb",
+  "fitness_direction": 1,
+  "formula": "If size_large: sm5(1/pcf_ocf_ttm). If size_small: sm5(1/pb_lf)*(1 - debttoassets/100). Else average.",
+  "metrics": {
+    "ic": 0.018242055338541997,
+    "icir": 0.17925026205516528,
+    "mi": 0.007973694236119044,
+    "rank_ic": 0.03283341956028777,
+    "rank_icir": 0.2553804671560016
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.17568241433140397,
+    "top_quantile_excess_return": 0.5920047138207456,
+    "top_quantile_max_drawdown": -0.10462483108474074,
+    "top_quantile_turnover": 0.020634873610615688
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.014376606798168266,
+    "icir": 0.1800078852472857,
+    "mi": 0.010855240430978519,
+    "rank_ic": 0.03283341956028777,
+    "rank_icir": 0.2553804671560016
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.17568241433140397,
+    "top_quantile_excess_return": 0.5920047138207456,
+    "top_quantile_max_drawdown": -0.10462483108474074,
+    "top_quantile_turnover": 0.020634873610615688
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.014376606798168266,
+    "icir": 0.1800078852472857,
+    "mi": 0.010855240430978519,
+    "rank_ic": 0.03283341956028777,
+    "rank_icir": 0.2553804671560016
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Mutation of g1_mutation_avsi_gen0_a_1d417200. Replaces sales yield with book yield (1/pb_lf) for small caps to improve the linear correlation (IC) by using a more robust value metric for small-cap stocks. Preserves the size-gated value mechanism and smoothing. Parent strength in RankIC and RankICIR is preserved. Cross-sectional ranking remains for comparability.",
+  "raw_metrics": {
+    "ic": 0.018242055338541997,
+    "icir": 0.17925026205516528,
+    "mi": 0.007973694236119044,
+    "rank_ic": 0.03283341956028777,
+    "rank_icir": 0.2553804671560016
+  },
+  "required_columns": [
+    "pcf_ocf_ttm",
+    "pb_lf",
+    "debttoassets",
+    "style_gate_size_large",
+    "style_gate_size_small"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260719-20260719-174251-r2",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260719-20260719-174251-r2"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "Uses style_gate_size_large and style_gate_size_small to select the appropriate value metric for large vs small cap regimes, maintaining the size-conditioned value mechanism.",
+  "style_gates_used": [
+    "style_gate_size_large",
+    "style_gate_size_small"
+  ],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.49345361919272185,
+    "pre_transform_top_quantile_excess_return": 0.5920047138207456,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.4936798983461157,
+    "transformed_top_quantile_excess_return": 0.5920047138207456
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "If size_large: ts_mean(1/pcf_ocf_ttm). If size_small: ts_mean(1/pb_lf)*(1 - debttoassets/100). Else average.",
+  "fe_formula": "If size_large: ts_mean(1/pcf_ocf_ttm). If size_small: ts_mean(1/pb_lf)*(1 - debttoassets/100). Else average.",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "If size_large: sm5(1/pcf_ocf_ttm). If size_small: sm5(1/pb_lf)*(1 - debttoassets/100). Else average."
+}

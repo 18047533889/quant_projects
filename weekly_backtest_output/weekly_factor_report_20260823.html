@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>因子周报 2026-08-23</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'PingFang SC','Microsoft YaHei',Arial,sans-serif; background:#0f1419; color:#e6e8ea; padding:20px; }
+h1 { color:#1d9bf0; font-size:1.5em; margin-bottom:4px; }
+.subtitle { color:#71767b; font-size:0.85em; margin-bottom:20px; }
+.metrics { display:flex; gap:20px; flex-wrap:wrap; margin-bottom:24px; }
+.metric { background:#161b22; border:1px solid #30363d; border-radius:8px; padding:16px 24px; text-align:center; }
+.metric b { display:block; font-size:2em; color:#1d9bf0; }
+.metric span { font-size:0.8em; color:#71767b; }
+.section { margin-bottom:32px; }
+.section h2 { color:#e6e8ea; font-size:1.1em; border-left:4px solid #1d9bf0; padding-left:12px; margin-bottom:12px; }
+table { width:100%; border-collapse:collapse; background:#161b22; border-radius:8px; overflow:hidden; }
+th { background:#21262d; color:#71767b; font-size:0.75em; text-align:left; padding:10px 12px; font-weight:400; }
+td { padding:10px 12px; font-size:0.85em; border-top:1px solid #21262d; }
+tr:hover td { background:#1c2128; }
+.pos { color:#3ba55c; font-weight:bold; }
+.neg { color:#f4212e; }
+.neu { color:#71767b; }
+.sharge { font-weight:bold; }
+</style>
+</head>
+<body>
+<h1>因子周报</h1>
+<div class="subtitle">生成时间: 2026-08-23 | 区间: 2024-01-02 ~ 2025-12-31</div>
+
+<div class="metrics">
+  <div class="metric"><b>68</b><span>总因子数</span></div>
+  <div class="metric"><b>7</b><span>正夏普</span></div>
+  <div class="metric"><b>38</b><span>失败</span></div>
+</div>
+
+<div class="section">
+<h2>正 Sharpe 因子（7 个）</h2>
+<table>
+<thead><tr>
+  <th>因子名称</th><th>Sharpe</th><th>年化收益</th><th>最大回撤</th><th>IC</th><th>RankIC</th>
+</tr></thead>
+<tbody>
+<tr>
+  <td>factor_overnight_repricing_ewm_stability</td>
+  <td class="pos sharge">+3.53</td>
+  <td class="pos">+38.2%</td>
+  <td class="neg">-6.9%</td>
+  <td class="pos">+0.0252</td>
+  <td class="pos">+0.0433</td>
+</tr><tr>
+  <td>factor_vol_asym_confirmed_range_v2</td>
+  <td class="pos sharge">+2.26</td>
+  <td class="pos">+36.1%</td>
+  <td class="neg">-14.9%</td>
+  <td class="pos">+0.0371</td>
+  <td class="pos">+0.0500</td>
+</tr><tr>
+  <td>factor_asym_vol_volume_cont_30</td>
+  <td class="pos sharge">+2.11</td>
+  <td class="pos">+34.1%</td>
+  <td class="neg">-10.8%</td>
+  <td class="pos">+0.0237</td>
+  <td class="pos">+0.0457</td>
+</tr><tr>
+  <td>factor_vol_asym_confirmed_range</td>
+  <td class="pos sharge">+1.84</td>
+  <td class="pos">+28.8%</td>
+  <td class="neg">-15.3%</td>
+  <td class="pos">+0.0375</td>
+  <td class="pos">+0.0476</td>
+</tr><tr>
+  <td>factor_downside_semivariance_smoothed</td>
+  <td class="pos sharge">+1.38</td>
+  <td class="pos">+23.1%</td>
+  <td class="neg">-9.6%</td>
+  <td class="pos">+0.0071</td>
+  <td class="pos">+0.0430</td>
+</tr><tr>
+  <td>factor_impact_weighted_asymmetry_slow</td>
+  <td class="pos sharge">+0.48</td>
+  <td class="pos">+6.8%</td>
+  <td class="neg">-15.5%</td>
+  <td class="pos">+0.0039</td>
+  <td class="pos">+0.0371</td>
+</tr><tr>
+  <td>factor_session_magnitude_imbalance_volume_weighted_42d</td>
+  <td class="pos sharge">+0.44</td>
+  <td class="pos">+6.6%</td>
+  <td class="neg">-21.0%</td>
+  <td class="neg">-0.0047</td>
+  <td class="pos">+0.0359</td>
+</tr></tbody></table></div>
+
+<div class="section">
+<h2>负 Sharpe 因子（23 个）</h2>
+<table>
+<thead><tr>
+  <th>因子名称</th><th>Sharpe</th><th>年化收益</th><th>最大回撤</th><th>IC</th><th>RankIC</th>
+</tr></thead>
+<tbody>
+<tr>
+  <td>factor_volatility_adjusted_dollar_pressure</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr>
+  <td>factor_ts_size_adaptive_earnings_book_smooth</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr>
+  <td>factor_volume_adaptive_momentum_smoothed_v3</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr>
+  <td>factor_asym_intraday_sma</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr>
+  <td>factor_lag_response_vol_tool_adaptive</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr>
+  <td>factor_fear_adjusted_dollar_pressure_short_ema</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr>
+  <td>factor_volume_adaptive_momentum_fast_vol</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr>
+  <td>factor_lag_vol_volatility_adjusted_gate</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr>
+  <td>factor_book_attention</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr>
+  <td>factor_drawdown_depth_atr_gated</td>
+  <td class="neg sharge">+0.00</td>
+  <td class="neg">+0.0%</td>
+  <td class="neg">0.0%</td>
+  <td class="neg">+0.0000</td>
+  <td class="neg">+0.0000</td>
+</tr><tr>
+  <td>factor_impact_asymmetry_slow_recovery</td>
+  <td class="neg sharge">-0.18</td>
+  <td class="neg">-2.8%</td>
+  <td class="neg">-27.3%</td>
+  <td class="neg">-0.0237</td>
+  <td class="pos">+0.0411</td>
+</tr><tr>
+  <td>factor_impact_downside_asymmetry_smoothed</td>
+  <td class="neg sharge">-0.36</td>
+  <td class="neg">-5.7%</td>
+  <td class="neg">-29.7%</td>
+  <td class="neg">-0.0211</td>
+  <td class="pos">+0.0387</td>
+</tr><tr>
+  <td>factor_volume_state_transition_carry_smooth</td>
+  <td class="neg sharge">-0.38</td>
+  <td class="neg">-4.2%</td>
+  <td class="neg">-19.6%</td>
+  <td class="neg">-0.0009</td>
+  <td class="neg">-0.0329</td>
+</tr><tr>
+  <td>factor_smoothed_drawdown_recovery_participation</td>
+  <td class="neg sharge">-0.71</td>
+  <td class="neg">-11.5%</td>
+  <td class="neg">-32.6%</td>
+  <td class="neg">-0.0096</td>
+  <td class="neg">-0.0415</td>
+</tr><tr>
+  <td>factor_volume_impact_elasticity_smooth</td>
+  <td class="neg sharge">-0.72</td>
+  <td class="neg">-7.3%</td>
+  <td class="neg">-21.9%</td>
+  <td class="neg">-0.0010</td>
+  <td class="neg">-0.0250</td>
+</tr><tr>
+  <td>factor_smoothed_energy_downside_resilience</td>
+  <td class="neg sharge">-0.93</td>
+  <td class="neg">-15.6%</td>
+  <td class="neg">-40.2%</td>
+  <td class="neg">-0.0058</td>
+  <td class="neg">-0.0435</td>
+</tr><tr>
+  <td>factor_volume_transition_raw_carry_30d</td>
+  <td class="neg sharge">-1.01</td>
+  <td class="neg">-11.8%</td>
+  <td class="neg">-27.2%</td>
+  <td class="neg">-0.0046</td>
+  <td class="neg">-0.0341</td>
+</tr><tr>
+  <td>factor_volume_transition_stress_attenuated_30d</td>
+  <td class="neg sharge">-1.03</td>
+  <td class="neg">-12.0%</td>
+  <td class="neg">-27.5%</td>
+  <td class="neg">-0.0046</td>
+  <td class="neg">-0.0340</td>
+</tr><tr>
+  <td>factor_smoothed_downside_variance_resilience</td>
+  <td class="neg sharge">-1.12</td>
+  <td class="neg">-18.8%</td>
+  <td class="neg">-42.4%</td>
+  <td class="neg">-0.0071</td>
+  <td class="neg">-0.0430</td>
+</tr><tr>
+  <td>factor_smoothed_energy_downside_resilience_8span</td>
+  <td class="neg sharge">-1.15</td>
+  <td class="neg">-17.5%</td>
+  <td class="neg">-36.9%</td>
+  <td class="neg">-0.0067</td>
+  <td class="neg">-0.0434</td>
+</tr><tr>
+  <td>factor_volume_adjusted_price_range_regime_v2</td>
+  <td class="neg sharge">-1.56</td>
+  <td class="neg">-22.0%</td>
+  <td class="neg">-45.3%</td>
+  <td class="neg">-0.0168</td>
+  <td class="neg">-0.0384</td>
+</tr><tr>
+  <td>factor_abnormality_asymmetry</td>
+  <td class="neg sharge">-1.86</td>
+  <td class="neg">-24.1%</td>
+  <td class="neg">-46.2%</td>
+  <td class="neg">-0.0222</td>
+  <td class="neg">-0.0471</td>
+</tr><tr>
+  <td>factor_vol_volume_asym_ewma</td>
+  <td class="neg sharge">-2.68</td>
+  <td class="neg">-28.9%</td>
+  <td class="neg">-50.4%</td>
+  <td class="neg">-0.0227</td>
+  <td class="neg">-0.0226</td>
+</tr></tbody></table></div>
+<div class="section">
+<h2>失败因子（38 个）</h2>
+<table>
+<thead><tr><th>因子名称</th><th>错误信息</th></tr></thead>
+<tbody>
+<tr><td>factor_amount_weighted_squared_impact</td><td class='neg'>unknown</td></tr><tr><td>factor_volume_weighted_squared_impact</td><td class='neg'>unknown</td></tr><tr><td>factor_amount_weighted_impact</td><td class='neg'>unknown</td></tr><tr><td>factor_volume_adjusted_price_range</td><td class='neg'>unknown</td></tr><tr><td>factor_persistent_left_tail_variance_share</td><td class='neg'>unknown</td></tr><tr><td>factor_squared_range_close_ema_cuberoot</td><td class='neg'>unknown</td></tr><tr><td>factor_volume_adjusted_price_range_ema</td><td class='neg'>unknown</td></tr><tr><td>factor_ewm_downside_variance_resilience</td><td class='neg'>unknown</td></tr><tr><td>factor_volume_adjusted_price_range_ema_gated</td><td class='neg'>unknown</td></tr><tr><td>factor_volume_adjusted_price_range_regime_smoothed_v2</td><td class='neg'>unknown</td></tr><tr><td>factor_drawdown_volume_complexity</td><td class='neg'>unknown</td></tr><tr><td>factor_volume_weighted_impact</td><td class='neg'>unknown</td></tr><tr><td>factor_high_volume_amount_weighted_squared_impact</td><td class='neg'>unknown</td></tr><tr><td>factor_persistence_ewma</td><td class='neg'>unknown</td></tr><tr><td>factor_persistence</td><td class='neg'>unknown</td></tr><tr><td>factor_price_impact_stable_5d</td><td class='neg'>unknown</td></tr><tr><td>factor_volume_adjusted_price_range_regime_smoothed</td><td class='neg'>unknown</td></tr><tr><td>factor_high_volume_volume_weighted_squared_impact</td><td class='neg'>unknown</td></tr><tr><td>factor_high_volume_amount_weighted_impact</td><td class='neg'>unknown</td></tr><tr><td>factor_drawdown_volume_geometry</td><td class='neg'>unknown</td></tr><tr><td>factor_vol_regime_impact_ema</td><td class='neg'>unknown</td></tr><tr><td>factor_squared_range_volume_rank_smoothed_no_cuberoot</td><td class='neg'>unknown</td></tr><tr><td>factor_high_volume_squared_return_weighted_impact</td><td class='neg'>unknown</td></tr><tr><td>factor_volume_adjusted_price_range_regime</td><td class='neg'>unknown</td></tr><tr><td>factor_vwap_adjusted_range_tanh_mutated_v2</td><td class='neg'>unknown</td></tr><tr><td>factor_lag_vol_robust_volratio</td><td class='neg'>unknown</td></tr><tr><td>factor_lag_vol_ratio_smoothed_v2</td><td class='neg'>unknown</td></tr><tr><td>factor_ewma_smoothness_volume</td><td class='neg'>unknown</td></tr><tr><td>factor_vwap_squared_deviation_intensity</td><td class='neg'>unknown</td></tr><tr><td>factor_drawdown_volume_modulated</td><td class='neg'>unknown</td></tr><tr><td>factor_vwap_deviation_intensity_squared_amount_weighted</td><td class='neg'>unknown</td></tr><tr><td>factor_smoothed_left_tail_variance_share</td><td class='neg'>unknown</td></tr><tr><td>factor_vwap_adjusted_range_tanh_smooth</td><td class='neg'>unknown</td></tr><tr><td>factor_volume_adjusted_price_range_regime_v3</td><td class='neg'>unknown</td></tr><tr><td>factor_pressure_ema_mutation</td><td class='neg'>unknown</td></tr><tr><td>factor_session_asymmetry_smooth_confirmed_30d</td><td class='neg'>unknown</td></tr><tr><td>factor_range_volume_ratio</td><td class='neg'>unknown</td></tr><tr><td>factor_volume_adjusted_price_range_gated</td><td class='neg'>unknown</td></tr></tbody></table></div></body></html>

@@ -1,0 +1,38 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "43fddb90f46fa560ca3269b5da385705f80b274fc7d8b4192303ebffefffb615",
+  "candidate_ids": [
+    "alpha-crossover-g1-001"
+  ],
+  "code": "def factor_volume_abnormality_range_interaction(df):\n    \"\"\"Volume abnormality interacting with range expansion/compression regime.\"\"\"\n    df_copy = df.copy()\n    log_vol = np.log(df_copy[\"volume\"] + 1)\n    roll_med = log_vol.rolling(window=20, min_periods=10).median()\n    roll_std = log_vol.rolling(window=20, min_periods=10).std()\n    vol_z = np.where(roll_std > 0, (log_vol - roll_med) / roll_std, 0.0)\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    avg_range = range_.rolling(window=20, min_periods=10).mean()\n    range_ratio = (range_ + 1e-8) / (avg_range + 1e-8)\n    factor = vol_z * range_ratio\n    factor = np.where(np.isnan(factor), 0.0, factor)\n    df_copy[\"factor_volume_abnormality_range_interaction\"] = factor\n    return df_copy[\"factor_volume_abnormality_range_interaction\"]",
+  "factor_name": "factor_volume_abnormality_range_interaction",
+  "fitness_direction": -1,
+  "formula": "Z(log(volume,20)) * (high-low) / SMA(high-low,20)",
+  "metrics": {
+    "ic": 0.022977564789309606,
+    "icir": 0.34937260135773957,
+    "mi": 0.0050701900297243085,
+    "rank_ic": 0.023658311287828165,
+    "rank_icir": 0.2868902882606373
+  },
+  "rationale": "This factor combines volume abnormality detection (log-volume z-score relative to 20-day median) with volatility regime (range expansion/compression ratio). Multiplying the volume z-score by the range ratio amplifies signals when volatility is expanding and attenuates when compressing, reflecting that volume abnormality is more informative during high-volatility periods. This fusion preserves parent1's volume abnormality insight and parent2's range regime insight.",
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260609-083420-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260609-083420-r1"
+  ],
+  "lqtp_formula": "Z(log(volume,20)) * (high-low) / ts_mean(20, high-low)",
+  "fe_formula": "Z(log(volume,20)) * (high-low) / ts_mean(20, high-low)",
+  "lqtp_notes": "Unconverted: ['Z']",
+  "fe_notes": "Unconverted: ['Z']",
+  "source_formula": "Z(log(volume,20)) * (high-low) / SMA(high-low,20)"
+}

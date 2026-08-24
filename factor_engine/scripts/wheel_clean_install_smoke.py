@@ -62,7 +62,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"      wheel: {wheel.name} (payload checked)")
 
     print(f"[2/4] create clean venv + install wheel")
-    _run([sys.executable, "-m", "venv", str(venv)], cwd=base)
+    # Debian/Ubuntu hosts often lack ensurepip, so `python -m venv` fails.
+    # Prefer virtualenv (available in the test interpreter) and fall back to
+    # the stdlib venv when it works.
+    try:
+        _run([sys.executable, "-m", "virtualenv", str(venv)], cwd=base)
+    except subprocess.CalledProcessError:
+        _run([sys.executable, "-m", "venv", str(venv)], cwd=base)
     py = venv / "bin" / "python"
     extras = f"[{args.extras}]" if args.extras else ""
     _run([str(py), "-m", "pip", "install", "-q", f"{wheel}{extras}"], cwd=base)

@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "0628ccb4beeabd2fe8f91538888f0c9f41dae15a5cafda8271148acc8ad2414c",
+  "candidate_ids": [
+    "mut_intraday_001_g3"
+  ],
+  "code": "def factor_intraday_reversal_zscore_volume_short(df):\n    df_copy = df.copy()\n    high = df_copy['high']\n    low = df_copy['low']\n    close = df_copy['close']\n    volume = df_copy['volume']\n    range_ = high - low\n    fraction = (close - low) / range_.replace(0.0, np.nan)\n    deviation = fraction - 0.5\n    std_ = fraction.rolling(10, min_periods=10).std(ddof=1).replace(0.0, np.nan)\n    rev = -deviation / std_\n    vol_ratio = volume / volume.rolling(20).mean()\n    vol_rank = vol_ratio.rolling(20, min_periods=20).rank(pct=True)\n    factor = rev * vol_rank\n    df_copy['factor_intraday_reversal_zscore_volume_short'] = factor\n    return df_copy['factor_intraday_reversal_zscore_volume_short']",
+  "factor_name": "factor_intraday_reversal_zscore_volume_short",
+  "fitness_direction": 1,
+  "formula": "rev = -zscore(fraction, 10) where fraction = (close-low)/(high-low); factor = rev * rank(volume/mean(volume,20), 20)",
+  "metrics": {
+    "ic": 0.022987848147681803,
+    "icir": 0.3042212051518414,
+    "mi": 0.007889937746963227,
+    "rank_ic": 0.02716223332556514,
+    "rank_icir": 0.3031978118613327
+  },
+  "rationale": "Mutation of cross_intraday_001_g2: reduce normalization window from 20 to 10 to make the intraday reversal signal more responsive to recent volatility changes, while preserving the volume rank confirmation. Parent strength target: preserve the RankIC and volume confirmation from the parent.",
+  "raw_metrics": {
+    "ic": 0.022987848147681803,
+    "icir": 0.3042212051518414,
+    "mi": 0.007889937746963227,
+    "rank_ic": 0.02716223332556514,
+    "rank_icir": 0.3031978118613327
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260616-025809-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260616-025809-r1"
+  ],
+  "lqtp_formula": "rev = -cs_zscore(fraction, 10) where fraction = (close-low)/(high-low); factor = rev * cs_rank(volume/mean(volume,20), 20) 20)",
+  "fe_formula": "rev = -zscore(fraction, 10) where fraction = (close-low)/(high-low); factor = rev * rank(volume/ts_mean(20, volume), 20)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "rev = -zscore(fraction, 10) where fraction = (close-low)/(high-low); factor = rev * rank(volume/mean(volume,20), 20)"
+}

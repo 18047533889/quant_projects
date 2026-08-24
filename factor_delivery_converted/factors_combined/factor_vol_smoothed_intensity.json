@@ -1,0 +1,97 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "a74223be4758ffdd0ac1a4a694772687044b26f5a3945dc09891001697386395",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_alpha_stability_0_0_9e3fa528_14b1f19f"
+  ],
+  "code": "def factor_vol_smoothed_intensity(df):\n    df_copy = df.copy()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    factor = vol_ratio.rolling(20, min_periods=20).mean()\n    df_copy[\"factor_vol_smoothed_intensity\"] = factor\n    return df_copy[\"factor_vol_smoothed_intensity\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.7090909090909091,
+        "top_quantile_annualized_excess_return": 0.022097628085724574,
+        "top_quantile_excess_return": 0.06305580742609673,
+        "top_quantile_max_drawdown": -0.10408100486803085,
+        "top_quantile_turnover": 0.09915065635609731
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.08935264886225122,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.10647351137748784,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_vol_smoothed_intensity",
+  "fitness_direction": -1,
+  "formula": "rolling_mean(vol_ratio, 20)",
+  "metrics": {
+    "ic": 0.009793081197185444,
+    "icir": 0.08935264886225122,
+    "mi": 0.014103724283391017,
+    "rank_ic": 0.028357148472806376,
+    "rank_icir": 0.2664224514343438
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7090909090909091,
+    "top_quantile_annualized_excess_return": 0.022097628085724574,
+    "top_quantile_excess_return": 0.06305580742609673,
+    "top_quantile_max_drawdown": -0.10408100486803085,
+    "top_quantile_turnover": 0.09915065635609731
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Simplifies the parent's volume momentum crossover to a single smoothed measure of volume intensity. By averaging the continuous volume ratio over 20 days, this captures persistent trading activity more directly, removing the sensitivity of the crossover to window choice. The 20-day window aligns with effective qualified candidates while preserving the core economic mechanism: sustained relative volume indicates informed trading or anticipation of price moves.",
+  "raw_metrics": {
+    "ic": -0.009793081197185444,
+    "icir": -0.08935264886225122,
+    "mi": 0.014103724283391017,
+    "rank_ic": -0.028357148472806376,
+    "rank_icir": -0.2664224514343438
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-20260730-055319-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-20260730-055319-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ts_mean(20, vol_ratio)",
+  "fe_formula": "ts_mean(20, vol_ratio)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "rolling_mean(vol_ratio, 20)"
+}

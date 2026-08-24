@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "198edd0d6714c04e1ebe7f7fe42fd5f2b0f30e7a7d5ee7a13e68407debb0add2",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_alpha_lag_response_001_6abf6c9a_4efad6a0"
+  ],
+  "code": "def factor_simplified_volume_lag(df):\n    df_copy = df.copy()\n    ret_1d = df_copy[\"close\"].pct_change(1)\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=10)\n    log_vol = np.log(vol_ratio.clip(lower=1e-12))\n    raw = ret_1d * log_vol\n    factor = raw.ewm(span=5, min_periods=5, adjust=False).mean()\n    df_copy[\"factor_simplified_volume_lag\"] = factor\n    return df_copy[\"factor_simplified_volume_lag\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_simplified_volume_lag",
+  "fitness_direction": -1,
+  "formula": "ema( ret_1d * log(vol_ratio_10) , span=5 )",
+  "metrics": {
+    "ic": 0.021555613036904786,
+    "icir": 0.21744255009096344,
+    "mi": 0.03400843330199255,
+    "rank_ic": 0.041636131438316605,
+    "rank_icir": 0.4261683650094714
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9,
+    "top_quantile_annualized_excess_return": 0.05744947127951616,
+    "top_quantile_excess_return": 0.17278106152342265,
+    "top_quantile_max_drawdown": -0.11475132876800465,
+    "top_quantile_turnover": 0.35857449951649023
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Simplified mutation of parent g1_mutation_alpha_lag_response_001_6abf6c9a. Core hypothesis preserved: volume-amplified price adjustment due to delayed market response when volume is elevated. Replaces 5-day return with daily return for immediate reaction, removes ATR normalization which added noise, and uses log volume ratio from alpha_tools as weight. EMA smoothing (span=5) reduces jaggedness while preserving responsiveness. Targets improvement in IC and RankIC by using a cleaner signal. Parent strength target: the volume-regime-aware adjustment concept (nonlinear volume interaction) is preserved as the core mechanism.",
+  "raw_metrics": {
+    "ic": -0.021555613036904786,
+    "icir": -0.21744255009096344,
+    "mi": 0.03400843330199255,
+    "rank_ic": -0.041636131438316605,
+    "rank_icir": -0.4261683650094714
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260703-091553-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260703-091553-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema( ret_1d * log(vol_ratio_10) , span=5 )",
+  "fe_formula": "ema( ret_1d * log(vol_ratio_10) , span=5 )",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "ema( ret_1d * log(vol_ratio_10) , span=5 )"
+}

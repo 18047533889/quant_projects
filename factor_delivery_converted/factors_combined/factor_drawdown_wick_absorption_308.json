@@ -1,0 +1,95 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "e0ef39340786daa31ecf266f3befe44405f0d5629c4df8c7168c0cd0b81ce7dd",
+  "candidate_ids": [
+    "alpha_drawdown_g0_wick_absorption"
+  ],
+  "code": "def factor_drawdown_wick_absorption(df):\n    \"\"\"Measure lower-wick absorption while price remains underwater.\"\"\"\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    open_ = df_copy[\"open\"]\n    close = df_copy[\"close\"]\n    eps = np.finfo(float).eps\n    safe_close = close.clip(lower=eps)\n    bar_range = (high - low).replace(0.0, np.nan)\n    wick_base = np.minimum(open_, close)\n    lower_wick = ((wick_base - low) / bar_range).clip(lower=0.0, upper=1.0)\n    close_location = ((close - low) / bar_range).clip(lower=0.0, upper=1.0)\n    absorption = (lower_wick * close_location).rolling(12, min_periods=12).mean()\n    high_water = safe_close.rolling(50, min_periods=50).max().clip(lower=eps)\n    depth = (1.0 - safe_close / high_water).clip(lower=0.0)\n    prior_close = safe_close.shift(1)\n    downside_damage = ((-np.log(safe_close / prior_close)).clip(lower=0.0)).rolling(12, min_periods=12).sum()\n    signal = depth * absorption / (1.0 + downside_damage)\n    df_copy[\"factor_drawdown_wick_absorption\"] = signal.replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_drawdown_wick_absorption\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9757575757575757,
+        "top_quantile_annualized_excess_return": 0.031862267257602994,
+        "top_quantile_excess_return": 0.08764403193955439,
+        "top_quantile_max_drawdown": -0.138907742796594,
+        "top_quantile_turnover": 0.1863252485159656
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_drawdown_wick_absorption",
+  "fitness_direction": 1,
+  "formula": "drawdown_depth_50 × mean_12[((min(open, close)-low)/(high-low)) × ((close-low)/(high-low))] / [1 + sum_12(max(0,-log(C_t/C_{t-1})))]",
+  "metrics": {
+    "ic": 0.018281293407738902,
+    "icir": 0.15734327457757133,
+    "mi": 0.010754851718078662,
+    "rank_ic": 0.026072652341558426,
+    "rank_icir": 0.1708574250114466
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.031862267257602994,
+    "top_quantile_excess_return": 0.08764403193955439,
+    "top_quantile_max_drawdown": -0.138907742796594,
+    "top_quantile_turnover": 0.1863252485159656
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "This factor measures drawdown absorption geometry: prices materially below their trailing 50-day high receive more signal when repeated lower shadows are followed by closes high within their daily ranges. Using the actual lower shadow avoids counting the candle body as wick absorption, while accumulated downside damage suppresses signals from still-disorderly selloffs. Positive clipping stabilizes price ratios and logarithms without introducing future information.",
+  "raw_metrics": {
+    "ic": 0.018281293407738902,
+    "icir": 0.15734327457757133,
+    "mi": 0.010754851718078662,
+    "rank_ic": 0.026072652341558426,
+    "rank_icir": 0.1708574250114466
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260807-060418-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260807-060418-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "drawdown_depth_50 × mean_12[((min(open, close)-low)/(high-low)) × ((close-low)/(high-low))] / [1 + ts_sum(12, max(0,-log(C_t/C_{t-1})))]",
+  "fe_formula": "drawdown_depth_50 × mean_12[((flex_min(open, close)-low)/(high-low)) × ((close-low)/(high-low))] / [1 + ts_sum(12, flex_max(0, -log(C_t/C_{t-1})))]",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "drawdown_depth_50 × mean_12[((min(open, close)-low)/(high-low)) × ((close-low)/(high-low))] / [1 + sum_12(max(0,-log(C_t/C_{t-1})))]"
+}

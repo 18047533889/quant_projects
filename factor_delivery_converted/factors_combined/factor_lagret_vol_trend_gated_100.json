@@ -1,0 +1,71 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "275a6ea4e28a40069d56954a5e72aec43aaaea209ff8858d30bbd7fa226441e3",
+  "candidate_ids": [
+    "g1_crossover_then_mutation_aglag_resp_001_mc_2_34551ae1",
+    "g2_crossover_then_mutation_g1_crossover_then_mutation_aglag_resp_001_mc_2_3_343de185"
+  ],
+  "code": "def factor_lagret_vol_trend_gated(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    high = df_copy['high']\n    low = df_copy['low']\n    lag_ret_5 = close / close.shift(5) - 1.0\n    vol_ema = volume.ewm(span=20, min_periods=20).mean()\n    vol_ratio = np.log(volume / vol_ema.replace(0, np.nan))\n    tr = pd.DataFrame({'hl': high - low, 'hc': (high - close.shift()).abs(), 'lc': (low - close.shift()).abs()}).max(axis=1)\n    atr = tr.rolling(20, min_periods=20).mean()\n    vol_factor = atr / close.replace(0, np.nan)\n    raw = lag_ret_5 * vol_ratio * (1.0 + vol_factor)\n    high_resvol = df_copy.get('style_gate_resvol_high', pd.Series(0, index=df_copy.index))\n    trend_mult = np.where(high_resvol > 0, 1.3, 0.9)\n    raw_trend = raw * trend_mult\n    factor = raw_trend.ewm(span=5, min_periods=5).mean()\n    df_copy['factor_lagret_vol_trend_gated'] = factor\n    return df_copy['factor_lagret_vol_trend_gated']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_lagret_vol_trend_gated",
+  "fitness_direction": -1,
+  "formula": "EMA5( (close/shift5-1) * log(volume/EMA20(volume)) * (1+ATR20/close) * (1.3 if resvol_high else 0.9) )",
+  "metrics": {
+    "ic": 0.02646808717004208,
+    "icir": 0.24498258753117186,
+    "mi": 0.03876378328817953,
+    "rank_ic": 0.04035021578840231,
+    "rank_icir": 0.3729817060308886
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8787878787878788,
+    "top_quantile_annualized_excess_return": 0.037244872818022134,
+    "top_quantile_excess_return": 0.10707676043276426,
+    "top_quantile_max_drawdown": -0.18776106625924271,
+    "top_quantile_turnover": 0.34401024006279995
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Mutates the trend adjustment from a fixed EMA200 binary to a regime-aware amplification based on resvol_high gate. In high residual volatility environments, the signal is amplified 1.3x to capture stronger trend effects; in low volatility, it is attenuated to 0.9x to reduce noise. This preserves the elite lagged-response mechanism (lagret_5 * log volume ratio * volatility amplification) while making the trend conditional on market stress.",
+  "raw_metrics": {
+    "ic": -0.02646808717004208,
+    "icir": -0.24498258753117186,
+    "mi": 0.03876378328817953,
+    "rank_ic": -0.04035021578840231,
+    "rank_icir": -0.3729817060308886
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260708-140639-r4",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260708-140639-r4"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": "Uses style_gate_resvol_high to adjust the amplification of the core signal. Rationale: In high residual volatility regimes, market dislocations amplify trend signals, so increasing weight improves rank stability. In low residual volatility, a smaller weight avoids overreacting to noise.",
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema(5, (close/shift5-1) * log(volume/EMA20(volume)) * (1+ATR20/close) * (1.3 if resvol_high else 0.9))",
+  "fe_formula": "ema(5, (close/shift5-1) * log(volume/EMA20(volume)) * (1+ATR20/close) * (1.3 if resvol_high else 0.9))",
+  "lqtp_notes": "Unconverted: ['EMA20']",
+  "fe_notes": "Unconverted: ['EMA20']",
+  "source_formula": "EMA5( (close/shift5-1) * log(volume/EMA20(volume)) * (1+ATR20/close) * (1.3 if resvol_high else 0.9) )"
+}

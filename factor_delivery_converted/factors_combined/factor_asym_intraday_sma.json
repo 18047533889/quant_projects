@@ -1,0 +1,65 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "talib"
+  ],
+  "calculation_fingerprint": "2e3461ce4a0ab2edf2b4d588f6da2247f31060137c676ae29d35db9c9897653a",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_ava_002_706d2721_3f1c8d68"
+  ],
+  "code": "def factor_asym_intraday_sma(df):\n    df_copy = df.copy()\n    upside = (df_copy[\"high\"] - df_copy[\"open\"]).astype(float)\n    downside = (df_copy[\"open\"] - df_copy[\"low\"]).astype(float)\n    sma_up = pd.Series(talib.SMA(upside.values, timeperiod=40), index=df_copy.index)\n    sma_down = pd.Series(talib.SMA(downside.values, timeperiod=40), index=df_copy.index)\n    ratio = sma_down / sma_up.replace(0, np.nan)\n    df_copy[\"factor_asym_intraday_sma\"] = ratio.fillna(0)\n    return df_copy[\"factor_asym_intraday_sma\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_asym_intraday_sma",
+  "fitness_direction": 1,
+  "formula": "sma_down = SMA(open - low, 40); sma_up = SMA(high - open, 40); ratio = sma_down / sma_up",
+  "metrics": {
+    "ic": 0.013350078676156564,
+    "icir": 0.12364510390097204,
+    "mi": 0.014158744159131764,
+    "rank_ic": 0.04232587432326435,
+    "rank_icir": 0.3238124475756542
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.08675849200662089,
+    "top_quantile_excess_return": 0.25377263348642765,
+    "top_quantile_max_drawdown": -0.12054191410875703,
+    "top_quantile_turnover": 0.11321011027795654
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Simplifies the intraday asymmetry measure by using simple moving averages instead of exponential, reducing sensitivity to recent outliers and improving stability. Window increased to 40 for a more persistent asymmetry signal.",
+  "raw_metrics": {
+    "ic": 0.013350078676156564,
+    "icir": 0.12364510390097204,
+    "mi": 0.014158744159131764,
+    "rank_ic": 0.04232587432326435,
+    "rank_icir": 0.3238124475756542
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260707-033414-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260707-033414-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "sma_down = ts_mean(40, open - low); sma_up = ts_mean(40, high - open); ratio = sma_down / sma_up",
+  "fe_formula": "sma_down = ts_mean(40, open - low); sma_up = ts_mean(40, high - open); ratio = sma_down / sma_up",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "sma_down = SMA(open - low, 40); sma_up = SMA(high - open, 40); ratio = sma_down / sma_up"
+}

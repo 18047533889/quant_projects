@@ -1,0 +1,35 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "d79f9dccf10c31e0a2209aa1342dac7d51a0c773ff3debd28f1f5c149370a749",
+  "candidate_ids": [
+    "alpha-mutation_gen1_mut_price_impact_stable_5d"
+  ],
+  "code": "def factor_price_impact_stable_5d(df):\n    df_copy = df.copy()\n    df_copy['ret'] = df_copy['close'].pct_change()\n    df_copy['abs_ret'] = df_copy['ret'].abs()\n    median_abs_ret = df_copy['abs_ret'].rolling(window=5, min_periods=3).median()\n    log_volume = np.log(df_copy['volume'] + 1)\n    avg_log_vol = log_volume.rolling(window=5, min_periods=3).mean()\n    df_copy['factor_price_impact_stable_5d'] = median_abs_ret / avg_log_vol\n    df_copy['factor_price_impact_stable_5d'].replace([np.inf, -np.inf], np.nan, inplace=True)\n    return df_copy['factor_price_impact_stable_5d']",
+  "factor_name": "factor_price_impact_stable_5d",
+  "fitness_direction": -1,
+  "formula": "rolling(5, median(abs(pct_change(close)))) / rolling(5, mean(log(volume+1)))",
+  "metrics": {
+    "ic": 0.019794885463333477,
+    "icir": 0.19964472933109242,
+    "mi": 0.024438967566391412,
+    "rank_ic": 0.05301981272023842,
+    "rank_icir": 0.4662156463971617
+  },
+  "rationale": "Mutated from factor_price_impact_5d by replacing mean with median for robustness and using log volume to reduce scale sensitivity. This preserves the core price impact hypothesis while targeting the bottleneck of low mutual information and improving rank stability.",
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260609-053202-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260609-053202-r1"
+  ],
+  "lqtp_formula": "<rolling>(5, median(abs(pct_change(close))))rolling>(5, mean(log(volume+1))))))",
+  "fe_formula": "<rolling>(5, median(abs(pct_change(close))))rolling>(5, mean(log(volume+1))))))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "rolling(5, median(abs(pct_change(close)))) / rolling(5, mean(log(volume+1)))"
+}

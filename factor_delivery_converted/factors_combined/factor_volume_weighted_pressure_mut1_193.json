@@ -1,0 +1,46 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "9a7300324a497a940afa4e279894f0fbe9ce1d649a6d4025e6822b850d2969b9",
+  "candidate_ids": [
+    "vwp-mut1-001"
+  ],
+  "code": "def factor_volume_weighted_pressure_mut1(df):\n    df_copy = df.copy()\n    raw_pressure = (df_copy[\"close\"] - df_copy[\"open\"]) * df_copy[\"volume\"]\n    ema_volume = df_copy[\"volume\"].ewm(span=10, adjust=False).mean()\n    norm_volume = df_copy[\"volume\"] / ema_volume\n    weighted_pressure = raw_pressure * norm_volume\n    std_pressure = weighted_pressure.rolling(window=20).std()\n    factor = weighted_pressure / (std_pressure + 1e-10)\n    df_copy[\"factor_volume_weighted_pressure_mut1\"] = factor\n    return df_copy[\"factor_volume_weighted_pressure_mut1\"]",
+  "factor_name": "factor_volume_weighted_pressure_mut1",
+  "fitness_direction": -1,
+  "formula": "pressure = (close - open) * volume * (volume / EMA(volume, 10)) / std(pressure, 20)",
+  "metrics": {
+    "ic": 0.015191880795347041,
+    "icir": 0.20334803944739366,
+    "mi": 0.013680892719532878,
+    "rank_ic": 0.02670979803813885,
+    "rank_icir": 0.2772374593054072
+  },
+  "rationale": "This mutation preserves the core price-volume imbalance mechanism of the parent while increasing responsiveness to recent volume patterns via exponential weighted volume normalization (10-day ewm vs 20-day SMA). The shorter volume window aims to improve the factor's directional sensitivity (IC) and capture nonlinear interactions (MI), while the longer volatility normalization window (20-day rolling std) maintains rank stability (RankIC, RankICIR). The economic intuition remains that periods where volume amplifies price movement carry predictive information.",
+  "raw_metrics": {
+    "ic": -0.015191880795347041,
+    "icir": -0.20334803944739366,
+    "mi": 0.013680892719532878,
+    "rank_ic": -0.02670979803813885,
+    "rank_icir": -0.2772374593054072
+  },
+  "required_columns": [
+    "open",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260610-095822-r3",
+  "source_run_ids": [
+    "formal-mvp-loop-20260610-095822-r3"
+  ],
+  "lqtp_formula": "pressure = (close - open) * volume * (volume / ema(10, volume)) / ts_std(20, pressure)",
+  "fe_formula": "pressure = (close - open) * volume * (volume / ema(10, volume)) / ts_std(20, pressure)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "pressure = (close - open) * volume * (volume / EMA(volume, 10)) / std(pressure, 20)"
+}

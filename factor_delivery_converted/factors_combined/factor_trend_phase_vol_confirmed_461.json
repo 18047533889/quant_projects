@@ -1,0 +1,126 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "29f92a95ea355a5764762a6058aabfcd6de080de5415da579ecc2ce21019bab6",
+  "candidate_ids": [
+    "g1_crossover_amc_001_stable_vol_trend_0_b13e7208",
+    "g2_crossover_amc_001_g1_crossover_amc_001_stable_vol_trend_0_256e534e"
+  ],
+  "code": "def factor_trend_phase_vol_confirmed(df):\n    df_copy = df.copy()\n    # Primary: trend phase vol adjusted\n    ema50 = talib.EMA(df_copy[\"close\"], timeperiod=50)\n    ema200 = talib.EMA(df_copy[\"close\"], timeperiod=200)\n    trend_diff = (ema50 - ema200) / df_copy[\"close\"]\n    atr = talib.ATR(df_copy[\"high\"], df_copy[\"low\"], df_copy[\"close\"], timeperiod=14)\n    vol_factor = 1 - (atr / df_copy[\"close\"]).replace(np.inf, np.nan).fillna(0)\n    trend_phase = trend_diff * vol_factor\n    # Lightweight modifier: volume trend ratio\n    vol_ema_short = talib.EMA(df_copy[\"volume\"], timeperiod=10)\n    vol_ema_long = talib.EMA(df_copy[\"volume\"], timeperiod=30)\n    volume_trend = vol_ema_short / vol_ema_long.replace(0, np.nan)\n    # Combine\n    factor = trend_phase * volume_trend\n    df_copy[\"factor_trend_phase_vol_confirmed\"] = factor\n    return df_copy[\"factor_trend_phase_vol_confirmed\"]",
+  "cross_sectional_rationale": "Trend-following signals benefit from cross-sectional ranking to compare relative trend strength across stocks, identifying those in the most persistent trending phase with volume confirmation.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.8545454545454545,
+        "top_quantile_annualized_excess_return": 0.03136396844093192,
+        "top_quantile_excess_return": 0.06645263762272169,
+        "top_quantile_max_drawdown": -0.17158227189852948,
+        "top_quantile_turnover": 0.040975085038196295
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.07723944771637531,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.22760552283624697,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_trend_phase_vol_confirmed",
+  "fitness_direction": -1,
+  "formula": "(EMA50-EMA200)/Close * (1-ATR/Close) * (EMA10(Volume)/EMA30(Volume))",
+  "metrics": {
+    "ic": 0.01021491086120537,
+    "icir": 0.07723944771637531,
+    "mi": 0.009784926726659648,
+    "rank_ic": 0.0149381820424738,
+    "rank_icir": 0.09521380640101315
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8545454545454545,
+    "top_quantile_annualized_excess_return": 0.03136396844093192,
+    "top_quantile_excess_return": 0.06645263762272169,
+    "top_quantile_max_drawdown": -0.17158227189852948,
+    "top_quantile_turnover": 0.040975085038196295
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.009917135386499364,
+    "icir": 0.07375995889341161,
+    "mi": 0.019229735765017963,
+    "rank_ic": 0.0149381820424738,
+    "rank_icir": 0.09521380640101315
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.8545454545454545,
+    "top_quantile_annualized_excess_return": 0.03136396844093192,
+    "top_quantile_excess_return": 0.06645263762272169,
+    "top_quantile_max_drawdown": -0.17158227189852948,
+    "top_quantile_turnover": 0.040975085038196295
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.009917135386499364,
+    "icir": -0.07375995889341161,
+    "mi": 0.019229735765017963,
+    "rank_ic": -0.0149381820424738,
+    "rank_icir": -0.09521380640101315
+  },
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "This crossover combines the payoff-strong trend-phase signal (EMA50-EMA200 adjusted by ATR) from the first parent with the volume trend consistency from the second parent. The volume trend ratio (EMA10/EMA30 volume) serves as a continuous confirmation weight: rising volume reinforces the trend signal, while falling volume attenuates it. This aims to improve rank stability (RankIC, RankICIR) by adding a volume-based persistence dimension, while preserving the positive payoff evidence of the primary mechanism. Cross-sectional ranking is retained to highlight relative trend strength with volume confirmation.",
+  "raw_metrics": {
+    "ic": -0.01021491086120537,
+    "icir": -0.07723944771637531,
+    "mi": 0.009784926726659648,
+    "rank_ic": -0.0149381820424738,
+    "rank_icir": -0.09521380640101315
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260720-210415-r10",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260720-210415-r10"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.2130588184884159,
+    "pre_transform_top_quantile_excess_return": 0.06645263762272169,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.20739127374772728,
+    "transformed_top_quantile_excess_return": 0.06645263762272169
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(EMA50-EMA200)/Close * (1-ATR/Close) * (ema(10, Volume)/ema(30, Volume))",
+  "fe_formula": "(EMA50-EMA200)/Close * (1-ATR/Close) * (ema(10, Volume)/ema(30, Volume))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(EMA50-EMA200)/Close * (1-ATR/Close) * (EMA10(Volume)/EMA30(Volume))"
+}

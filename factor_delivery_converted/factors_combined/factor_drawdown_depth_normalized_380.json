@@ -1,0 +1,66 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "8b1cd47566db485786e652f8a51f4a799c901d774f55c41d92fc69f8671ff6b6",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_candidate_001_b1596c12_25b76cb2"
+  ],
+  "code": "def factor_drawdown_depth_normalized(df):\n    df_copy = df.copy()\n    rolling_max = df_copy[\"close\"].rolling(252, min_periods=50).max()\n    drawdown = df_copy[\"close\"] / rolling_max - 1\n    depth = -drawdown\n    ret = df_copy[\"close\"].pct_change()\n    vol = ret.rolling(20, min_periods=10).std()\n    factor = depth / vol.replace(0, np.nan)\n    factor = factor.fillna(0)\n    df_copy[\"factor_drawdown_depth_normalized\"] = factor\n    return df_copy[\"factor_drawdown_depth_normalized\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_drawdown_depth_normalized",
+  "fitness_direction": 1,
+  "formula": "-drawdown / volatility",
+  "metrics": {
+    "ic": 0.013502184680078492,
+    "icir": 0.12320683808009765,
+    "mi": 0.016079630262851197,
+    "rank_ic": 0.03710136416301644,
+    "rank_icir": 0.27763933461881474
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": 0.02815139989929305,
+    "top_quantile_excess_return": 0.0771984662189551,
+    "top_quantile_max_drawdown": -0.12985110091713037,
+    "top_quantile_turnover": 0.09947679539000127
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Preserves parent's core intuition of drawdown severity normalized by recent volatility. Simplifies by removing the duration component, focusing solely on drawdown depth relative to short-term volatility. This reduction in complexity aims to reduce noise and improve signal-to-noise ratio, targeting the low IC observed in the parent.",
+  "raw_metrics": {
+    "ic": 0.013502184680078492,
+    "icir": 0.12320683808009765,
+    "mi": 0.016079630262851197,
+    "rank_ic": 0.03710136416301644,
+    "rank_icir": 0.27763933461881474
+  },
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260710-210948-r7",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260710-210948-r7"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "-drawdown / volatility",
+  "fe_formula": "-drawdown / volatility",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "-drawdown / volatility"
+}

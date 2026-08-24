@@ -1,0 +1,104 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "minute_tools"
+  ],
+  "calculation_fingerprint": "de99c246f599d1d76b24306f11e83476bb6e2c55246f7ef706769ddc4ff8c919",
+  "candidate_id": "g2_crossover_then_mutation_g1_crossover_then_mutation_minute_amount_impact_1ac46c5a",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_crossover_then_mutation_minute_amount_impact_1ac46c5a"
+  ],
+  "code": "def factor_amount_weighted_squared_impact(df):\n    df_copy = df.copy()\n    ret = df_copy['close_price'].pct_change().fillna(0.0)\n    sq_ret = ret ** 2\n    amount = df_copy['amount']\n    total_amount = amount.sum()\n    if total_amount > 0:\n        impact = (sq_ret * amount).sum() / total_amount\n    else:\n        impact = 0.0\n    day = pd.Timestamp(df_copy['TradingDay'].iloc[0])\n    out = pd.Series([impact], index=[day], name='factor_amount_weighted_squared_impact')\n    return out",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "domain_agent": "minute-mutation",
+  "factor_name": "factor_amount_weighted_squared_impact",
+  "factor_value_contract": "minute_to_daily_panel",
+  "fitness_direction": -1,
+  "formula": "amount_weighted_mean(close_price.pct_change()^2, amount, TradingDay)",
+  "frequency": "minute",
+  "lineage": {
+    "agent_skill": "minute-mutation",
+    "generation": 2,
+    "guidance_mode": null,
+    "operation": "mutation",
+    "parent_ids": [
+      "g1_crossover_then_mutation_minute_amount_impact_gen0_v1_minute_price_deviat_d2bcdfb1",
+      "g1_mutation_minute_amount_impact_gen0_v1_9c0db803"
+    ]
+  },
+  "metadata": {
+    "fitness_direction": -1,
+    "fitness_metrics": {
+      "ic": 0.053974295815826495,
+      "icir": 0.5776745682578235,
+      "mi": 0.05875158514766454,
+      "rank_ic": 0.1056667885125283,
+      "rank_icir": 0.5374451597043816
+    },
+    "llm_candidate_id": "g2_mutation_minute_amount_weighted_squared_impact_v1",
+    "payoff_diagnostics": {
+      "quantile_monotonicity": 1.0,
+      "top_quantile_annualized_excess_return": 0.4109040370217807,
+      "top_quantile_excess_return": 0.012369833411824516,
+      "top_quantile_max_drawdown": -0.01211218476721887,
+      "top_quantile_turnover": 0.34944441759011974
+    },
+    "payoff_gate_passed": true,
+    "pre_transform_fitness_direction": 1,
+    "raw_fitness_metrics": {
+      "ic": -0.053974295815826495,
+      "icir": -0.5776745682578235,
+      "mi": 0.05875158514766454,
+      "rank_ic": -0.1056667885125283,
+      "rank_icir": -0.5374451597043816
+    },
+    "transform_gate_passed": true
+  },
+  "metrics": {
+    "ic": 0.053974295815826495,
+    "icir": 0.5776745682578235,
+    "mi": 0.05875158514766454,
+    "rank_ic": 0.1056667885125283,
+    "rank_icir": 0.5374451597043816
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.4109040370217807,
+    "top_quantile_excess_return": 0.012369833411824516,
+    "top_quantile_max_drawdown": -0.01211218476721887,
+    "top_quantile_turnover": 0.34944441759011974
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "rationale": "Mutation: replaced absolute return with squared return to amplify larger price moves while preserving the core amount-weighted mechanism. Squared returns emphasize extreme intraday price changes, potentially improving tail sensitivity and signal strength.",
+  "raw_metrics": {
+    "ic": -0.053974295815826495,
+    "icir": -0.5776745682578235,
+    "mi": 0.05875158514766454,
+    "rank_ic": -0.1056667885125283,
+    "rank_icir": -0.5374451597043816
+  },
+  "required_columns": [
+    "trading_datetime",
+    "TradingDay",
+    "open_price",
+    "high_price",
+    "low_price",
+    "close_price",
+    "volume",
+    "amount"
+  ],
+  "run_id": "minute-mvp-loop-20260630-104357-r3",
+  "source_run_ids": [
+    "minute-mvp-loop-20260630-104357-r3"
+  ],
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "amount_weighted_mean(close_price.ts_pct()^2, amount, TradingDay)",
+  "fe_formula": "amount_weighted_mean(close_price.ts_pct()^2, amount, TradingDay)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "amount_weighted_mean(close_price.pct_change()^2, amount, TradingDay)"
+}

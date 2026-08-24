@@ -36,6 +36,11 @@ ndarray codec (dtype + shape + base64 payload bytes) instead of the lossy
 NaN/Inf bit patterns, and datetime64 axes exactly.
 """
 
+import datetime
+import decimal
+import enum
+import hashlib
+
 from dataclasses import dataclass, field, fields as dataclass_fields
 from types import MappingProxyType
 from typing import Any, Dict, Mapping, Tuple
@@ -100,7 +105,13 @@ class FrozenMapping(Mapping):
         return NotImplemented
 
     def __hash__(self) -> int:
-        return hash(frozenset(self._data.items()))
+        # Stable across processes (unlike builtin hash(), which is salted by
+        # PYTHONHASHSEED) and correct for ndarray values.  canonicalize is
+        # fail-closed (QE-P0-06): unsupported object types raise instead of
+        # producing an unstable repr-derived digest.
+        return stable_hash(
+            stable_content_hex(tag="FrozenMapping", fields=dict(self._data))
+        )
 
     def __getstate__(self) -> dict:
         # Pickle as a plain dict; __setstate__ restores the read-only wrapper.
@@ -115,7 +126,9 @@ def _freeze_value(value: Any) -> Any:
     """Recursively freeze a value into an immutable form.
 
     dict -> FrozenMapping; list/tuple -> tuple; set/frozenset -> frozenset;
-    ndarray -> read-only copy; everything else returned as-is.
+    ndarray -> read-only copy; immutable scalars/strings/bytes/None/Enum/
+    numpy-scalar/datetime pass through unchanged; anything else (a mutable
+    object) raises :class:`InvalidContractError` fail-closed.
     """
     if isinstance(value, Mapping):
         return FrozenMapping({k: _freeze_value(v) for k, v in value.items()})
@@ -127,7 +140,18 @@ def _freeze_value(value: Any) -> Any:
         arr = np.array(value, copy=True, order="C")
         arr.flags.writeable = False
         return arr
-    return value
+    if (
+        isinstance(value, (str, bytes, int, float, bool))
+        or value is None
+        or isinstance(value, (enum.Enum, np.generic, decimal.Decimal,
+                              datetime.datetime, datetime.date,
+                              datetime.timedelta))
+    ):
+        return value
+    raise InvalidContractError(
+        "_freeze_value: unsupported mutable value of type "
+        f"{type(value).__name__} (fail-closed)"
+    )
 
 
 class ImmutableBufferRef:
@@ -139,16 +163,44 @@ class ImmutableBufferRef:
     mutable alias; the caller is asserting it will not mutate the buffer
     afterwards.  This is the only way to opt out of the default copy-on-write
     ownership (QE-P0-02).
+
+    Real ownership (P1-14): the ref captures ``content_sha256`` = SHA-256 of
+    the buffer's raw bytes at construction, so mutation-after-adoption by the
+    caller is detectable.  Only a WRITABLE ndarray may be handed over — a
+    read-only buffer is refused because the caller cannot be the owner of
+    something already frozen.
     """
 
-    __slots__ = ("array",)
+    __slots__ = ("array", "content_sha256")
 
     def __init__(self, array: np.ndarray):
         if not isinstance(array, np.ndarray):
             raise InvalidContractError(
                 f"ImmutableBufferRef requires an ndarray, got {type(array).__name__}"
             )
+        if not array.flags.writeable:
+            raise InvalidContractError(
+                "ImmutableBufferRef requires a WRITABLE ndarray so the caller "
+                "can hand over real ownership; got a read-only buffer"
+            )
         object.__setattr__(self, "array", array)
+        object.__setattr__(self, "content_sha256", _buffer_sha256(array))
+
+    def verify_untouched(self) -> None:
+        """Raise :class:`InvalidContractError` if the buffer mutated since adoption.
+
+        Recomputes SHA-256 over the CURRENT buffer bytes and compares with the
+        hash captured at construction, detecting a caller mutating the buffer
+        after the artifact adopted it (which would silently corrupt a
+        supposedly-immutable artifact).
+        """
+        current = _buffer_sha256(self.array)
+        if current != self.content_sha256:
+            raise InvalidContractError(
+                "ImmutableBufferRef buffer was mutated after adoption "
+                f"(content_sha256 changed: expected {self.content_sha256[:12]}..., "
+                f"got {current[:12]}...)"
+            )
 
 
 def _base_field_names() -> frozenset:
@@ -183,6 +235,11 @@ def _check_string_tuple(name: str, value: Any) -> None:
         _check_metadata_string(name, item)
 
 
+def _buffer_sha256(array: np.ndarray) -> str:
+    """Canonical SHA-256 hex digest of an ndarray's raw buffer bytes."""
+    return hashlib.sha256(array.tobytes()).hexdigest()
+
+
 def _freeze_array(value: Any, name: str) -> np.ndarray:
     """Validate ``value`` and return a read-only ndarray the artifact owns.
 
@@ -200,10 +257,15 @@ def _freeze_array(value: Any, name: str) -> np.ndarray:
                 f"got {type(array).__name__}"
             )
         try:
+            # Adopt the caller's buffer read-only (zero-copy, QE-P0-02).
             array.flags.writeable = False
         except ValueError:
             array = array.copy()
             array.flags.writeable = False
+        # P1-14 real ownership: if the caller mutated the buffer between
+        # handing over the ref and adoption, the ref's captured hash no longer
+        # matches the current bytes -- catch that before returning.
+        value.verify_untouched()
         return array
     if not isinstance(value, (np.ndarray, list, tuple)):
         raise InvalidContractError(
@@ -236,6 +298,7 @@ class MetricArtifact:
     provenance: Mapping[str, Any] = field(default_factory=dict)
     created_from: Tuple[str, ...] = ()
     factor_axis: Any = None
+    production: bool = False
 
     def __post_init__(self) -> None:
         _check_metadata_string("metric_id", self.metric_id)
@@ -272,6 +335,15 @@ class MetricArtifact:
             raise InvalidContractError(
                 "MetricArtifact.factor_axis must be a FactorAxisRef or None, got "
                 f"{type(self.factor_axis).__name__}"
+            )
+        # P1-14: a production artifact MUST identify its factor axis with a real
+        # FactorAxisRef; research/backtest artifacts may omit it (None stays
+        # allowed for back-compat).
+        if self.production and not isinstance(self.factor_axis, FactorAxisRef):
+            raise InvalidContractError(
+                "MetricArtifact.production=True requires factor_axis to be a "
+                "FactorAxisRef, got "
+                f"{'None' if self.factor_axis is None else type(self.factor_axis).__name__}"
             )
 
     def _validate_f_axis(self, f: int) -> None:

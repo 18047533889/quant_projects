@@ -1,0 +1,99 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "56708d56baa795e615aa3890cfe40edaef3aef4fdea6a4d13cf2b92836721f76",
+  "candidate_ids": [
+    "crossover_gen2_001"
+  ],
+  "code": "def factor_smoothed_atr_ratio_gated(df):\n    df_copy = df.copy()\n    atr20 = talib.ATR(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=20)\n    atr60 = talib.ATR(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=60)\n    ratio = atr20 / atr60.replace(0, np.nan)\n    smoothed_ratio = pd.Series(talib.EMA(ratio.values, timeperiod=5), index=df_copy.index)\n    smoothed_ratio = smoothed_ratio.fillna(0)\n    resvol_high = df_copy['style_gate_resvol_high'] > 0\n    factor = np.where(resvol_high, smoothed_ratio, 0)\n    factor = np.nan_to_num(factor, nan=0)\n    df_copy['factor_smoothed_atr_ratio_gated'] = factor\n    return df_copy['factor_smoothed_atr_ratio_gated']",
+  "cross_sectional_rationale": "Cross-sectional rank identifies stocks with extreme volatility regime transitions during high residual volatility, enabling relative comparison across stocks.",
+  "cross_sectional_transform": "cs_rank",
+  "factor_name": "factor_smoothed_atr_ratio_gated",
+  "fitness_direction": -1,
+  "formula": "if style_gate_resvol_high then EMA5(ATR20/ATR60) else 0",
+  "metrics": {
+    "ic": 0.014739477698770449,
+    "icir": 0.13280679123896097,
+    "mi": 0.11046832414968133,
+    "rank_ic": 0.03905903316938864,
+    "rank_icir": 0.32837496144757056
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.4,
+    "top_quantile_annualized_excess_return": 0.06279761249509197,
+    "top_quantile_excess_return": 0.17293866503442512,
+    "top_quantile_max_drawdown": -0.12387099416350789,
+    "top_quantile_turnover": 0.015965429641766612
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.015240816440509213,
+    "icir": 0.13475966048531213,
+    "mi": 0.021632391546479557,
+    "rank_ic": 0.03905903316938864,
+    "rank_icir": 0.32837496144757056
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.4,
+    "top_quantile_annualized_excess_return": 0.06279761249509197,
+    "top_quantile_excess_return": 0.17293866503442512,
+    "top_quantile_max_drawdown": -0.12387099416350789,
+    "top_quantile_turnover": 0.015965429641766612
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.015240816440509213,
+    "icir": -0.13475966048531213,
+    "mi": 0.021632391546479557,
+    "rank_ic": -0.03905903316938864,
+    "rank_icir": -0.32837496144757056
+  },
+  "rationale": "Crossover taking the direct ATR ratio mechanism from mutation_gen1_001 (parent2) as primary, and borrowing the EMA smoothing lightweight idea from ARV_002_M1 (parent1) to reduce noise in the ratio, potentially improving IC and ICIR while preserving RankICIR. The core economic mechanism (volatility regime expansion/compression during high residual volatility) remains intact.",
+  "raw_metrics": {
+    "ic": -0.014739477698770449,
+    "icir": -0.13280679123896097,
+    "mi": 0.11046832414968133,
+    "rank_ic": -0.03905903316938864,
+    "rank_icir": -0.32837496144757056
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260626-050556-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260626-050556-r2"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "Uses style_gate_resvol_high to activate the factor only when residual volatility is elevated. During high residual volatility, range-based volatility signals are more likely predictive.",
+  "style_gates_used": [
+    "style_gate_resvol_high"
+  ],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.5390668630892601,
+    "pre_transform_top_quantile_excess_return": 0.17293866503442512,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.625448587704372,
+    "transformed_top_quantile_excess_return": 0.17293866503442512
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "if style_gate_resvol_high then ema(5, ATR20/ATR60) else 0",
+  "fe_formula": "if style_gate_resvol_high then ema(5, ATR20/ATR60) else 0",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "if style_gate_resvol_high then EMA5(ATR20/ATR60) else 0"
+}

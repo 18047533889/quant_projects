@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "e2a8996e947232feb5c643c1a43b9aa244358367f19ea576e8304bb171931064",
+  "candidate_ids": [
+    "OI-002-mut-002"
+  ],
+  "code": "def factor_volume_regime_intraday_momentum(df):\n    df_copy = df.copy()\n    intraday_ret = (df_copy[\"close\"] - df_copy[\"open\"]) / df_copy[\"open\"].replace(0, np.nan)\n    pressure = intraday_ret * df_copy[\"volume\"]\n    smoothed = pressure.ewm(span=10, adjust=False).mean()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    factor = np.where(is_low_vol > 0, smoothed * 0.5, smoothed)\n    df_copy[\"factor\"] = factor\n    return df_copy[\"factor\"].fillna(0).rename(\"factor_volume_regime_intraday_momentum\")",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_volume_regime_intraday_momentum",
+  "fitness_direction": -1,
+  "formula": "pressure = ((close - open) / open) * volume; smoothed = EMA10(pressure); halve on low-volume days",
+  "metrics": {
+    "ic": 0.018092474995387922,
+    "icir": 0.23469997992323677,
+    "mi": 0.023655838101735327,
+    "rank_ic": 0.03717169001790499,
+    "rank_icir": 0.3036374956825727
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.3,
+    "top_quantile_annualized_excess_return": 0.022435891932031105,
+    "top_quantile_excess_return": 0.06582187637391512,
+    "top_quantile_max_drawdown": -0.1227411769150093,
+    "top_quantile_turnover": 0.26182850600266266
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Preserves the core volume-weighted intraday momentum mechanism from parent. Adds a lightweight volume regime adjustment: on low-volume days (detected by classify_volume_regime), the signal is halved to reduce noise from thin trading. The EMA(10) smoothing is retained for stability. This targets improving RankIC and RankICIR by filtering out low-quality observations.",
+  "raw_metrics": {
+    "ic": -0.018092474995387922,
+    "icir": -0.23469997992323677,
+    "mi": 0.023655838101735327,
+    "rank_ic": -0.03717169001790499,
+    "rank_icir": -0.3036374956825727
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260626-020403-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260626-020403-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "pressure = ((close - open) / open) * volume; smoothed = ema(10, pressure); halve on low-volume days",
+  "fe_formula": "pressure = ((close - open) / open) * volume; smoothed = ema(10, pressure); halve on low-volume days",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "pressure = ((close - open) / open) * volume; smoothed = EMA10(pressure); halve on low-volume days"
+}

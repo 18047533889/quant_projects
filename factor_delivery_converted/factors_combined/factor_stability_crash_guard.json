@@ -1,0 +1,42 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "df06dbe872f2e69e979b542ff456228ff59a74d970d2d8e81c1aba58d350aedf",
+  "candidate_ids": [
+    "alpha-crossover-crash-stability-001"
+  ],
+  "code": "def factor_stability_crash_guard(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    ret = close.pct_change()\n    # SDC: smooth directional consistency\n    ema_ret = ret.ewm(span=21, min_periods=21).mean()\n    ema_absret = ret.abs().ewm(span=21, min_periods=21).mean()\n    ratio = ema_ret / ema_absret.replace(0, np.nan)\n    sma_vol = volume.rolling(21, min_periods=21).mean()\n    vol_factor = volume / sma_vol.replace(0, np.nan)\n    sdc = ratio * vol_factor\n    # CS: crash skew (negative skewness, inverted so high values = high crash risk)\n    N = 20\n    rolling_mean = ret.rolling(N).mean()\n    rolling_m2 = (ret**2).rolling(N).mean()\n    rolling_m3 = (ret**3).rolling(N).mean()\n    central_m3 = rolling_m3 - 3*rolling_mean*rolling_m2 + 2*rolling_mean**3\n    rolling_var_pop = ret.rolling(N).var(ddof=0)\n    rolling_std_pop = rolling_var_pop ** 0.5\n    skewness = central_m3 / (rolling_std_pop**3).replace(0, np.nan)\n    cs = -skewness\n    # Normalize cs to [0,1] using rank\n    cs_rank = cs.rank(pct=True).fillna(0.5)\n    # Combine: reduce SDC when crash risk is high\n    factor = sdc * (1 - cs_rank)\n    factor = factor.fillna(0)\n    df_copy['factor_stability_crash_guard'] = factor\n    return df_copy['factor_stability_crash_guard']",
+  "factor_name": "factor_stability_crash_guard",
+  "fitness_direction": -1,
+  "formula": "SDC = EMA(ret,21)/EMA(|ret|,21) * (vol/SMA(vol,21)); CS = -skewness(ret,20); factor = SDC * (1 - rank_pct(CS))",
+  "metrics": {
+    "ic": 0.021124615271862074,
+    "icir": 0.21584238074882936,
+    "mi": 0.014120713235160842,
+    "rank_ic": 0.034090991738457095,
+    "rank_icir": 0.27837806464515874
+  },
+  "rationale": "This factor combines smooth directional consistency (from parent stability factor) with crash risk measured by negative skewness (from crash skew parent). By downweighting the stability signal when crash risk is high, it aims to preserve the strength of the stability factor during normal regimes while protecting against false trends during extreme risk periods. The rank normalization of crash skew ensures a smooth gating effect. This crossover targets the bottleneck of the stability factor's vulnerability to crash regimes, aiming for improved robustness across market conditions.",
+  "raw_metrics": {
+    "ic": -0.021124615271862074,
+    "icir": -0.21584238074882936,
+    "mi": 0.014120713235160842,
+    "rank_ic": -0.034090991738457095,
+    "rank_icir": -0.27837806464515874
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260610-084536-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260610-084536-r2"
+  ],
+  "lqtp_formula": "SDC = ema(21, ret)/ema(21, |ret|) * (vol/ts_mean(21, vol)); CS = -ts_skew(20, ret); factor = SDC * (1 - cs_rank(CS))",
+  "fe_formula": "SDC = ema(21, ret)/ema(21, |ret|) * (vol/ts_mean(21, vol)); CS = -ts_skew(20, ret); factor = SDC * (1 - rank(CS))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "SDC = EMA(ret,21)/EMA(|ret|,21) * (vol/SMA(vol,21)); CS = -skewness(ret,20); factor = SDC * (1 - rank_pct(CS))"
+}

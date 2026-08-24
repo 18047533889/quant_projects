@@ -1,0 +1,119 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "89b1232b1813ebbaa7c10c26d445c832cf02079f6f2cb965f4f8eed180fe4474",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_crash_g0_left_tail_variance_share_94_881b6b72"
+  ],
+  "code": "def factor_persistent_left_tail_variance_share(df):\n    \"\"\"Persistent exponentially weighted share of realized variance from negative returns.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    downside_variance = ret.clip(upper=0.0).pow(2).ewm(span=45, min_periods=30, adjust=False).mean()\n    total_variance = ret.pow(2).ewm(span=45, min_periods=30, adjust=False).mean()\n    df_copy[\"factor_persistent_left_tail_variance_share\"] = downside_variance / total_variance.replace(0.0, np.nan)\n    return df_copy[\"factor_persistent_left_tail_variance_share\"]",
+  "cross_sectional_rationale": "The bounded downside-variance share remains economically interpretable as a relative same-day fragility measure. Cross-sectional ranking identifies the stocks with the most persistently loss-dominated variance while reducing market-wide volatility-level effects.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "long_short_sharpe": 2.7236645936918444,
+        "quantile_monotonicity": 0.9151515151515152,
+        "top_quantile_annualized_excess_return": 0.02116401617510366,
+        "top_quantile_excess_return": 0.059372574951330304,
+        "top_quantile_max_drawdown": -0.12719194093891661,
+        "top_quantile_turnover": 0.12117793923366489
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_excess_percentile",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_percentile"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_persistent_left_tail_variance_share",
+  "fitness_direction": 1,
+  "formula": "EWMA_45[min(r_t,0)^2] / EWMA_45[r_t^2]",
+  "metrics": {
+    "ic": 0.02370485057855798,
+    "icir": 0.19714046691228343,
+    "mi": 0.014398896197429067,
+    "rank_ic": 0.052552652377010005,
+    "rank_icir": 0.38073408382675483
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.7236645936918444,
+    "quantile_monotonicity": 0.9151515151515152,
+    "top_quantile_annualized_excess_return": 0.02116401617510366,
+    "top_quantile_excess_return": 0.059372574951330304,
+    "top_quantile_max_drawdown": -0.12719194093891661,
+    "top_quantile_turnover": 0.12117793923366489
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_percentile",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.0263739723924716,
+    "icir": 0.21630232937741647,
+    "mi": 0.019264590213374788,
+    "rank_ic": 0.052552652377010005,
+    "rank_icir": 0.38073408382675483
+  },
+  "pre_transform_payoff_diagnostics": {
+    "long_short_sharpe": 2.7236645936918444,
+    "quantile_monotonicity": 0.9151515151515152,
+    "top_quantile_annualized_excess_return": 0.02116401617510366,
+    "top_quantile_excess_return": 0.059372574951330304,
+    "top_quantile_max_drawdown": -0.12719194093891661,
+    "top_quantile_turnover": 0.12117793923366489
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.0263739723924716,
+    "icir": 0.21630232937741647,
+    "mi": 0.019264590213374788,
+    "rank_ic": 0.052552652377010005,
+    "rank_icir": 0.38073408382675483
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "This preserves the qualified parent's crash-fragility mechanism: stocks whose realized variance is persistently dominated by losses may remain vulnerable to adverse repricing. The sole mutation lengthens the causal EWMA span from 30 to 45 sessions, filtering transient one-day loss shocks and reducing signal churn. The target is the parent's failed top-quantile payoff and negative annualized excess while preserving its qualified IC, RankIC, ICIR, RankICIR, and MI profile through the same bounded downside-variance-share mechanism.",
+  "raw_metrics": {
+    "ic": 0.02370485057855798,
+    "icir": 0.19714046691228343,
+    "mi": 0.014398896197429067,
+    "rank_ic": 0.052552652377010005,
+    "rank_icir": 0.38073408382675483
+  },
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6terra-20260814-053307-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6terra-20260814-053307-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 1.147439138689781,
+    "pre_transform_top_quantile_excess_return": 0.059372574951330304,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 1.1083796417934377,
+    "transformed_top_quantile_excess_return": 0.059372574951330304
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "EWMA_45[min(r_t,0)^2] / EWMA_45[r_t^2]",
+  "fe_formula": "EWMA_45[flex_min(r_t, 0)^2] / EWMA_45[r_t^2]",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "EWMA_45[min(r_t,0)^2] / EWMA_45[r_t^2]"
+}

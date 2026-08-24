@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "2b5625cdcefcdb3655734123e2158dd1eb72d531cb5bbc9e9b606dd8d9800ba6",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_alpha_stability_002_a57eaa79_e149f73b"
+  ],
+  "code": "def factor_ewma_smoothness_volume(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    abs_diff_ret = (ret - ret.shift(1)).abs()\n    smoothness = abs_diff_ret.ewm(span=10, min_periods=10).mean()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    vol_weight = vol_ratio.clip(lower=0.5, upper=1.5)\n    factor = -smoothness * vol_weight\n    df_copy[\"factor_ewma_smoothness_volume\"] = factor\n    return df_copy[\"factor_ewma_smoothness_volume\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_ewma_smoothness_volume",
+  "fitness_direction": 1,
+  "formula": "-ewm(|ret(t)-ret(t-1)|, span=10) * clip(vol_ratio, 0.5, 1.5)",
+  "metrics": {
+    "ic": 0.014969297414246192,
+    "icir": 0.1110678327822082,
+    "mi": 0.056235683468703,
+    "rank_ic": 0.05698273275720451,
+    "rank_icir": 0.40524292337010626
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.031707973993317484,
+    "top_quantile_excess_return": 0.09233814637253257,
+    "top_quantile_max_drawdown": -0.1295427050902067,
+    "top_quantile_turnover": 0.324028246194597
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Mutate parent factor_return_change_smoothness by replacing rolling mean with EWMA for faster response, flipping direction so smoother price action (lower jitter) predicts continuation, and using continuous bounded volume scaling. Targets Price-Volatility Behavior layer: low return jitter confirmed by active volume indicates conviction.",
+  "raw_metrics": {
+    "ic": 0.014969297414246192,
+    "icir": 0.1110678327822082,
+    "mi": 0.056235683468703,
+    "rank_ic": 0.05698273275720451,
+    "rank_icir": 0.40524292337010626
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260629-073809-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260629-073809-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "-ema(span=10, |ret(t)-ret(t-1)|) * clip(vol_ratio, 0.5, 1.5)",
+  "fe_formula": "-ema(span=10, |ret(t)-ret(t-1)|) * clip(vol_ratio, 0.5, 1.5)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "-ewm(|ret(t)-ret(t-1)|, span=10) * clip(vol_ratio, 0.5, 1.5)"
+}

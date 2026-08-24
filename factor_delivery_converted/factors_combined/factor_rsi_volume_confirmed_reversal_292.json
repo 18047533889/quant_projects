@@ -1,0 +1,65 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "talib",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "3944be22fe49bd76f28631a2219ddbc32a2c1bfb8b14d2103a5bdb831060c9a2",
+  "candidate_ids": [
+    "g2_crossover_g1_crossover_factor_rsi_reversal_volume_regime_g_9b93adda"
+  ],
+  "code": "def factor_rsi_volume_confirmed_reversal(df):\n    df_copy = df.copy()\n    close_float = df_copy[\"close\"].values.astype(np.float64)\n    rsi = talib.RSI(close_float, timeperiod=14)\n    rsi = pd.Series(rsi, index=df_copy.index)\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    signal = 50 - rsi\n    factor = signal * vol_ratio\n    df_copy[\"factor_rsi_volume_confirmed_reversal\"] = factor\n    return df_copy[\"factor_rsi_volume_confirmed_reversal\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_rsi_volume_confirmed_reversal",
+  "fitness_direction": 1,
+  "formula": "(50 - RSI(14)) * vol_ratio, where vol_ratio = volume / EMA(volume, 20)",
+  "metrics": {
+    "ic": 0.02215448461945727,
+    "icir": 0.16540843541851527,
+    "mi": 0.025594316368986014,
+    "rank_ic": 0.03621247507916177,
+    "rank_icir": 0.23120124088404084
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6,
+    "top_quantile_annualized_excess_return": 0.019987998722130085,
+    "top_quantile_excess_return": 0.057343855086476436,
+    "top_quantile_max_drawdown": -0.22607461241062843,
+    "top_quantile_turnover": 0.34738318076291413
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Combine RSI mean reversion with volume confirmation: scale the RSI reversal signal by the volume ratio (current volume / EMA volume) to amplify signals when volume is high, as strong volume often confirms reversal potential. This replaces the previous binary resvol gate with a continuous volume adjustment.",
+  "raw_metrics": {
+    "ic": 0.02215448461945727,
+    "icir": 0.16540843541851527,
+    "mi": 0.025594316368986014,
+    "rank_ic": 0.03621247507916177,
+    "rank_icir": 0.23120124088404084
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260709-041908-r10",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260709-041908-r10"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(50 - ts_rsi(14)) * vol_ratio, where vol_ratio = volume / ema(20, volume)",
+  "fe_formula": "(50 - RSI(14)) * vol_ratio, where vol_ratio = volume / ema(20, volume)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(50 - RSI(14)) * vol_ratio, where vol_ratio = volume / EMA(volume, 20)"
+}

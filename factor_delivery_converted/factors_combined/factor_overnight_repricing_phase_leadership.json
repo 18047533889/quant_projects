@@ -1,0 +1,119 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "dbc5776cdd1e7d3a2a52dabb4a686ca7c2e6d280cface7817b0ec372131586f2",
+  "candidate_ids": [
+    "amc_g0_overnight_repricing_leadership"
+  ],
+  "code": "def factor_overnight_repricing_phase_leadership(df):\n    \"\"\"Identifies long-horizon trends led by overnight repricing rather than intraday reversal.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    overnight_cumulative = overnight_ret.rolling(63, min_periods=63).sum()\n    intraday_cumulative = intraday_ret.rolling(63, min_periods=63).sum()\n    total_activity = (overnight_ret.abs() + intraday_ret.abs()).rolling(63, min_periods=63).sum().replace(0.0, np.nan)\n    phase_leadership = (overnight_cumulative - intraday_cumulative) / total_activity\n    df_copy[\"factor_overnight_repricing_phase_leadership\"] = phase_leadership\n    return df_copy[\"factor_overnight_repricing_phase_leadership\"]",
+  "cross_sectional_rationale": "The raw bounded measure is most useful as a same-day relative phase indicator: ranking identifies stocks whose trends are most strongly overnight-repricing-led versus their contemporaries while reducing sensitivity to market-wide changes in the overnight/intraday return mix.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "long_short_sharpe": 2.289261764139199,
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.04661218110131382,
+        "top_quantile_excess_return": 0.12693386050772815,
+        "top_quantile_max_drawdown": -0.16057234468537906,
+        "top_quantile_turnover": 0.10365989360577463
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_overnight_repricing_phase_leadership",
+  "fitness_direction": 1,
+  "formula": "[sum_63(overnight_return) - sum_63(intraday_return)] / sum_63(|overnight_return| + |intraday_return|)",
+  "metrics": {
+    "ic": 0.019298286420799452,
+    "icir": 0.18028082192297423,
+    "mi": 0.006744928298373587,
+    "rank_ic": 0.03942154326055332,
+    "rank_icir": 0.3188058451296917
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.289261764139199,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.04661218110131382,
+    "top_quantile_excess_return": 0.12693386050772815,
+    "top_quantile_max_drawdown": -0.16057234468537906,
+    "top_quantile_turnover": 0.10365989360577463
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.0205808300440635,
+    "icir": 0.18790101857381766,
+    "mi": 0.005863899563133046,
+    "rank_ic": 0.03942154326055332,
+    "rank_icir": 0.3188058451296917
+  },
+  "pre_transform_payoff_diagnostics": {
+    "long_short_sharpe": 2.289261764139199,
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.04661218110131382,
+    "top_quantile_excess_return": 0.12693386050772815,
+    "top_quantile_max_drawdown": -0.16057234468537906,
+    "top_quantile_turnover": 0.10365989360577463
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.0205808300440635,
+    "icir": 0.18790101857381766,
+    "mi": 0.005863899563133046,
+    "rank_ic": 0.03942154326055332,
+    "rank_icir": 0.3188058451296917
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Long-cycle advances led by overnight repricing can reflect gradual incorporation of information outside continuous trading, whereas gains that are repeatedly surrendered intraday can indicate a less durable phase. This factor separates the long-horizon return source into overnight and intraday components and scales their difference by realized return activity, yielding a bounded measure of information-led versus intraday-led cycle leadership.",
+  "raw_metrics": {
+    "ic": 0.019298286420799452,
+    "icir": 0.18028082192297423,
+    "mi": 0.006744928298373587,
+    "rank_ic": 0.03942154326055332,
+    "rank_icir": 0.3188058451296917
+  },
+  "required_columns": [
+    "open",
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6terra-20260814-053307-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6terra-20260814-053307-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.9630062030915769,
+    "pre_transform_top_quantile_excess_return": 0.12693386050772815,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.9487043285890677,
+    "transformed_top_quantile_excess_return": 0.12693386050772815
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "[ts_sum(63, overnight_return) - ts_sum(63, intraday_return)] / ts_sum(63, |overnight_return| + |intraday_return|)",
+  "fe_formula": "[ts_sum(63, overnight_return) - ts_sum(63, intraday_return)] / ts_sum(63, |overnight_return| + |intraday_return|)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "[sum_63(overnight_return) - sum_63(intraday_return)] / sum_63(|overnight_return| + |intraday_return|)"
+}

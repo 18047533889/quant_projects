@@ -1,0 +1,103 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "minute_tools"
+  ],
+  "calculation_fingerprint": "legacy-unresolved:3",
+  "candidate_id": "g1_crossover_then_mutation_minute_amount_impact_v0_minute_high_volume_event_ea53736b",
+  "candidate_ids": [
+    "g1_crossover_then_mutation_minute_amount_impact_v0_minute_high_volume_event_ea53736b"
+  ],
+  "code": "def factor_high_volume_amount_weighted_squared_impact(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close_price\"].pct_change().fillna(0.0) ** 2\n    is_high, _ = minute_tools.get_up_space(df_copy[\"volume\"], df_copy[\"TradingDay\"], std_multiplier=1.5)\n    numerator = (ret * df_copy[\"amount\"] * is_high).sum()\n    denominator = (df_copy[\"amount\"] * is_high).sum()\n    value = numerator / denominator if denominator != 0 else 0.0\n    day = pd.Timestamp(df_copy[\"TradingDay\"].iloc[0])\n    out = pd.Series([value], index=[day], name=\"factor_high_volume_amount_weighted_squared_impact\")\n    return out",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "domain_agent": "minute-mutation",
+  "factor_name": "factor_high_volume_amount_weighted_squared_impact",
+  "factor_value_contract": "minute_to_daily_panel",
+  "fitness_direction": -1,
+  "formula": "Amount-weighted mean of squared close returns on minutes with volume > 1.5σ above mean",
+  "frequency": "minute",
+  "lineage": {
+    "agent_skill": "minute-mutation",
+    "generation": 1,
+    "guidance_mode": null,
+    "operation": "mutation",
+    "parent_ids": [
+      "minute-amount-impact_v0",
+      "minute_high_volume_event_intensity_v1"
+    ]
+  },
+  "metadata": {
+    "fitness_direction": -1,
+    "fitness_metrics": {
+      "ic": 0.04660803022507264,
+      "icir": 0.587508219602243,
+      "mi": 0.04400839449315974,
+      "rank_ic": 0.09975594804835157,
+      "rank_icir": 0.5338798113340979
+    },
+    "payoff_diagnostics": {
+      "quantile_monotonicity": 1.0,
+      "top_quantile_annualized_excess_return": 0.36455706060518067,
+      "top_quantile_excess_return": 0.0111629125639785,
+      "top_quantile_max_drawdown": -0.010875041666433272,
+      "top_quantile_turnover": 0.47361172372539306
+    },
+    "payoff_gate_passed": true,
+    "pre_transform_fitness_direction": 1,
+    "raw_fitness_metrics": {
+      "ic": -0.04660803022507264,
+      "icir": -0.587508219602243,
+      "mi": 0.04400839449315974,
+      "rank_ic": -0.09975594804835157,
+      "rank_icir": -0.5338798113340979
+    },
+    "transform_gate_passed": true
+  },
+  "metrics": {
+    "ic": 0.04660803022507264,
+    "icir": 0.587508219602243,
+    "mi": 0.04400839449315974,
+    "rank_ic": 0.09975594804835157,
+    "rank_icir": 0.5338798113340979
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.36455706060518067,
+    "top_quantile_excess_return": 0.0111629125639785,
+    "top_quantile_max_drawdown": -0.010875041666433272,
+    "top_quantile_turnover": 0.47361172372539306
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "rationale": "Mutated parent by using squared returns (amplifying larger price moves) and a stricter high-volume threshold (1.5 std), aiming to capture more extreme price impact during exceptional volume periods, similar to tail-sensitive impact measures.",
+  "raw_metrics": {
+    "ic": -0.04660803022507264,
+    "icir": -0.587508219602243,
+    "mi": 0.04400839449315974,
+    "rank_ic": -0.09975594804835157,
+    "rank_icir": -0.5338798113340979
+  },
+  "required_columns": [
+    "trading_datetime",
+    "TradingDay",
+    "open_price",
+    "high_price",
+    "low_price",
+    "close_price",
+    "volume",
+    "amount"
+  ],
+  "run_id": "minute-mvp-loop-20260630-082206-r2",
+  "source_run_ids": [
+    "minute-mvp-loop-20260630-082206-r2"
+  ],
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "Amount-weighted mean of squared close returns on minutes with volume > 1.5σ above mean",
+  "fe_formula": "Amount-weighted mean of squared close returns on minutes with volume > 1.5σ above mean",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "Amount-weighted mean of squared close returns on minutes with volume > 1.5σ above mean"
+}

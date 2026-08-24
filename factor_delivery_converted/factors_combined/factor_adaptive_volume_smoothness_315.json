@@ -1,0 +1,72 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "41020de9b064bf31fd62b0e8315ce6bcec6467fcd9c13e346c5bcc0dfab274a5",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_crossover_composite_002_stb_002_559c00fa_g1_c_6c78ed7e"
+  ],
+  "code": "def factor_adaptive_volume_smoothness(df):\n    df_copy = df.copy()\n    high_resvol = df_copy['style_gate_resvol_high'] > 0\n    cv_short = df_copy['volume'].rolling(10, min_periods=10).std(ddof=1) / df_copy['volume'].rolling(10, min_periods=10).mean().replace(0, np.nan)\n    cv_long = df_copy['volume'].rolling(20, min_periods=20).std(ddof=1) / df_copy['volume'].rolling(20, min_periods=20).mean().replace(0, np.nan)\n    factor = -np.where(high_resvol, cv_long, cv_short)\n    df_copy['factor_adaptive_volume_smoothness'] = factor\n    return df_copy['factor_adaptive_volume_smoothness']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_adaptive_volume_smoothness",
+  "fitness_direction": 1,
+  "formula": "-CV(volume, window) where window = 20 if high resvol else 10",
+  "metrics": {
+    "ic": 0.011327665138827023,
+    "icir": 0.15452489023775592,
+    "mi": 0.009196065210721471,
+    "rank_ic": 0.034945056777481144,
+    "rank_icir": 0.5231564841050704
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.05858224342789997,
+    "top_quantile_excess_return": 0.1753065614446725,
+    "top_quantile_max_drawdown": -0.0712316387966897,
+    "top_quantile_turnover": 0.1983373050951644
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Mutates the parent fixed 10-day window to an adaptive window based on residual volatility. In high residual volatility, a longer 20-day window captures more stable volume consistency, reducing noise. In low volatility, the shorter 10-day window retains sensitivity. This preserves the core volume smoothness mechanism while improving signal quality by matching window length to market noise. Aims to improve IC and MI while maintaining strong RankICIR.",
+  "raw_metrics": {
+    "ic": 0.011327665138827023,
+    "icir": 0.15452489023775592,
+    "mi": 0.009196065210721471,
+    "rank_ic": 0.034945056777481144,
+    "rank_icir": 0.5231564841050704
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260707-104009-r6",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260707-104009-r6"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "Uses style_gate_resvol_high to select between 20-day and 10-day volume CV windows. High residual volatility indicates noisy price action where longer-term volume consistency is more reliable; low volatility allows shorter-term fluctuations to matter. Both branches are continuous OHLCV-derived signals.",
+  "style_gates_used": [
+    "style_gate_resvol_high"
+  ],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "-CV(volume, window) where window = 20 if high resvol else 10",
+  "fe_formula": "-CV(volume, window) where window = 20 if high resvol else 10",
+  "lqtp_notes": "Unconverted: ['CV']",
+  "fe_notes": "Unconverted: ['CV']",
+  "source_formula": "-CV(volume, window) where window = 20 if high resvol else 10"
+}

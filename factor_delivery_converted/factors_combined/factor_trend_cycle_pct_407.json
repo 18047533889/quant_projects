@@ -1,0 +1,122 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "3dd898e60c8f4d4d349e52c1eaf2eb42b47f66cc5e733ef41a0ee56ef67666ec",
+  "candidate_ids": [
+    "g1_mutation_mc_cycle_pos_1_58edc947"
+  ],
+  "code": "def factor_trend_cycle_pct(df):\n    df_copy = df.copy()\n    sma200 = df_copy[\"close\"].rolling(200, min_periods=200).mean()\n    pct_dev = (df_copy[\"close\"] / sma200) - 1\n    df_copy[\"factor_trend_cycle_pct\"] = pct_dev\n    return df_copy[\"factor_trend_cycle_pct\"]",
+  "cross_sectional_rationale": "Cross-sectional rank helps identify stocks that are most overextended or oversold relative to their long-term trend, improving comparability across assets for cycle-based mean-reversion.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.07820341605554426,
+        "top_quantile_excess_return": 0.16983999612730072,
+        "top_quantile_max_drawdown": -0.24463441338235292,
+        "top_quantile_turnover": 0.07800275568756733
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_trend_cycle_pct",
+  "fitness_direction": -1,
+  "formula": "(close / SMA(close,200)) - 1",
+  "metrics": {
+    "ic": 0.017208934956851173,
+    "icir": 0.1096087216114366,
+    "mi": 0.01564339173938567,
+    "rank_ic": 0.03263512591559122,
+    "rank_icir": 0.1785180086745807
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.07820341605554426,
+    "top_quantile_excess_return": 0.16983999612730072,
+    "top_quantile_max_drawdown": -0.24463441338235292,
+    "top_quantile_turnover": 0.07800275568756733
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.02239434331551856,
+    "icir": 0.13507650057474793,
+    "mi": 0.03373778297633834,
+    "rank_ic": 0.03263512591559122,
+    "rank_icir": 0.1785180086745807
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.07820341605554426,
+    "top_quantile_excess_return": 0.16983999612730072,
+    "top_quantile_max_drawdown": -0.24463441338235292,
+    "top_quantile_turnover": 0.07800275568756733
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.02239434331551856,
+    "icir": -0.13507650057474793,
+    "mi": 0.03373778297633834,
+    "rank_ic": -0.03263512591559122,
+    "rank_icir": -0.1785180086745807
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "Percentage deviation from long-term SMA, capturing cycle position as relative distance. Simplifies normalization from ATR to percentage, focusing on the core mean-reversion signal and potentially improving metric stability.",
+  "raw_metrics": {
+    "ic": -0.017208934956851173,
+    "icir": -0.1096087216114366,
+    "mi": 0.01564339173938567,
+    "rank_ic": -0.03263512591559122,
+    "rank_icir": -0.1785180086745807
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260715-060858-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260715-060858-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.4023617614567767,
+    "pre_transform_top_quantile_excess_return": 0.16983999612730072,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.3536141828978454,
+    "transformed_top_quantile_excess_return": 0.16983999612730072
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(close / ts_mean(200, close)) - 1",
+  "fe_formula": "(close / ts_mean(200, close)) - 1",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(close / SMA(close,200)) - 1"
+}

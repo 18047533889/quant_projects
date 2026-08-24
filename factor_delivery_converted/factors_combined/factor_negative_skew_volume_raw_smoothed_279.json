@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "38f66991b8e9187d80579b31fa55c2b2b4c5d11a62d318b87866bd6144026f6a",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_mutation_cogalpha_tailrisk_002_faf7abab_g1_cr_36d4c8f9"
+  ],
+  "code": "def factor_negative_skew_volume_raw_smoothed(df):\n    df_copy = df.copy()\n    returns = df_copy['close'].pct_change()\n    skew = returns.rolling(30, min_periods=30).skew()\n    stress = -skew\n    vol_ema = df_copy['volume'].ewm(span=20, adjust=False).mean()\n    vol_ratio = df_copy['volume'] / vol_ema.replace(0.0, np.nan)\n    raw = stress * vol_ratio\n    factor = raw.ewm(span=3, adjust=False).mean()\n    factor.name = 'factor_negative_skew_volume_raw_smoothed'\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_negative_skew_volume_raw_smoothed",
+  "fitness_direction": 1,
+  "formula": "factor = EMA3( -rolling_skew(returns,30) * (volume / EMA20(volume)) )",
+  "metrics": {
+    "ic": 0.01516173405688295,
+    "icir": 0.17100186384407295,
+    "mi": 0.006377897995820447,
+    "rank_ic": 0.03200129244822186,
+    "rank_icir": 0.36142000915398603
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.09513371791478265,
+    "top_quantile_excess_return": 0.2843733328220668,
+    "top_quantile_max_drawdown": -0.08458443157053552,
+    "top_quantile_turnover": 0.13477020817999907
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Mutation of parent g2_crossover_g1_mutation_cogalpha_tailrisk_002_faf7abab: simplified by removing the log transform from volume ratio to recover linear volume confirmation strength, reduced skew window from 40 to 30 days for more timely tail-risk capture, and added a 3-day EMA smoothing to reduce noise. Preserves the core negative-skew times volume-ratio mechanism. Target bottleneck: improve low MI (0.010) while retaining parent RankICIR strength (~0.33).",
+  "raw_metrics": {
+    "ic": 0.01516173405688295,
+    "icir": 0.17100186384407295,
+    "mi": 0.006377897995820447,
+    "rank_ic": 0.03200129244822186,
+    "rank_icir": 0.36142000915398603
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260708-112322-r3",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260708-112322-r3"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "factor = ema(3, -rolling_skew(returns,30) * (volume / EMA20(volume)))",
+  "fe_formula": "factor = ema(3, -rolling_skew(returns,30) * (volume / EMA20(volume)))",
+  "lqtp_notes": "Unconverted: ['EMA20', 'rolling_skew']",
+  "fe_notes": "Unconverted: ['EMA20', 'rolling_skew']",
+  "source_formula": "factor = EMA3( -rolling_skew(returns,30) * (volume / EMA20(volume)) )"
+}

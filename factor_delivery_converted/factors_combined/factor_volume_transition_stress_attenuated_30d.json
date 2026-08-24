@@ -1,0 +1,95 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "471c85deb22ffeda858067ff74df177b22c86ae517e79190bc1fecd6edca955e",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_crossover_then_mutation_alpha_volume_structur_e15bcf30"
+  ],
+  "code": "def factor_volume_transition_stress_attenuated_30d(df):\n    \"\"\"Smoothed volume-transition carry with bounded overnight downside-stress attenuation.\"\"\"\n    df_copy = df.copy()\n    volume = df_copy[\"volume\"]\n    baseline = volume.rolling(20, min_periods=20).median()\n    active = volume > baseline\n    prior_active = active.shift(1).fillna(False)\n    transition = (active & ~prior_active).astype(float)\n    close_return = df_copy[\"close\"].pct_change()\n    event_count = transition.rolling(30, min_periods=30).sum()\n    carried_return = (transition * close_return).rolling(30, min_periods=30).sum()\n    raw_carry = carried_return / (1.0 + event_count)\n    overnight_return, intraday_return = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    downside_stress = (-overnight_return).clip(lower=0.0).rolling(5, min_periods=5).mean()\n    attenuation = 1.0 - downside_stress.clip(lower=0.0, upper=0.5)\n    factor = raw_carry * attenuation\n    return factor.replace([np.inf, -np.inf], np.nan).rename(\"factor_volume_transition_stress_attenuated_30d\")",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.030718436959072504,
+        "top_quantile_excess_return": 0.08689418577659103,
+        "top_quantile_max_drawdown": -0.12789298228287216,
+        "top_quantile_turnover": 0.12372287146040384
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_volume_transition_stress_attenuated_30d",
+  "fitness_direction": -1,
+  "formula": "[sum_30(transition_into_high_volume * close_return) / (1 + sum_30(transition_into_high_volume))] * [1 - clip(mean_5(max(-overnight_return, 0)), 0, 0.5)]",
+  "metrics": {
+    "ic": 0.01832789424376244,
+    "icir": 0.19926620527290845,
+    "mi": 0.017685699797601373,
+    "rank_ic": 0.04178533364003059,
+    "rank_icir": 0.4281497129262744
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.030718436959072504,
+    "top_quantile_excess_return": 0.08689418577659103,
+    "top_quantile_max_drawdown": -0.12789298228287216,
+    "top_quantile_turnover": 0.12372287146040384
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Preserves the qualified parent's 30-bar volume-transition carry, event-count normalization, and low-churn structure while targeting its weaker IC and payoff thickness with one bounded downside-stress modifier. Recent negative overnight returns attenuate the carry modestly, reducing exposure when participation transitions occur during short-horizon overnight stress without replacing the continuous OHLCV-derived signal.",
+  "raw_metrics": {
+    "ic": -0.01832789424376244,
+    "icir": -0.19926620527290845,
+    "mi": 0.017685699797601373,
+    "rank_ic": -0.04178533364003059,
+    "rank_icir": -0.4281497129262744
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260806-064355-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260806-064355-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "[ts_sum(30, transition_into_high_volume * close_return) / (1 + ts_sum(30, transition_into_high_volume))] * [1 - clip(mean_5(max(-overnight_return, 0)), 0, 0.5)]",
+  "fe_formula": "[ts_sum(30, transition_into_high_volume * close_return) / (1 + ts_sum(30, transition_into_high_volume))] * [1 - clip(mean_5(flex_max(-overnight_return, 0)), 0, 0.5)]",
+  "lqtp_notes": "Unconverted: ['mean_5']",
+  "fe_notes": "Unconverted: ['mean_5']",
+  "source_formula": "[sum_30(transition_into_high_volume * close_return) / (1 + sum_30(transition_into_high_volume))] * [1 - clip(mean_5(max(-overnight_return, 0)), 0, 0.5)]"
+}

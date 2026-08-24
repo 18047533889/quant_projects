@@ -1,0 +1,91 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "7c95f87d5046fe8bf68a09403f49c1b51ddd4e7a7615dd8f298af890c55225c6",
+  "candidate_ids": [
+    "g2_crossover_g1_crossover_alpha_vol_asymmetry_g0_a_aoimb_g0_v_7000c63f"
+  ],
+  "code": "def factor_recovery_volume_pressure_stabilized(df):\n    \"\"\"Measure persistent recovery from a prior drawdown with bounded volume-pressure attenuation.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    low = df_copy[\"low\"]\n    volume = df_copy[\"volume\"]\n    prior_peak = close.rolling(30, min_periods=30).max().shift(5).replace(0.0, np.nan)\n    drawdown_depth = (1.0 - close.shift(5) / prior_peak).clip(lower=0.0, upper=0.8)\n    prior_low = low.rolling(15, min_periods=15).min().shift(1).replace(0.0, np.nan)\n    recovery = close / prior_low - 1.0\n    recovery_score = recovery.ewm(span=4, adjust=False, min_periods=4).mean() - 0.5 * drawdown_depth\n    log_volume = np.log(volume.clip(lower=1.0))\n    safe_close = close.replace(0.0, np.nan)\n    returns = safe_close.pct_change().replace([np.inf, -np.inf], np.nan)\n    volume_pressure = returns.rolling(20, min_periods=20).corr(log_volume.diff()).replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    confirmation_weight = 1.0 - 0.2 * np.tanh(volume_pressure)\n    factor = recovery_score * (0.75 + 0.75 * drawdown_depth) * confirmation_weight\n    df_copy[\"factor_recovery_volume_pressure_stabilized\"] = factor\n    return df_copy[\"factor_recovery_volume_pressure_stabilized\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9272727272727272,
+        "top_quantile_annualized_excess_return": 0.020089419557911103,
+        "top_quantile_excess_return": 0.055971828610684504,
+        "top_quantile_max_drawdown": -0.1340599149394478,
+        "top_quantile_turnover": 0.15601304928268334
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_recovery_volume_pressure_stabilized",
+  "fitness_direction": -1,
+  "formula": "[EMA4(close / lagged 15-bar low - 1) - 0.5 drawdown_depth] × [0.75 + 0.75 drawdown_depth] × [1 - 0.2 tanh(Corr20(return, Δlog(volume)))]",
+  "metrics": {
+    "ic": 0.030767868516825753,
+    "icir": 0.21527691412051222,
+    "mi": 0.0274911838107732,
+    "rank_ic": 0.04132784056131749,
+    "rank_icir": 0.25995206875933513
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9272727272727272,
+    "top_quantile_annualized_excess_return": 0.020089419557911103,
+    "top_quantile_excess_return": 0.055971828610684504,
+    "top_quantile_max_drawdown": -0.1340599149394478,
+    "top_quantile_turnover": 0.15601304928268334
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "The smoothed drawdown-recovery mechanism remains primary, preserving a persistent recovery signal while using a bounded volume-pressure attenuation. Recovery is modestly downweighted when returns and changing volume show aligned participation pressure, reducing sensitivity to abrupt volume shocks without introducing a separate alpha source. Zero-price guards and non-finite correlation handling improve numerical stability while retaining the original causal logic.",
+  "raw_metrics": {
+    "ic": -0.030767868516825753,
+    "icir": -0.21527691412051222,
+    "mi": 0.0274911838107732,
+    "rank_ic": -0.04132784056131749,
+    "rank_icir": -0.25995206875933513
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260806-094519-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260806-094519-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "[ema(4, close / lagged 15-bar low - 1) - 0.5 drawdown_depth] × [0.75 + 0.75 drawdown_depth] × [1 - 0.2 tanh(Corr20(return, Δlog(volume)))]",
+  "fe_formula": "[ema(4, close / lagged 15-bar low - 1) - 0.5 drawdown_depth] × [0.75 + 0.75 drawdown_depth] × [1 - 0.2 tanh(Corr20(return, Δlog(volume)))]",
+  "lqtp_notes": "Unconverted: ['Corr20']",
+  "fe_notes": "Unconverted: ['Corr20']",
+  "source_formula": "[EMA4(close / lagged 15-bar low - 1) - 0.5 drawdown_depth] × [0.75 + 0.75 drawdown_depth] × [1 - 0.2 tanh(Corr20(return, Δlog(volume)))]"
+}

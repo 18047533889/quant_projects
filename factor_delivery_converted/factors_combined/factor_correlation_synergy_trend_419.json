@@ -1,0 +1,122 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "1d941f8e7d05eaac734c49515744626592f3de0690158d3a8e06d13df51bea62",
+  "candidate_ids": [
+    "AC-002"
+  ],
+  "code": "def factor_correlation_synergy_trend(df):\n    df_copy = df.copy()\n    price_roc = df_copy['close'].pct_change(20)\n    volume_roc = df_copy['volume'].pct_change(20)\n    corr = price_roc.rolling(30).corr(volume_roc).clip(0, 1).fillna(0)\n    short_trend = (df_copy['close'].rolling(10).mean() / df_copy['close'].rolling(40).mean() - 1)\n    long_trend = (df_copy['close'].rolling(20).mean() / df_copy['close'].rolling(80).mean() - 1)\n    factor = short_trend * corr + long_trend * (1 - corr)\n    factor.name = 'factor_correlation_synergy_trend'\n    return factor",
+  "cross_sectional_rationale": "Gaussian rank normalization ensures cross-sectional comparability of the synergy-weighted trend signal, which is economically relevant as it reflects relative alignment across stocks.",
+  "cross_sectional_transform": "cs_rank_gauss",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.09002608533990109,
+        "top_quantile_excess_return": 0.24686838759679075,
+        "top_quantile_max_drawdown": -0.12169916182034846,
+        "top_quantile_turnover": 0.05537814539332011
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_correlation_synergy_trend",
+  "fitness_direction": -1,
+  "formula": "synergy = corr(roc(close,20), roc(volume,20)) * short_trend + (1-corr) * long_trend",
+  "metrics": {
+    "ic": 0.01577659266881985,
+    "icir": 0.10176731194973072,
+    "mi": 0.012890249916919672,
+    "rank_ic": 0.032477953404379686,
+    "rank_icir": 0.18491022850199093
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.09002608533990109,
+    "top_quantile_excess_return": 0.24686838759679075,
+    "top_quantile_max_drawdown": -0.12169916182034846,
+    "top_quantile_turnover": 0.05537814539332011
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.01801168849838484,
+    "icir": 0.11201461567615878,
+    "mi": 0.02911862475454896,
+    "rank_ic": 0.032477953404379686,
+    "rank_icir": 0.18491022850199093
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.09002608533990109,
+    "top_quantile_excess_return": 0.24686838759679075,
+    "top_quantile_max_drawdown": -0.12169916182034846,
+    "top_quantile_turnover": 0.05537814539332011
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.01801168849838484,
+    "icir": -0.11201461567615878,
+    "mi": 0.02911862475454896,
+    "rank_ic": -0.032477953404379686,
+    "rank_icir": -0.18491022850199093
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "Synergy fusion: rolling correlation between price and volume rates of change measures alignment. When price and volume move together (high corr), short-term trend is favored; otherwise, long-term trend dominates. This continuous weighting creates an adaptive trend signal that exploits orthogonal information from two trend horizons and two data streams (price and volume), targeting balanced metric improvement.",
+  "raw_metrics": {
+    "ic": -0.01577659266881985,
+    "icir": -0.10176731194973072,
+    "mi": 0.012890249916919672,
+    "rank_ic": -0.032477953404379686,
+    "rank_icir": -0.18491022850199093
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260719-181655-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260719-181655-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.3765331108354632,
+    "pre_transform_top_quantile_excess_return": 0.24686838759679075,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.3478223364418409,
+    "transformed_top_quantile_excess_return": 0.24686838759679075
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "synergy = ts_corr(roc(volume,20), roc(close,20))volume)) * short_trend + (1-corr) * long_trend",
+  "fe_formula": "synergy = ts_corr(roc(volume,20), roc(close,20))volume)) * short_trend + (1-corr) * long_trend",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "synergy = corr(roc(close,20), roc(volume,20)) * short_trend + (1-corr) * long_trend"
+}

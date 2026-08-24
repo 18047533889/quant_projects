@@ -1,0 +1,95 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "b57640878bbf50d9daca79fe7bae786e82d1864d76990d16c4ba2fc74ddd4dd2",
+  "candidate_ids": [
+    "amc_g0_signed_path_efficiency_cycle"
+  ],
+  "code": "def factor_signed_path_efficiency_cycle(df):\n    \"\"\"Measure whether the recent price path is forming a persistent directional phase.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    net_move = close - close.shift(126)\n    path_length = close.diff().abs().rolling(126, min_periods=126).sum()\n    efficiency = net_move / path_length.replace(0.0, np.nan)\n    recent_efficiency = (close - close.shift(42)) / close.diff().abs().rolling(42, min_periods=42).sum().replace(0.0, np.nan)\n    phase_signal = efficiency * recent_efficiency.abs()\n    df_copy[\"factor_signed_path_efficiency_cycle\"] = phase_signal.replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_signed_path_efficiency_cycle\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.01594625354189505,
+        "top_quantile_excess_return": 0.03825578304910615,
+        "top_quantile_max_drawdown": -0.19836779065900212,
+        "top_quantile_turnover": 0.16466208944557575
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_signed_path_efficiency_cycle",
+  "fitness_direction": -1,
+  "formula": "[(C_t - C_{t-126}) / sum_{i=0}^{125}|Delta C_{t-i}|] * |(C_t - C_{t-42}) / sum_{i=0}^{41}|Delta C_{t-i}||",
+  "metrics": {
+    "ic": 0.022739580954976996,
+    "icir": 0.17305243727197264,
+    "mi": 0.015096086839825773,
+    "rank_ic": 0.03453226356880247,
+    "rank_icir": 0.2273476077226715
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.01594625354189505,
+    "top_quantile_excess_return": 0.03825578304910615,
+    "top_quantile_max_drawdown": -0.19836779065900212,
+    "top_quantile_turnover": 0.16466208944557575
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "This expresses market structure through path geometry: a signed long-horizon net move is rewarded when the recent path is also efficient rather than oscillatory. The mechanism distinguishes directional accumulation or distribution phases from noisy cycle interiors without relying on moving-average level comparisons or serial-autocorrelation classifiers.",
+  "raw_metrics": {
+    "ic": -0.022739580954976996,
+    "icir": -0.17305243727197264,
+    "mi": 0.015096086839825773,
+    "rank_ic": -0.03453226356880247,
+    "rank_icir": -0.2273476077226715
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260807-092149-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260807-092149-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "[(C_t - C_{t-126}) / sum_{i=0}^{125}|Delta C_{t-i}|] * |(C_t - C_{t-42}) / sum_{i=0}^{41}|Delta C_{t-i}||",
+  "fe_formula": "[(C_t - C_{t-126}) / sum_{i=0}^{125}|Delta C_{t-i}|] * |(C_t - C_{t-42}) / sum_{i=0}^{41}|Delta C_{t-i}||",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "[(C_t - C_{t-126}) / sum_{i=0}^{125}|Delta C_{t-i}|] * |(C_t - C_{t-42}) / sum_{i=0}^{41}|Delta C_{t-i}||"
+}

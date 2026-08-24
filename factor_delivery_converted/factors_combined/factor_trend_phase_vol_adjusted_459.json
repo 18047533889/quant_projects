@@ -1,0 +1,125 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "903106c6d0c708f7de532b7ba5a8c2b8b50082c85d585b5b3ebd22450dceff18",
+  "candidate_ids": [
+    "amc_001"
+  ],
+  "code": "def factor_trend_phase_vol_adjusted(df):\n    df_copy = df.copy()\n    ema50 = talib.EMA(df_copy[\"close\"], timeperiod=50)\n    ema200 = talib.EMA(df_copy[\"close\"], timeperiod=200)\n    trend_diff = (ema50 - ema200) / df_copy[\"close\"]\n    atr = talib.ATR(df_copy[\"high\"], df_copy[\"low\"], df_copy[\"close\"], timeperiod=14)\n    vol_factor = 1 - (atr / df_copy[\"close\"]).replace(np.inf, np.nan).fillna(0)\n    factor = trend_diff * vol_factor\n    df_copy[\"factor_trend_phase_vol_adjusted\"] = factor\n    return df_copy[\"factor_trend_phase_vol_adjusted\"]",
+  "cross_sectional_rationale": "Trend-following signals benefit from cross-sectional ranking to compare relative trend strength across stocks, identifying those in the most persistent trending phase.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9151515151515152,
+        "top_quantile_annualized_excess_return": 0.04739039078192797,
+        "top_quantile_excess_return": 0.10126765982949504,
+        "top_quantile_max_drawdown": -0.1746235715367216,
+        "top_quantile_turnover": 0.022983660180797436
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.0821731831145444,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.17826816885455607,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_trend_phase_vol_adjusted",
+  "fitness_direction": -1,
+  "formula": "(EMA50 - EMA200) / Close * (1 - ATR14 / Close)",
+  "metrics": {
+    "ic": 0.010870601534464655,
+    "icir": 0.0821731831145444,
+    "mi": 0.007852788628483154,
+    "rank_ic": 0.017124145407904228,
+    "rank_icir": 0.10775805639900021
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9151515151515152,
+    "top_quantile_annualized_excess_return": 0.04739039078192797,
+    "top_quantile_excess_return": 0.10126765982949504,
+    "top_quantile_max_drawdown": -0.1746235715367216,
+    "top_quantile_turnover": 0.022983660180797436
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.01003846470801849,
+    "icir": 0.07449330195974077,
+    "mi": 0.012573733724537739,
+    "rank_ic": 0.017124145407904228,
+    "rank_icir": 0.10775805639900021
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9151515151515152,
+    "top_quantile_annualized_excess_return": 0.04739039078192797,
+    "top_quantile_excess_return": 0.10126765982949504,
+    "top_quantile_max_drawdown": -0.1746235715367216,
+    "top_quantile_turnover": 0.022983660180797436
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.01003846470801849,
+    "icir": -0.07449330195974077,
+    "mi": 0.012573733724537739,
+    "rank_ic": -0.017124145407904228,
+    "rank_icir": -0.10775805639900021
+  },
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "This factor captures long-term market phase using the difference between 50-day and 200-day EMAs, normalized by price. It adjusts for volatility regime by downweighting periods of high ATR, assuming cyclical transitions between trending and volatile phases. Cross-sectional ranking isolates stocks in the strongest trending phase.",
+  "raw_metrics": {
+    "ic": -0.010870601534464655,
+    "icir": -0.0821731831145444,
+    "mi": 0.007852788628483154,
+    "rank_ic": -0.017124145407904228,
+    "rank_icir": -0.10775805639900021
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260720-210415-r10",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260720-210415-r10"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.22198770219920144,
+    "pre_transform_top_quantile_excess_return": 0.10126765982949504,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.22577877508439664,
+    "transformed_top_quantile_excess_return": 0.10126765982949504
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(EMA50 - EMA200) / Close * (1 - ATR14 / Close)",
+  "fe_formula": "(EMA50 - EMA200) / Close * (1 - ATR14 / Close)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(EMA50 - EMA200) / Close * (1 - ATR14 / Close)"
+}

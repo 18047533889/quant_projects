@@ -1,0 +1,88 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "74e63424641aed6adad75f214802178b84254b4515c03d598a8a91f6b4efab4f",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_vqc_002_66bfe32b_70265b52"
+  ],
+  "code": "def factor_value_quality_simple(df):\n    df_copy = df.copy()\n    pb = df_copy[\"pb_lf\"]\n    cheapness = 1.0 / pb.replace(0, np.nan)\n    cheapness = cheapness.where(pb > 0, np.nan)\n    debt_ratio = df_copy[\"debttoassets\"] / 100.0\n    health = (1.0 - debt_ratio).clip(0.0, None)\n    composite = cheapness * health\n    composite = composite.replace([np.inf, -np.inf], np.nan)\n    composite.name = \"factor_value_quality_simple\"\n    return composite",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.12380468836009095,
+        "top_quantile_excess_return": 0.39841343182936173,
+        "top_quantile_max_drawdown": -0.07642403241642726,
+        "top_quantile_turnover": 0.022945179744948946
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_value_quality_simple",
+  "fitness_direction": 1,
+  "formula": "composite = (1/pb_lf) * max(0, 1 - debttoassets/100)",
+  "metrics": {
+    "ic": 0.011656660865015102,
+    "icir": 0.1480168323566111,
+    "mi": 0.014657905747990085,
+    "rank_ic": 0.03208359561316933,
+    "rank_icir": 0.33194816517091397
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.12380468836009095,
+    "top_quantile_excess_return": 0.39841343182936173,
+    "top_quantile_max_drawdown": -0.07642403241642726,
+    "top_quantile_turnover": 0.022945179744948946
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Simplified value-quality composite: book yield multiplied by a financial health score based on low debt. Replaces the parent's ROE change trend with debt-to-assets to improve raw IC stability and avoid noise from volatile profitability trends. The raw signal is used without cross-sectional transform to target linear correlation improvement.",
+  "raw_metrics": {
+    "ic": 0.011656660865015102,
+    "icir": 0.1480168323566111,
+    "mi": 0.014657905747990085,
+    "rank_ic": 0.03208359561316933,
+    "rank_icir": 0.33194816517091397
+  },
+  "required_columns": [
+    "pb_lf",
+    "debttoassets"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260721-20260721-175143-r4",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260721-20260721-175143-r4"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "composite = (1/pb_lf) * max(0, 1 - debttoassets/100)",
+  "fe_formula": "composite = (1/pb_lf) * flex_max(0, 1 - debttoassets/100)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "composite = (1/pb_lf) * max(0, 1 - debttoassets/100)"
+}

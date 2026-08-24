@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "67baccb5e7e0f327ce350942a1f4ff9a9afb68519640fa5fa45a9f1d46833409",
+  "candidate_ids": [
+    "mutation_crossover_002_simplified"
+  ],
+  "code": "def factor_simplified_intraday_mean_reversion(df):\n    df_copy = df.copy()\n    midpoint = (df_copy['high'] + df_copy['low']) / 2\n    intraday_fraction = (df_copy['close'] - midpoint) / (df_copy['high'] - df_copy['low']).replace(0, np.nan)\n    smoothed_intraday = intraday_fraction.rolling(5, min_periods=5).mean()\n    factor = -smoothed_intraday\n    df_copy['factor_simplified_intraday_mean_reversion'] = factor\n    return df_copy['factor_simplified_intraday_mean_reversion']",
+  "factor_name": "factor_simplified_intraday_mean_reversion",
+  "fitness_direction": 1,
+  "formula": "-mean((close-midpoint)/(high-low), 5)",
+  "metrics": {
+    "ic": 0.020110001415788666,
+    "icir": 0.24401587926698873,
+    "mi": 0.0086315947271558,
+    "rank_ic": 0.024611271992742746,
+    "rank_icir": 0.2580738937722953
+  },
+  "rationale": "Simplified mean reversion signal by ablating the volume confirmation ratio to reduce noise and improve cross-sectional rank stability. Preserves the core economic intuition of contrarian trading based on intraday close position within daily range over the past 5 days. Parent strength target: ICIR from mutation_001.",
+  "raw_metrics": {
+    "ic": 0.020110001415788666,
+    "icir": 0.24401587926698873,
+    "mi": 0.0086315947271558,
+    "rank_ic": 0.024611271992742746,
+    "rank_icir": 0.2580738937722953
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260616-043913-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260616-043913-r2"
+  ],
+  "lqtp_formula": "-ts_mean(5, (close-midpoint)/(high-low))",
+  "fe_formula": "-ts_mean(5, (close-midpoint)/(high-low))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "-mean((close-midpoint)/(high-low), 5)"
+}

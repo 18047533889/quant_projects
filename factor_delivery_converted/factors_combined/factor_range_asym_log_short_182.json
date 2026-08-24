@@ -1,0 +1,51 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "4c34114533edc90976b3a657d4cd084a1f5e9962df43fc0553b3047305874445",
+  "candidate_ids": [
+    "range-asym-log-short-v1"
+  ],
+  "code": "def factor_range_asym_log_short(df):\n    df_copy = df.copy()\n    up_close = df_copy['close'] > df_copy['close'].shift(1)\n    down_close = ~up_close\n    range_ = df_copy['high'] - df_copy['low']\n    win = 10\n    min_per = 5\n    up_sum = range_.where(up_close, 0).rolling(win, min_periods=min_per).sum()\n    down_sum = range_.where(down_close, 0).rolling(win, min_periods=min_per).sum()\n    up_count = up_close.rolling(win, min_periods=min_per).sum()\n    down_count = down_close.rolling(win, min_periods=min_per).sum()\n    up_avg = up_sum / up_count.replace(0, np.nan)\n    down_avg = down_sum / down_count.replace(0, np.nan)\n    # Safe ratio: avoid division by zero by clipping down_avg lower bound\n    ratio = up_avg / down_avg.clip(lower=1e-12)\n    # Clip ratio to avoid log(0) or negative\n    ratio_clipped = np.clip(ratio, 1e-12, None)\n    factor = np.log(ratio_clipped)\n    factor = factor.fillna(0)\n    df_copy['factor_range_asym_log_short'] = factor\n    return df_copy['factor_range_asym_log_short']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_range_asym_log_short",
+  "fitness_direction": -1,
+  "formula": "ratio = log(avg_up_range / avg_down_range) over 10 days, min 5 periods",
+  "metrics": {
+    "ic": 0.014626357857270516,
+    "icir": 0.20891719062910954,
+    "mi": 0.013250804285037887,
+    "rank_ic": 0.030921465072366768,
+    "rank_icir": 0.34098527412959534
+  },
+  "rationale": "Mutated from range-asym-smoothed-v1: reduced window to 10 and min_periods to 5 for shorter-term asymmetry; replaced symmetric ratio with log ratio to enhance linearity; removed EMA smoothing to avoid over-dampening. Preserves parent's core asymmetric range mechanism while targeting improved IC and RankIC. Repaired to avoid infinite values by clipping division and log inputs.",
+  "raw_metrics": {
+    "ic": -0.014626357857270516,
+    "icir": -0.20891719062910954,
+    "mi": 0.013250804285037887,
+    "rank_ic": -0.030921465072366768,
+    "rank_icir": -0.34098527412959534
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260622-052632-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260622-052632-r1"
+  ],
+  "lqtp_formula": "ratio = log(avg_up_range / avg_down_range) over 10 days, min 5 periods",
+  "fe_formula": "ratio = log(avg_up_range / avg_down_range) over 10 days, min 5 periods",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "ratio = log(avg_up_range / avg_down_range) over 10 days, min 5 periods"
+}

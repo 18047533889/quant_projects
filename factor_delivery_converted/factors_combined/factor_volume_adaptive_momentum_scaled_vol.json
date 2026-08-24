@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "99b330dd45010bb8190ca6eb7dbf4a5a95b38dfae8055f5c2d62af04a67ec950",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_cand_002_alpha_price_volume_coheren_218476bd"
+  ],
+  "code": "def factor_volume_adaptive_momentum_scaled_vol(df):\n    df_copy = df.copy()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20, high_threshold=1.5, low_threshold=0.6)\n    ret5 = df_copy[\"close\"] / df_copy[\"close\"].shift(5) - 1\n    daily_ret = df_copy[\"close\"].pct_change()\n    vol_20 = daily_ret.rolling(20).std()\n    ret5_scaled = ret5 / vol_20.replace(0, np.nan)\n    vol_weight = np.log(vol_ratio.clip(lower=0.1, upper=10))\n    weighted_ret = ret5_scaled * vol_weight\n    factor = weighted_ret.ewm(span=10, min_periods=10).mean()\n    df_copy[\"factor_volume_adaptive_momentum_scaled_vol\"] = factor\n    return df_copy[\"factor_volume_adaptive_momentum_scaled_vol\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_volume_adaptive_momentum_scaled_vol",
+  "fitness_direction": -1,
+  "formula": "EMA( (close/shift(close,5)-1) / trailing_vol(20) * log(vol_ratio) , span=10)",
+  "metrics": {
+    "ic": 0.01912035163362823,
+    "icir": 0.19105566901510848,
+    "mi": 0.02049609491379556,
+    "rank_ic": 0.034784913376961824,
+    "rank_icir": 0.37472027592743257
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.08754885363204834,
+    "top_quantile_excess_return": 0.2604435699797387,
+    "top_quantile_max_drawdown": -0.11207960617006352,
+    "top_quantile_turnover": 0.19290787328425718
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Mutates factor_volume_adaptive_momentum_smoothed by adding a trailing 20-day volatility normalization to the 5-day return. This preserves the core volume-adaptive momentum and smoothing while targeting improved IC by making the return component risk-adjusted. The parent's strength in RankIC and RankICIR is preserved through the same log volume weighting and EMA smoothing.",
+  "raw_metrics": {
+    "ic": -0.01912035163362823,
+    "icir": -0.19105566901510848,
+    "mi": 0.02049609491379556,
+    "rank_ic": -0.034784913376961824,
+    "rank_icir": -0.37472027592743257
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260707-085157-r5",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260707-085157-r5"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema(span=10, (close/shift(close,5)-1) / trailing_vol(20) * log(vol_ratio)))",
+  "fe_formula": "ema(span=10, (close/shift(close,5)-1) / trailing_vol(20) * log(vol_ratio))=10)",
+  "lqtp_notes": "Unconverted: ['trailing_vol']",
+  "fe_notes": "Unconverted: ['trailing_vol']",
+  "source_formula": "EMA( (close/shift(close,5)-1) / trailing_vol(20) * log(vol_ratio) , span=10)"
+}

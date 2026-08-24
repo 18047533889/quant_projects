@@ -1,0 +1,88 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "6f1cd8e2bb2ac2e9633b3cf95077ea4c152e197f482fd8d55fc152f93c295ac5",
+  "candidate_ids": [
+    "g1_mutation_aca_turn_002_cf882341"
+  ],
+  "code": "def factor_book_attention(df):\n    df_copy = df.copy()\n    book_yield = 1.0 / df_copy['pb_lf'].replace(0, np.nan)\n    inattention = 1.0 - df_copy['free_turn'].rolling(20, min_periods=10).rank(pct=True).fillna(0.5)\n    df_copy['factor_book_attention'] = book_yield * inattention\n    return df_copy['factor_book_attention']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.7818181818181819,
+        "top_quantile_annualized_excess_return": 0.08368869121430467,
+        "top_quantile_excess_return": 0.2597411072808846,
+        "top_quantile_max_drawdown": -0.11149755389387028,
+        "top_quantile_turnover": 0.3765974402883675
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_book_attention",
+  "fitness_direction": 1,
+  "formula": "1/pb_lf * (1 - ts_rank(free_turn,20))",
+  "metrics": {
+    "ic": 0.009750088095037971,
+    "icir": 0.10761858545860434,
+    "mi": 0.02078740948722846,
+    "rank_ic": 0.04202951666320781,
+    "rank_icir": 0.37980731812231117
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7818181818181819,
+    "top_quantile_annualized_excess_return": 0.08368869121430467,
+    "top_quantile_excess_return": 0.2597411072808846,
+    "top_quantile_max_drawdown": -0.11149755389387028,
+    "top_quantile_turnover": 0.3765974402883675
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Mutation of earnings-yield attention factor (ACA-TURN-002) replacing trailing PE with book-to-price to mitigate negative-earnings distortion and unstable PE ratios. The inattention component from free_turn rank is preserved to retain the low-attention value premium hypothesis. Cross-sectional transform removed because raw composite outperformed transformed in the parent.",
+  "raw_metrics": {
+    "ic": 0.009750088095037971,
+    "icir": 0.10761858545860434,
+    "mi": 0.02078740948722846,
+    "rank_ic": 0.04202951666320781,
+    "rank_icir": 0.37980731812231117
+  },
+  "required_columns": [
+    "pb_lf",
+    "free_turn"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260717-20260717-112543-r3",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260717-20260717-112543-r3"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "1/pb_lf * (1 - ts_rank(free_turn,20))",
+  "fe_formula": "1/pb_lf * (1 - ts_rank(free_turn,20))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "1/pb_lf * (1 - ts_rank(free_turn,20))"
+}

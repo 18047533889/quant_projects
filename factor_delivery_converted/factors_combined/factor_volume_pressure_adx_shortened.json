@@ -1,0 +1,124 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "57ce89df11ded9002003303516984b04f6b67d19e7eeb7f73419c79e78750042",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_mutation_alphacycle_001_a299e42a_order_imbala_4f1f6444"
+  ],
+  "code": "def factor_volume_pressure_adx_shortened(df):\n    df_copy = df.copy()\n    prev_close = df_copy['close'].shift(1)\n    buy = (df_copy['high'] - prev_close) * df_copy['volume']\n    sell = (prev_close - df_copy['low']) * df_copy['volume']\n    window = 20\n    net = (buy.rolling(window).sum() - sell.rolling(window).sum()) / df_copy['volume'].rolling(window).sum().replace(0, np.nan)\n    adx = pd.Series(talib.ADX(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=20), index=df_copy.index)\n    factor = net * (adx / 100.0)\n    factor = factor.ewm(span=3).mean()\n    factor.name = \"factor_volume_pressure_adx_shortened\"\n    return factor",
+  "cross_sectional_rationale": "Cross-sectional rank reveals which stocks have the strongest net directional movement adjusted for short-term trend strength on each date, improving comparability across stocks with different volume scales.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.7818181818181819,
+        "top_quantile_annualized_excess_return": -0.018156351642928836,
+        "top_quantile_excess_return": -0.0485870784477912,
+        "top_quantile_max_drawdown": -0.16433659725819438,
+        "top_quantile_turnover": 0.10924296405388781
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_volume_pressure_adx_shortened",
+  "fitness_direction": -1,
+  "formula": "((high - prev_close)*volume - (prev_close - low)*volume).rolling(20).sum() / volume.rolling(20).sum() * (ADX(20)/100), smoothed by 3-day EMA",
+  "metrics": {
+    "ic": 0.015608965513713869,
+    "icir": 0.1501162304758424,
+    "mi": 0.010419087146244621,
+    "rank_ic": 0.04079117757450667,
+    "rank_icir": 0.3521233250778905
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7818181818181819,
+    "top_quantile_annualized_excess_return": -0.018156351642928836,
+    "top_quantile_excess_return": -0.0485870784477912,
+    "top_quantile_max_drawdown": -0.16433659725819438,
+    "top_quantile_turnover": 0.10924296405388781
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.002513728719032629,
+    "icir": 0.0794691319562519,
+    "mi": 0.023492420263064417,
+    "rank_ic": 0.04079117757450667,
+    "rank_icir": 0.3521233250778905
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.7818181818181819,
+    "top_quantile_annualized_excess_return": -0.018156351642928836,
+    "top_quantile_excess_return": -0.0485870784477912,
+    "top_quantile_max_drawdown": -0.16433659725819438,
+    "top_quantile_turnover": 0.10924296405388781
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.002513728719032629,
+    "icir": -0.0794691319562519,
+    "mi": 0.023492420263064417,
+    "rank_ic": -0.04079117757450667,
+    "rank_icir": -0.3521233250778905
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Net volume-weighted directional movement is the primary mechanism. Shortened ADX period (20 vs 50) increases responsiveness to trend strength changes, reducing the lag of the original trend gate. A shorter EMA (3 vs 10) further reduces signal delay, aiming to improve the payoff responsiveness of the factor while preserving its core directional pressure insight. The shorter windows target the payoff weakness by allowing the factor to react more quickly to changes in volume pressure and trend confirmation.",
+  "raw_metrics": {
+    "ic": -0.015608965513713869,
+    "icir": -0.1501162304758424,
+    "mi": 0.010419087146244621,
+    "rank_ic": -0.04079117757450667,
+    "rank_icir": -0.3521233250778905
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260720-053953-r6",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260720-053953-r6"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.49838978359074615,
+    "pre_transform_top_quantile_excess_return": -0.0485870784477912,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.5690587857881981,
+    "transformed_top_quantile_excess_return": -0.0485870784477912
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "((high - prev_close)*volume - (prev_close - low)*volume).<rolling>(20).ts_sum() / volume.<rolling>(20).ts_sum() * (ts_adx(20)/100), smoothed by 3-day EMA",
+  "fe_formula": "((high - prev_close)*volume - (prev_close - low)*volume).<rolling>(20).ts_sum() / volume.<rolling>(20).ts_sum() * (ADX(20)/100), smoothed by 3-day EMA",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "((high - prev_close)*volume - (prev_close - low)*volume).rolling(20).sum() / volume.rolling(20).sum() * (ADX(20)/100), smoothed by 3-day EMA"
+}

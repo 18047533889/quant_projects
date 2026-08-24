@@ -1,0 +1,50 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "5369de40400f4f6bd428e9db0c3215a1974fcc44e0572490d6fad8e9c031df67",
+  "candidate_ids": [
+    "AD_gen0_01_M1",
+    "g1_crossover_seed_factor_71_seed_factor_103_adab1f0d"
+  ],
+  "code": "def factor_drawdown_volume_geometry(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    running_max = close.expanding().max()\n    depth = (running_max - close) / running_max\n    new_high = close == running_max\n    group = new_high.cumsum()\n    duration = df_copy.groupby(group).cumcount()\n    depth_chg = depth.diff(10).fillna(0)\n    vol_ma = volume.rolling(20).mean()\n    vol_ratio = volume / vol_ma\n    rank_depth = depth.rank()\n    rank_duration = duration.rank()\n    rank_recovery = depth_chg.rank()\n    rank_vol = vol_ratio.rank()\n    depth_vol = rank_depth * rank_vol\n    factor = depth_vol + rank_duration + rank_recovery\n    df_copy['factor_drawdown_volume_geometry'] = factor\n    return df_copy['factor_drawdown_volume_geometry']",
+  "factor_name": "factor_drawdown_volume_geometry",
+  "fitness_direction": 1,
+  "formula": "rank(depth) * rank(vol/vol_ma20) + rank(duration) + rank(delta_depth_10)",
+  "metrics": {
+    "ic": 0.029498553735379785,
+    "icir": 0.37561664437075754,
+    "mi": 0.006273478652085274,
+    "rank_ic": 0.029556198977648426,
+    "rank_icir": 0.31327408503761583
+  },
+  "rationale": "Extends the multi-scale drawdown geometry by incorporating volume confirmation. Depth is multiplied by normalized volume to emphasize drawdowns with heavy participation, while duration and recovery change remain additive. This nonlinear interaction targets the mutual information bottleneck without disrupting rank stability.",
+  "raw_metrics": {
+    "ic": 0.029498553735379785,
+    "icir": 0.37561664437075754,
+    "mi": 0.006273478652085274,
+    "rank_ic": 0.029556198977648426,
+    "rank_icir": 0.31327408503761583
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260610-084536-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260610-084536-r2",
+    "seed-evo-raw-6-20260629-112446"
+  ],
+  "lqtp_formula": "cs_rank(depth) * cs_rank(vol/vol_ma20) + cs_rank(duration) + cs_rank(delta_depth_10)",
+  "fe_formula": "rank(depth) * rank(vol/vol_ma20) + rank(duration) + rank(delta_depth_10)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "rank(depth) * rank(vol/vol_ma20) + rank(duration) + rank(delta_depth_10)"
+}

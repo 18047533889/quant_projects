@@ -1,0 +1,116 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "2fc3e5f8590d08521f2e5f02c3d2a6e16da80b64a50243c15011e22d9625a593",
+  "candidate_ids": [
+    "g1_mutation_ava_001_cecb7b86"
+  ],
+  "code": "def factor_downside_volatility_ratio_long(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    ret = close.pct_change()\n    neg_ret = ret.where(ret < 0, 0.0)\n    window = 40\n    down_vol = neg_ret.rolling(window, min_periods=window).std(ddof=1)\n    total_vol = ret.rolling(window, min_periods=window).std(ddof=1)\n    total_vol_safe = total_vol.replace(0, np.nan)\n    factor = down_vol / total_vol_safe\n    factor = factor.fillna(0.5)\n    df_copy[\"factor_downside_volatility_ratio_long\"] = factor\n    return df_copy[\"factor_downside_volatility_ratio_long\"]",
+  "cross_sectional_rationale": "Absolute ratio levels are stock-specific due to varying volatility baselines; cross-sectional rank highlights relative asymmetry across assets.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9757575757575757,
+        "top_quantile_annualized_excess_return": 0.000209971639156592,
+        "top_quantile_excess_return": 0.0005700255979848023,
+        "top_quantile_max_drawdown": -0.22435875684846573,
+        "top_quantile_turnover": 0.12819326731707925
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_downside_volatility_ratio_long",
+  "fitness_direction": 1,
+  "formula": "down_vol / total_vol (rolling 40-day)",
+  "metrics": {
+    "ic": 0.014436665454682487,
+    "icir": 0.13241029461347037,
+    "mi": 0.008642629978924177,
+    "rank_ic": 0.03784039742373469,
+    "rank_icir": 0.3035322077642061
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.000209971639156592,
+    "top_quantile_excess_return": 0.0005700255979848023,
+    "top_quantile_max_drawdown": -0.22435875684846573,
+    "top_quantile_turnover": 0.12819326731707925
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.015420361669356094,
+    "icir": 0.13897950659244118,
+    "mi": 0.009252084981768327,
+    "rank_ic": 0.03784039742373469,
+    "rank_icir": 0.3035322077642061
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.000209971639156592,
+    "top_quantile_excess_return": 0.0005700255979848023,
+    "top_quantile_max_drawdown": -0.22435875684846573,
+    "top_quantile_turnover": 0.12819326731707925
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.015420361669356094,
+    "icir": 0.13897950659244118,
+    "mi": 0.009252084981768327,
+    "rank_ic": 0.03784039742373469,
+    "rank_icir": 0.3035322077642061
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Mutation of factor_downside_volatility_ratio: extends the lookback window from 20 to 40 days to reduce noise and improve stability of the downside asymmetry measure. The longer window provides a smoother estimate of the leverage effect, targeting improved RankIC and ICIR while preserving the core economic mechanism.",
+  "raw_metrics": {
+    "ic": 0.014436665454682487,
+    "icir": 0.13241029461347037,
+    "mi": 0.008642629978924177,
+    "rank_ic": 0.03784039742373469,
+    "rank_icir": 0.3035322077642061
+  },
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260717-143914-r4",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260717-143914-r4"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.5050245584315064,
+    "pre_transform_top_quantile_excess_return": 0.0005700255979848023,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.49686219523501785,
+    "transformed_top_quantile_excess_return": 0.0005700255979848023
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "down_vol / total_vol (rolling 40-day)",
+  "fe_formula": "down_vol / total_vol (rolling 40-day)",
+  "lqtp_notes": "Unconverted: ['total_vol']",
+  "fe_notes": "Unconverted: ['total_vol']",
+  "source_formula": "down_vol / total_vol (rolling 40-day)"
+}

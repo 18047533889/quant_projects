@@ -1,0 +1,42 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "4a9a4510eb2a70f9d0e52e3f3c79f2d12f570a362faef4a21eb8ba223b140f7d",
+  "candidate_ids": [
+    "crash_001"
+  ],
+  "code": "def factor_volume_pressure_reversal(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change(5)\n    vol_ma = df_copy['volume'].rolling(20).mean()\n    vol_ratio = df_copy['volume'] / vol_ma.replace(0, np.nan)\n    signal = -ret * vol_ratio\n    signal = signal.fillna(0)\n    signal.name = 'factor_volume_pressure_reversal'\n    return signal",
+  "factor_name": "factor_volume_pressure_reversal",
+  "fitness_direction": 1,
+  "formula": "-ret_5d * (volume / SMA(volume,20))",
+  "metrics": {
+    "ic": 0.023346011723116185,
+    "icir": 0.22922321571364468,
+    "mi": 0.0242840235797539,
+    "rank_ic": 0.0357047745565051,
+    "rank_icir": 0.2865276210694835
+  },
+  "rationale": "Crash precursor: negative return weighted by volume expansion. Heavy volume on a decline signals panic selling, a precursor to crash. Volume ratio amplifies moves with abnormal volume, capturing regime breakdown in market participation.",
+  "raw_metrics": {
+    "ic": 0.023346011723116185,
+    "icir": 0.22922321571364468,
+    "mi": 0.0242840235797539,
+    "rank_ic": 0.0357047745565051,
+    "rank_icir": 0.2865276210694835
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260615-051510-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260615-051510-r2"
+  ],
+  "lqtp_formula": "-ret_5d * (volume / ts_mean(20, volume))",
+  "fe_formula": "-ret_5d * (volume / ts_mean(20, volume))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "-ret_5d * (volume / SMA(volume,20))"
+}

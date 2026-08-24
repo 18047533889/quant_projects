@@ -1,0 +1,51 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "37643cd03103cf7fe7d2cd1b77d96d66dbf6fdae5fcc9dacb36a86e84f41fcdd",
+  "candidate_ids": [
+    "range-asym-vol-smooth-crossover"
+  ],
+  "code": "def factor_range_asym_vol_smooth(df):\n    df_copy = df.copy()\n    up_close = df_copy['close'] > df_copy['close'].shift(1)\n    down_close = ~up_close\n    range_ = df_copy['high'] - df_copy['low']\n    win = 20\n    min_per = 5\n    up_sum = range_.where(up_close, 0).rolling(win, min_periods=min_per).sum()\n    down_sum = range_.where(down_close, 0).rolling(win, min_periods=min_per).sum()\n    up_count = up_close.rolling(win, min_periods=min_per).sum()\n    down_count = down_close.rolling(win, min_periods=min_per).sum()\n    up_avg = up_sum / up_count.replace(0, np.nan)\n    down_avg = down_sum / down_count.replace(0, np.nan)\n    ratio = (up_avg - down_avg) / (up_avg + down_avg + 1e-10)\n    vol_avg = df_copy['volume'].rolling(20, min_periods=10).mean()\n    vol_max = vol_avg.rolling(20, min_periods=10).max().replace(0, np.nan)\n    vol_weight = vol_avg / vol_max\n    factor = ratio * vol_weight\n    factor = factor.ewm(span=5, adjust=False).mean()\n    factor = factor.fillna(0)\n    df_copy['factor_range_asym_vol_smooth'] = factor\n    return df_copy['factor_range_asym_vol_smooth']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_range_asym_vol_smooth",
+  "fitness_direction": -1,
+  "formula": "ratio = (avg_up_range - avg_down_range) / (avg_up_range + avg_down_range) over 20 days; vol_weight = vol_20_avg / rolling_max(vol_20_avg); factor = ratio * vol_weight then 5-period EMA smoothing",
+  "metrics": {
+    "ic": 0.01340080174588402,
+    "icir": 0.1757932585401696,
+    "mi": 0.00528152408675453,
+    "rank_ic": 0.03319955310733521,
+    "rank_icir": 0.37038314779807835
+  },
+  "rationale": "Crossover: preserves the volume-weighted asymmetric range mechanism from range-asym-vol-weight-v1 (strong RankIC/IC) and borrows EMA smoothing from range-asym-smoothed-v1 to reduce noise and improve MI. Targets improved mutual information while retaining rank stability.",
+  "raw_metrics": {
+    "ic": -0.01340080174588402,
+    "icir": -0.1757932585401696,
+    "mi": 0.00528152408675453,
+    "rank_ic": -0.03319955310733521,
+    "rank_icir": -0.37038314779807835
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260622-052632-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260622-052632-r1"
+  ],
+  "lqtp_formula": "ratio = (avg_up_range - avg_down_range) / (avg_up_range + avg_down_range) over 20 days; vol_weight = vol_20_avg / ts_max(vol_20_avg); factor = ratio * vol_weight then 5-period EMA smoothing",
+  "fe_formula": "ratio = (avg_up_range - avg_down_range) / (avg_up_range + avg_down_range) over 20 days; vol_weight = vol_20_avg / ts_max(vol_20_avg); factor = ratio * vol_weight then 5-period EMA smoothing",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "ratio = (avg_up_range - avg_down_range) / (avg_up_range + avg_down_range) over 20 days; vol_weight = vol_20_avg / rolling_max(vol_20_avg); factor = ratio * vol_weight then 5-period EMA smoothing"
+}

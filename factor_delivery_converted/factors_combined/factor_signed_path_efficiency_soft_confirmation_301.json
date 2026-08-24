@@ -1,0 +1,95 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "58ff972a4ba28243576bf1eba0110ffa0b2fa0dacb832cb18542c5acd2526929",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_amc_g0_signed_path_efficiency_cycle_e0231abf"
+  ],
+  "code": "def factor_signed_path_efficiency_soft_confirmation(df):\n    \"\"\"Measure persistent directional phases with softened directional confirmation.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    net_move = close - close.shift(126)\n    path_length = close.diff().abs().rolling(126, min_periods=126).sum()\n    efficiency = net_move / path_length.replace(0.0, np.nan)\n    recent_net_move = close - close.shift(63)\n    recent_path_length = close.diff().abs().rolling(63, min_periods=63).sum()\n    recent_efficiency = recent_net_move / recent_path_length.replace(0.0, np.nan)\n    recent_magnitude = np.sqrt(recent_efficiency.abs().clip(lower=0.0))\n    directional_agreement = np.tanh(5.0 * efficiency * recent_efficiency)\n    confirmation_weight = 1.0 + 0.25 * recent_magnitude * directional_agreement\n    signal = efficiency * confirmation_weight\n    df_copy[\"factor_signed_path_efficiency_soft_confirmation\"] = signal.replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_signed_path_efficiency_soft_confirmation\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9757575757575757,
+        "top_quantile_annualized_excess_return": 0.04649553622009983,
+        "top_quantile_excess_return": 0.11387669242005583,
+        "top_quantile_max_drawdown": -0.18060007072155027,
+        "top_quantile_turnover": 0.1157286440908268
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_signed_path_efficiency_soft_confirmation",
+  "fitness_direction": -1,
+  "formula": "E_t * [1 + 0.25 * sqrt(|E^(63)_t|) * tanh(5 E_t E^(63)_t)], where E_t is 126-bar signed path efficiency",
+  "metrics": {
+    "ic": 0.022745942563861723,
+    "icir": 0.16077065564712098,
+    "mi": 0.012245828558228311,
+    "rank_ic": 0.0336499010284093,
+    "rank_icir": 0.2141200815539373
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.04649553622009983,
+    "top_quantile_excess_return": 0.11387669242005583,
+    "top_quantile_max_drawdown": -0.18060007072155027,
+    "top_quantile_turnover": 0.1157286440908268
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "Uses 126-bar signed path efficiency as the core directional persistence signal and applies a bounded, continuous 63-bar confirmation weight. Recent efficiency magnitude controls the strength of the adjustment, while tanh-based directional agreement modestly boosts aligned trends and attenuates opposing trends without creating a binary gate or adding a separate feature family.",
+  "raw_metrics": {
+    "ic": -0.022745942563861723,
+    "icir": -0.16077065564712098,
+    "mi": 0.012245828558228311,
+    "rank_ic": -0.0336499010284093,
+    "rank_icir": -0.2141200815539373
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260807-092149-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260807-092149-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "E_t * [1 + 0.25 * sqrt(|E^(63)_t|) * tanh(5 E_t E^(63)_t)], where E_t is 126-bar signed path efficiency",
+  "fe_formula": "E_t * [1 + 0.25 * sqrt(|E^(63)_t|) * tanh(5 E_t E^(63)_t)], where E_t is 126-bar signed path efficiency",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "E_t * [1 + 0.25 * sqrt(|E^(63)_t|) * tanh(5 E_t E^(63)_t)], where E_t is 126-bar signed path efficiency"
+}

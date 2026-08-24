@@ -1,0 +1,45 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "c877d0d11f06a31bc8da15db9c7a0be2ed152fa43cbbe7060772e472ea0a6195",
+  "candidate_ids": [
+    "crossover-hybrid-mag-001"
+  ],
+  "code": "def factor_crossover_hybrid_magnitude(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    abs_ret = ret.abs()\n    smooth_abs_ret = abs_ret.ewm(span=21, min_periods=10).mean()\n    rank_abs_ret = abs_ret.rolling(21, min_periods=10).rank(pct=True)\n    magnitude = 0.5 * smooth_abs_ret + 0.5 * rank_abs_ret\n    high = df_copy['high']\n    low = df_copy['low']\n    open_ = df_copy['open']\n    close = df_copy['close']\n    volume = df_copy['volume']\n    body_top = np.maximum(open_, close)\n    body_bottom = np.minimum(open_, close)\n    upper_shadow = high - body_top\n    lower_shadow = body_bottom - low\n    symmetry = (lower_shadow - upper_shadow) / (lower_shadow + upper_shadow + 1e-10)\n    symmetry_rank = symmetry.rolling(20, min_periods=10).rank(pct=True)\n    vol_ma = volume.rolling(20, min_periods=10).mean()\n    vol_ratio = volume / vol_ma.replace(0, np.nan)\n    factor = magnitude * (symmetry_rank * vol_ratio)\n    factor = factor.fillna(0)\n    return factor.rename('factor_crossover_hybrid_magnitude')",
+  "factor_name": "factor_crossover_hybrid_magnitude",
+  "fitness_direction": -1,
+  "formula": "(0.5 * ewm_span21(|pct_change|) + 0.5 * ts_rank_{21}(|pct_change|)) * (ts_rank_{20}(symmetry) * (volume / rolling_mean_{20}(volume)))",
+  "metrics": {
+    "ic": 0.022625882037957692,
+    "icir": 0.3096803725644199,
+    "mi": 0.00883482158079918,
+    "rank_ic": 0.01889932280917567,
+    "rank_icir": 0.28395095285902555
+  },
+  "rationale": "Crossover of elite crossover-gen1-001 (smooth absolute return) and qualified mut_stable_symmetry_001 (percentile rank of absolute return). The magnitude term is a weighted average of the two parent magnitude measures, preserving the trend-consistency of the smooth EMA and the outlier robustness of the rank. The shape-volume confirmation component is common to both parents. This hybrid aims to maintain the strong RankIC from the elite parent while improving mutual information by balancing the magnitude representation. The target bottleneck is the relatively low MI in both parents.",
+  "raw_metrics": {
+    "ic": -0.022625882037957692,
+    "icir": -0.3096803725644199,
+    "mi": 0.00883482158079918,
+    "rank_ic": -0.01889932280917567,
+    "rank_icir": -0.28395095285902555
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260611-061826-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260611-061826-r1"
+  ],
+  "lqtp_formula": "(0.5 * ema(21, |pct_change|) + 0.5 * ts_rank_{21}(|pct_change|)) * (ts_rank_{20}(symmetry) * (volume / rolling_mean_{20}(volume)))",
+  "fe_formula": "(0.5 * ema(21, |pct_change|) + 0.5 * ts_rank_{21}(|pct_change|)) * (ts_rank_{20}(symmetry) * (volume / rolling_mean_{20}(volume)))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(0.5 * ewm_span21(|pct_change|) + 0.5 * ts_rank_{21}(|pct_change|)) * (ts_rank_{20}(symmetry) * (volume / rolling_mean_{20}(volume)))"
+}

@@ -1,0 +1,119 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "3769cf730edd9598dfa4db8c86a284f4e24ee7bf0f65ec15d5589e5b6c2318a2",
+  "candidate_ids": [
+    "g1_crossover_float_elasticity_candidate1_alr_001_r1_52e13695"
+  ],
+  "code": "def factor_size_gated_float_conditioned_cheapness(df):\n    df_copy = df.copy()\n    cheapness = 1.0 / df_copy[\"pb_lf\"].replace(0, np.nan)\n    float_adj = 1.0 / np.log1p(df_copy[\"free_float_shares\"].clip(lower=1e6))\n    debt_ratio = df_copy[\"debttoassets\"] / 100.0\n    is_large = df_copy[\"style_gate_size_large\"]\n    penalty = 1.0 / (1.0 + debt_ratio)\n    factor = np.where(is_large == 1, cheapness * float_adj, cheapness * float_adj * penalty)\n    factor_series = pd.Series(factor, index=df_copy.index)\n    return factor_series.rename(\"factor_size_gated_float_conditioned_cheapness\")",
+  "cross_sectional_rationale": "Cross-sectional rank normalizes the multiplicative combination of different units (inverse PB, float adjustment, leverage penalty) to a common interpretable scale, isolating the relative ordering of size-gated float-conditioned cheapness.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.08193604499243645,
+        "top_quantile_excess_return": 0.25389655738723116,
+        "top_quantile_max_drawdown": -0.15704284981798466,
+        "top_quantile_turnover": 0.021784570287231665
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_size_gated_float_conditioned_cheapness",
+  "fitness_direction": 1,
+  "formula": "if large: (1/pb_lf) / log(1+free_float_shares); else: (1/pb_lf) / log(1+free_float_shares) * 1/(1+debttoassets/100)",
+  "metrics": {
+    "ic": 0.011310484421538744,
+    "icir": 0.10276437220946916,
+    "mi": 0.019093732394788177,
+    "rank_ic": 0.03470444481206248,
+    "rank_icir": 0.2501245309870914
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.08193604499243645,
+    "top_quantile_excess_return": 0.25389655738723116,
+    "top_quantile_max_drawdown": -0.15704284981798466,
+    "top_quantile_turnover": 0.021784570287231665
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.008508078109239035,
+    "icir": 0.07546199188711172,
+    "mi": 0.021205827396780563,
+    "rank_ic": 0.03470444481206248,
+    "rank_icir": 0.2501245309870914
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.08193604499243645,
+    "top_quantile_excess_return": 0.25389655738723116,
+    "top_quantile_max_drawdown": -0.15704284981798466,
+    "top_quantile_turnover": 0.021784570287231665
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.008508078109239035,
+    "icir": 0.07546199188711172,
+    "mi": 0.021205827396780563,
+    "rank_ic": 0.03470444481206248,
+    "rank_icir": 0.2501245309870914
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Large-cap stocks have lower distress risk, so the health penalty is unnecessary; full float-conditioned cheapness signal is retained. For small and mid caps, leverage-adjusted cheapness provides a distress buffer, using a bounded penalty 1/(1+debt_ratio). This combines parent1's float-elasticity value mechanism with parent2's size-gated leverage logic, preserving the qualified parent's strength while targeting the IC bottleneck via reduced noise in large caps.",
+  "raw_metrics": {
+    "ic": 0.011310484421538744,
+    "icir": 0.10276437220946916,
+    "mi": 0.019093732394788177,
+    "rank_ic": 0.03470444481206248,
+    "rank_icir": 0.2501245309870914
+  },
+  "required_columns": [
+    "pb_lf",
+    "free_float_shares",
+    "debttoassets",
+    "style_gate_size_large"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260721-20260721-205925-r5",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260721-20260721-205925-r5"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "Size gate (style_gate_size_large) switches the distress penalty: large caps face lower distress risk so no penalty is applied; small/mid caps receive a leverage discount. This is consistent with prior evidence that size-gated health mechanisms work with debt penalty.",
+  "style_gates_used": [
+    "style_gate_size_large"
+  ],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.3900048731922852,
+    "pre_transform_top_quantile_excess_return": 0.25389655738723116,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.41799756482495,
+    "transformed_top_quantile_excess_return": 0.25389655738723116
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "if large: (1/pb_lf) / log(1+free_float_shares); else: (1/pb_lf) / log(1+free_float_shares) * 1/(1+debttoassets/100)",
+  "fe_formula": "if large: (1/pb_lf) / log(1+free_float_shares); else: (1/pb_lf) / log(1+free_float_shares) * 1/(1+debttoassets/100)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "if large: (1/pb_lf) / log(1+free_float_shares); else: (1/pb_lf) / log(1+free_float_shares) * 1/(1+debttoassets/100)"
+}

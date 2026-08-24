@@ -1,0 +1,65 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "16d0ba384e10df7815c5d5930566316e29f94273ab9d066d0b67842b60904f13",
+  "candidate_ids": [
+    "g2_crossover_g1_mutation_lag_001_7f8fab1a_g1_crossover_lag_00_8fc9578f"
+  ],
+  "code": "def factor_volume_adjusted_lag_consensus_v2(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    open_price = df_copy[\"open\"]\n    ret = close.pct_change()\n    vol_ratio = volume / volume.rolling(10, min_periods=10).mean()\n    log_vol_ratio = np.log(vol_ratio.replace(0, np.nan).clip(lower=1e-12))\n    lag_ret = ret.shift(1)\n    raw = lag_ret * log_vol_ratio\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(close, open_price)\n    vol_diff = volume.diff()\n    intraday_dir = np.sign(intraday_ret)\n    vol_dir = np.sign(vol_diff)\n    agreement = (intraday_dir == vol_dir).astype(float)\n    consensus = agreement.rolling(10).mean()\n    factor = raw * consensus\n    factor = factor.ewm(span=8, min_periods=8, adjust=False).mean()\n    factor = factor.fillna(0.0)\n    factor.name = \"factor_volume_adjusted_lag_consensus_v2\"\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_volume_adjusted_lag_consensus_v2",
+  "fitness_direction": -1,
+  "formula": "EMA_8( lag_ret * log(V / SMA_10(V)) * consensus(10) )",
+  "metrics": {
+    "ic": 0.014924261068233271,
+    "icir": 0.13526053911944802,
+    "mi": 0.032951554611822864,
+    "rank_ic": 0.03651822165820741,
+    "rank_icir": 0.33336741146665994
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.03711235344142816,
+    "top_quantile_excess_return": 0.10780413668956634,
+    "top_quantile_max_drawdown": -0.10879606464019342,
+    "top_quantile_turnover": 0.296248978955259
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Preserve parent1's strong RankIC and RankICIR from its volume-adjusted lag return with window 10 and EMA 8. Borrow parent2's lightweight consensus between intraday return direction and volume change direction. The consensus acts as a regime weight: when both directions agree, the signal is amplified; when they disagree, it is attenuated. This adds nonlinear interaction to improve IC and ICIR without altering the core economic mechanism.",
+  "raw_metrics": {
+    "ic": -0.014924261068233271,
+    "icir": -0.13526053911944802,
+    "mi": 0.032951554611822864,
+    "rank_ic": -0.03651822165820741,
+    "rank_icir": -0.33336741146665994
+  },
+  "required_columns": [
+    "open",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260706-094538-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260706-094538-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema(8, lag_ret * log(V / SMA_10(V)) * consensus(10))",
+  "fe_formula": "ema(8, lag_ret * log(V / SMA_10(V)) * consensus(10))",
+  "lqtp_notes": "Unconverted: ['SMA_10', 'consensus']",
+  "fe_notes": "Unconverted: ['SMA_10', 'consensus']",
+  "source_formula": "EMA_8( lag_ret * log(V / SMA_10(V)) * consensus(10) )"
+}

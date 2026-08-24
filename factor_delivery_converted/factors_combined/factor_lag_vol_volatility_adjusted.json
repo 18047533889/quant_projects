@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "f7a15b22282d1ce5be312f190dbcb64b6fb27f58c9f8a0eb19d7bbfe77ffc31f",
+  "candidate_ids": [
+    "alpha-lag-response-0-1"
+  ],
+  "code": "def factor_lag_vol_volatility_adjusted(df):\n    df_copy = df.copy()\n    ret_5 = df_copy[\"close\"] / df_copy[\"close\"].shift(5) - 1\n    ema_vol = df_copy[\"volume\"].ewm(span=30, min_periods=30, adjust=False).mean()\n    log_vol_ratio = np.log(df_copy[\"volume\"] / ema_vol.replace(0, np.nan))\n    atr_20 = talib.ATR(df_copy[\"high\"], df_copy[\"low\"], df_copy[\"close\"], timeperiod=20)\n    vol_adj = atr_20 / df_copy[\"close\"].replace(0, np.nan)\n    raw = ret_5 * log_vol_ratio * vol_adj\n    factor = raw.ewm(span=5, min_periods=5, adjust=False).mean()\n    df_copy[\"factor_lag_vol_volatility_adjusted\"] = factor\n    return df_copy[\"factor_lag_vol_volatility_adjusted\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_lag_vol_volatility_adjusted",
+  "fitness_direction": -1,
+  "formula": "EMA5( (close/shift(close,5)-1) * log(volume/EMA30(volume)) * (ATR20/close) )",
+  "metrics": {
+    "ic": 0.02389197698868705,
+    "icir": 0.20032931671957524,
+    "mi": 0.04618039939395402,
+    "rank_ic": 0.04066061390039906,
+    "rank_icir": 0.3481754548917892
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8666666666666667,
+    "top_quantile_annualized_excess_return": 0.029647159884757635,
+    "top_quantile_excess_return": 0.0834090759307391,
+    "top_quantile_max_drawdown": -0.18504212384036034,
+    "top_quantile_turnover": 0.3286165941765543
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Captures delayed adjustment between volatility, volume, and returns. Lagged return (5-day) is amplified by high relative volume (log volume ratio) and high volatility (ATR/close), then smoothed with EMA5 to reduce noise. The product expresses how past return signals strengthen when both volume and volatility are elevated, reflecting slower information diffusion.",
+  "raw_metrics": {
+    "ic": -0.02389197698868705,
+    "icir": -0.20032931671957524,
+    "mi": 0.04618039939395402,
+    "rank_ic": -0.04066061390039906,
+    "rank_icir": -0.3481754548917892
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260708-061501-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260708-061501-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema(5, (close/delay(close, 5)-1) * log(volume/EMA30(volume)) * (ATR20/close))",
+  "fe_formula": "ema(5, (close/ts_delay(close, 5)-1) * log(volume/EMA30(volume)) * (ATR20/close))",
+  "lqtp_notes": "Unconverted: ['EMA30']",
+  "fe_notes": "Unconverted: ['EMA30']",
+  "source_formula": "EMA5( (close/shift(close,5)-1) * log(volume/EMA30(volume)) * (ATR20/close) )"
+}

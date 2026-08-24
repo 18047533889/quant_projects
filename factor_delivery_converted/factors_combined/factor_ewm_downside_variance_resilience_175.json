@@ -1,0 +1,91 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "cacec44ba8ad450f4c6f9b1a1f0db234232a849f5a38a4599c77aebf26960a04",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_tailrisk_g0_downside_semivariance_c_d1f0aa99"
+  ],
+  "code": "def factor_ewm_downside_variance_resilience(df):\n    \"\"\"Resilience from the exponentially weighted share of variance occurring on down days.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    downside_energy = ret.clip(upper=0.0).pow(2).ewm(span=24, adjust=False, min_periods=24).mean()\n    total_energy = ret.pow(2).ewm(span=24, adjust=False, min_periods=24).mean()\n    df_copy[\"factor_ewm_downside_variance_resilience\"] = -(downside_energy / total_energy.replace(0.0, np.nan))\n    return df_copy[\"factor_ewm_downside_variance_resilience\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "long_short_sharpe": 2.8674593140846314,
+        "quantile_monotonicity": 0.9636363636363636,
+        "top_quantile_annualized_excess_return": -0.007272535783877321,
+        "top_quantile_excess_return": -0.020071142574574208,
+        "top_quantile_max_drawdown": -0.16920069703087415,
+        "top_quantile_turnover": 0.18112954576105353
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return,top_quantile_excess_percentile"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_ewm_downside_variance_resilience",
+  "fitness_direction": -1,
+  "formula": "-EWMA_24[min(r_t,0)^2] / EWMA_24[r_t^2]",
+  "metrics": {
+    "ic": 0.026130249140781336,
+    "icir": 0.21264779175284126,
+    "mi": 0.018128873842416127,
+    "rank_ic": 0.051258815292518745,
+    "rank_icir": 0.36608954133170785
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.8674593140846314,
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": -0.007272535783877321,
+    "top_quantile_excess_return": -0.020071142574574208,
+    "top_quantile_max_drawdown": -0.16920069703087415,
+    "top_quantile_turnover": 0.18112954576105353
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return,top_quantile_excess_percentile",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "This preserves the parent’s loss-dominated variance mechanism and its resilience direction: stocks with a smaller recent share of return variance arising on down days score higher. It replaces the parent’s hard 20-session energy cutoff followed by a second 5-session smoothing step with one causal 24-span exponentially weighted ratio. The single estimator gives recent downside shocks greater relevance while decaying older shocks smoothly, targeting rank and IC consistency without adding another signal family or increasing turnover through a regime switch.",
+  "raw_metrics": {
+    "ic": -0.026130249140781336,
+    "icir": -0.21264779175284126,
+    "mi": 0.018128873842416127,
+    "rank_ic": -0.051258815292518745,
+    "rank_icir": -0.36608954133170785
+  },
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6terra-20260814-053307-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6terra-20260814-053307-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "-EWMA_24[min(r_t,0)^2] / EWMA_24[r_t^2]",
+  "fe_formula": "-EWMA_24[flex_min(r_t, 0)^2] / EWMA_24[r_t^2]",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "-EWMA_24[min(r_t,0)^2] / EWMA_24[r_t^2]"
+}

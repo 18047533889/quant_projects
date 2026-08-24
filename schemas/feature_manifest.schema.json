@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "status-feature-manifest-v1",
+  "type": "object",
+  "required": ["run_id", "registry_version", "pipeline_version", "source_root", "output_root", "feature_set", "frequency", "date_range", "features", "output", "quality", "memory"],
+  "properties": {
+    "run_id": {"type": "string", "minLength": 8},
+    "registry_version": {"const": "587"},
+    "pipeline_version": {"type": "string", "minLength": 1},
+    "source_root": {"type": "string", "pattern": "^cos://"},
+    "output_root": {"type": "string", "pattern": "^cos://"},
+    "feature_set": {"type": "string"},
+    "frequency": {"enum": ["1d", "1m"]},
+    "date_range": {
+      "type": "object",
+      "required": ["start", "end"],
+      "properties": {"start": {"format": "date"}, "end": {"format": "date"}},
+      "additionalProperties": false
+    },
+    "features": {"type": "array", "items": {"$ref": "#/$defs/feature"}},
+    "output": {
+      "type": "object",
+      "required": ["local_path", "sha256", "bytes", "rows", "schema_fingerprint"],
+      "properties": {
+        "local_path": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "bytes": {"type": "integer", "minimum": 1},
+        "rows": {"type": "integer", "minimum": 1},
+        "schema_fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "quality": {"type": "object", "required": ["rows", "coverage_ratio", "publishable_rows"]},
+    "memory": {"type": "object", "required": ["rss_bytes", "available_bytes", "total_bytes", "worker_count"]}
+  },
+  "$defs": {
+    "feature": {
+      "type": "object",
+      "required": ["canonical_feature_id", "field_name", "semantic_version", "market", "frequency", "source_version", "availability_rule", "formula_hash", "formula_version", "source_lineage"],
+      "properties": {
+        "canonical_feature_id": {"type": "string"},
+        "field_name": {"type": "string"},
+        "semantic_version": {"type": "string"},
+        "market": {"const": "CN-A-share"},
+        "frequency": {"enum": ["1d", "1m"]},
+        "window": {},
+        "source_version": {"type": "string"},
+        "availability_rule": {"type": "string"},
+        "formula_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "alias_feature_ids": {"type": "array", "items": {"type": "string"}},
+        "observation_time": {},
+        "availability_timestamp": {},
+        "reference_period": {},
+        "release_date": {},
+        "revision_version": {},
+        "formula_version": {"type": "string"},
+        "coverage_ratio": {},
+        "source_lineage": {"type": "array"},
+        "priority": {"type": "string"},
+        "registry_source_row": {"type": "integer"},
+        "exec_bucket": {"type": "string"}
+      }
+    }
+  }
+}

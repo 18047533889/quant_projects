@@ -1,0 +1,73 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "factor_assets"
+version = "0.1.0"
+description = "Factor asset identity, registry, lifecycle, and governance"
+authors = [{name = "Quant Platform Team"}]
+requires-python = ">=3.10"
+dependencies = [
+    "typing-extensions>=4.5.0",
+    "dataclasses-json>=0.5.13",
+    "numpy>=1.24",
+    "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+# Install only the integration dependency needed by one adapter.
+quant_evaluator = [
+    "quant_evaluator>=0.0.1a1,<0.2",
+]
+factor_engine = [
+    "factor-engine>=0.3.0",
+]
+data_access = [
+    "data-access>=0.10.0",
+]
+# Install every optional integration dependency.
+adapters = [
+    "quant_evaluator>=0.0.1a1,<0.2",
+    "factor-engine>=0.3.0",
+    "data-access>=0.10.0",
+]
+# Explicit adapter profiles keep clean-wheel installs scoped and reproducible.
+adapters-qe = ["quant_evaluator>=0.0.1a1,<0.2"]
+adapters-fe = ["factor-engine>=0.3.0"]
+adapters-da = ["data-access>=0.10.0"]
+full = [
+    "quant_evaluator>=0.0.1a1,<0.2",
+    "factor-engine>=0.3.0",
+    "data-access>=0.10.0",
+]
+
+[tool.setuptools]
+package-dir = {"factor_assets" = "."}
+packages = [
+    "factor_assets",
+    "factor_assets.adapters",
+    "factor_assets.aggregation",
+    "factor_assets.assembly",
+    "factor_assets.campaigns",
+    "factor_assets.clustering",
+    "factor_assets.contracts",
+    "factor_assets.graph",
+    "factor_assets.identity",
+    "factor_assets.lifecycle",
+    "factor_assets.novelty",
+    "factor_assets.optimizer",
+    "factor_assets.registry",
+    "factor_assets.seen_index",
+    "factor_assets.selection",
+    "factor_assets.similarity",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"

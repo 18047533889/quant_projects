@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "a1cf5bab0aced491a5a20a49f9d76bfd35a1839041b3bbbcd2d0eb0721b2e7c4",
+  "candidate_ids": [
+    "MUT_APVC_001_ewm"
+  ],
+  "code": "def factor_volume_confirmed_return_ewm(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change(5)\n    vol_avg = df_copy['volume'].ewm(span=20, adjust=False).mean().replace(0, np.nan)\n    vol_ratio = df_copy['volume'] / vol_avg\n    vol_rank = vol_ratio.rolling(20).rank(pct=True)\n    factor = ret * vol_rank\n    factor.name = 'factor_volume_confirmed_return_ewm'\n    return factor",
+  "factor_name": "factor_volume_confirmed_return_ewm",
+  "fitness_direction": -1,
+  "formula": "factor = ret(5) * rank_{20}(volume / ewm(volume, 20))",
+  "metrics": {
+    "ic": 0.024266454144258594,
+    "icir": 0.22032022337375362,
+    "mi": 0.042509701544859446,
+    "rank_ic": 0.034887038764850116,
+    "rank_icir": 0.2917841109878971
+  },
+  "rationale": "Mutation of parent volume_confirmed_return: replaced rolling mean with exponential weighted moving average for volume ratio denominator. This reduces lag and better captures recent volume regime, targeting improved IC while preserving the rank transform that underpins strong RankIC and RankICIR.",
+  "raw_metrics": {
+    "ic": -0.024266454144258594,
+    "icir": -0.22032022337375362,
+    "mi": 0.042509701544859446,
+    "rank_ic": -0.034887038764850116,
+    "rank_icir": -0.2917841109878971
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260615-034100-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260615-034100-r1"
+  ],
+  "lqtp_formula": "factor = ret(5) * rank_{20}(volume / ema(20, volume))",
+  "fe_formula": "factor = ret(5) * rank_{20}(volume / ema(20, volume))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "factor = ret(5) * rank_{20}(volume / ewm(volume, 20))"
+}

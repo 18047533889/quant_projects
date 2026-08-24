@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "7aa373e1cc9af06406424d058f761ab999e5cf5413d71a20375266edb737e0a5",
+  "candidate_ids": [
+    "crossover-reversal-volume-002"
+  ],
+  "code": "def factor_reversal_volume_volregime(df):\n    df_copy = df.copy()\n    # Primary mechanism from crossover-reversal-volume-001: reversal with volume confirmation\n    range_ = df_copy['high'] - df_copy['low']\n    safe_range = range_.replace(0.0, np.nan)\n    intra_pos = (df_copy['close'] - df_copy['low']) / safe_range\n    smoothed = intra_pos.ewm(span=3, adjust=False).mean()\n    reversal = 0.5 - smoothed\n    vol_sma_21 = df_copy['volume'].rolling(21, min_periods=21).mean()\n    vol_ratio = df_copy['volume'] / vol_sma_21.replace(0, np.nan)\n    vol_rank = vol_ratio.rolling(63, min_periods=63).rank(pct=True)\n    # Lightweight modifier from rough_mom_crossover_001: volatility regime gate via roughness\n    tr = pd.concat([df_copy['high'] - df_copy['low'],\n                    (df_copy['high'] - df_copy['close'].shift(1)).abs(),\n                    (df_copy['low'] - df_copy['close'].shift(1)).abs()], axis=1).max(axis=1)\n    atr5 = tr.rolling(5, min_periods=5).mean()\n    atr20 = tr.rolling(20, min_periods=20).mean()\n    roughness = atr5 / atr20.replace(0.0, np.nan)\n    regime = np.where(roughness > 1.0, 1.0, 0.5)\n    factor = reversal * vol_rank * regime\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy['factor_reversal_volume_volregime'] = factor\n    return df_copy['factor_reversal_volume_volregime']",
+  "factor_name": "factor_reversal_volume_volregime",
+  "fitness_direction": 1,
+  "formula": "(0.5 - EWMA((close-low)/(high-low), span=3)) * rank_63(volume/SMA_21(volume)) * (1.0 if ATR5/ATR20 > 1 else 0.5)",
+  "metrics": {
+    "ic": 0.027659428334053573,
+    "icir": 0.3640997108496638,
+    "mi": 0.0084336807805796,
+    "rank_ic": 0.028105992995633437,
+    "rank_icir": 0.31511240357477
+  },
+  "rationale": "Crossover of reversal-volume-confirmed (qualified parent, strong RankIC and ICIR) with a volatility regime gate (roughness from rejected parent). The reversal mechanism and volume rank are preserved as primary. The roughness ratio (ATR5/ATR20) acts as a lightweight modifier: when short-term volatility exceeds long-term volatility (roughness>1), the signal is fully applied; otherwise it is halved. This targets improved MI by capturing nonlinear volatility-dependent reversal strength while maintaining the parent's rank stability.",
+  "raw_metrics": {
+    "ic": 0.027659428334053573,
+    "icir": 0.3640997108496638,
+    "mi": 0.0084336807805796,
+    "rank_ic": 0.028105992995633437,
+    "rank_icir": 0.31511240357477
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260616-091905-r5",
+  "source_run_ids": [
+    "formal-mvp-loop-20260616-091905-r5"
+  ],
+  "lqtp_formula": "(0.5 - ema(span=3, (close-low)/(high-low))) * ts_rank(63, volume/SMA_21(volume)) * (1.0 if ATR5/ATR20 > 1 else 0.5)",
+  "fe_formula": "(0.5 - ema(span=3, (close-low)/(high-low))) * ts_rank(63, volume/SMA_21(volume)) * (1.0 if ATR5/ATR20 > 1 else 0.5)",
+  "lqtp_notes": "Unconverted: ['SMA_21']",
+  "fe_notes": "Unconverted: ['SMA_21']",
+  "source_formula": "(0.5 - EWMA((close-low)/(high-low), span=3)) * rank_63(volume/SMA_21(volume)) * (1.0 if ATR5/ATR20 > 1 else 0.5)"
+}

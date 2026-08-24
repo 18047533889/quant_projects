@@ -16,7 +16,31 @@ Target functions:
 
 from typing import Tuple
 import numpy as np
-from numba import njit, prange
+
+# Numba is an OPTIONAL acceleration dependency. When it is absent the module
+# must still import cleanly (collection must not crash) and every ``numba_*``
+# kernel must degrade to a working pure-Python/NumPy fallback. The no-op
+# ``njit`` decorator and ``prange``->``range`` alias below let the exact same
+# function bodies run as plain Python (they are written in valid NumPy/Python),
+# so the fallback paths are bit-for-bit the same algorithms as the JIT kernels.
+try:
+    from numba import njit, prange
+    NUMBA_AVAILABLE = True
+except ImportError:  # pragma: no cover - exercised only when numba is absent
+    NUMBA_AVAILABLE = False
+
+    def njit(*args, **kwargs):
+        """No-op decorator: returns the function unchanged (pure-Python fallback)."""
+        if args and callable(args[0]):
+            return args[0]
+
+        def decorator(func):
+            return func
+
+        return decorator
+
+    def prange(*args, **kwargs):
+        return range(*args, **kwargs)
 
 
 # =============================================================================

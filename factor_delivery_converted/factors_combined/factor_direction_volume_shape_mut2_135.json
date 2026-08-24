@@ -1,0 +1,45 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "27a55409a2a5099101e6abfc8d28dc5a049c5c979a68d2610216d6a472242769",
+  "candidate_ids": [
+    "mut_dir_vol_shape_004"
+  ],
+  "code": "def factor_direction_volume_shape_mut2(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    ema_ret = ret.ewm(span=10, adjust=False).mean()\n    vol_20_mean = df_copy[\"volume\"].rolling(20).mean()\n    vol_20_std = df_copy[\"volume\"].rolling(20).std(ddof=1)\n    vol_z = (df_copy[\"volume\"] - vol_20_mean) / vol_20_std.replace(0.0, np.nan)\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    range_20_mean = range_.rolling(20).mean()\n    range_ratio = range_ / range_20_mean.replace(0.0, np.nan)\n    range_ratio_20_mean = range_ratio.rolling(20).mean()\n    range_ratio_20_std = range_ratio.rolling(20).std(ddof=1).replace(0.0, np.nan)\n    range_ratio_z = (range_ratio - range_ratio_20_mean) / range_ratio_20_std\n    vol_tanh = np.tanh(vol_z)\n    range_tanh = np.tanh(range_ratio_z)\n    confirmation = vol_tanh * range_tanh\n    body_top = np.maximum(df_copy[\"open\"], df_copy[\"close\"])\n    body_bottom = np.minimum(df_copy[\"open\"], df_copy[\"close\"])\n    upper_shadow = df_copy[\"high\"] - body_top\n    lower_shadow = body_bottom - df_copy[\"low\"]\n    symmetry = (lower_shadow - upper_shadow) / (lower_shadow + upper_shadow + 1e-10)\n    symmetry_rank = symmetry.rolling(20, min_periods=10).rank(pct=True)\n    vol_ratio = df_copy[\"volume\"] / vol_20_mean.replace(0.0, np.nan)\n    secondary = symmetry_rank * vol_ratio\n    factor = ema_ret * confirmation + 0.2 * secondary\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy[\"factor_direction_volume_shape_mut2\"] = factor\n    return df_copy[\"factor_direction_volume_shape_mut2\"]",
+  "factor_name": "factor_direction_volume_shape_mut2",
+  "fitness_direction": -1,
+  "formula": "factor = ema_10(ret) * tanh(vol_z) * tanh(range_ratio_z) + 0.2 * rank_ts(symmetry,20) * volume/ma_volume_20",
+  "metrics": {
+    "ic": 0.022843839254924173,
+    "icir": 0.3112419666038575,
+    "mi": 0.010745281863633771,
+    "rank_ic": 0.02279530630371081,
+    "rank_icir": 0.3605705218703925
+  },
+  "rationale": "Mutation of mut_dir_vol_shape_003: preserves the core combination of volume-shape confirmation (tanh(vol_z) * tanh(range_ratio_z)) and shape asymmetry secondary component. Replaces the discrete directional persistence (net_dir * mom) with a continuous exponentially weighted moving average of returns (span=10). This smooths out short-term noise and provides a more robust directional signal, targeting improvement in ICIR and MI while preserving the strong RankIC from the parent. The secondary component weight is retained.",
+  "raw_metrics": {
+    "ic": -0.022843839254924173,
+    "icir": -0.3112419666038575,
+    "mi": 0.010745281863633771,
+    "rank_ic": -0.02279530630371081,
+    "rank_icir": -0.3605705218703925
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260611-061826-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260611-061826-r1"
+  ],
+  "lqtp_formula": "factor = ema_10(ret) * tanh(vol_z) * tanh(range_ratio_z) + 0.2 * rank_ts(symmetry,20) * volume/ma_volume_20",
+  "fe_formula": "factor = ema_10(ret) * tanh(vol_z) * tanh(range_ratio_z) + 0.2 * rank_ts(symmetry,20) * volume/ma_volume_20",
+  "lqtp_notes": "Unconverted: ['ema_10', 'rank_ts']",
+  "fe_notes": "Unconverted: ['ema_10', 'rank_ts']",
+  "source_formula": "factor = ema_10(ret) * tanh(vol_z) * tanh(range_ratio_z) + 0.2 * rank_ts(symmetry,20) * volume/ma_volume_20"
+}

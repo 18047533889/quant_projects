@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "83e5a68b06d8bea3ffa6a209cc755152d9be84bff4fd698a3380a70fa10cefb3",
+  "candidate_ids": [
+    "crash_vol_body_asym_mut001"
+  ],
+  "code": "def factor_crash_vol_body_asym(df):\n    df_copy = df.copy()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(10, min_periods=10).mean()\n    body = df_copy['close'] - df_copy['open']\n    total_range = df_copy['high'] - df_copy['low']\n    body_asym = body / total_range.replace(0, np.nan)\n    factor = -vol_ratio * body_asym\n    df_copy['factor_crash_vol_body_asym'] = factor\n    return df_copy['factor_crash_vol_body_asym']",
+  "factor_name": "factor_crash_vol_body_asym",
+  "fitness_direction": 1,
+  "formula": "- (volume / rolling_mean(volume,10)) * ((close - open) / (high - low))",
+  "metrics": {
+    "ic": 0.018465980094016596,
+    "icir": 0.2152441530495594,
+    "mi": 0.010396705345980806,
+    "rank_ic": 0.027887943444833942,
+    "rank_icir": 0.27570026612643606
+  },
+  "rationale": "Mutation of crash_vol_ratio_asym_cross001. Preserves the core crash precursor mechanism: volume ratio combined with directional bias, multiplied by -1. Simplifies the asymmetry component from EWMA-smoothed up/down ranges to a single-day body-to-range ratio, reducing lag and noise while keeping the parent's RankIC and MI strengths. Targets improved IC and ICIR by using a more contemporaneous directional signal.",
+  "raw_metrics": {
+    "ic": 0.018465980094016596,
+    "icir": 0.2152441530495594,
+    "mi": 0.010396705345980806,
+    "rank_ic": 0.027887943444833942,
+    "rank_icir": 0.27570026612643606
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260615-064629-r3",
+  "source_run_ids": [
+    "formal-mvp-loop-20260615-064629-r3"
+  ],
+  "lqtp_formula": "- (volume / ts_mean(10, volume)) * ((close - open) / (high - low))",
+  "fe_formula": "- (volume / ts_mean(10, volume)) * ((close - open) / (high - low))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "- (volume / rolling_mean(volume,10)) * ((close - open) / (high - low))"
+}

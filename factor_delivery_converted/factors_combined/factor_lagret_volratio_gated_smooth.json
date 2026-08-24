@@ -1,0 +1,72 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "a3693547da0587fe2bc3883361141d5ac6d5ad2b9aa1a14e771d22697da5c4cf",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_crossover_then_mutation_candidate_001_repair1_f0ab9559"
+  ],
+  "code": "def factor_lagret_volratio_gated_smooth(df):\n    df_copy = df.copy()\n    lag_ret = df_copy['close'].pct_change(5).shift(1)\n    vol_ema = df_copy['volume'].ewm(span=15, adjust=False).mean()\n    vol_ratio = np.log((df_copy['volume'] / vol_ema).clip(lower=1e-12))\n    raw = lag_ret * vol_ratio\n    use_long_smooth = (df_copy['style_gate_resvol_high'] > 0)\n    smooth_short = raw.ewm(span=5, adjust=False).mean()\n    smooth_long = raw.ewm(span=10, adjust=False).mean()\n    factor = np.where(use_long_smooth, smooth_long, smooth_short)\n    df_copy['factor_lagret_volratio_gated_smooth'] = factor\n    return df_copy['factor_lagret_volratio_gated_smooth']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_lagret_volratio_gated_smooth",
+  "fitness_direction": -1,
+  "formula": "EMA_gated(lag_ret_5 * log(volume/EMA15(volume))) gated by resvol_high (smoothing span 5 or 10)",
+  "metrics": {
+    "ic": 0.018602659065036692,
+    "icir": 0.18630231258112057,
+    "mi": 0.02641011548961103,
+    "rank_ic": 0.02833492159642604,
+    "rank_icir": 0.281321502876463
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7696969696969697,
+    "top_quantile_annualized_excess_return": 0.034732323959004274,
+    "top_quantile_excess_return": 0.10216871114477333,
+    "top_quantile_max_drawdown": -0.169976025176944,
+    "top_quantile_turnover": 0.3410888914782511
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Mutate parent by removing the liquidity_high gate (lightweight modifier) to simplify and avoid overfitting to a single market regime. Adjust smoothing windows from (3,8) to (5,10) to reduce noise while preserving the core volume-confirmed lagged return mechanism. Keep the resvol_high gate to adapt smoothing span based on residual volatility regime. Parent strength target: RankIC and ICIR stability from parent; aim to improve robustness by eliminating an unnecessary auxiliary parameter.",
+  "raw_metrics": {
+    "ic": -0.018602659065036692,
+    "icir": -0.18630231258112057,
+    "mi": 0.02641011548961103,
+    "rank_ic": -0.02833492159642604,
+    "rank_icir": -0.281321502876463
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260708-112322-r3",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260708-112322-r3"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "Only one gate used: style_gate_resvol_high selects smoothing span (5 vs 10 days) to avoid overreaction to transitory noise when residual volatility is high. The gate maintains continuous variation for cross-sectional binning.",
+  "style_gates_used": [
+    "style_gate_resvol_high"
+  ],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "EMA_gated(lag_ret_5 * log(volume/EMA15(volume))) gated by resvol_high (smoothing span 5 or 10)",
+  "fe_formula": "EMA_gated(lag_ret_5 * log(volume/EMA15(volume))) gated by resvol_high (smoothing span 5 or 10)",
+  "lqtp_notes": "Unconverted: ['EMA15', 'EMA_gated', 'resvol_high']",
+  "fe_notes": "Unconverted: ['EMA15', 'EMA_gated', 'resvol_high']",
+  "source_formula": "EMA_gated(lag_ret_5 * log(volume/EMA15(volume))) gated by resvol_high (smoothing span 5 or 10)"
+}

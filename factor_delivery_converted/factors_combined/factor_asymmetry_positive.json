@@ -1,0 +1,116 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "f43df7910d46c88cc1bd3c8b9605984d2eeddf1c0fc72d8e79df7607dfc948c7",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_drawn_0_1_vol_asym_001_3017337a_e9a4cbae"
+  ],
+  "code": "def factor_asymmetry_positive(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    pos_ret = ret.clip(lower=0)\n    neg_ret = ret.clip(upper=0)\n    upside_vol = pos_ret.rolling(20, min_periods=20).std(ddof=1)\n    downside_vol = neg_ret.rolling(20, min_periods=20).std(ddof=1)\n    factor = upside_vol - downside_vol\n    df_copy[\"factor_asymmetry_positive\"] = factor\n    return df_copy[\"factor_asymmetry_positive\"]",
+  "cross_sectional_rationale": "Cross-sectional rank Gaussian aligns volatility asymmetry across stocks and preserves relative ordering.",
+  "cross_sectional_transform": "cs_rank_gauss",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.806060606060606,
+        "top_quantile_annualized_excess_return": -0.029043253821016912,
+        "top_quantile_excess_return": -0.07903962550713028,
+        "top_quantile_max_drawdown": -0.22546502729075402,
+        "top_quantile_turnover": 0.1883566345647493
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_asymmetry_positive",
+  "fitness_direction": -1,
+  "formula": "upside_vol = rolling_std(pos_returns, 20); downside_vol = rolling_std(neg_returns, 20); factor = upside_vol - downside_vol",
+  "metrics": {
+    "ic": 0.015343993220127921,
+    "icir": 0.13264482724689283,
+    "mi": 0.015757803980761764,
+    "rank_ic": 0.038745957629118144,
+    "rank_icir": 0.3053631011554248
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.806060606060606,
+    "top_quantile_annualized_excess_return": -0.029043253821016912,
+    "top_quantile_excess_return": -0.07903962550713028,
+    "top_quantile_max_drawdown": -0.22546502729075402,
+    "top_quantile_turnover": 0.1883566345647493
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.018268967433356185,
+    "icir": 0.14672705520713633,
+    "mi": 0.02792615037820667,
+    "rank_ic": 0.038745957629118144,
+    "rank_icir": 0.3053631011554248
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.806060606060606,
+    "top_quantile_annualized_excess_return": -0.029043253821016912,
+    "top_quantile_excess_return": -0.07903962550713028,
+    "top_quantile_max_drawdown": -0.22546502729075402,
+    "top_quantile_turnover": 0.1883566345647493
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.018268967433356185,
+    "icir": -0.14672705520713633,
+    "mi": 0.02792615037820667,
+    "rank_ic": -0.038745957629118144,
+    "rank_icir": -0.3053631011554248
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Simplified mutation of parent g1_crossover_drawn_0_1_vol_asym_001: replaced EWMA std with rolling std, removed momentum gate, and reversed sign to target positive long-only payoff. The core leverage effect insight is reversed to capture positive asymmetry: stocks with higher upside volatility relative to downside volatility tend to have positive returns, consistent with risk-on preference.",
+  "raw_metrics": {
+    "ic": -0.015343993220127921,
+    "icir": -0.13264482724689283,
+    "mi": 0.015757803980761764,
+    "rank_ic": -0.038745957629118144,
+    "rank_icir": -0.3053631011554248
+  },
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260719-143332-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260719-143332-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.5370312318032422,
+    "pre_transform_top_quantile_excess_return": -0.07903962550713028,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.5078556832323254,
+    "transformed_top_quantile_excess_return": -0.07903962550713028
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "upside_vol = ts_std(20, pos_returns); downside_vol = ts_std(20, neg_returns); factor = upside_vol - downside_vol",
+  "fe_formula": "upside_vol = ts_std(20, pos_returns); downside_vol = ts_std(20, neg_returns); factor = upside_vol - downside_vol",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "upside_vol = rolling_std(pos_returns, 20); downside_vol = rolling_std(neg_returns, 20); factor = upside_vol - downside_vol"
+}

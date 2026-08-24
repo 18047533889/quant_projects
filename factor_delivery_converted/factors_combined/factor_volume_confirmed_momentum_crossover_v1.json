@@ -1,0 +1,42 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "dd3605e12fcfb0d995c34c1d0555523fbaa79bdce6c87d1f750576bf15821556",
+  "candidate_ids": [
+    "crossover_vcm_001"
+  ],
+  "code": "def factor_volume_confirmed_momentum_crossover_v1(df):\n    df_copy = df.copy()\n    price_ret = df_copy['close'].pct_change(5)\n    volume_20_avg = df_copy['volume'].rolling(20).mean().replace(0, np.nan)\n    volume_ratio = df_copy['volume'] / volume_20_avg\n    volume_rank = volume_ratio.rolling(10).rank(pct=True)\n    factor = price_ret * volume_rank\n    factor.name = 'factor_volume_confirmed_momentum_crossover_v1'\n    return factor",
+  "factor_name": "factor_volume_confirmed_momentum_crossover_v1",
+  "fitness_direction": -1,
+  "formula": "pct_return_5 * rank(volume / sma_20) over 10",
+  "metrics": {
+    "ic": 0.02341599211406269,
+    "icir": 0.21164396323129628,
+    "mi": 0.06807373668957606,
+    "rank_ic": 0.03471567204730907,
+    "rank_icir": 0.2884103100822881
+  },
+  "rationale": "Crossover: primary mechanism from factor_volume_confirmed_momentum (apvc-001) using 5-day price return scaled by volume ratio percentile, preserving the robust 20-day volume average for ratio calculation, but borrowing the 10-day rank window from factor_volume_confirmed_momentum_v2 to make the confirmation more responsive, targeting improved IC while maintaining rank stability.",
+  "raw_metrics": {
+    "ic": -0.02341599211406269,
+    "icir": -0.21164396323129628,
+    "mi": 0.06807373668957606,
+    "rank_ic": -0.03471567204730907,
+    "rank_icir": -0.2884103100822881
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260612-014632-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260612-014632-r1"
+  ],
+  "lqtp_formula": "pct_return_5 * cs_rank(volume / sma_20) over 10",
+  "fe_formula": "pct_return_5 * rank(volume / sma_20) over 10",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "pct_return_5 * rank(volume / sma_20) over 10"
+}

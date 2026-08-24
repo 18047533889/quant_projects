@@ -1,0 +1,121 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "079656289a995e65626a2c41381eb938b280dce9df11b0a108afd486960f92c9",
+  "candidate_ids": [
+    "g2_crossover_g1_crossover_volasym_tail_fragility_drawdown_g0_87ad21be"
+  ],
+  "code": "def factor_tail_fragility_ewm_overnight_buffer(df):\n    \"\"\"Drawdown-conditioned downside-tail fragility with a bounded overnight-repricing buffer.\"\"\"\n    df_copy = df.copy()\n    previous_close = df_copy[\"close\"].shift(1)\n    downside_tail = (previous_close - df_copy[\"low\"]).clip(lower=0.0) / previous_close.replace(0.0, np.nan)\n    upside_tail = (df_copy[\"high\"] - previous_close).clip(lower=0.0) / previous_close.replace(0.0, np.nan)\n    downside_energy = downside_tail.pow(2).rolling(20, min_periods=20).sum()\n    upside_energy = upside_tail.pow(2).rolling(20, min_periods=20).sum()\n    tail_asymmetry = downside_energy / (downside_energy + upside_energy).replace(0.0, np.nan)\n    drawdown = 1.0 - df_copy[\"close\"] / df_copy[\"close\"].rolling(60, min_periods=60).max().replace(0.0, np.nan)\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    phase_numerator = (overnight_ret - intraday_ret).ewm(span=20, adjust=False, min_periods=20).mean()\n    phase_activity = (overnight_ret.abs() + intraday_ret.abs()).ewm(span=20, adjust=False, min_periods=20).mean().replace(0.0, np.nan)\n    overnight_phase = (phase_numerator / phase_activity).clip(lower=-1.0, upper=1.0)\n    df_copy[\"factor_tail_fragility_ewm_overnight_buffer\"] = -tail_asymmetry * drawdown * (1.0 - 0.25 * overnight_phase)\n    return df_copy[\"factor_tail_fragility_ewm_overnight_buffer\"]",
+  "cross_sectional_rationale": "The bounded fragility score is interpreted relative to contemporaneous peers because tail-excursion intensity, drawdown depth, and repricing composition differ materially across stocks; same-day ranking improves comparability without replacing the raw payoff mechanism.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "long_short_sharpe": 2.312720594052426,
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.07845737367837025,
+        "top_quantile_excess_return": 0.22057207716744132,
+        "top_quantile_max_drawdown": -0.15840174424039732,
+        "top_quantile_turnover": 0.14386669930448365
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_tail_fragility_ewm_overnight_buffer",
+  "fitness_direction": -1,
+  "formula": "-(20-day downside tail-energy share) × (60-day close drawdown) × [1 - 0.25 × clip(EWMA20(overnight return - intraday return) / EWMA20(|overnight return| + |intraday return|), -1, 1)]",
+  "metrics": {
+    "ic": 0.02174651111726681,
+    "icir": 0.1548397502713538,
+    "mi": 0.010131054167248799,
+    "rank_ic": 0.02851245736025327,
+    "rank_icir": 0.1625176853868619
+  },
+  "payoff_diagnostics": {
+    "long_short_sharpe": 2.312720594052426,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.07845737367837025,
+    "top_quantile_excess_return": 0.22057207716744132,
+    "top_quantile_max_drawdown": -0.15840174424039732,
+    "top_quantile_turnover": 0.14386669930448365
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.019715880934567356,
+    "icir": 0.14564467599257638,
+    "mi": 0.018056830988299133,
+    "rank_ic": 0.02851245736025327,
+    "rank_icir": 0.1625176853868619
+  },
+  "pre_transform_payoff_diagnostics": {
+    "long_short_sharpe": 2.312720594052426,
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.07845737367837025,
+    "top_quantile_excess_return": 0.22057207716744132,
+    "top_quantile_max_drawdown": -0.15840174424039732,
+    "top_quantile_turnover": 0.14386669930448365
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.019715880934567356,
+    "icir": -0.14564467599257638,
+    "mi": 0.018056830988299133,
+    "rank_ic": -0.02851245736025327,
+    "rank_icir": -0.1625176853868619
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "The primary mechanism from factor_tail_fragility_drawdown_asymmetry remains drawdown-conditioned downside-tail fragility, preserving its direct shock-absorption interpretation. The single transferred modifier from factor_tail_fragility_overnight_buffer is a bounded overnight-versus-intraday repricing phase: overnight-led repricing modestly attenuates the fragility penalty because its information incorporation can be more resilient than comparable intraday-led deterioration. Exponentially weighted phase estimation targets the observed window-boundary consistency bottleneck while leaving the tail-fragility mechanism dominant.",
+  "raw_metrics": {
+    "ic": -0.02174651111726681,
+    "icir": -0.1548397502713538,
+    "mi": 0.010131054167248799,
+    "rank_ic": -0.02851245736025327,
+    "rank_icir": -0.1625176853868619
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6terra-20260814-053307-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6terra-20260814-053307-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.6023033366129951,
+    "pre_transform_top_quantile_excess_return": 0.22057207716744132,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.6165160860504287,
+    "transformed_top_quantile_excess_return": 0.22057207716744132
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "-[ema(20) downside tail-energy share] × [60-day close drawdown] × {1 - 0.35 × clip([sum_20 overnight return - sum_20 intraday return] / sum_20(|overnight return| + |intraday return|), -1, 1)}",
+  "fe_formula": "-[ema(20) downside tail-energy share] × [60-day close drawdown] × {1 - 0.35 × clip([sum_20 overnight return - sum_20 intraday return] / sum_20(|overnight return| + |intraday return|), -1, 1)}",
+  "lqtp_notes": "Unconverted: ['sum_20']",
+  "fe_notes": "Unconverted: ['sum_20']",
+  "source_formula": "-[EWMA(20) downside tail-energy share] × [60-day close drawdown] × {1 - 0.35 × clip([sum_20 overnight return - sum_20 intraday return] / sum_20(|overnight return| + |intraday return|), -1, 1)}"
+}

@@ -1,0 +1,92 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "55c3d62d56ec9c35d277becae527ef3ad7007b19838b12e4e8c3bb13e2ec1343",
+  "candidate_ids": [
+    "asym_vol_001_mut_002"
+  ],
+  "code": "def factor_asym_vol_down_up_volatility_gated(df, window=20):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    pos_var = np.where(ret > 0, ret**2, np.nan)\n    neg_var = np.where(ret < 0, ret**2, np.nan)\n    pos_var_mean = pd.Series(pos_var, index=df_copy.index).ewm(span=window, min_periods=5).mean()\n    neg_var_mean = pd.Series(neg_var, index=df_copy.index).ewm(span=window, min_periods=5).mean()\n    ratio = np.log(neg_var_mean / pos_var_mean.replace(0, np.nan))\n    asymmetry = ratio.replace([np.inf, -np.inf], np.nan).fillna(0)\n    is_high_resvol = df_copy['style_gate_resvol_high'] > 0\n    factor = np.where(is_high_resvol, asymmetry, 0.0)\n    df_copy['factor_asym_vol_down_up_volatility_gated'] = factor\n    return df_copy['factor_asym_vol_down_up_volatility_gated']",
+  "cross_sectional_rationale": "Cross-sectional rank allows comparison of asymmetry across stocks in a relative-value context, identifying those with extreme downside volatility relative to peers during high-residual-vol regimes.",
+  "cross_sectional_transform": "cs_rank",
+  "factor_name": "factor_asym_vol_down_up_volatility_gated",
+  "fitness_direction": 1,
+  "formula": "log(ewm_mean(down_squared_return) / ewm_mean(up_squared_return)) if style_gate_resvol_high > 0 else 0",
+  "metrics": {
+    "ic": 0.014120545892849902,
+    "icir": 0.2122141862365358,
+    "mi": 0.16903299730358157,
+    "rank_ic": 0.02750964879769664,
+    "rank_icir": 0.41861190788154096
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.4,
+    "top_quantile_annualized_excess_return": 0.052321580777855425,
+    "top_quantile_excess_return": 0.1554576117248505,
+    "top_quantile_max_drawdown": -0.11095879444341283,
+    "top_quantile_turnover": 0.09505015543523311
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.017742730137617287,
+    "icir": 0.23734674752081586,
+    "mi": 0.022389363560783693,
+    "rank_ic": 0.02750964879769664,
+    "rank_icir": 0.41861190788154096
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.4,
+    "top_quantile_annualized_excess_return": 0.052321580777855425,
+    "top_quantile_excess_return": 0.1554576117248505,
+    "top_quantile_max_drawdown": -0.11095879444341283,
+    "top_quantile_turnover": 0.09505015543523311
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.017742730137617287,
+    "icir": 0.23734674752081586,
+    "mi": 0.022389363560783693,
+    "rank_ic": 0.02750964879769664,
+    "rank_icir": 0.41861190788154096
+  },
+  "rationale": "Asymmetric volatility between up and down returns is often more pronounced during periods of high residual volatility. Replacing the simple rolling mean with exponential weighted mean (EWM) gives more weight to recent observations, making the volatility asymmetry signal more responsive to recent changes while preserving the core economic mechanism. Gating on style_gate_resvol_high focuses the signal on regimes where divergence in volatility components is most informative.",
+  "raw_metrics": {
+    "ic": 0.014120545892849902,
+    "icir": 0.2122141862365358,
+    "mi": 0.16903299730358157,
+    "rank_ic": 0.02750964879769664,
+    "rank_icir": 0.41861190788154096
+  },
+  "required_columns": [
+    "close",
+    "style_gate_resvol_high"
+  ],
+  "run_id": "formal-mvp-loop-20260626-050556-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260626-050556-r2"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "style_gate_resvol_high is used to activate the asymmetry factor only when residual volatility is elevated. The economic rationale: during periods of high residual volatility, asymmetric volatility component divergence is more likely to carry predictive information about future price movements, whereas during low residual volatility the same signal may be dominated by noise.",
+  "style_gates_used": [
+    "style_gate_resvol_high"
+  ],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.7236003978984544,
+    "pre_transform_top_quantile_excess_return": 0.1554576117248505,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.8414892861122049,
+    "transformed_top_quantile_excess_return": 0.1554576117248505
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "log(ewm_mean(down_squared_return) / ewm_mean(up_squared_return)) if style_gate_resvol_high > 0 else 0",
+  "fe_formula": "log(ewm_mean(down_squared_return) / ewm_mean(up_squared_return)) if style_gate_resvol_high > 0 else 0",
+  "lqtp_notes": "Unconverted: ['ewm_mean']",
+  "fe_notes": "Unconverted: ['ewm_mean']",
+  "source_formula": "log(ewm_mean(down_squared_return) / ewm_mean(up_squared_return)) if style_gate_resvol_high > 0 else 0"
+}

@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "30c8428b0c0bc0bbafedf32f436a9fb1362d3da219a2c17257a98627527702f7",
+  "candidate_ids": [
+    "volume_confirmed_dir_mut_v4"
+  ],
+  "code": "def factor_volume_confirmed_dir_mut_v4(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    sign_ret = np.sign(ret)\n    net_dir = sign_ret.rolling(5, min_periods=5).sum()\n    mom = df_copy[\"close\"] / df_copy[\"close\"].shift(20) - 1\n    direction_signal = net_dir * mom\n    vol_rank = df_copy[\"volume\"].rolling(20, min_periods=20).rank(pct=True)\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    range_rank = range_.rolling(20, min_periods=20).rank(pct=True)\n    vol_z_rank = (vol_rank - 0.5) * 2\n    range_z_rank = (range_rank - 0.5) * 2\n    raw_composite = vol_z_rank * range_z_rank\n    composite_confidence = np.tanh(raw_composite)\n    factor = direction_signal * composite_confidence\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy[\"factor_volume_confirmed_dir_mut_v4\"] = factor\n    return df_copy[\"factor_volume_confirmed_dir_mut_v4\"]",
+  "factor_name": "factor_volume_confirmed_dir_mut_v4",
+  "fitness_direction": -1,
+  "formula": "factor = (net_dir * mom) * tanh( ((rank(vol,20)-0.5)*2) * ((rank(range,20)-0.5)*2) )",
+  "metrics": {
+    "ic": 0.01705136750217695,
+    "icir": 0.2328672599281839,
+    "mi": 0.016508365908152633,
+    "rank_ic": 0.014397635090898616,
+    "rank_icir": 0.29352396711796985
+  },
+  "rationale": "Mutation preserves the core volume-confirmed directional persistence structure but replaces outlier-sensitive z-score normalization of volume and range with rank-based z-scores (percentile rank centered and scaled to [-1,1]). This reduces the impact of extreme observations while maintaining monotonic ordering and the tanh compression, targeting improvement in IC and RankIC while preserving the parent's relatively high MI.",
+  "raw_metrics": {
+    "ic": -0.01705136750217695,
+    "icir": -0.2328672599281839,
+    "mi": 0.016508365908152633,
+    "rank_ic": -0.014397635090898616,
+    "rank_icir": -0.29352396711796985
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260611-061826-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260611-061826-r1"
+  ],
+  "lqtp_formula": "factor = (net_dir * mom) * tanh( ((cs_rank(vol, 20)-0.5)*2) * ((cs_rank(range, 20)-0.5)*2) )",
+  "fe_formula": "factor = (net_dir * mom) * tanh( ((rank(vol,20)-0.5)*2) * ((rank(range,20)-0.5)*2) )",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "factor = (net_dir * mom) * tanh( ((rank(vol,20)-0.5)*2) * ((rank(range,20)-0.5)*2) )"
+}

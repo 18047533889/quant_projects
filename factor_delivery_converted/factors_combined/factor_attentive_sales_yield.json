@@ -1,0 +1,115 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "a2316cc5324b78b1205f279be8ae8c130f064e1a3b64d337287b0d28143efa11",
+  "candidate_ids": [
+    "alpha-turnover-attention-context-0-0-repaired-0"
+  ],
+  "code": "def factor_attentive_sales_yield(df):\n    df_copy = df.copy()\n    sales_yield = 1.0 / df_copy[\"ps_ttm\"].replace(0, np.nan)\n    inattention = 1.0 - df_copy[\"free_turn\"].rolling(20, min_periods=1).rank(pct=True)\n    sales_yield = sales_yield.ffill()\n    inattention = inattention.ffill()\n    df_copy[\"factor_attentive_sales_yield\"] = sales_yield * inattention\n    return df_copy[\"factor_attentive_sales_yield\"]",
+  "cross_sectional_rationale": "Sales yield is cross-sectionally comparable; ranking ensures scale consistency and emphasizes relative cheapness across stocks.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.7454545454545455,
+        "top_quantile_annualized_excess_return": 0.058650957660408176,
+        "top_quantile_excess_return": 0.17765192616471248,
+        "top_quantile_max_drawdown": -0.08170292112960253,
+        "top_quantile_turnover": 0.2977545507808448
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_attentive_sales_yield",
+  "fitness_direction": 1,
+  "formula": "1/ps_ttm * (1 - ts_rank(free_turn, 20)), with forward fill to reduce NaNs",
+  "metrics": {
+    "ic": 0.011964938537900736,
+    "icir": 0.14248032216897893,
+    "mi": 0.026211738194213297,
+    "rank_ic": 0.03446363259894264,
+    "rank_icir": 0.3471428557928142
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7454545454545455,
+    "top_quantile_annualized_excess_return": 0.058650957660408176,
+    "top_quantile_excess_return": 0.17765192616471248,
+    "top_quantile_max_drawdown": -0.08170292112960253,
+    "top_quantile_turnover": 0.2977545507808448
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.004041955430269212,
+    "icir": 0.0795587262402952,
+    "mi": 0.01583392500742331,
+    "rank_ic": 0.03446363259894264,
+    "rank_icir": 0.3471428557928142
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.7454545454545455,
+    "top_quantile_annualized_excess_return": 0.058650957660408176,
+    "top_quantile_excess_return": 0.17765192616471248,
+    "top_quantile_max_drawdown": -0.08170292112960253,
+    "top_quantile_turnover": 0.2977545507808448
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.004041955430269212,
+    "icir": 0.0795587262402952,
+    "mi": 0.01583392500742331,
+    "rank_ic": 0.03446363259894264,
+    "rank_icir": 0.3471428557928142
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Sales yield (1/ps_ttm) is a stable value metric. When free-turn (attention) is low, the undervalued signal is stronger as neglected stocks have more room for correction. Multiplying sales yield by inattention (1 - rank of free_turn) amplifies the value effect when attention is low, and attenuates it when attention is high. Forward-fill is applied to both components to reduce missing values while preserving the direction of the signal.",
+  "raw_metrics": {
+    "ic": 0.011964938537900736,
+    "icir": 0.14248032216897893,
+    "mi": 0.026211738194213297,
+    "rank_ic": 0.03446363259894264,
+    "rank_icir": 0.3471428557928142
+  },
+  "required_columns": [
+    "ps_ttm",
+    "free_turn"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260717-20260718-074009-r13",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260717-20260718-074009-r13"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.4810410950697445,
+    "pre_transform_top_quantile_excess_return": 0.17765192616471248,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.5622634872928498,
+    "transformed_top_quantile_excess_return": 0.17765192616471248
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "1/ps_ttm * (1 - ts_rank(free_turn, 20)), with forward fill to reduce NaNs",
+  "fe_formula": "1/ps_ttm * (1 - ts_rank(free_turn, 20)), with forward fill to reduce NaNs",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "1/ps_ttm * (1 - ts_rank(free_turn, 20)), with forward fill to reduce NaNs"
+}

@@ -1,0 +1,41 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "c62fe7cfa1ce09f8ec70c8be23c877b1c286419d0446cd836d5bc2bd9d92b25c",
+  "candidate_ids": [
+    "VREG-SMOOTH-001"
+  ],
+  "code": "def factor_vol_regime_smoothed_trend(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_20 = ret.rolling(20).std()\n    med_vol_60 = vol_20.rolling(60).median()\n    regime = ((vol_20 > med_vol_60).astype(int) * 2) - 1\n    trend = df_copy[\"close\"] - df_copy[\"close\"].ewm(span=10, adjust=False).mean()\n    df_copy[\"factor_vol_regime_smoothed_trend\"] = regime * trend\n    return df_copy[\"factor_vol_regime_smoothed_trend\"]",
+  "factor_name": "factor_vol_regime_smoothed_trend",
+  "fitness_direction": -1,
+  "formula": "regime = sign(vol_20 - med_vol_60); factor = regime * (close - EMA(close, 10))",
+  "metrics": {
+    "ic": 0.01947205238863873,
+    "icir": 0.36860983096124117,
+    "mi": 0.016314539349902013,
+    "rank_ic": 0.021179744645532603,
+    "rank_icir": 0.2822027040586975
+  },
+  "rationale": "This factor preserves the volatility-regime switching intuition of the parent by comparing 20-day rolling volatility to its 60-day median, but replaces the raw 10-day price change with a smoothed exponential moving average (EMA) of close. The EMA reduces noise and improves rank stability, targeting the RankIC bottleneck while maintaining the core regime-dependent momentum/mean-reversion hypothesis.",
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260609-072013-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260609-072013-r1"
+  ],
+  "lqtp_formula": "regime = sign(vol_20 - med_vol_60); factor = regime * (close - ema(10, close))",
+  "fe_formula": "regime = sign(vol_20 - med_vol_60); factor = regime * (close - ema(10, close))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "regime = sign(vol_20 - med_vol_60); factor = regime * (close - EMA(close, 10))"
+}

@@ -1,0 +1,45 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "9d145ed1bb0a7a36131594ab05640f043674ae44cca32aa5807f09a5149a48d8",
+  "candidate_ids": [
+    "cro_vol_gated_herding_gen4"
+  ],
+  "code": "def factor_vol_gated_herding_crossover(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    high = df_copy['high']\n    low = df_copy['low']\n    \n    # Parent1: momentum and volatility adjustment\n    mom = close / close.shift(5) - 1\n    tr = np.maximum(high - low, np.maximum((high - close.shift(1)).abs(), (low - close.shift(1)).abs()))\n    atr = tr.rolling(20, min_periods=10).mean()\n    vol_adj = atr / close\n    vol_mean = vol_adj.rolling(20, min_periods=10).mean()\n    vol_std = vol_adj.rolling(20, min_periods=10).std(ddof=1)\n    vol_z = (vol_adj - vol_mean) / vol_std.replace(0, np.nan)\n    vol_z_clipped = np.clip(vol_z, -2, 2)\n    \n    ret = close.pct_change()\n    ema_ret = ret.ewm(span=7, min_periods=7, adjust=False).mean()\n    persistence = np.tanh(ema_ret * 5)\n    \n    base_mom = (mom / (1 + vol_z_clipped.abs())) * (1 + persistence)\n    \n    # Parent2: herding signal\n    vol_chg = volume.pct_change()\n    corr_ret_vol = ret.rolling(30, min_periods=30).corr(vol_chg)\n    mean_ret = ret.rolling(40, min_periods=40).mean()\n    std_ret = ret.rolling(40, min_periods=40).std().replace(0, np.nan)\n    z_ret = (ret - mean_ret) / std_ret\n    sp_ret = np.tanh(z_ret)\n    herding = corr_ret_vol * sp_ret\n    \n    # Volume confidence from parent1\n    vol_rank = volume.rolling(20).rank(pct=True)\n    vol_ma20 = volume.rolling(20).mean()\n    vol_trend = volume.rolling(5).mean() / vol_ma20.replace(0, np.nan)\n    confidence = 1 + np.tanh(vol_rank * vol_trend)\n    \n    # Combine: base_mom modulated by herding, with volume confidence\n    factor = base_mom * (1 + np.tanh(herding)) * confidence\n    factor = factor.fillna(0.0).clip(-5, 5)\n    df_copy['factor_vol_gated_herding_crossover'] = factor\n    return df_copy['factor_vol_gated_herding_crossover']",
+  "factor_name": "factor_vol_gated_herding_crossover",
+  "fitness_direction": -1,
+  "formula": "factor = (mom / (1 + |z(ATR/close)|)) * (1 + tanh(5*EMA(ret))) * (1 + tanh(herding)) * (1 + tanh(vol_rank * vol_trend))",
+  "metrics": {
+    "ic": 0.02382409234615977,
+    "icir": 0.22080130657392438,
+    "mi": 0.02150319455369054,
+    "rank_ic": 0.03287806528671249,
+    "rank_icir": 0.27649962902578923
+  },
+  "rationale": "Crossover combining volume-gated momentum (parent1: mut_vol_gated_mom_gen4) with herding co-movement signal (parent2: mut-herd-ema-gated-gen3-002). Parent1 provides strong directional momentum with volatility adjustment and volume confidence; parent2 captures price-volume co-movement. The child multiplies the momentum base by a herding boost and volume confidence, preserving the high RankIC/RankICIR from both parents while targeting improved IC and ICIR through complementary signals.",
+  "raw_metrics": {
+    "ic": -0.02382409234615977,
+    "icir": -0.22080130657392438,
+    "mi": 0.02150319455369054,
+    "rank_ic": -0.03287806528671249,
+    "rank_icir": -0.27649962902578923
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260611-090600-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260611-090600-r2"
+  ],
+  "lqtp_formula": "factor = (mom / (1 + |cs_zscore(ATR/close)|)) * (1 + tanh(5*ema(ret))) * (1 + tanh(herding)) * (1 + tanh(vol_rank * vol_trend))",
+  "fe_formula": "factor = (mom / (1 + |zscore(ATR/close)|)) * (1 + tanh(5*ema(ret))) * (1 + tanh(herding)) * (1 + tanh(vol_rank * vol_trend))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "factor = (mom / (1 + |z(ATR/close)|)) * (1 + tanh(5*EMA(ret))) * (1 + tanh(herding)) * (1 + tanh(vol_rank * vol_trend))"
+}

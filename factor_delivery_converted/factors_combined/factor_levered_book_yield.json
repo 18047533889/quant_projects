@@ -1,0 +1,88 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "670a2097a1d5fae97ade252c98473dc43dd59ea7d136cb44925b32ff4768acc8",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_vgc_001_48ee7654_89a24320"
+  ],
+  "code": "def factor_levered_book_yield(df):\n    df_copy = df.copy()\n    book_yield = 1.0 / df_copy[\"pb_lf\"].replace(0, np.nan)\n    leverage = df_copy[\"debttoassets\"] / 100.0\n    factor = book_yield * (1.0 - leverage)\n    df_copy[\"factor_levered_book_yield\"] = factor\n    return df_copy[\"factor_levered_book_yield\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.12331923217141205,
+        "top_quantile_excess_return": 0.3966786010938326,
+        "top_quantile_max_drawdown": -0.07654521502547751,
+        "top_quantile_turnover": 0.02297759128666396
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_levered_book_yield",
+  "fitness_direction": 1,
+  "formula": "(1 / pb_lf) * (1 - debttoassets/100)",
+  "metrics": {
+    "ic": 0.011602189635527836,
+    "icir": 0.14784174214296744,
+    "mi": 0.014778854692238497,
+    "rank_ic": 0.03211594807438042,
+    "rank_icir": 0.33368267066921037
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.12331923217141205,
+    "top_quantile_excess_return": 0.3966786010938326,
+    "top_quantile_max_drawdown": -0.07654521502547751,
+    "top_quantile_turnover": 0.02297759128666396
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Simplified from parent by removing ROA multiplier. Book yield adjusted for leverage captures cheapness with financial risk discount. Leverage penalty reduces exposure to distressed value. Removing ROA avoids non-linear amplification that may weaken continuous IC.",
+  "raw_metrics": {
+    "ic": 0.011602189635527836,
+    "icir": 0.14784174214296744,
+    "mi": 0.014778854692238497,
+    "rank_ic": 0.03211594807438042,
+    "rank_icir": 0.33368267066921037
+  },
+  "required_columns": [
+    "pb_lf",
+    "debttoassets"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260717-20260718-115642-r15",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260717-20260718-115642-r15"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(1 / pb_lf) * (1 - debttoassets/100)",
+  "fe_formula": "(1 / pb_lf) * (1 - debttoassets/100)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(1 / pb_lf) * (1 - debttoassets/100)"
+}

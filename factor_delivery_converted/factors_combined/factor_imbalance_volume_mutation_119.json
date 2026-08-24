@@ -1,0 +1,37 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "644a2d07e6f99714101fd4a4bf91fbf564860e168e5a5e7b7cc6af12838642ec",
+  "candidate_ids": [
+    "mutation_gen1_001"
+  ],
+  "code": "def factor_imbalance_volume_mutation(df):\n    df_copy = df.copy()\n    clv = np.where(df_copy['high'] - df_copy['low'] != 0,\n                   (2*df_copy['close'] - df_copy['high'] - df_copy['low']) / (df_copy['high'] - df_copy['low']),\n                   0)\n    money_flow = clv * df_copy['volume']\n    order_imbalance = money_flow.rolling(window=10, min_periods=1).sum()\n    vol_ma = df_copy['volume'].rolling(window=10, min_periods=5).mean()\n    vol_ratio = df_copy['volume'] / (vol_ma + 1e-8)\n    norm_range = (df_copy['high'] - df_copy['low']) / (df_copy['close'] + 1e-8)\n    vol_abnormality = vol_ratio * norm_range\n    df_copy['factor_imbalance_volume_mutation'] = order_imbalance * vol_abnormality\n    return df_copy['factor_imbalance_volume_mutation']",
+  "factor_name": "factor_imbalance_volume_mutation",
+  "fitness_direction": -1,
+  "formula": "OI_10 * (vol_ratio * norm_range), where OI_10 = sum_{i=t-9}^{t}(CLV_i * vol_i), vol_ratio = vol/vol_ma_10, norm_range = (high-low)/close",
+  "metrics": {
+    "ic": 0.02427090032208387,
+    "icir": 0.4006257967707107,
+    "mi": 0.012622974637940487,
+    "rank_ic": 0.02547692139126491,
+    "rank_icir": 0.2980855428136349
+  },
+  "rationale": "This mutation preserves the core idea of combining directional pressure (order imbalance) with volume abnormality, but uses shorter 10-day windows and a volume ratio instead of z-score to reduce noise and improve responsiveness, targeting improved RankIC and ICIR while maintaining interpretability.",
+  "required_columns": [
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260609-053202-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260609-053202-r1"
+  ],
+  "lqtp_formula": "OI_10 * (vol_ratio * norm_range), where OI_10 = sum_{i=t-9}^{t}(CLV_i * vol_i), vol_ratio = vol/vol_ma_10, norm_range = (high-low)/close",
+  "fe_formula": "OI_10 * (vol_ratio * norm_range), where OI_10 = sum_{i=t-9}^{t}(CLV_i * vol_i), vol_ratio = vol/vol_ma_10, norm_range = (high-low)/close",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "OI_10 * (vol_ratio * norm_range), where OI_10 = sum_{i=t-9}^{t}(CLV_i * vol_i), vol_ratio = vol/vol_ma_10, norm_range = (high-low)/close"
+}

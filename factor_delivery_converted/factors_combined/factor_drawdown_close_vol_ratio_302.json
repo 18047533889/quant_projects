@@ -1,0 +1,124 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "7e5c41c2ef8c02a6a389e7264d1df3b5957e194880d25d6519be7216f3d4a911",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_then_mutation_alpha_drawdown_002_cr_2d5547ea"
+  ],
+  "code": "def factor_drawdown_close_vol_ratio(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(20, min_periods=10).max()\n    max_drawdown_20 = (df_copy['close'] - rolling_max) / rolling_max\n    close_vol = df_copy['close'].rolling(20, min_periods=10).std(ddof=1)\n    stress_ratio = -max_drawdown_20 / close_vol.replace(0.0, np.nan)\n    df_copy['factor_drawdown_close_vol_ratio'] = stress_ratio.fillna(0.0)\n    return df_copy['factor_drawdown_close_vol_ratio']",
+  "cross_sectional_rationale": "CS rank standardizes the stress ratio across stocks, highlighting relative stress. Retained from parent to preserve predictive metric strength.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9515151515151515,
+        "top_quantile_annualized_excess_return": -0.01576402366377183,
+        "top_quantile_excess_return": -0.04408241683733294,
+        "top_quantile_max_drawdown": -0.1682939628762149,
+        "top_quantile_turnover": 0.15811041787352498
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_drawdown_close_vol_ratio",
+  "fitness_direction": 1,
+  "formula": "stress_ratio = -(close / rolling_max(20) - 1) / close_std(20)",
+  "metrics": {
+    "ic": 0.017322989907050522,
+    "icir": 0.1590333977742187,
+    "mi": 0.028113920802288916,
+    "rank_ic": 0.03261771114648642,
+    "rank_icir": 0.24732370020992123
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": -0.01576402366377183,
+    "top_quantile_excess_return": -0.04408241683733294,
+    "top_quantile_max_drawdown": -0.1682939628762149,
+    "top_quantile_turnover": 0.15811041787352498
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.009309863726896425,
+    "icir": 0.12539887776247827,
+    "mi": 0.012309855234138745,
+    "rank_ic": 0.03261771114648642,
+    "rank_icir": 0.24732370020992123
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": -0.01576402366377183,
+    "top_quantile_excess_return": -0.04408241683733294,
+    "top_quantile_max_drawdown": -0.1682939628762149,
+    "top_quantile_turnover": 0.15811041787352498
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.009309863726896425,
+    "icir": 0.12539887776247827,
+    "mi": 0.012309855234138745,
+    "rank_ic": 0.03261771114648642,
+    "rank_icir": 0.24732370020992123
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Measures drawdown severity normalized by close rolling standard deviation instead of ATR. Close volatility is less influenced by intraday extremes, reducing noise in the stress ratio. This targets the parent's payoff bottleneck (negative top quantile excess return) while preserving the core drawdown/volatility intuition. Cross-sectional cs_rank remains to highlight relative stress across stocks.",
+  "raw_metrics": {
+    "ic": 0.017322989907050522,
+    "icir": 0.1590333977742187,
+    "mi": 0.028113920802288916,
+    "rank_ic": 0.03261771114648642,
+    "rank_icir": 0.24732370020992123
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260717-061725-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260717-061725-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.42696000807992107,
+    "pre_transform_top_quantile_excess_return": -0.04408241683733294,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.4844117198399658,
+    "transformed_top_quantile_excess_return": -0.04408241683733294
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "stress_ratio = -(close / ts_max(20) - 1) / close_std(20)",
+  "fe_formula": "stress_ratio = -(close / ts_max(20) - 1) / close_std(20)",
+  "lqtp_notes": "Unconverted: ['close_std']",
+  "fe_notes": "Unconverted: ['close_std']",
+  "source_formula": "stress_ratio = -(close / rolling_max(20) - 1) / close_std(20)"
+}

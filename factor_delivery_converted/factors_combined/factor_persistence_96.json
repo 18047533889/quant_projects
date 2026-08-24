@@ -1,0 +1,34 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "262d8ef71a53f9571ba7c2d1aa7eb0246af8a49bc5cec73981ab12c320a3bbe2",
+  "candidate_ids": [
+    "stability_0"
+  ],
+  "code": "def factor_persistence(df):\n    df_copy = df.copy()\n    returns = df_copy[\"close\"].pct_change()\n    abs_return_diff = returns.diff().abs()\n    smoothness = -abs_return_diff.rolling(window=10, min_periods=1).mean()\n    df_copy[\"factor_persistence\"] = smoothness.fillna(0)\n    return df_copy[\"factor_persistence\"]",
+  "factor_name": "factor_persistence",
+  "fitness_direction": 1,
+  "formula": "-MA(|d(r)|, 10)",
+  "metrics": {
+    "ic": 0.040174841091050885,
+    "icir": 0.34757911416725173,
+    "mi": 0.029673141005400083,
+    "rank_ic": 0.07434394161171248,
+    "rank_icir": 0.5410148920809936
+  },
+  "rationale": "This factor measures the temporal consistency of daily returns by averaging the absolute change in consecutive returns over a 10-day rolling window. A smaller absolute change indicates more persistent return direction, which aligns with the Stability & Regime-Gating layer's focus on smoothness and persistence. The negative sign inverts the scale so higher factor values correspond to greater persistence.",
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-20260609-053202-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260609-053202-r1"
+  ],
+  "lqtp_formula": "-ts_mean(10, |d(r)|)",
+  "fe_formula": "-ts_mean(10, |d(r)|)",
+  "lqtp_notes": "Unconverted: ['d']",
+  "fe_notes": "Unconverted: ['d']",
+  "source_formula": "-MA(|d(r)|, 10)"
+}

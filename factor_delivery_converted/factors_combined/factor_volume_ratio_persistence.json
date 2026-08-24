@@ -1,0 +1,97 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "8c001efe6007eb715b57102521efa2fd6664a6a32c6f23556bfcca7d62cfa0a3",
+  "candidate_ids": [
+    "g1_crossover_alpha_stability_0_0_candidate_tail_001_802dbde6"
+  ],
+  "code": "def factor_volume_ratio_persistence(df):\n    df_copy = df.copy()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    persistence = vol_ratio.rolling(60, min_periods=30).mean()\n    df_copy[\"factor_volume_ratio_persistence\"] = persistence\n    return df_copy[\"factor_volume_ratio_persistence\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.8545454545454545,
+        "top_quantile_annualized_excess_return": 0.021547415624512123,
+        "top_quantile_excess_return": 0.06055802939315047,
+        "top_quantile_max_drawdown": -0.1196425351318251,
+        "top_quantile_turnover": 0.062288824029259504
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.08862715355686664,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.11372846443133369,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_volume_ratio_persistence",
+  "fitness_direction": -1,
+  "formula": "rolling mean of vol_ratio (volume/EMA) over 60 days",
+  "metrics": {
+    "ic": 0.009755647012906756,
+    "icir": 0.08862715355686664,
+    "mi": 0.015790631650856923,
+    "rank_ic": 0.02773830724387134,
+    "rank_icir": 0.2599439754776672
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8545454545454545,
+    "top_quantile_annualized_excess_return": 0.021547415624512123,
+    "top_quantile_excess_return": 0.06055802939315047,
+    "top_quantile_max_drawdown": -0.1196425351318251,
+    "top_quantile_turnover": 0.062288824029259504
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Measures persistence of volume intensity using continuous volume ratio (volume/EMA). Stocks with sustained high relative volume exhibit smoother price behavior and lower noise, aligning with temporal consistency focus. Uses vol_ratio from classify_volume_regime instead of binary flag to capture continuous information.",
+  "raw_metrics": {
+    "ic": -0.009755647012906756,
+    "icir": -0.08862715355686664,
+    "mi": 0.015790631650856923,
+    "rank_ic": -0.02773830724387134,
+    "rank_icir": -0.2599439754776672
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-20260730-055319-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-20260730-055319-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "rolling mean of <vol_ratio>(volume/EMA) over 60 days",
+  "fe_formula": "rolling mean of <vol_ratio>(volume/EMA) over 60 days",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "rolling mean of vol_ratio (volume/EMA) over 60 days"
+}

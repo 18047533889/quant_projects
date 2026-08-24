@@ -3,6 +3,19 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Large data files
+*.parquet
+runs/full-history-overnight/
+weekly_backtest_output/factor_values.parquet
+
+# vectorbt outputs (contain large parquet files)
+vectorbt_qs/examples/output/
+
 # Distribution / packaging
 .Python
 build/
@@ -20,11 +33,6 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-
-# Virtual environments
-.venv/
-venv/
-ENV/
 
 # Environment files
 .env
@@ -51,7 +59,6 @@ docs/logging/
 
 # Misc
 coscli_output/
-factor_assets/
 factor_cold_start/
 logs/
 modeling/build/

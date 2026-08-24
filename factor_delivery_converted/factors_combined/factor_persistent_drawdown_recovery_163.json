@@ -1,0 +1,93 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "e4bf666effa06c7a94b095217d6eebc96d4f669d2c818754781f4281f47433be",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_alpha_composite_0002_0531e74d_f05b639e"
+  ],
+  "code": "def factor_persistent_drawdown_recovery(df):\n    \"\"\"Measure persistent recovery from a lagged local drawdown while reducing reactive payoff exposure.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    low = df_copy[\"low\"]\n    prior_peak = close.rolling(30, min_periods=30).max().shift(5).replace([0.0, np.inf, -np.inf], np.nan)\n    drawdown_depth = (1.0 - close.shift(5) / prior_peak).clip(lower=0.0, upper=0.8)\n    prior_low = low.rolling(15, min_periods=15).min().shift(1).replace([0.0, np.inf, -np.inf], np.nan)\n    recovery = close / prior_low - 1.0\n    recovery_score = recovery.ewm(span=4, adjust=False, min_periods=4).mean() - 0.5 * drawdown_depth\n    factor = recovery_score * (1.0 + 0.35 * drawdown_depth)\n    df_copy[\"factor_persistent_drawdown_recovery\"] = factor\n    return df_copy[\"factor_persistent_drawdown_recovery\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9515151515151515,
+        "top_quantile_annualized_excess_return": 0.017320190163145233,
+        "top_quantile_excess_return": 0.04814120298714508,
+        "top_quantile_max_drawdown": -0.13517984173598374,
+        "top_quantile_turnover": 0.1578864435615246
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_excess_percentile",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_percentile"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_persistent_drawdown_recovery",
+  "fitness_direction": -1,
+  "formula": "[EMA4(close / lagged 15-bar low - 1) - 0.5 × lagged drawdown depth] × [1 + 0.35 × lagged drawdown depth]",
+  "metrics": {
+    "ic": 0.031778301709416666,
+    "icir": 0.22288264444129516,
+    "mi": 0.027073419032666912,
+    "rank_ic": 0.041588144133719585,
+    "rank_icir": 0.262724585794292
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9515151515151515,
+    "top_quantile_annualized_excess_return": 0.017320190163145233,
+    "top_quantile_excess_return": 0.04814120298714508,
+    "top_quantile_max_drawdown": -0.13517984173598374,
+    "top_quantile_turnover": 0.1578864435615246
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_percentile",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Uses a smoothed current-price recovery relative to a trailing lagged low, while subtracting and modestly amplifying a prior drawdown-depth term. The lagged peak and low ensure the signal uses only present and past observations; zero and non-finite denominators are treated as missing to prevent infinite outputs. The construction aims to capture persistent recovery while reducing sensitivity to abrupt, transient reversals.",
+  "raw_metrics": {
+    "ic": -0.031778301709416666,
+    "icir": -0.22288264444129516,
+    "mi": 0.027073419032666912,
+    "rank_ic": -0.041588144133719585,
+    "rank_icir": -0.262724585794292
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260806-094519-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260806-094519-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "[ema(4, close / lagged 15-bar low - 1) - 0.5 × lagged drawdown depth] × [1 + 0.35 × lagged drawdown depth]",
+  "fe_formula": "[ema(4, close / lagged 15-bar low - 1) - 0.5 × lagged drawdown depth] × [1 + 0.35 × lagged drawdown depth]",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "[EMA4(close / lagged 15-bar low - 1) - 0.5 × lagged drawdown depth] × [1 + 0.35 × lagged drawdown depth]"
+}

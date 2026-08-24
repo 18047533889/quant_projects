@@ -1,0 +1,73 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "673dd35ced140fa67eddc3ee18c278e0960a1c7792ef615250c50dbf768a9aea",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_cogalpha_tailrisk_002_faf7abab_785667a8"
+  ],
+  "code": "def factor_negative_skew_stress_gated(df):\n    df_copy = df.copy()\n    returns = df_copy['close'].pct_change()\n    rolling_skew = returns.rolling(40, min_periods=40).skew()\n    stress = -rolling_skew\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean()\n    factor = stress * vol_ratio\n    resvol_high = df_copy['style_gate_resvol_high']\n    weight = np.where(resvol_high > 0, 1.2, 0.8)\n    factor = factor * weight\n    factor.name = 'factor_negative_skew_stress_gated'\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_negative_skew_stress_gated",
+  "fitness_direction": 1,
+  "formula": "stress = -rolling_skew(returns, 40); factor = stress * (volume / rolling_mean(volume, 20)) * np.where(resvol_high, 1.2, 0.8)",
+  "metrics": {
+    "ic": 0.01648716913137625,
+    "icir": 0.18046739098569992,
+    "mi": 0.011949353858982548,
+    "rank_ic": 0.03295958471820172,
+    "rank_icir": 0.34828863575159874
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8909090909090909,
+    "top_quantile_annualized_excess_return": 0.04596399488596781,
+    "top_quantile_excess_return": 0.12972826675690796,
+    "top_quantile_max_drawdown": -0.12442043368666533,
+    "top_quantile_turnover": 0.2105298481499191
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Preserve core negative skew stress (tail-risk) multiplied by volume ratio. Add a lightweight residual-volatility regime gate to amplify the factor during high-residual-volatility periods when tail-risk premiums are elevated, and attenuate during low-resvol periods to reduce noise. This targets IC and MI improvement while preserving the rank ordering strength (RankIC 0.0309, RankICIR 0.3274).",
+  "raw_metrics": {
+    "ic": 0.01648716913137625,
+    "icir": 0.18046739098569992,
+    "mi": 0.011949353858982548,
+    "rank_ic": 0.03295958471820172,
+    "rank_icir": 0.34828863575159874
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "style_gate_resvol_high"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260708-112322-r3",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260708-112322-r3"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "The style_gate_resvol_high gate identifies stocks with high residual (idiosyncratic) volatility, which often coincide with market stress and elevated tail-risk compensation. In this regime, the negative skew signal should be given higher weight (1.2) to capture the premium; in low-residual-volatility periods, the signal is attenuated (0.8) to reduce noise. This bounded weight adjustment preserves cross-sectional continuity.",
+  "style_gates_used": [
+    "style_gate_resvol_high"
+  ],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "stress = -ts_skew(40, returns); factor = stress * (volume / ts_mean(20, volume)) * np.where(resvol_high, 1.2, 0.8)",
+  "fe_formula": "stress = -ts_skew(40, returns); factor = stress * (volume / ts_mean(20, volume)) * np.where(resvol_high, 1.2, 0.8)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "stress = -rolling_skew(returns, 40); factor = stress * (volume / rolling_mean(volume, 20)) * np.where(resvol_high, 1.2, 0.8)"
+}

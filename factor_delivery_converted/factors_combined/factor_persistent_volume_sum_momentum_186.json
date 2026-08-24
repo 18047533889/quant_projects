@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "18b041db087eca5742a564bb056820b5a37da79c745a2ac7149ea38a17724a8c",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_alpha_daily_trend_gen0_1_alpha_draw_31e0b885"
+  ],
+  "code": "def factor_persistent_volume_sum_momentum(df):\n    df_copy = df.copy()\n    ret = df_copy['close'] / df_copy['close'].shift(10) - 1\n    daily_ret = df_copy['close'].pct_change()\n    positive_ret = np.where(daily_ret > 0, daily_ret, 0.0)\n    persistence = pd.Series(positive_ret, index=df_copy.index).rolling(10).sum()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy['volume'], window=20)\n    weight = 1 + 0.3 * vol_ratio\n    factor = ret * persistence * weight\n    df_copy['factor_persistent_volume_sum_momentum'] = factor\n    return df_copy['factor_persistent_volume_sum_momentum']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_persistent_volume_sum_momentum",
+  "fitness_direction": -1,
+  "formula": "factor = (close/shift10 - 1) * sum(positive daily returns over 10 days) * (1 + 0.3 * vol_ratio)",
+  "metrics": {
+    "ic": 0.02350848714014418,
+    "icir": 0.20720579172487819,
+    "mi": 0.05857239972648198,
+    "rank_ic": 0.02684494642688081,
+    "rank_icir": 0.1683558424936171
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.1,
+    "top_quantile_annualized_excess_return": 0.023636633575684796,
+    "top_quantile_excess_return": 0.06843102287032243,
+    "top_quantile_max_drawdown": -0.14398512869010793,
+    "top_quantile_turnover": 0.2690453632399154
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Mutation of parent factor_persistent_volume_ratio_momentum: replaced binary persistence count (number of positive daily returns) with a continuous sum of positive daily returns over the same 10-day window. This reduces noise from the discrete count and provides a smoother measure of directional persistence, aiming to improve RankIC and RankICIR stability while preserving the core mechanism of momentum confirmed by volume participation.",
+  "raw_metrics": {
+    "ic": -0.02350848714014418,
+    "icir": -0.20720579172487819,
+    "mi": 0.05857239972648198,
+    "rank_ic": -0.02684494642688081,
+    "rank_icir": -0.1683558424936171
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260629-073809-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260629-073809-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "factor = (close/shift10 - 1) * ts_sum(positive daily returns over 10 days) * (1 + 0.3 * vol_ratio)",
+  "fe_formula": "factor = (close/shift10 - 1) * ts_sum(positive daily returns over 10 days) * (1 + 0.3 * vol_ratio)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "factor = (close/shift10 - 1) * sum(positive daily returns over 10 days) * (1 + 0.3 * vol_ratio)"
+}

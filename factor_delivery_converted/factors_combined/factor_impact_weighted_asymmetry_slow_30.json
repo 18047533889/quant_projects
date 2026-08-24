@@ -1,0 +1,91 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "32ee750499c2fa443890c6de13133e31643ec4f0e4e21bfeccba9d50cf5fbcea",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_mutation_alpha_vol_asymmetry_g0_a_8a96c104_g1_9de5f021"
+  ],
+  "code": "def factor_impact_weighted_asymmetry_slow_30(df):\n    \"\"\"Slower normalized downside-impact asymmetry for predictive stability.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    safe_close = close.where(close > 0.0)\n    prev_close = safe_close.shift(1)\n    safe_volume = volume.where(volume > 0.0)\n    ret = (safe_close / prev_close - 1.0).replace([np.inf, -np.inf], np.nan)\n    dollar_volume = (prev_close * safe_volume).replace([np.inf, -np.inf], np.nan)\n    impact = (ret.abs() / dollar_volume).replace([np.inf, -np.inf], np.nan)\n    impact_base = impact.rolling(30, min_periods=15).median()\n    impact_base = impact_base.where(np.isfinite(impact_base) & (impact_base > 0.0))\n    relative_impact = (impact / impact_base).replace([np.inf, -np.inf], np.nan).clip(upper=10.0)\n    downside = ret.clip(upper=0.0).pow(2) * relative_impact\n    upside = ret.clip(lower=0.0).pow(2) * relative_impact\n    asymmetry = downside.rolling(30, min_periods=15).mean() - upside.rolling(30, min_periods=15).mean()\n    total_stress = (downside + upside).rolling(30, min_periods=15).mean()\n    raw_signal = (asymmetry / total_stress.replace(0.0, np.nan)).replace([np.inf, -np.inf], np.nan)\n    factor = raw_signal.ewm(span=30, min_periods=15, adjust=False).mean()\n    df_copy[\"factor_impact_weighted_asymmetry_slow_30\"] = factor.replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_impact_weighted_asymmetry_slow_30\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.0702908063790848,
+        "top_quantile_excess_return": 0.20150363394896553,
+        "top_quantile_max_drawdown": -0.06592897345304649,
+        "top_quantile_turnover": 0.04515615618418994
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_impact_weighted_asymmetry_slow_30",
+  "fitness_direction": 1,
+  "formula": "EWMA30(([MA30(r^-_t^2 I_t) - MA30(r^+_t^2 I_t)] / MA30(r^-_t^2 I_t + r^+_t^2 I_t))), where I_t is capped absolute return per dollar volume relative to its trailing 30-bar median.",
+  "metrics": {
+    "ic": 0.015861502979306812,
+    "icir": 0.1498418546654632,
+    "mi": 0.005001925810050878,
+    "rank_ic": 0.03134592005820453,
+    "rank_icir": 0.2568014391833693
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.0702908063790848,
+    "top_quantile_excess_return": 0.20150363394896553,
+    "top_quantile_max_drawdown": -0.06592897345304649,
+    "top_quantile_turnover": 0.04515615618418994
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "Mutation preserves the parent's core economic mechanism of normalized downside-impact asymmetry and its raw payoff-oriented implementation. It targets the parent's predictive robustness and turnover bottleneck by extending the impact baseline, stress aggregation, and final exponential smoothing from 20 to 30 bars, reducing sensitivity to isolated volume-price shocks while retaining continuous relative downside information. No cross-sectional transform or style gate is added.",
+  "raw_metrics": {
+    "ic": 0.015861502979306812,
+    "icir": 0.1498418546654632,
+    "mi": 0.005001925810050878,
+    "rank_ic": 0.03134592005820453,
+    "rank_icir": 0.2568014391833693
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260806-094519-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260806-094519-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema(30, ([MA30(r^-_t^2 I_t) - MA30(r^+_t^2 I_t)] / MA30(r^-_t^2 I_t + r^+_t^2 I_t))), where I_t is capped absolute return per dollar volume relative to its trailing 30-bar median.",
+  "fe_formula": "ema(30, ([MA30(r^-_t^2 I_t) - MA30(r^+_t^2 I_t)] / MA30(r^-_t^2 I_t + r^+_t^2 I_t))), where I_t is capped absolute return per dollar volume relative to its trailing 30-bar median.",
+  "lqtp_notes": "Unconverted: ['MA30']",
+  "fe_notes": "Unconverted: ['MA30']",
+  "source_formula": "EWMA30(([MA30(r^-_t^2 I_t) - MA30(r^+_t^2 I_t)] / MA30(r^-_t^2 I_t + r^+_t^2 I_t))), where I_t is capped absolute return per dollar volume relative to its trailing 30-bar median."
+}

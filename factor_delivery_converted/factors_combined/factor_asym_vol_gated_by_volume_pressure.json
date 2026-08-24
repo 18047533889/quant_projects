@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "20a8896046074a9d1d6106464740d7cc55d36a4aa76502d338db0b0273a6357b",
+  "candidate_ids": [
+    "cross_vol_asym_001"
+  ],
+  "code": "def factor_asym_vol_gated_by_volume_pressure(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    ret = close.pct_change()\n    up_ret = np.where(ret > 0, ret, np.nan)\n    down_ret = np.where(ret < 0, ret, np.nan)\n    span = 20\n    up_var = pd.Series(up_ret**2, index=df_copy.index).ewm(span=span, min_periods=5).mean()\n    down_var = pd.Series(down_ret**2, index=df_copy.index).ewm(span=span, min_periods=5).mean()\n    up_vol = up_var.pow(0.5)\n    down_vol = down_var.pow(0.5)\n    ratio = down_vol / up_vol.replace(0, np.nan)\n    asym = np.log(ratio.clip(lower=1e-6))\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    factor = asym * vol_ratio\n    factor = factor.fillna(0)\n    df_copy[\"factor_asym_vol_gated_by_volume_pressure\"] = factor\n    return df_copy[\"factor_asym_vol_gated_by_volume_pressure\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_asym_vol_gated_by_volume_pressure",
+  "fitness_direction": 1,
+  "formula": "log( EWMA(down_ret^2,20)^0.5 / EWMA(up_ret^2,20)^0.5 ) * vol_ratio(20)",
+  "metrics": {
+    "ic": 0.0194473834416527,
+    "icir": 0.1891991021605335,
+    "mi": 0.016407110324358598,
+    "rank_ic": 0.03710742056359146,
+    "rank_icir": 0.3407290665464978
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.09512246152923809,
+    "top_quantile_excess_return": 0.2936325824848016,
+    "top_quantile_max_drawdown": -0.08768471676641187,
+    "top_quantile_turnover": 0.22179315648741965
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Crossover: primary mechanism from asym-vol-ratio-ewma-001 captures downside/upside volatility asymmetry using EWMA; lightweight modifier from candidate_3 uses continuous vol_ratio from classify_volume_regime as a volume-conviction weight. The product amplifies the asymmetry signal during high volume periods, combining crash risk with volume pressure.",
+  "raw_metrics": {
+    "ic": 0.0194473834416527,
+    "icir": 0.1891991021605335,
+    "mi": 0.016407110324358598,
+    "rank_ic": 0.03710742056359146,
+    "rank_icir": 0.3407290665464978
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260629-010620-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260629-010620-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "log( ema(20, down_ret^2)^0.5 / ema(20, up_ret^2)^0.5 ) * <vol_ratio>(20)",
+  "fe_formula": "log( ema(20, down_ret^2)^0.5 / ema(20, up_ret^2)^0.5 ) * <vol_ratio>(20)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "log( EWMA(down_ret^2,20)^0.5 / EWMA(up_ret^2,20)^0.5 ) * vol_ratio(20)"
+}

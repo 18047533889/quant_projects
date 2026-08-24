@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "9d829415cfa42cd1949f46b7109060fdec56f6d564a9c31c98d1ec7bab78c537",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_then_mutation_alpha_creative_2_vwap_36515c24"
+  ],
+  "code": "def factor_vwap_adjusted_range_tanh_mutated_v2(df):\n    df_copy = df.copy()\n    atr = talib.ATR(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=14)\n    vwap = (df_copy['close'] * df_copy['volume']).rolling(14).sum() / df_copy['volume'].rolling(14).sum().replace(0, np.nan)\n    norm_atr = atr / vwap\n    vol_ema = talib.EMA(df_copy['volume'], timeperiod=30)\n    vol_ratio = df_copy['volume'] / vol_ema\n    raw = norm_atr * vol_ratio\n    factor = np.tanh(raw)\n    df_copy['factor_vwap_adjusted_range_tanh_mutated_v2'] = factor\n    return df_copy['factor_vwap_adjusted_range_tanh_mutated_v2']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_vwap_adjusted_range_tanh_mutated_v2",
+  "fitness_direction": -1,
+  "formula": "tanh( (ATR(14) / VWAP(14)) * (volume / EMA(volume, 30)) )",
+  "metrics": {
+    "ic": 0.01916455347188627,
+    "icir": 0.1361422795547824,
+    "mi": 0.06822848486839028,
+    "rank_ic": 0.05959183464527854,
+    "rank_icir": 0.4116383094606438
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6,
+    "top_quantile_annualized_excess_return": 0.014736592600995468,
+    "top_quantile_excess_return": 0.04117098832102495,
+    "top_quantile_max_drawdown": -0.13285869676844508,
+    "top_quantile_turnover": 0.3785779042396846
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Mutate the parent by lengthening ATR and VWAP windows from 10 to 14 for a more robust volatility estimate, and increasing volume EMA from 20 to 30 to reduce noise in volume confirmation. This targets improved IC while preserving the core trend-volume confirmation mechanism and RankIC stability. The tanh transformation is retained to maintain rank consistency.",
+  "raw_metrics": {
+    "ic": -0.01916455347188627,
+    "icir": -0.1361422795547824,
+    "mi": 0.06822848486839028,
+    "rank_ic": -0.05959183464527854,
+    "rank_icir": -0.4116383094606438
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260707-013704-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260707-013704-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "tanh( (ts_atr(14) / VWAP(14)) * (volume / ema(30, volume)) )",
+  "fe_formula": "tanh( (ATR(14) / VWAP(14)) * (volume / ema(30, volume)) )",
+  "lqtp_notes": "Unconverted: ['VWAP']",
+  "fe_notes": "Unconverted: ['VWAP']",
+  "source_formula": "tanh( (ATR(14) / VWAP(14)) * (volume / EMA(volume, 30)) )"
+}

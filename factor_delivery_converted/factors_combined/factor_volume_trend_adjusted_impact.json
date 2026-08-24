@@ -1,0 +1,43 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "7dbefd95c21668742b57ae581dd6d27263de38860f59c894a99076f5d5336367",
+  "candidate_ids": [
+    "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+  ],
+  "code": "def factor_volume_trend_adjusted_impact(df):\n    df_copy = df.copy()\n    price_move = df_copy['close'] - df_copy['open']\n    volume_ma20 = df_copy['volume'].rolling(window=20, min_periods=20).mean()\n    volume_ratio = df_copy['volume'] / (volume_ma20 + 1e-10)\n    impact = price_move * volume_ratio\n    factor = impact.ewm(span=21, min_periods=21, adjust=False).mean()\n    df_copy[\"factor_volume_trend_adjusted_impact\"] = factor\n    return df_copy[\"factor_volume_trend_adjusted_impact\"]",
+  "factor_name": "factor_volume_trend_adjusted_impact",
+  "fitness_direction": -1,
+  "formula": "(close - open) * (volume / 20-day volume MA), then 21-day EWM",
+  "metrics": {
+    "ic": 0.016859047776363042,
+    "icir": 0.2080422250551569,
+    "mi": 0.03275626108503982,
+    "rank_ic": 0.0411318026122436,
+    "rank_icir": 0.365732505447761
+  },
+  "rationale": "This factor mutates the parent volume-adjusted price impact by replacing the sqrt(volume) denominator with a volume trend ratio (volume / 20-day moving average). This emphasizes price moves that occur on abnormally high volume relative to recent trend, capturing conviction-driven movements. The EWM smoothing improves stability and consistency, targeting the IC bottleneck while preserving the parent's rank-based strength (RankIC).",
+  "raw_metrics": {
+    "ic": -0.016859047776363042,
+    "icir": -0.2080422250551569,
+    "mi": 0.03275626108503982,
+    "rank_ic": -0.0411318026122436,
+    "rank_icir": -0.365732505447761
+  },
+  "required_columns": [
+    "open",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260610-073501-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260610-073501-r1"
+  ],
+  "lqtp_formula": "(close - open) * (volume / 20-day volume MA), then 21-day EWM",
+  "fe_formula": "(close - open) * (volume / 20-day volume MA), then 21-day EWM",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(close - open) * (volume / 20-day volume MA), then 21-day EWM"
+}

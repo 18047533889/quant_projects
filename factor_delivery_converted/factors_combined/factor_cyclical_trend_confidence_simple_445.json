@@ -1,0 +1,98 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "596db93f201ff4ac34949142a5aecbabbc6b23d2e7590d9d2b733048e5927fdf",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_alphacycle_001_a299e42a_448b1b60"
+  ],
+  "code": "def factor_cyclical_trend_confidence_simple(df):\n    df_copy = df.copy()\n    pdi = pd.Series(talib.PLUS_DI(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=50), index=df_copy.index)\n    mdi = pd.Series(talib.MINUS_DI(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=50), index=df_copy.index)\n    di_spread = pdi - mdi\n    factor = pd.Series(talib.EMA(di_spread, timeperiod=20), index=df_copy.index)\n    df_copy['factor_cyclical_trend_confidence_simple'] = factor\n    return df_copy['factor_cyclical_trend_confidence_simple']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.07354565370947519,
+        "top_quantile_excess_return": 0.20256590359046167,
+        "top_quantile_max_drawdown": -0.13333639599413383,
+        "top_quantile_turnover": 0.030047236844606372
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.08929744917701424,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.10702550822985768,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_cyclical_trend_confidence_simple",
+  "fitness_direction": -1,
+  "formula": "EMA(20, PLUS_DI(50) - MINUS_DI(50))",
+  "metrics": {
+    "ic": 0.012097730398605854,
+    "icir": 0.08929744917701424,
+    "mi": 0.0135707840785102,
+    "rank_ic": 0.032558962128953366,
+    "rank_icir": 0.22296891567727462
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.07354565370947519,
+    "top_quantile_excess_return": 0.20256590359046167,
+    "top_quantile_max_drawdown": -0.13333639599413383,
+    "top_quantile_turnover": 0.030047236844606372
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Ablate ADX weighting from the parent to increase signal strength in trending markets. The parent used ADX to reduce false signals in weak trends, but this also attenuated payoff in genuine trends. Removing ADX lets the directional spread drive the signal directly, potentially improving payoff while preserving directional predictive content.",
+  "raw_metrics": {
+    "ic": -0.012097730398605854,
+    "icir": -0.08929744917701424,
+    "mi": 0.0135707840785102,
+    "rank_ic": -0.032558962128953366,
+    "rank_icir": -0.22296891567727462
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260720-053953-r6",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260720-053953-r6"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema(PLUS_DI(50) - MINUS_DI(50), 20)",
+  "fe_formula": "ema(PLUS_DI(50) - MINUS_DI(50), 20)",
+  "lqtp_notes": "Unconverted: ['MINUS_DI', 'PLUS_DI']",
+  "fe_notes": "Unconverted: ['MINUS_DI', 'PLUS_DI']",
+  "source_formula": "EMA(20, PLUS_DI(50) - MINUS_DI(50))"
+}

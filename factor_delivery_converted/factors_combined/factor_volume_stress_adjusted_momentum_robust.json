@@ -1,0 +1,51 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "f77ec8f213925d4d39604e963b9ecc8b39b461d731c7950debd1ce29a149a944",
+  "candidate_ids": [
+    "CROSS-MUT-001"
+  ],
+  "code": "def factor_volume_stress_adjusted_momentum_robust(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change(10)\n    vol_median = df_copy['volume'].rolling(20).median()\n    vol_mad = (df_copy['volume'] - vol_median).abs().rolling(20).median()\n    vol_robust_z = (df_copy['volume'] - vol_median) / (vol_mad * 1.4826).replace(0, np.nan)\n    vol_robust_z = vol_robust_z.clip(-3, 3)\n    returns = df_copy['close'].pct_change()\n    neg_returns = returns.clip(upper=0)\n    downside_std = neg_returns.rolling(20, min_periods=20).std()\n    total_std = returns.rolling(20, min_periods=20).std()\n    ratio = downside_std / total_std.replace(0, np.nan)\n    ratio = ratio.fillna(0.5)\n    factor = ret * vol_robust_z * (1 - ratio)\n    factor.name = \"factor_volume_stress_adjusted_momentum_robust\"\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_volume_stress_adjusted_momentum_robust",
+  "fitness_direction": -1,
+  "formula": "factor = (close_10d_return) * robust_z(volume, 20d) * (1 - downside_stress_ratio(20d))",
+  "metrics": {
+    "ic": 0.026551416818299197,
+    "icir": 0.24248509632643472,
+    "mi": 0.03411308822478354,
+    "rank_ic": 0.02736064457184772,
+    "rank_icir": 0.3133349444291996
+  },
+  "rationale": "Mutation of CROSS-001: preserves the core price-volume coherence mechanism (10-day return multiplied by volume deviation) but replaces the standard volume z-score (mean/std) with a robust z-score using median and MAD. This reduces the influence of outlier volume observations, aiming to improve IC and MI stability without disrupting the RankIC strength of the parent.",
+  "raw_metrics": {
+    "ic": -0.026551416818299197,
+    "icir": -0.24248509632643472,
+    "mi": 0.03411308822478354,
+    "rank_ic": -0.02736064457184772,
+    "rank_icir": -0.3133349444291996
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260622-103436-r4",
+  "source_run_ids": [
+    "formal-mvp-loop-20260622-103436-r4"
+  ],
+  "lqtp_formula": "factor = (close_10d_return) * cs_zscore(volume, 20d) * (1 - downside_stress_ratio(20d))",
+  "fe_formula": "factor = (close_10d_return) * zscore(volume, 20d) * (1 - downside_stress_ratio(20d))",
+  "lqtp_notes": "Unconverted: ['downside_stress_ratio']",
+  "fe_notes": "Unconverted: ['downside_stress_ratio']",
+  "source_formula": "factor = (close_10d_return) * robust_z(volume, 20d) * (1 - downside_stress_ratio(20d))"
+}

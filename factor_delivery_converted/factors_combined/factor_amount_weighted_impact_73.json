@@ -1,0 +1,98 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "minute_tools"
+  ],
+  "calculation_fingerprint": "legacy-unresolved:2",
+  "candidate_id": "minute-amount-impact_v0",
+  "candidate_ids": [
+    "minute-amount-impact_v0"
+  ],
+  "code": "def factor_amount_weighted_impact(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close_price\"].pct_change().abs().fillna(0.0)\n    impact = minute_tools.amount_weighted_mean(ret, df_copy[\"amount\"], df_copy[\"TradingDay\"])\n    value = float(impact)\n    day = pd.Timestamp(df_copy[\"TradingDay\"].iloc[0])\n    out = pd.Series([value], index=[day], name=\"factor_amount_weighted_impact\")\n    return out",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "domain_agent": "minute-amount-impact",
+  "factor_name": "factor_amount_weighted_impact",
+  "factor_value_contract": "minute_to_daily_panel",
+  "fitness_direction": -1,
+  "formula": "Amount-weighted mean of absolute minute returns",
+  "frequency": "minute",
+  "lineage": {
+    "agent_skill": "MinuteAmountImpact",
+    "generation": 0,
+    "guidance_mode": null,
+    "operation": null,
+    "parent_ids": []
+  },
+  "metadata": {
+    "fitness_direction": -1,
+    "fitness_metrics": {
+      "ic": 0.055534188617222306,
+      "icir": 0.41433818705464587,
+      "mi": 0.0562795811415322,
+      "rank_ic": 0.10272882330337357,
+      "rank_icir": 0.5070724785010118
+    },
+    "minute_required_columns": [
+      "close_price",
+      "amount"
+    ],
+    "payoff_diagnostics": {
+      "quantile_monotonicity": 1.0,
+      "top_quantile_annualized_excess_return": 0.3849628300202119,
+      "top_quantile_excess_return": 0.011699094648748964,
+      "top_quantile_max_drawdown": -0.013258917907250423,
+      "top_quantile_turnover": 0.3441774872811204
+    },
+    "payoff_gate_passed": true,
+    "pre_transform_fitness_direction": 1,
+    "raw_fitness_metrics": {
+      "ic": -0.055534188617222306,
+      "icir": -0.41433818705464587,
+      "mi": 0.0562795811415322,
+      "rank_ic": -0.10272882330337357,
+      "rank_icir": -0.5070724785010118
+    },
+    "transform_gate_passed": true
+  },
+  "metrics": {
+    "ic": 0.055534188617222306,
+    "icir": 0.41433818705464587,
+    "mi": 0.0562795811415322,
+    "rank_ic": 0.10272882330337357,
+    "rank_icir": 0.5070724785010118
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.3849628300202119,
+    "top_quantile_excess_return": 0.011699094648748964,
+    "top_quantile_max_drawdown": -0.013258917907250423,
+    "top_quantile_turnover": 0.3441774872811204
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "rationale": "Measures the average absolute price impact per unit of trading amount. Higher values indicate greater price movement relative to capital participation, capturing stressful or inefficient execution. Continuous and dense across all days.",
+  "raw_metrics": {
+    "ic": -0.055534188617222306,
+    "icir": -0.41433818705464587,
+    "mi": 0.0562795811415322,
+    "rank_ic": -0.10272882330337357,
+    "rank_icir": -0.5070724785010118
+  },
+  "required_columns": [
+    "close_price",
+    "amount"
+  ],
+  "run_id": "minute-mvp-loop-20260630-082206-r2",
+  "source_run_ids": [
+    "minute-mvp-loop-20260630-082206-r2"
+  ],
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "Amount-weighted mean of absolute minute returns",
+  "fe_formula": "Amount-weighted mean of absolute minute returns",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "Amount-weighted mean of absolute minute returns"
+}

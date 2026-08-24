@@ -1,0 +1,104 @@
+{
+  "allowed_libraries": [
+    "numpy",
+    "pandas",
+    "minute_tools"
+  ],
+  "calculation_fingerprint": "legacy-unresolved:12",
+  "candidate_id": "g2_mutation_g1_crossover_minute_spread_pulse_intensity_v1_mi_1d09f6d6",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_minute_spread_pulse_intensity_v1_mi_1d09f6d6"
+  ],
+  "code": "def factor_vwap_squared_deviation_intensity(df):\n    df_copy = df.copy()\n    vwap = (df_copy['close_price'] * df_copy['volume']).sum() / df_copy['volume'].sum()\n    deviation = (df_copy['close_price'] - vwap) ** 2\n    is_high, volume_z = minute_tools.get_up_space(df_copy['volume'], df_copy['TradingDay'], std_multiplier=1.0)\n    weight = volume_z.clip(lower=0)\n    weighted_dev = deviation * weight\n    sum_weight = weight.sum()\n    value = (weighted_dev.sum() / sum_weight) if sum_weight > 0 else 0.0\n    day = pd.Timestamp(df_copy['TradingDay'].iloc[0])\n    return pd.Series([value], index=[day], name='factor_vwap_squared_deviation_intensity')",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "domain_agent": "minutemutation",
+  "factor_name": "factor_vwap_squared_deviation_intensity",
+  "factor_value_contract": "minute_to_daily_panel",
+  "fitness_direction": 1,
+  "formula": null,
+  "frequency": "minute",
+  "lineage": {
+    "agent_skill": "MinuteMutation",
+    "generation": 2,
+    "guidance_mode": null,
+    "operation": "mutation",
+    "parent_ids": [
+      "g1_crossover_minute_spread_pulse_intensity_v1_minute_price_de_2580d801"
+    ]
+  },
+  "metadata": {
+    "fitness_direction": 1,
+    "fitness_metrics": {
+      "ic": 0.022128636691685757,
+      "icir": 0.4630175912442589,
+      "mi": 0.029892769801579178,
+      "rank_ic": 0.06051340511833471,
+      "rank_icir": 0.3367932213786278
+    },
+    "llm_candidate_id": "g2_mutation_minute_vwap_squared_deviation_intensity_v1",
+    "payoff_diagnostics": {
+      "quantile_monotonicity": 1.0,
+      "top_quantile_annualized_excess_return": 0.40468717286290534,
+      "top_quantile_excess_return": 0.012210179561815249,
+      "top_quantile_max_drawdown": -0.0181755960183555,
+      "top_quantile_turnover": 0.5245757020511349
+    },
+    "payoff_gate_passed": true,
+    "pre_transform_fitness_direction": 1,
+    "raw_fitness_metrics": {
+      "ic": 0.022128636691685757,
+      "icir": 0.4630175912442589,
+      "mi": 0.029892769801579178,
+      "rank_ic": 0.06051340511833471,
+      "rank_icir": 0.3367932213786278
+    },
+    "transform_gate_passed": true
+  },
+  "metrics": {
+    "ic": 0.022128636691685757,
+    "icir": 0.4630175912442589,
+    "mi": 0.029892769801579178,
+    "rank_ic": 0.06051340511833471,
+    "rank_icir": 0.3367932213786278
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.40468717286290534,
+    "top_quantile_excess_return": 0.012210179561815249,
+    "top_quantile_max_drawdown": -0.0181755960183555,
+    "top_quantile_turnover": 0.5245757020511349
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "post_transforms": null,
+  "rationale": "Measures the volume-intensity-weighted average squared deviation of intraday closing prices from the daily VWAP. By squaring the deviation, larger price dislocations are amplified, increasing tail sensitivity while preserving the core mechanism of weighting by volume spike intensity.",
+  "raw_metrics": {
+    "ic": 0.022128636691685757,
+    "icir": 0.4630175912442589,
+    "mi": 0.029892769801579178,
+    "rank_ic": 0.06051340511833471,
+    "rank_icir": 0.3367932213786278
+  },
+  "required_columns": [
+    "trading_datetime",
+    "TradingDay",
+    "open_price",
+    "high_price",
+    "low_price",
+    "close_price",
+    "volume",
+    "amount"
+  ],
+  "run_id": "minute-mvp-loop-20260711-151010-r10",
+  "source_run_ids": [
+    "minute-mvp-loop-20260711-151010-r10"
+  ],
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "",
+  "fe_formula": "",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": ""
+}

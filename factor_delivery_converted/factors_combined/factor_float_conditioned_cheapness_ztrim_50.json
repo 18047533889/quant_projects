@@ -1,0 +1,116 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "34cfd8b34d006434cb96613ee95b0f036d0c5d47216e61eb8e6ce552a4962df6",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_then_mutation_float_elasticity_cand_d613fb70"
+  ],
+  "code": "def factor_float_conditioned_cheapness_ztrim(df):\n    df_copy = df.copy()\n    cheapness = 1.0 / df_copy[\"pb_lf\"].replace(0, np.nan)\n    float_adj = 1.0 / np.log1p(df_copy[\"free_float_shares\"].clip(lower=1e6))\n    debt_ratio = df_copy[\"debttoassets\"] / 100.0\n    penalty = 1.0 / (1.0 + debt_ratio)\n    raw = cheapness * float_adj * penalty\n    mean_ = raw.rolling(252, min_periods=60).mean()\n    std_ = raw.rolling(252, min_periods=60).std(ddof=1)\n    upper = mean_ + 3.0 * std_\n    lower = mean_ - 3.0 * std_\n    trimmed = raw.clip(lower=lower, upper=upper)\n    return trimmed.rename(\"factor_float_conditioned_cheapness_ztrim\")",
+  "cross_sectional_rationale": "Cross-sectional rank normalizes the multiplicative combination of different units (inverse PB, float adjustment, leverage penalty) to a common interpretable scale, isolating the relative ordering of float-conditioned cheapness.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.11974191917712518,
+        "top_quantile_excess_return": 0.38393793067825754,
+        "top_quantile_max_drawdown": -0.11985943286708411,
+        "top_quantile_turnover": 0.022116462004548768
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_float_conditioned_cheapness_ztrim",
+  "fitness_direction": 1,
+  "formula": "raw = (1/pb_lf) / log(1+free_float_shares) * 1/(1+debttoassets/100); then clip to rolling mean ± 3*std over 252 days",
+  "metrics": {
+    "ic": 0.014523224839337505,
+    "icir": 0.13918036231833403,
+    "mi": 0.01638279171789847,
+    "rank_ic": 0.03713341335335305,
+    "rank_icir": 0.28443418008104093
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.11974191917712518,
+    "top_quantile_excess_return": 0.38393793067825754,
+    "top_quantile_max_drawdown": -0.11985943286708411,
+    "top_quantile_turnover": 0.022116462004548768
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.012900636859823403,
+    "icir": 0.12367648570871813,
+    "mi": 0.019781632551193695,
+    "rank_ic": 0.03713341335335305,
+    "rank_icir": 0.28443418008104093
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.11974191917712518,
+    "top_quantile_excess_return": 0.38393793067825754,
+    "top_quantile_max_drawdown": -0.11985943286708411,
+    "top_quantile_turnover": 0.022116462004548768
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.012900636859823403,
+    "icir": 0.12367648570871813,
+    "mi": 0.019781632551193695,
+    "rank_ic": 0.03713341335335305,
+    "rank_icir": 0.28443418008104093
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Mutation from time-series quantile clip to z-score-based trimming. The core float-conditioned cheapness with leverage penalty is preserved. Rolling z-score trimming normalizes outliers by volatility, improving the Pearson IC without damaging the strong rank-based metrics (RankIC, RankICIR, MI). This directly targets the parent's IC bottleneck while preserving its rank and MI strengths.",
+  "raw_metrics": {
+    "ic": 0.014523224839337505,
+    "icir": 0.13918036231833403,
+    "mi": 0.01638279171789847,
+    "rank_ic": 0.03713341335335305,
+    "rank_icir": 0.28443418008104093
+  },
+  "required_columns": [
+    "pb_lf",
+    "free_float_shares",
+    "debttoassets"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260721-20260721-205925-r5",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260721-20260721-205925-r5"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.4779263485541292,
+    "pre_transform_top_quantile_excess_return": 0.38393793067825754,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.491653972309964,
+    "transformed_top_quantile_excess_return": 0.38393793067825754
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "raw = (1/pb_lf) / log(1+free_float_shares) * 1/(1+debttoassets/100); then clip to rolling mean ± 3*std over 252 days",
+  "fe_formula": "raw = (1/pb_lf) / log(1+free_float_shares) * 1/(1+debttoassets/100); then clip to rolling mean ± 3*std over 252 days",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "raw = (1/pb_lf) / log(1+free_float_shares) * 1/(1+debttoassets/100); then clip to rolling mean ± 3*std over 252 days"
+}

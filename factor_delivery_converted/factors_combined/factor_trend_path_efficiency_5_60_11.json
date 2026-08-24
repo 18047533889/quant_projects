@@ -1,0 +1,130 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "b_id": "B16",
+  "c_id": "C1603",
+  "calculation_fingerprint": "3485ecf7a96ea0d9c451396f3da64bccc6c8f3aff92419bba6b2b6cdc1ceec63",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_c1603_gen0_005_d06f7f01_d2edde6c"
+  ],
+  "code": "def factor_trend_path_efficiency_5_60(df):\n    '''Idea: A long-horizon trend is trustworthy when recent five-day directional progress is efficient; choppy or counter-trend paths signal a phase rupture.\n\n    Logic: The 60-day return defines the long-horizon trend. The registered directional_efficiency tool returns the signed five-day efficiency ratio (five-day net displacement over total five-day path length). Multiplying the 60-day trend by this signed efficiency keeps the trend when short-horizon progress is aligned and efficient, attenuates it when the path is choppy, and flips it when the short path has retraced against the trend.\n    Sub-mechanism tags: multi_scale_consistency, trend_alignment, path_efficiency, long_horizon_slope.\n    Formula: factor = (close/close.shift(60)-1) * directional_efficiency(close, 5).\n    '''\n    df_copy = df.copy()\n    long_ret = df_copy['close'] / df_copy['close'].shift(60) - 1.0\n    short_eff = alpha_tools.directional_efficiency(df_copy, window=5)\n    short_eff = short_eff.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    factor = long_ret * short_eff\n    df_copy['factor_trend_path_efficiency_5_60'] = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    return df_copy['factor_trend_path_efficiency_5_60']",
+  "codegen_skill": "alpha-mutation",
+  "cross_sectional_rationale": "The signed five-day path efficiency is denominated in per-stock return units, and its predictive meaning for trend quality is strongest relative to other stocks on the same date; cs_rank makes the factor comparable across heterogeneous price levels and volatilities without altering the raw mechanism.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "guidance_inconsistent": false,
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": -0.015283985202326877,
+        "top_quantile_excess_return": -0.039770556315761985,
+        "top_quantile_max_drawdown": -0.1787854433482895,
+        "top_quantile_turnover": 0.1897300761897055
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first",
+    "transform_applied": true
+  },
+  "factor_name": "factor_trend_path_efficiency_5_60",
+  "fitness_direction": -1,
+  "formula": "(close / close.shift(60) - 1) * directional_efficiency(close, 5)",
+  "manual_admission": null,
+  "metrics": {
+    "ic": 0.019033333027889683,
+    "icir": 0.14175686984041524,
+    "mi": 0.009063711983097633,
+    "rank_ic": 0.034863937097675976,
+    "rank_icir": 0.2218250682910812
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": -0.015283985202326877,
+    "top_quantile_excess_return": -0.039770556315761985,
+    "top_quantile_max_drawdown": -0.1787854433482895,
+    "top_quantile_turnover": 0.1897300761897055
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.0028739048089577424,
+    "icir": 0.03672461981840211,
+    "mi": 0.017539500247254036,
+    "rank_ic": 0.034863937097675976,
+    "rank_icir": 0.2218250682910812
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": -0.015283985202326877,
+    "top_quantile_excess_return": -0.039770556315761985,
+    "top_quantile_max_drawdown": -0.1787854433482895,
+    "top_quantile_turnover": 0.1897300761897055
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.0028739048089577424,
+    "icir": -0.03672461981840211,
+    "mi": 0.017539500247254036,
+    "rank_ic": -0.034863937097675976,
+    "rank_icir": -0.2218250682910812
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "The parent gated the 60-day slope by a five-day count of daily sign agreement with the trend. This mutation replaces that discrete sign-count with a signed directional-efficiency mechanism over the same horizon: the registered directional_efficiency tool measures five-day net displacement divided by total five-day path length, so it is continuous, magnitude-aware, and bounded. This changes the event definition from 'how many recent days agreed with the trend' to 'how much recent progress is efficient and in the trend's direction', and changes the response regime because a forceful counter-trend retracement now actively flips the trend signal instead of merely reducing its weight. The core long-horizon slope mechanism is preserved and the cycle's consistency-versus-rupture hypothesis is expressed more directly.",
+  "raw_metrics": {
+    "ic": -0.019033333027889683,
+    "icir": -0.14175686984041524,
+    "mi": 0.009063711983097633,
+    "rank_ic": -0.034863937097675976,
+    "rank_icir": -0.2218250682910812
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-evo-bottleneck-fix-v1-20260813-085045-r2",
+  "source_run_ids": [
+    "formal-evo-bottleneck-fix-v1-20260813-085045-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.31382703026337105,
+    "pre_transform_top_quantile_excess_return": -0.039770556315761985,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.4265429202401597,
+    "transformed_top_quantile_excess_return": -0.039770556315761985
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(close / close.delay(60) - 1) * directional_efficiency(close, 5)",
+  "fe_formula": "(close / close.ts_delay(60) - 1) * directional_efficiency(close, 5)",
+  "lqtp_notes": "Unconverted: ['directional_efficiency']",
+  "fe_notes": "Unconverted: ['directional_efficiency']",
+  "source_formula": "(close / close.shift(60) - 1) * directional_efficiency(close, 5)"
+}

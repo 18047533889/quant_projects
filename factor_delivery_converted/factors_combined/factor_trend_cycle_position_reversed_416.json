@@ -1,0 +1,95 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "f94340e39b243ee702dfed39d7c9957114996d2740cfa3faee046d90112c511b",
+  "candidate_ids": [
+    "g2_mutation_mc_cycle_pos_1_ab878cd4"
+  ],
+  "code": "def factor_trend_cycle_position_reversed(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    sma200 = close.rolling(200, min_periods=200).mean()\n    tr = pd.concat([high - low, (high - close.shift(1)).abs(), (low - close.shift(1)).abs()], axis=1).max(axis=1)\n    atr20 = tr.rolling(20, min_periods=20).mean()\n    position = (close - sma200) / atr20.replace(0, np.nan)\n    df_copy[\"factor_trend_cycle_position_reversed\"] = -position\n    return df_copy[\"factor_trend_cycle_position_reversed\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9151515151515152,
+        "top_quantile_annualized_excess_return": 0.047608494617145114,
+        "top_quantile_excess_return": 0.10174546995526468,
+        "top_quantile_max_drawdown": -0.19227680156213733,
+        "top_quantile_turnover": 0.07360178114083996
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_trend_cycle_position_reversed",
+  "fitness_direction": 1,
+  "formula": "-(close - SMA(close,200)) / ATR(20)",
+  "metrics": {
+    "ic": 0.014218815450978669,
+    "icir": 0.10337776227819027,
+    "mi": 0.010443303315682329,
+    "rank_ic": 0.03218776361275435,
+    "rank_icir": 0.20030841447699646
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9151515151515152,
+    "top_quantile_annualized_excess_return": 0.047608494617145114,
+    "top_quantile_excess_return": 0.10174546995526468,
+    "top_quantile_max_drawdown": -0.19227680156213733,
+    "top_quantile_turnover": 0.07360178114083996
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "Reversed long-term trend cycle position: flips the sign so that positive values indicate oversold (price below 200-day SMA) and negative values indicate overextended uptrend. This aligns the factor with mean-reversion intuition: buy oversold, sell overextended. Removing cross-sectional rank preserves the raw magnitude for direct payoff.",
+  "raw_metrics": {
+    "ic": 0.014218815450978669,
+    "icir": 0.10337776227819027,
+    "mi": 0.010443303315682329,
+    "rank_ic": 0.03218776361275435,
+    "rank_icir": 0.20030841447699646
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260715-060858-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260715-060858-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "-(close - ts_mean(200, close)) / ts_atr(20)",
+  "fe_formula": "-(close - ts_mean(200, close)) / ATR(20)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "-(close - SMA(close,200)) / ATR(20)"
+}

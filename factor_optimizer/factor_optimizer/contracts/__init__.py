@@ -10,6 +10,7 @@ from .objective import (
 from .search_budget import SearchBudget, BudgetTracker
 from .trial import Trial, TrialStatus
 from .splits import EvaluationProtocol, SplitPlan
+from .validator import TrialValidatorIdentity, MutationGrammarValidator
 
 __all__ = [
     "CandidateMutation",
@@ -23,4 +24,6 @@ __all__ = [
     "TrialStatus",
     "SplitPlan",
     "EvaluationProtocol",
+    "TrialValidatorIdentity",
+    "MutationGrammarValidator",
 ]

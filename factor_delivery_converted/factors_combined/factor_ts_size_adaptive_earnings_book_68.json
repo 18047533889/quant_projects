@@ -1,0 +1,118 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "math"
+  ],
+  "calculation_fingerprint": "b7d76f4fb145fada754d2db42a798f6ab5c6c7c1451e807f680c1fa6b5dd1a3a",
+  "candidate_ids": [
+    "AVSI-001"
+  ],
+  "code": "def factor_ts_size_adaptive_earnings_book(df):\n    df_copy = df.copy()\n    size_mean = df_copy['mkt_cap_float'].rolling(60, min_periods=20).mean()\n    size_std = df_copy['mkt_cap_float'].rolling(60, min_periods=20).std(ddof=0)\n    size_z = (df_copy['mkt_cap_float'] - size_mean) / size_std.replace(0, np.nan)\n    ey = 1.0 / df_copy['pe_ttm'].replace(0, np.nan)\n    by = 1.0 / df_copy['pb_lf'].replace(0, np.nan)\n    lev = df_copy['debttoassets'] / 100.0\n    lev_penalty = (1.0 - lev).clip(lower=0.0)\n    df_copy['factor_ts_size_adaptive_earnings_book'] = np.where(\n        size_z > 0, ey, by * lev_penalty\n    )\n    return df_copy['factor_ts_size_adaptive_earnings_book']",
+  "cross_sectional_rationale": "Cross-sectional rank ensures comparability of raw value signals with different scales across stocks.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.8666666666666667,
+        "top_quantile_annualized_excess_return": 0.06306222254415084,
+        "top_quantile_excess_return": 0.192074845894463,
+        "top_quantile_max_drawdown": -0.10274622913726472,
+        "top_quantile_turnover": 0.13784365936006285
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_ts_size_adaptive_earnings_book",
+  "fitness_direction": 1,
+  "formula": "If time-series size_z > 0: 1/pe_ttm else: (1/pb_lf) * max(0, 1 - debttoassets/100)",
+  "metrics": {
+    "ic": 0.009158387919799626,
+    "icir": 0.08976192493219691,
+    "mi": 0.011275364927223919,
+    "rank_ic": 0.033475386754854584,
+    "rank_icir": 0.2750112014853214
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8666666666666667,
+    "top_quantile_annualized_excess_return": 0.06306222254415084,
+    "top_quantile_excess_return": 0.192074845894463,
+    "top_quantile_max_drawdown": -0.10274622913726472,
+    "top_quantile_turnover": 0.13784365936006285
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.008000110615646807,
+    "icir": 0.0938760287358747,
+    "mi": 0.018204419267769723,
+    "rank_ic": 0.033475386754854584,
+    "rank_icir": 0.2750112014853214
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.8666666666666667,
+    "top_quantile_annualized_excess_return": 0.06306222254415084,
+    "top_quantile_excess_return": 0.192074845894463,
+    "top_quantile_max_drawdown": -0.10274622913726472,
+    "top_quantile_turnover": 0.13784365936006285
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.008000110615646807,
+    "icir": 0.0938760287358747,
+    "mi": 0.018204419267769723,
+    "rank_ic": 0.033475386754854584,
+    "rank_icir": 0.2750112014853214
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Time-series size context: when a stock's market cap is relatively large compared to its own history, earnings yield is more reliable; when relatively small, book yield adjusted for leverage avoids distress risk. This uses mkt_cap_float as a time-series conditioner, not a cross-sectional amplifier.",
+  "raw_metrics": {
+    "ic": 0.009158387919799626,
+    "icir": 0.08976192493219691,
+    "mi": 0.011275364927223919,
+    "rank_ic": 0.033475386754854584,
+    "rank_icir": 0.2750112014853214
+  },
+  "required_columns": [
+    "pe_ttm",
+    "pb_lf",
+    "debttoassets",
+    "mkt_cap_float"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260721-20260722-002422-r6",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260721-20260722-002422-r6"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.4285671468594672,
+    "pre_transform_top_quantile_excess_return": 0.192074845894463,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.4186822660193964,
+    "transformed_top_quantile_excess_return": 0.192074845894463
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "If time-series size_z > 0: 1/pe_ttm else: (1/pb_lf) * max(0, 1 - debttoassets/100)",
+  "fe_formula": "If time-series size_z > 0: 1/pe_ttm else: (1/pb_lf) * flex_max(0, 1 - debttoassets/100)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "If time-series size_z > 0: 1/pe_ttm else: (1/pb_lf) * max(0, 1 - debttoassets/100)"
+}

@@ -1,0 +1,95 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "a05f1394ef54efa0fc9a0322ba42cfcd3e3ad6bce80eab64cda119c1b9d4fa23",
+  "candidate_ids": [
+    "g1_mutation_alpha_tail_risk_001_68dcfb9c"
+  ],
+  "code": "def factor_volume_trend_stress(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    abs_ret = close.pct_change().abs()\n    vol_short = volume.ewm(span=10, min_periods=10).mean()\n    vol_long = volume.ewm(span=30, min_periods=30).mean()\n    vol_trend = (vol_short / vol_long.replace(0, np.nan)) - 1.0\n    stress = abs_ret * vol_trend\n    stress_accum = stress.rolling(20, min_periods=20).sum()\n    stress_accum.name = 'factor_volume_trend_stress'\n    return stress_accum",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.8666666666666667,
+        "top_quantile_annualized_excess_return": 0.0187776599440288,
+        "top_quantile_excess_return": 0.051170939971605156,
+        "top_quantile_max_drawdown": -0.14002348040121249,
+        "top_quantile_turnover": 0.06893264427613907
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.09036033682190861,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.09639663178091396,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_volume_trend_stress",
+  "fitness_direction": -1,
+  "formula": "stress_accum_t = sum_{i=0}^{19} (|r_{t-i}| * (V_short_{t-i} / V_long_{t-i} - 1))",
+  "metrics": {
+    "ic": 0.011365616993882324,
+    "icir": 0.09036033682190861,
+    "mi": 0.022219226082976107,
+    "rank_ic": 0.024738551402645595,
+    "rank_icir": 0.21457432644699465
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8666666666666667,
+    "top_quantile_annualized_excess_return": 0.0187776599440288,
+    "top_quantile_excess_return": 0.051170939971605156,
+    "top_quantile_max_drawdown": -0.14002348040121249,
+    "top_quantile_turnover": 0.06893264427613907
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "This factor captures tail risk accumulation by combining absolute return magnitude with volume momentum. Absolute returns measure price disruption robustly, while the volume trend (short-term EMA / long-term EMA - 1) indicates whether volume is expanding during stress. A rising volume trend alongside large price changes signals informed pressure and may precede a continuation move. The 20-day sum reduces noise. This mutation improves on the parent by using absolute returns (more robust than squared) and a consistent volume trend indicator (EMA ratio) instead of a noisy volume-to-mean ratio.",
+  "raw_metrics": {
+    "ic": -0.011365616993882324,
+    "icir": -0.09036033682190861,
+    "mi": 0.022219226082976107,
+    "rank_ic": -0.024738551402645595,
+    "rank_icir": -0.21457432644699465
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260720-210415-r10",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260720-210415-r10"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "stress_accum_t = sum_{i=0}^{19} (|r_{t-i}| * (V_short_{t-i} / V_long_{t-i} - 1))",
+  "fe_formula": "stress_accum_t = sum_{i=0}^{19} (|r_{t-i}| * (V_short_{t-i} / V_long_{t-i} - 1))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "stress_accum_t = sum_{i=0}^{19} (|r_{t-i}| * (V_short_{t-i} / V_long_{t-i} - 1))"
+}

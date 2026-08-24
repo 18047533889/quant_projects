@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "da6b4f21d3d6b1ce78fa4ded9dcb8c0ce7c4e2ac9ab580c5072ea649fb8e0eb1",
+  "candidate_ids": [
+    "g2_crossover_g1_crossover_pvcoh_002_alpha_lag_response_001_85_2afb470b"
+  ],
+  "code": "def factor_vol_adjusted_lag_log_coherence(df):\n    df_copy = df.copy()\n    high_low = df_copy[\"high\"] - df_copy[\"low\"]\n    high_pc = (df_copy[\"high\"] - df_copy[\"close\"].shift(1)).abs()\n    low_pc = (df_copy[\"low\"] - df_copy[\"close\"].shift(1)).abs()\n    tr = pd.concat([high_low, high_pc, low_pc], axis=1).max(axis=1)\n    atr = tr.rolling(14, min_periods=14).mean()\n    norm_vol = atr / df_copy[\"close\"].replace(0, np.nan)\n    ret_5 = df_copy[\"close\"].pct_change(5)\n    vol_ma = df_copy[\"volume\"].rolling(20, min_periods=20).mean()\n    vol_ratio = df_copy[\"volume\"] / vol_ma.replace(0, np.nan)\n    log_vol_ratio = np.log(vol_ratio.clip(lower=1e-12))\n    primary = ret_5 * log_vol_ratio / norm_vol.replace(0, np.nan)\n    ret_daily = df_copy[\"close\"].pct_change()\n    vol_pct = df_copy[\"volume\"].pct_change()\n    corr = ret_daily.rolling(20, min_periods=20).corr(vol_pct)\n    weight = 1 + corr.fillna(0)\n    factor = primary * weight\n    df_copy[\"factor_vol_adjusted_lag_log_coherence\"] = factor\n    return df_copy[\"factor_vol_adjusted_lag_log_coherence\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_vol_adjusted_lag_log_coherence",
+  "fitness_direction": -1,
+  "formula": "ret_5d * log(vol/vol_ma_20) / (ATR_14/close) * (1 + rolling_corr(ret_daily, vol_pct, 20))",
+  "metrics": {
+    "ic": 0.021791449727988552,
+    "icir": 0.23658448025632275,
+    "mi": 0.019491332277495665,
+    "rank_ic": 0.019866935943596446,
+    "rank_icir": 0.22998948544812137
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.3,
+    "top_quantile_annualized_excess_return": 0.014409261120605255,
+    "top_quantile_excess_return": 0.04083570517387347,
+    "top_quantile_max_drawdown": -0.09728992963710803,
+    "top_quantile_turnover": 0.5959353734158209
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Crossover combining the primary mechanism from parent g1_crossover_pvcoh_002_alpha_lag_response_001_85fca0ee (qualified, strong RankIC and RankICIR) with a lightweight log transform of the volume ratio borrowed from parent g1_mutation_alpha_lag_response_001_6abf6c9a. The primary mechanism uses delayed price adjustment captured by ret_5 * (vol/vol_ma) / (ATR/close) and then multiplies by a price-volume coherence weight (1+rolling_corr). The log transform of volume ratio compresses outliers and improves stationarity, aiming to improve IC while preserving the strong rank-order stability from the coherence term. No cross-sectional transform is needed as parent ranking evidence supports the raw mechanism.",
+  "raw_metrics": {
+    "ic": -0.021791449727988552,
+    "icir": -0.23658448025632275,
+    "mi": 0.019491332277495665,
+    "rank_ic": -0.019866935943596446,
+    "rank_icir": -0.22998948544812137
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260703-091553-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260703-091553-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ret_5d * log(vol/vol_ma_20) / (ATR_14/close) * (1 + rolling_corr(ret_daily, vol_pct, 20))",
+  "fe_formula": "ret_5d * log(vol/vol_ma_20) / (ATR_14/close) * (1 + rolling_corr(ret_daily, vol_pct, 20))",
+  "lqtp_notes": "Unconverted: ['rolling_corr']",
+  "fe_notes": "Unconverted: ['rolling_corr']",
+  "source_formula": "ret_5d * log(vol/vol_ma_20) / (ATR_14/close) * (1 + rolling_corr(ret_daily, vol_pct, 20))"
+}

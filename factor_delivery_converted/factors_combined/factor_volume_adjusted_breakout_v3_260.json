@@ -1,0 +1,51 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "37108ec63013e9c733519eecc23532da8c537e5dfa7341d5db219105276e145b",
+  "candidate_ids": [
+    "apvc_mutation_002"
+  ],
+  "code": "def factor_volume_adjusted_breakout_v3(df):\n    df_copy = df.copy()\n    ret = df_copy['close'] / df_copy['close'].shift(1) - 1\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(10, min_periods=10).mean()\n    highest_high = df_copy['high'].rolling(10, min_periods=10).max().shift(1)\n    breakout = df_copy['close'] > highest_high\n    signal = breakout * ret * vol_ratio\n    factor = signal.rolling(5).mean()\n    factor.name = 'factor_volume_adjusted_breakout_v3'\n    return factor",
+  "cross_sectional_rationale": "Rank transform highlights stocks with most coherent volume-confirmed breakouts relative to peers, improving cross-sectional separation.",
+  "cross_sectional_transform": "cs_rank",
+  "factor_name": "factor_volume_adjusted_breakout_v3",
+  "fitness_direction": -1,
+  "formula": "mean_5( if(close > max_10(high).shift(1), (close/delay(close,1)-1) * (volume/mean_10(volume)), 0 ) )",
+  "metrics": {
+    "ic": 0.0167420768066912,
+    "icir": 0.17625643691097773,
+    "mi": 0.18233479564055965,
+    "rank_ic": 0.03401392001649302,
+    "rank_icir": 0.3416950329192015
+  },
+  "rationale": "Mutation of apvc_mutation_001: shortened volume ratio window from 20 to 10 to align with breakout horizon, and changed aggregation from sum to mean to produce a smoother signal. Aims to improve ICIR and IC while preserving RankIC strength.",
+  "raw_metrics": {
+    "ic": -0.0167420768066912,
+    "icir": -0.17625643691097773,
+    "mi": 0.18233479564055965,
+    "rank_ic": -0.03401392001649302,
+    "rank_icir": -0.3416950329192015
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260624-010848-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260624-010848-r1"
+  ],
+  "lqtp_formula": "ts_mean(5, if(close > max_10(high).delay(1), (close/delay(close,1)-1) * (volume/mean_10(volume)), 0 ))",
+  "fe_formula": "ts_mean(5, if(close > max_10(high).ts_delay(1), (close/ts_delay(close, 1)-1) * (volume/mean_10(volume)), 0 ))",
+  "lqtp_notes": "Unconverted: ['max_10', 'mean_10']",
+  "fe_notes": "Unconverted: ['max_10', 'mean_10']",
+  "source_formula": "mean_5( if(close > max_10(high).shift(1), (close/delay(close,1)-1) * (volume/mean_10(volume)), 0 ) )"
+}

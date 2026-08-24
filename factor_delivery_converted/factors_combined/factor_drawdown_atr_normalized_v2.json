@@ -1,0 +1,51 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "433e4361288893b33af9d402c851eb253d91bed922438944eb134978ecfaa284",
+  "candidate_ids": [
+    "crossover_drawdown_atr_002"
+  ],
+  "code": "def factor_drawdown_atr_normalized_v2(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(window=60, min_periods=60).max()\n    drawdown = (df_copy['close'] - rolling_max) / rolling_max\n    high = df_copy['high'].values.astype(float)\n    low = df_copy['low'].values.astype(float)\n    close = df_copy['close'].values.astype(float)\n    atr = pd.Series(talib.ATR(high, low, close, timeperiod=60), index=df_copy.index)\n    normalized = -drawdown / atr.replace(0, np.nan)\n    df_copy['factor_drawdown_atr_normalized_v2'] = normalized.fillna(0)\n    return df_copy['factor_drawdown_atr_normalized_v2']",
+  "cross_sectional_rationale": "Cross-sectional rank identifies stocks with the most severe volatility-normalized drawdowns relative to peers, enabling relative comparison and improving RankIC stability.",
+  "cross_sectional_transform": "cs_rank",
+  "factor_name": "factor_drawdown_atr_normalized_v2",
+  "fitness_direction": 1,
+  "formula": "(-(close - max(close,60)) / max(close,60)) / ATR(60)",
+  "metrics": {
+    "ic": 0.019318032979443876,
+    "icir": 0.17732053250440646,
+    "mi": 0.01929494449641389,
+    "rank_ic": 0.03609891478455906,
+    "rank_icir": 0.2790332469656641
+  },
+  "rationale": "Crossover: primary mechanism from drawdown_atr_norm_001 (drawdown depth normalized by 60-period ATR), with sign flip from alpha-mutation-001 to make oversold severity a positive signal. The 60-period ATR aligns with the drawdown window for consistent risk adjustment, while the negative sign improves direction interpretation as oversold buying opportunity. Cross-sectional rank emphasizes relative severity.",
+  "raw_metrics": {
+    "ic": 0.019318032979443876,
+    "icir": 0.17732053250440646,
+    "mi": 0.01929494449641389,
+    "rank_ic": 0.03609891478455906,
+    "rank_icir": 0.2790332469656641
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260623-073242-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260623-073242-r2"
+  ],
+  "lqtp_formula": "(-(close - max(close,60)) / max(close,60)) / ts_atr(60)",
+  "fe_formula": "(-(close - flex_max(close, 60)) / flex_max(close, 60)) / ATR(60)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(-(close - max(close,60)) / max(close,60)) / ATR(60)"
+}

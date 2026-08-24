@@ -1,0 +1,95 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "bf3e35c561180d16084896d31a8f631c1437e66f0b9ae3bf4b70815c3279e881",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_alpha_stability_gen0_001_f4b91cf1_ff817332"
+  ],
+  "code": "def factor_volatility_persistence_atr_v2(df):\n    df_copy = df.copy()\n    atr = talib.ATR(df_copy[\"high\"], df_copy[\"low\"], df_copy[\"close\"], timeperiod=14)\n    atr = atr.replace(0.0, np.nan)\n    inv_atr = 1.0 / atr\n    factor = inv_atr.ewm(span=15, min_periods=15, adjust=False).mean()\n    df_copy[\"factor_volatility_persistence_atr_v2\"] = factor\n    return df_copy[\"factor_volatility_persistence_atr_v2\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.07923547061790837,
+        "top_quantile_excess_return": 0.23442247355997536,
+        "top_quantile_max_drawdown": -0.11158718080729102,
+        "top_quantile_turnover": 0.010288398536247263
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.007350730240042307,
+      "field": "ic",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.2649269759957693,
+      "threshold": 0.01
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_volatility_persistence_atr_v2",
+  "fitness_direction": 1,
+  "formula": "Factor = EMA(1 / ATR(14), 15)",
+  "metrics": {
+    "ic": 0.007350730240042307,
+    "icir": 0.09159713311280691,
+    "mi": 0.019454217424349274,
+    "rank_ic": 0.03306150657295838,
+    "rank_icir": 0.23671493472301816
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.07923547061790837,
+    "top_quantile_excess_return": 0.23442247355997536,
+    "top_quantile_max_drawdown": -0.11158718080729102,
+    "top_quantile_turnover": 0.010288398536247263
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Mutation of parent factor_volatility_persistence_atr. Increases the EMA smoothing window from 10 to 15 to reduce noise and improve ICIR consistency while preserving the core mechanism of low volatility persistence measured by inverse ATR.",
+  "raw_metrics": {
+    "ic": 0.007350730240042307,
+    "icir": 0.09159713311280691,
+    "mi": 0.019454217424349274,
+    "rank_ic": 0.03306150657295838,
+    "rank_icir": 0.23671493472301816
+  },
+  "required_columns": [
+    "high",
+    "low",
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260716-080935-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260716-080935-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "Factor = ema(15, 1 / ATR(14))15)",
+  "fe_formula": "Factor = ema(15, 1 / ATR(14))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "Factor = EMA(1 / ATR(14), 15)"
+}

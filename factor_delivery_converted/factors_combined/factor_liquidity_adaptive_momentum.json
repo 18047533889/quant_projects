@@ -1,0 +1,65 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "3e9aed651988868384b78f9f6a915370251c902644a45ef0b013509666c12b21",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_crossover_adt_002_ava_001_a7aaf5db_g1_mutatio_c7ba687b"
+  ],
+  "code": "def factor_liquidity_adaptive_momentum(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    returns = close.pct_change()\n    mom = close / close.shift(21) - 1.0\n    down_ret = np.where(returns < 0, returns, np.nan)\n    down_ret_series = pd.Series(down_ret, index=df_copy.index)\n    vol_short = down_ret_series.rolling(21, min_periods=5).std(ddof=1)\n    vol_long = down_ret_series.rolling(63, min_periods=5).std(ddof=1)\n    high_liquidity = df_copy['style_gate_liquidity_high'] > 0\n    vol = np.where(high_liquidity, vol_short, vol_long)\n    vol = np.where(vol == 0.0, np.nan, vol)\n    factor = mom / vol\n    df_copy['factor_liquidity_adaptive_momentum'] = factor\n    return df_copy['factor_liquidity_adaptive_momentum']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_liquidity_adaptive_momentum",
+  "fitness_direction": -1,
+  "formula": "(close / shift(21) - 1) / (if liquidity_high then std(negative_returns,21) else std(negative_returns,63))",
+  "metrics": {
+    "ic": 0.019280490506528084,
+    "icir": 0.13937264960636978,
+    "mi": 0.01884845183681172,
+    "rank_ic": 0.03434059708371572,
+    "rank_icir": 0.22445004330156954
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6,
+    "top_quantile_annualized_excess_return": 0.04923126508734432,
+    "top_quantile_excess_return": 0.14346818888266255,
+    "top_quantile_max_drawdown": -0.1130382001505783,
+    "top_quantile_turnover": 0.19071688733185982
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Simplified mutation of parent: removed intraday asymmetry weighting to isolate the core liquidity-adaptive downside volatility normalized momentum. Ablation tests whether the asymmetry component added noise; expect IC improvement while preserving RankICIR stability of the primary mechanism.",
+  "raw_metrics": {
+    "ic": -0.019280490506528084,
+    "icir": -0.13937264960636978,
+    "mi": 0.01884845183681172,
+    "rank_ic": -0.03434059708371572,
+    "rank_icir": -0.22445004330156954
+  },
+  "required_columns": [
+    "close",
+    "style_gate_liquidity_high"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260707-033414-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260707-033414-r2"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "Uses style_gate_liquidity_high to select the volatility window length for downside volatility normalization. High liquidity regime indicates order-flow fluidity where downside volatility is more informative over a shorter window (21-day); low liquidity regime trends are noisier and a longer (63-day) downside volatility estimate avoids over-adaptation. This conditional window maintains continuous factor values for all assets.",
+  "style_gates_used": [
+    "style_gate_liquidity_high"
+  ],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "(close / delay(21) - 1) / (if liquidity_high then ts_std(21, negative_returns) else ts_std(63, negative_returns))",
+  "fe_formula": "(close / ts_delay(21) - 1) / (if liquidity_high then ts_std(21, negative_returns) else ts_std(63, negative_returns))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(close / shift(21) - 1) / (if liquidity_high then std(negative_returns,21) else std(negative_returns,63))"
+}

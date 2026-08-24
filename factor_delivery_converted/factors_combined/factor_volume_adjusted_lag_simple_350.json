@@ -1,0 +1,63 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "aa4872f199919faaad8d1c874d0b441d374446ab63565d9831ffdc3f65d3db10",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_then_mutation_lag_001_alpha_herding_cd3a0531"
+  ],
+  "code": "def factor_volume_adjusted_lag_simple(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    ret = close.pct_change()\n    vol_ratio = volume / volume.rolling(10, min_periods=10).mean()\n    log_vol_ratio = np.log(vol_ratio.replace(0, np.nan).clip(lower=1e-12))\n    lag_ret = ret.shift(1)\n    raw = lag_ret * log_vol_ratio\n    factor = raw.ewm(span=8, min_periods=8, adjust=False).mean()\n    factor = factor.fillna(0.0)\n    factor.name = \"factor_volume_adjusted_lag_simple\"\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_volume_adjusted_lag_simple",
+  "fitness_direction": -1,
+  "formula": "EMA_8( lag_ret * log(V / SMA_10(V)) )",
+  "metrics": {
+    "ic": 0.015657516630951065,
+    "icir": 0.14218820660845724,
+    "mi": 0.03383639529873861,
+    "rank_ic": 0.03620291839313755,
+    "rank_icir": 0.32708165681466894
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7,
+    "top_quantile_annualized_excess_return": 0.032413123065988536,
+    "top_quantile_excess_return": 0.0937593629436031,
+    "top_quantile_max_drawdown": -0.12071120283464731,
+    "top_quantile_turnover": 0.29433053869562087
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Mutation from factor_volume_adjusted_lag_simple: reduced volume ratio window from 20 to 10 for more responsive volume regime detection, and increased EMA span from 5 to 8 for smoother, less noisy signal. This aims to improve IC and ICIR while preserving the RankICIR strength of the parent.",
+  "raw_metrics": {
+    "ic": -0.015657516630951065,
+    "icir": -0.14218820660845724,
+    "mi": 0.03383639529873861,
+    "rank_ic": -0.03620291839313755,
+    "rank_icir": -0.32708165681466894
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260706-094538-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260706-094538-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema(8, lag_ret * log(V / SMA_10(V)))",
+  "fe_formula": "ema(8, lag_ret * log(V / SMA_10(V)))",
+  "lqtp_notes": "Unconverted: ['SMA_10']",
+  "fe_notes": "Unconverted: ['SMA_10']",
+  "source_formula": "EMA_8( lag_ret * log(V / SMA_10(V)) )"
+}

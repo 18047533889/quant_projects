@@ -1,0 +1,130 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "b_id": "B3",
+  "c_id": "C303",
+  "calculation_fingerprint": "a53c1d6564bf48f920cc09ed9167234db95130bb7faf4fab45e9e52bc0f35562",
+  "candidate_ids": [
+    "g1_crossover_then_mutation_c101_g0_post_breakout_range_expansion_002_c301_g_d7d1ffe3"
+  ],
+  "code": "def factor_failed_retest_reversion_20_5(df):\n    \"\"\"Idea: After an upside breakout, a retest that fails to hold the prior 20-day high (price touches the boundary and closes back below it) carries reversion information: repeated failed retests with elevated volume and closes near the lows separate a failed attempt that reverts into the range from a genuine level-hold.\n\n    Logic: recent_breakout flags any close above the prior 20-day high in the last five days (shifted). retest_failure marks days where low <= prior_high and close < prior_high. failure_depth is the distance of the close below the prior high normalized by ATR20. rejection is 1 - close location, so closes near the low receive the strongest rejection weight. volume ratio is capped at 3. The daily failure score is summed over five days to capture repeated failed attempts. The raw signal is negative, expressing expected reversion, and is only active after a recent upside breakout.\n\n    Sub-mechanism tags: failed_retest, breakout_reversion, close_rejection, volume_confirmation\n    \"\"\"\n    df_copy = df.copy()\n    prior_high = df_copy[\"high\"].rolling(20, min_periods=20).max().shift(1)\n    recent_breakout = (df_copy[\"close\"] > prior_high).astype(float).rolling(5, min_periods=1).max().shift(1)\n    atr = alpha_tools.average_true_range(df_copy, window=20)\n    day_range = (df_copy[\"high\"] - df_copy[\"low\"]).replace(0.0, np.nan)\n    close_loc = ((df_copy[\"close\"] - df_copy[\"low\"]) / day_range).clip(0, 1)\n    rejection = (1.0 - close_loc).fillna(0.0)\n    failure_depth = ((prior_high - df_copy[\"close\"]).clip(lower=0) / atr.replace(0.0, np.nan)).fillna(0.0)\n    retest_failure = ((df_copy[\"low\"] <= prior_high) & (df_copy[\"close\"] < prior_high)).astype(float)\n    vol_ratio = (df_copy[\"volume\"] / df_copy[\"volume\"].rolling(20, min_periods=20).mean().replace(0.0, np.nan)).clip(upper=3.0).fillna(1.0)\n    daily_failure = retest_failure * failure_depth * rejection * vol_ratio\n    recent_failure = daily_failure.rolling(5, min_periods=1).sum().fillna(0.0)\n    signal = -recent_breakout * recent_failure\n    signal = signal.where(np.isfinite(signal), 0.0)\n    signal.name = \"factor_failed_retest_reversion_20_5\"\n    return signal",
+  "codegen_skill": "alpha-mutation",
+  "cross_sectional_rationale": "The raw score is an event-contingent retest failure measure whose magnitude depends on boundary distance and volume scale; same-day cross-sectional rank isolates relative failed-retest severity across assets.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "guidance_inconsistent": false,
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.6121212121212121,
+        "top_quantile_annualized_excess_return": -0.027162394506274445,
+        "top_quantile_excess_return": -0.0739458687571436,
+        "top_quantile_max_drawdown": -0.20194414949599981,
+        "top_quantile_turnover": 0.04236051473035689
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first",
+    "transform_applied": true
+  },
+  "factor_name": "factor_failed_retest_reversion_20_5",
+  "fitness_direction": 1,
+  "formula": "S = -B * sum_{i=0..4} F_{t-i}, where B = max_{j=1..5} I[C_{t-j} > H20_{t-j-1}], F = I[L <= H20_shift & C < H20_shift] * ((H20_shift - C)/ATR20) * (1 - CL) * min(V/MA20(V),3), CL = (C-L)/(H-L)",
+  "manual_admission": null,
+  "metrics": {
+    "ic": 0.017621709062987927,
+    "icir": 0.21682776858093963,
+    "mi": 0.18139694257345873,
+    "rank_ic": 0.028540796191357364,
+    "rank_icir": 0.3357379252596307
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6121212121212121,
+    "top_quantile_annualized_excess_return": -0.027162394506274445,
+    "top_quantile_excess_return": -0.0739458687571436,
+    "top_quantile_max_drawdown": -0.20194414949599981,
+    "top_quantile_turnover": 0.04236051473035689
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.012877741322564067,
+    "icir": 0.19552950433480842,
+    "mi": 0.004190289109864409,
+    "rank_ic": 0.028540796191357364,
+    "rank_icir": 0.3357379252596307
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.6121212121212121,
+    "top_quantile_annualized_excess_return": -0.027162394506274445,
+    "top_quantile_excess_return": -0.0739458687571436,
+    "top_quantile_max_drawdown": -0.20194414949599981,
+    "top_quantile_turnover": 0.04236051473035689
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.012877741322564067,
+    "icir": 0.19552950433480842,
+    "mi": 0.004190289109864409,
+    "rank_ic": 0.028540796191357364,
+    "rank_icir": 0.3357379252596307
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "The parent factor rewarded successful defended retests as an amplifier on post-breakout expansion strength. Its payoff evidence was weak on the long side, so this mutation changes the event-response sign rather than merely flipping the output: the child prices failed retests as reversion pressure. It keeps the same boundary construction (shifted 20-day high), the same recent-breakout trigger, and the same volume/ATR normalization, but replaces the successful-defense condition (low <= prior_high and close > prior_high, lower wick, close margin above) with a failed-defense condition (low <= prior_high and close < prior_high, close near the low, depth below the boundary). The persistence aggregation also changes from a five-day maximum of defense quality to a five-day sum of failure severity, so repeated failed attempts accumulate rather than one strong defense dominating. This directly tests the cycle information gap: retest depth, duration, and participation quality separate a genuine level-hold from a failed attempt that reverts into the prior range.",
+  "raw_metrics": {
+    "ic": 0.017621709062987927,
+    "icir": 0.21682776858093963,
+    "mi": 0.18139694257345873,
+    "rank_ic": 0.028540796191357364,
+    "rank_icir": 0.3357379252596307
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-routing-penalty-xalpha-light-v2-20260817-093932-r1",
+  "source_run_ids": [
+    "formal-routing-penalty-xalpha-light-v2-20260817-093932-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.5768762562182249,
+    "pre_transform_top_quantile_excess_return": -0.0739458687571436,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.7801251416683743,
+    "transformed_top_quantile_excess_return": -0.0739458687571436
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "S = -B * sum_{i=0..4} F_{t-i}, where B = max_{j=1..5} I[C_{t-j} > H20_{t-j-1}], F = I[L <= H20_shift & C < H20_shift] * ((H20_shift - C)/ATR20) * (1 - CL) * min(V/MA20(V),3), CL = (C-L)/(H-L)",
+  "fe_formula": "S = -B * sum_{i=0..4} F_{t-i}, where B = max_{j=1..5} I[C_{t-j} > H20_{t-j-1}], F = I[L <= H20_shift & C < H20_shift] * ((H20_shift - C)/ATR20) * (1 - CL) * flex_min(V/MA20(V), 3), CL = (C-L)/(H-L)",
+  "lqtp_notes": "Textual non-executable: I[...]-notation (indicator function, use Python code); C (close shorthand in text, not executable); Unconverted: ['MA20']",
+  "fe_notes": "Textual non-executable: I[...]-notation (indicator function, use Python code); C (close shorthand in text, not executable); Unconverted: ['MA20']",
+  "source_formula": "S = -B * sum_{i=0..4} F_{t-i}, where B = max_{j=1..5} I[C_{t-j} > H20_{t-j-1}], F = I[L <= H20_shift & C < H20_shift] * ((H20_shift - C)/ATR20) * (1 - CL) * min(V/MA20(V),3), CL = (C-L)/(H-L)"
+}

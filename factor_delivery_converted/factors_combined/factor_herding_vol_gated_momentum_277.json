@@ -1,0 +1,42 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "65dfa72a7a805d8a2420e5a3edb31ce53262846604aa7ed04f0baf644348ef86",
+  "candidate_ids": [
+    "mut-herd-rank-gen4-001"
+  ],
+  "code": "def factor_herding_vol_gated_momentum(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change().fillna(0)\n    vol_chg = df_copy['volume'].pct_change().fillna(0)\n    herding_corr = ret.rolling(20, min_periods=20).corr(vol_chg).fillna(0)\n    rank_ret = ret.rolling(20, min_periods=20).rank(pct=True).fillna(0.5)\n    rank_vol = vol_chg.rolling(20, min_periods=20).rank(pct=True).fillna(0.5)\n    inter = (rank_ret - 0.5) * (rank_vol - 0.5)\n    vol_adj = ret.rolling(20, min_periods=20).std().fillna(0)\n    inter_adj = inter / (1 + vol_adj)\n    trend = ret.ewm(span=20, adjust=False).mean().fillna(0)\n    trend_mean = trend.rolling(40, min_periods=20).mean().fillna(0)\n    trend_std = trend.rolling(40, min_periods=20).std(ddof=1).fillna(1)\n    trend_z = (trend - trend_mean) / trend_std.replace(0, 1)\n    factor = inter_adj * (1 + 0.5 * herding_corr) * (1 + 0.5 * trend_z)\n    factor = factor.fillna(0)\n    df_copy['factor_herding_vol_gated_momentum'] = factor\n    return df_copy['factor_herding_vol_gated_momentum']",
+  "factor_name": "factor_herding_vol_gated_momentum",
+  "fitness_direction": -1,
+  "formula": "factor = ( (rank(ret,20)-0.5)*(rank(vol_chg,20)-0.5) / (1 + std(ret,20)) ) * (1 + 0.5*corr(ret,vol_chg,20)) * (1 + 0.5*zscore(ema(ret,20),40))",
+  "metrics": {
+    "ic": 0.010415839687394502,
+    "icir": 0.17153321606114003,
+    "mi": 0.006065143827722608,
+    "rank_ic": 0.022289676076731185,
+    "rank_icir": 0.36327481240667275
+  },
+  "rationale": "This mutation preserves the core herding and rank interaction from the parent (mut-herd-rank-gen3-002) but targets improved IC and ICIR by (1) adding a volatility adjustment (rolling std of returns) to the interaction to reduce noise during high-volatility periods, (2) replacing the trend rank with a z-score of the EMA trend for more responsive and symmetric signal, and (3) keeping the herding correlation as a confidence multiplier. The parent strength (RankIC stability from rank-based normalization and multiplicative gating) is maintained. This aims to boost IC and ICIR while keeping the herding consensus as the primary signal.",
+  "raw_metrics": {
+    "ic": -0.010415839687394502,
+    "icir": -0.17153321606114003,
+    "mi": 0.006065143827722608,
+    "rank_ic": -0.022289676076731185,
+    "rank_icir": -0.36327481240667275
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260611-090600-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260611-090600-r2"
+  ],
+  "lqtp_formula": "factor = ( (cs_rank(ret, 20)-0.5)*(cs_rank(vol_chg, 20)-0.5) / (1 + ts_std(20, ret)) ) * (1 + 0.5*ts_corr(vol_chg, ret, 20)) * (1 + 0.5*cs_zscore(ema(ret,20), 40))",
+  "fe_formula": "factor = ( (rank(ret,20)-0.5)*(rank(vol_chg,20)-0.5) / (1 + ts_std(20, ret)) ) * (1 + 0.5*ts_corr(vol_chg, ret, 20)) * (1 + 0.5*zscore(ema(ret,20),40))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "factor = ( (rank(ret,20)-0.5)*(rank(vol_chg,20)-0.5) / (1 + std(ret,20)) ) * (1 + 0.5*corr(ret,vol_chg,20)) * (1 + 0.5*zscore(ema(ret,20),40))"
+}

@@ -1,0 +1,88 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "81c0222ee129168b878183fa2106a487dd91fb9a453375f362b5e302dfa99e7e",
+  "candidate_ids": [
+    "candidate_1"
+  ],
+  "code": "def factor_growth_adjusted_earnings_yield(df):\n    df_copy = df.copy()\n    inv_pe = 1.0 / df_copy[\"pe_ttm\"].replace(0, np.nan)\n    growth = df_copy[\"forecast_incap_chgr_mid\"]  # keep as percentage points\n    # Combine using rank to align scales\n    inv_pe_rank = inv_pe.rank(pct=True)\n    growth_rank = growth.rank(pct=True)\n    factor = inv_pe_rank * (1 + growth_rank)\n    factor.name = \"factor_growth_adjusted_earnings_yield\"\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.8424242424242424,
+        "top_quantile_annualized_excess_return": 0.2373103784370183,
+        "top_quantile_excess_return": 0.8437101472131401,
+        "top_quantile_max_drawdown": -0.05720974144494251,
+        "top_quantile_turnover": 0.07420450167891833
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_growth_adjusted_earnings_yield",
+  "fitness_direction": 1,
+  "formula": "growth_adjusted_ey = rank(1/pe_ttm) * (1 + rank(forecast_incap_chgr_mid))",
+  "metrics": {
+    "ic": 0.018670731755812655,
+    "icir": 0.290280515689805,
+    "mi": 0.008476973554014222,
+    "rank_ic": 0.026346369684413663,
+    "rank_icir": 0.3602453561587076
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8424242424242424,
+    "top_quantile_annualized_excess_return": 0.2373103784370183,
+    "top_quantile_excess_return": 0.8437101472131401,
+    "top_quantile_max_drawdown": -0.05720974144494251,
+    "top_quantile_turnover": 0.07420450167891833
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Growth-adjusted earnings yield: combine current earnings yield with forward-looking earnings growth forecast to capture cheapness with growth potential. Rank transforms align the different unit scales.",
+  "raw_metrics": {
+    "ic": 0.018670731755812655,
+    "icir": 0.290280515689805,
+    "mi": 0.008476973554014222,
+    "rank_ic": 0.026346369684413663,
+    "rank_icir": 0.3602453561587076
+  },
+  "required_columns": [
+    "pe_ttm",
+    "forecast_incap_chgr_mid"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260719-20260720-094114-r11",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260719-20260720-094114-r11"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "growth_adjusted_ey = cs_rank(1/pe_ttm) * (1 + cs_rank(forecast_incap_chgr_mid))",
+  "fe_formula": "growth_adjusted_ey = rank(1/pe_ttm) * (1 + rank(forecast_incap_chgr_mid))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "growth_adjusted_ey = rank(1/pe_ttm) * (1 + rank(forecast_incap_chgr_mid))"
+}

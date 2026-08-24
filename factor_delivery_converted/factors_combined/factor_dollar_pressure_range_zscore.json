@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "9f98aeba77c50402d08fde7101ae168c8629ad5c44ccd477e5b5d07cc0899794",
+  "candidate_ids": [
+    "alpha_dollar_pressure_range_zscore_mut1"
+  ],
+  "code": "def factor_dollar_pressure_range_zscore(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    high = df_copy['high']\n    low = df_copy['low']\n    volume = df_copy['volume']\n    typical_price = (high + low + close) / 3\n    dollar_imbalance = (close - typical_price) * volume\n    range_ = high - low\n    range_mean = range_.rolling(20, min_periods=20).mean().replace(0, np.nan)\n    raw = dollar_imbalance / range_mean\n    raw_mean = raw.rolling(20, min_periods=20).mean()\n    raw_std = raw.rolling(20, min_periods=20).std(ddof=1)\n    zscore = (raw - raw_mean) / raw_std.replace(0, np.nan)\n    df_copy['factor_dollar_pressure_range_zscore'] = zscore\n    return df_copy['factor_dollar_pressure_range_zscore']",
+  "factor_name": "factor_dollar_pressure_range_zscore",
+  "fitness_direction": -1,
+  "formula": "((close - (high+low+close)/3) * volume) / rolling_mean(high-low,20) -> rolling_zscore(20)",
+  "metrics": {
+    "ic": 0.02269522443095018,
+    "icir": 0.3083536776137772,
+    "mi": 0.00609126302210683,
+    "rank_ic": 0.023077972605221445,
+    "rank_icir": 0.26624157285946354
+  },
+  "rationale": "Preserves the core dollar imbalance relative to volatility range, but replaces rank normalization with rolling z-score to improve linear correlation (IC) while maintaining the economic mechanism. The z-score may better capture cross-sectional ordering than rank pct in this context.",
+  "raw_metrics": {
+    "ic": -0.02269522443095018,
+    "icir": -0.3083536776137772,
+    "mi": 0.00609126302210683,
+    "rank_ic": -0.023077972605221445,
+    "rank_icir": -0.26624157285946354
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260616-074520-r4",
+  "source_run_ids": [
+    "formal-mvp-loop-20260616-074520-r4"
+  ],
+  "lqtp_formula": "((close - (high+low+close)/3) * volume) / ts_mean(20, high-low) -> rolling_zscore(20)",
+  "fe_formula": "((close - (high+low+close)/3) * volume) / ts_mean(20, high-low) -> rolling_zscore(20)",
+  "lqtp_notes": "Unconverted: ['rolling_zscore']",
+  "fe_notes": "Unconverted: ['rolling_zscore']",
+  "source_formula": "((close - (high+low+close)/3) * volume) / rolling_mean(high-low,20) -> rolling_zscore(20)"
+}

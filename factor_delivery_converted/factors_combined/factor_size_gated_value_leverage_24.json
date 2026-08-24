@@ -1,0 +1,95 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "ca27d01b649e0ae0810e8b92fd8172de799c36449ca38d1ef8ec247c6b759263",
+  "candidate_ids": [
+    "g1_mutation_vsi_002_40faa1e0",
+    "vsi-002"
+  ],
+  "code": "def factor_size_gated_value_leverage(df):\n    df_copy = df.copy()\n    cheapness_pe = 1.0 / df_copy[\"pe_ttm\"].replace(0, np.nan)\n    cheapness_pb = 1.0 / df_copy[\"pb_lf\"].replace(0, np.nan)\n    leverage_penalty = 1.0 - df_copy[\"debttoassets\"] / 100.0\n    is_large = df_copy[\"style_gate_size_large\"] == 1\n    is_small = df_copy[\"style_gate_size_small\"] == 1\n    factor = cheapness_pe.copy()\n    factor[is_small] = (cheapness_pb * leverage_penalty)[is_small]\n    factor.name = \"factor_size_gated_value_leverage\"\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9272727272727272,
+        "top_quantile_annualized_excess_return": 0.20844752219222795,
+        "top_quantile_excess_return": 0.7228273669092578,
+        "top_quantile_max_drawdown": -0.199406044920165,
+        "top_quantile_turnover": 0.027987792918165076
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_size_gated_value_leverage",
+  "fitness_direction": 1,
+  "formula": null,
+  "metrics": {
+    "ic": 0.015519770204201847,
+    "icir": 0.19321463232046587,
+    "mi": 0.018014278811946838,
+    "rank_ic": 0.032293972525274724,
+    "rank_icir": 0.31066187300070786
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9272727272727272,
+    "top_quantile_annualized_excess_return": 0.20844752219222795,
+    "top_quantile_excess_return": 0.7228273669092578,
+    "top_quantile_max_drawdown": -0.199406044920165,
+    "top_quantile_turnover": 0.027987792918165076
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Use size style gates to apply different value signals: larger caps use earnings yield (more stable), smaller caps use book yield with leverage penalty to mitigate distress risk. This conditions value on size through regime-specific value expressions with a distress control.",
+  "raw_metrics": {
+    "ic": 0.015519770204201847,
+    "icir": 0.19321463232046587,
+    "mi": 0.018014278811946838,
+    "rank_ic": 0.032293972525274724,
+    "rank_icir": 0.31066187300070786
+  },
+  "required_columns": [
+    "pe_ttm",
+    "pb_lf",
+    "debttoassets",
+    "style_gate_size_large",
+    "style_gate_size_small"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260719-20260719-143117-r1",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260719-20260719-143117-r1"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "Use size style gates to apply different value signals: larger caps use earnings yield (more stable), smaller caps use book yield with leverage penalty to mitigate distress risk.",
+  "style_gates_used": [
+    "style_gate_size_large",
+    "style_gate_size_small"
+  ],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "",
+  "fe_formula": "",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": ""
+}

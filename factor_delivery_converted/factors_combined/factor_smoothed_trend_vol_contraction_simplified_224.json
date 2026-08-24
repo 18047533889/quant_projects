@@ -1,0 +1,70 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "fdcc005b170e3004ab75b95c767ba787dbe73e391696cd8c9cb3f57207f56cd2",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_mutation_composite_gen0_2_2288f99f_g1_mutatio_96fd7e77"
+  ],
+  "code": "def factor_smoothed_trend_vol_contraction_simplified(df):\n    df_copy = df.copy()\n    daily_ret = df_copy['close'].pct_change()\n    trend = talib.EMA(daily_ret, timeperiod=10)\n    atr5 = talib.ATR(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=5)\n    atr20 = talib.ATR(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=20)\n    contraction = 1 - atr5 / atr20.replace(0, np.nan)\n    contraction = np.clip(contraction, -1, 1)\n    factor = trend * contraction\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    factor.name = 'factor_smoothed_trend_vol_contraction_simplified'\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_smoothed_trend_vol_contraction_simplified",
+  "fitness_direction": 1,
+  "formula": "EMA(daily_ret,10) * clip(1 - ATR5/ATR20, -1, 1)",
+  "metrics": {
+    "ic": 0.023192402314767303,
+    "icir": 0.18881492260141877,
+    "mi": 0.03889559254804276,
+    "rank_ic": 0.02546846717643295,
+    "rank_icir": 0.23495909654616412
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7090909090909091,
+    "top_quantile_annualized_excess_return": 0.030895268901327766,
+    "top_quantile_excess_return": 0.08872157255043289,
+    "top_quantile_max_drawdown": -0.1799734849942417,
+    "top_quantile_turnover": 0.4739037833306378
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Simplification of parent: removed the signed square root transformation on the contraction term and added a clip to [-1,1] to bound extreme values. This preserves the core trend-contraction interaction while reducing unnecessary nonlinearity, potentially improving rank stability and interpretability. Keeps cross_sectional_transform as none to maintain raw payoff mechanism.",
+  "raw_metrics": {
+    "ic": 0.023192402314767303,
+    "icir": 0.18881492260141877,
+    "mi": 0.03889559254804276,
+    "rank_ic": 0.02546846717643295,
+    "rank_icir": 0.23495909654616412
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260708-190920-r6",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260708-190920-r6"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema(10, daily_ret) * clip(1 - ATR5/ATR20, -1, 1)",
+  "fe_formula": "ema(10, daily_ret) * clip(1 - ATR5/ATR20, -1, 1)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "EMA(daily_ret,10) * clip(1 - ATR5/ATR20, -1, 1)"
+}

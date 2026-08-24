@@ -20,6 +20,10 @@ from factor_optimizer.capabilities import (
     ProductionCapability,
     require_production_capability,
 )
+from factor_optimizer.contracts.validator import (
+    TrialValidatorIdentity,
+    MutationGrammarValidator,
+)
 from factor_optimizer.errors import (
     FactorOptimizerError,
     ContractError,
@@ -75,6 +79,9 @@ __all__ = [
     "PRODUCTION_CAPABILITY",
     "ProductionCapability",
     "require_production_capability",
+    # Production contracts
+    "TrialValidatorIdentity",
+    "MutationGrammarValidator",
     # Errors
     "FactorOptimizerError",
     "ContractError",

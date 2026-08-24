@@ -1,0 +1,124 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "3567f5bbe3fc9d03beaf9823da76380405848c0b9573634fc641280a4efe3ed7",
+  "candidate_ids": [
+    "g2_crossover_g1_crossover_then_mutation_alpha_drawdown_0_2_as_9607eb3d"
+  ],
+  "code": "def factor_price_impact_vol_adjusted_vol_asym(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    high = df_copy['high']\n    low = df_copy['low']\n    ret = close / close.shift(1) - 1.0\n    abs_ret = ret.abs()\n    impact = abs_ret / volume.replace(0, np.nan)\n    avg_impact = impact.rolling(20, min_periods=20).mean()\n    vol = ret.rolling(20, min_periods=20).std(ddof=1).replace(0, np.nan)\n    base_factor = avg_impact / vol\n    pos_ret = ret.where(ret > 0, 0.0)\n    neg_ret = ret.where(ret < 0, 0.0)\n    window = 60\n    vol_up = pos_ret.rolling(window, min_periods=int(window/2)).std(ddof=1)\n    vol_down = neg_ret.rolling(window, min_periods=int(window/2)).std(ddof=1)\n    vol_ratio = vol_down / vol_up.replace(0, np.nan)\n    vol_ratio = vol_ratio.replace([np.inf, -np.inf], np.nan)\n    smoothed_vol_ratio = vol_ratio.ewm(span=20, min_periods=10).mean()\n    factor = base_factor * (1.0 + smoothed_vol_ratio.fillna(0))\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy['factor_price_impact_vol_adjusted_vol_asym'] = factor\n    return df_copy['factor_price_impact_vol_adjusted_vol_asym']",
+  "cross_sectional_rationale": "Rank transform enables cross-sectional comparison of relative price impact and asymmetry across stocks, essential for liquidity and fragility ranking signals.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.05463761295173719,
+        "top_quantile_excess_return": 0.16022556240273067,
+        "top_quantile_max_drawdown": -0.1110862604472509,
+        "top_quantile_turnover": 0.029259579110079037
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.08900156925662377,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.10998430743376239,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_price_impact_vol_adjusted_vol_asym",
+  "fitness_direction": 1,
+  "formula": "base_factor = rolling_mean(|ret|/vol,20) / rolling_std(ret,20); vol_asym = EMA( vol_down/vol_up, 20); factor = base_factor * (1 + vol_asym)",
+  "metrics": {
+    "ic": 0.00902530116712814,
+    "icir": 0.08900156925662377,
+    "mi": 0.006015210213037747,
+    "rank_ic": 0.016873886885069567,
+    "rank_icir": 0.13506965420502115
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.05463761295173719,
+    "top_quantile_excess_return": 0.16022556240273067,
+    "top_quantile_max_drawdown": -0.1110862604472509,
+    "top_quantile_turnover": 0.029259579110079037
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.0007913389514422002,
+    "icir": 0.013520707166890057,
+    "mi": 0.012888731326671454,
+    "rank_ic": 0.016873886885069567,
+    "rank_icir": 0.13506965420502115
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.05463761295173719,
+    "top_quantile_excess_return": 0.16022556240273067,
+    "top_quantile_max_drawdown": -0.1110862604472509,
+    "top_quantile_turnover": 0.029259579110079037
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.0007913389514422002,
+    "icir": 0.013520707166890057,
+    "mi": 0.012888731326671454,
+    "rank_ic": 0.016873886885069567,
+    "rank_icir": 0.13506965420502115
+  },
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Crossover: primary mechanism is volatility-adjusted price impact (payoff-first parent). Replaces volume tail asymmetry with a smoothed downside/upside volatility ratio from predictive-first parent. The vol asymmetry captures downside fragility, targeting improved RankIC by sharpening cross-sectional differentiation in return asymmetry. Both components are OHLCV-derived, continuous, and economically grounded.",
+  "raw_metrics": {
+    "ic": 0.00902530116712814,
+    "icir": 0.08900156925662377,
+    "mi": 0.006015210213037747,
+    "rank_ic": 0.016873886885069567,
+    "rank_icir": 0.13506965420502115
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-20260730-011744-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-20260730-011744-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.17914431853509444,
+    "pre_transform_top_quantile_excess_return": 0.16022556240273067,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.2559856217268804,
+    "transformed_top_quantile_excess_return": 0.16022556240273067
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "base_factor = ts_mean(20, |ret|/vol) / ts_std(20, ret); vol_asym = ema(20, vol_down/vol_up); factor = base_factor * (1 + vol_asym)",
+  "fe_formula": "base_factor = ts_mean(20, |ret|/vol) / ts_std(20, ret); vol_asym = ema(20, vol_down/vol_up); factor = base_factor * (1 + vol_asym)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "base_factor = rolling_mean(|ret|/vol,20) / rolling_std(ret,20); vol_asym = EMA( vol_down/vol_up, 20); factor = base_factor * (1 + vol_asym)"
+}

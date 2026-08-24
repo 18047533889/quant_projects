@@ -1,0 +1,122 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "0c3139a987757d0d2d207c71f9639569e2436abb4f6babb91b7be25f724a556d",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_then_mutation_ac_002_alpha_stabilit_6d593015"
+  ],
+  "code": "def factor_volume_adaptive_trend(df):\n    df_copy = df.copy()\n    short_trend = (df_copy['close'].rolling(10).mean() / df_copy['close'].rolling(40).mean() - 1)\n    long_trend = (df_copy['close'].rolling(20).mean() / df_copy['close'].rolling(80).mean() - 1)\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy['volume'], window=20)\n    weight = np.minimum(vol_ratio, 1.0)\n    factor = short_trend * weight + long_trend * (1 - weight)\n    factor.name = 'factor_volume_adaptive_trend'\n    return factor",
+  "cross_sectional_rationale": "Gaussian rank normalization ensures cross-sectional comparability of the volume-adaptive trend signal, which is economically relevant as it reflects relative alignment across stocks.",
+  "cross_sectional_transform": "cs_rank_gauss",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9636363636363636,
+        "top_quantile_annualized_excess_return": 0.042525183786839005,
+        "top_quantile_excess_return": 0.11248193565615638,
+        "top_quantile_max_drawdown": -0.16780295942156032,
+        "top_quantile_turnover": 0.1502128996052276
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_volume_adaptive_trend",
+  "fitness_direction": -1,
+  "formula": "short_trend = SMA(close,10)/SMA(close,40)-1; long_trend = SMA(close,20)/SMA(close,80)-1; weight = min(vol_ratio,1); factor = short_trend*weight + long_trend*(1-weight)",
+  "metrics": {
+    "ic": 0.015736799949996685,
+    "icir": 0.10078097358469582,
+    "mi": 0.014853679938623188,
+    "rank_ic": 0.03407713358875124,
+    "rank_icir": 0.1914785572233298
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.042525183786839005,
+    "top_quantile_excess_return": 0.11248193565615638,
+    "top_quantile_max_drawdown": -0.16780295942156032,
+    "top_quantile_turnover": 0.1502128996052276
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.019037756257544947,
+    "icir": 0.11693432859431838,
+    "mi": 0.03349529329615741,
+    "rank_ic": 0.03407713358875124,
+    "rank_icir": 0.1914785572233298
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9636363636363636,
+    "top_quantile_annualized_excess_return": 0.042525183786839005,
+    "top_quantile_excess_return": 0.11248193565615638,
+    "top_quantile_max_drawdown": -0.16780295942156032,
+    "top_quantile_turnover": 0.1502128996052276
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.019037756257544947,
+    "icir": -0.11693432859431838,
+    "mi": 0.03349529329615741,
+    "rank_ic": -0.03407713358875124,
+    "rank_icir": -0.1914785572233298
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Mutation of factor_correlation_synergy_trend_smoothed_2: replaces noisy 20-day price-volume correlation with the continuous volume ratio from classify_volume_regime, which directly measures volume intensity relative to its EMA. When volume is elevated (vol_ratio>1), short-term trend is favored; otherwise long-term trend dominates. This simplifies the synergy mechanism, reduces estimation noise, and targets improved IC/ICIR while preserving the adaptive trend structure and strong payoff.",
+  "raw_metrics": {
+    "ic": -0.015736799949996685,
+    "icir": -0.10078097358469582,
+    "mi": 0.014853679938623188,
+    "rank_ic": -0.03407713358875124,
+    "rank_icir": -0.1914785572233298
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260719-181655-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260719-181655-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.39502306896010175,
+    "pre_transform_top_quantile_excess_return": 0.11248193565615638,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.35692714428539674,
+    "transformed_top_quantile_excess_return": 0.11248193565615638
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "short_trend = ts_mean(10, close)/ts_mean(40, close)-1; long_trend = ts_mean(20, close)/ts_mean(80, close)-1; weight = min(vol_ratio,1); factor = short_trend*weight + long_trend*(1-weight)",
+  "fe_formula": "short_trend = ts_mean(10, close)/ts_mean(40, close)-1; long_trend = ts_mean(20, close)/ts_mean(80, close)-1; weight = flex_min(vol_ratio, 1); factor = short_trend*weight + long_trend*(1-weight)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "short_trend = SMA(close,10)/SMA(close,40)-1; long_trend = SMA(close,20)/SMA(close,80)-1; weight = min(vol_ratio,1); factor = short_trend*weight + long_trend*(1-weight)"
+}

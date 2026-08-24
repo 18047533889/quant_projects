@@ -1,0 +1,51 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "97c9e7960f31784016427f814dbc748c78c6b9fd43080bf14b5d9b5057449afa",
+  "candidate_ids": [
+    "MUT-003"
+  ],
+  "code": "def factor_volume_persistence_momentum_robust(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change(10)\n    vol_med = df_copy['volume'].rolling(20).median()\n    vol_mad = (df_copy['volume'] - vol_med).abs().rolling(20).median()\n    vol_robust_z = (df_copy['volume'] - vol_med) / vol_mad.replace(0, np.nan)\n    vol_robust_z = vol_robust_z.clip(-3, 3)\n    daily_ret = df_copy['close'].pct_change()\n    persistence = (daily_ret > 0).astype(float).rolling(10).sum() / 10\n    factor = ret * vol_robust_z * persistence\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    factor.name = \"factor_volume_persistence_momentum_robust\"\n    return factor",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_volume_persistence_momentum_robust",
+  "fitness_direction": -1,
+  "formula": "factor = pct_change(close,10) * robust_zscore(volume,20) * persistence(10)",
+  "metrics": {
+    "ic": 0.024977666278841366,
+    "icir": 0.22911762429485993,
+    "mi": 0.03156786682907686,
+    "rank_ic": 0.026248395032220245,
+    "rank_icir": 0.29816836597010815
+  },
+  "rationale": "Mutation of CROSS-002: preserves the core price-volume coherence mechanism (10-day return multiplied by volume deviation) but replaces the standard z-score (mean/std) with a robust z-score using median and MAD. This reduces the influence of outlier volume observations, aiming to improve IC stability without disrupting the RankICIR strength of the parent.",
+  "raw_metrics": {
+    "ic": -0.024977666278841366,
+    "icir": -0.22911762429485993,
+    "mi": 0.03156786682907686,
+    "rank_ic": -0.026248395032220245,
+    "rank_icir": -0.29816836597010815
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260622-103436-r4",
+  "source_run_ids": [
+    "formal-mvp-loop-20260622-103436-r4"
+  ],
+  "lqtp_formula": "factor = ts_pct(close, 10) * cs_zscore(volume,20) * persistence(10)",
+  "fe_formula": "factor = ts_pct(close, 10) * zscore(volume, 20) * persistence(10)",
+  "lqtp_notes": "Unconverted: ['persistence']",
+  "fe_notes": "Unconverted: ['persistence']",
+  "source_formula": "factor = pct_change(close,10) * robust_zscore(volume,20) * persistence(10)"
+}

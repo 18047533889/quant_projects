@@ -1,0 +1,115 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "72992a6049cc9bfe4c7662c2a4f4dbf7195ad882377cf2e4713ecfe836349157",
+  "candidate_ids": [
+    "g1_mutation_alpha_turnover_attention_context_0_0_repaired_0_49d2cc21"
+  ],
+  "code": "def factor_attentive_sales_yield_winsor(df):\n    df_copy = df.copy()\n    sales_yield = 1.0 / df_copy[\"ps_ttm\"].replace(0, np.nan)\n    inattention = 1.0 - df_copy[\"free_turn\"].rolling(20, min_periods=1).rank(pct=True)\n    sales_yield = sales_yield.ffill()\n    inattention = inattention.ffill()\n    raw = sales_yield * inattention\n    lower = raw.rolling(60, min_periods=20).quantile(0.05)\n    upper = raw.rolling(60, min_periods=20).quantile(0.95)\n    winsorized = raw.clip(lower=lower, upper=upper)\n    df_copy[\"factor_attentive_sales_yield_winsor\"] = winsorized\n    return df_copy[\"factor_attentive_sales_yield_winsor\"]",
+  "cross_sectional_rationale": "Sales yield is cross-sectionally comparable; ranking ensures scale consistency and emphasizes relative cheapness across stocks.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.7454545454545455,
+        "top_quantile_annualized_excess_return": 0.05892120403793877,
+        "top_quantile_excess_return": 0.178514637273556,
+        "top_quantile_max_drawdown": -0.08266520765292384,
+        "top_quantile_turnover": 0.2923006011087168
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_attentive_sales_yield_winsor",
+  "fitness_direction": 1,
+  "formula": "1/ps_ttm * (1 - ts_rank(free_turn, 20)), then rolling 60-day winsorize at 5% and 95% quantiles to reduce outlier drag on IC.",
+  "metrics": {
+    "ic": 0.012231734230862932,
+    "icir": 0.1442695366861432,
+    "mi": 0.02279765789372945,
+    "rank_ic": 0.03492987420969172,
+    "rank_icir": 0.3488230189181543
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.7454545454545455,
+    "top_quantile_annualized_excess_return": 0.05892120403793877,
+    "top_quantile_excess_return": 0.178514637273556,
+    "top_quantile_max_drawdown": -0.08266520765292384,
+    "top_quantile_turnover": 0.2923006011087168
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.004095389555396565,
+    "icir": 0.08014211551346709,
+    "mi": 0.016693638643702435,
+    "rank_ic": 0.03492987420969172,
+    "rank_icir": 0.3488230189181543
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.7454545454545455,
+    "top_quantile_annualized_excess_return": 0.05892120403793877,
+    "top_quantile_excess_return": 0.178514637273556,
+    "top_quantile_max_drawdown": -0.08266520765292384,
+    "top_quantile_turnover": 0.2923006011087168
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.004095389555396565,
+    "icir": 0.08014211551346709,
+    "mi": 0.016693638643702435,
+    "rank_ic": 0.03492987420969172,
+    "rank_icir": 0.3488230189181543
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Sales yield (1/ps_ttm) is a stable value metric. Multiplying by inattention (1 - rank of free_turn) amplifies the value effect when attention is low. The parent had strong RankIC/ICIR but weaker IC; winsorizing the product at rolling 5th/95th percentiles reduces extreme values that harm linear correlation while preserving rank ordering and the economic mechanism.",
+  "raw_metrics": {
+    "ic": 0.012231734230862932,
+    "icir": 0.1442695366861432,
+    "mi": 0.02279765789372945,
+    "rank_ic": 0.03492987420969172,
+    "rank_icir": 0.3488230189181543
+  },
+  "required_columns": [
+    "ps_ttm",
+    "free_turn"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260717-20260718-074009-r13",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260717-20260718-074009-r13"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.4846840368404121,
+    "pre_transform_top_quantile_excess_return": 0.178514637273556,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.5630518219385816,
+    "transformed_top_quantile_excess_return": 0.178514637273556
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "1/ps_ttm * (1 - ts_rank(free_turn, 20)), then rolling 60-day winsorize at 5% and 95% quantiles to reduce outlier drag on IC.",
+  "fe_formula": "1/ps_ttm * (1 - ts_rank(free_turn, 20)), then rolling 60-day winsorize at 5% and 95% quantiles to reduce outlier drag on IC.",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "1/ps_ttm * (1 - ts_rank(free_turn, 20)), then rolling 60-day winsorize at 5% and 95% quantiles to reduce outlier drag on IC."
+}

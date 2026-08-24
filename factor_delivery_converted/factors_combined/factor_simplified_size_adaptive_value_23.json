@@ -1,0 +1,122 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "7bc413270e06ae7c549dbb2728109ad5b0420499f104cbcc3a151761ee4c27b3",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_then_mutation_a_001_roe_q_001_69638_bdac0e48"
+  ],
+  "code": "def factor_simplified_size_adaptive_value(df):\n    df_copy = df.copy()\n    debt_ratio = df_copy[\"debttoassets\"] / 100.0\n    book_yield = 1.0 / df_copy[\"pb_lf\"].replace(0, np.nan)\n    small_value = book_yield * (1.0 / (1.0 + debt_ratio))\n    earnings_yield = 1.0 / df_copy[\"pe_ttm\"].replace(0, np.nan)\n    roe = df_copy[\"roe_ttm2\"] / 100.0\n    large_value = earnings_yield * (1.0 + roe)\n    is_small = df_copy[\"style_gate_size_small\"] == 1\n    is_large = df_copy[\"style_gate_size_large\"] == 1\n    signal = large_value.copy()\n    signal[is_small] = small_value[is_small]\n    signal.name = 'factor_simplified_size_adaptive_value'\n    return signal",
+  "cross_sectional_rationale": "Value signals are inherently cross-sectional; ranking ensures comparability across assets.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.8787878787878788,
+        "top_quantile_annualized_excess_return": 0.2252345785446428,
+        "top_quantile_excess_return": 0.7924840135907953,
+        "top_quantile_max_drawdown": -0.19819056325712892,
+        "top_quantile_turnover": 0.03151055933475511
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_simplified_size_adaptive_value",
+  "fitness_direction": 1,
+  "formula": "If small-cap: (1/PB) * (1/(1+Debt/100)); else: (1/PE) * (1 + ROE/100)",
+  "metrics": {
+    "ic": 0.017061862140361785,
+    "icir": 0.1939743077120186,
+    "mi": 0.011083170917684626,
+    "rank_ic": 0.031323275473960195,
+    "rank_icir": 0.2952211855762488
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8787878787878788,
+    "top_quantile_annualized_excess_return": 0.2252345785446428,
+    "top_quantile_excess_return": 0.7924840135907953,
+    "top_quantile_max_drawdown": -0.19819056325712892,
+    "top_quantile_turnover": 0.03151055933475511
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": {
+    "ic": 0.009949101213704353,
+    "icir": 0.13400590713868663,
+    "mi": 0.019024724313070784,
+    "rank_ic": 0.031323275473960195,
+    "rank_icir": 0.2952211855762488
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.8787878787878788,
+    "top_quantile_annualized_excess_return": 0.2252345785446428,
+    "top_quantile_excess_return": 0.7924840135907953,
+    "top_quantile_max_drawdown": -0.19819056325712892,
+    "top_quantile_turnover": 0.03151055933475511
+  },
+  "pre_transform_raw_metrics": {
+    "ic": 0.009949101213704353,
+    "icir": 0.13400590713868663,
+    "mi": 0.019024724313070784,
+    "rank_ic": 0.031323275473960195,
+    "rank_icir": 0.2952211855762488
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Simplified mutation of size-adaptive quality value factor: keep small-cap branch (book yield with hyperbolic leverage penalty) unchanged; for large caps, replace debt-adjusted ROE multiplier with raw ROE/100 multiplier. This simplifies the large-cap quality adjustment, removing the leverage double-counting, while preserving the core size-gated value intuition from the parent. Expected to improve IC by reducing unnecessary penalization in the large-cap branch.",
+  "raw_metrics": {
+    "ic": 0.017061862140361785,
+    "icir": 0.1939743077120186,
+    "mi": 0.011083170917684626,
+    "rank_ic": 0.031323275473960195,
+    "rank_icir": 0.2952211855762488
+  },
+  "required_columns": [
+    "pe_ttm",
+    "pb_lf",
+    "debttoassets",
+    "roe_ttm2",
+    "style_gate_size_small",
+    "style_gate_size_large"
+  ],
+  "run_id": "formal-fundamental-strict-and-20260719-20260719-210614-r4",
+  "source_run_ids": [
+    "formal-fundamental-strict-and-20260719-20260719-210614-r4"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "style_gate_size_small and size_large provide discrete size regimes to apply different value measures: book yield with hyperbolic leverage penalty for small caps, earnings yield with raw ROE quality boost for large caps.",
+  "style_gates_used": [
+    "style_gate_size_large",
+    "style_gate_size_small"
+  ],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.4895241937156708,
+    "pre_transform_top_quantile_excess_return": 0.7924840135907953,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.5486638018202741,
+    "transformed_top_quantile_excess_return": 0.7924840135907953
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "If small-cap: (1/PB) * (1/(1+Debt/100)); else: (1/PE) * (1 + ROE/100)",
+  "fe_formula": "If small-cap: (1/PB) * (1/(1+Debt/100)); else: (1/PE) * (1 + ROE/100)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "If small-cap: (1/PB) * (1/(1+Debt/100)); else: (1/PE) * (1 + ROE/100)"
+}

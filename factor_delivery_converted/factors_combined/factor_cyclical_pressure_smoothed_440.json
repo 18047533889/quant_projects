@@ -1,0 +1,125 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "c3d8f213f6a96400131982497461e77cc133f84358a6c24c540c7a3a4f461685",
+  "candidate_ids": [
+    "g1_mutation_amc_002_e9e4d0c6"
+  ],
+  "code": "def factor_cyclical_pressure_smoothed(df):\n    df_copy = df.copy()\n    high_low = df_copy[\"high\"] - df_copy[\"low\"]\n    high_pc = (df_copy[\"high\"] - df_copy[\"close\"].shift(1)).abs()\n    low_pc = (df_copy[\"low\"] - df_copy[\"close\"].shift(1)).abs()\n    true_range = pd.concat([high_low, high_pc, low_pc], axis=1).max(axis=1)\n    atr_ema = talib.EMA(true_range.values.astype(np.float64), timeperiod=90)\n    atr_ema = pd.Series(atr_ema, index=df_copy.index)\n    atr_change = atr_ema / atr_ema.shift(20) - 1\n    return atr_change.fillna(0).rename('factor_cyclical_pressure_smoothed')",
+  "cross_sectional_rationale": "Z-score normalizes cyclical pressure for same-date cross-sectional comparison, identifying stocks with relative expansion in volatility cycles.",
+  "cross_sectional_transform": "cs_zscore",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9757575757575757,
+        "top_quantile_annualized_excess_return": 0.025631394709115574,
+        "top_quantile_excess_return": 0.06371190791064607,
+        "top_quantile_max_drawdown": -0.1565734203136041,
+        "top_quantile_turnover": 0.0968645492024878
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.0908628270541992,
+      "field": "icir",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.09137172945800812,
+      "threshold": 0.1
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_cyclical_pressure_smoothed",
+  "fitness_direction": -1,
+  "formula": "ATR_EMA90(20d change) = (EMA(TR,90) / lag20(EMA(TR,90))) - 1",
+  "metrics": {
+    "ic": 0.012778574684237345,
+    "icir": 0.0908628270541992,
+    "mi": 0.014209800875381262,
+    "rank_ic": 0.0326370229309762,
+    "rank_icir": 0.23731757013475763
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.025631394709115574,
+    "top_quantile_excess_return": 0.06371190791064607,
+    "top_quantile_max_drawdown": -0.1565734203136041,
+    "top_quantile_turnover": 0.0968645492024878
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.012778574684237346,
+    "icir": 0.09086282705419921,
+    "mi": 0.02293651366110705,
+    "rank_ic": 0.0326370229309762,
+    "rank_icir": 0.23731757013475763
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.9757575757575757,
+    "top_quantile_annualized_excess_return": 0.025631394709115574,
+    "top_quantile_excess_return": 0.06371190791064607,
+    "top_quantile_max_drawdown": -0.1565734203136041,
+    "top_quantile_turnover": 0.0968645492024878
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.012778574684237346,
+    "icir": -0.09086282705419921,
+    "mi": 0.02293651366110705,
+    "rank_ic": -0.0326370229309762,
+    "rank_icir": -0.23731757013475763
+  },
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Uses an exponential moving average of true range (EMA-90) instead of simple average to capture recent volatility changes more responsively while preserving the cyclical pressure interpretation. The 20-day rate of change of EMA-ATR remains the core signal.",
+  "raw_metrics": {
+    "ic": -0.012778574684237345,
+    "icir": -0.0908628270541992,
+    "mi": 0.014209800875381262,
+    "rank_ic": -0.0326370229309762,
+    "rank_icir": -0.23731757013475763
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260717-204608-r6",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260717-204608-r6"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.39653250846527743,
+    "pre_transform_top_quantile_excess_return": 0.06371190791064607,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.38780579567955165,
+    "transformed_top_quantile_excess_return": 0.06371190791064607
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ATR_EMA90(20d change) = (ema(90, TR) / delay(20, ema(90, TR))) - 1",
+  "fe_formula": "ATR_EMA90(20d change) = (ema(90, TR) / ts_delay(20, EMA(TR,90)))) - 1",
+  "lqtp_notes": "Unconverted: ['ATR_EMA90']",
+  "fe_notes": "Unconverted: ['ATR_EMA90']",
+  "source_formula": "ATR_EMA90(20d change) = (EMA(TR,90) / lag20(EMA(TR,90))) - 1"
+}

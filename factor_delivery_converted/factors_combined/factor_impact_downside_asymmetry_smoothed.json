@@ -1,0 +1,91 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "eb748d8e054adc0cb480987cde7d7ea372350049ef544385f82ee9ea0b64ed8f",
+  "candidate_ids": [
+    "g1_crossover_then_mutation_alpha_vol_asymmetry_g0_a_aoimb_g0_volume_respons_089a0e3d"
+  ],
+  "code": "def factor_impact_downside_asymmetry_smoothed(df):\n    \"\"\"Smoothed liquidity-sensitive downside-impact asymmetry.\"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"].where(df_copy[\"close\"] > 0.0)\n    volume = df_copy[\"volume\"].where(df_copy[\"volume\"] > 0.0)\n    prev_close = close.shift(1)\n    ret = (close / prev_close - 1.0).replace([np.inf, -np.inf], np.nan)\n    dollar_volume = (prev_close * volume).replace([np.inf, -np.inf], np.nan)\n    impact = (ret.abs() / dollar_volume).replace([np.inf, -np.inf], np.nan)\n    impact_base = impact.rolling(30, min_periods=15).median()\n    impact_base = impact_base.where(np.isfinite(impact_base) & (impact_base > 0.0))\n    relative_impact = (impact / impact_base).replace([np.inf, -np.inf], np.nan).clip(upper=10.0)\n    downside_impact = ret.clip(upper=0.0).pow(2) * relative_impact\n    upside_impact = ret.clip(lower=0.0).pow(2) * relative_impact\n    raw_asymmetry = downside_impact - upside_impact\n    signal = raw_asymmetry.ewm(span=30, min_periods=15, adjust=False).mean()\n    df_copy[\"factor_impact_downside_asymmetry_smoothed\"] = signal.replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_impact_downside_asymmetry_smoothed\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.03086278264564335,
+        "top_quantile_excess_return": 0.08744458541370848,
+        "top_quantile_max_drawdown": -0.12608755164470664,
+        "top_quantile_turnover": 0.1266883773477828
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "balanced"
+  },
+  "factor_name": "factor_impact_downside_asymmetry_smoothed",
+  "fitness_direction": 1,
+  "formula": "EWMA30[(r_t^-^2 - r_t^+^2) * |r_t|/Median30(|r|/dollar_volume)]",
+  "metrics": {
+    "ic": 0.020922856734435693,
+    "icir": 0.23069246511933042,
+    "mi": 0.0463262292786748,
+    "rank_ic": 0.04669688316325709,
+    "rank_icir": 0.3452701809839021
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.03086278264564335,
+    "top_quantile_excess_return": 0.08744458541370848,
+    "top_quantile_max_drawdown": -0.12608755164470664,
+    "top_quantile_turnover": 0.1266883773477828
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "balanced",
+  "rationale": "Mutates the parent's liquidity-sensitive downside-impact asymmetry by removing the unstable volume-correlation modifier and extending the impact baseline and signal smoothing from 20 to 30 bars. This preserves the core economic mechanism while directly targeting the parent's weak predictive robustness and excessive turnover/payoff failure through a lower-noise, slower-moving signal. Parent-strength target: preserve relative downside-impact information while improving stability and turnover discipline.",
+  "raw_metrics": {
+    "ic": 0.020922856734435693,
+    "icir": 0.23069246511933042,
+    "mi": 0.0463262292786748,
+    "rank_ic": 0.04669688316325709,
+    "rank_icir": 0.3452701809839021
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260806-094519-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260806-094519-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "EWMA30[(r_t^-^2 - r_t^+^2) * |r_t|/ts_median(30, |r|/dollar_volume)]",
+  "fe_formula": "EWMA30[(r_t^-^2 - r_t^+^2) * |r_t|/ts_median(30, |r|/dollar_volume)]",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "EWMA30[(r_t^-^2 - r_t^+^2) * |r_t|/Median30(|r|/dollar_volume)]"
+}

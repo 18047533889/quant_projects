@@ -1,0 +1,73 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "538814c56244ecc2a64128bab140e2cd7345b54bd556e1a405b9cb6a86c495b4",
+  "candidate_ids": [
+    "g2_crossover_g1_crossover_regime_gating_001_composite_001_37c_828b9a58"
+  ],
+  "code": "def factor_regime_vol_adaptive_trend_v4(df):\n    df_copy = df.copy()\n    high_resvol = df_copy['style_gate_resvol_high'] > 0\n    imp = (df_copy['close'] - df_copy['open']) / (df_copy['high'] - df_copy['low'] + 1e-8)\n    imp = imp.rolling(3, min_periods=3).mean()\n    mom = df_copy['close'] / df_copy['close'].shift(10) - 1\n    mom = mom.rolling(5, min_periods=5).mean()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy['volume'], window=20)\n    factor = np.where(high_resvol, imp * vol_ratio, mom * vol_ratio)\n    factor = pd.Series(factor, index=df_copy.index)\n    factor = factor.replace([np.inf, -np.inf], np.nan)\n    df_copy['factor_regime_vol_adaptive_trend_v4'] = factor\n    return df_copy['factor_regime_vol_adaptive_trend_v4']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_regime_vol_adaptive_trend_v4",
+  "fitness_direction": -1,
+  "formula": "if resvol_high: factor = mean(3, (close-open)/(high-low)) * vol_ratio; else: factor = mean(5, ROC(10)) * vol_ratio",
+  "metrics": {
+    "ic": 0.020145193056438308,
+    "icir": 0.18877341855010685,
+    "mi": 0.03660044668264817,
+    "rank_ic": 0.0242950184562683,
+    "rank_icir": 0.19574083742053583
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.8545454545454545,
+    "top_quantile_annualized_excess_return": 0.03413059470765112,
+    "top_quantile_excess_return": 0.1009298326224215,
+    "top_quantile_max_drawdown": -0.1746915884722181,
+    "top_quantile_turnover": 0.4517469777593537
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Crossover of regime_vol_adaptive_trend_v2 (primary) and regime_vol_adaptive_trend_v3 (secondary). Primary mechanism preserved: regime-switching between intraday price impact and smoothed momentum, both scaled by volume ratio from classify_volume_regime. Lightweight modifier borrowed from secondary: shorter impact window (3 vs 5) to capture faster mean reversion in high residual volatility regimes, while keeping momentum window at 5 to maintain trend stability. Targets improved IC and RankIC responsiveness without sacrificing the parent strength of continuous volume-confirmed signals.",
+  "raw_metrics": {
+    "ic": -0.020145193056438308,
+    "icir": -0.18877341855010685,
+    "mi": 0.03660044668264817,
+    "rank_ic": -0.0242950184562683,
+    "rank_icir": -0.19574083742053583
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "style_gate_resvol_high"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260709-014358-r9",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260709-014358-r9"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "Uses style_gate_resvol_high to switch between intraday pressure (high residual volatility, short-term mean reversion) and momentum (low residual volatility, trend persistence). The vol_ratio from classify_volume_regime adds a continuous confidence weight within each regime.",
+  "style_gates_used": [
+    "style_gate_resvol_high"
+  ],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "if resvol_high: factor = ts_mean((close-open)/(high-low), 5) * vol_ratio; else: factor = ts_pct(10) * vol_ratio",
+  "fe_formula": "if resvol_high: factor = ts_mean((close-open)/(high-low), 5) * vol_ratio; else: factor = ts_pct(10) * vol_ratio",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "if resvol_high: factor = mean(5, (close-open)/(high-low)) * vol_ratio; else: factor = ROC(10) * vol_ratio"
+}

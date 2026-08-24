@@ -1,0 +1,98 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "2f69bafdcc4d67825a34edf2099e0d8eaf6ab105d7dfa904461c5fd77df36fae",
+  "candidate_ids": [
+    "g1_crossover_alpha_drawdown_0_1_amc_002_fbd03a44"
+  ],
+  "code": "def factor_drawdown_skew_adjusted_stress(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(20, min_periods=20).max()\n    drawdown = (df_copy['close'] / rolling_max) - 1.0\n    high = df_copy['high'].values.astype(np.float64)\n    low = df_copy['low'].values.astype(np.float64)\n    close = df_copy['close'].values.astype(np.float64)\n    atr = pd.Series(talib.ATR(high, low, close, timeperiod=20), index=df_copy.index)\n    atr = atr.replace(0.0, np.nan)\n    normalized_dd = drawdown / atr\n    stress = normalized_dd.rolling(5, min_periods=5).sum()\n    returns = df_copy['close'].pct_change()\n    skew = returns.rolling(126, min_periods=126).skew().fillna(0.0)\n    weight = 1.0 - 0.2 * np.tanh(skew)\n    factor = stress * weight\n    df_copy['factor_drawdown_skew_adjusted_stress'] = factor\n    return df_copy['factor_drawdown_skew_adjusted_stress']",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.9878787878787879,
+        "top_quantile_annualized_excess_return": 0.05304827979523452,
+        "top_quantile_excess_return": 0.1544000628728559,
+        "top_quantile_max_drawdown": -0.10206966644958049,
+        "top_quantile_turnover": 0.07549250019224721
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "current": 0.009256914083587907,
+      "field": "ic",
+      "kind": "predictive_metric",
+      "normalized_gap": 0.0743085916412093,
+      "threshold": 0.01
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_drawdown_skew_adjusted_stress",
+  "fitness_direction": -1,
+  "formula": "stress = sum((close/rolling_max(close,20)-1)/ATR(20),5); weight = 1 - 0.2*tanh(skew(returns,126)); factor = stress * weight",
+  "metrics": {
+    "ic": 0.009256914083587907,
+    "icir": 0.11765982053345198,
+    "mi": 0.0065188220690641785,
+    "rank_ic": 0.02934427087662382,
+    "rank_icir": 0.22044974375636114
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.9878787878787879,
+    "top_quantile_annualized_excess_return": 0.05304827979523452,
+    "top_quantile_excess_return": 0.1544000628728559,
+    "top_quantile_max_drawdown": -0.10206966644958049,
+    "top_quantile_turnover": 0.07549250019224721
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": false,
+  "qualification_track": "payoff_first",
+  "rationale": "Keeps drawdown volatility-adjusted stress as primary payoff mechanism (strong payoff evidence). Adds a lightweight bounded weight (0.8-1.2) based on 126-day return skewness to modulate the signal: negative skew (downside tail) amplifies drawdown signal, positive skew attenuates it. This addresses the parent's low rank IC by incorporating return asymmetry regime information from secondary parent.",
+  "raw_metrics": {
+    "ic": -0.009256914083587907,
+    "icir": -0.11765982053345198,
+    "mi": 0.0065188220690641785,
+    "rank_ic": -0.02934427087662382,
+    "rank_icir": -0.22044974375636114
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260720-002200-r4",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260720-002200-r4"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "stress = ts_sum(5, (close/rolling_max(close,20)-1)/ATR(20)) weight = 1 - 0.2*tanh(skew(returns,126)); factor = stress * weight",
+  "fe_formula": "stress = ts_sum(5, (close/rolling_max(close,20)-1)/ATR(20))ight = 1 - 0.2*tanh(skew(returns,126)); factor = stress * weight",
+  "lqtp_notes": "Unconverted: ['skew']",
+  "fe_notes": "Unconverted: ['skew']",
+  "source_formula": "stress = sum((close/rolling_max(close,20)-1)/ATR(20),5); weight = 1 - 0.2*tanh(skew(returns,126)); factor = stress * weight"
+}

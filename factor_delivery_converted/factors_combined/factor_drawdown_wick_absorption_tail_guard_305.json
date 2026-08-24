@@ -1,0 +1,95 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "b12f3bc65dbf4e2cee8a80cbb09446c5b99b86d5f24d4050108d8ae63637122b",
+  "candidate_ids": [
+    "g2_crossover_g1_crossover_then_mutation_alpha_drawdown_g0_wic_dd886f7c"
+  ],
+  "code": "def factor_drawdown_wick_absorption_tail_guard(df):\n    \"\"\"Measure underwater lower-wick absorption with bounded drawdown-conditioned tail-risk attenuation.\"\"\"\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    open_ = df_copy[\"open\"]\n    close = df_copy[\"close\"].replace([np.inf, -np.inf], np.nan)\n    eps = np.finfo(float).eps\n    safe_close = close.clip(lower=eps)\n    bar_range = (high - low).replace(0.0, np.nan)\n    wick_base = np.minimum(open_, close)\n    lower_wick = ((wick_base - low) / bar_range).clip(lower=0.0, upper=1.0)\n    close_location = ((close - low) / bar_range).clip(lower=0.0, upper=1.0)\n    absorption = (lower_wick * close_location).rolling(16, min_periods=16).mean()\n    high_water = safe_close.rolling(50, min_periods=50).max().clip(lower=eps)\n    depth = (1.0 - safe_close / high_water).clip(lower=0.0)\n    prior_close = safe_close.shift(1)\n    downside_damage = (-np.log(safe_close / prior_close)).clip(lower=0.0).rolling(12, min_periods=12).sum()\n    ret = safe_close.pct_change().replace([np.inf, -np.inf], np.nan)\n    downside_energy = ret.clip(upper=0.0).pow(2)\n    upside_energy = ret.clip(lower=0.0).pow(2)\n    rolling_peak = safe_close.rolling(20, min_periods=20).max().clip(lower=eps)\n    local_drawdown = (1.0 - safe_close / rolling_peak).clip(lower=0.0)\n    weighted_downside = (downside_energy * (1.0 + local_drawdown)).rolling(20, min_periods=20).mean()\n    upside_baseline = upside_energy.rolling(20, min_periods=20).mean()\n    total_energy = (downside_energy + upside_energy).rolling(20, min_periods=20).mean().replace(0.0, np.nan)\n    tail_fragility = ((weighted_downside - upside_baseline) / total_energy).clip(lower=0.0, upper=1.0)\n    signal = depth * absorption / (1.0 + downside_damage)\n    signal = signal * (1.0 - 0.25 * tail_fragility)\n    df_copy[\"factor_drawdown_wick_absorption_tail_guard\"] = signal.replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_drawdown_wick_absorption_tail_guard\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.03773509622202598,
+        "top_quantile_excess_return": 0.10430452624358977,
+        "top_quantile_max_drawdown": -0.09918330636819273,
+        "top_quantile_turnover": 0.1685287557883577
+      },
+      "payoff_gate_passed": true
+    },
+    "primary_target": {
+      "kind": "preserve_balanced_strength"
+    },
+    "qualification_track": "payoff_first"
+  },
+  "factor_name": "factor_drawdown_wick_absorption_tail_guard",
+  "fitness_direction": 1,
+  "formula": "[drawdown_depth_50 × mean_16(lower_wick_fraction × close_location)] / [1 + downside_damage_12] × [1 - 0.25 × max(0, drawdown-conditioned tail_fragility_20)]",
+  "metrics": {
+    "ic": 0.0184916983052167,
+    "icir": 0.1578193475228731,
+    "mi": 0.011249931644726097,
+    "rank_ic": 0.023566463439382852,
+    "rank_icir": 0.15471978293929553
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.03773509622202598,
+    "top_quantile_excess_return": 0.10430452624358977,
+    "top_quantile_max_drawdown": -0.09918330636819273,
+    "top_quantile_turnover": 0.1685287557883577
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "payoff_first",
+  "rationale": "The payoff-first parent remains primary: underwater drawdown depth combined with repeated lower-wick recovery identifies absorption and preserves the parent's positive payoff and monotonicity evidence. The secondary parent contributes only one bounded modifier, drawdown-conditioned downside tail fragility, which attenuates absorption when downside shocks dominate upside energy during local drawdowns. This targets the primary parent's weaker predictive stability without averaging mechanisms, adding a cross-sectional transform, or introducing a separate feature family.",
+  "raw_metrics": {
+    "ic": 0.0184916983052167,
+    "icir": 0.1578193475228731,
+    "mi": 0.011249931644726097,
+    "rank_ic": 0.023566463439382852,
+    "rank_icir": 0.15471978293929553
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260807-060418-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260807-060418-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "[drawdown_depth_50 × ts_mean(16, lower_wick_fraction × close_location)] / [1 + downside_damage_12] × [1 - 0.25 × max(0, drawdown-conditioned tail_fragility_20)]",
+  "fe_formula": "[drawdown_depth_50 × ts_mean(16, lower_wick_fraction × close_location)] / [1 + downside_damage_12] × [1 - 0.25 × flex_max(0, drawdown-conditioned tail_fragility_20)]",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "[drawdown_depth_50 × mean_16(lower_wick_fraction × close_location)] / [1 + downside_damage_12] × [1 - 0.25 × max(0, drawdown-conditioned tail_fragility_20)]"
+}

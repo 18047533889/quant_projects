@@ -1,0 +1,97 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "9c8a38365b3c686f8c2b02f069486964d79cd5da426d7e86213eddbe5094c307",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_g1_mutation_alpha_vol_asymmetry_g0_002_686d980b_6e5201d1"
+  ],
+  "code": "def factor_session_magnitude_imbalance_volume_weighted_42d(df):\n    \"\"\"Smoothed session return magnitude imbalance with bounded volume participation weighting.\"\"\"\n    df_copy = df.copy()\n    overnight, intraday = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    downside = (-overnight.clip(upper=0.0) + -intraday.clip(upper=0.0)).rolling(42, min_periods=42).mean()\n    upside = (overnight.clip(lower=0.0) + intraday.clip(lower=0.0)).rolling(42, min_periods=42).mean()\n    total_magnitude = (downside + upside).replace(0.0, np.nan)\n    imbalance = (downside - upside) / total_magnitude\n    _, _, volume_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    participation_weight = 0.85 + 0.15 * volume_ratio.clip(lower=0.0, upper=2.0)\n    df_copy[\"factor_session_magnitude_imbalance_volume_weighted_42d\"] = (imbalance * participation_weight).replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_session_magnitude_imbalance_volume_weighted_42d\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 1.0,
+        "top_quantile_annualized_excess_return": 0.005249182871264191,
+        "top_quantile_excess_return": 0.014269822182416902,
+        "top_quantile_max_drawdown": -0.21060403750663226,
+        "top_quantile_turnover": 0.1841796577179973
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_session_magnitude_imbalance_volume_weighted_42d",
+  "fitness_direction": 1,
+  "formula": "[(42-day downside session return magnitude - 42-day upside session return magnitude) / total 42-day session return magnitude] * [0.85 + 0.15 * clip(volume / EMA20(volume), 0, 2)]",
+  "metrics": {
+    "ic": 0.026353096655407363,
+    "icir": 0.1832356758261082,
+    "mi": 0.02017901028736624,
+    "rank_ic": 0.044978434819516216,
+    "rank_icir": 0.277962795948342
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.005249182871264191,
+    "top_quantile_excess_return": 0.014269822182416902,
+    "top_quantile_max_drawdown": -0.21060403750663226,
+    "top_quantile_turnover": 0.1841796577179973
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Mutation preserves the parent's core normalized downside-versus-upside session magnitude imbalance and its bounded volume-participation modifier, while extending the asymmetry window from 30 to 42 sessions. The longer trailing window is intended to reduce short-lived session noise and improve predictive rank stability without adding a feature family or materially changing the parent's payoff-oriented, low-turnover mechanism.",
+  "raw_metrics": {
+    "ic": 0.026353096655407363,
+    "icir": 0.1832356758261082,
+    "mi": 0.02017901028736624,
+    "rank_ic": 0.044978434819516216,
+    "rank_icir": 0.277962795948342
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-gpt5.6luna-20260807-092149-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-gpt5.6luna-20260807-092149-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "[(42-day downside session return magnitude - 42-day upside session return magnitude) / total 42-day session return magnitude] * [0.85 + 0.15 * clip(volume / EMA20(volume), 0, 2)]",
+  "fe_formula": "[(42-day downside session return magnitude - 42-day upside session return magnitude) / total 42-day session return magnitude] * [0.85 + 0.15 * clip(volume / EMA20(volume), 0, 2)]",
+  "lqtp_notes": "Unconverted: ['EMA20']",
+  "fe_notes": "Unconverted: ['EMA20']",
+  "source_formula": "[(42-day downside session return magnitude - 42-day upside session return magnitude) / total 42-day session return magnitude] * [0.85 + 0.15 * clip(volume / EMA20(volume), 0, 2)]"
+}

@@ -1,0 +1,125 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "b_id": "B3",
+  "c_id": "C301",
+  "calculation_fingerprint": "51d8a6b9762e81c2aa1aeb8d214162419d04072341ec7027a762e3081a6a417d",
+  "candidate_ids": [
+    "C301_hold_persistence_5d_20d_high"
+  ],
+  "code": "def factor_hold_persistence_5d_20d_high(df):\n    '''Idea: After a close breaks above its prior 20-day high, trailing persistence of closes above that level over the last 5 days separates genuine level repricing from failed breakouts.\nLogic: Compute the prior 20-day high from shifted highs, flag days where close exceeds it, count the trailing 5-day holding persistence, and amplify by the excess above the broken level.\nSub-mechanism tags: breakout_hold, persistence, upper_bound_repricing\nFormula: persistence = sum_{i=0..4} I(close_{t-i} > prior_high_{t-i}); factor = persistence * (1 + 2*max(close/prior_high - 1, 0))\n'''\n    df_copy = df.copy()\n    prior_high = df_copy['high'].shift(1).rolling(20, min_periods=20).max()\n    above = (df_copy['close'] > prior_high).astype(float)\n    persistence = above.rolling(5, min_periods=1).sum()\n    excess = (df_copy['close'] / prior_high - 1.0).clip(lower=0.0)\n    factor = persistence * (1.0 + 2.0 * excess)\n    factor = factor.replace([np.inf, -np.inf], np.nan).ffill().bfill()\n    factor.name = 'factor_hold_persistence_5d_20d_high'\n    return factor",
+  "codegen_skill": "micro-active-agent-codegen",
+  "cross_sectional_rationale": "Persistence of closes above a prior high is a relative-strength statement; ranking each date makes hold persistence comparable across stocks with different price levels.",
+  "cross_sectional_transform": "cs_rank",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.6121212121212121,
+        "top_quantile_annualized_excess_return": -0.02314832174241921,
+        "top_quantile_excess_return": -0.0650734698007871,
+        "top_quantile_max_drawdown": -0.20835931384875772,
+        "top_quantile_turnover": 0.03973107814900043
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_hold_persistence_5d_20d_high",
+  "fitness_direction": -1,
+  "formula": "persistence = sum_{i=0..4} I(close_{t-i} > prior_high_{t-i}); factor = persistence * (1 + 2*max(close/prior_high - 1, 0))",
+  "manual_admission": null,
+  "metrics": {
+    "ic": 0.019838739932372767,
+    "icir": 0.22115499891940402,
+    "mi": 0.18217418378047956,
+    "rank_ic": 0.031253925017017445,
+    "rank_icir": 0.3398373634777598
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.6121212121212121,
+    "top_quantile_annualized_excess_return": -0.02314832174241921,
+    "top_quantile_excess_return": -0.0650734698007871,
+    "top_quantile_max_drawdown": -0.20835931384875772,
+    "top_quantile_turnover": 0.03973107814900043
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": -1,
+  "pre_transform_metrics": {
+    "ic": 0.023506460299254572,
+    "icir": 0.25133030566003517,
+    "mi": 0.01411204455037951,
+    "rank_ic": 0.031253925017017445,
+    "rank_icir": 0.3398373634777598
+  },
+  "pre_transform_payoff_diagnostics": {
+    "quantile_monotonicity": 0.6121212121212121,
+    "top_quantile_annualized_excess_return": -0.02314832174241921,
+    "top_quantile_excess_return": -0.0650734698007871,
+    "top_quantile_max_drawdown": -0.20835931384875772,
+    "top_quantile_turnover": 0.03973107814900043
+  },
+  "pre_transform_raw_metrics": {
+    "ic": -0.023506460299254572,
+    "icir": -0.25133030566003517,
+    "mi": 0.01411204455037951,
+    "rank_ic": -0.031253925017017445,
+    "rank_icir": -0.3398373634777598
+  },
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "This factor measures how consistently a stock has stayed above its prior 20-day high over the trailing 5 days. Persistent holds are a sign that the upper bound has been repriced rather than merely touched, while a breakout that immediately falls back receives a low score. The small excess amplification keeps the count signal continuous and rewards holds with meaningful follow-through.",
+  "raw_metrics": {
+    "ic": -0.019838739932372767,
+    "icir": -0.22115499891940402,
+    "mi": 0.18217418378047956,
+    "rank_ic": -0.031253925017017445,
+    "rank_icir": -0.3398373634777598
+  },
+  "required_columns": [
+    "high",
+    "close"
+  ],
+  "run_id": "formal-dynamic-memory-xalpha-light-v2-20260810-072411-r1",
+  "source_run_ids": [
+    "formal-dynamic-memory-xalpha-light-v2-20260810-072411-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {
+    "composite_tolerance": 0.05,
+    "payoff_retention_minimum": 0.6,
+    "pre_transform_composite": 0.6600400990044465,
+    "pre_transform_top_quantile_excess_return": -0.0650734698007871,
+    "transform_gate_passed": true,
+    "transform_gate_reason": null,
+    "transformed_composite": 0.7942592111270336,
+    "transformed_top_quantile_excess_return": -0.0650734698007871
+  },
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "persistence = sum_{i=0..4} I(close_{t-i} > prior_high_{t-i}); factor = persistence * (1 + 2*max(close/prior_high - 1, 0))",
+  "fe_formula": "persistence = sum_{i=0..4} I(close_{t-i} > prior_high_{t-i}); factor = persistence * (1 + 2*flex_max(close/prior_high - 1, 0))",
+  "lqtp_notes": "Unconverted: ['I']",
+  "fe_notes": "Unconverted: ['I']",
+  "source_formula": "persistence = sum_{i=0..4} I(close_{t-i} > prior_high_{t-i}); factor = persistence * (1 + 2*max(close/prior_high - 1, 0))"
+}

@@ -1,8 +1,8 @@
 {
-  "count": 1565,
+  "count": 1558,
   "fingerprint": {
     "dirty": true,
-    "head": "b05a888fd95d463509f77b2c17ba993a794177c1"
+    "head": "14c60aae68231ff6d94b6c5a27a2c046ab362ef6"
   },
   "recipes": [
     {
@@ -7749,27 +7749,6 @@
       "terminal_allowed": true
     },
     {
-      "canonical": "fin_actual_expectation_divergence",
-      "direct_use_status": "direct_alpha",
-      "expected_cardinality": "panel",
-      "expected_grain": "daily",
-      "expected_output_kind": "series",
-      "expected_value_domain": "",
-      "input_bindings": {
-        "expected": "earnings_expected"
-      },
-      "market": "ashare",
-      "minimum_coverage": 0.5,
-      "parameter_values": {},
-      "required_context": {
-        "sources": [
-          "fundamental_pit"
-        ]
-      },
-      "role": "fundamental_pit",
-      "terminal_allowed": true
-    },
-    {
       "canonical": "fin_announcement_lag",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -7829,28 +7808,6 @@
       "parameter_values": {
         "periods": null
       },
-      "required_context": {
-        "sources": [
-          "fundamental_pit"
-        ]
-      },
-      "role": "fundamental_pit",
-      "terminal_allowed": true
-    },
-    {
-      "canonical": "fin_beat_streak",
-      "direct_use_status": "direct_alpha",
-      "expected_cardinality": "panel",
-      "expected_grain": "daily",
-      "expected_output_kind": "series",
-      "expected_value_domain": "",
-      "input_bindings": {
-        "expected": "earnings_expected",
-        "period_id": "period_id"
-      },
-      "market": "ashare",
-      "minimum_coverage": 0.5,
-      "parameter_values": {},
       "required_context": {
         "sources": [
           "fundamental_pit"
@@ -8282,49 +8239,6 @@
       "terminal_allowed": true
     },
     {
-      "canonical": "fin_days_since_expectation_revision",
-      "direct_use_status": "direct_alpha",
-      "expected_cardinality": "panel",
-      "expected_grain": "daily",
-      "expected_output_kind": "series",
-      "expected_value_domain": "",
-      "input_bindings": {
-        "expected": "earnings_expected"
-      },
-      "market": "ashare",
-      "minimum_coverage": 0.5,
-      "parameter_values": {},
-      "required_context": {
-        "sources": [
-          "fundamental_pit"
-        ]
-      },
-      "role": "fundamental_pit",
-      "terminal_allowed": true
-    },
-    {
-      "canonical": "fin_days_since_update",
-      "direct_use_status": "direct_alpha",
-      "expected_cardinality": "panel",
-      "expected_grain": "daily",
-      "expected_output_kind": "series",
-      "expected_value_domain": "",
-      "input_bindings": {
-        "period_id": "period_id",
-        "x": "continuous_close"
-      },
-      "market": "ashare",
-      "minimum_coverage": 0.5,
-      "parameter_values": {},
-      "required_context": {
-        "sources": [
-          "fundamental_pit"
-        ]
-      },
-      "role": "fundamental_pit",
-      "terminal_allowed": true
-    },
-    {
       "canonical": "fin_debt_repayment_intensity",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -8625,7 +8539,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -8646,7 +8560,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -8667,7 +8581,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -8688,7 +8602,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -8709,7 +8623,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -9287,28 +9201,6 @@
       "terminal_allowed": true
     },
     {
-      "canonical": "fin_miss_streak",
-      "direct_use_status": "direct_alpha",
-      "expected_cardinality": "panel",
-      "expected_grain": "daily",
-      "expected_output_kind": "series",
-      "expected_value_domain": "",
-      "input_bindings": {
-        "expected": "earnings_expected",
-        "period_id": "period_id"
-      },
-      "market": "ashare",
-      "minimum_coverage": 0.5,
-      "parameter_values": {},
-      "required_context": {
-        "sources": [
-          "fundamental_pit"
-        ]
-      },
-      "role": "fundamental_pit",
-      "terminal_allowed": true
-    },
-    {
       "canonical": "fin_monotonicity",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -9779,28 +9671,6 @@
       "terminal_allowed": true
     },
     {
-      "canonical": "fin_restated_flag",
-      "direct_use_status": "direct_alpha",
-      "expected_cardinality": "panel",
-      "expected_grain": "daily",
-      "expected_output_kind": "series",
-      "expected_value_domain": "",
-      "input_bindings": {
-        "period_id": "period_id",
-        "x": "continuous_close"
-      },
-      "market": "ashare",
-      "minimum_coverage": 0.5,
-      "parameter_values": {},
-      "required_context": {
-        "sources": [
-          "fundamental_pit"
-        ]
-      },
-      "role": "fundamental_pit",
-      "terminal_allowed": true
-    },
-    {
       "canonical": "fin_revision_count",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -9819,7 +9689,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -9841,7 +9711,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -9863,7 +9733,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -9885,7 +9755,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -9907,7 +9777,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -10029,28 +9899,6 @@
       "terminal_allowed": true
     },
     {
-      "canonical": "fin_staleness",
-      "direct_use_status": "direct_alpha",
-      "expected_cardinality": "panel",
-      "expected_grain": "daily",
-      "expected_output_kind": "series",
-      "expected_value_domain": "",
-      "input_bindings": {
-        "period_id": "period_id",
-        "x": "continuous_close"
-      },
-      "market": "ashare",
-      "minimum_coverage": 0.5,
-      "parameter_values": {},
-      "required_context": {
-        "sources": [
-          "fundamental_pit"
-        ]
-      },
-      "role": "fundamental_pit",
-      "terminal_allowed": true
-    },
-    {
       "canonical": "fin_std",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -10092,7 +9940,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -10116,7 +9964,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -10140,7 +9988,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -10161,7 +10009,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {

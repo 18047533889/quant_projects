@@ -1,0 +1,69 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "3ec0f2affb6fb3b1bc7a850ba0c23ae22fc7d50ad8c396855539c828039ec585",
+  "candidate_ids": [
+    "g2_mutation_g1_mutation_liquidity_gated_trend_0_1a99f88a_703553a0"
+  ],
+  "code": "def factor_resvol_smoothed_trend(df):\n    df_copy = df.copy()\n    momentum = df_copy[\"close\"] - df_copy[\"close\"].shift(10)\n    vol = df_copy[\"close\"].rolling(20).std(ddof=1).replace(0, np.nan)\n    trend_signal = momentum / vol\n    high_resvol = df_copy[\"style_gate_resvol_high\"] > 0\n    weight = np.where(high_resvol, 1.0, 0.5)\n    factor = trend_signal * weight\n    df_copy[\"factor_resvol_smoothed_trend\"] = factor\n    return df_copy[\"factor_resvol_smoothed_trend\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_resvol_smoothed_trend",
+  "fitness_direction": -1,
+  "formula": "trend = (close - close.shift(10)) / rolling_std(close, 20); output = trend * (1.0 if resvol_high else 0.5)",
+  "metrics": {
+    "ic": 0.016667852997973152,
+    "icir": 0.13670465725276393,
+    "mi": 0.020170089399782043,
+    "rank_ic": 0.028662333606594374,
+    "rank_icir": 0.19669357875625634
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.0,
+    "top_quantile_annualized_excess_return": 0.02953604718931513,
+    "top_quantile_excess_return": 0.08484142670757233,
+    "top_quantile_max_drawdown": -0.09742557939605556,
+    "top_quantile_turnover": 0.30423861378622746
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "This mutation preserves the parent's core normalized trend with regime-weighting, but replaces the liquidity gate with a residual volatility gate (style_gate_resvol_high) to capture periods of heightened idiosyncratic volatility that often accompany sustained trend signals. Additionally, the momentum window is extended from 5 to 10 days to reduce noise and improve signal-to-noise. The gate weight is kept as continuous attenuation (1.0 high, 0.5 low) to ensure cross-sectional variation.",
+  "raw_metrics": {
+    "ic": -0.016667852997973152,
+    "icir": -0.13670465725276393,
+    "mi": 0.020170089399782043,
+    "rank_ic": -0.028662333606594374,
+    "rank_icir": -0.19669357875625634
+  },
+  "required_columns": [
+    "close",
+    "style_gate_resvol_high"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260703-064436-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260703-064436-r1"
+  ],
+  "style_gate_applied": true,
+  "style_gate_rationale": "Uses style_gate_resvol_high to identify high residual volatility regimes where normalized trend signals tend to be stronger and more persistent; in low residual volatility regimes the signal is halved to reduce noise exposure.",
+  "style_gates_used": [
+    "style_gate_resvol_high"
+  ],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "trend = (close - close.delay(10)) / ts_std(20, close); output = trend * (1.0 if resvol_high else 0.5)",
+  "fe_formula": "trend = (close - close.ts_delay(10)) / ts_std(20, close); output = trend * (1.0 if resvol_high else 0.5)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "trend = (close - close.shift(10)) / rolling_std(close, 20); output = trend * (1.0 if resvol_high else 0.5)"
+}

@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "8647af7b2ff595362bb5f4489a7d740689a72f62d7cae2748b19012f5600975b",
+  "candidate_ids": [
+    "order-imbalance-ema-001"
+  ],
+  "code": "def factor_order_imbalance_volume_flow_ema(df):\n    df_copy = df.copy()\n    high_low = df_copy[\"high\"] - df_copy[\"low\"]\n    high_low_safe = high_low.replace(0, np.nan)\n    daily_imbalance = (2 * df_copy[\"close\"] - df_copy[\"high\"] - df_copy[\"low\"]) / high_low_safe\n    daily_flow = daily_imbalance * df_copy[\"volume\"]\n    factor = daily_flow.ewm(span=10, min_periods=1, adjust=False).mean()\n    factor = factor.fillna(0).clip(-1e10, 1e10)\n    factor.name = \"factor_order_imbalance_volume_flow_ema\"\n    return factor",
+  "factor_name": "factor_order_imbalance_volume_flow_ema",
+  "fitness_direction": -1,
+  "formula": "imbalance = (2*close - high - low) / (high - low), flow = imbalance * volume, EMA(flow, span=10)",
+  "metrics": {
+    "ic": 0.012610877524112003,
+    "icir": 0.20011358342670962,
+    "mi": 0.015017378695596051,
+    "rank_ic": 0.025691536215091428,
+    "rank_icir": 0.2716690301247074
+  },
+  "rationale": "Preserves the parent's core idea of directional pressure from order imbalance (close position within the range) weighted by volume, but replaces the simple rolling sum with an exponential moving average (span=10) to reduce noise and improve rank stability. The mutation targets the ICIR and RankICIR bottleneck seen in the parent's rejection, while maintaining the economic intuition of persistent order flow. Uses nan-safe division and clipping for robustness.",
+  "raw_metrics": {
+    "ic": -0.012610877524112003,
+    "icir": -0.20011358342670962,
+    "mi": 0.015017378695596051,
+    "rank_ic": -0.025691536215091428,
+    "rank_icir": -0.2716690301247074
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260610-073501-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-20260610-073501-r1"
+  ],
+  "lqtp_formula": "imbalance = (2*close - high - low) / (high - low), flow = imbalance * volume, ema(span=10, flow)",
+  "fe_formula": "imbalance = (2*close - high - low) / (high - low), flow = imbalance * volume, ema(span=10, flow)",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "imbalance = (2*close - high - low) / (high - low), flow = imbalance * volume, EMA(flow, span=10)"
+}

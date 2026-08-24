@@ -1,0 +1,140 @@
+{
+  "allowed_libraries": [],
+  "calculation_fingerprint": "38a064aec33e708edfd6ee841846c686d706da45a1a8331ddf957ff33797dc82",
+  "candidate_id": "g2_crossover_then_mutation_minute_price_deviation_zscore_minute_price_devia_99e61166",
+  "candidate_ids": [
+    "g2_crossover_then_mutation_minute_price_deviation_zscore_minute_price_devia_99e61166"
+  ],
+  "code": "def factor_minute_mutation_skew_mean(df):\n    \"\"\"Minute DSL factor — executed via /api/calculate/minute.\"\"\"\n    raise NotImplementedError(\"minute DSL expression; use metadata.expression\")\n    # expression = \"\"\"daily_mean(m_skew(get('close'), 390))\"\"\"\n",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "domain_agent": "minute-price-deviation",
+  "expression": "daily_mean(m_skew(get('close'), 390))",
+  "factor_name": "factor_minute_mutation_skew_mean",
+  "factor_value_contract": "minute_to_daily_panel",
+  "fitness_direction": -1,
+  "formula": "daily_mean(m_skew(get('close'), 390))",
+  "frequency": "minute",
+  "lineage": {
+    "agent_skill": "minute-mutation",
+    "generation": 2,
+    "guidance_mode": null,
+    "operation": "mutation",
+    "parent_ids": [
+      "minute_price_deviation_zscore",
+      "minute_price_deviation_vwap"
+    ]
+  },
+  "metadata": {
+    "evolution_guidance": {
+      "preserve": {
+        "passed_predictive_metrics": [
+          "ic",
+          "rank_ic",
+          "icir",
+          "rank_icir",
+          "mi"
+        ],
+        "payoff_diagnostics": {
+          "quantile_monotonicity": 0.41818181818181815,
+          "top_quantile_annualized_excess_return": -0.33725598319164174,
+          "top_quantile_excess_return": -0.03684926375559949,
+          "top_quantile_max_drawdown": -0.05310928230230805,
+          "top_quantile_turnover": 0.8639751552795032
+        },
+        "payoff_gate_passed": false
+      },
+      "primary_target": {
+        "kind": "preserve_balanced_strength"
+      },
+      "qualification_track": null
+    },
+    "execution_feedback": {
+      "days": 0,
+      "expression_hash": "bdf66fa0cf9f2f625c746d365149959be621dbbcb88335ff56d5a3fc11ab998c",
+      "reason": "probe_budget_exhausted",
+      "repairable": false,
+      "retryable": true,
+      "shape_hash": "562da379ea880180e7a0ad46e50ef81959abbcb80204a9da4dde9bc80c993b15",
+      "stage": "quality_probe",
+      "status": "inconclusive"
+    },
+    "expression": "daily_mean(m_skew(get('close'), 390))",
+    "fitness_direction": -1,
+    "fitness_metrics": {
+      "ic": 0.012679937375845916,
+      "icir": 0.1394884719838326,
+      "mi": 0.006654854065040183,
+      "rank_ic": 0.02074578008566782,
+      "rank_icir": 0.19509561246634294
+    },
+    "infrastructure_recovery": true,
+    "llm_candidate_id": "g3_mutation_minute_skew_mean_001",
+    "payoff_diagnostics": {
+      "quantile_monotonicity": 0.41818181818181815,
+      "top_quantile_annualized_excess_return": -0.33725598319164174,
+      "top_quantile_excess_return": -0.03684926375559949,
+      "top_quantile_max_drawdown": -0.05310928230230805,
+      "top_quantile_turnover": 0.8639751552795032
+    },
+    "payoff_gate_passed": false,
+    "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+    "pre_transform_fitness_direction": 1,
+    "predictive_gate_passed": true,
+    "qualification_track": null,
+    "raw_fitness_metrics": {
+      "ic": -0.012679937375845916,
+      "icir": -0.1394884719838326,
+      "mi": 0.006654854065040183,
+      "rank_ic": -0.02074578008566782,
+      "rank_icir": -0.19509561246634294
+    },
+    "transform_gate_passed": true
+  },
+  "metrics": {
+    "ic": 0.012679937375845916,
+    "icir": 0.1394884719838326,
+    "mi": 0.006654854065040183,
+    "rank_ic": 0.02074578008566782,
+    "rank_icir": 0.19509561246634294
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.41818181818181815,
+    "top_quantile_annualized_excess_return": -0.33725598319164174,
+    "top_quantile_excess_return": -0.03684926375559949,
+    "top_quantile_max_drawdown": -0.05310928230230805,
+    "top_quantile_turnover": 0.8639751552795032
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "post_transforms": null,
+  "rationale": "Replaced intraday z-score with intraday skewness (m_skew) to capture asymmetry of close price distribution within the day, then averaged across minutes. This measures whether the close tends to skew above or below the intraday mean.",
+  "raw_metrics": {
+    "ic": -0.012679937375845916,
+    "icir": -0.1394884719838326,
+    "mi": 0.006654854065040183,
+    "rank_ic": -0.02074578008566782,
+    "rank_icir": -0.19509561246634294
+  },
+  "required_columns": [
+    "trading_datetime",
+    "TradingDay",
+    "open_price",
+    "high_price",
+    "low_price",
+    "close_price",
+    "volume",
+    "amount"
+  ],
+  "run_id": "minute-hs300-probe-repair-20260722-034558-r1",
+  "source_run_ids": [
+    "minute-hs300-probe-repair-20260722-034558-r1"
+  ],
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "<daily_mean>(m_skew(get('close'), 390))",
+  "fe_formula": "<daily_mean>(m_skew(get('close'), 390))",
+  "lqtp_notes": "Unconverted: ['m_skew']",
+  "fe_notes": "Unconverted: ['m_skew']",
+  "source_formula": "daily_mean(m_skew(get('close'), 390))"
+}

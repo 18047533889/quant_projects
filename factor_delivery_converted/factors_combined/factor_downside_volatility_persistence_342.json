@@ -1,0 +1,89 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd"
+  ],
+  "calculation_fingerprint": "4cbe8c3e4f4fbd37cb569d94e90e73799f3ab676473a7b34b8cce364c0fa9256",
+  "candidate_ids": [
+    "g1_mutation_vol_asym_001_0a23a86d"
+  ],
+  "code": "def factor_downside_volatility_persistence(df):\n    \"\"\"Asymmetric volatility persistence: difference between downside and upside rolling volatility.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    pos_ret = ret.clip(lower=0)\n    neg_ret = ret.clip(upper=0)\n    upside_vol = pos_ret.rolling(20, min_periods=20).std()\n    downside_vol = neg_ret.rolling(20, min_periods=20).std()\n    factor = downside_vol - upside_vol\n    df_copy[\"factor_downside_volatility_persistence\"] = factor\n    return df_copy[\"factor_downside_volatility_persistence\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "evolution_guidance": {
+    "preserve": {
+      "passed_predictive_metrics": [
+        "ic",
+        "rank_ic",
+        "icir",
+        "rank_icir",
+        "mi"
+      ],
+      "payoff_diagnostics": {
+        "quantile_monotonicity": 0.806060606060606,
+        "top_quantile_annualized_excess_return": -0.029043253821016912,
+        "top_quantile_excess_return": -0.07903962550713028,
+        "top_quantile_max_drawdown": -0.22546502729075402,
+        "top_quantile_turnover": 0.1883566345647493
+      },
+      "payoff_gate_passed": false
+    },
+    "primary_target": {
+      "field": "top_quantile_annualized_excess_return",
+      "kind": "payoff",
+      "reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return"
+    },
+    "qualification_track": "predictive_first"
+  },
+  "factor_name": "factor_downside_volatility_persistence",
+  "fitness_direction": 1,
+  "formula": "downside_vol = rolling_std(neg_returns, 20); upside_vol = rolling_std(pos_returns, 20); factor = downside_vol - upside_vol",
+  "metrics": {
+    "ic": 0.018268967433356185,
+    "icir": 0.14672705520713633,
+    "mi": 0.027925690862021568,
+    "rank_ic": 0.038745957629118144,
+    "rank_icir": 0.3053631011554248
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.806060606060606,
+    "top_quantile_annualized_excess_return": -0.029043253821016912,
+    "top_quantile_excess_return": -0.07903962550713028,
+    "top_quantile_max_drawdown": -0.22546502729075402,
+    "top_quantile_turnover": 0.1883566345647493
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "predictive_gate_passed": true,
+  "qualification_track": "predictive_first",
+  "rationale": "Simplified mutation of parent vol_asym_001: replace EWMA std with rolling std to reduce noise and improve predictive signal. The core leverage effect hypothesis is preserved: negative returns increase subsequent volatility more than positive returns.",
+  "raw_metrics": {
+    "ic": 0.018268967433356185,
+    "icir": 0.14672705520713633,
+    "mi": 0.027925690862021568,
+    "rank_ic": 0.038745957629118144,
+    "rank_icir": 0.3053631011554248
+  },
+  "required_columns": [
+    "close"
+  ],
+  "run_id": "formal-mvp-loop-v3-guarded-or-20260719-143332-r1",
+  "source_run_ids": [
+    "formal-mvp-loop-v3-guarded-or-20260719-143332-r1"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "downside_vol = ts_std(20, neg_returns); upside_vol = ts_std(20, pos_returns); factor = downside_vol - upside_vol",
+  "fe_formula": "downside_vol = ts_std(20, neg_returns); upside_vol = ts_std(20, pos_returns); factor = downside_vol - upside_vol",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "downside_vol = rolling_std(neg_returns, 20); upside_vol = rolling_std(pos_returns, 20); factor = downside_vol - upside_vol"
+}

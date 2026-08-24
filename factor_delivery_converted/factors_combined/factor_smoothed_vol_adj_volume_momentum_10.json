@@ -1,0 +1,67 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math",
+    "alpha_tools"
+  ],
+  "calculation_fingerprint": "c771339485974df3bc7859550a7cf59004fecc11b3c0ca05d8283ea0e5ee516e",
+  "candidate_ids": [
+    "g2_mutation_g1_crossover_then_mutation_atr_001_apvc_002_5711_9f5bc5a9"
+  ],
+  "code": "def factor_smoothed_vol_adj_volume_momentum_10(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"] / df_copy[\"close\"].shift(10) - 1\n    vol_ema = df_copy[\"volume\"].ewm(span=20, adjust=False).mean()\n    vol_ratio = df_copy[\"volume\"] / vol_ema.replace(0.0, np.nan)\n    log_vol_ratio = np.log(vol_ratio.clip(lower=1e-12))\n    ret_vol = ret.rolling(20, min_periods=20).std(ddof=0)\n    raw_factor = (ret * log_vol_ratio) / ret_vol.replace(0.0, np.nan)\n    smoothed = raw_factor.ewm(span=5, adjust=False).mean()\n    df_copy[\"factor_smoothed_vol_adj_volume_momentum_10\"] = smoothed.fillna(0)\n    return df_copy[\"factor_smoothed_vol_adj_volume_momentum_10\"]",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "factor_name": "factor_smoothed_vol_adj_volume_momentum_10",
+  "fitness_direction": -1,
+  "formula": "EMA_5( (close/shift(10)-1) * log(volume/EMA_20(volume)) / std_20(ret) )",
+  "metrics": {
+    "ic": 0.017748991663658474,
+    "icir": 0.19488018577461233,
+    "mi": 0.01482990109300708,
+    "rank_ic": 0.024688995602579082,
+    "rank_icir": 0.2836628000945107
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 1.0,
+    "top_quantile_annualized_excess_return": 0.08238495690058545,
+    "top_quantile_excess_return": 0.24400657958887595,
+    "top_quantile_max_drawdown": -0.09231066837987745,
+    "top_quantile_turnover": 0.2673999808586823
+  },
+  "payoff_gate_passed": true,
+  "payoff_gate_reason": null,
+  "pre_transform_fitness_direction": 1,
+  "pre_transform_metrics": null,
+  "pre_transform_payoff_diagnostics": null,
+  "pre_transform_raw_metrics": null,
+  "rationale": "Mutation of g1_crossover_then_mutation_atr_001_apvc_002_57113858: shortens the momentum horizon from 15 to 10 days to increase sensitivity to recent price changes while preserving the volume-confirmed momentum and volatility normalization core mechanism. The smoothing, log volume ratio, and volatility normalization window remain unchanged to maintain RankICIR strength.",
+  "raw_metrics": {
+    "ic": -0.017748991663658474,
+    "icir": -0.19488018577461233,
+    "mi": 0.01482990109300708,
+    "rank_ic": -0.024688995602579082,
+    "rank_icir": -0.2836628000945107
+  },
+  "required_columns": [
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-admitted-v2-20260706-114750-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-admitted-v2-20260706-114750-r2"
+  ],
+  "style_gate_applied": false,
+  "style_gate_rationale": null,
+  "style_gates_used": [],
+  "transform_comparison": {},
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "ema(5, (close/delay(10)-1) * log(volume/EMA_20(volume)) / std_20(ret))",
+  "fe_formula": "ema(5, (close/ts_delay(10)-1) * log(volume/EMA_20(volume)) / std_20(ret))",
+  "lqtp_notes": "Unconverted: ['EMA_20', 'std_20']",
+  "fe_notes": "Unconverted: ['EMA_20', 'std_20']",
+  "source_formula": "EMA_5( (close/shift(10)-1) * log(volume/EMA_20(volume)) / std_20(ret) )"
+}

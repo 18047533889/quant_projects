@@ -1,0 +1,139 @@
+{
+  "allowed_libraries": [],
+  "calculation_fingerprint": "327b2baf6a503378ad39b9294f87391e0cfd32894f01d65c1d3dc98525743c63",
+  "candidate_id": "g2_mutation_minute_robust_shape_kurt_volume_342114a2",
+  "candidate_ids": [
+    "g2_mutation_minute_robust_shape_kurt_volume_342114a2"
+  ],
+  "code": "def factor_kurt_volume_std(df):\n    \"\"\"Minute DSL factor — executed via /api/calculate/minute.\"\"\"\n    raise NotImplementedError(\"minute DSL expression; use metadata.expression\")\n    # expression = \"\"\"daily_kurt(ts_std(get('volume'), 20))\"\"\"\n",
+  "cross_sectional_rationale": null,
+  "cross_sectional_transform": "none",
+  "domain_agent": "minute-robust-shape",
+  "expression": "daily_kurt(ts_std(get('volume'), 20))",
+  "factor_name": "factor_kurt_volume_std",
+  "factor_value_contract": "minute_to_daily_panel",
+  "fitness_direction": -1,
+  "formula": "daily_kurt(ts_std(get('volume'), 20))",
+  "frequency": "minute",
+  "lineage": {
+    "agent_skill": "minute-mutation",
+    "generation": 2,
+    "guidance_mode": null,
+    "operation": "mutation",
+    "parent_ids": [
+      "minute_robust_shape_kurt_volume"
+    ]
+  },
+  "metadata": {
+    "evolution_guidance": {
+      "preserve": {
+        "passed_predictive_metrics": [
+          "ic",
+          "rank_ic",
+          "icir",
+          "rank_icir",
+          "mi"
+        ],
+        "payoff_diagnostics": {
+          "quantile_monotonicity": 0.793939393939394,
+          "top_quantile_annualized_excess_return": -0.2576823894396464,
+          "top_quantile_excess_return": -0.02682991966496806,
+          "top_quantile_max_drawdown": -0.02439079866926397,
+          "top_quantile_turnover": 0.8950310559006209
+        },
+        "payoff_gate_passed": false
+      },
+      "primary_target": {
+        "kind": "preserve_balanced_strength"
+      },
+      "qualification_track": null
+    },
+    "execution_feedback": {
+      "days": 0,
+      "expression_hash": "8af3cdb2298c504a96a7bd92441ffdaf2e6a3be9a30d57a774cea1ac4a389efa",
+      "reason": "probe_budget_exhausted",
+      "repairable": false,
+      "retryable": true,
+      "shape_hash": "e018513ef8f5fbded3bee92ea9d91b13e77b772ed6792a0b99b039f505b99c27",
+      "stage": "quality_probe",
+      "status": "inconclusive"
+    },
+    "expression": "daily_kurt(ts_std(get('volume'), 20))",
+    "fitness_direction": -1,
+    "fitness_metrics": {
+      "ic": 0.018437963701051413,
+      "icir": 0.17035305858188035,
+      "mi": 0.008702319623137278,
+      "rank_ic": 0.04734704359779915,
+      "rank_icir": 0.6441277038577495
+    },
+    "infrastructure_recovery": true,
+    "llm_candidate_id": "minute_mutation_kurt_volume_std_001",
+    "payoff_diagnostics": {
+      "quantile_monotonicity": 0.793939393939394,
+      "top_quantile_annualized_excess_return": -0.2576823894396464,
+      "top_quantile_excess_return": -0.02682991966496806,
+      "top_quantile_max_drawdown": -0.02439079866926397,
+      "top_quantile_turnover": 0.8950310559006209
+    },
+    "payoff_gate_passed": false,
+    "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+    "pre_transform_fitness_direction": 1,
+    "predictive_gate_passed": true,
+    "qualification_track": null,
+    "raw_fitness_metrics": {
+      "ic": -0.018437963701051413,
+      "icir": -0.17035305858188035,
+      "mi": 0.008702319623137278,
+      "rank_ic": -0.04734704359779915,
+      "rank_icir": -0.6441277038577495
+    },
+    "transform_gate_passed": true
+  },
+  "metrics": {
+    "ic": 0.018437963701051413,
+    "icir": 0.17035305858188035,
+    "mi": 0.008702319623137278,
+    "rank_ic": 0.04734704359779915,
+    "rank_icir": 0.6441277038577495
+  },
+  "payoff_diagnostics": {
+    "quantile_monotonicity": 0.793939393939394,
+    "top_quantile_annualized_excess_return": -0.2576823894396464,
+    "top_quantile_excess_return": -0.02682991966496806,
+    "top_quantile_max_drawdown": -0.02439079866926397,
+    "top_quantile_turnover": 0.8950310559006209
+  },
+  "payoff_gate_passed": false,
+  "payoff_gate_reason": "payoff_gate_failed:top_quantile_excess_return,top_quantile_annualized_excess_return",
+  "post_transforms": null,
+  "rationale": "Kurtosis of the rolling standard deviation of intraday volume. Measures tailedness of volume volatility, capturing extreme fluctuations in trading activity.",
+  "raw_metrics": {
+    "ic": -0.018437963701051413,
+    "icir": -0.17035305858188035,
+    "mi": 0.008702319623137278,
+    "rank_ic": -0.04734704359779915,
+    "rank_icir": -0.6441277038577495
+  },
+  "required_columns": [
+    "trading_datetime",
+    "TradingDay",
+    "open_price",
+    "high_price",
+    "low_price",
+    "close_price",
+    "volume",
+    "amount"
+  ],
+  "run_id": "minute-hs300-probe-repair-20260722-034558-r1",
+  "source_run_ids": [
+    "minute-hs300-probe-repair-20260722-034558-r1"
+  ],
+  "transform_gate_passed": true,
+  "transform_gate_reason": null,
+  "lqtp_formula": "daily_kurt(ts_std(get('volume'), 20))",
+  "fe_formula": "daily_kurt(ts_std(get('volume'), 20))",
+  "lqtp_notes": "Unconverted: ['daily_kurt']",
+  "fe_notes": "Unconverted: ['daily_kurt']",
+  "source_formula": "daily_kurt(ts_std(get('volume'), 20))"
+}

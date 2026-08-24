@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "dc20f7e352b892389dec275647cc5ab60b6562fc94132771523ee6c16a0977de",
+  "candidate_ids": [
+    "vol_aob_mut_002"
+  ],
+  "code": "def factor_simplified_fear_pressure(df):\n    df_copy = df.copy()\n    # Dollar imbalance\n    dollar_imb = (df_copy['close'] - df_copy['open']) * df_copy['volume']\n    # Simple moving average of dollar imbalance (21 days) instead of EMA\n    smoothed_imb = dollar_imb.rolling(21, min_periods=21).mean()\n    # Short-term price decline (positive when price falls)\n    price_decline = (df_copy['close'].shift(1) - df_copy['close']) / df_copy['close'].shift(1)\n    # Fear-adjusted dollar pressure\n    fear_adj_imb = smoothed_imb * (1 + price_decline)\n    # ATR for normalization\n    high = df_copy['high'].values.astype(np.float64)\n    low = df_copy['low'].values.astype(np.float64)\n    close = df_copy['close'].values.astype(np.float64)\n    atr = talib.ATR(high, low, close, timeperiod=21)\n    atr_series = pd.Series(atr, index=df_copy.index)\n    raw = fear_adj_imb / atr_series.replace(0, np.nan)\n    # Rank transform for cross-sectional stability\n    df_copy['factor_simplified_fear_pressure'] = raw.rank(pct=True) * 2 - 1\n    return df_copy['factor_simplified_fear_pressure']",
+  "factor_name": "factor_simplified_fear_pressure",
+  "fitness_direction": -1,
+  "formula": "rank( SMA((C-O)*V,21) * (1+(C(-1)-C)/C(-1)) / ATR(21) ) * 2 - 1",
+  "metrics": {
+    "ic": 0.019051208954911934,
+    "icir": 0.20833021555900733,
+    "mi": 0.0207723060689613,
+    "rank_ic": 0.03934032054825901,
+    "rank_icir": 0.3842587468614695
+  },
+  "rationale": "Mutation: simplified fear-adjusted dollar pressure by removing the volume abnormality multiplier and replacing EMA with SMA (21) for smoothing. Preserves parent's strong RankIC and RankICIR from the core economic mechanism (dollar pressure amplified by short-term price decline, normalized by ATR). The SMA reduces responsiveness, targeting improved IC and ICIR by reducing noise. Single core mechanism with no modifiers for compactness.",
+  "raw_metrics": {
+    "ic": -0.019051208954911934,
+    "icir": -0.20833021555900733,
+    "mi": 0.0207723060689613,
+    "rank_ic": -0.03934032054825901,
+    "rank_icir": -0.3842587468614695
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260616-060730-r3",
+  "source_run_ids": [
+    "formal-mvp-loop-20260616-060730-r3"
+  ],
+  "lqtp_formula": "cs_rank(SMA((C-O)*V,21) * (1+(C(-1)-C)/C(-1)) / ATR(21))tr(21) ) * 2 - 1",
+  "fe_formula": "rank( ts_mean(21, (C-O)*V) * (1+(C(-1)-C)/C(-1)) / ATR(21) ) * 2 - 1",
+  "lqtp_notes": "Textual non-executable: C (close shorthand in text, not executable); Unconverted: ['C', 'tr']",
+  "fe_notes": "Textual non-executable: C (close shorthand in text, not executable); Unconverted: ['C']",
+  "source_formula": "rank( SMA((C-O)*V,21) * (1+(C(-1)-C)/C(-1)) / ATR(21) ) * 2 - 1"
+}

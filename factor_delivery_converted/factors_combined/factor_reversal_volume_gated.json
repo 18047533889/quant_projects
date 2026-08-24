@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "a037b74087e61c991e8c0833618ff400ad00146604e5127b6c8703b30eb4d8c0",
+  "candidate_ids": [
+    "alpha-crossover-004"
+  ],
+  "code": "def factor_reversal_volume_gated(df):\n    df_copy = df.copy()\n    range_ = df_copy['high'] - df_copy['low']\n    safe_range = range_.replace(0.0, np.nan)\n    intra_pos = (df_copy['close'] - df_copy['low']) / safe_range\n    smoothed = intra_pos.ewm(span=5, adjust=False).mean()\n    volume_ratio = df_copy['volume'] / df_copy['volume'].rolling(20).mean().replace(0.0, np.nan)\n    factor = (0.5 - smoothed) * volume_ratio\n    df_copy['factor_reversal_volume_gated'] = factor\n    return df_copy['factor_reversal_volume_gated']",
+  "factor_name": "factor_reversal_volume_gated",
+  "fitness_direction": 1,
+  "formula": "(0.5 - EWM((close - low) / (high - low), span=5)) * (volume / ts_mean(volume, 20))",
+  "metrics": {
+    "ic": 0.029817817226622488,
+    "icir": 0.3507646490141313,
+    "mi": 0.0063939592252726385,
+    "rank_ic": 0.03053805604535141,
+    "rank_icir": 0.3152581234907118
+  },
+  "rationale": "Crossover of intraday reversal (parent1) and volume-scaled momentum (parent2). Preserves the reversal's rank-stable signal (RankIC) while using the volume ratio from parent2 to amplify reversals on high volume, targeting improved ICIR and MI. The product is economically meaningful: reversals are more reliable when accompanied by above-average volume.",
+  "raw_metrics": {
+    "ic": 0.029817817226622488,
+    "icir": 0.3507646490141313,
+    "mi": 0.0063939592252726385,
+    "rank_ic": 0.03053805604535141,
+    "rank_icir": 0.3152581234907118
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260616-091905-r5",
+  "source_run_ids": [
+    "formal-mvp-loop-20260616-091905-r5"
+  ],
+  "lqtp_formula": "(0.5 - ema(span=5, (close - low) / (high - low))) * (volume / ts_mean(volume, 20))",
+  "fe_formula": "(0.5 - ema(span=5, (close - low) / (high - low))) * (volume / ts_mean(volume, 20))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "(0.5 - EWM((close - low) / (high - low), span=5)) * (volume / ts_mean(volume, 20))"
+}

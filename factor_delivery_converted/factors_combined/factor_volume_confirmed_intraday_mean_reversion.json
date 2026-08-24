@@ -1,0 +1,48 @@
+{
+  "allowed_libraries": [
+    "np",
+    "pd",
+    "stats",
+    "talib",
+    "math"
+  ],
+  "calculation_fingerprint": "0c18d0ec22ef82384fe6db6e6962bd943b48099b38116df40b210d00de8a4b75",
+  "candidate_ids": [
+    "crossover_002"
+  ],
+  "code": "def factor_volume_confirmed_intraday_mean_reversion(df):\n    df_copy = df.copy()\n    midpoint = (df_copy['high'] + df_copy['low']) / 2\n    intraday_fraction = (df_copy['close'] - midpoint) / (df_copy['high'] - df_copy['low']).replace(0, np.nan)\n    smoothed_intraday = intraday_fraction.rolling(5, min_periods=5).mean()\n    volume_ma = df_copy['volume'].rolling(20, min_periods=10).mean()\n    volume_ratio = df_copy['volume'] / volume_ma.replace(0, np.nan)\n    factor = -smoothed_intraday * volume_ratio\n    df_copy['factor_volume_confirmed_intraday_mean_reversion'] = factor\n    return df_copy['factor_volume_confirmed_intraday_mean_reversion']",
+  "factor_name": "factor_volume_confirmed_intraday_mean_reversion",
+  "fitness_direction": 1,
+  "formula": "-mean((close-midpoint)/(high-low), 5) * (volume / SMA(volume,20))",
+  "metrics": {
+    "ic": 0.028295948702678046,
+    "icir": 0.33765621748180935,
+    "mi": 0.005948663797829212,
+    "rank_ic": 0.026225106957324384,
+    "rank_icir": 0.28260759630717713
+  },
+  "rationale": "Crossover borrows the primary mean reversion mechanism (smoothed intraday close position) from mutation_001 and adds a lightweight volume confirmation ratio from mutated_stability_002. The volume ratio amplifies the contrarian signal when volume is above its 20-day average, aiming to improve cross-sectional rank stability (RankIC/IR) while preserving the IC and ICIR strength of the mean reversion parent.",
+  "raw_metrics": {
+    "ic": 0.028295948702678046,
+    "icir": 0.33765621748180935,
+    "mi": 0.005948663797829212,
+    "rank_ic": 0.026225106957324384,
+    "rank_icir": 0.28260759630717713
+  },
+  "required_columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "run_id": "formal-mvp-loop-20260616-043913-r2",
+  "source_run_ids": [
+    "formal-mvp-loop-20260616-043913-r2"
+  ],
+  "lqtp_formula": "-ts_mean(5, (close-midpoint)/(high-low)) * (volume / ts_mean(20, volume))",
+  "fe_formula": "-ts_mean(5, (close-midpoint)/(high-low)) * (volume / ts_mean(20, volume))",
+  "lqtp_notes": "",
+  "fe_notes": "",
+  "source_formula": "-mean((close-midpoint)/(high-low), 5) * (volume / SMA(volume,20))"
+}
