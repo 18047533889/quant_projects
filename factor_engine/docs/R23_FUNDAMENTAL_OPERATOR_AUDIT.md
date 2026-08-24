@@ -1,17 +1,16 @@
 # R23 Fundamental Operator Audit
 
-Fundamental canonicals: 160
+Fundamental canonicals: 145
 
 | canonical | final_status | accepted_flow_semantics | blockers |
 |---|---|---|---|
+| accounting_comparability_score | SUPPORTING_ONLY | not-declared |  |
 | altman_z_score | SUPPORTING_ONLY | not-declared |  |
 | cash_flow_lifecycle_stage | SUPPORTING_ONLY | not-declared |  |
 | date_diff_days | SUPPORTING_ONLY | not-declared |  |
 | fin_accrual_ratio | SUPPORTING_ONLY | flow_type:SinglePeriodFlow |  |
 | fin_acquisition_cash_intensity | SUPPORTING_ONLY | not-declared |  |
-| fin_actual_expectation_divergence | CERTIFIED_CONTEXTUAL | not-declared | PIT11_EXPECTATION_POST_EVENT_LEAK |
 | fin_average_balance | SUPPORTING_ONLY | not-declared |  |
-| fin_beat_streak | CERTIFIED_CONTEXTUAL | not-declared | PIT11_EXPECTATION_POST_EVENT_LEAK |
 | fin_borrowing_intensity | SUPPORTING_ONLY | not-declared |  |
 | fin_cagr | SUPPORTING_ONLY | flow_type:SinglePeriodFlow |  |
 | fin_capex_growth | SUPPORTING_ONLY | flow_type:SinglePeriodFlow |  |
@@ -31,8 +30,6 @@ Fundamental canonicals: 160
 | fin_contract_liability_intensity | SUPPORTING_ONLY | not-declared |  |
 | fin_core_earnings_ratio | SUPPORTING_ONLY | not-declared |  |
 | fin_cv | SUPPORTING_ONLY | not-declared |  |
-| fin_days_since_expectation_revision | CERTIFIED_CONTEXTUAL | not-declared | PIT18_REVISION_EVENT_UNPROVEN |
-| fin_days_since_update | CERTIFIED_CONTEXTUAL | not-declared | PIT18_REVISION_EVENT_UNPROVEN |
 | fin_debt_repayment_intensity | SUPPORTING_ONLY | not-declared |  |
 | fin_debt_service_coverage_proxy | SUPPORTING_ONLY | not-declared |  |
 | fin_deferred_tax_gap | SUPPORTING_ONLY | not-declared |  |
@@ -45,11 +42,6 @@ Fundamental canonicals: 160
 | fin_earnings_smoothness | SUPPORTING_ONLY | flow_type:SinglePeriodFlow |  |
 | fin_equity_capital_growth | SUPPORTING_ONLY | flow_type:Stock |  |
 | fin_expectation_dispersion | SUPPORTING_ONLY | not-declared |  |
-| fin_expectation_revision | CERTIFIED_CONTEXTUAL | not-declared | PIT18_REVISION_EVENT_UNPROVEN |
-| fin_expectation_revision_count | CERTIFIED_CONTEXTUAL | not-declared | PIT18_REVISION_EVENT_UNPROVEN |
-| fin_expectation_revision_magnitude | CERTIFIED_CONTEXTUAL | not-declared | PIT18_REVISION_EVENT_UNPROVEN |
-| fin_expectation_revision_pct | CERTIFIED_CONTEXTUAL | not-declared | PIT18_REVISION_EVENT_UNPROVEN |
-| fin_expectation_revision_speed | CERTIFIED_CONTEXTUAL | not-declared | PIT18_REVISION_EVENT_UNPROVEN |
 | fin_expense_sales_divergence | SUPPORTING_ONLY | not-declared |  |
 | fin_fair_value_income_dependence | SUPPORTING_ONLY | not-declared |  |
 | fin_financing_gap | SUPPORTING_ONLY | flow_type:SinglePeriodFlow |  |
@@ -71,12 +63,10 @@ Fundamental canonicals: 160
 | fin_lease_asset_liability_gap | SUPPORTING_ONLY | not-declared |  |
 | fin_lease_intensity | SUPPORTING_ONLY | not-declared |  |
 | fin_log_change | SUPPORTING_ONLY | flow_type:SinglePeriodFlow |  |
-| fin_mad | SUPPORTING_ONLY | not-declared |  |
 | fin_margin_persistence | SUPPORTING_ONLY | flow_type:SinglePeriodFlow |  |
 | fin_mean_abs_deviation | SUPPORTING_ONLY | not-declared |  |
 | fin_median_abs_deviation | SUPPORTING_ONLY | not-declared |  |
 | fin_minority_profit_share | SUPPORTING_ONLY | not-declared |  |
-| fin_miss_streak | CERTIFIED_CONTEXTUAL | not-declared | PIT11_EXPECTATION_POST_EVENT_LEAK |
 | fin_monotonicity | SUPPORTING_ONLY | not-declared |  |
 | fin_negative_streak | SUPPORTING_ONLY | not-declared |  |
 | fin_net_borrowing_cashflow | SUPPORTING_ONLY | flow_type:SinglePeriodFlow |  |
@@ -98,23 +88,12 @@ Fundamental canonicals: 160
 | fin_rd_capitalization_ratio | SUPPORTING_ONLY | not-declared |  |
 | fin_rd_total_intensity | SUPPORTING_ONLY | not-declared |  |
 | fin_receivable_sales_divergence | SUPPORTING_ONLY | not-declared |  |
-| fin_restated_flag | CERTIFIED_CONTEXTUAL | not-declared | PIT18_REVISION_EVENT_UNPROVEN |
-| fin_revision_count | CERTIFIED_CONTEXTUAL | not-declared | PIT18_REVISION_EVENT_UNPROVEN |
-| fin_revision_delta | CERTIFIED_CONTEXTUAL | not-declared | PIT18_REVISION_EVENT_UNPROVEN |
-| fin_revision_direction | CERTIFIED_CONTEXTUAL | not-declared | PIT18_REVISION_EVENT_UNPROVEN |
-| fin_revision_magnitude | CERTIFIED_CONTEXTUAL | not-declared | PIT18_REVISION_EVENT_UNPROVEN |
-| fin_revision_pct | CERTIFIED_CONTEXTUAL | not-declared | PIT18_REVISION_EVENT_UNPROVEN |
 | fin_roe_cash_gap | SUPPORTING_ONLY | flow_type:SinglePeriodFlow |  |
 | fin_seasonal_percentile | SUPPORTING_ONLY | not-declared |  |
 | fin_seasonal_zscore | SUPPORTING_ONLY | not-declared |  |
 | fin_sign_change_count | SUPPORTING_ONLY | not-declared |  |
 | fin_stability | SUPPORTING_ONLY | not-declared |  |
-| fin_staleness | CERTIFIED_CONTEXTUAL | not-declared | PIT18_REVISION_EVENT_UNPROVEN |
 | fin_std | SUPPORTING_ONLY | not-declared |  |
-| fin_surprise | CERTIFIED_CONTEXTUAL | not-declared | PIT11_EXPECTATION_POST_EVENT_LEAK |
-| fin_surprise_event_percentile | CERTIFIED_CONTEXTUAL | not-declared | PIT11_EXPECTATION_POST_EVENT_LEAK |
-| fin_surprise_event_zscore | CERTIFIED_CONTEXTUAL | not-declared | PIT11_EXPECTATION_POST_EVENT_LEAK |
-| fin_surprise_zscore | CERTIFIED_CONTEXTUAL | not-declared | PIT11_EXPECTATION_POST_EVENT_LEAK |
 | fin_total_operating_accruals | SUPPORTING_ONLY | flow_type:Stock |  |
 | fin_trend_acceleration | SUPPORTING_ONLY | not-declared |  |
 | fin_trend_r2 | SUPPORTING_ONLY | not-declared |  |
@@ -128,21 +107,26 @@ Fundamental canonicals: 160
 | fin_yoy | SUPPORTING_ONLY | flow_type:SinglePeriodFlow |  |
 | fin_zscore_history | SUPPORTING_ONLY | not-declared |  |
 | fin_zscore_vs_prior_history | SUPPORTING_ONLY | not-declared |  |
+| fiscal_acceleration | SUPPORTING_ONLY | not-declared |  |
 | fiscal_accrual_quality | SUPPORTING_ONLY | not-declared |  |
 | fiscal_ar_resid_std | SUPPORTING_ONLY | not-declared |  |
 | fiscal_asymmetric_elasticity | SUPPORTING_ONLY | not-declared |  |
+| fiscal_asymmetric_timeliness | SUPPORTING_ONLY | not-declared |  |
 | fiscal_autocorr | SUPPORTING_ONLY | not-declared |  |
 | fiscal_change_direction_agreement | SUPPORTING_ONLY | not-declared |  |
 | fiscal_direction_consistency | SUPPORTING_ONLY | not-declared |  |
 | fiscal_pair_direction_agreement | SUPPORTING_ONLY | not-declared |  |
+| fiscal_pct_change | SUPPORTING_ONLY | not-declared |  |
 | fiscal_perpetual_inventory | SUPPORTING_ONLY | not-declared |  |
 | fiscal_regression_resid_std | SUPPORTING_ONLY | not-declared |  |
 | fiscal_reversal_ratio | SUPPORTING_ONLY | not-declared |  |
+| fiscal_rolling_std | SUPPORTING_ONLY | not-declared |  |
 | fiscal_sign_agreement | SUPPORTING_ONLY | not-declared |  |
 | fiscal_sign_consistency | SUPPORTING_ONLY | not-declared |  |
 | fiscal_standardized_surprise | SUPPORTING_ONLY | not-declared |  |
 | fiscal_true_streak | SUPPORTING_ONLY | not-declared |  |
 | fundamental_staleness | SUPPORTING_ONLY | not-declared |  |
+| industry_fiscal_resid | SUPPORTING_ONLY | not-declared |  |
 | period_average | SUPPORTING_ONLY | not-declared |  |
 | period_cagr | SUPPORTING_ONLY | not-declared |  |
 | period_change | SUPPORTING_ONLY | not-declared |  |
@@ -153,6 +137,7 @@ Fundamental canonicals: 160
 | piotroski_observed_count | SUPPORTING_ONLY | flow_type:SinglePeriodFlow |  |
 | piotroski_partial_score | SUPPORTING_ONLY | flow_type:SinglePeriodFlow |  |
 | quarter_from_cumulative | SUPPORTING_ONLY | not-declared |  |
+| relation_jaccard | SUPPORTING_ONLY | not-declared |  |
 | report_change_breadth | SUPPORTING_ONLY | not-declared |  |
 | report_change_coherence | SUPPORTING_ONLY | not-declared |  |
 | report_filing_delay_surprise | SUPPORTING_ONLY | not-declared |  |

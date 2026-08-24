@@ -6,7 +6,7 @@ presence 检查（§26：R36 的若干 gate 检查的是 source presence，不�
 按它执行）。未实现/未接线的 gate 明确标 ``DEFERRED``，**不**宣称通过。
 
 运行：``python3 scripts/audit_r38_hard_gates.py``；exit code = blockers 数。
-输出 ``docs/evidence/r38/R38_HARD_GATES.json``。
+输出 ``evidence/factor_engine/r38/R38_HARD_GATES.json``。
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ sys.path.insert(0, ".")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-_EVID = "docs/evidence/r38"
+_EVID = "evidence/factor_engine/r38"
 os.makedirs(_EVID, exist_ok=True)
 
 

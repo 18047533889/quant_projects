@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Any
 
 FE_ROOT = Path(__file__).resolve().parents[1]
-_CASE_REGISTRY_JSON = FE_ROOT / "evidence" / "primitive_case_registry.json"
-_VERIFIED_JSON = FE_ROOT / "evidence" / "primitive_verified.json"
+_CASE_REGISTRY_JSON = FE_ROOT.parent / "evidence" / "primitive_case_registry.json"
+_VERIFIED_JSON = FE_ROOT.parent / "evidence" / "primitive_verified.json"
 
 
 @lru_cache(maxsize=1)

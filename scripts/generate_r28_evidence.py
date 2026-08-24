@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """R28 Phase 10: consolidate every R28 evidence artifact under
-``docs/evidence/r28/`` bound to the current git SHA + canonical-set digest.
+``evidence/factor_engine/r28/`` bound to the current git SHA + canonical-set digest.
 
 Inputs (already produced by the phase scripts / pytest JUnit):
 - R28_OPERATOR_INVENTORY.{json,csv}            (audit_r28_inventory.py)
@@ -34,7 +34,7 @@ from collections import Counter
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-OUT = REPO / "docs" / "evidence" / "r28"
+OUT = REPO / "evidence" / "factor_engine" / "r28"
 
 #: test-file -> test-type buckets used by the coverage matrix
 TEST_TYPE_BUCKETS = {

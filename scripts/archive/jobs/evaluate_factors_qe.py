@@ -159,7 +159,7 @@ def main():
     close = load_close_matrix()
     print(f"  形状: {close.shape}")
 
-    HTML_DIR = PROJECT / "docs" / "reports" / "2026-08-23" / "factors"
+    HTML_DIR = PROJECT / "factor_engine" / "docs" / "reports" / "2026-08-23" / "factors"
     factor_names = sorted([
         f.stem.replace('factor_', '')
         for f in HTML_DIR.glob("factor_*.html")
@@ -190,14 +190,14 @@ def main():
             slim[n] = {}
             continue
         slim[n] = {k: v for k, v in r.items() if k not in ('ls_nav', 'g_nav', 'dates')}
-    with open(PROJECT / "docs" / "reports" / "2026-08-23" / "all_eval.json", "w") as f:
+    with open(PROJECT / "factor_engine" / "docs" / "reports" / "2026-08-23" / "all_eval.json", "w") as f:
         json.dump(slim, f, indent=2, default=str)
-    print(f"\nSlim eval: {PROJECT / 'docs' / 'reports' / '2026-08-23' / 'all_eval.json'}")
+    print(f"\nSlim eval: {PROJECT / 'factor_engine' / 'docs' / 'reports' / '2026-08-23' / 'all_eval.json'}")
 
     # Save full version (with nav/ic)
-    with open(PROJECT / "docs" / "reports" / "2026-08-23" / "all_eval_full.json", "w") as f:
+    with open(PROJECT / "factor_engine" / "docs" / "reports" / "2026-08-23" / "all_eval_full.json", "w") as f:
         json.dump(out, f, default=str)
-    print(f"Full eval: {PROJECT / 'docs' / 'reports' / '2026-08-23' / 'all_eval_full.json'}")
+    print(f"Full eval: {PROJECT / 'factor_engine' / 'docs' / 'reports' / '2026-08-23' / 'all_eval_full.json'}")
 
     ranked = [(n, r) for n, r in out.items() if r and 'ls_sharpe' in r]
     ranked.sort(key=lambda x: x[1]['ls_sharpe'], reverse=True)

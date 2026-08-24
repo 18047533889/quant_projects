@@ -9,7 +9,7 @@
 - ``yoy``：同比增速；
 - ``quarter`` / ``avg2``：季度化或两期平均。
 
-依赖 canonical 基本面字段（见 ``docs/canonical_data_fields.md``）；与价量时序算子分文件维护。
+依赖 canonical 基本面字段（见 ``factor_engine/docs/canonical_data_fields.md``）；与价量时序算子分文件维护。
 """
 from __future__ import annotations
 

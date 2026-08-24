@@ -22,7 +22,7 @@ authoritative prune；否则 fail-open（返回空 → 调用方回退全量路�
 构建失败都会把 ``complete`` 置 False，禁止拿不完整索引做 false-negative 裁剪。
 
 COS 原始布局不动；本索引是本地 serving 层的优化物。更进一步的
-filing_year/month 分区物化湖见 ``docs/PIT_SERVING_LAYOUT.md``。
+filing_year/month 分区物化湖见 ``factor_engine/docs/PIT_SERVING_LAYOUT.md``。
 
 维护人：quant 基础平台组    最后更新：2026-08-08
 """

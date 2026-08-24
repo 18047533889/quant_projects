@@ -191,7 +191,7 @@ def test_yaml_export():
 
 def test_documentation_exists():
     """Test that documentation exists."""
-    doc_path = project_root / "docs" / "ASHARE_MINING_MATRIX.md"
+    doc_path = project_root / "factor_engine" / "docs" / "ASHARE_MINING_MATRIX.md"
     assert doc_path.exists()
 
     with open(doc_path, "r", encoding="utf-8") as f:

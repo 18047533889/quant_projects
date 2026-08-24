@@ -169,5 +169,5 @@ def test_benchmark_records_speedup():
     # record for evidence
     import pathlib
 
-    out = pathlib.Path("docs/evidence/r35") if (pathlib.Path("docs/evidence/r35").exists() or True) else None
+    out = pathlib.Path("evidence/factor_engine/r35") if (pathlib.Path("evidence/factor_engine/r35").exists() or True) else None
     print(json.dumps(rec))

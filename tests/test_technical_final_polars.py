@@ -16,7 +16,7 @@ def _load_module(name: str):
 
     base_polars.register_operator = lambda **_kwargs: lambda cls: cls
     spec = importlib.util.spec_from_file_location(
-        name, _ROOT / "cleaned_operators/polars_native/technical_final.py"
+        name, _ROOT / "factor_engine/cleaned_operators/polars_native/technical_final.py"
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

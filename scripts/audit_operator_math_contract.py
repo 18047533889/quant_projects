@@ -5,7 +5,7 @@ local casts / sample masking drift / duplicated semantic policy。
 
 对每个 canonical 生成 ``MathematicalSemanticCertificate``（R19-129 全部字段），
 并映射到 M01..M20 release-blocker。输出
-``docs/R19_OPERATOR_MATH_AUDIT.{json,csv,md}``。
+``factor_engine/docs/R19_OPERATOR_MATH_AUDIT.{json,csv,md}``。
 
 容错约定：
 - ``load_all()`` 失败（并发 agent 正在改 operator）不致命 —— 记录
@@ -735,7 +735,7 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=40,
                     help="最多审计 canonical 数（默认 40；--all 覆盖）")
     ap.add_argument("--all", action="store_true", help="审计全部 canonical")
-    ap.add_argument("--out", default=str(REPO / "docs"),
+    ap.add_argument("--out", default=str(REPO / "factor_engine" / "docs"),
                     help="输出目录（默认 factor_engine/docs）")
     ap.add_argument("--dynamic", action="store_true",
                     help="对 DYNAMIC_AUDIT_CORE 跑真实算子动态检查")

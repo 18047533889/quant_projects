@@ -80,8 +80,8 @@ def test_industry_holder_indexweight_provider_required_on_us() -> None:
 
 
 def test_generated_manifest_file_is_committed_and_in_sync() -> None:
-    """docs/operator_market_capabilities.json must match the live registry."""
-    path = ROOT / "docs" / "operator_market_capabilities.json"
+    """factor_engine/docs/operator_market_capabilities.json must match the live registry."""
+    path = ROOT / "factor_engine" / "docs" / "operator_market_capabilities.json"
     if not path.is_file():
         pytest.skip("manifest not generated; run scripts/build_operator_market_capabilities.py")
     doc = json.loads(path.read_text(encoding="utf-8"))
@@ -93,7 +93,7 @@ def test_generated_manifest_file_is_committed_and_in_sync() -> None:
 
 
 def test_market_field_manifest_generated() -> None:
-    path = ROOT / "docs" / "market_field_manifest.json"
+    path = ROOT / "factor_engine" / "docs" / "market_field_manifest.json"
     if not path.is_file():
         pytest.skip("manifest not generated; run scripts/build_market_field_manifest.py")
     doc = json.loads(path.read_text(encoding="utf-8"))

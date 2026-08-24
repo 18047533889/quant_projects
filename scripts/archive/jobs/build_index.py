@@ -32,7 +32,7 @@ from quant_evaluator.contracts.label_bundle import LabelBundle
 
 PROJECT = Path("/home/sunhaiwei/quant_projects")
 FV_PATH = PROJECT / "weekly_backtest_output" / "factor_values.parquet"
-DOCS_DIR = PROJECT / "docs"
+DOCS_DIR = PROJECT / "factor_engine" / "docs"
 REPORT_DIR = DOCS_DIR / "reports" / "2026-08-23"
 FACTORS_DIR = REPORT_DIR / "factors"
 

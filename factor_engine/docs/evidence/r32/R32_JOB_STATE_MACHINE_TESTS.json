@@ -1,9 +1,0 @@
-{
-  "draining_rejects_new_consumes_queued": true,
-  "idempotency_key": "(owner_principal, job_type, idempotency_key)",
-  "insert_on_conflict_do_nothing": true,
-  "reconciliation_durable": true,
-  "request_digest_conflict_409": true,
-  "terminal_state_cas_no_overwrite": true,
-  "unexpected_exception_worker_survives": true
-}

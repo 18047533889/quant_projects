@@ -20,7 +20,7 @@ def _load():
 
 def test_operator_upgrade_matrix_yaml_fresh():
     script = FE_ROOT / "scripts" / "export_operator_upgrade_matrix.py"
-    out = FE_ROOT / "evidence" / "operator_upgrade_matrix.yaml"
+    out = FE_ROOT.parent / "evidence" / "operator_upgrade_matrix.yaml"
     proc = subprocess.run(
         [sys.executable, str(script), "--check"],
         cwd=str(FE_ROOT),

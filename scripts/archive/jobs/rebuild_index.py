@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import io, base64
 
 PROJECT = Path("/home/sunhaiwei/quant_projects")
-REPORT_DIR = PROJECT / "docs" / "reports" / "2026-08-23"
+REPORT_DIR = PROJECT / "factor_engine" / "docs" / "reports" / "2026-08-23"
 FACTORS_DIR = REPORT_DIR / "factors"
 ALL_EVAL = REPORT_DIR / "all_eval_full.json"
 ALL_EVAL_SLIM = REPORT_DIR / "all_eval.json"

@@ -195,7 +195,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     path = (
         Path(argv[0])
         if argv
-        else FE_ROOT / "docs" / "evidence" / "r37" / "R37_PARAMETER_DOMAIN_STORE.json"
+        else FE_ROOT / "evidence" / "factor_engine" / "r37" / "R37_PARAMETER_DOMAIN_STORE.json"
     )
     points = load_store_points(path)
     axis = check_evidence_axis_completeness(points)

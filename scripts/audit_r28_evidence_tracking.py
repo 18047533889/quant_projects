@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-OUT = REPO / "docs" / "evidence" / "r28"
+OUT = REPO / "evidence" / "factor_engine" / "r28"
 
 EXPECTED = [
     "R28_OPERATOR_INVENTORY.csv",
@@ -47,7 +47,7 @@ def _only_evidence_commits_since(manifest_sha: str) -> bool:
     out = git(["diff", "--name-only", manifest_sha, "HEAD"]).stdout.strip()
     if not out:
         return False
-    return all("/docs/evidence/r28/" in line for line in out.splitlines())
+    return all("/evidence/factor_engine/r28/" in line for line in out.splitlines())
 
 
 def main() -> int:
@@ -71,7 +71,7 @@ def main() -> int:
         manifest = json.loads(manifest_path.read_text())
         manifest_sha = manifest.get("git_sha")
         # The evidence is bound to the CODE sha that produced the tests.  The
-        # evidence commit itself only touches docs/evidence/r28; if HEAD is that
+        # evidence commit itself only touches evidence/factor_engine/r28; if HEAD is that
         # evidence commit, its parent is the code sha and the evidence is current.
         if manifest_sha == sha:
             ok_sha = True

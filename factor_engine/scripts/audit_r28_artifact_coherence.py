@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-OUT = REPO / "docs" / "evidence" / "r28"
+OUT = REPO / "evidence" / "factor_engine" / "r28"
 
 
 def _load() -> None:

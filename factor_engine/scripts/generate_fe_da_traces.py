@@ -6,7 +6,7 @@
     physical_scan_count 不线性 ↑   （source_group_count << factor_count）
 
 用 FE 批量 IR（FactorSourcePlan → FactorBatchDataPlan → FieldRequestCoalescer），
-纯 Python 无数据读取。输出到 dataaccess/docs/evidence/r30/。
+纯 Python 无数据读取。输出到 dataaccess/evidence/factor_engine/r30/。
 """
 from __future__ import annotations
 
@@ -133,7 +133,7 @@ def main() -> None:
     out_dir = Path(
         os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
-            "dataaccess/docs/evidence/r30",
+            "dataaccess/evidence/factor_engine/r30",
         )
     )
     out_dir.mkdir(parents=True, exist_ok=True)

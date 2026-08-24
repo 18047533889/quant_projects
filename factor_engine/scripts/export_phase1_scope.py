@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 FE_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUT = FE_ROOT / "evidence" / "phase1_production_scope.yaml"
+DEFAULT_OUT = FE_ROOT.parent / "evidence" / "phase1_production_scope.yaml"
 
 
 def _bootstrap() -> None:

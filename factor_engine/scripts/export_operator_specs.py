@@ -37,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="与 --core-only 联用：校验 docs/operator_core_specs.yaml 未过期",
+        help="与 --core-only 联用：校验 factor_engine/docs/operator_core_specs.yaml 未过期",
     )
     args = parser.parse_args(argv)
 

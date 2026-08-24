@@ -1,8 +1,0 @@
-canonical,source_frequency,declared_bar_width,official_grid_required,missing_timestamp_policy,duplicate_policy,endpoint_policy,session_tz_policy,early_close_policy,coverage_policy,time_output_uses_slot_id,PASS/FAIL
-intra_segment_return,minute,1min,yes,explicit_slot,DQ_fail,exact,session_local,calendar,unique_valid_slots,n/a,PASS
-intra_realized_variance,minute,1min,yes,explicit_slot,DQ_fail,n/a,session_local,calendar,unique_valid_slots,n/a,PASS
-intra_path_efficiency,minute,1min,yes,break_run,DQ_fail,n/a,session_local,calendar,contiguous_run,n/a,PASS
-intra_high_time,minute,1min,yes,explicit_slot,DQ_fail,n/a,session_local,calendar,n/a,yes,PASS
-intra_lunch_gap_return,minute,1min,yes,exact_endpoint,DQ_fail,exact,session_local,calendar,n/a,n/a,PASS
-intra_limit_first_hit_time,minute,1min,yes,tri_state,DQ_fail,n/a,session_local,calendar,n/a,yes,PASS
-session_event_recovery_score,minute,1min,yes,break_censor,DQ_fail,n/a,session_local,calendar,session_close_required,yes,PASS

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """R37 Phase 0: Baseline / Inventory。
 
-输出（docs/evidence/r37/）：
+输出（evidence/factor_engine/r37/）：
     R37_BASELINE.json                     基线 HEAD、组件 hash、关键状态
     R37_CURRENT_OPERATOR_INVENTORY.parquet production canonical 逐算子 inventory
     R37_CURRENT_RESOURCE_ARCH.json         资源权威现状（唯一 HostResourceCoordinator?）
@@ -23,7 +23,7 @@ sys.path.insert(0, "..")
 from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded  # noqa: E402
 from factor_engine.backend.evidence_provenance import current_commit_sha  # noqa: E402
 
-OUT = Path("docs/evidence/r37")
+OUT = Path("evidence/factor_engine/r37")
 OUT.mkdir(parents=True, exist_ok=True)
 
 

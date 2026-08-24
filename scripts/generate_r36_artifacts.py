@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """R36 evidence 生成：server profile + decision trace + calibration + acceptance。
 
-绑定当前 HEAD，写 ``docs/evidence/r36/``：
+绑定当前 HEAD，写 ``evidence/factor_engine/r36/``：
     R36_HEAD.json / SERVER_PROFILE.json / RESOURCE_DECISION_TRACE.json /
     CALIBRATION_STORE.json / R36_HARD_GATES.json（由 audit 生成）/
     R36_FINAL_ACCEPTANCE_REPORT.md
@@ -17,7 +17,7 @@ sys.path.insert(0, ".")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-_EVID = "docs/evidence/r36"
+_EVID = "evidence/factor_engine/r36"
 os.makedirs(_EVID, exist_ok=True)
 
 

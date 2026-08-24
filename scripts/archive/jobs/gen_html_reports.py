@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 PROJECT = Path("/home/sunhaiwei/quant_projects")
-OUT_REPORT_BASE = PROJECT / "docs" / "reports"
+OUT_REPORT_BASE = PROJECT / "factor_engine" / "docs" / "reports"
 OUT_WB = PROJECT / "weekly_backtest_output"
 sys.path.insert(0, str(PROJECT))
 sys.path.insert(0, str(PROJECT / "vectorbt_qs"))

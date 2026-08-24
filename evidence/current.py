@@ -67,8 +67,8 @@ EVIDENCE_DIR = _REPO_ROOT / "evidence"
 _NON_SOURCE_OUTPUT_DIRS = {
     "evidence",
     "build",
-    "docs/reports",
-    "docs/generated",
+    "factor_engine/docs/reports",
+    "factor_engine/docs/generated",
     "archives",
 }
 
@@ -574,7 +574,7 @@ def _root_diff_hash() -> str:
     """SHA-256 of the root working-tree ``git diff`` defensively cached.
 
     P0-4: evidence/output/generated artifacts (evidence/, build/,
-    docs/reports/, docs/generated/, archives/) are attested separately
+    factor_engine/docs/reports/, factor_engine/docs/generated/, archives/) are attested separately
     (EvidenceAttestationIdentity) and are EXCLUDED from the STABLE source
     identity.  Only the changed paths NOT under an excluded dir contribute to
     the digest, so committing new evidence never perturbs the SourceTreeIdentity.

@@ -15,8 +15,8 @@ R34 只认证 canonical 默认参数点（11 算子 × 7 window）。R37 修正�
    production runtime 通过 ``assert_parameter_point_certified`` 消费（P0-009）。
 
 输出：
-    docs/evidence/r37/R37_PARAMETER_DOMAIN_LEDGER.parquet/.csv
-    docs/evidence/r37/R37_PARAMETER_DOMAIN_CERTIFICATION.json
+    evidence/factor_engine/r37/R37_PARAMETER_DOMAIN_LEDGER.parquet/.csv
+    evidence/factor_engine/r37/R37_PARAMETER_DOMAIN_CERTIFICATION.json
     runtime store（由 audit 脚本 populate 后落盘）
 """
 from __future__ import annotations
@@ -39,7 +39,7 @@ from factor_engine.runtime.parameter_domain_store import (  # noqa: E402
     ParameterDomainCertificationStore,
 )
 
-E = Path("docs/evidence/r37")
+E = Path("evidence/factor_engine/r37")
 E.mkdir(parents=True, exist_ok=True)
 
 N_STK, N_DAY = 50, 300

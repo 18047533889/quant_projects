@@ -47,7 +47,7 @@ def test_sql_registry_synced_with_emitter_whitelist():
 
 
 def test_sql_pushdown_coverage_doc():
-    doc = FE_ROOT / "docs" / "sql_pushdown_coverage.md"
+    doc = FE_ROOT / "factor_engine" / "docs" / "sql_pushdown_coverage.md"
     assert doc.is_file(), "运行 report_backend_coverage.py --write-doc 生成清单"
     text = doc.read_text(encoding="utf-8")
     assert "group_decay_linear" in text

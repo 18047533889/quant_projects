@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""R38 evidence 生成：绑定当前 HEAD，写 ``docs/evidence/r38/``。
+"""R38 evidence 生成：绑定当前 HEAD，写 ``evidence/factor_engine/r38/``。
 
     R38_HEAD.json
     R38_AUTOSHARD_PARITY.json
@@ -21,7 +21,7 @@ sys.path.insert(0, ".")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-_EVID = "docs/evidence/r38"
+_EVID = "evidence/factor_engine/r38"
 os.makedirs(_EVID, exist_ok=True)
 
 

@@ -93,6 +93,6 @@ snap = {
     "risky_active": risky,
     "daily_pit_safe_false": [c for c, _ in pit_false],
 }
-with open("docs/r30_phase1_inventory.json", "w") as f:
+with open("factor_engine/docs/r30_phase1_inventory.json", "w") as f:
     json.dump(snap, f, indent=2, sort_keys=True)
-print("\nsaved docs/r30_phase1_inventory.json")
+print("\nsaved factor_engine/docs/r30_phase1_inventory.json")

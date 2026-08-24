@@ -14,7 +14,7 @@ import re
 
 
 _ROOT = Path(__file__).resolve().parents[2]
-_POLARS_NATIVE = _ROOT / "cleaned_operators" / "polars_native"
+_POLARS_NATIVE = _ROOT / "factor_engine" / "cleaned_operators" / "polars_native"
 
 # Keep this bounded to expressions that can make a value at t depend on t+1,
 # rather than trying to infer every possible Python/NumPy data dependency.

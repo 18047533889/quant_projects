@@ -24,8 +24,8 @@ PIT11_EXPECTATION_POST_EVENT_LEAK = "PIT11_EXPECTATION_POST_EVENT_LEAK"
 
 # The 7 operators whose expectations/surprises are only knowable AFTER an
 # earnings event — the label is knowable before the signal, so production
-# terminal placement leaks the label.  (docs/R23_PER_CANONICAL_AUDIT.json and
-# docs/R23_OPERATOR_REMEDIATION_PLAN.md both list these 7 as P0.)
+# terminal placement leaks the label.  (factor_engine/docs/R23_PER_CANONICAL_AUDIT.json and
+# factor_engine/docs/R23_OPERATOR_REMEDIATION_PLAN.md both list these 7 as P0.)
 PIT11_LEAK_CANONICALS: tuple[str, ...] = (
     "fin_actual_expectation_divergence",
     "fin_beat_streak",

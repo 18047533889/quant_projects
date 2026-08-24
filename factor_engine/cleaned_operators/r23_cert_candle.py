@@ -56,7 +56,7 @@ def _six_way_from_artifact() -> frozenset[str]:
 
     Mirrors ``r23_cert_ts_price._six_way_from_artifact`` exactly.
     """
-    path = FE_ROOT / "evidence" / "primitive_verified.json"
+    path = FE_ROOT.parent / "evidence" / "primitive_verified.json"
     if not path.is_file():
         return frozenset()
     try:

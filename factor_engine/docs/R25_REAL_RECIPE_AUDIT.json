@@ -5,6 +5,11 @@
     "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
   },
   {
+    "canonical": "ALMA",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
     "canonical": "ATR_WILDER",
     "recipe_slots": 3,
     "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
@@ -23,6 +28,11 @@
     "canonical": "ChaikinOscillator",
     "recipe_slots": 4,
     "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\", \"volume\": \"raw_volume_shares\"}"
+  },
+  {
+    "canonical": "CoppockCurve",
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
   },
   {
     "canonical": "DEMA",
@@ -50,9 +60,24 @@
     "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"volume\": \"raw_volume_shares\"}"
   },
   {
+    "canonical": "ElderRay",
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "FisherTransform",
+    "recipe_slots": 2,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\"}"
+  },
+  {
     "canonical": "ForceIndex",
     "recipe_slots": 2,
     "recipe": "{\"close\": \"continuous_close\", \"volume\": \"raw_volume_shares\"}"
+  },
+  {
+    "canonical": "HMA",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
     "canonical": "KAMA",
@@ -140,7 +165,17 @@
     "recipe": "{\"volume\": \"raw_volume_shares\"}"
   },
   {
+    "canonical": "QQE",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
     "canonical": "RSI_WILDER",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "RSX",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
   },
@@ -185,6 +220,11 @@
     "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
   },
   {
+    "canonical": "WMA",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
     "canonical": "a_share_cap_ratio",
     "recipe_slots": 1,
     "recipe": "{\"a_cap\": \"continuous_close\"}"
@@ -208,6 +248,11 @@
     "canonical": "abs_return_volume_corr",
     "recipe_slots": 2,
     "recipe": "{\"ret\": \"return_decimal\", \"volume\": \"raw_volume_shares\"}"
+  },
+  {
+    "canonical": "accounting_comparability_score",
+    "recipe_slots": 1,
+    "recipe": "{\"period_id\": \"period_id\"}"
   },
   {
     "canonical": "acos",
@@ -261,8 +306,8 @@
   },
   {
     "canonical": "ashare_failed_limit_count",
-    "recipe_slots": 3,
-    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
   },
   {
     "canonical": "ashare_limit_asymmetry",
@@ -282,7 +327,7 @@
   {
     "canonical": "ashare_limit_down_touch",
     "recipe_slots": 1,
-    "recipe": "{\"low\": \"continuous_low\"}"
+    "recipe": "{\"lower_limit\": \"continuous_close\"}"
   },
   {
     "canonical": "ashare_limit_down_volume_ratio",
@@ -296,13 +341,13 @@
   },
   {
     "canonical": "ashare_limit_failed",
-    "recipe_slots": 2,
-    "recipe": "{\"high\": \"continuous_high\", \"close\": \"continuous_close\"}"
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
   },
   {
     "canonical": "ashare_limit_one_price",
-    "recipe_slots": 3,
-    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
   },
   {
     "canonical": "ashare_limit_open_down_streak",
@@ -312,7 +357,7 @@
   {
     "canonical": "ashare_limit_open_failed",
     "recipe_slots": 1,
-    "recipe": "{\"low\": \"continuous_low\"}"
+    "recipe": "{\"upper_limit\": \"continuous_close\"}"
   },
   {
     "canonical": "ashare_limit_open_up_streak",
@@ -321,8 +366,8 @@
   },
   {
     "canonical": "ashare_limit_touch_count",
-    "recipe_slots": 2,
-    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\"}"
+    "recipe_slots": 1,
+    "recipe": "{\"high_limit\": \"continuous_close\"}"
   },
   {
     "canonical": "ashare_limit_up_streak",
@@ -332,7 +377,7 @@
   {
     "canonical": "ashare_limit_up_touch",
     "recipe_slots": 1,
-    "recipe": "{\"high\": \"continuous_high\"}"
+    "recipe": "{\"upper_limit\": \"continuous_close\"}"
   },
   {
     "canonical": "ashare_limit_up_volume_ratio",
@@ -341,8 +386,8 @@
   },
   {
     "canonical": "ashare_one_price_limit_streak",
-    "recipe_slots": 3,
-    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
   },
   {
     "canonical": "ashare_open_at_upper_limit",
@@ -375,6 +420,31 @@
     "recipe": "{\"y\": \"return_decimal\", \"x\": \"continuous_close\"}"
   },
   {
+    "canonical": "atr_acceleration",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "atr_pct",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "atr_percentile",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "atr_short_long_ratio",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "atr_zscore",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
     "canonical": "average_turnover",
     "recipe_slots": 1,
     "recipe": "{\"turnover\": \"turnover\"}"
@@ -393,6 +463,16 @@
     "canonical": "benchmark_relative_price",
     "recipe_slots": 1,
     "recipe": "{\"price\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "beta_divergence_pct",
+    "recipe_slots": 1,
+    "recipe": "{\"ret\": \"return_decimal\"}"
+  },
+  {
+    "canonical": "beta_residual_z",
+    "recipe_slots": 1,
+    "recipe": "{\"ret\": \"return_decimal\"}"
   },
   {
     "canonical": "bollinger_pct_b",
@@ -416,6 +496,16 @@
   },
   {
     "canonical": "bounded_pvi",
+    "recipe_slots": 2,
+    "recipe": "{\"close\": \"continuous_close\", \"volume\": \"raw_volume_shares\"}"
+  },
+  {
+    "canonical": "bvc_imbalance_ma",
+    "recipe_slots": 2,
+    "recipe": "{\"close\": \"continuous_close\", \"volume\": \"raw_volume_shares\"}"
+  },
+  {
+    "canonical": "bvc_sign_pct",
     "recipe_slots": 2,
     "recipe": "{\"close\": \"continuous_close\", \"volume\": \"raw_volume_shares\"}"
   },
@@ -446,6 +536,11 @@
   },
   {
     "canonical": "candle_body_ratio",
+    "recipe_slots": 4,
+    "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "candle_body_strength",
     "recipe_slots": 4,
     "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
   },
@@ -510,12 +605,22 @@
     "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\"}"
   },
   {
+    "canonical": "candle_pattern_count",
+    "recipe_slots": 4,
+    "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
     "canonical": "candle_range",
     "recipe_slots": 2,
     "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\"}"
   },
   {
     "canonical": "candle_range_atr",
+    "recipe_slots": 4,
+    "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "candle_range_pct",
     "recipe_slots": 4,
     "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
   },
@@ -555,9 +660,14 @@
     "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"close\": \"continuous_close\"}"
   },
   {
-    "canonical": "candlestick_pattern",
+    "canonical": "candle_wick_balance",
     "recipe_slots": 4,
     "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "candlestick_pattern",
+    "recipe_slots": 2,
+    "recipe": "{\"open\": \"continuous_open\", \"close\": \"continuous_close\"}"
   },
   {
     "canonical": "capital_change_age",
@@ -575,14 +685,39 @@
     "recipe": "{\"operating\": \"continuous_close\"}"
   },
   {
+    "canonical": "category_age",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "category_age_lower_bound",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "category_frequency",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "category_transition_rate",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "category_transition_surprise",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
+  },
+  {
     "canonical": "cbrt",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
     "canonical": "cdl_dark_cloud_cover",
-    "recipe_slots": 4,
-    "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+    "recipe_slots": 2,
+    "recipe": "{\"open\": \"continuous_open\", \"close\": \"continuous_close\"}"
   },
   {
     "canonical": "cdl_doji",
@@ -591,8 +726,8 @@
   },
   {
     "canonical": "cdl_dragonfly_doji",
-    "recipe_slots": 4,
-    "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+    "recipe_slots": 2,
+    "recipe": "{\"open\": \"continuous_open\", \"close\": \"continuous_close\"}"
   },
   {
     "canonical": "cdl_engulfing",
@@ -601,33 +736,33 @@
   },
   {
     "canonical": "cdl_evening_star",
-    "recipe_slots": 4,
-    "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+    "recipe_slots": 2,
+    "recipe": "{\"open\": \"continuous_open\", \"close\": \"continuous_close\"}"
   },
   {
     "canonical": "cdl_gravestone_doji",
-    "recipe_slots": 4,
-    "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+    "recipe_slots": 2,
+    "recipe": "{\"open\": \"continuous_open\", \"close\": \"continuous_close\"}"
   },
   {
     "canonical": "cdl_hammer",
-    "recipe_slots": 4,
-    "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+    "recipe_slots": 2,
+    "recipe": "{\"open\": \"continuous_open\", \"close\": \"continuous_close\"}"
   },
   {
     "canonical": "cdl_hanging_man",
-    "recipe_slots": 4,
-    "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+    "recipe_slots": 2,
+    "recipe": "{\"open\": \"continuous_open\", \"close\": \"continuous_close\"}"
   },
   {
     "canonical": "cdl_harami",
-    "recipe_slots": 4,
-    "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+    "recipe_slots": 2,
+    "recipe": "{\"open\": \"continuous_open\", \"close\": \"continuous_close\"}"
   },
   {
     "canonical": "cdl_harami_cross",
-    "recipe_slots": 4,
-    "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+    "recipe_slots": 2,
+    "recipe": "{\"open\": \"continuous_open\", \"close\": \"continuous_close\"}"
   },
   {
     "canonical": "cdl_inside_bar",
@@ -646,8 +781,8 @@
   },
   {
     "canonical": "cdl_morning_star",
-    "recipe_slots": 4,
-    "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+    "recipe_slots": 2,
+    "recipe": "{\"open\": \"continuous_open\", \"close\": \"continuous_close\"}"
   },
   {
     "canonical": "cdl_outside_bar",
@@ -656,8 +791,8 @@
   },
   {
     "canonical": "cdl_piercing",
-    "recipe_slots": 4,
-    "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+    "recipe_slots": 2,
+    "recipe": "{\"open\": \"continuous_open\", \"close\": \"continuous_close\"}"
   },
   {
     "canonical": "cdl_shooting_star",
@@ -671,28 +806,33 @@
   },
   {
     "canonical": "cdl_three_black_crows",
-    "recipe_slots": 4,
-    "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+    "recipe_slots": 2,
+    "recipe": "{\"open\": \"continuous_open\", \"close\": \"continuous_close\"}"
   },
   {
     "canonical": "cdl_three_white_soldiers",
-    "recipe_slots": 4,
-    "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+    "recipe_slots": 2,
+    "recipe": "{\"open\": \"continuous_open\", \"close\": \"continuous_close\"}"
   },
   {
     "canonical": "cdl_tweezer_bottom",
-    "recipe_slots": 4,
-    "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+    "recipe_slots": 2,
+    "recipe": "{\"open\": \"continuous_open\", \"close\": \"continuous_close\"}"
   },
   {
     "canonical": "cdl_tweezer_top",
-    "recipe_slots": 4,
-    "recipe": "{\"open\": \"continuous_open\", \"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+    "recipe_slots": 2,
+    "recipe": "{\"open\": \"continuous_open\", \"close\": \"continuous_close\"}"
   },
   {
     "canonical": "ceil",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "chikou_distance_pct",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
   },
   {
     "canonical": "choppiness_index",
@@ -748,6 +888,16 @@
     "canonical": "composition_normalized_entropy",
     "recipe_slots": 1,
     "recipe": "{\"x1\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "consolidation_pct",
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "consolidation_range_pct",
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
   },
   {
     "canonical": "constant",
@@ -830,6 +980,16 @@
     "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
+    "canonical": "cs_empirical_bayes_shrinkage",
+    "recipe_slots": 1,
+    "recipe": "{\"estimate\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "cs_factor_bucket_return",
+    "recipe_slots": 2,
+    "recipe": "{\"factor\": \"continuous_close\", \"ret\": \"return_decimal\"}"
+  },
+  {
     "canonical": "cs_fill_mean",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
@@ -861,6 +1021,11 @@
   },
   {
     "canonical": "cs_isolation",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "cs_isolation_forest_score",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
   },
@@ -985,6 +1150,11 @@
     "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
+    "canonical": "cs_predictability_mosaic_score",
+    "recipe_slots": 1,
+    "recipe": "{\"base_signal\": \"continuous_close\"}"
+  },
+  {
     "canonical": "cs_quantile",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
@@ -1053,6 +1223,11 @@
     "canonical": "cs_robust_mahalanobis_mad",
     "recipe_slots": 3,
     "recipe": "{\"f1\": \"return_decimal\", \"f2\": \"raw_volume_shares\", \"f3\": \"turnover\"}"
+  },
+  {
+    "canonical": "cs_shrink_to_group_mean",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
     "canonical": "cs_shrinkage_mahalanobis",
@@ -1145,6 +1320,11 @@
     "recipe": "{\"left\": \"event_date\", \"right\": \"event_date\"}"
   },
   {
+    "canonical": "dema_distance_pct",
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
+  },
+  {
     "canonical": "digital_count",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
@@ -1175,6 +1355,21 @@
     "recipe": "{\"close\": \"continuous_close\", \"volume\": \"raw_volume_shares\"}"
   },
   {
+    "canonical": "donchian_breakout_down",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "donchian_breakout_up",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "donchian_channel_position",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
     "canonical": "donchian_lower",
     "recipe_slots": 1,
     "recipe": "{\"low\": \"continuous_low\"}"
@@ -1195,6 +1390,11 @@
     "recipe": "{\"high\": \"continuous_high\"}"
   },
   {
+    "canonical": "donchian_width_pct",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
     "canonical": "down_volume_ratio",
     "recipe_slots": 2,
     "recipe": "{\"ret\": \"return_decimal\", \"volume\": \"raw_volume_shares\"}"
@@ -1206,6 +1406,16 @@
   },
   {
     "canonical": "efficiency_ratio",
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "ema_crossover",
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "ema_distance_pct",
     "recipe_slots": 1,
     "recipe": "{\"close\": \"continuous_close\"}"
   },
@@ -1250,9 +1460,19 @@
     "recipe": "{\"condition\": \"condition_bool\"}"
   },
   {
+    "canonical": "event_cluster_duration",
+    "recipe_slots": 1,
+    "recipe": "{\"event\": \"event_mask\"}"
+  },
+  {
     "canonical": "event_cluster_mean_size",
     "recipe_slots": 1,
     "recipe": "{\"condition\": \"condition_bool\"}"
+  },
+  {
+    "canonical": "event_cluster_score",
+    "recipe_slots": 1,
+    "recipe": "{\"event\": \"event_mask\"}"
   },
   {
     "canonical": "event_cumulative_return_past",
@@ -1265,12 +1485,32 @@
     "recipe": "{\"event\": \"event_mask\"}"
   },
   {
+    "canonical": "event_decay_window",
+    "recipe_slots": 1,
+    "recipe": "{\"event\": \"event_mask\"}"
+  },
+  {
+    "canonical": "event_direction_imbalance",
+    "recipe_slots": 1,
+    "recipe": "{\"event\": \"event_mask\"}"
+  },
+  {
+    "canonical": "event_direction_persistence",
+    "recipe_slots": 1,
+    "recipe": "{\"event\": \"event_mask\"}"
+  },
+  {
     "canonical": "event_fano_excess",
     "recipe_slots": 1,
     "recipe": "{\"event\": \"event_mask\"}"
   },
   {
     "canonical": "event_fano_factor",
+    "recipe_slots": 1,
+    "recipe": "{\"event\": \"event_mask\"}"
+  },
+  {
+    "canonical": "event_flip_density",
     "recipe_slots": 1,
     "recipe": "{\"event\": \"event_mask\"}"
   },
@@ -1325,6 +1565,16 @@
     "recipe": "{\"mark\": \"continuous_close\"}"
   },
   {
+    "canonical": "event_rate_pct",
+    "recipe_slots": 1,
+    "recipe": "{\"event\": \"event_mask\"}"
+  },
+  {
+    "canonical": "event_recency_z",
+    "recipe_slots": 1,
+    "recipe": "{\"event\": \"event_mask\"}"
+  },
+  {
     "canonical": "event_refractory",
     "recipe_slots": 1,
     "recipe": "{\"condition\": \"condition_bool\"}"
@@ -1363,6 +1613,41 @@
     "canonical": "event_return_since_last",
     "recipe_slots": 2,
     "recipe": "{\"ret\": \"return_decimal\", \"event\": \"event_mask\"}"
+  },
+  {
+    "canonical": "event_streak",
+    "recipe_slots": 1,
+    "recipe": "{\"event\": \"event_mask\"}"
+  },
+  {
+    "canonical": "ewm_corr",
+    "recipe_slots": 2,
+    "recipe": "{\"x\": \"continuous_close\", \"y\": \"return_decimal\"}"
+  },
+  {
+    "canonical": "ewm_cov",
+    "recipe_slots": 2,
+    "recipe": "{\"x\": \"continuous_close\", \"y\": \"return_decimal\"}"
+  },
+  {
+    "canonical": "ex_self_mad_z",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "ex_self_mean_gap",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "ex_self_rank_pct",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "ex_self_zscore",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
     "canonical": "exp",
@@ -1720,11 +2005,6 @@
     "recipe": "{\"x\": \"continuous_close\", \"period_id\": \"period_id\", \"flow_type\": \"cash_flow_type\"}"
   },
   {
-    "canonical": "fin_mad",
-    "recipe_slots": 2,
-    "recipe": "{\"x\": \"continuous_close\", \"period_id\": \"period_id\"}"
-  },
-  {
     "canonical": "fin_margin_persistence",
     "recipe_slots": 2,
     "recipe": "{\"period_id\": \"period_id\", \"flow_type\": \"cash_flow_type\"}"
@@ -2010,6 +2290,11 @@
     "recipe": "{\"x\": \"continuous_close\", \"period_id\": \"period_id\"}"
   },
   {
+    "canonical": "fiscal_acceleration",
+    "recipe_slots": 2,
+    "recipe": "{\"value\": \"continuous_close\", \"period_id\": \"period_id\"}"
+  },
+  {
     "canonical": "fiscal_accrual_quality",
     "recipe_slots": 1,
     "recipe": "{\"period_id\": \"period_id\"}"
@@ -2021,6 +2306,11 @@
   },
   {
     "canonical": "fiscal_asymmetric_elasticity",
+    "recipe_slots": 1,
+    "recipe": "{\"period_id\": \"period_id\"}"
+  },
+  {
+    "canonical": "fiscal_asymmetric_timeliness",
     "recipe_slots": 1,
     "recipe": "{\"period_id\": \"period_id\"}"
   },
@@ -2045,6 +2335,11 @@
     "recipe": "{\"period_id\": \"period_id\"}"
   },
   {
+    "canonical": "fiscal_pct_change",
+    "recipe_slots": 2,
+    "recipe": "{\"value\": \"continuous_close\", \"period_id\": \"period_id\"}"
+  },
+  {
     "canonical": "fiscal_perpetual_inventory",
     "recipe_slots": 1,
     "recipe": "{\"period_id\": \"period_id\"}"
@@ -2058,6 +2353,11 @@
     "canonical": "fiscal_reversal_ratio",
     "recipe_slots": 2,
     "recipe": "{\"x\": \"continuous_close\", \"period_id\": \"period_id\"}"
+  },
+  {
+    "canonical": "fiscal_rolling_std",
+    "recipe_slots": 2,
+    "recipe": "{\"value\": \"continuous_close\", \"period_id\": \"period_id\"}"
   },
   {
     "canonical": "fiscal_sign_agreement",
@@ -2258,6 +2558,11 @@
     "canonical": "group_multi_level_rank_consistency",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "group_multi_resid",
+    "recipe_slots": 1,
+    "recipe": "{\"y\": \"return_decimal\"}"
   },
   {
     "canonical": "group_neutralize",
@@ -2675,6 +2980,11 @@
     "recipe": "{\"index_weight\": \"continuous_close\"}"
   },
   {
+    "canonical": "industry_fiscal_resid",
+    "recipe_slots": 2,
+    "recipe": "{\"y\": \"return_decimal\", \"period_id\": \"period_id\"}"
+  },
+  {
     "canonical": "industry_rolling_pca_loading",
     "recipe_slots": 1,
     "recipe": "{\"ret\": \"return_decimal\"}"
@@ -2735,6 +3045,11 @@
     "recipe": "{\"value\": \"continuous_close\"}"
   },
   {
+    "canonical": "intra_consolidation_quality",
+    "recipe_slots": 3,
+    "recipe": "{\"price\": \"continuous_close\", \"volume\": \"raw_volume_shares\", \"amount\": \"amount_local\"}"
+  },
+  {
     "canonical": "intra_continuous_variance",
     "recipe_slots": 1,
     "recipe": "{\"close\": \"continuous_close\"}"
@@ -2768,6 +3083,21 @@
     "canonical": "intra_entropy",
     "recipe_slots": 1,
     "recipe": "{\"value\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "intra_eod_reversal_decomposition",
+    "recipe_slots": 1,
+    "recipe": "{\"price\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "intra_event_pre_post_contrast",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "intra_event_window_reduce",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
     "canonical": "intra_extreme_bar_return",
@@ -2813,6 +3143,11 @@
     "canonical": "intra_idiosyncratic_variance_ex_self",
     "recipe_slots": 1,
     "recipe": "{\"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "intra_impulse_event_detector",
+    "recipe_slots": 1,
+    "recipe": "{\"price\": \"continuous_close\"}"
   },
   {
     "canonical": "intra_industry_lead_lag_ex_self",
@@ -2900,9 +3235,19 @@
     "recipe": "{\"close\": \"continuous_close\"}"
   },
   {
+    "canonical": "intra_limit_pre_hit_pressure_profile",
+    "recipe_slots": 2,
+    "recipe": "{\"price\": \"continuous_close\", \"volume\": \"raw_volume_shares\"}"
+  },
+  {
     "canonical": "intra_limit_reopen_count",
     "recipe_slots": 1,
     "recipe": "{\"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "intra_liquidity_resilience_curve_fit",
+    "recipe_slots": 1,
+    "recipe": "{\"price\": \"continuous_close\"}"
   },
   {
     "canonical": "intra_longest_above_vwap_streak",
@@ -2950,6 +3295,11 @@
     "recipe": "{\"close\": \"continuous_close\"}"
   },
   {
+    "canonical": "intra_multiresolution_resample_reduce",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
     "canonical": "intra_negative_jump_variation",
     "recipe_slots": 1,
     "recipe": "{\"close\": \"continuous_close\"}"
@@ -2958,6 +3308,11 @@
     "canonical": "intra_negative_tail_variation",
     "recipe_slots": 1,
     "recipe": "{\"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "intra_neighbor_event_class",
+    "recipe_slots": 1,
+    "recipe": "{\"event_mask\": \"continuous_close\"}"
   },
   {
     "canonical": "intra_path_efficiency",
@@ -2975,6 +3330,11 @@
     "recipe": "{\"close\": \"continuous_close\"}"
   },
   {
+    "canonical": "intra_post_impulse_response",
+    "recipe_slots": 3,
+    "recipe": "{\"price\": \"continuous_close\", \"volume\": \"raw_volume_shares\", \"amount\": \"amount_local\"}"
+  },
+  {
     "canonical": "intra_price_vwap_max_negative_excursion",
     "recipe_slots": 3,
     "recipe": "{\"close\": \"continuous_close\", \"amount\": \"amount_local\", \"volume\": \"raw_volume_shares\"}"
@@ -2985,9 +3345,19 @@
     "recipe": "{\"close\": \"continuous_close\", \"amount\": \"amount_local\", \"volume\": \"raw_volume_shares\"}"
   },
   {
+    "canonical": "intra_probe_outcome_score",
+    "recipe_slots": 3,
+    "recipe": "{\"price\": \"continuous_close\", \"volume\": \"raw_volume_shares\", \"amount\": \"amount_local\"}"
+  },
+  {
     "canonical": "intra_profile_earth_mover_distance",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "intra_range_gap_flag",
+    "recipe_slots": 1,
+    "recipe": "{\"event_mask\": \"continuous_close\"}"
   },
   {
     "canonical": "intra_realized_beta",
@@ -3035,6 +3405,11 @@
     "recipe": "{\"close\": \"continuous_close\"}"
   },
   {
+    "canonical": "intra_response_curve_features",
+    "recipe_slots": 1,
+    "recipe": "{\"price\": \"continuous_close\"}"
+  },
+  {
     "canonical": "intra_return_activity_corr",
     "recipe_slots": 1,
     "recipe": "{\"close\": \"continuous_close\"}"
@@ -3045,6 +3420,16 @@
     "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
+    "canonical": "intra_round_price_barrier_response",
+    "recipe_slots": 1,
+    "recipe": "{\"price\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "intra_round_price_clustering_share",
+    "recipe_slots": 1,
+    "recipe": "{\"price\": \"continuous_close\"}"
+  },
+  {
     "canonical": "intra_same_slot_momentum",
     "recipe_slots": 1,
     "recipe": "{\"close\": \"continuous_close\"}"
@@ -3053,6 +3438,11 @@
     "canonical": "intra_same_slot_reversal",
     "recipe_slots": 1,
     "recipe": "{\"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "intra_same_slot_zscore",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
     "canonical": "intra_segment_amount_share",
@@ -3080,6 +3470,11 @@
     "recipe": "{\"close\": \"continuous_close\", \"amount\": \"amount_local\", \"volume\": \"raw_volume_shares\"}"
   },
   {
+    "canonical": "intra_session_boundary_jump",
+    "recipe_slots": 1,
+    "recipe": "{\"price\": \"continuous_close\"}"
+  },
+  {
     "canonical": "intra_session_return_asymmetry",
     "recipe_slots": 1,
     "recipe": "{\"close\": \"continuous_close\"}"
@@ -3105,6 +3500,16 @@
     "recipe": "{\"close\": \"continuous_close\"}"
   },
   {
+    "canonical": "intra_slice_mask_pair_reduce",
+    "recipe_slots": 2,
+    "recipe": "{\"x\": \"continuous_close\", \"y\": \"return_decimal\"}"
+  },
+  {
+    "canonical": "intra_slice_mask_reduce",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
     "canonical": "intra_slot_amount_surprise",
     "recipe_slots": 1,
     "recipe": "{\"amount\": \"amount_local\"}"
@@ -3118,6 +3523,61 @@
     "canonical": "intra_slot_volume_surprise",
     "recipe_slots": 1,
     "recipe": "{\"volume\": \"raw_volume_shares\"}"
+  },
+  {
+    "canonical": "intra_state_count",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "intra_state_dwell_stats",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "intra_state_follow_beta",
+    "recipe_slots": 2,
+    "recipe": "{\"x\": \"continuous_close\", \"target\": \"return_decimal\"}"
+  },
+  {
+    "canonical": "intra_state_follow_corr",
+    "recipe_slots": 2,
+    "recipe": "{\"x\": \"continuous_close\", \"target\": \"return_decimal\"}"
+  },
+  {
+    "canonical": "intra_state_follow_ratio",
+    "recipe_slots": 2,
+    "recipe": "{\"x\": \"continuous_close\", \"target\": \"return_decimal\"}"
+  },
+  {
+    "canonical": "intra_state_interval_moment",
+    "recipe_slots": 1,
+    "recipe": "{\"target\": \"return_decimal\"}"
+  },
+  {
+    "canonical": "intra_state_pair_same_slot_corr",
+    "recipe_slots": 1,
+    "recipe": "{\"state_a\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "intra_state_sum",
+    "recipe_slots": 2,
+    "recipe": "{\"x\": \"continuous_close\", \"target\": \"return_decimal\"}"
+  },
+  {
+    "canonical": "intra_state_transition_entropy",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "intra_state_vwap",
+    "recipe_slots": 3,
+    "recipe": "{\"price\": \"continuous_close\", \"volume\": \"raw_volume_shares\", \"target\": \"return_decimal\"}"
+  },
+  {
+    "canonical": "intra_supply_absorption_score",
+    "recipe_slots": 3,
+    "recipe": "{\"price\": \"continuous_close\", \"volume\": \"raw_volume_shares\", \"amount\": \"amount_local\"}"
   },
   {
     "canonical": "intra_tail_event_count",
@@ -3160,6 +3620,11 @@
     "recipe": "{\"close\": \"continuous_close\"}"
   },
   {
+    "canonical": "intra_volume_at_price_profile",
+    "recipe_slots": 2,
+    "recipe": "{\"price\": \"continuous_close\", \"volume\": \"raw_volume_shares\"}"
+  },
+  {
     "canonical": "intra_volume_price_alignment",
     "recipe_slots": 2,
     "recipe": "{\"close\": \"continuous_close\", \"volume\": \"raw_volume_shares\"}"
@@ -3173,6 +3638,21 @@
     "canonical": "intra_volume_profile_jsd",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "intra_volume_profile_peak_geometry",
+    "recipe_slots": 2,
+    "recipe": "{\"price\": \"continuous_close\", \"volume\": \"raw_volume_shares\"}"
+  },
+  {
+    "canonical": "intra_volume_profile_supply_structure",
+    "recipe_slots": 2,
+    "recipe": "{\"price\": \"continuous_close\", \"volume\": \"raw_volume_shares\"}"
+  },
+  {
+    "canonical": "intra_volume_profile_value_area",
+    "recipe_slots": 2,
+    "recipe": "{\"price\": \"continuous_close\", \"volume\": \"raw_volume_shares\"}"
   },
   {
     "canonical": "intra_vwap_above_ratio",
@@ -3390,6 +3870,26 @@
     "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
+    "canonical": "kama_distance_pct",
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "keltner_breakout_strength",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "keltner_compression",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "keltner_width_pct",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
     "canonical": "le",
     "recipe_slots": 2,
     "recipe": "{\"x\": \"continuous_close\", \"y\": \"return_decimal\"}"
@@ -3450,6 +3950,11 @@
     "recipe": "{\"x\": \"continuous_close\", \"y\": \"return_decimal\"}"
   },
   {
+    "canonical": "ma_slope_pct",
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
+  },
+  {
     "canonical": "market_cap_free_cap_gap",
     "recipe_slots": 1,
     "recipe": "{\"market_cap\": \"market_cap\"}"
@@ -3490,6 +3995,21 @@
     "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
+    "canonical": "negative_event_age",
+    "recipe_slots": 1,
+    "recipe": "{\"event\": \"event_mask\"}"
+  },
+  {
+    "canonical": "negative_event_rate",
+    "recipe_slots": 1,
+    "recipe": "{\"event\": \"event_mask\"}"
+  },
+  {
+    "canonical": "nonfinite_to_num",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
     "canonical": "normalize",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
@@ -3522,7 +4042,7 @@
   {
     "canonical": "overnight_return",
     "recipe_slots": 1,
-    "recipe": "{\"pre_close\": \"continuous_close\"}"
+    "recipe": "{\"open_px\": \"continuous_close\"}"
   },
   {
     "canonical": "overnight_volatility",
@@ -3530,9 +4050,29 @@
     "recipe": "{\"open\": \"continuous_open\", \"close\": \"continuous_close\"}"
   },
   {
+    "canonical": "panel_async_beta_ex_self",
+    "recipe_slots": 1,
+    "recipe": "{\"ret\": \"return_decimal\"}"
+  },
+  {
+    "canonical": "panel_factor_pocket_strength",
+    "recipe_slots": 2,
+    "recipe": "{\"ret\": \"return_decimal\", \"factor\": \"continuous_close\"}"
+  },
+  {
     "canonical": "panel_mixture_of_experts_score",
     "recipe_slots": 1,
     "recipe": "{\"y\": \"return_decimal\"}"
+  },
+  {
+    "canonical": "panel_peer_graph_aggregate",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "panel_predictability_mosaic_score",
+    "recipe_slots": 1,
+    "recipe": "{\"base_signal\": \"continuous_close\"}"
   },
   {
     "canonical": "panel_regime_conditioned_forecast",
@@ -3765,6 +4305,16 @@
     "recipe": "{\"ocf\": \"operating_cash_flow\", \"net_profit\": \"net_profit\", \"period_id\": \"period_id\"}"
   },
   {
+    "canonical": "positive_event_age",
+    "recipe_slots": 1,
+    "recipe": "{\"event\": \"event_mask\"}"
+  },
+  {
+    "canonical": "positive_event_rate",
+    "recipe_slots": 1,
+    "recipe": "{\"event\": \"event_mask\"}"
+  },
+  {
     "canonical": "power",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
@@ -3795,6 +4345,26 @@
     "recipe": "{\"x\": \"continuous_close\", \"y\": \"return_decimal\"}"
   },
   {
+    "canonical": "psar_days_since_flip",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "psar_direction",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "psar_distance_pct",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "psar_flip",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
     "canonical": "quarter_from_cumulative",
     "recipe_slots": 2,
     "recipe": "{\"x\": \"continuous_close\", \"period_id\": \"period_id\"}"
@@ -3818,6 +4388,26 @@
     "canonical": "real_turnover_rate",
     "recipe_slots": 1,
     "recipe": "{\"volume\": \"raw_volume_shares\"}"
+  },
+  {
+    "canonical": "reg_forecast_error_pct",
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "reg_r2_trailing",
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "reg_residual_zscore",
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "reg_slope_tstat",
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
   },
   {
     "canonical": "relation_category_share",
@@ -3890,6 +4480,11 @@
     "recipe": "{\"hhi\": \"continuous_close\"}"
   },
   {
+    "canonical": "relation_jaccard",
+    "recipe_slots": 1,
+    "recipe": "{\"entity_id\": \"continuous_close\"}"
+  },
+  {
     "canonical": "relation_overlap_ratio",
     "recipe_slots": 1,
     "recipe": "{\"current_ids\": \"continuous_close\"}"
@@ -3938,6 +4533,11 @@
     "canonical": "relation_weighted_std_ex_self",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "relative_strength_group_pct",
+    "recipe_slots": 1,
+    "recipe": "{\"ret\": \"return_decimal\"}"
   },
   {
     "canonical": "relative_volume",
@@ -4075,6 +4675,11 @@
     "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
+    "canonical": "senkou_span_causal_pct",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
     "canonical": "session_event_recovery_score",
     "recipe_slots": 2,
     "recipe": "{\"x\": \"continuous_close\", \"event\": \"event_mask\"}"
@@ -4093,6 +4698,16 @@
     "canonical": "signed_dollar_volume",
     "recipe_slots": 3,
     "recipe": "{\"ret\": \"return_decimal\", \"close\": \"continuous_close\", \"volume\": \"raw_volume_shares\"}"
+  },
+  {
+    "canonical": "signed_event_decay",
+    "recipe_slots": 1,
+    "recipe": "{\"event\": \"event_mask\"}"
+  },
+  {
+    "canonical": "signed_event_rate",
+    "recipe_slots": 1,
+    "recipe": "{\"event\": \"event_mask\"}"
   },
   {
     "canonical": "signed_log",
@@ -4140,6 +4755,21 @@
     "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
+    "canonical": "sma_distance_pct",
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "spectral_energy_ratio",
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "spectral_trend_share",
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
+  },
+  {
     "canonical": "sqrt",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
@@ -4155,9 +4785,74 @@
     "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
+    "canonical": "sr_distance_pct",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "sr_touch_count",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "state_adaptive_deadband",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "state_adaptive_slew_limit",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "state_age",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "state_confidence_weighted_ema",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "state_cost_aware_deadband",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "state_cost_aware_slew",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
     "canonical": "state_deadband",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "state_dwell_pct",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "state_episode_age",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "state_episode_age_capped",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "state_episode_age_lower_bound",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "state_episode_censored_flag",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
   },
   {
     "canonical": "state_episode_efficiency",
@@ -4190,14 +4885,49 @@
     "recipe": "{\"x\": \"continuous_close\", \"condition\": \"condition_bool\"}"
   },
   {
+    "canonical": "state_flip_age",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "state_flip_density",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
+  },
+  {
     "canonical": "state_hold",
     "recipe_slots": 1,
     "recipe": "{\"value\": \"continuous_close\"}"
   },
   {
+    "canonical": "state_l1_turnover_prox",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "state_l2_partial_adjustment",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
     "canonical": "state_latch",
     "recipe_slots": 1,
     "recipe": "{\"set_condition\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "state_persistence",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "state_quantile_hysteresis",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "state_rank_deadband",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
     "canonical": "state_since_count",
@@ -4230,9 +4960,49 @@
     "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
+    "canonical": "state_transition_count",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "state_transition_rate",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "state_transition_surprise",
+    "recipe_slots": 1,
+    "recipe": "{\"state\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "state_uncertainty_deadband",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
     "canonical": "subtract",
     "recipe_slots": 2,
     "recipe": "{\"x\": \"continuous_close\", \"y\": \"return_decimal\"}"
+  },
+  {
+    "canonical": "supertrend_days_since_flip",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "supertrend_direction",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "supertrend_distance_pct",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "supertrend_flip",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
   },
   {
     "canonical": "suspension_frequency",
@@ -4260,6 +5030,16 @@
     "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
+    "canonical": "tema_distance_pct",
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "tenkan_kijun_cross",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
     "canonical": "tradable_state",
     "recipe_slots": 1,
     "recipe": "{\"listed\": \"continuous_close\"}"
@@ -4270,7 +5050,27 @@
     "recipe": "{\"condition\": \"condition_bool\"}"
   },
   {
+    "canonical": "trading_day_diff",
+    "recipe_slots": 2,
+    "recipe": "{\"date1\": \"event_date\", \"date2\": \"event_date\"}"
+  },
+  {
     "canonical": "true_range",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "true_range_pct",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "true_range_surprise",
+    "recipe_slots": 3,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "true_range_zscore",
     "recipe_slots": 3,
     "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
   },
@@ -4326,6 +5126,16 @@
   },
   {
     "canonical": "ts_activity_clock_lagged_value_prior",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "ts_adaptive_noise_kalman",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "ts_alpha_beta_filter",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
   },
@@ -4445,6 +5255,11 @@
     "recipe": "{\"x\": \"return_decimal\"}"
   },
   {
+    "canonical": "ts_bessel_lowpass_causal",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
     "canonical": "ts_best_lag_corr_excess",
     "recipe_slots": 2,
     "recipe": "{\"y\": \"return_decimal\", \"x\": \"continuous_close\"}"
@@ -4523,6 +5338,21 @@
     "canonical": "ts_bures_corr_shift",
     "recipe_slots": 2,
     "recipe": "{\"x\": \"continuous_close\", \"y\": \"return_decimal\"}"
+  },
+  {
+    "canonical": "ts_butterworth_lowpass_causal",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "ts_causal_local_linear_smoother",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "ts_causal_savgol_endpoint",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
     "canonical": "ts_change_point_probability",
@@ -5035,6 +5865,11 @@
     "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
+    "canonical": "ts_fir_lowpass_causal",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
     "canonical": "ts_first_passage_bias",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
@@ -5150,6 +5985,16 @@
     "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
+    "canonical": "ts_h_infinity_level_filter",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "ts_hampel_filter_causal",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
     "canonical": "ts_hankel_effective_rank",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
@@ -5170,17 +6015,7 @@
     "recipe": "{\"x\": \"return_decimal\"}"
   },
   {
-    "canonical": "ts_har_rv_forecast",
-    "recipe_slots": 1,
-    "recipe": "{\"x\": \"return_decimal\"}"
-  },
-  {
     "canonical": "ts_har_rv_forecast_error_z",
-    "recipe_slots": 1,
-    "recipe": "{\"x\": \"return_decimal\"}"
-  },
-  {
-    "canonical": "ts_har_rv_innovation_z",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"return_decimal\"}"
   },
@@ -5316,8 +6151,8 @@
   },
   {
     "canonical": "ts_interval_exploration_efficiency",
-    "recipe_slots": 3,
-    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\"}"
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
   },
   {
     "canonical": "ts_interval_nesting_depth",
@@ -5331,8 +6166,8 @@
   },
   {
     "canonical": "ts_interval_occupancy_mode_distance",
-    "recipe_slots": 3,
-    "recipe": "{\"x\": \"continuous_close\", \"low\": \"continuous_low\", \"high\": \"continuous_high\"}"
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
     "canonical": "ts_interval_overlap_connected_component_ratio",
@@ -5385,6 +6220,11 @@
     "recipe": "{\"x\": \"return_decimal\"}"
   },
   {
+    "canonical": "ts_kama",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
     "canonical": "ts_kernel_granger_score",
     "recipe_slots": 2,
     "recipe": "{\"y\": \"return_decimal\", \"x\": \"return_decimal\"}"
@@ -5426,6 +6266,11 @@
   },
   {
     "canonical": "ts_kurt",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "ts_l1_trend_filter_trailing",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
   },
@@ -5670,7 +6515,17 @@
     "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
+    "canonical": "ts_mean_reversion_ou_approx_half_life_prior",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
     "canonical": "ts_median",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "ts_median3_causal",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
   },
@@ -6060,6 +6915,11 @@
     "recipe": "{\"y\": \"return_decimal\", \"x\": \"continuous_close\"}"
   },
   {
+    "canonical": "ts_quantile_beta_spread_prior",
+    "recipe_slots": 2,
+    "recipe": "{\"y\": \"return_decimal\", \"x\": \"continuous_close\"}"
+  },
+  {
     "canonical": "ts_quantile_crossing_spectral_concentration",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
@@ -6325,6 +7185,11 @@
     "recipe": "{\"y\": \"return_decimal\"}"
   },
   {
+    "canonical": "ts_robust_ema",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
     "canonical": "ts_robust_zscore_inclusive",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
@@ -6338,6 +7203,11 @@
     "canonical": "ts_roll_effective_spread",
     "recipe_slots": 1,
     "recipe": "{\"price\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "ts_rolling_median_causal",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
     "canonical": "ts_rolling_sr_gaussian_mean_shift_score",
@@ -6445,12 +7315,27 @@
     "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
+    "canonical": "ts_spectral_lowpass_trailing",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
     "canonical": "ts_spectral_peak_concentration",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
     "canonical": "ts_spectral_quality_factor",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "ts_ssa_denoise_trailing",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "ts_ssa_prior_reconstruction_error",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
   },
@@ -6520,6 +7405,11 @@
     "recipe": "{\"price\": \"continuous_close\"}"
   },
   {
+    "canonical": "ts_student_t_kalman_filter",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
     "canonical": "ts_sum",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
@@ -6531,6 +7421,11 @@
   },
   {
     "canonical": "ts_sum_if",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "ts_super_smoother",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
   },
@@ -6636,6 +7531,11 @@
   },
   {
     "canonical": "ts_topk_sum",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "ts_total_variation_filter_trailing",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
   },
@@ -6910,6 +7810,11 @@
     "recipe": "{\"x\": \"continuous_close\"}"
   },
   {
+    "canonical": "ts_wavelet_shrinkage_trailing",
+    "recipe_slots": 1,
+    "recipe": "{\"x\": \"continuous_close\"}"
+  },
+  {
     "canonical": "ts_weighted_downside_deviation",
     "recipe_slots": 1,
     "recipe": "{\"x\": \"continuous_close\"}"
@@ -6978,6 +7883,16 @@
     "canonical": "turnover_autocorr",
     "recipe_slots": 1,
     "recipe": "{\"turnover\": \"turnover\"}"
+  },
+  {
+    "canonical": "turnover_chip_age_cost_surface",
+    "recipe_slots": 2,
+    "recipe": "{\"close\": \"continuous_close\", \"turnover\": \"turnover\"}"
+  },
+  {
+    "canonical": "turnover_chip_overhang_surface",
+    "recipe_slots": 2,
+    "recipe": "{\"close\": \"continuous_close\", \"turnover\": \"turnover\"}"
   },
   {
     "canonical": "turnover_momentum",
@@ -7130,14 +8045,39 @@
     "recipe": "{\"volume\": \"raw_volume_shares\"}"
   },
   {
+    "canonical": "vpin_pct",
+    "recipe_slots": 2,
+    "recipe": "{\"close\": \"continuous_close\", \"volume\": \"raw_volume_shares\"}"
+  },
+  {
     "canonical": "vwap_deviation",
     "recipe_slots": 2,
     "recipe": "{\"price\": \"continuous_close\", \"volume\": \"raw_volume_shares\"}"
   },
   {
+    "canonical": "vwap_distance_pct",
+    "recipe_slots": 2,
+    "recipe": "{\"close\": \"continuous_close\", \"volume\": \"raw_volume_shares\"}"
+  },
+  {
+    "canonical": "vwap_premium_pct",
+    "recipe_slots": 4,
+    "recipe": "{\"high\": \"continuous_high\", \"low\": \"continuous_low\", \"close\": \"continuous_close\", \"volume\": \"raw_volume_shares\"}"
+  },
+  {
+    "canonical": "vwap_slope_pct",
+    "recipe_slots": 2,
+    "recipe": "{\"close\": \"continuous_close\", \"volume\": \"raw_volume_shares\"}"
+  },
+  {
     "canonical": "vwap_to_close_return",
     "recipe_slots": 2,
     "recipe": "{\"vwap\": \"continuous_vwap\", \"close\": \"continuous_close\"}"
+  },
+  {
+    "canonical": "wavelet_detail_energy_ratio",
+    "recipe_slots": 1,
+    "recipe": "{\"close\": \"continuous_close\"}"
   },
   {
     "canonical": "where",

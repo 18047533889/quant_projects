@@ -20,7 +20,7 @@ default_searchable / final_direct_use_ready / failure_reasons / evidence_sha).
 
 Evidence is bound to current git HEAD (M-001); ``evidence_sha`` = HEAD sha.
 
-Run:  python3 scripts/generate_model_canonical_ledger.py [--out docs/evidence/model_operators]
+Run:  python3 scripts/generate_model_canonical_ledger.py [--out evidence/factor_engine/model_operators]
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ sys.path.insert(0, ".")
 sys.path.insert(0, "..")
 
 REPO = Path(__file__).resolve().parent.parent
-DEFAULT_OUT = REPO / "docs" / "evidence" / "model_operators"
+DEFAULT_OUT = REPO / "evidence" / "factor_engine" / "model_operators"
 
 LEDGER_FIELDS = [
     "canonical", "family", "true_model_type", "semantic_role", "surface",

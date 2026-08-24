@@ -29,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
         "-o",
         "--output",
         type=Path,
-        default=Path(__file__).resolve().parents[1] / "docs" / "operator_specs_manifest.json",
+        default=Path(__file__).resolve().parents[1] / "factor_engine" / "docs" / "operator_specs_manifest.json",
         help="输出路径（.json 或 .yaml）",
     )
     parser.add_argument("--production-only", action="store_true", help="仅 production 允许算子")
@@ -37,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="与 --core-only 联用：校验 docs/operator_core_specs.yaml 未过期",
+        help="与 --core-only 联用：校验 factor_engine/docs/operator_core_specs.yaml 未过期",
     )
     args = parser.parse_args(argv)
 
@@ -52,7 +52,7 @@ def main(argv: list[str] | None = None) -> int:
         if not args.core_only:
             print("--check 须与 --core-only 联用", file=sys.stderr)
             return 2
-        ref_path = Path(__file__).resolve().parents[1] / "docs" / "operator_core_specs.yaml"
+        ref_path = Path(__file__).resolve().parents[1] / "factor_engine" / "docs" / "operator_core_specs.yaml"
         if not ref_path.is_file():
             print(f"缺少参考 manifest: {ref_path}", file=sys.stderr)
             return 1

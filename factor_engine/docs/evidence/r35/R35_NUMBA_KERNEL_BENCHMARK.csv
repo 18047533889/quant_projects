@@ -1,5 +1,0 @@
-kernel,numba_best_ms,ref_best_ms,speedup_x
-kalman_level,0.0057,0.6388,112.56
-kalman_trend,0.0068,3.1429,461.92
-kalman_beta,0.0087,1.2001,137.9
-ar_prior_forecast,0.1977,11.8375,59.88

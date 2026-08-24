@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
 PROJECT = Path("/home/sunhaiwei/quant_projects")
-REPORT_DIR = PROJECT / "docs" / "reports" / "2026-08-23"
+REPORT_DIR = PROJECT / "factor_engine" / "docs" / "reports" / "2026-08-23"
 FACTORS_DIR = REPORT_DIR / "factors"
 ZIP_LOOKUP = PROJECT / "factor_delivery_converted" / "zip_orig_lookup.json"
 ALL_EVAL = REPORT_DIR / "all_eval_full.json"

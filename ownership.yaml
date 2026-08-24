@@ -1,0 +1,50 @@
+# Repository domain ownership (R49 governance).
+# Each top-level path is owned by one team; the CI gate (scripts/check_no_mirrors.py)
+# enforces that no file is duplicated across ownership boundaries.
+version: 1
+
+domains:
+  factor_engine:
+    owner: factor_engine_team
+    paths: [factor_engine]
+    responsibility: [DSL, expression tree, compiler, backend execution, config-driven runtime]
+  data_access:
+    owner: data_team
+    paths: [data_access]
+    responsibility: [datasets, PIT, storage, COS, snapshot]
+  modeling:
+    owner: model_team
+    paths: [modeling]
+    responsibility: [alpha prediction, training, evaluation, artifact lifecycle]
+  quant_evaluator:
+    owner: eval_team
+    paths: [quant_evaluator]
+    responsibility: [factor evaluation, IC/IR, backtest reporting]
+  factor_optimizer:
+    owner: optimizer_team
+    paths: [factor_optimizer]
+    responsibility: [factor combination, portfolio optimization]
+  factor_assets:
+    owner: assets_team
+    paths: [factor_assets]
+    responsibility: [factor asset registry, production manifests]
+  factor_preprocess:
+    owner: data_team
+    paths: [factor_preprocess]
+    responsibility: [feature preprocessing, schema, manifest]
+  vectorbt_qs:
+    owner: backtest_team
+    paths: [vectorbt_qs]
+    responsibility: [vectorbt-based backtesting]
+  research_platform:
+    owner: research_team
+    paths: [research_platform, alphaprobe]
+    responsibility: [research workflows, alpha discovery]
+  platform:
+    owner: platform_team
+    paths: [scripts, benchmarks, evidence, config, docs, tests, examples]
+    responsibility: [CI, gates, evidence, docs, infra]
+  generated_artifacts:
+    owner: platform_team
+    paths: [runs, data]
+    responsibility: [runtime output, regenerable assets — gitignored]

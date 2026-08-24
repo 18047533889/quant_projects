@@ -73,5 +73,5 @@ print("missing role examples:", missing_role_examples)
 
 json.dump({"stats": stats, "fallback_examples": fallback_examples,
            "missing_role_examples": missing_role_examples},
-          open("docs/r30_phase6_param_scan.json", "w"), indent=2, sort_keys=True)
+          open("factor_engine/docs/r30_phase6_param_scan.json", "w"), indent=2, sort_keys=True)
 print("saved")

@@ -1,7 +1,0 @@
-{
-  "anchor_policy": "exact_trade_day (production default) | previous_trade_day | next_trade_day",
-  "intraday_window": "intraday_session_clock (SessionCalendar bar_slots, skips lunch)",
-  "out_of_coverage": "CalendarCoverageError (default); clamp=True only UI/research",
-  "production_unavailable": "CalendarUnavailableError (no bdate fallback)",
-  "timezone_naive_strip": "tz_convert('UTC').tz_localize(None) \u2014 convert, never silent strip"
-}

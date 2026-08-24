@@ -19,7 +19,7 @@ NOT_RUN；failed_cases>0 => FAIL），不用文件存在代替行为测试。
     R37_CURRENT_HEAD_SHA_CONSISTENT（evidence SHA == benchmark SHA == code SHA）
 
 输出：
-    docs/evidence/r37/R37_HARD_GATES.json
+    evidence/factor_engine/r37/R37_HARD_GATES.json
 """
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ def _gate_evidence_truth() -> GateResult:
         fired = [v["fired"] for v in neg_controls.values()] or []
         return GateResult.from_cases(
             "R37_EVIDENCE_TRUTH_PASS", cases + fired, commit_sha=head,
-            evidence_files=("docs/evidence/r37/R37_EVIDENCE_TRUTH_GATES.json",),
+            evidence_files=("evidence/factor_engine/r37/R37_EVIDENCE_TRUTH_GATES.json",),
             details={"evidence_truth_gates": len(truth["gates"]),
                      "negative_controls": len(neg_controls)},
         )
@@ -94,7 +94,7 @@ def _gate_parameter_domain_certified() -> GateResult:
         ))
     return GateResult.from_cases(
         "R37_PARAMETER_DOMAIN_CERTIFIED", cases, commit_sha=head,
-        evidence_files=("docs/evidence/r37/R37_PARAMETER_DOMAIN_STORE.json",),
+        evidence_files=("evidence/factor_engine/r37/R37_PARAMETER_DOMAIN_STORE.json",),
         details={"certified_point_count": n,
                  "operators": len({cp.key.canonical for cp in store.all_passed_certified_points()})},
     )
@@ -131,7 +131,7 @@ def _gate_ledger_produced() -> GateResult:
         n = df.height
         return GateResult.from_cases(
             "R37_PER_CANONICAL_LEDGER_PRODUCED", [n > 0], commit_sha=head,
-            evidence_files=("docs/evidence/r37/R37_OPERATOR_CORRECTNESS_LEDGER.parquet",),
+            evidence_files=("evidence/factor_engine/r37/R37_OPERATOR_CORRECTNESS_LEDGER.parquet",),
             details={"rows": n},
         )
     except Exception as exc:

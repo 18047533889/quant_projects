@@ -76,5 +76,5 @@ for (pkg, st), cnt in sorted(pkg_status.items()):
 json.dump({
     "per_module": {m: {"total": v["total"], "status": dict(v["status"])} for m, v in per_mod.items()},
     "flagged_modules": flagged,
-}, open("docs/r30_phase3_module_scan.json", "w"), indent=2, sort_keys=True)
-print("\nsaved docs/r30_phase3_module_scan.json")
+}, open("factor_engine/docs/r30_phase3_module_scan.json", "w"), indent=2, sort_keys=True)
+print("\nsaved factor_engine/docs/r30_phase3_module_scan.json")

@@ -5,7 +5,7 @@ local casts / sample masking drift / duplicated semantic policy。
 
 对每个 canonical 生成 ``MathematicalSemanticCertificate``（R19-129 全部字段），
 并映射到 M01..M20 release-blocker。输出
-``docs/R19_OPERATOR_MATH_AUDIT.{json,csv,md}``。
+``factor_engine/docs/R19_OPERATOR_MATH_AUDIT.{json,csv,md}``。
 
 容错约定：
 - ``load_all()`` 失败（并发 agent 正在改 operator）不致命 —— 记录

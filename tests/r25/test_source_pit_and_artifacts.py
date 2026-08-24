@@ -17,7 +17,7 @@ def test_cross_market_source_cert_both_markets_present():
     # R25-064..066/153: the temporal source certificate keys A/US same-name
     # tables separately — both markets must be present, never one overriding
     # the other.
-    cert_path = os.path.join(ROOT, "docs", "R23_TEMPORAL_SOURCE_CERTIFICATES.json")
+    cert_path = os.path.join(ROOT, "factor_engine", "docs", "R23_TEMPORAL_SOURCE_CERTIFICATES.json")
     assert os.path.exists(cert_path), "run scripts/r23_audit_generate.py first"
     certs = json.load(open(cert_path))
     for name in ("StockIncome", "StockBalance", "StockDailyBar", "StockList", "Calendar"):
@@ -32,7 +32,7 @@ def test_no_strict_pit_true_with_unproven_knowledge_clock():
     # R25-067/068/180: a table that claims strict_pit_allowed=True must carry an
     # explicit knowledge-time resolution (or N/A_EXACT_OBSERVATION for exact
     # observed data) — never a bare UNPROVEN contradiction.
-    cert_path = os.path.join(ROOT, "docs", "R23_TEMPORAL_SOURCE_CERTIFICATES.json")
+    cert_path = os.path.join(ROOT, "factor_engine", "docs", "R23_TEMPORAL_SOURCE_CERTIFICATES.json")
     assert os.path.exists(cert_path), "run scripts/r23_audit_generate.py first"
     certs = json.load(open(cert_path))
     contradictions = []
@@ -63,7 +63,7 @@ def test_artifact_snapshot_digest_coherent():
     # the live registry count.
     from factor_engine.cleaned_operators.registry import OperatorRegistry
 
-    snapshot_path = os.path.join(ROOT, "docs", "R25_CANONICAL_SNAPSHOT.json")
+    snapshot_path = os.path.join(ROOT, "factor_engine", "docs", "R25_CANONICAL_SNAPSHOT.json")
     assert os.path.exists(snapshot_path), "run scripts/audit_r25_genuine_usability.py first"
     snapshot = json.load(open(snapshot_path))
     assert snapshot["count"] == len(OperatorRegistry._catalog), "snapshot count != live registry count"
@@ -74,7 +74,7 @@ def test_genuine_usability_requires_independent_evidence():
     # source_contract are independently proven.  With the R25-186 certifier fix
     # neither is granted by the runtime audit, so the honest matrix must not
     # mark everything usable.
-    matrix_path = os.path.join(ROOT, "docs", "R25_GENUINE_USABILITY_MATRIX.json")
+    matrix_path = os.path.join(ROOT, "factor_engine", "docs", "R25_GENUINE_USABILITY_MATRIX.json")
     assert os.path.exists(matrix_path), "run scripts/audit_r25_genuine_usability.py first"
     matrix = json.load(open(matrix_path))
     claimed = [r["canonical"] for r in matrix if r["genuine_usable"]]
@@ -86,6 +86,6 @@ def test_genuine_usability_requires_independent_evidence():
 
 def test_state_machine_no_silent_int_coercion():
     # R25-005/167: A-share state-machine must use strict integer authority.
-    src = open(os.path.join(ROOT, "cleaned_operators", "ashare", "state_machine.py")).read()
+    src = open(os.path.join(ROOT, "factor_engine", "cleaned_operators", "ashare", "state_machine.py")).read()
     assert "strict_nonnegative_int(max_lookback, \"max_lookback\")" in src
     assert "int(max_lookback)" not in src, "silent int() coercion must be gone"

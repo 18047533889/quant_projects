@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""生成 docs/market_field_manifest.json — 每个 canonical 概念的双市场 provider 清单。
+"""生成 factor_engine/docs/market_field_manifest.json — 每个 canonical 概念的双市场 provider 清单。
 
 对 ``fields.concepts`` 中的每个概念，汇总 A/US 两侧的 provider binding：
 status / dataset / physical / transform / source_unit / coverage / pit。

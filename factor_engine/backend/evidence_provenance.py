@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 FE_ROOT = Path(__file__).resolve().parents[1]
-CASE_REGISTRY_JSON = FE_ROOT / "evidence" / "primitive_case_registry.json"
-VERIFIED_JSON = FE_ROOT / "evidence" / "primitive_verified.json"
+CASE_REGISTRY_JSON = FE_ROOT.parent / "evidence" / "primitive_case_registry.json"
+VERIFIED_JSON = FE_ROOT.parent / "evidence" / "primitive_verified.json"
 
 #: R22-EVIDENCE-CONTAMINATION: test-certified fixture artifacts live inside the
 #: evidence tree but are NOT production evidence.  They are generated on demand

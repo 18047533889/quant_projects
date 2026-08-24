@@ -82,7 +82,7 @@ def test_all_certified_have_production_status():
 
 def test_experimental_not_certified():
     """In-scope intraday operators that are NOT certified must NOT be admitted."""
-    audit_path = FE_ROOT / "docs/R23_PER_CANONICAL_AUDIT.json"
+    audit_path = FE_ROOT / "factor_engine/docs/R23_PER_CANONICAL_AUDIT.json"
     d = json.loads(audit_path.read_text(encoding="utf-8"))
     cats = ("intraday_microstructure", "market_microstructure", "intraday_session")
     scope = {x["canonical"] for x in d if x.get("category") in cats}

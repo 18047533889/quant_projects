@@ -30,7 +30,7 @@ from scripts.generate_physical_implementation_matrix import (  # noqa: E402
     write_matrix_doc,
 )
 
-MATRIX_DOC = FE_ROOT / "docs" / "PHYSICAL_IMPLEMENTATION_MATRIX.md"
+MATRIX_DOC = FE_ROOT / "factor_engine" / "docs" / "PHYSICAL_IMPLEMENTATION_MATRIX.md"
 
 
 def test_cell_escapes_pipe_and_newline() -> None:
@@ -194,7 +194,7 @@ def test_generated_matrix_doc_on_disk_well_formed() -> None:
     """The real generated artifact on disk must have consistent column counts."""
     if not MATRIX_DOC.is_file():
         raise AssertionError(
-            "docs/PHYSICAL_IMPLEMENTATION_MATRIX.md missing — run the generator"
+            "factor_engine/docs/PHYSICAL_IMPLEMENTATION_MATRIX.md missing — run the generator"
         )
     text = MATRIX_DOC.read_text(encoding="utf-8")
     tables = _markdown_table_rows(text)

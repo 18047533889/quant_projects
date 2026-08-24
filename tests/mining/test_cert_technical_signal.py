@@ -18,7 +18,7 @@ from factor_engine.cleaned_operators import load_all
 from factor_engine.cleaned_operators.registry import OperatorRegistry
 from factor_engine.mining.direct_use import build_direct_use_operator
 
-# All 46 technical_signal canonicals from docs/R23_PER_CANONICAL_AUDIT.json
+# All 46 technical_signal canonicals from factor_engine/docs/R23_PER_CANONICAL_AUDIT.json
 TECHNICAL_SIGNAL_CANONICALS = frozenset({
     "ADX", "ATR_WILDER", "CMO", "DEMA",
     "DMI_minus", "DMI_plus", "DX",

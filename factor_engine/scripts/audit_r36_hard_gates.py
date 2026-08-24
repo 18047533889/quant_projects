@@ -3,7 +3,7 @@
 
 对齐 R36 §295 硬门总表。每个 gate 都是**行为探针**（构造输入 → 断言行为），
 不是 grep / 静态检查。审计 HEAD 绑定当前仓库，输出
-``docs/evidence/r36/R36_HARD_GATES.json``，exit code 反映 R36_HARD_BLOCKERS_ZERO。
+``evidence/factor_engine/r36/R36_HARD_GATES.json``，exit code 反映 R36_HARD_BLOCKERS_ZERO。
 
 覆盖（P0 修复闭环）：
     - ResourceDecision 闭环 + AIMD 双向控制器 + PSI/slope（P0-001/002/003/010/011/012）
@@ -844,6 +844,6 @@ for k in sorted(gates):
 print(f"\nR36_HARD_BLOCKERS_ZERO = {not blockers}")
 import os as _os
 
-os.makedirs("docs/evidence/r36", exist_ok=True)
-json.dump(gates, open("docs/evidence/r36/R36_HARD_GATES.json", "w"), indent=2, sort_keys=True)
+os.makedirs("evidence/factor_engine/r36", exist_ok=True)
+json.dump(gates, open("evidence/factor_engine/r36/R36_HARD_GATES.json", "w"), indent=2, sort_keys=True)
 sys.exit(1 if blockers else 0)

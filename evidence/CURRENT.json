@@ -1,20 +1,20 @@
 {
   "schema_version": 3,
-  "generated_at": "2026-08-24T15:47:30.668940+00:00",
-  "source_snapshot_id": "src:v1:ac4521ea097b3bce",
+  "generated_at": "2026-08-24T17:52:43.356169+00:00",
+  "source_snapshot_id": "src:v1:f4480bffda67e898",
   "sha_bindings": {
-    "RootRepoSHA": "{\"HEAD\":\"7f43f7469145ed506347ac3095e6a5945e35a7a0\",\"cached_diff_hash\":\"e46af8c6fb81069bda5762f1da7e5f3d39251af8b3f33920771da464b32b702a\",\"diff_hash\":\"300cbc1d15ff03ec81489080aea3e4b05617a4946f3806595bf837e235871130\",\"dirty\":true,\"identity_hash\":\"d856076445ac55b465b486431cc983b4832bb1b66256da481f4c940fcacb01a5\",\"untracked_source_hash\":\"7e0ac4a9239ae5b2d614229263904b78795ae5fbb1214ce97e209db2ee03e459\"}",
-    "SourceTreeIdentity": "{\"HEAD\":\"7f43f7469145ed506347ac3095e6a5945e35a7a0\",\"cached_diff_hash\":\"e46af8c6fb81069bda5762f1da7e5f3d39251af8b3f33920771da464b32b702a\",\"diff_hash\":\"300cbc1d15ff03ec81489080aea3e4b05617a4946f3806595bf837e235871130\",\"dirty\":true,\"identity_hash\":\"d856076445ac55b465b486431cc983b4832bb1b66256da481f4c940fcacb01a5\",\"untracked_source_hash\":\"7e0ac4a9239ae5b2d614229263904b78795ae5fbb1214ce97e209db2ee03e459\"}",
-    "PlatformSourceTreeIdentity": "fd0600968af2763b9fff83608f1438c7c77d36fce92bbf07fa8cbff00cc99676",
+    "RootRepoSHA": "{\"HEAD\":\"0d22dc674d0e3e6d1437c2c67e801ace7bc4cc37\",\"cached_diff_hash\":\"7eae1f15a04d4f8ce2b55c41db38df0e15446b3431e04b6ac746bfb276ff6291\",\"diff_hash\":\"d2ca617d65987d80ab5aa6a578a52518fea80c3c5b7e07f8b80e6605072b5bf1\",\"dirty\":true,\"identity_hash\":\"cf79a15d0b913ff13e558b0f63385995dc3b549ba725da125d6e45fb6602ecae\",\"untracked_source_hash\":\"af65b5aa04596f8ca01a996cf6e8a73c4896dc78d257a4704d405d3a82cab32b\"}",
+    "SourceTreeIdentity": "{\"HEAD\":\"0d22dc674d0e3e6d1437c2c67e801ace7bc4cc37\",\"cached_diff_hash\":\"7eae1f15a04d4f8ce2b55c41db38df0e15446b3431e04b6ac746bfb276ff6291\",\"diff_hash\":\"d2ca617d65987d80ab5aa6a578a52518fea80c3c5b7e07f8b80e6605072b5bf1\",\"dirty\":true,\"identity_hash\":\"cf79a15d0b913ff13e558b0f63385995dc3b549ba725da125d6e45fb6602ecae\",\"untracked_source_hash\":\"af65b5aa04596f8ca01a996cf6e8a73c4896dc78d257a4704d405d3a82cab32b\"}",
+    "PlatformSourceTreeIdentity": "b7b348c3ed044b21230710fb675c525afe06568b97c9c7a9d152d0819b1fe00c",
     "AlphaGeneratorIdentity": "a2d47c9770f58d06a862e21009aafb3eadbb93f58eda61b4ad5579b95754787c",
-    "EvidenceAttestationIdentity": "5d727b917d3e10c325288eaa9b93ac1b29506db01336c39bce2dc4cf9c1e878c",
-    "OperatorCatalogSHA": "fc4c569dfd857bf55ab34f0656995576b4f6245726e82cac5132981d6e2870e3",
+    "EvidenceAttestationIdentity": "e315c7948b9e9588d0002f4e7c75b528aa39749c811a37b2c9fda02636fec928",
+    "OperatorCatalogSHA": "bc6b282613b4352351a65c7f23b7686aa65ff32efa180a7c0ebe3b963f93c25d",
     "SemanticCatalogIdentity": "a336cab3bf6b4113942c317e1949efdb2b749e334910cc458b1daef9ff16774d",
-    "ImplementationClosureHashSet": "33354571963901b73ecb59d74f29cbcca64ceff068a2b986141f59587474a424",
+    "ImplementationClosureHashSet": "0dd6302426d9af34badd1baff55e7225b0488f5c2f4b6761013c683c2c42f6b9",
     "DependencyLockHash": "f567dd4f2d37e0b8aafba60014e90f488913d7315dea9609164b1e1b33ba3377",
     "TestEnvironmentIdentity": "0a0fd01455850a189a8f1589fc65f1157a517fb0c293c9c6d8eb3337daa205f7"
   },
-  "source_tree_identity": "fd0600968af2763b9fff83608f1438c7c77d36fce92bbf07fa8cbff00cc99676",
+  "source_tree_identity": "b7b348c3ed044b21230710fb675c525afe06568b97c9c7a9d152d0819b1fe00c",
   "sha_binding_metadata": {
     "OperatorCatalogPath": "build/mining/direct_mining_catalog.json",
     "DependencyLockPath": "requirements-production.lock",
@@ -94,12 +94,12 @@
   "dimensions": {
     "build_health": "CURRENT",
     "runtime_health": "CURRENT",
-    "research_validity": "STALE",
-    "release_validity": "STALE",
+    "research_validity": "CURRENT",
+    "release_validity": "CURRENT",
     "production_readiness": "CURRENT"
   },
   "evaluation": {
-    "staleness_evaluated_at": "2026-08-24T15:47:31.003529+00:00",
+    "staleness_evaluated_at": "2026-08-24T17:52:43.685276+00:00",
     "status": "STALE",
     "changed_artifacts": [
       "operator-benchmark-manifest",
@@ -110,8 +110,8 @@
     "dimensions": {
       "build_health": "CURRENT",
       "runtime_health": "CURRENT",
-      "research_validity": "STALE",
-      "release_validity": "STALE",
+      "research_validity": "CURRENT",
+      "release_validity": "CURRENT",
       "production_readiness": "CURRENT"
     }
   }

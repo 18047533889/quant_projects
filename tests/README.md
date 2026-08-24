@@ -76,4 +76,4 @@ PYTHONPATH=. pytest tests/ -q
 
 - 根 [`README.md`](../README.md)「运行测试」  
 - [`docs/算子与导入教程.md`](../docs/算子与导入教程.md)  
-- [`docs/changelog_shw.md`](../docs/changelog_shw.md)
+- [`docs/changelog_shw.md`](../factor_engine/docs/changelog_shw.md)

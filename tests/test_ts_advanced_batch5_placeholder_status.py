@@ -6,7 +6,7 @@ from pathlib import Path
 
 MODULE = (
     Path(__file__).resolve().parents[1]
-    / "cleaned_operators"
+    / "factor_engine" / "cleaned_operators"
     / "polars_native"
     / "ts_advanced_batch5.py"
 )

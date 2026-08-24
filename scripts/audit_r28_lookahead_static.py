@@ -6,7 +6,7 @@ Comment- and docstring-stripped (tokenize-based) scan so comments cannot masquer
 as code.  Every hazard line is emitted with a ``review_status`` (default
 ``unreviewed``) and ``resolution``; the R28 gate requires
 ``UNREVIEWED_STATIC_HAZARD == 0``, i.e. every emitted row must eventually carry a
-review status.  Output goes to ``docs/evidence/r28/R28_STATIC_LOOKAHEAD_SCAN.{csv,json}``.
+review status.  Output goes to ``evidence/factor_engine/r28/R28_STATIC_LOOKAHEAD_SCAN.{csv,json}``.
 
 Run:  python3 scripts/audit_r28_lookahead_static.py
 """
@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-OUT = REPO / "docs" / "evidence" / "r28"
+OUT = REPO / "evidence" / "factor_engine" / "r28"
 
 SCAN_DIRS = [
     "cleaned_operators",

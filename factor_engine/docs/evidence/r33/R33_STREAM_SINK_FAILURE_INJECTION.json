@@ -1,5 +1,0 @@
-{
-  "finish_proves_durable": "accepted == committed + failed; queue empty; writers joined",
-  "retry_taxonomy": "transient IO only; schema/invalid factor/disk full/deterministic -> FAILED",
-  "writer_fatal_propagates": true
-}

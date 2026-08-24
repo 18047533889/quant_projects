@@ -310,7 +310,7 @@ class EvidenceTruthEngine:
 
 
 def evidence_store_path() -> Path:
-    return FE_ROOT / "docs" / "evidence" / "r37"
+    return FE_ROOT.parent / "evidence" / "factor_engine" / "r37"
 
 
 # ---------------------------------------------------------------------------
@@ -318,7 +318,7 @@ def evidence_store_path() -> Path:
 # ---------------------------------------------------------------------------
 
 #: 证据 artifact 的默认路径（validity 核对对象）。
-_PRIMITIVE_VERIFIED_JSON = FE_ROOT / "evidence" / "primitive_verified.json"
+_PRIMITIVE_VERIFIED_JSON = FE_ROOT.parent / "evidence" / "primitive_verified.json"
 
 
 def _current_head_sha() -> str:
@@ -335,7 +335,7 @@ def build_manifest_digest() -> str:
     changed_since_certified）；缺失 → 回退对 runtime/backend 源码树做轻量摘要。
     返回空串表示无法判定（调用方仍按 key 缓存，但 validity 判定会 fail-closed）。
     """
-    scm = FE_ROOT / "evidence" / "scm_manifest.json"
+    scm = FE_ROOT.parent / "evidence" / "scm_manifest.json"
     try:
         if scm.is_file():
             data = json.loads(scm.read_text(encoding="utf-8"))
@@ -427,7 +427,7 @@ def _evidence_validity_uncached(version_key: tuple[str, str, str, str]) -> bool:
     if build_digest:
         # build 维度：scm 清单存在且 build_commit_sha 与当前 HEAD 一致（或与
         # artifact commit 一致）。
-        scm = FE_ROOT / "evidence" / "scm_manifest.json"
+        scm = FE_ROOT.parent / "evidence" / "scm_manifest.json"
         try:
             scm_data = json.loads(scm.read_text(encoding="utf-8")) if scm.is_file() else None
         except (OSError, json.JSONDecodeError):

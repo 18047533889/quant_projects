@@ -4,16 +4,13 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
-from typing import Callable, Iterable, Mapping, Optional
+from typing import Callable, Iterable, Mapping, Optional, Union
 
+from factor_assets.contracts.admission import FactorAdmissionArtifact
 from factor_assets.contracts.asset import FactorAsset
-from factor_assets.contracts.factor_set import (
-   
-        FactorMembership,
-    FactorSetArtifact,
-    FactorSetSpec,
-)
+from factor_assets.contracts.factor_set import FactorMembership, FactorSetArtifact, FactorSetSpec
 from factor_assets.contracts.lifecycle import LifecycleState
+from factor_assets.contracts.similarity import SimilarityArtifact
 from factor_assets.optimizer.pareto import ParetoPoint
 from factor_assets.selection.policy import SelectionDecision
 
@@ -44,7 +41,16 @@ class FactorSetAssembler:
         selection_decisions: Optional[Iterable[SelectionDecision]] = None,
         selection_run_id: Optional[str] = None,
         created_at: Optional[str] = None,
-        similarity_provider: Optional[Callable[[str, str], Optional[float]]] = None,
+        similarity_provider: Optional[
+            Union[
+                Callable[[str, str], Optional[float]],
+                Callable[[str, str], Optional[SimilarityArtifact]],
+            ]
+        ] = None,
+        admission_artifacts: Optional[
+            Mapping[str, FactorAdmissionArtifact]
+        ] = None,
+        production: bool = False,
     ) -> FactorSetArtifact:
         """Assemble a factor set from candidate assets.
 
@@ -54,13 +60,26 @@ class FactorSetAssembler:
             selection_decisions: Admission decisions for non-manual policies.
             selection_run_id: Optional provenance identifier for this run.
             created_at: Optional explicit creation timestamp, useful for replay.
-            similarity_provider: Optional callable ``(factor_a, factor_b) ->
-                similarity in [0, 1]`` used by the ``diverse`` (MMR) policy.
+            similarity_provider: Optional ``(factor_a, factor_b)`` callable used
+                by the ``diverse`` (MMR) policy.  It may return either a bare
+                similarity float in ``[0, 1]`` (backward compatible) or a
+                :class:`SimilarityArtifact` whose ``primary_view`` is consumed.
                 Required for ``diverse``; the policy fails closed without it.
+            admission_artifacts: Optional ``{factor_id: FactorAdmissionArtifact}``
+                map supplying the production-mandatory membership provenance
+                (``health_state_ref``, ``cluster_id``, ``orientation``,
+                ``factor_version``).  Membership fields are populated ONLY from
+                these artifacts — never synthesized.
+            production: When True, membership provenance must be fully resolved
+                from admission artifacts; any unresolvable mandatory field fails
+                closed (raises ValueError) rather than fabricating a value.
 
         Raises:
-            TypeError: If ``spec`` or a candidate is not the expected contract.
-            ValueError: If no candidates match or ``max_factors`` is invalid.
+            TypeError: If ``spec``, a candidate, or an admission artifact value
+                is not the expected contract.
+            ValueError: If no candidates match, ``max_factors`` is invalid, a
+                production-mandatory membership field is unresolvable, or an
+                admission artifact key does not match its ``factor_id``.
         """
         if not isinstance(spec, FactorSetSpec):
             raise TypeError("spec must be a FactorSetSpec")
@@ -76,6 +95,8 @@ class FactorSetAssembler:
                 "diverse (MMR) selection requires a similarity_provider; "
                 "failing closed rather than silently degrading to non-MMR"
             )
+
+        admission_artifacts = self._validate_admission_artifacts(admission_artifacts)
 
         admitted_factor_ids: Optional[set[str]] = None
         latest_decisions: dict[str, SelectionDecision] = {}
@@ -150,12 +171,17 @@ class FactorSetAssembler:
 
         factor_ids = tuple(asset.factor_id for asset in matched)
         timestamp = created_at or datetime.now(timezone.utc).isoformat()
-        memberships = self._build_memberships(matched, latest_decisions, spec)
+        memberships = self._build_memberships(
+            matched, latest_decisions, spec, admission_artifacts, production
+        )
         assembly_hash = self._assembly_hash(factor_ids, spec, memberships)
         policy_hash = self._policy_hash(spec)
         versions = tuple(
-            asset.metadata.fe_compiler_generation or asset.metadata.canonical_hash
-            for asset in matched
+            member.factor_version or (
+                asset.metadata.fe_compiler_generation
+                or asset.metadata.canonical_hash
+            )
+            for member, asset in zip(memberships, matched)
         )
         evidence_refs = tuple(
             asset.latest_evidence_ref.bundle_id
@@ -178,11 +204,69 @@ class FactorSetAssembler:
         )
 
     @staticmethod
+    def _validate_admission_artifacts(
+        admission_artifacts: Optional[Mapping[str, FactorAdmissionArtifact]],
+    ) -> dict[str, FactorAdmissionArtifact]:
+        """Validate the admission-artifact map (typed values, matching keys).
+
+        Every value must be a :class:`FactorAdmissionArtifact` and every key
+        must match the artifact's own ``factor_id``.  Returns a plain dict so
+        downstream membership construction never touches a caller-owned
+        mapping after validation.
+        """
+        if admission_artifacts is None:
+            return {}
+        if not isinstance(admission_artifacts, Mapping):
+            raise TypeError(
+                "admission_artifacts must be a mapping of factor_id to "
+                "FactorAdmissionArtifact"
+            )
+        validated: dict[str, FactorAdmissionArtifact] = {}
+        for factor_id, artifact in admission_artifacts.items():
+            if not isinstance(artifact, FactorAdmissionArtifact):
+                raise TypeError(
+                    f"admission_artifacts[{factor_id!r}] must be a "
+                    "FactorAdmissionArtifact"
+                )
+            if factor_id != artifact.factor_id:
+                raise ValueError(
+                    f"admission_artifacts key {factor_id!r} must match "
+                    f"artifact.factor_id {artifact.factor_id!r}"
+                )
+            validated[factor_id] = artifact
+        return validated
+
+    @staticmethod
+    def _admission_for(
+        factor_id: str,
+        admission_artifacts: Mapping[str, FactorAdmissionArtifact],
+        production: bool,
+    ) -> Optional[FactorAdmissionArtifact]:
+        """Return the admission artifact for a factor.
+
+        In production mode a missing artifact is a hard failure — the
+        membership's mandatory provenance cannot be resolved, and the
+        assembler never fabricates it.
+        """
+        artifact = admission_artifacts.get(factor_id)
+        if artifact is None and production:
+            raise ValueError(
+                "production assembly requires an admission artifact for every "
+                f"member; missing artifact for factor_id {factor_id!r}"
+            )
+        return artifact
+
+    @staticmethod
     def _rank(
         assets: list[FactorAsset],
         spec: FactorSetSpec,
         decisions: dict[str, SelectionDecision],
-        similarity_provider: Optional[Callable[[str, str], Optional[float]]] = None,
+        similarity_provider: Optional[
+            Union[
+                Callable[[str, str], Optional[float]],
+                Callable[[str, str], Optional[SimilarityArtifact]],
+            ]
+        ] = None,
     ) -> list[FactorAsset]:
         """Order candidates by policy-appropriate, evidence-based ranking.
 
@@ -240,11 +324,56 @@ class FactorSetAssembler:
         assets: list[FactorAsset],
         decisions: dict[str, SelectionDecision],
         spec: FactorSetSpec,
+        admission_artifacts: Optional[Mapping[str, FactorAdmissionArtifact]] = None,
+        production: bool = False,
     ) -> tuple[FactorMembership, ...]:
-        """Build per-member provenance from the admission decisions."""
+        """Build per-member provenance from the admission decisions.
+
+        In production mode the mandatory membership fields (``health_state_ref``,
+        ``cluster_id``, ``orientation``, ``factor_version``) are populated ONLY
+        from the corresponding admission artifact — never synthesized — and a
+        missing mandatory field fails closed with ``ValueError``.  In
+        non-production mode the fields stay None unless an artifact supplies
+        them, preserving the legacy behaviour.
+        """
+        artifacts = {} if admission_artifacts is None else admission_artifacts
         members: list[FactorMembership] = []
         for rank, asset in enumerate(assets):
             decision = decisions.get(asset.factor_id)
+            artifact = FactorSetAssembler._admission_for(
+                asset.factor_id, artifacts, production
+            )
+            health_state_ref = (
+                artifact.health_state_ref
+                if artifact is not None
+                else None
+            )
+            cluster_id = artifact.cluster_id if artifact is not None else None
+            orientation = artifact.orientation if artifact is not None else None
+            factor_version = (
+                artifact.factor_version
+                if artifact is not None and artifact.factor_version is not None
+                else (
+                    asset.metadata.fe_compiler_generation
+                    or asset.metadata.canonical_hash
+                )
+            )
+            if production:
+                if health_state_ref is None:
+                    raise ValueError(
+                        "production assembly requires health_state_ref from the "
+                        f"admission artifact; missing for factor_id {asset.factor_id!r}"
+                    )
+                if cluster_id is None:
+                    raise ValueError(
+                        "production assembly requires cluster_id from the "
+                        f"admission artifact; missing for factor_id {asset.factor_id!r}"
+                    )
+                if orientation is None:
+                    raise ValueError(
+                        "production assembly requires orientation from the "
+                        f"admission artifact; missing for factor_id {asset.factor_id!r}"
+                    )
             evidence_ref = (
                 asset.latest_evidence_ref.bundle_id
                 if asset.latest_evidence_ref is not None
@@ -255,9 +384,14 @@ class FactorSetAssembler:
                     factor_id=asset.factor_id,
                     role="member",
                     family_id=asset.family,
-                    factor_version=(
-                        asset.metadata.fe_compiler_generation
-                        or asset.metadata.canonical_hash
+                    factor_version=factor_version,
+                    health_state_ref=health_state_ref,
+                    cluster_id=cluster_id,
+                    orientation=orientation,
+                    representative_of=(
+                        f"cluster:{cluster_id}"
+                        if cluster_id is not None
+                        else None
                     ),
                     selection_decision_ref=(
                         decision.decision_id if decision is not None else None
@@ -297,10 +431,14 @@ class FactorSetAssembler:
                 member.selection_decision_ref or "",
                 member.evidence_ref or "",
                 member.novelty_ref or "",
+                member.health_state_ref or "",
+                member.cluster_id if member.cluster_id is not None else "",
+                member.orientation if member.orientation is not None else "",
+                member.representative_of or "",
             ):
                 # Length-prefix each field so delimiters inside values cannot
                 # create hash collisions across different field splits.
-                encoded = field.encode("utf-8")
+                encoded = str(field).encode("utf-8")
                 digest.update(str(len(encoded)).encode("ascii"))
                 digest.update(b":")
                 digest.update(encoded)
@@ -543,7 +681,12 @@ def _family_robust_rank(
 def _diverse_mmr_rank(
     assets: list[FactorAsset],
     decisions: dict[str, SelectionDecision],
-    similarity_provider: Optional[Callable[[str, str], Optional[float]]],
+    similarity_provider: Optional[
+        Union[
+            Callable[[str, str], Optional[float]],
+            Callable[[str, str], Optional[SimilarityArtifact]],
+        ]
+    ],
 ) -> list[FactorAsset]:
     """Rank by greedy Maximal Marginal Relevance (MMR).
 
@@ -553,9 +696,12 @@ def _diverse_mmr_rank(
 
     Quality comes from the decision metadata ``quality`` key (finite float);
     when absent it falls back to the recency rank (higher recency = higher
-    quality).  Similarity comes from the caller-supplied ``similarity_provider``.
-    The policy fails closed (raises) when ``diverse`` is selected without a
-    similarity provider, so this helper is only reached with a provider present.
+    quality).  Similarity comes from the caller-supplied ``similarity_provider``,
+    which may return either a bare float (backward compatible) or a
+    :class:`SimilarityArtifact` whose ``primary_view`` value is consumed
+    (``None`` similarity — from either form — is treated as zero).  The policy
+    fails closed (raises) when ``diverse`` is selected without a similarity
+    provider, so this helper is only reached with a provider present.
     """
     if similarity_provider is None:
         raise ValueError(
@@ -576,6 +722,15 @@ def _diverse_mmr_rank(
         # Fallback: higher recency (lower rank index) = higher quality.
         return float(len(assets) - recency_rank)
 
+    def similarity_value(factor_a: str, factor_b: str) -> float:
+        """Similarity magnitude for MMR; None/absent is treated as zero."""
+        result = similarity_provider(factor_a, factor_b)
+        if isinstance(result, SimilarityArtifact):
+            value = result.primary_value
+        else:
+            value = result
+        return abs(value) if value is not None else 0.0
+
     # Precompute quality for each asset (recency rank = index in input order).
     quality_by_id = {
         asset.factor_id: quality(asset, idx)
@@ -593,7 +748,7 @@ def _diverse_mmr_rank(
             q = quality_by_id[asset.factor_id]
             if selected_ids:
                 max_sim = max(
-                    abs(similarity_provider(asset.factor_id, s) or 0.0)
+                    similarity_value(asset.factor_id, s)
                     for s in selected_ids
                 )
             else:

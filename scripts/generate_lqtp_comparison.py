@@ -10,8 +10,8 @@ from factor_engine.cleaned_operators.registry import OperatorRegistry
 from factor_engine.api.operator_registry import build_dsl_allowlist
 
 ROOT = Path(__file__).resolve().parents[1]
-GUIDE = ROOT / "cleaned_operators" / "docs" / "算子全览.md"
-OUT = ROOT / "docs" / "lqtp_vs_factor_engine_operators.md"
+GUIDE = ROOT / "factor_engine" / "cleaned_operators" / "docs" / "算子全览.md"
+OUT = ROOT / "factor_engine" / "docs" / "lqtp_vs_factor_engine_operators.md"
 
 LQTP_ROWS: list[tuple[str, str, set[str]]] = [
     ("截面", "rank / cs_rank", {"rank", "cs_rank"}),
@@ -118,7 +118,7 @@ def _fe_has(names: set[str], allow_lower: set[str]) -> bool:
 
 
 def main() -> None:
-    """生成 ``docs/lqtp_vs_factor_engine_operators.md`` 对照表。"""
+    """生成 ``factor_engine/docs/lqtp_vs_factor_engine_operators.md`` 对照表。"""
     load_all()
     allow = build_dsl_allowlist()
     allow_lower = {k.lower() for k in allow}

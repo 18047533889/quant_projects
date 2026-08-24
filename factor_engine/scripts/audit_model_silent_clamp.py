@@ -24,7 +24,7 @@ silent-coercion 站点以 ``{file, line, pattern}`` 上报，供 M-240 gate 使�
 它们是 no-op 或显式取整，不属于用户参数被静默截断。
 
 输出：
-    docs/evidence/r35/R35_MODEL_SILENT_CLAMP_AUDIT.json
+    evidence/factor_engine/r35/R35_MODEL_SILENT_CLAMP_AUDIT.json
 """
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ MODULES: list[str] = [
     "cleaned_operators/research_transform.py",
 ]
 
-OUT = Path("docs/evidence/r35/R35_MODEL_SILENT_CLAMP_AUDIT.json")
+OUT = Path("evidence/factor_engine/r35/R35_MODEL_SILENT_CLAMP_AUDIT.json")
 
 
 def _call_func_name(node: ast.AST) -> str | None:

@@ -3,7 +3,7 @@
 
 The 14 financial revision/restatement operators derive from point-in-time
 revision events whose provenance (whether the revision was knowable at signal
-time) is UNPROVEN.  docs/R23_PER_CANONICAL_AUDIT.json marks each as
+time) is UNPROVEN.  factor_engine/docs/R23_PER_CANONICAL_AUDIT.json marks each as
 P0 / blocker=PIT18_REVISION_EVENT_UNPROVEN / final=CERTIFIED_CONTEXTUAL —
 contextual use only, never production terminal placement.
 
@@ -27,7 +27,7 @@ from factor_engine.cleaned_operators.operator_spec import (
 from factor_engine.cleaned_operators.registry import OperatorRegistry
 from factor_engine.mining.direct_use import _is_production_denied, build_direct_use_operator
 
-# The 14 PIT18 canonicals, deduped from docs/R23_PER_CANONICAL_AUDIT.json by
+# The 14 PIT18 canonicals, deduped from factor_engine/docs/R23_PER_CANONICAL_AUDIT.json by
 # blocker=PIT18_REVISION_EVENT_UNPROVEN.  Note the audit list is UNAMBIGUOUS —
 # the remediation plan's 14 rows overlap these exactly and there is no separate
 # fin_expectation_revision_extra row.
@@ -63,7 +63,7 @@ _PIT11_CANONICALS: tuple[str, ...] = (
 )
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_AUDIT = os.path.join(_ROOT, "docs", "R23_PER_CANONICAL_AUDIT.json")
+_AUDIT = os.path.join(_ROOT, "factor_engine", "docs", "R23_PER_CANONICAL_AUDIT.json")
 
 
 def _audit_pit18_canonicals() -> set[str]:

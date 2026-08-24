@@ -32,7 +32,7 @@ from factor_engine.mining.direct_use import (
     public_mining_disposition,
 )
 
-_DOCS = Path("docs")
+_DOCS = Path("factor_engine") / "docs"
 _BUILD = Path("build") / "mining"
 
 

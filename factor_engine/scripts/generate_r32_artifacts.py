@@ -2,7 +2,7 @@
 """R32 evidence artifact generation: binds current HEAD + package/runtime
 versions, runs the hard-gates audit, and writes the R32 evidence bundle.
 
-§26 artifact list — the concrete JSON/CSV files under docs/evidence/r32/.
+§26 artifact list — the concrete JSON/CSV files under evidence/factor_engine/r32/.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ sys.path.insert(0, ".")
 sys.path.insert(0, "..")
 
 FE = Path(__file__).resolve().parents[1]
-OUT = FE / "docs" / "evidence" / "r32"
+OUT = FE / "evidence" / "factor_engine" / "r32"
 OUT.mkdir(parents=True, exist_ok=True)
 
 

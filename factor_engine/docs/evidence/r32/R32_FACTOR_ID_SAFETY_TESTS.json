@@ -1,7 +1,0 @@
-{
-  "checks": {
-    "path_traversal_rejected": true,
-    "too_long_rejected": true
-  },
-  "gate": "R32_FACTOR_ID_TRUNCATION_ZERO / PATH_TRAVERSAL_ZERO"
-}

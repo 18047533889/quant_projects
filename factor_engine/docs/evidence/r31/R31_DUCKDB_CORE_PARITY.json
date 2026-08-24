@@ -1,8 +1,0 @@
-{
-  "canonicals_certified": 48,
-  "duckdb_emitters": 46,
-  "duckdb_parity_pass": 39,
-  "duckdb_parity_fail": 0,
-  "clickhouse_separate_certification": "not-certified",
-  "note": "R31 只认证 DuckDB；ClickHouse 独立 SQL dialect production certification，不自动继承 DuckDB。"
-}

@@ -1,9 +1,0 @@
-{
- "present_in_registry": [],
- "runtime_surface_zero": true,
- "internal_grammar_exception": [
-  "constant"
- ],
- "random_factor_terminals_zero": true,
- "checked": "see test_forbidden_operator_surface.py + test_no_random_factor_terminals.py"
-}

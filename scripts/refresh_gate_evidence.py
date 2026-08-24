@@ -64,6 +64,12 @@ def main() -> int:
                 "executed_at": e["executed_at"],
                 "run_at": e["executed_at"],
             }
+            # P0-WT: carry the per-entry working-tree Merkle identity (computed
+            # by gate_runner at run time) so staleness is judged on the WORKING
+            # TREE, not just git HEAD.  gate_runner already binds every entry;
+            # this must not drop it on the way to verified_gate_evidence.json.
+            if e.get("tree_identity"):
+                entry["tree_identity"] = e["tree_identity"]
             if e.get("timed_out"):
                 entry["note"] = "TIMEOUT"
             elif e.get("note"):
@@ -79,6 +85,11 @@ def main() -> int:
         "generated_by": "refresh_gate_evidence",
         "git_sha": artifact.get("git_sha"),
         "timestamp": artifact.get("timestamp"),
+        # P0-WT: the working-tree Merkle identity the whole evidence set was
+        # captured against (REPO_ROOT platform_source_tree_identity).  When the
+        # live tree diverges (even without a git HEAD change), this makes the
+        # evidence honestly STALE.
+        "tree_identity": runner._tree_identity(),
         "gates": gates,
     }
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)

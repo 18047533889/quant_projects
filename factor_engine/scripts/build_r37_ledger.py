@@ -17,8 +17,8 @@ final_production_ready / reason
 3. typed signature / edge contract（production_hardening）
 
 输出：
-    docs/evidence/r37/R37_OPERATOR_CORRECTNESS_LEDGER.parquet
-    docs/evidence/r37/R37_OPERATOR_CORRECTNESS_LEDGER.csv
+    evidence/factor_engine/r37/R37_OPERATOR_CORRECTNESS_LEDGER.parquet
+    evidence/factor_engine/r37/R37_OPERATOR_CORRECTNESS_LEDGER.csv
 """
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ from factor_engine.backend.evidence_provenance import current_commit_sha  # noqa
 from factor_engine.cleaned_operators.production_hardening import factor_production_targets  # noqa: E402
 from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
-E = Path("docs/evidence/r37")
+E = Path("evidence/factor_engine/r37")
 
 # 有独立 numpy oracle 的算子（R37-P0-003，见 audit_r37_parameter_domains.py）
 _INDEPENDENT_ORACLE = {

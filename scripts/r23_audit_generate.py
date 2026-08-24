@@ -27,7 +27,7 @@ import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-DOCS = os.path.join(ROOT, "docs")
+DOCS = os.path.join(ROOT, "factor_engine", "docs")
 
 if ROOT not in os.sys.path:
     os.sys.path.insert(0, ROOT)

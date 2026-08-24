@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]  # factor_engine
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-MANIFEST = ROOT / "docs" / "operator_market_capabilities.json"
+MANIFEST = ROOT / "factor_engine" / "docs" / "operator_market_capabilities.json"
 
 
 def main() -> int:
@@ -29,7 +29,7 @@ def main() -> int:
     registered = set(OperatorRegistry.list_canonical())
 
     if not MANIFEST.is_file():
-        print("CI FAIL: docs/operator_market_capabilities.json missing; run "
+        print("CI FAIL: factor_engine/docs/operator_market_capabilities.json missing; run "
               "scripts/build_operator_market_capabilities.py", file=sys.stderr)
         return 1
 

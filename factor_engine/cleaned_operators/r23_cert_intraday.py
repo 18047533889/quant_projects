@@ -16,7 +16,7 @@ when BOTH its native Polars expression AND its DuckDB SQL query agree with the
 pandas semantic reference on genuine minute-shaped panels (status ==
 ``certified`` => polars=True AND duckdb_sql=True).
 
-Findings from ``docs/R23_PER_CANONICAL_AUDIT.json``:
+Findings from ``factor_engine/docs/R23_PER_CANONICAL_AUDIT.json``:
   * ``intraday_microstructure``  ~128 operators, all severity P1, all blocked
     by "experimental lifecycle: not production-certified (R23-303)", all with
     empty ``pit_issue``.
@@ -94,7 +94,7 @@ def _minute_shape_from_artifact() -> frozenset[str]:
     (i.e. ``polars is True`` AND ``duckdb_sql is True``).  A missing / corrupt
     artifact yields an empty set (no fabricated evidence).
     """
-    path = FE_ROOT / "evidence" / "intraday_minute_parity.json"
+    path = FE_ROOT.parent / "evidence" / "intraday_minute_parity.json"
     if not path.is_file():
         return frozenset()
     try:

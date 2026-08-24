@@ -9,8 +9,8 @@ production verdict = 实际证据 AND，绝不从 status/surface 推导（R34 §
 缺证据的维度一律 PENDING（PASS/FAIL/PENDING/N/A 五态分开，R34 §87）。
 
 输出：
-    docs/evidence/r34/R34_CANONICAL_CORRECTNESS_LEDGER.csv
-    docs/evidence/r34/R34_CANONICAL_CORRECTNESS_LEDGER.json
+    evidence/factor_engine/r34/R34_CANONICAL_CORRECTNESS_LEDGER.csv
+    evidence/factor_engine/r34/R34_CANONICAL_CORRECTNESS_LEDGER.json
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded  # noqa: 
 from factor_engine.cleaned_operators.production_hardening import factor_production_targets  # noqa: E402
 from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
-E = Path("docs/evidence/r34")
+E = Path("evidence/factor_engine/r34")
 
 
 def _typed_signature_status(canonical: str) -> tuple[str, str]:

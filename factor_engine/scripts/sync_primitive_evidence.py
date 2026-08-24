@@ -80,7 +80,7 @@ def main() -> int:
     _bootstrap()
     payload = _collect_cases()
     count = payload.pop("_six_way_count", 0)
-    out = FE_ROOT / "evidence" / "primitive_case_registry.json"
+    out = FE_ROOT.parent / "evidence" / "primitive_case_registry.json"
     text = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
     if args.check:
         if not out.is_file():

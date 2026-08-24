@@ -86,9 +86,9 @@ for d, c in sorted(disc.items()):
     print(f"  {d}: {c}")
 
 csv_fields = list(rows[0].keys())
-with open("docs/evidence/r30/R30_PER_CANONICAL_FINAL_REVIEW.csv", "w", newline="") as f:
+with open("evidence/factor_engine/r30/R30_PER_CANONICAL_FINAL_REVIEW.csv", "w", newline="") as f:
     w = csv.DictWriter(f, fieldnames=csv_fields)
     w.writeheader()
     w.writerows(rows)
-json.dump(rows, open("docs/evidence/r30/R30_PER_CANONICAL_FINAL_REVIEW.json", "w"), indent=2, sort_keys=True)
+json.dump(rows, open("evidence/factor_engine/r30/R30_PER_CANONICAL_FINAL_REVIEW.json", "w"), indent=2, sort_keys=True)
 print("saved R30_PER_CANONICAL_FINAL_REVIEW.csv/json")

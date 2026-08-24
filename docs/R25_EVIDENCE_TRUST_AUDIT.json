@@ -1,7 +1,0 @@
-{
-  "total": 1436,
-  "semantic_golden_verified": 0,
-  "source_contract_verified": 0,
-  "both_independent": 0,
-  "note": "R25-011..014: synthetic runtime audit grants only runtime/shape/determinism/prefix evidence; semantic_golden and source_contract require independent evidence (math golden / FieldSpec-Provider DataAccess contract)."
-}

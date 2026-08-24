@@ -91,10 +91,10 @@ json.dump({
     "violations": violations,
     "needs_declaration": needs_declaration,
     "hard_same_close_zero": hard_same_close_zero,
-}, open("docs/evidence/r30/R30_AVAILABILITY_CLOCK_AUDIT.csv.json", "w"), indent=2, sort_keys=True)
+}, open("evidence/factor_engine/r30/R30_AVAILABILITY_CLOCK_AUDIT.csv.json", "w"), indent=2, sort_keys=True)
 
 import csv
-with open("docs/evidence/r30/R30_AVAILABILITY_CLOCK_AUDIT.csv", "w", newline="") as f:
+with open("evidence/factor_engine/r30/R30_AVAILABILITY_CLOCK_AUDIT.csv", "w", newline="") as f:
     w = csv.DictWriter(f, fieldnames=list(rows[0].keys()) if rows else [])
     w.writeheader()
     w.writerows(rows)

@@ -20,7 +20,7 @@ def main() -> int:
         "-o",
         "--output",
         type=Path,
-        default=FE / "docs" / "dsl_allowlist.json",
+        default=FE / "factor_engine" / "docs" / "dsl_allowlist.json",
         help="输出 JSON 路径",
     )
     args = parser.parse_args()

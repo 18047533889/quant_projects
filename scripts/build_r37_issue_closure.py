@@ -18,7 +18,7 @@ sys.path.insert(0, "..")
 
 from factor_engine.backend.evidence_provenance import current_commit_sha  # noqa: E402
 
-E = Path("docs/evidence/r37")
+E = Path("evidence/factor_engine/r37")
 
 # 每条 entry：真实完成（本机执行证据）或 NOT_RUN/PENDING（诚实标注原因）。
 ISSUES: list[dict] = [

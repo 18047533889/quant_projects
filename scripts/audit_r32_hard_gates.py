@@ -567,7 +567,7 @@ def _release_dr_gates() -> None:
         "forbidden", "not allowed", "禁止", "不允许", "restricted",
         "生产规则", "production rules",
     )
-    for path in [Path("docs/dsl_operators_reference.md"), Path("docs/operator_production_hardening.md")]:
+    for path in [Path("factor_engine/docs/dsl_operators_reference.md"), Path("factor_engine/docs/operator_production_hardening.md")]:
         if not path.exists():
             continue
         text = path.read_text(encoding="utf-8", errors="ignore")

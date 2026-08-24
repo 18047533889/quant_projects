@@ -130,7 +130,7 @@ def test_real_evidence_truth_gates_current_head():
     """审计时点 evidence truth 输出必须绑定当前 HEAD 且 0 FAIL。"""
     import json
 
-    p = Path("docs/evidence/r37/R37_EVIDENCE_TRUTH_GATES.json")
+    p = Path("evidence/factor_engine/r37/R37_EVIDENCE_TRUTH_GATES.json")
     assert p.is_file()
     d = json.loads(p.read_text(encoding="utf-8"))
     assert d["failed"] == 0, f"evidence truth 有 FAIL: {d['gates']}"

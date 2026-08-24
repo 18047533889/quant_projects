@@ -88,7 +88,6 @@ include = [
     "factor_engine.cache*",
     "factor_engine.cleaned_operators",
     "factor_engine.docs*",
-    "factor_engine.evidence*",
     "factor_engine.expr*",
     "factor_engine.factor_recipes*",
     "factor_engine.fields*",
@@ -137,6 +136,12 @@ exclude = [
     "factor_engine.cleaned_operators_archived.*",
     "factor_engine.cleaned_operators.cleaned_operators",
     "factor_engine.cleaned_operators.cleaned_operators.*",
+    # R49: factor_engine.evidence was consolidated into root evidence/ (live
+    # authority); the factor_engine.evidence package must NOT ship in the wheel.
+    # Root "evidence" package (included via "evidence*") is the sole wheel
+    # representation.
+    "factor_engine.evidence",
+    "factor_engine.evidence.*",
 ]
 
 [tool.setuptools.package-dir]
@@ -145,13 +150,11 @@ exclude = [
 
 [tool.setuptools.package-data]
 "evidence" = ["*.json", "*.yaml"]
-"docs" = ["*.json", "*.yaml", "*.md"]
 "cleaned_operators" = ["docs/*"]
 # R45: factor_engine.* is the source authority. Ship its data files too so the
 # engine's runtime data dependencies (canonical_data_fields.json, operator docs,
 # evidence) are present inside the wheel.
 "factor_engine.docs" = ["*.json", "*.yaml", "*.md"]
-"factor_engine.evidence" = ["*.json", "*.yaml"]
 "factor_engine.cleaned_operators" = ["docs/*"]
 data_access = ["config/*.yaml", "config/README.md", "docs/*.md"]
 vectorbt_qs = [

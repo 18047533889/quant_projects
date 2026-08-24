@@ -8,8 +8,8 @@ import sys
 from pathlib import Path
 
 FE_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUT = FE_ROOT / "evidence" / "operator_upgrade_matrix.yaml"
-DEFAULT_JSON = FE_ROOT / "evidence" / "operator_upgrade_matrix.json"
+DEFAULT_OUT = FE_ROOT.parent / "evidence" / "operator_upgrade_matrix.yaml"
+DEFAULT_JSON = FE_ROOT.parent / "evidence" / "operator_upgrade_matrix.json"
 
 
 def _bootstrap() -> None:

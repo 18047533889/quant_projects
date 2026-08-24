@@ -6,7 +6,7 @@ executed_cases 的 gate 一律 NOT_RUN，绝不写死 True。无法在本机独�
 重载 gate（真实 DataAccess PIT golden / 全后端 parity / 真实 DA 混合源 batch）
 如实标记 NOT_RUN + reason，禁止假完成（R34 §1）。
 
-输出 docs/evidence/r34/R34_HARD_GATES.json。
+输出 evidence/factor_engine/r34/R34_HARD_GATES.json。
 """
 from __future__ import annotations
 
@@ -237,10 +237,10 @@ def main() -> int:
     truth_ok = [bool(truth.get("passed") == truth.get("total"))] if truth else []
     gates["R34_CURRENT_HEAD_BOUND"] = GateResult.from_cases(
         "R34_CURRENT_HEAD_BOUND", [bool(HEAD)], commit_sha=HEAD,
-        evidence_files=("docs/evidence/r34/R34_HEAD.json",))
+        evidence_files=("evidence/factor_engine/r34/R34_HEAD.json",))
     gates["R34_CLEAN_TREE_CERTIFICATION"] = GateResult.from_cases(
         "R34_CLEAN_TREE_CERTIFICATION", truth_ok, commit_sha=HEAD,
-        evidence_files=("docs/evidence/r34/R34_EVIDENCE_TRUTH_GATES.json",))
+        evidence_files=("evidence/factor_engine/r34/R34_EVIDENCE_TRUTH_GATES.json",))
     gates["R34_ALL_ARTIFACTS_CURRENT_HEAD"] = GateResult.from_cases(
         "R34_ALL_ARTIFACTS_CURRENT_HEAD", truth_ok, commit_sha=HEAD)
     gates["R34_ZERO_HARDCODED_TRUE_GATES"] = GateResult.from_cases(
@@ -293,7 +293,7 @@ def main() -> int:
         [n_certified > 0],  # 新 certifier 产出真实窗口域，推翻 default-only
         commit_sha=HEAD,
         details={"certified_ops": n_certified, "not_certified": not_certified},
-        evidence_files=("docs/evidence/r34/R34_PARAMETER_DOMAIN_COVERAGE.json",))
+        evidence_files=("evidence/factor_engine/r34/R34_PARAMETER_DOMAIN_COVERAGE.json",))
     gates["R34_PRODUCTION_PARAM_DOMAIN_SUBSET_OF_CERTIFIED_DOMAIN"] = GateResult.not_run(
         "R34_PRODUCTION_PARAM_DOMAIN_SUBSET_OF_CERTIFIED_DOMAIN",
         "核心 7 个 rolling 算子已认证 window∈{1..252}；全 production 算子的 certified⊇production 映射为后续轮",
@@ -339,7 +339,7 @@ def main() -> int:
         "R34_BACKEND_CERTIFICATION_EXECUTION_VARIANT_AWARE", "execution-variant 认证留后续", HEAD)
     gates["R34_PANDAS_REFERENCE_GOLDEN_PASS"] = GateResult.from_cases(
         "R34_PANDAS_REFERENCE_GOLDEN_PASS", [n_certified > 0], commit_sha=HEAD,
-        evidence_files=("docs/evidence/r34/R34_PARAMETER_DOMAIN_COVERAGE.json",))
+        evidence_files=("evidence/factor_engine/r34/R34_PARAMETER_DOMAIN_COVERAGE.json",))
     gates["R34_POLARS_CERTIFIED_REGION_PARITY_PASS"] = GateResult.not_run(
         "R34_POLARS_CERTIFIED_REGION_PARITY_PASS", "Polars parity 重跑留后续", HEAD)
     gates["R34_DUCKDB_CERTIFIED_REGION_PARITY_PASS"] = GateResult.not_run(

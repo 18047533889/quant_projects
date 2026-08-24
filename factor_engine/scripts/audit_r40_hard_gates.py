@@ -339,7 +339,7 @@ def gate_evidence_completeness() -> GateResult:
     )
 
     FE_ROOT = Path(__file__).resolve().parents[1]
-    path = FE_ROOT / "docs" / "evidence" / "r37" / "R37_PARAMETER_DOMAIN_STORE.json"
+    path = FE_ROOT.parent / "evidence" / "factor_engine" / "r37" / "R37_PARAMETER_DOMAIN_STORE.json"
     points = load_store_points(path)
     if not points:
         return GateResult(

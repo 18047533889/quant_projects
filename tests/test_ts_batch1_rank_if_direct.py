@@ -34,18 +34,31 @@ base.register_operator = _register_operator
 base.OperatorMetadata = _Metadata
 base.ParamSpec = _ParamSpec
 base.ParamRole = types.SimpleNamespace(
-    HORIZON="horizon", SUPPORT_POLICY="support_policy", SCALAR="scalar"
+    HORIZON="horizon", SUPPORT_POLICY="support_policy", SCALAR="scalar", NUMERICAL="numerical"
 )
-package = types.ModuleType("cleaned_operators")
-package.__path__ = [str(ROOT / "cleaned_operators")]
-sys.modules["cleaned_operators"] = package
+_PREV_PKG = sys.modules.get("factor_engine.cleaned_operators")
+_PREV_BASE = sys.modules.get("factor_engine.cleaned_operators.base")
+package = types.ModuleType("factor_engine.cleaned_operators")
+package.__path__ = [str(ROOT / "factor_engine" / "cleaned_operators")]
+sys.modules["factor_engine.cleaned_operators"] = package
 sys.modules["factor_engine.cleaned_operators.base"] = base
 
 _SPEC = spec_from_file_location(
-    "ts_batch1_rank_direct", ROOT / "cleaned_operators" / "polars_native" / "ts_batch1.py"
+    "ts_batch1_rank_direct", ROOT / "factor_engine" / "cleaned_operators" / "polars_native" / "ts_batch1.py"
 )
 _MODULE = module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_MODULE)
+
+# R49.5: restore the real modules so this test's fake registration does not
+# pollute later tests in the same pytest process (test-isolation hygiene).
+if _PREV_PKG is None:
+    sys.modules.pop("factor_engine.cleaned_operators", None)
+else:
+    sys.modules["factor_engine.cleaned_operators"] = _PREV_PKG
+if _PREV_BASE is None:
+    sys.modules.pop("factor_engine.cleaned_operators.base", None)
+else:
+    sys.modules["factor_engine.cleaned_operators.base"] = _PREV_BASE
 
 
 def _series(values):

@@ -60,16 +60,48 @@ def mock_canonical_expression(node):
     return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
 
+# Module names that must be mocked so the REAL factor_engine.expr package is
+# never imported while the adapter is (re)loaded. If the real package chain is
+# pulled in while factor_engine.expr.base is a MagicMock, its @dataclass
+# definitions blow up ("Mock object has no attribute '__mro__'") and the
+# failure permanently poisons sys.modules for later tests.
+_MOCKED_FE_MODULES = ("expr", "factor_engine.expr", "factor_engine.expr.base")
+_MISSING = object()
+
+
+def _install_fe_mocks(mock_expr):
+    """Install hermetic FE mocks into sys.modules; return the prior state."""
+    import sys
+    saved = {}
+    for name in _MOCKED_FE_MODULES:
+        saved[name] = sys.modules.get(name, _MISSING)
+    sys.modules["expr"] = mock_expr
+    sys.modules["factor_engine.expr"] = mock_expr
+    sys.modules["factor_engine.expr.base"] = mock_expr.base
+    return saved
+
+
+def _restore_fe_mocks(saved):
+    """Restore sys.modules to its pre-test state so later tests stay clean."""
+    import sys
+    for name in _MOCKED_FE_MODULES:
+        prior = saved.get(name)
+        if prior is _MISSING:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = prior
+
+
 class TestFEIdentityProvider:
     """Test FE identity provider."""
 
     def setup_method(self):
         """Set up test fixtures."""
         # Mock FE availability
-        import sys
         from unittest.mock import MagicMock
 
-        # Create mock expr module
+        # Create mock expr module (hermetic: the real factor_engine.expr
+        # package must never be imported while the adapter is reloaded)
         mock_expr = MagicMock()
         mock_expr.Expr = MockExpr
         mock_expr.CleanedCall = MockCleanedCall
@@ -78,13 +110,16 @@ class TestFEIdentityProvider:
         mock_expr.canonical_expression = mock_canonical_expression
         mock_expr.expression_payload = mock_expression_payload
         mock_expr.base.ensure_expr = lambda x: x
-        sys.modules['expr'] = mock_expr
-        sys.modules['factor_engine.expr.base'] = mock_expr.base
+        self._saved_fe_mocks = _install_fe_mocks(mock_expr)
 
         # Force reload
         import importlib
         import factor_assets.adapters.factor_engine
         importlib.reload(factor_assets.adapters.factor_engine)
+
+    def teardown_method(self):
+        """Restore sys.modules so no mock pollution leaks into other tests."""
+        _restore_fe_mocks(getattr(self, "_saved_fe_mocks", {}))
 
     def test_get_canonical_hash_simple_column(self):
         """Test canonical hash for simple column reference."""
@@ -335,25 +370,28 @@ class TestFEIdentityProviderStringParsing:
 
     def test_string_parsing_not_implemented(self):
         """Test that string parsing raises NotImplementedError."""
-        import sys
         from unittest.mock import MagicMock
 
-        # Mock FE
+        # Mock FE (hermetic — never import the real factor_engine.expr)
         mock_expr = MagicMock()
         mock_expr.Expr = MockExpr
-        sys.modules['expr'] = mock_expr
-        sys.modules['factor_engine.expr.base'] = MagicMock()
+        mock_expr.canonical_expression = mock_canonical_expression
+        mock_expr.expression_payload = mock_expression_payload
+        mock_expr.base.ensure_expr = lambda x: x
+        saved = _install_fe_mocks(mock_expr)
+        try:
+            import importlib
+            import factor_assets.adapters.factor_engine
+            importlib.reload(factor_assets.adapters.factor_engine)
 
-        import importlib
-        import factor_assets.adapters.factor_engine
-        importlib.reload(factor_assets.adapters.factor_engine)
+            from factor_assets.adapters.factor_engine import FEIdentityProvider
 
-        from factor_assets.adapters.factor_engine import FEIdentityProvider
+            provider = FEIdentityProvider()
 
-        provider = FEIdentityProvider()
-
-        with pytest.raises(ValueError, match="Invalid factor expression"):
-            provider.get_canonical_hash("ts_mean(close, 20)")
+            with pytest.raises(ValueError, match="Invalid factor expression"):
+                provider.get_canonical_hash("ts_mean(close, 20)")
+        finally:
+            _restore_fe_mocks(saved)
 
 
 class TestOptionalDependency:
@@ -361,14 +399,33 @@ class TestOptionalDependency:
 
     def test_missing_fe_raises_error(self):
         """Test that missing FE raises OptionalDependencyMissing."""
+        import sys
         import factor_assets.adapters.factor_engine as fe_mod
 
-        # Directly patch FE_AVAILABLE to simulate missing dependency
-        with patch.object(fe_mod, 'FE_AVAILABLE', False):
-            from factor_assets.adapters.factor_engine import FEIdentityProvider
+        # This test does not mock the FE modules, so force a reload to undo
+        # any mocked-state left by earlier tests, then restore sys.modules.
+        saved = {}
+        for name in _MOCKED_FE_MODULES:
+            saved[name] = sys.modules.get(name, _MISSING)
+            sys.modules.pop(name, None)
+        try:
+            import importlib
+            importlib.reload(fe_mod)
 
-            with pytest.raises(OptionalDependencyMissing) as exc_info:
-                FEIdentityProvider()
+            # Directly patch FE_AVAILABLE to simulate missing dependency
+            with patch.object(fe_mod, 'FE_AVAILABLE', False):
+                from factor_assets.adapters.factor_engine import FEIdentityProvider
 
-            assert exc_info.value.package_name == "factor_engine"
-            assert exc_info.value.adapter_name == "FEIdentityProvider"
+                with pytest.raises(OptionalDependencyMissing) as exc_info:
+                    FEIdentityProvider()
+
+                assert exc_info.value.package_name == "factor_engine"
+                assert exc_info.value.adapter_name == "FEIdentityProvider"
+        finally:
+            import factor_assets.adapters.factor_engine as fe_final
+            importlib.reload(fe_final)
+            for name, prior in saved.items():
+                if prior is _MISSING:
+                    sys.modules.pop(name, None)
+                else:
+                    sys.modules[name] = prior

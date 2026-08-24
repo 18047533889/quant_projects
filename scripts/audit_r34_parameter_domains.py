@@ -11,8 +11,8 @@
 有限值 allclose（rtol/atol）+ NaN/Inf mask 对齐才算 certified。
 
 输出：
-    docs/evidence/r34/R34_PARAMETER_DOMAIN_COVERAGE.csv
-    docs/evidence/r34/R34_PARAMETER_DOMAIN_COVERAGE.json
+    evidence/factor_engine/r34/R34_PARAMETER_DOMAIN_COVERAGE.csv
+    evidence/factor_engine/r34/R34_PARAMETER_DOMAIN_COVERAGE.json
 
 这直接推翻 primitive evidence 里 79/79 的 ``{"bounds": ["default"]}`` overclaim：
 本次只认证**实际测过**的参数点，production 参数域 ⊆ certified 域才能进生产。
@@ -32,7 +32,7 @@ sys.path.insert(0, "..")
 from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded  # noqa: E402
 from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
-E = Path("docs/evidence/r34")
+E = Path("evidence/factor_engine/r34")
 WINDOWS = (1, 2, 5, 20, 60, 120, 252)
 DDOFS = (0, 1)
 N_STK, N_DAY = 50, 300

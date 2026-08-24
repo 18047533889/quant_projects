@@ -10,7 +10,7 @@ from typing import Any, Mapping
 
 from factor_engine.planner.logical_plan import PlanNode
 
-_EVIDENCE_JSON = Path(__file__).resolve().parents[1] / "evidence" / "primitive_verified.json"
+_EVIDENCE_JSON = Path(__file__).resolve().parents[2] / "evidence" / "primitive_verified.json"
 
 
 @lru_cache(maxsize=1)

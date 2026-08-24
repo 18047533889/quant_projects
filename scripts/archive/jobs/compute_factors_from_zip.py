@@ -20,7 +20,7 @@ ZIP_LOOKUP = PROJECT / "factor_delivery_converted" / "zip_orig_lookup.json"
 FV_PATH = BACKTEST_OUT / "factor_values.parquet"
 
 # 61 个本周因子 (从 docs/reports/.../factors/ HTML 名)
-HTML_DIR = PROJECT / "docs" / "reports" / "2026-08-23" / "factors"
+HTML_DIR = PROJECT / "factor_engine" / "docs" / "reports" / "2026-08-23" / "factors"
 
 
 def load_market(start='2019-01-01', end='2025-12-31') -> pd.DataFrame:

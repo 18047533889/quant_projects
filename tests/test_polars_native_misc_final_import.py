@@ -15,7 +15,7 @@ def test_misc_final_imports_with_authoritative_metadata_abi(monkeypatch) -> None
     module_name = "_test_polars_native_misc_final"
     spec = importlib.util.spec_from_file_location(
         module_name,
-        _ROOT / "cleaned_operators/polars_native/misc_final.py",
+        _ROOT / "factor_engine/cleaned_operators/polars_native/misc_final.py",
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

@@ -1,0 +1,37 @@
+R49: Repository domain reorganization (docs/benchmarks/examples → factor_engine)
+status: complete
+date: 2026-08-25
+
+Part A — FE-owned content returned to factor_engine/ (undo G2's wrong-side deletes):
+  benchmarks/: root → factor_engine/benchmarks/ (FE backend benchmarking, 5 files, FE-imports 2/2)
+  examples/: root → factor_engine/examples/ (FE examples, 84 files, FE-imports 10/10)
+  docs/: root → factor_engine/docs/ (FE documentation center, 211 files incl factor_pages/reports/figs)
+  root docs/ deleted (all content merged into factor_engine/docs/)
+
+Part B — path reference fixes (root docs/ + root cleaned_operators/ gone):
+  scripts/: 34 files rewritten 'docs/' → 'factor_engine/docs/'
+  tests/: 15 files rewritten + ROOT/'docs' → factor_engine/docs + cleaned_operators → factor_engine/cleaned_operators
+  evidence/: source_snapshot.py + current.py exclusions updated for factor_engine/docs
+  pyproject.toml: removed root 'docs' package-data; kept factor_engine.docs
+
+Part C — evidence consolidation (from R49-G2):
+  docs/evidence/ (141 files r28-r47) → evidence/factor_engine/
+  factor_engine/evidence/ (101-file duplicate) → deleted (root evidence/ is authority)
+  ~80 scripts 'docs/evidence/' → 'evidence/factor_engine/'
+
+Part D — governance (R49-G3):
+  ownership.yaml created (11 domains)
+  scripts/check_no_mirrors.py created + unit-tested + exit-0 on live tree
+  ci.yml 'no-mirror-packages' job added
+
+verified:
+  root now: factor_engine data_access modeling quant_evaluator factor_optimizer factor_assets
+            factor_preprocess vectorbt_qs research_platform alphaprobe scripts tests evidence
+            config benchmarks examples docs runs data (gitignored)
+  R49.5 gate: 171 passed
+  fresh-wheel: registry 1624, WHEEL OK
+
+pre-existing (NOT R49 regressions, confirmed):
+  test_market_manifest 21-unknown: registry gap (21 ops unclassified) — needs FE-owner classification
+  test_ts_batch1 + polars-panel test-ordering pollution: pre-existing sys.modules fake-module fragility
+  (test_ts_batch1 isolation fixed; r25 standalone passes)

@@ -7,7 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-_EVIDENCE_JSON = Path(__file__).resolve().parents[1] / "evidence" / "composite_verified.json"
+_EVIDENCE_JSON = Path(__file__).resolve().parents[2] / "evidence" / "composite_verified.json"
 
 
 @lru_cache(maxsize=1)

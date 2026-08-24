@@ -11,9 +11,16 @@ panel renders a ``NOT_COMPUTED`` placeholder - never a 0.0.
 
 import numpy as np
 from typing import Dict, Any, List, Optional, Tuple
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields as dataclass_fields
 
 from quant_evaluator.reporting.chart_spec import ChartSpec
+from quant_evaluator.contracts.metric_artifacts import (
+    MetricArtifact as CanonicalMetricArtifact,
+)
+from quant_evaluator.contracts.evidence_status import (
+    EvidenceStatus,
+    EvidenceReasonCode,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -24,8 +31,12 @@ from quant_evaluator.reporting.chart_spec import ChartSpec
 class MetricArtifact:
     """Pre-computed metric data bundle consumed by tear-sheet panels.
 
-    Carries only pre-aggregated values. The reporting layer renders these into
-    ``ChartSpec`` objects and must never recompute the underlying metrics.
+    This reporting-layer class is a **thin wrapper** around the canonical
+    ``contracts.metric_artifacts.MetricArtifact`` family + a machine-readable
+    :class:`EvidenceStatus`.  It carries only pre-aggregated values (never
+    recomputes metrics) plus provenance (``source_artifact``) and evidence
+    state (``computed`` / ``status``) so downstream consumers can distinguish
+    a real result from a ``NOT_COMPUTED`` placeholder — never a fabricated 0.0.
 
     Attributes:
         name: Canonical artifact name (matches the panel key that consumes it).
@@ -34,7 +45,16 @@ class MetricArtifact:
         title: Optional display title (falls back to the panel default).
         x_label / y_label: Optional axis labels.
         dimensions: Optional pre-computed dimension annotations.
+        computed: True only when a real (COMPUTED) result is carried.
+        status: :class:`EvidenceStatus` of the wrapped evidence (None when the
+            caller does not participate in the evidence contract; treated as
+            COMPUTED for backward compatibility).
+        source_artifact: The canonical contract artifact (or None) this
+            wrapper was built from.  ``from_canonical`` sets it; ``wrap_artifact``
+            sets it; bare ``metric_artifact(...)`` leaves it None.
+        reason_code: Machine-readable reason when ``computed`` is False.
     """
+
     name: str
     metric_type: str = "line"
     data: Dict[str, Any] = field(default_factory=dict)
@@ -42,6 +62,111 @@ class MetricArtifact:
     x_label: str = ""
     y_label: str = ""
     dimensions: Dict[str, Any] = field(default_factory=dict)
+    computed: bool = True
+    status: Optional[EvidenceStatus] = None
+    source_artifact: Optional[Any] = None
+    reason_code: str = ""
+
+    def __post_init__(self) -> None:
+        # ``computed`` is authoritative when explicitly supplied.  A bare
+        # ``metric_artifact(...)`` keeps ``computed=True`` (backward compat),
+        # while ``from_canonical(status=non-COMPUTED)`` sets ``computed=False``.
+        if self.status is not None:
+            if self.computed and self.status is not EvidenceStatus.COMPUTED:
+                object.__setattr__(self, "computed", False)
+            elif not self.computed and self.status is EvidenceStatus.COMPUTED:
+                object.__setattr__(self, "computed", True)
+        if self.computed:
+            if self.status is None:
+                object.__setattr__(self, "status", EvidenceStatus.COMPUTED)
+            if not self.reason_code:
+                object.__setattr__(self, "reason_code", EvidenceReasonCode.OK.value)
+        elif not self.reason_code:
+            object.__setattr__(
+                self, "reason_code", EvidenceReasonCode.NOT_YET_COMPUTED.value
+            )
+
+    @classmethod
+    def from_canonical(
+        cls,
+        canonical: CanonicalMetricArtifact,
+        status: EvidenceStatus = EvidenceStatus.COMPUTED,
+        *,
+        metric_type: str = "",
+        title: str = "",
+        x_label: str = "",
+        y_label: str = "",
+        dimensions: Optional[Dict[str, Any]] = None,
+        data: Optional[Dict[str, Any]] = None,
+    ) -> "MetricArtifact":
+        """Build a reporting wrapper around a canonical contract artifact.
+
+        The canonical artifact is preserved as ``source_artifact`` and the
+        evidence ``status`` rides along so a non-COMPUTED status renders the
+        ``NOT_COMPUTED`` placeholder path (never a fabricated 0.0).
+
+        The wrapper's ``name`` is the canonical ``metric_id`` (the panel-key
+        contract), ``data`` is the artifact's ``to_dict()`` payload, and the
+        optional ``data`` keyword replaces that payload when given (panel
+        renderers expect per-panel semantic fields).
+        """
+        if not isinstance(canonical, CanonicalMetricArtifact):
+            raise TypeError(
+                "MetricArtifact.from_canonical expects a "
+                f"contracts.metric_artifacts artifact, got {type(canonical).__name__}"
+            )
+        computed = status is EvidenceStatus.COMPUTED
+        name = canonical.metric_id
+        payload = data if data is not None else canonical.to_dict()
+        return cls(
+            name=name,
+            metric_type=metric_type,
+            data=payload,
+            title=title,
+            x_label=x_label,
+            y_label=y_label,
+            dimensions=dimensions if dimensions is not None else {},
+            computed=computed,
+            status=status,
+            source_artifact=canonical,
+            reason_code=(
+                EvidenceReasonCode.OK.value
+                if computed
+                else EvidenceReasonCode.NOT_YET_COMPUTED.value
+            ),
+        )
+
+    @classmethod
+    def not_computed(
+        cls,
+        name: str,
+        metric_type: str = "line",
+        data: Optional[Dict[str, Any]] = None,
+        title: str = "",
+        x_label: str = "",
+        y_label: str = "",
+        dimensions: Optional[Dict[str, Any]] = None,
+        reason_code: str = EvidenceReasonCode.NOT_YET_COMPUTED.value,
+        source_artifact: Optional[Any] = None,
+    ) -> "MetricArtifact":
+        """Build an explicitly NOT_COMPUTED wrapper (placeholder, never 0.0)."""
+        return cls(
+            name=name,
+            metric_type=metric_type,
+            data=data if data is not None else {},
+            title=title,
+            x_label=x_label,
+            y_label=y_label,
+            dimensions=dimensions if dimensions is not None else {},
+            computed=False,
+            status=EvidenceStatus.NOT_COMPUTED,
+            source_artifact=source_artifact,
+            reason_code=reason_code,
+        )
+
+    def renderable(self) -> bool:
+        """True when the wrapper carries a real, COMPUTED result."""
+        return self.computed and self.status is EvidenceStatus.COMPUTED
 
 
 # Marker for panels whose source metric artifact was not computed.
@@ -71,6 +196,25 @@ def metric_artifact(
         x_label=x_label,
         y_label=y_label,
         data=dict(data),
+    )
+
+
+def wrap_artifact(obj: Any) -> MetricArtifact:
+    """Wrap a canonical contract artifact into a COMPUTED reporting wrapper.
+
+    - Canonical ``contracts.metric_artifacts`` artifact -> a COMPUTED
+      ``MetricArtifact`` carrying it as ``source_artifact``.
+    - Already-wrapped reporting ``MetricArtifact`` -> returned unchanged
+      (identity passthrough).
+    - Anything else -> :class:`TypeError` (fail closed; never fabricate data).
+    """
+    if isinstance(obj, MetricArtifact):
+        return obj
+    if isinstance(obj, CanonicalMetricArtifact):
+        return MetricArtifact.from_canonical(obj, status=EvidenceStatus.COMPUTED)
+    raise TypeError(
+        "wrap_artifact expects a canonical contracts.metric_artifacts "
+        f"artifact or a reporting MetricArtifact, got {type(obj).__name__}"
     )
 
 
@@ -148,6 +292,17 @@ def _plain(value: Any) -> Any:
     return value
 
 
+def _stat(value: Any) -> Any:
+    """Render a summary-statistic value for display.
+
+    None (a default / not-computed scalar) renders as an em dash "—" — never a
+    fabricated 0.0.  Real numbers pass through unchanged.
+    """
+    if value is None:
+        return "—"
+    return _plain(value)
+
+
 def _placeholder_panel(panel_key: str, title: str, chart_type: str) -> ChartSpec:
     """NOT_COMPUTED placeholder rendered when the source artifact is absent."""
     return ChartSpec(
@@ -173,7 +328,19 @@ def _spec_from_artifact(
     y_label: str = "",
     data: Optional[Dict[str, Any]] = None,
 ) -> ChartSpec:
-    """Render a ChartSpec directly from a pre-computed MetricArtifact."""
+    """Render a ChartSpec directly from a pre-computed MetricArtifact.
+
+    A wrapper whose evidence status is NOT COMPUTED (or that is explicitly not
+    computed) renders the ``NOT_COMPUTED`` placeholder path — never a fabricated
+    0.0.  The placeholder is keyed off the artifact's own ``name`` so
+    ``source_artifact_refs`` stays truthful even in the placeholder case.
+    """
+    if not artifact.renderable():
+        return _placeholder_panel(
+            artifact.name or "unknown_panel",
+            artifact.title or title,
+            artifact.metric_type or chart_type,
+        )
     return ChartSpec(
         title=artifact.title or title,
         chart_type=artifact.metric_type or chart_type,
@@ -323,9 +490,9 @@ class EvaluationResult:
     # IC metrics
     ic_series: Optional[np.ndarray] = None
     rank_ic_series: Optional[np.ndarray] = None
-    ic_mean: float = 0.0
-    ic_std: float = 0.0
-    icir: float = 0.0
+    ic_mean: Optional[float] = None
+    ic_std: Optional[float] = None
+    icir: Optional[float] = None
 
     # Quantile metrics
     quantile_returns: Optional[np.ndarray] = None
@@ -336,33 +503,33 @@ class EvaluationResult:
     long_short_returns: Optional[np.ndarray] = None
     cumulative_returns: Optional[np.ndarray] = None
     drawdown_series: Optional[np.ndarray] = None
-    max_drawdown: float = 0.0
+    max_drawdown: Optional[float] = None
     drawdown_durations: Optional[np.ndarray] = None
 
     # Turnover metrics
     turnover_series: Optional[np.ndarray] = None
-    avg_turnover: float = 0.0
+    avg_turnover: Optional[float] = None
 
     # Coverage metrics
     coverage_series: Optional[np.ndarray] = None
-    avg_coverage: float = 0.0
+    avg_coverage: Optional[float] = None
 
     # Factor correlation
     factor_correlation: Optional[np.ndarray] = None
     factor_names: Optional[List[str]] = None
 
     # Distribution metrics
-    skewness: float = 0.0
-    kurtosis: float = 0.0
-    variance: float = 0.0
-    cvar: float = 0.0
+    skewness: Optional[float] = None
+    kurtosis: Optional[float] = None
+    variance: Optional[float] = None
+    cvar: Optional[float] = None
 
     # Performance metrics
-    sharpe_ratio: float = 0.0
-    annual_return: float = 0.0
-    annual_volatility: float = 0.0
-    sortino_ratio: float = 0.0
-    calmar_ratio: float = 0.0
+    sharpe_ratio: Optional[float] = None
+    annual_return: Optional[float] = None
+    annual_volatility: Optional[float] = None
+    sortino_ratio: Optional[float] = None
+    calmar_ratio: Optional[float] = None
 
     # HHI (Herfindahl-Hirschman Index)
     hhi: Optional[np.ndarray] = None
@@ -389,6 +556,10 @@ class EvaluationResult:
 
     # Pre-computed metric artifacts consumed by the institutional panels.
     artifacts: Dict[str, MetricArtifact] = field(default_factory=dict)
+
+    # Machine-readable evidence status for the whole evaluation.  Defaults to
+    # NOT_COMPUTED so an empty EvaluationResult never fabricates computed data.
+    status: EvidenceStatus = EvidenceStatus.NOT_COMPUTED
 
 
 def generate_tear_sheet(
@@ -628,19 +799,19 @@ def generate_tear_sheet(
 
     # Panel 17: Summary statistics table
     summary_stats = {
-        "IC Mean": evaluation_result.ic_mean,
-        "IC Std": evaluation_result.ic_std,
-        "ICIR": evaluation_result.icir,
-        "Sharpe Ratio": evaluation_result.sharpe_ratio,
-        "Annual Return": evaluation_result.annual_return,
-        "Annual Volatility": evaluation_result.annual_volatility,
-        "Max Drawdown": evaluation_result.max_drawdown,
-        "Sortino Ratio": evaluation_result.sortino_ratio,
-        "Calmar Ratio": evaluation_result.calmar_ratio,
-        "Avg Turnover": evaluation_result.avg_turnover,
-        "Avg Coverage": evaluation_result.avg_coverage,
-        "Skewness": evaluation_result.skewness,
-        "Kurtosis": evaluation_result.kurtosis,
+        "IC Mean": _stat(evaluation_result.ic_mean),
+        "IC Std": _stat(evaluation_result.ic_std),
+        "ICIR": _stat(evaluation_result.icir),
+        "Sharpe Ratio": _stat(evaluation_result.sharpe_ratio),
+        "Annual Return": _stat(evaluation_result.annual_return),
+        "Annual Volatility": _stat(evaluation_result.annual_volatility),
+        "Max Drawdown": _stat(evaluation_result.max_drawdown),
+        "Sortino Ratio": _stat(evaluation_result.sortino_ratio),
+        "Calmar Ratio": _stat(evaluation_result.calmar_ratio),
+        "Avg Turnover": _stat(evaluation_result.avg_turnover),
+        "Avg Coverage": _stat(evaluation_result.avg_coverage),
+        "Skewness": _stat(evaluation_result.skewness),
+        "Kurtosis": _stat(evaluation_result.kurtosis),
     }
     panels["summary_statistics_table"] = ChartSpec(
         title="Summary Statistics",

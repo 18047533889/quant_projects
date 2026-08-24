@@ -38,7 +38,7 @@ R23_CERTIFIED_CANONICALS: frozenset[str] = frozenset({
 
 def _six_way_from_artifact() -> frozenset[str]:
     """Read the six-way intersection directly from the committed artifact."""
-    path = FE_ROOT / "evidence" / "primitive_verified.json"
+    path = FE_ROOT.parent / "evidence" / "primitive_verified.json"
     if not path.is_file():
         return frozenset()
     try:

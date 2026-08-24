@@ -23,7 +23,7 @@ LEGAL_STATES = frozenset({
     "BLOCKED_NO_DATA",
 })
 FORBIDDEN_STATES = frozenset({"UNKNOWN", "MAYBE", "TODO", "PENDING_WITHOUT_ACTION", "SKIPPED"})
-DOCS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "docs")
+DOCS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "factor_engine", "docs")
 AUDIT_CSV = os.path.join(DOCS, "R23_PER_CANONICAL_AUDIT.csv")
 
 

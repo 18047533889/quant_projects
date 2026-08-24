@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-E = REPO / "docs" / "evidence" / "r31"
+E = REPO / "evidence" / "factor_engine" / "r31"
 
 
 def _sha() -> str:
@@ -89,7 +89,7 @@ def main() -> None:
             "",
             "## 工件",
             "",
-            f"- docs/evidence/r31/R31_HARD_GATES.json（{n_pass}/{n_total}）",
+            f"- evidence/factor_engine/r31/R31_HARD_GATES.json（{n_pass}/{n_total}）",
             "- R31_SQL_EMITTER_CERTIFICATION.csv / R31_TRIPLE_BACKEND_PARITY.csv / R31_BACKEND_TARGET_MATRIX.csv / R31_DUCKDB_CORE_PARITY.json",
             "- R31_DEPENDENCY_COMPATIBILITY.json / R31_CURRENT_ARCHITECTURE.json",
             "",

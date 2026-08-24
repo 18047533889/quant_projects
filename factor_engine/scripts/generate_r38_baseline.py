@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """R38 Phase 0/10: baseline + claim-vs-runtime ledger + wiring audit.
 
-Generates ``docs/evidence/r38/``:
+Generates ``evidence/factor_engine/r38/``:
     R38_BASELINE.json
     R38_RUNTIME_WIRING_AUDIT.json
     R38_R35_R36_CLAIM_VS_RUNTIME.csv
@@ -20,7 +20,7 @@ import os
 import subprocess
 import sys
 
-_EVID = "docs/evidence/r38"
+_EVID = "evidence/factor_engine/r38"
 os.makedirs(_EVID, exist_ok=True)
 
 

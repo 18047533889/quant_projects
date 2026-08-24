@@ -11,10 +11,10 @@ Outputs (``--out`` default ``build/mining``, plus ``--docs`` default ``docs``):
   * build/mining/direct_mining_manifest.json    — eligible DIRECT_* only
   * build/mining/research_operator_manifest.json— RESEARCH_TOOL rows
   * build/mining/remediation_backlog_manifest.json — DELETE_*/MOVE_* rows
-  * docs/R18_DIRECT_USE_MATRIX.json / .csv / .md — every registered canonical
-  * docs/R18_OPERATOR_SMOKE_RECIPES.json        — real smoke recipe per direct op
-  * docs/R18_DELETE_PLAN.json / .md             — the deletion plan
-  * docs/operator_migration_map.json            — alias/duplicate -> canonical
+  * factor_engine/docs/R18_DIRECT_USE_MATRIX.json / .csv / .md — every registered canonical
+  * factor_engine/docs/R18_OPERATOR_SMOKE_RECIPES.json        — real smoke recipe per direct op
+  * factor_engine/docs/R18_DELETE_PLAN.json / .md             — the deletion plan
+  * factor_engine/docs/operator_migration_map.json            — alias/duplicate -> canonical
 
 Every row carries a non-empty ``direct_use_status`` (R18-124: no UNRESOLVED /
 UNKNOWN / PENDING may survive).  ``--strict`` fails the run on any unresolved row
@@ -337,7 +337,7 @@ def build_all(*, out_dir: Path, docs_dir: Path) -> dict[str, int]:
         },
     )
 
-    # ---- docs/R18_DIRECT_USE_MATRIX.json ------------------------------------
+    # ---- factor_engine/docs/R18_DIRECT_USE_MATRIX.json ------------------------------------
     write_json(
         docs_dir / "R18_DIRECT_USE_MATRIX.json",
         {
@@ -349,7 +349,7 @@ def build_all(*, out_dir: Path, docs_dir: Path) -> dict[str, int]:
         },
     )
 
-    # ---- docs/R18_DIRECT_USE_MATRIX.csv -------------------------------------
+    # ---- factor_engine/docs/R18_DIRECT_USE_MATRIX.csv -------------------------------------
     cols = [
         "canonical", "direct_use_status", "mining_role", "terminal_allowed",
         "allowed_ast_positions", "mining_lane", "economic_effect_family",
@@ -391,7 +391,7 @@ def build_all(*, out_dir: Path, docs_dir: Path) -> dict[str, int]:
                 ]
             )
 
-    # ---- docs/R18_DIRECT_USE_MATRIX.md --------------------------------------
+    # ---- factor_engine/docs/R18_DIRECT_USE_MATRIX.md --------------------------------------
     md_lines = [
         "# R18 Direct-Use Matrix",
         "",
@@ -420,7 +420,7 @@ def build_all(*, out_dir: Path, docs_dir: Path) -> dict[str, int]:
         "\n".join(md_lines) + "\n", encoding="utf-8"
     )
 
-    # ---- docs/R18_OPERATOR_SMOKE_RECIPES.json -------------------------------
+    # ---- factor_engine/docs/R18_OPERATOR_SMOKE_RECIPES.json -------------------------------
     write_json(
         docs_dir / "R18_OPERATOR_SMOKE_RECIPES.json",
         {
@@ -431,7 +431,7 @@ def build_all(*, out_dir: Path, docs_dir: Path) -> dict[str, int]:
         },
     )
 
-    # ---- docs/R18_DELETE_PLAN.json / .md ------------------------------------
+    # ---- factor_engine/docs/R18_DELETE_PLAN.json / .md ------------------------------------
     write_json(
         docs_dir / "R18_DELETE_PLAN.json",
         {
@@ -467,7 +467,7 @@ def build_all(*, out_dir: Path, docs_dir: Path) -> dict[str, int]:
         )
     (docs_dir / "R18_DELETE_PLAN.md").write_text("\n".join(md_lines) + "\n", encoding="utf-8")
 
-    # ---- docs/operator_migration_map.json -----------------------------------
+    # ---- factor_engine/docs/operator_migration_map.json -----------------------------------
     aliases: dict[str, str] = {}
     try:
         from factor_engine.cleaned_operators.registry import OperatorRegistry
@@ -491,7 +491,7 @@ def build_all(*, out_dir: Path, docs_dir: Path) -> dict[str, int]:
         },
     )
 
-    # ---- docs/R18_DELETE_PLAN.md summary + totals ----------------------------
+    # ---- factor_engine/docs/R18_DELETE_PLAN.md summary + totals ----------------------------
     return {
         "registered": len(rows),
         "direct_retained": len(direct),

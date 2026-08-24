@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import Any
 
 FE_ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE_JSON = FE_ROOT / "evidence" / "primitive_verified.json"
-COMPOSITE_EVIDENCE_JSON = FE_ROOT / "evidence" / "composite_verified.json"
+EVIDENCE_JSON = FE_ROOT.parent / "evidence" / "primitive_verified.json"
+COMPOSITE_EVIDENCE_JSON = FE_ROOT.parent / "evidence" / "composite_verified.json"
 
 
 class CertStage(str, Enum):

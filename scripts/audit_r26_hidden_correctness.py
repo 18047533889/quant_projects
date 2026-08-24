@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DOCS = ROOT / "docs"
+DOCS = ROOT / "factor_engine" / "docs"
 DOCS.mkdir(exist_ok=True)
 
 _GATES: dict[str, str] = {

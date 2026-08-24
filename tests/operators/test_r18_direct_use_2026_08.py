@@ -269,7 +269,7 @@ def _direct_canonicals():
 def _smoke_recipes():
     from pathlib import Path
 
-    p = Path(__file__).resolve().parents[2] / "docs" / "R18_OPERATOR_SMOKE_RECIPES.json"
+    p = Path(__file__).resolve().parents[2] / "factor_engine" / "docs" / "R18_OPERATOR_SMOKE_RECIPES.json"
     if not p.exists():
         return {}
     import json

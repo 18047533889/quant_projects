@@ -23,8 +23,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 FE_ROOT = Path(__file__).resolve().parents[1]
-BASE_PATH = FE_ROOT / "evidence" / "primitive_verified.json"
-DELTA_PATH = FE_ROOT / "evidence" / "primitive_verified_delta.json"
+BASE_PATH = FE_ROOT.parent / "evidence" / "primitive_verified.json"
+DELTA_PATH = FE_ROOT.parent / "evidence" / "primitive_verified_delta.json"
 FISCAL_EMITTER_PATH = FE_ROOT / "backend" / "sql_pushdown" / "fiscal_v2.py"
 
 

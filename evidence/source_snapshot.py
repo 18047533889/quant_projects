@@ -30,7 +30,7 @@ OUTPUT_PATH = EVIDENCE_DIR / "current" / "source_snapshot.json"
 # Directories to scan (relative to REPO_ROOT).
 # R46 P0-02: coverage now spans the FULL platform source tree, not just the
 # legacy FactorEngine dirs.  quant_evaluator / factor_optimizer / factor_assets /
-# factor_preprocess / dataaccess / vectorbt_qs / factor_engine are all regular
+# factor_preprocess / data_access / vectorbt_qs / factor_engine are all regular
 # monorepo packages (no submodules) and must be inside the evidence snapshot.
 SCAN_DIRS: tuple[str, ...] = (
     "backend",
@@ -45,10 +45,9 @@ SCAN_DIRS: tuple[str, ...] = (
     "factor_optimizer",
     "factor_assets",
     "factor_preprocess",
-    "dataaccess",
+    "data_access",
     "vectorbt_qs",
     "alphaprobe",
-    "data_access",
 )
 
 # Directory / pattern exclusions (relative to each scanned dir root)
@@ -56,6 +55,7 @@ EXCLUDE_DIRS: frozenset[str] = frozenset({
     ".git",
     "evidence",
     "docs",
+    "factor_engine/docs",
     "build",
     "__pycache__",
     "logs",
@@ -73,7 +73,7 @@ EXCLUDE_SUFFIXES: frozenset[str] = frozenset({".pyc", ".py.pre_lazy_opt"})
 # Also skip anything inside evidence/generated or docs/generated anywhere
 _EXACT_EXCLUDE_DIRS: frozenset[str] = frozenset({
     "evidence/generated",
-    "docs/generated",
+    "factor_engine/docs/generated",
 })
 
 
@@ -290,16 +290,14 @@ PLATFORM_PACKAGES: tuple[str, ...] = (
     "factor_optimizer",
     "factor_assets",
     "factor_preprocess",
-    "dataaccess",
+    "data_access",
     "vectorbt_qs",
     # P0-AP: AlphaProbe (independent project) is part of the platform source
     # identity.  R26 P0-ALPHA: alphaprobe is scanned for real source only (its
     # pdm.lock / pyproject / env / makefile are excluded from the tree hash —
-    # see _ALPHA_EXCLUDE_NAMES).  data_access (the repository-local namespace
-    # shim forwarding to dataaccess/) is a platform import boundary and is
-    # listed too.
+    # see _ALPHA_EXCLUDE_NAMES).  data_access is the canonical repository-local
+    # namespace (the dataaccess/ directory does not exist in this monorepo).
     "alphaprobe",
-    "data_access",
 )
 
 # P0-ALPHA: alphaprobe is a vendored independent project; its dependency lock /
@@ -426,7 +424,7 @@ def platform_source_tree_identity(
     Merkle-style root over the ENTIRE platform source:
       * per-package tree hash for each regular package (factor_engine,
         quant_evaluator, factor_optimizer, factor_assets, factor_preprocess,
-        dataaccess, vectorbt_qs);
+        data_access, vectorbt_qs);
       * root orchestration source files (*.py, *.sh at the monorepo root);
       * packaging_identity  = Merkle over all pyproject.toml files;
       * dependency_lock_identity = SHA-256 over the production dependency lock
@@ -530,7 +528,7 @@ def platform_source_tree_identity(
 
 
 def _is_non_source(rel: str) -> bool:
-    for excl in ("evidence", "build", "docs", "archives"):
+    for excl in ("evidence", "build", "docs", "archives", "factor_engine/docs"):
         if rel == excl or rel.startswith(excl + "/"):
             return True
     return False

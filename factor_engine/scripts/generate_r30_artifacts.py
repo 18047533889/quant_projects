@@ -24,7 +24,7 @@ from factor_engine.cleaned_operators.operator_policy import infer_operator_polic
 from factor_engine.cleaned_operators.registry import _contract_hash
 
 FE = Path(__file__).resolve().parents[1]
-OUT = FE / "docs" / "evidence" / "r30"
+OUT = FE / "evidence" / "factor_engine" / "r30"
 OUT.mkdir(parents=True, exist_ok=True)
 
 def _git_head() -> str:

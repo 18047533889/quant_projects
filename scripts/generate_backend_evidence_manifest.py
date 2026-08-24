@@ -60,7 +60,7 @@ def build() -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", type=Path, default=FE_ROOT / "docs" / "backend_evidence_manifest.json")
+    parser.add_argument("--out", type=Path, default=FE_ROOT / "factor_engine" / "docs" / "backend_evidence_manifest.json")
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     payload = build()

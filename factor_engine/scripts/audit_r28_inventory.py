@@ -5,7 +5,7 @@
 Fresh Python process -> ``load_all()`` -> enumerate OperatorRegistry.  Every
 canonical is recorded with surface classification, production certification,
 metadata, source module/class, parameter contract and backends.  Output is
-written to ``docs/evidence/r28/R28_OPERATOR_INVENTORY.{csv,json}`` and the
+written to ``evidence/factor_engine/r28/R28_OPERATOR_INVENTORY.{csv,json}`` and the
 canonical-set digest is printed so every other R28 artifact binds the same set.
 
 Run:  python3 scripts/audit_r28_inventory.py
@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-OUT = REPO / "docs" / "evidence" / "r28"
+OUT = REPO / "evidence" / "factor_engine" / "r28"
 
 
 def _load() -> None:

@@ -35,7 +35,7 @@ FE_ROOT = Path(__file__).resolve().parents[1]
 
 #: 默认参数域认证证据（R37 独立 oracle 生成，current-SHA evidence）。
 #: 生产启动/执行期通过它装载，禁止空 store 或旧 SHA store 悄悄存在（R39 #29）。
-DEFAULT_PARAMETER_DOMAIN_EVIDENCE = FE_ROOT / "docs" / "evidence" / "r37" / "R37_PARAMETER_DOMAIN_STORE.json"
+DEFAULT_PARAMETER_DOMAIN_EVIDENCE = FE_ROOT.parent / "evidence" / "factor_engine" / "r37" / "R37_PARAMETER_DOMAIN_STORE.json"
 
 
 def _current_head() -> str:

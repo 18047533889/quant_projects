@@ -8,8 +8,8 @@ import sys
 from pathlib import Path
 
 FE_ROOT = Path(__file__).resolve().parents[1]
-MD_PATH = FE_ROOT / "docs" / "factor_engine_llm_prompt.md"
-TXT_PATH = FE_ROOT / "docs" / "factor_engine_llm_prompt.txt"
+MD_PATH = FE_ROOT / "factor_engine" / "docs" / "factor_engine_llm_prompt.md"
+TXT_PATH = FE_ROOT / "factor_engine" / "docs" / "factor_engine_llm_prompt.txt"
 
 
 def _strip_inline_md(text: str) -> str:

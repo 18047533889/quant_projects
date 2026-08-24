@@ -70,5 +70,5 @@ for mod in ["factor_engine.cleaned_operators.research_polars",
 
 json.dump({
     "per_module_surface": {m: {"total": v["total"], "surface": dict(v["surface"])} for m, v in per_mod.items()},
-}, open("docs/r30_phase3b_surface_scan.json", "w"), indent=2, sort_keys=True)
+}, open("factor_engine/docs/r30_phase3b_surface_scan.json", "w"), indent=2, sort_keys=True)
 print("\nsaved")

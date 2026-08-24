@@ -7,8 +7,8 @@ import sys
 from pathlib import Path
 
 FE_ROOT = Path(__file__).resolve().parents[1]
-OUT_MD = FE_ROOT / "cleaned_operators" / "docs" / "operators_catalog.md"
-OUT_JSON = FE_ROOT / "cleaned_operators" / "docs" / "operators_catalog.json"
+OUT_MD = FE_ROOT / "factor_engine" / "cleaned_operators" / "docs" / "operators_catalog.md"
+OUT_JSON = FE_ROOT / "factor_engine" / "cleaned_operators" / "docs" / "operators_catalog.json"
 
 
 def _load():

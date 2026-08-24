@@ -60,5 +60,5 @@ print("\n=== aggregate by (surface, certified) ===")
 for k, v in sorted(by_cert.items()):
     print("  ", k, v)
 
-json.dump({m: r for m, r in per_mod.items()}, open("docs/r30_phase3c_detail.json", "w"), indent=2, sort_keys=True)
+json.dump({m: r for m, r in per_mod.items()}, open("factor_engine/docs/r30_phase3c_detail.json", "w"), indent=2, sort_keys=True)
 print("saved")

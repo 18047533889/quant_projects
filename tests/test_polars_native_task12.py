@@ -26,7 +26,7 @@ def test_technical_final_imports_with_authoritative_metadata_abi(monkeypatch) ->
     monkeypatch.setattr(base_polars, "register_operator", lambda **_kwargs: lambda cls: cls)
     module = _load_module(
         "_task12_technical_final",
-        "cleaned_operators/polars_native/technical_final.py",
+        "factor_engine/cleaned_operators/polars_native/technical_final.py",
     )
 
     assert module.ElderRay.metadata.name == "ElderRay"
@@ -39,7 +39,7 @@ def test_ts_leverage_effect_is_causal_and_matches_historical_definition(monkeypa
     monkeypatch.setattr(base, "register_operator", lambda **_kwargs: lambda cls: cls)
     module = _load_module(
         "_task12_ts_advanced_batch5",
-        "cleaned_operators/polars_native/ts_advanced_batch5.py",
+        "factor_engine/cleaned_operators/polars_native/ts_advanced_batch5.py",
     )
     op = module.TSLeverageEffectPolarsNative()
 

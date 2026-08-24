@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""R35 Phase L: consolidate R35 evidence under ``docs/evidence/r35/`` bound to
+"""R35 Phase L: consolidate R35 evidence under ``evidence/factor_engine/r35/`` bound to
 the current git SHA + canonical digest.
 
 Artifacts:
@@ -29,7 +29,7 @@ sys.path.insert(0, ".")
 sys.path.insert(0, "..")
 
 REPO = Path(__file__).resolve().parent.parent
-OUT = REPO / "docs" / "evidence" / "r35"
+OUT = REPO / "evidence" / "factor_engine" / "r35"
 OUT.mkdir(parents=True, exist_ok=True)
 
 

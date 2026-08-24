@@ -5,7 +5,7 @@
 Every model-like canonical (name/category/implementation-based classifier) is
 assigned a ModelTimingContract (explicit or deterministic default) and classified
 descriptive-vs-predictive.  Output goes to
-``docs/evidence/r28/R28_MODEL_CAUSALITY_MATRIX.{csv,json}``.
+``evidence/factor_engine/r28/R28_MODEL_CAUSALITY_MATRIX.{csv,json}``.
 
 Hard gate: R28_ALL_MODEL_CANONICALS_TIMING_CONTRACTED (every model-like canonical
 has a contract) and R28_ALL_PREDICTIVE_MODELS_FIT_THROUGH_T_MINUS_1 (every
@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-OUT = REPO / "docs" / "evidence" / "r28"
+OUT = REPO / "evidence" / "factor_engine" / "r28"
 
 
 def _load() -> None:

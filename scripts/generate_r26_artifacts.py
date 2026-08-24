@@ -16,7 +16,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DOCS = ROOT / "docs"
+DOCS = ROOT / "factor_engine" / "docs"
 
 
 def main() -> int:

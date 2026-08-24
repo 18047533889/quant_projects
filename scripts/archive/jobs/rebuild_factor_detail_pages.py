@@ -58,7 +58,7 @@ except Exception as _qe_err:
 
 PROJECT = Path("/home/sunhaiwei/quant_projects")
 CONV_DIR = PROJECT / "factor_delivery_converted" / "factors_combined"
-REPORT_DIR = PROJECT / "docs" / "reports" / "2026-08-23"
+REPORT_DIR = PROJECT / "factor_engine" / "docs" / "reports" / "2026-08-23"
 FACTORS_DIR = REPORT_DIR / "factors"
 BACKTEST_OUT = PROJECT / "weekly_backtest_output"
 OUT_IMGS = REPORT_DIR  # 生成的图放这里

@@ -79,7 +79,7 @@ def test_parameter_domain_independent_oracle_exists():
 def test_parameter_domain_evidence_generated():
     from pathlib import Path
 
-    p = Path("docs/evidence/r34/R34_PARAMETER_DOMAIN_COVERAGE.json")
+    p = Path("evidence/factor_engine/r34/R34_PARAMETER_DOMAIN_COVERAGE.json")
     assert p.is_file()
     import json
 
@@ -171,7 +171,7 @@ def test_engine_production_frequency_fail_closed():
     try:
         assert is_production_mode()
         # 直接验证 engine 的频次解析路径（读源码确认 fail-closed 存在）
-        src = open("runtime/engine.py", encoding="utf-8").read()
+        src = open("factor_engine/runtime/engine.py", encoding="utf-8").read()
         assert "refusing to guess '1d' in production" in src
     finally:
         if _prev:
@@ -184,7 +184,7 @@ def test_hard_gate_audit_honest():
     """R34 hard gates 审计必须产出 PASS/NOT_RUN/FAIL 而非恒真。"""
     from pathlib import Path
 
-    p = Path("docs/evidence/r34/R34_HARD_GATES.json")
+    p = Path("evidence/factor_engine/r34/R34_HARD_GATES.json")
     assert p.is_file()
     import json
 

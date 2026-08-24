@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 _REPO = Path(__file__).resolve().parent.parent.parent.parent
-_OUT = _REPO / "docs" / "evidence" / "r28"
+_OUT = _REPO / "evidence" / "factor_engine" / "r28"
 
 REQUIRED_FILES = [
     "R28_OPERATOR_INVENTORY.csv",
@@ -42,7 +42,7 @@ def _head():
 
 def test_r28_evidence_current_head():
     """The evidence manifest must be bound to the current code SHA.  The evidence
-    commit itself only touches docs/evidence/r28, so HEAD == manifest_sha or
+    commit itself only touches evidence/factor_engine/r28, so HEAD == manifest_sha or
     HEAD is an evidence-only commit on top of manifest_sha."""
     manifest_path = _OUT / "R28_ARTIFACT_MANIFEST.json"
     if not manifest_path.exists():
@@ -54,7 +54,7 @@ def test_r28_evidence_current_head():
         return
     # current iff no code changed between the bound code sha and HEAD
     diff = _git(["diff", "--name-only", manifest_sha, "HEAD"]).stdout.strip()
-    evidence_only = all("/docs/evidence/r28/" in line for line in diff.splitlines())
+    evidence_only = all("/evidence/factor_engine/r28/" in line for line in diff.splitlines())
     assert evidence_only, (
         f"evidence git_sha {manifest_sha} not current (HEAD {head}) (STALE — regenerate)"
     )

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """R47 新增算子开发总规范 — evidence 收口。
 
-Consolidates the R47 taskbook deliverables under ``docs/evidence/r47/`` bound to
+Consolidates the R47 taskbook deliverables under ``evidence/factor_engine/r47/`` bound to
 the current git SHA:
 
 - R47_HEAD.json                      (git sha + runtime versions)
@@ -27,7 +27,7 @@ sys.path.insert(0, ".")
 sys.path.insert(0, "..")
 
 REPO = Path(__file__).resolve().parent.parent
-OUT = REPO / "docs" / "evidence" / "r47"
+OUT = REPO / "evidence" / "factor_engine" / "r47"
 OUT.mkdir(parents=True, exist_ok=True)
 
 

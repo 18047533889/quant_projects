@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """2026-08 A-share field-catalog alignment acceptance tests.
 
-Locks the fixes from the COS lqtp data-dictionary audit (``docs/AUDIT_2026_08_
+Locks the fixes from the COS lqtp data-dictionary audit (``factor_engine/docs/AUDIT_2026_08_
 FIELD_ALIGNMENT_PLAN.md``): field/table contracts, unit normalization, strict
 unknown-field interception, fiscal-ordinal ordering, valuation gap variants and
 shareholder snapshot fail-closed semantics.

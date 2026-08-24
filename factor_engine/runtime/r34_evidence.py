@@ -379,12 +379,12 @@ def stale_evidence_report() -> dict[str, Any]:
             "current_head": current,
         }
 
-    _record("factor_operator_verified", FE_ROOT / "evidence" / "factor_operator_verified.json",
-            _json_sha(FE_ROOT / "evidence" / "factor_operator_verified.json", "commit_sha"))
-    _record("primitive_verified", FE_ROOT / "evidence" / "primitive_verified.json",
-            _json_sha(FE_ROOT / "evidence" / "primitive_verified.json", None))
+    _record("factor_operator_verified", FE_ROOT.parent / "evidence" / "factor_operator_verified.json",
+            _json_sha(FE_ROOT.parent / "evidence" / "factor_operator_verified.json", "commit_sha"))
+    _record("primitive_verified", FE_ROOT.parent / "evidence" / "primitive_verified.json",
+            _json_sha(FE_ROOT.parent / "evidence" / "primitive_verified.json", None))
     for round_name in ("r28", "r30", "r31", "r32"):
-        dirp = FE_ROOT / "docs" / "evidence" / round_name
+        dirp = FE_ROOT.parent / "evidence" / "factor_engine" / round_name
         for f in sorted(dirp.glob("*.json")):
             _record(f"{round_name}/{f.stem}", f, _json_sha(f, None))
     return report
@@ -410,4 +410,4 @@ def _json_sha(path: Path, key: str | None) -> str | None:
 
 
 def evidence_store_path() -> Path:
-    return FE_ROOT / "docs" / "evidence" / "r34"
+    return FE_ROOT.parent / "evidence" / "factor_engine" / "r34"

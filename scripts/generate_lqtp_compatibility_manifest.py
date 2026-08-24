@@ -12,7 +12,7 @@ if str(ROOT) not in sys.path:
 
 from factor_engine.api.lqtp_capabilities import build_lqtp_capability_manifest
 
-DEFAULT_OUTPUT = ROOT / "docs" / "lqtp_compatibility_manifest.json"
+DEFAULT_OUTPUT = ROOT / "factor_engine" / "docs" / "lqtp_compatibility_manifest.json"
 
 
 def render() -> str:

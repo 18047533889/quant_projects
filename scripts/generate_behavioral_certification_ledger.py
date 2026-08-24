@@ -6,7 +6,7 @@ MF-P0-003 / REM-171: typed behavioral certification ledger. Scans actual test
 files, oracle scripts, and evidence artifacts to populate certification status
 HONESTLY — never fakes a CERTIFIED status for evidence that doesn't exist.
 
-Run:  python3 scripts/generate_behavioral_certification_ledger.py [--out docs/evidence/model_operators]
+Run:  python3 scripts/generate_behavioral_certification_ledger.py [--out evidence/factor_engine/model_operators]
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ sys.path.insert(0, ".")
 sys.path.insert(0, "..")
 
 REPO = Path(__file__).resolve().parent.parent
-DEFAULT_OUT = REPO / "docs" / "evidence" / "model_operators"
+DEFAULT_OUT = REPO / "evidence" / "factor_engine" / "model_operators"
 
 
 def git_sha() -> str | None:
@@ -41,7 +41,7 @@ def _probe_parameter_domain(canonical: str) -> dict[str, str | None]:
         from factor_engine.runtime.parameter_domain_store import ParameterDomainCertificationStore
         store = ParameterDomainCertificationStore()
         # Try loading default evidence if available
-        evidence_path = REPO / "docs" / "evidence" / "r37" / "R37_PARAMETER_DOMAIN_STORE.json"
+        evidence_path = REPO / "evidence" / "factor_engine" / "r37" / "R37_PARAMETER_DOMAIN_STORE.json"
         if evidence_path.exists():
             store.load_json(evidence_path)
         has_any = store.operator_has_any_certified_region(canonical)

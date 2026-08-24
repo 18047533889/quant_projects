@@ -64,5 +64,5 @@ for s in ("research", "unsafe", "internal", "legacy"):
 
 # save
 out = {"risky": risky, "pit_false": {s: sorted(v) for s, v in pit.items()}}
-json.dump(out, open("docs/r30_phase1b_scan.json", "w"), indent=2, sort_keys=True)
-print("\nsaved docs/r30_phase1b_scan.json  elapsed", round(time.time() - t0, 1), "s")
+json.dump(out, open("factor_engine/docs/r30_phase1b_scan.json", "w"), indent=2, sort_keys=True)
+print("\nsaved factor_engine/docs/r30_phase1b_scan.json  elapsed", round(time.time() - t0, 1), "s")

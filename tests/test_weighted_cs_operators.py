@@ -17,7 +17,7 @@ except ImportError:
 # Import directly from module to avoid __init__.py conflicts
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent / "cleaned_operators" / "polars_native"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "factor_engine" / "cleaned_operators" / "polars_native"))
 
 from cs_batch1 import (
     CSWeightedMeanPolarsNative,

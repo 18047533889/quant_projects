@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 FE_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUT = FE_ROOT / "docs" / "mining_data_source_presets.json"
+DEFAULT_OUT = FE_ROOT / "factor_engine" / "docs" / "mining_data_source_presets.json"
 
 
 def main() -> int:

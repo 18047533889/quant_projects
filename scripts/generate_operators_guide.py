@@ -8,7 +8,7 @@ from datetime import date
 from pathlib import Path
 
 FE_ROOT = Path(__file__).resolve().parents[1]
-OUT_PATH = FE_ROOT / "cleaned_operators" / "docs" / "算子全览.md"
+OUT_PATH = FE_ROOT / "factor_engine" / "cleaned_operators" / "docs" / "算子全览.md"
 
 CATEGORY_ZH = {
     "elementwise_math": "元素级数学",
@@ -130,7 +130,7 @@ def _render(entries: dict[str, dict], allowlist_count: int) -> str:
     lines: list[str] = [
         "# factor_engine 算子全览",
         "",
-        f"> 文档路径：`cleaned_operators/docs/算子全览.md`  ",
+        f"> 文档路径：`factor_engine/cleaned_operators/docs/算子全览.md`  ",
         f"> 自动生成日期：{date.today().isoformat()}  ",
         f"> DSL 白名单：**{allowlist_count}** 个名字（含别名）；下文按 **{len(entries)}** 个规范算子分组。  ",
         "> 重新生成：`cd factor_engine && PYTHONPATH=. python3 scripts/generate_operators_guide.py`",

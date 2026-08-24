@@ -28,7 +28,7 @@ for _path in (str(_FE_ROOT), str(_QUANT_ROOT)):
 # the ROOT ``tests/conftest.py``; when it starts inside ``factor_engine/`` it
 # loads this submodule conftest.  A run that names BOTH trees in one command
 # triggers the mismatch and must be split into two commands (see
-# docs/R21_SOURCE_RESIDENCY_AUDIT.md §5).
+# factor_engine/docs/R21_SOURCE_RESIDENCY_AUDIT.md §5).
 
 # The editable-install finder (``__editable__.factor_engine-0.3.1``) maps the
 # top-level ``mining`` package to ``<repo>/factor_engine/mining``.  When the

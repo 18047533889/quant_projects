@@ -36,13 +36,13 @@ def _current_head() -> str | None:
 # --------------------------------------------------------------------------- #
 def test_model_current_head_json_exists():
     """MODEL_CURRENT_HEAD.json must exist after certifier runs."""
-    path = REPO / "docs" / "evidence" / "model_operators" / "MODEL_CURRENT_HEAD.json"
+    path = REPO / "evidence" / "factor_engine" / "model_operators" / "MODEL_CURRENT_HEAD.json"
     assert path.exists(), "MODEL_CURRENT_HEAD.json missing; run generate_model_canonical_ledger.py"
 
 
 def test_model_current_head_binds_to_real_head():
     """MODEL_CURRENT_HEAD.json must bind to the ACTUAL repo HEAD, not a stale SHA."""
-    path = REPO / "docs" / "evidence" / "model_operators" / "MODEL_CURRENT_HEAD.json"
+    path = REPO / "evidence" / "factor_engine" / "model_operators" / "MODEL_CURRENT_HEAD.json"
     if not path.exists():
         pytest.skip("MODEL_CURRENT_HEAD.json does not exist")
 
@@ -61,7 +61,7 @@ def test_model_current_head_binds_to_real_head():
 
 def test_model_current_head_has_required_fields():
     """MODEL_CURRENT_HEAD.json must have all required fields."""
-    path = REPO / "docs" / "evidence" / "model_operators" / "MODEL_CURRENT_HEAD.json"
+    path = REPO / "evidence" / "factor_engine" / "model_operators" / "MODEL_CURRENT_HEAD.json"
     if not path.exists():
         pytest.skip("MODEL_CURRENT_HEAD.json does not exist")
 
@@ -193,7 +193,7 @@ def test_direct_use_readiness_appears_in_report_hard_gate_set():
 # --------------------------------------------------------------------------- #
 def test_behavioral_certification_ledger_exists():
     """behavioral_certification_ledger.json must exist after script runs."""
-    path = REPO / "docs" / "evidence" / "model_operators" / "behavioral_certification_ledger.json"
+    path = REPO / "evidence" / "factor_engine" / "model_operators" / "behavioral_certification_ledger.json"
     # This is OK to skip if not generated yet
     if not path.exists():
         pytest.skip("behavioral_certification_ledger.json not generated yet")
@@ -201,7 +201,7 @@ def test_behavioral_certification_ledger_exists():
 
 def test_behavioral_certification_ledger_structure():
     """behavioral_certification_ledger.json must have required structure."""
-    path = REPO / "docs" / "evidence" / "model_operators" / "behavioral_certification_ledger.json"
+    path = REPO / "evidence" / "factor_engine" / "model_operators" / "behavioral_certification_ledger.json"
     if not path.exists():
         pytest.skip("behavioral_certification_ledger.json not generated yet")
 
@@ -223,7 +223,7 @@ def test_behavioral_certification_ledger_structure():
 
 def test_behavioral_certification_ledger_binds_to_current_head():
     """behavioral_certification_ledger.json must bind to current HEAD."""
-    path = REPO / "docs" / "evidence" / "model_operators" / "behavioral_certification_ledger.json"
+    path = REPO / "evidence" / "factor_engine" / "model_operators" / "behavioral_certification_ledger.json"
     if not path.exists():
         pytest.skip("behavioral_certification_ledger.json not generated yet")
 
@@ -240,7 +240,7 @@ def test_behavioral_certification_ledger_binds_to_current_head():
 
 def test_behavioral_certification_never_fakes_certified_status():
     """If ledger says CERTIFIED, the evidence artifact must exist."""
-    path = REPO / "docs" / "evidence" / "model_operators" / "behavioral_certification_ledger.json"
+    path = REPO / "evidence" / "factor_engine" / "model_operators" / "behavioral_certification_ledger.json"
     if not path.exists():
         pytest.skip("behavioral_certification_ledger.json not generated yet")
 
@@ -254,7 +254,7 @@ def test_behavioral_certification_never_fakes_certified_status():
 
     if param_certified:
         # The parameter domain store must exist and be loadable
-        store_path = REPO / "docs" / "evidence" / "r37" / "R37_PARAMETER_DOMAIN_STORE.json"
+        store_path = REPO / "evidence" / "factor_engine" / "r37" / "R37_PARAMETER_DOMAIN_STORE.json"
         assert store_path.exists(), (
             f"{len(param_certified)} operators marked parameter_domain CERTIFIED "
             "but R37_PARAMETER_DOMAIN_STORE.json missing"
@@ -263,7 +263,7 @@ def test_behavioral_certification_never_fakes_certified_status():
 
 def test_model_final_hard_gates_binds_to_current_head():
     """MODEL_FINAL_HARD_GATES.json must bind to current HEAD."""
-    path = REPO / "docs" / "evidence" / "model_operators" / "MODEL_FINAL_HARD_GATES.json"
+    path = REPO / "evidence" / "factor_engine" / "model_operators" / "MODEL_FINAL_HARD_GATES.json"
     if not path.exists():
         pytest.skip("MODEL_FINAL_HARD_GATES.json does not exist")
 
@@ -280,7 +280,7 @@ def test_model_final_hard_gates_binds_to_current_head():
 
 def test_model_final_hard_gates_has_freshness_gate():
     """MODEL_FINAL_HARD_GATES.json must include MODEL_CURRENT_HEAD_EVIDENCE_FRESH."""
-    path = REPO / "docs" / "evidence" / "model_operators" / "MODEL_FINAL_HARD_GATES.json"
+    path = REPO / "evidence" / "factor_engine" / "model_operators" / "MODEL_FINAL_HARD_GATES.json"
     if not path.exists():
         pytest.skip("MODEL_FINAL_HARD_GATES.json does not exist")
 

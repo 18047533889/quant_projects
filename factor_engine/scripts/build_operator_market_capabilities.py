@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""生成 docs/operator_market_capabilities.json + docs/operator_market_matrix.md。
+"""生成 factor_engine/docs/operator_market_capabilities.json + factor_engine/docs/operator_market_matrix.md。
 
 对 OperatorRegistry 中全部 canonical 自动生成 A/US 市场能力结论（spec §118）：
 generic math/TS/CS → both；市场机制算子 → 契约判定；全部 canonical 必须覆盖，

@@ -81,7 +81,7 @@ def main() -> int:
     load_all()
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=Path, default=FE_ROOT.parent / EXPECTED_FILENAME)
-    parser.add_argument("--output", type=Path, default=FE_ROOT / "evidence" / "fundamental_1288_compile_report.json")
+    parser.add_argument("--output", type=Path, default=FE_ROOT.parent / "evidence" / "fundamental_1288_compile_report.json")
     args = parser.parse_args()
     rows, source_report = load_cold_start(args.source)
     if source_report.status != "available":

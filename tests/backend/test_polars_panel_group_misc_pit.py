@@ -10,7 +10,7 @@ import polars as pl
 
 _MODULE_PATH = (
     Path(__file__).parents[2]
-    / "cleaned_operators"
+    / "factor_engine" / "cleaned_operators"
     / "polars_native"
     / "panel_group_misc.py"
 )

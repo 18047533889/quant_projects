@@ -77,5 +77,5 @@ print(f"needing universe-asof contract: {sum(1 for n in needs_contract if n['dim
 print("violations (explicit mislabel):", len(violations))
 
 json.dump({"rows": rows, "needs_contract": needs_contract, "violations": violations},
-          open("docs/evidence/r30/R30_SOURCE_UNIVERSE_PIT_AUDIT.json", "w"), indent=2, sort_keys=True)
+          open("evidence/factor_engine/r30/R30_SOURCE_UNIVERSE_PIT_AUDIT.json", "w"), indent=2, sort_keys=True)
 print("saved R30_SOURCE_UNIVERSE_PIT_AUDIT.json")

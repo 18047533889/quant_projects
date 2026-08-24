@@ -28,8 +28,8 @@ from functools import lru_cache
 from pathlib import Path
 
 FE_ROOT = Path(__file__).resolve().parents[1]
-CASE_PATH = FE_ROOT / "evidence" / "recipe_case_registry.json"
-VERIFIED_PATH = FE_ROOT / "evidence" / "recipe_verified.json"
+CASE_PATH = FE_ROOT.parent / "evidence" / "recipe_case_registry.json"
+VERIFIED_PATH = FE_ROOT.parent / "evidence" / "recipe_verified.json"
 
 
 def _hash_file(path: Path) -> str:
@@ -70,10 +70,10 @@ def current_hashes() -> dict[str, str]:
             FE_ROOT / "tests" / "operators" / "test_recipe_production_admission_v2.py"
         ),
         "primitive_evidence_hash": _hash_file(
-            FE_ROOT / "evidence" / "primitive_verified.json"
+            FE_ROOT.parent / "evidence" / "primitive_verified.json"
         ),
         "factor_operator_evidence_hash": _hash_file(
-            FE_ROOT / "evidence" / "factor_operator_verified.json"
+            FE_ROOT.parent / "evidence" / "factor_operator_verified.json"
         ),
     }
 

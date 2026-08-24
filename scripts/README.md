@@ -46,7 +46,7 @@ PYTHONPATH=. python scripts/bench_pandas_vs_modin.py
 | 脚本 | 用途 |
 |------|------|
 | [`validate_delivery_formula.py`](validate_delivery_formula.py) | 美股 manifest / 公式 DSL 语法校验（`api/mining_integration`） |
-| [`export_dsl_allowlist.py`](export_dsl_allowlist.py) | 导出 `docs/dsl_allowlist.json`（AFV 白名单对齐） |
+| [`export_dsl_allowlist.py`](export_dsl_allowlist.py) | 导出 `factor_engine/docs/dsl_allowlist.json`（AFV 白名单对齐） |
 | [`build_canonical_fields.py`](build_canonical_fields.py) | 生成 `canonical_data_fields.json`（在 `quant_projects` 根执行） |
 
 ```bash
@@ -55,7 +55,7 @@ PYTHONPATH=. python scripts/validate_delivery_formula.py --manifest path/to/mani
 PYTHONPATH=. python scripts/export_dsl_allowlist.py
 ```
 
-规范与命令说明见 [`docs/miner_delivery_spec.md`](../docs/miner_delivery_spec.md) §5.4。
+规范与命令说明见 [`docs/miner_delivery_spec.md`](../factor_engine/docs/miner_delivery_spec.md) §5.4。
 
 ---
 
@@ -89,4 +89,4 @@ PYTHONPATH=. python scripts/migrate_factor_lake_schema.py --lake-root /path/to/l
 
 - [`backend/pandas_compat.py`](../backend/pandas_compat.py)  
 - [`runtime/perf_config.py`](../runtime/perf_config.py)  
-- [`docs/FactorEngine完全指南.md`](../docs/FactorEngine完全指南.md)  
+- [`docs/FactorEngine完全指南.md`](../factor_engine/docs/FactorEngine完全指南.md)  

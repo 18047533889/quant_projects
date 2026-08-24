@@ -129,6 +129,23 @@ jobs:
           python -c "import sys; sys.path.insert(0,'scripts'); from gate_runner import GateRunner, find_spec, Status; r=GateRunner(python=sys.executable); res=r.run_gate(find_spec('SUBMODULE_REACHABILITY')); print('SUBMODULE_REACHABILITY', res['status']); sys.exit(0 if res['status'] in ('PASS', 'NOT_APPLICABLE') else 1)"
 
   # ---------------------------------------------------------------------------
+  # R49 GOVERNANCE — no package may be mirrored across ownership boundaries.
+  # Pure stdlib script; runs from the fresh clone without installing deps.
+  # See ownership.yaml for the domain ownership map.
+  # ---------------------------------------------------------------------------
+  no-mirror-packages:
+    name: no-mirror-packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Check no mirror packages (R49 governance)
+        run: python scripts/check_no_mirrors.py
+
+  # ---------------------------------------------------------------------------
   # FRESH_WHEEL_MATRIX — build the six canonical wheels from their own
   # pyprojects, clean-venv install with --require-hashes, wheel-only import +
   # cross-package contract checks.  Runs the real script; the verifier parses

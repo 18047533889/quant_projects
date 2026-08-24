@@ -7,7 +7,7 @@
       constant / group 等 fixtures 上比较。
     - 输出：``value parity`` / ``NaN mask parity`` / ``dtype`` / ``index order`` /
       warmup。
-    - 生成 ``docs/evidence/r31/R31_SQL_EMITTER_CERTIFICATION.csv`` 与
+    - 生成 ``evidence/factor_engine/r31/R31_SQL_EMITTER_CERTIFICATION.csv`` 与
       ``R31_TRIPLE_BACKEND_PARITY.csv``。
     - **ClickHouse 不自动继承 DuckDB**（R31 §25）：同 emitter 在 ClickHouse 需
       单独认证——本 harness 只认证 DuckDB；ClickHouse 单独计分。
@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from factor_engine.planner.logical_plan import PlanNode  # noqa: E402
 
-EVIDENCE_DIR = Path(__file__).resolve().parents[1] / "docs" / "evidence" / "r31"
+EVIDENCE_DIR = Path(__file__).resolve().parents[1] / "evidence" / "factor_engine" / "r31"
 
 #: Tier A 核心算子（R31 §23）：四则/比较/逻辑 + 基础 ts/cs/group + 简单技术。
 #: 只认证真实 SQL emitter 支持且非 research-only 的算子。

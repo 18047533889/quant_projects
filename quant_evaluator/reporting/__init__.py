@@ -13,6 +13,7 @@ from quant_evaluator.reporting.artifacts import ChartArtifactStore, ArtifactInfo
 from quant_evaluator.reporting.tear_sheet import (
     MetricArtifact,
     metric_artifact,
+    wrap_artifact,
     NOT_COMPUTED,
     UNAVAILABLE,
     INSTITUTIONAL_PANELS,
@@ -56,6 +57,7 @@ __all__ = [
     "ArtifactInfo",
     "MetricArtifact",
     "metric_artifact",
+    "wrap_artifact",
     "NOT_COMPUTED",
     "UNAVAILABLE",
     "INSTITUTIONAL_PANELS",

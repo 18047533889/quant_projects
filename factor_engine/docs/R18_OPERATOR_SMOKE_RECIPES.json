@@ -1,8 +1,8 @@
 {
-  "count": 1469,
+  "count": 1558,
   "fingerprint": {
-    "dirty": false,
-    "head": "19d2ff954b56f5dfd034d8ec8e8631af0ff271d4"
+    "dirty": true,
+    "head": "0d22dc674d0e3e6d1437c2c67e801ace7bc4cc37"
   },
   "recipes": [
     {
@@ -1954,6 +1954,134 @@
       "terminal_allowed": false
     },
     {
+      "canonical": "atr_acceleration",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "atr_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "atr_percentile",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "score_window": null,
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "atr_short_long_ratio",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "long_window": null,
+        "short_window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "atr_zscore",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "score_window": null,
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "average_turnover",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -2035,6 +2163,52 @@
       "market": "ashare",
       "minimum_coverage": 0.5,
       "parameter_values": {},
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "beta_divergence_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "ret": "return_decimal"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "beta_residual_z",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "ret": "return_decimal"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
       "required_context": {
         "sources": [
           "daily_bar"
@@ -2136,6 +2310,55 @@
     },
     {
       "canonical": "bounded_pvi",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "volume": "raw_volume_shares"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "bvc_imbalance_ma",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "volume": "raw_volume_shares"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "fast_window": null,
+        "slow_window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "bvc_sign_pct",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
       "expected_grain": "daily",
@@ -2288,6 +2511,32 @@
       "market": "ashare",
       "minimum_coverage": 0.5,
       "parameter_values": {},
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "candle_body_strength",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low",
+        "open": "continuous_open"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
       "required_context": {
         "sources": [
           "daily_bar"
@@ -2575,6 +2824,32 @@
       "terminal_allowed": true
     },
     {
+      "canonical": "candle_pattern_count",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low",
+        "open": "continuous_open"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "candle_range",
       "direct_use_status": "direct_intermediate",
       "expected_cardinality": "panel",
@@ -2598,6 +2873,32 @@
     },
     {
       "canonical": "candle_range_atr",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low",
+        "open": "continuous_open"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "candle_range_pct",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
       "expected_grain": "daily",
@@ -2791,6 +3092,32 @@
       "terminal_allowed": true
     },
     {
+      "canonical": "candle_wick_balance",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low",
+        "open": "continuous_open"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "candlestick_pattern",
       "direct_use_status": "direct_state",
       "expected_cardinality": "panel",
@@ -2878,6 +3205,121 @@
         ]
       },
       "role": "fundamental_pit",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "category_age",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "state": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "category_age_lower_bound",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "state": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "category_frequency",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "state": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "category_transition_rate",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "state": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "category_transition_surprise",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "state": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
       "terminal_allowed": true
     },
     {
@@ -3465,6 +3907,31 @@
       "terminal_allowed": false
     },
     {
+      "canonical": "chikou_distance_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "kijun_window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "choppiness_index",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -3674,6 +4141,52 @@
       "market": "ashare",
       "minimum_coverage": 0.5,
       "parameter_values": {},
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "consolidation_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "consolidation_range_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
       "required_context": {
         "sources": [
           "daily_bar"
@@ -5502,6 +6015,29 @@
       "terminal_allowed": true
     },
     {
+      "canonical": "dema_distance_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "digital_count",
       "direct_use_status": "direct_state",
       "expected_cardinality": "panel",
@@ -5641,6 +6177,81 @@
       "terminal_allowed": true
     },
     {
+      "canonical": "donchian_breakout_down",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "donchian_breakout_up",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "donchian_channel_position",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "donchian_lower",
       "direct_use_status": "direct_intermediate",
       "expected_cardinality": "panel",
@@ -5736,6 +6347,31 @@
       "terminal_allowed": false
     },
     {
+      "canonical": "donchian_width_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "down_volume_ratio",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -5782,6 +6418,53 @@
     },
     {
       "canonical": "efficiency_ratio",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "ema_crossover",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "fast_window": null,
+        "slow_window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "ema_distance_pct",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
       "expected_grain": "daily",
@@ -5998,6 +6681,29 @@
       "terminal_allowed": true
     },
     {
+      "canonical": "event_cluster_duration",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "event": "event_mask"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "event_pit"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "event_cluster_mean_size",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -6011,6 +6717,30 @@
       "minimum_coverage": 0.5,
       "parameter_values": {
         "max_gap": null,
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "event_pit"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "event_cluster_score",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "event": "event_mask"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "rate_window": null,
         "window": null
       },
       "required_context": {
@@ -6072,6 +6802,76 @@
       "terminal_allowed": true
     },
     {
+      "canonical": "event_decay_window",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "event": "event_mask"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "halflife": null,
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "event_pit"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "event_direction_imbalance",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "event": "event_mask"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "event_pit"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "event_direction_persistence",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "event": "event_mask"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "event_pit"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "event_fano_excess",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -6109,6 +6909,29 @@
       "minimum_coverage": 0.5,
       "parameter_values": {
         "block": null,
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "event_pit"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "event_flip_density",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "event": "event_mask"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
         "window": null
       },
       "required_context": {
@@ -6368,6 +7191,52 @@
       "terminal_allowed": true
     },
     {
+      "canonical": "event_rate_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "event": "event_mask"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "event_pit"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "event_recency_z",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "event": "event_mask"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "event_pit"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "event_refractory",
       "direct_use_status": "direct_event",
       "expected_cardinality": "panel",
@@ -6567,6 +7436,169 @@
       "terminal_allowed": true
     },
     {
+      "canonical": "event_streak",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "event": "event_mask"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "event_pit"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "ewm_corr",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "x": "continuous_close",
+        "y": "return_decimal"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "span": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "ewm_cov",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "x": "continuous_close",
+        "y": "return_decimal"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "span": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "ex_self_mad_z",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "x": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "min_peers": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "ex_self_mean_gap",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "x": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "min_peers": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "ex_self_rank_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "x": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "min_peers": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "ex_self_zscore",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "x": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "min_peers": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "exp",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -6717,27 +7749,6 @@
       "terminal_allowed": true
     },
     {
-      "canonical": "fin_actual_expectation_divergence",
-      "direct_use_status": "direct_alpha",
-      "expected_cardinality": "panel",
-      "expected_grain": "daily",
-      "expected_output_kind": "series",
-      "expected_value_domain": "",
-      "input_bindings": {
-        "expected": "earnings_expected"
-      },
-      "market": "ashare",
-      "minimum_coverage": 0.5,
-      "parameter_values": {},
-      "required_context": {
-        "sources": [
-          "fundamental_pit"
-        ]
-      },
-      "role": "fundamental_pit",
-      "terminal_allowed": true
-    },
-    {
       "canonical": "fin_announcement_lag",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -6797,28 +7808,6 @@
       "parameter_values": {
         "periods": null
       },
-      "required_context": {
-        "sources": [
-          "fundamental_pit"
-        ]
-      },
-      "role": "fundamental_pit",
-      "terminal_allowed": true
-    },
-    {
-      "canonical": "fin_beat_streak",
-      "direct_use_status": "direct_alpha",
-      "expected_cardinality": "panel",
-      "expected_grain": "daily",
-      "expected_output_kind": "series",
-      "expected_value_domain": "",
-      "input_bindings": {
-        "expected": "earnings_expected",
-        "period_id": "period_id"
-      },
-      "market": "ashare",
-      "minimum_coverage": 0.5,
-      "parameter_values": {},
       "required_context": {
         "sources": [
           "fundamental_pit"
@@ -7250,49 +8239,6 @@
       "terminal_allowed": true
     },
     {
-      "canonical": "fin_days_since_expectation_revision",
-      "direct_use_status": "direct_alpha",
-      "expected_cardinality": "panel",
-      "expected_grain": "daily",
-      "expected_output_kind": "series",
-      "expected_value_domain": "",
-      "input_bindings": {
-        "expected": "earnings_expected"
-      },
-      "market": "ashare",
-      "minimum_coverage": 0.5,
-      "parameter_values": {},
-      "required_context": {
-        "sources": [
-          "fundamental_pit"
-        ]
-      },
-      "role": "fundamental_pit",
-      "terminal_allowed": true
-    },
-    {
-      "canonical": "fin_days_since_update",
-      "direct_use_status": "direct_alpha",
-      "expected_cardinality": "panel",
-      "expected_grain": "daily",
-      "expected_output_kind": "series",
-      "expected_value_domain": "",
-      "input_bindings": {
-        "period_id": "period_id",
-        "x": "continuous_close"
-      },
-      "market": "ashare",
-      "minimum_coverage": 0.5,
-      "parameter_values": {},
-      "required_context": {
-        "sources": [
-          "fundamental_pit"
-        ]
-      },
-      "role": "fundamental_pit",
-      "terminal_allowed": true
-    },
-    {
       "canonical": "fin_debt_repayment_intensity",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -7593,7 +8539,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -7614,7 +8560,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -7635,7 +8581,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -7656,7 +8602,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -7677,7 +8623,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -8255,28 +9201,6 @@
       "terminal_allowed": true
     },
     {
-      "canonical": "fin_miss_streak",
-      "direct_use_status": "direct_alpha",
-      "expected_cardinality": "panel",
-      "expected_grain": "daily",
-      "expected_output_kind": "series",
-      "expected_value_domain": "",
-      "input_bindings": {
-        "expected": "earnings_expected",
-        "period_id": "period_id"
-      },
-      "market": "ashare",
-      "minimum_coverage": 0.5,
-      "parameter_values": {},
-      "required_context": {
-        "sources": [
-          "fundamental_pit"
-        ]
-      },
-      "role": "fundamental_pit",
-      "terminal_allowed": true
-    },
-    {
       "canonical": "fin_monotonicity",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -8747,28 +9671,6 @@
       "terminal_allowed": true
     },
     {
-      "canonical": "fin_restated_flag",
-      "direct_use_status": "direct_alpha",
-      "expected_cardinality": "panel",
-      "expected_grain": "daily",
-      "expected_output_kind": "series",
-      "expected_value_domain": "",
-      "input_bindings": {
-        "period_id": "period_id",
-        "x": "continuous_close"
-      },
-      "market": "ashare",
-      "minimum_coverage": 0.5,
-      "parameter_values": {},
-      "required_context": {
-        "sources": [
-          "fundamental_pit"
-        ]
-      },
-      "role": "fundamental_pit",
-      "terminal_allowed": true
-    },
-    {
       "canonical": "fin_revision_count",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -8787,7 +9689,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -8809,7 +9711,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -8831,7 +9733,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -8853,7 +9755,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -8875,7 +9777,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -8997,28 +9899,6 @@
       "terminal_allowed": true
     },
     {
-      "canonical": "fin_staleness",
-      "direct_use_status": "direct_alpha",
-      "expected_cardinality": "panel",
-      "expected_grain": "daily",
-      "expected_output_kind": "series",
-      "expected_value_domain": "",
-      "input_bindings": {
-        "period_id": "period_id",
-        "x": "continuous_close"
-      },
-      "market": "ashare",
-      "minimum_coverage": 0.5,
-      "parameter_values": {},
-      "required_context": {
-        "sources": [
-          "fundamental_pit"
-        ]
-      },
-      "role": "fundamental_pit",
-      "terminal_allowed": true
-    },
-    {
       "canonical": "fin_std",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -9060,7 +9940,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -9084,7 +9964,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -9108,7 +9988,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -9129,7 +10009,7 @@
           "fundamental_pit"
         ]
       },
-      "role": "fundamental_pit",
+      "role": "denied",
       "terminal_allowed": true
     },
     {
@@ -16513,6 +17393,113 @@
       "terminal_allowed": false
     },
     {
+      "canonical": "kama_distance_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "er_window": null,
+        "fast_window": null,
+        "slow_window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "keltner_breakout_strength",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "atr_window": null,
+        "ema_window": null,
+        "multiplier": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "keltner_compression",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "atr_window": null,
+        "ema_window": null,
+        "multiplier": null,
+        "score_window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "keltner_width_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "atr_window": null,
+        "ema_window": null,
+        "multiplier": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "le",
       "direct_use_status": "direct_condition",
       "expected_cardinality": "panel",
@@ -16777,6 +17764,29 @@
       "terminal_allowed": false
     },
     {
+      "canonical": "ma_slope_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "market_cap_free_cap_gap",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -16921,6 +17931,52 @@
       "market": "ashare",
       "minimum_coverage": 0.5,
       "parameter_values": {},
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "negative_event_age",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "event": "event_mask"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "negative_event_rate",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "event": "event_mask"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
       "required_context": {
         "sources": [
           "daily_bar"
@@ -18301,6 +19357,52 @@
       "terminal_allowed": true
     },
     {
+      "canonical": "positive_event_age",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "event": "event_mask"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "positive_event_rate",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "event": "event_mask"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "power",
       "direct_use_status": "direct_intermediate",
       "expected_cardinality": "panel",
@@ -18405,6 +19507,110 @@
       "market": "ashare",
       "minimum_coverage": 0.5,
       "parameter_values": {},
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "psar_days_since_flip",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "acceleration": null,
+        "maximum": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "psar_direction",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "acceleration": null,
+        "maximum": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "psar_distance_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "acceleration": null,
+        "maximum": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "psar_flip",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "acceleration": null,
+        "maximum": null
+      },
       "required_context": {
         "sources": [
           "daily_bar"
@@ -18520,6 +19726,98 @@
       "market": "ashare",
       "minimum_coverage": 0.5,
       "parameter_values": {},
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "reg_forecast_error_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "reg_r2_trailing",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "reg_residual_zscore",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "reg_slope_tstat",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
       "required_context": {
         "sources": [
           "daily_bar"
@@ -19084,6 +20382,29 @@
       "required_context": {
         "sources": [
           "relation_pit"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "relative_strength_group_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "ret": "return_decimal"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
         ]
       },
       "role": "alpha",
@@ -19710,6 +21031,32 @@
       "terminal_allowed": true
     },
     {
+      "canonical": "senkou_span_causal_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "kijun_window": null,
+        "tenkan_window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "session_event_recovery_score",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -19793,6 +21140,53 @@
       "market": "ashare",
       "minimum_coverage": 0.5,
       "parameter_values": {},
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "signed_event_decay",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "event": "event_mask"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "halflife": null,
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "signed_event_rate",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "event": "event_mask"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
       "required_context": {
         "sources": [
           "daily_bar"
@@ -19957,6 +21351,77 @@
       "terminal_allowed": true
     },
     {
+      "canonical": "sma_distance_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "spectral_energy_ratio",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "top_k": null,
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "spectral_trend_share",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "trend_bins": null,
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "sqrt",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -20020,6 +21485,57 @@
       "terminal_allowed": false
     },
     {
+      "canonical": "sr_distance_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "sr_touch_count",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "tol": null,
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "state_adaptive_deadband",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -20060,6 +21576,29 @@
         "scale_method": null,
         "scale_window": null,
         "slew_mult": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "state_age",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "state": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
       },
       "required_context": {
         "sources": [
@@ -20164,6 +21703,122 @@
       },
       "role": "state",
       "terminal_allowed": false
+    },
+    {
+      "canonical": "state_dwell_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "state": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "state_episode_age",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "state": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "state_episode_age_capped",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "state": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "max_cap": null,
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "state_episode_age_lower_bound",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "state": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "state_episode_censored_flag",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "state": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
     },
     {
       "canonical": "state_episode_efficiency",
@@ -20295,6 +21950,52 @@
       "terminal_allowed": false
     },
     {
+      "canonical": "state_flip_age",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "state": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "state_flip_density",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "state": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "state_hold",
       "direct_use_status": "direct_state",
       "expected_cardinality": "panel",
@@ -20385,6 +22086,29 @@
       },
       "role": "state",
       "terminal_allowed": false
+    },
+    {
+      "canonical": "state_persistence",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "state": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
     },
     {
       "canonical": "state_quantile_hysteresis",
@@ -20575,6 +22299,75 @@
       "terminal_allowed": false
     },
     {
+      "canonical": "state_transition_count",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "state": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "state_transition_rate",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "state": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "state_transition_surprise",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "state": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "state_uncertainty_deadband",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -20612,6 +22405,110 @@
       "market": "ashare",
       "minimum_coverage": 0.5,
       "parameter_values": {},
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "supertrend_days_since_flip",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "atr_window": null,
+        "multiplier": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "supertrend_direction",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "atr_window": null,
+        "multiplier": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "supertrend_distance_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "atr_window": null,
+        "multiplier": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "supertrend_flip",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "atr_window": null,
+        "multiplier": null
+      },
       "required_context": {
         "sources": [
           "daily_bar"
@@ -20715,6 +22612,55 @@
       "terminal_allowed": true
     },
     {
+      "canonical": "tema_distance_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "tenkan_kijun_cross",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "kijun_window": null,
+        "tenkan_window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "tradable_state",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -20802,6 +22748,79 @@
       },
       "role": "alpha",
       "terminal_allowed": false
+    },
+    {
+      "canonical": "true_range_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {},
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "true_range_surprise",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "true_range_zscore",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
     },
     {
       "canonical": "true_turnover_rate",
@@ -22065,7 +24084,6 @@
       "market": "ashare",
       "minimum_coverage": 0.5,
       "parameter_values": {
-        "transition_prob": null,
         "window": null
       },
       "required_context": {
@@ -23909,7 +25927,7 @@
       "market": "ashare",
       "minimum_coverage": 0.5,
       "parameter_values": {
-        "span": null
+        "window": null
       },
       "required_context": {
         "sources": [
@@ -23933,7 +25951,7 @@
       "market": "ashare",
       "minimum_coverage": 0.5,
       "parameter_values": {
-        "span": null
+        "window": null
       },
       "required_context": {
         "sources": [
@@ -27563,6 +29581,30 @@
       "terminal_allowed": true
     },
     {
+      "canonical": "ts_mean_reversion_ou_approx_half_life_prior",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "x": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "min_periods": null,
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "ts_median",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -29934,7 +31976,6 @@
       "market": "ashare",
       "minimum_coverage": 0.5,
       "parameter_values": {
-        "transition_prob": null,
         "window": null
       },
       "required_context": {
@@ -32846,7 +34887,6 @@
       "market": "ashare",
       "minimum_coverage": 0.5,
       "parameter_values": {
-        "transition_prob": null,
         "window": null
       },
       "required_context": {
@@ -34600,6 +36640,31 @@
       "terminal_allowed": true
     },
     {
+      "canonical": "vpin_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "volume": "raw_volume_shares"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "buckets": null,
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
       "canonical": "vwap_deviation",
       "direct_use_status": "direct_alpha",
       "expected_cardinality": "panel",
@@ -34608,6 +36673,80 @@
       "expected_value_domain": "",
       "input_bindings": {
         "price": "continuous_close",
+        "volume": "raw_volume_shares"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "vwap_distance_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "volume": "raw_volume_shares"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "vwap_premium_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
+        "high": "continuous_high",
+        "low": "continuous_low",
+        "volume": "raw_volume_shares"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "vwap_slope_pct",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close",
         "volume": "raw_volume_shares"
       },
       "market": "ashare",
@@ -34638,6 +36777,29 @@
       "minimum_coverage": 0.5,
       "parameter_values": {
         "price_basis": null
+      },
+      "required_context": {
+        "sources": [
+          "daily_bar"
+        ]
+      },
+      "role": "alpha",
+      "terminal_allowed": true
+    },
+    {
+      "canonical": "wavelet_detail_energy_ratio",
+      "direct_use_status": "direct_alpha",
+      "expected_cardinality": "panel",
+      "expected_grain": "daily",
+      "expected_output_kind": "series",
+      "expected_value_domain": "",
+      "input_bindings": {
+        "close": "continuous_close"
+      },
+      "market": "ashare",
+      "minimum_coverage": 0.5,
+      "parameter_values": {
+        "window": null
       },
       "required_context": {
         "sources": [

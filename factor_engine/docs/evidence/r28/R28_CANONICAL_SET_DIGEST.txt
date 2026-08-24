@@ -1,3 +1,0 @@
-git_sha=435bce72e9754d6a58261a449cd036b55b258a58
-canonical_set_digest=06498a7b7debeb87f71d7f14f8a69acd99ec83a7be9c65c12bcf2ea2ea734e81
-total=1436

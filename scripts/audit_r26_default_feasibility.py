@@ -145,7 +145,7 @@ def main() -> int:
     for canon, fam in sorted(_FAMILIES.items()):
         status = _probe(canon, fam)
         rows.append({"canonical": canon, "family": fam, "default_feasibility_status": status})
-    out = ROOT / "docs" / "R26_DEFAULT_FEASIBILITY_AUDIT.csv"
+    out = ROOT / "factor_engine" / "docs" / "R26_DEFAULT_FEASIBILITY_AUDIT.csv"
     with open(out, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=["canonical", "family", "default_feasibility_status"])
         w.writeheader()

@@ -145,5 +145,5 @@ print("=== R30 HARD GATES ===")
 for k in sorted(gates):
     print(f"  [{'OK' if gates[k] else 'FAIL'}] {k}")
 print(f"\nR30_HARD_BLOCKERS_ZERO = {not blockers}")
-json.dump(gates, open("docs/evidence/r30/R30_HARD_GATES.json", "w"), indent=2, sort_keys=True)
+json.dump(gates, open("evidence/factor_engine/r30/R30_HARD_GATES.json", "w"), indent=2, sort_keys=True)
 sys.exit(1 if blockers else 0)

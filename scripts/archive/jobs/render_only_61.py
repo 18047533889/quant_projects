@@ -21,7 +21,7 @@ import io, base64
 
 PROJECT = Path("/home/sunhaiwei/quant_projects")
 sys.path.insert(0, str(PROJECT / "jobs"))
-REPORT_DIR = PROJECT / "docs" / "reports" / "2026-08-23"
+REPORT_DIR = PROJECT / "factor_engine" / "docs" / "reports" / "2026-08-23"
 FACTORS_DIR = REPORT_DIR / "factors"
 
 # 复用 rebuild_factor_detail_pages 中的渲染函数 (只读不重算)

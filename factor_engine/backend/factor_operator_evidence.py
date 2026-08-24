@@ -28,7 +28,7 @@ from typing import Any
 
 FE_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = FE_ROOT.parent
-VERIFIED_PATH = FE_ROOT / "evidence" / "factor_operator_verified.json"
+VERIFIED_PATH = FE_ROOT.parent / "evidence" / "factor_operator_verified.json"
 
 # review #253: the factor evidence artifact must bind the FULL execution TCB,
 # not just operator sources.  Editing any component below invalidates previously

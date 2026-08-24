@@ -29,7 +29,7 @@ def main() -> int:
     registered = set(OperatorRegistry.list_canonical())
 
     if not MANIFEST.is_file():
-        print("CI FAIL: docs/operator_market_capabilities.json missing; run "
+        print("CI FAIL: factor_engine/docs/operator_market_capabilities.json missing; run "
               "scripts/build_operator_market_capabilities.py", file=sys.stderr)
         return 1
 

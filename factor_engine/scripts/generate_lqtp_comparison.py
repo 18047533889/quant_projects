@@ -118,7 +118,7 @@ def _fe_has(names: set[str], allow_lower: set[str]) -> bool:
 
 
 def main() -> None:
-    """生成 ``docs/lqtp_vs_factor_engine_operators.md`` 对照表。"""
+    """生成 ``factor_engine/docs/lqtp_vs_factor_engine_operators.md`` 对照表。"""
     load_all()
     allow = build_dsl_allowlist()
     allow_lower = {k.lower() for k in allow}

@@ -3,7 +3,7 @@
 """R17 §4 / §7.6: per-canonical A/US cross-market audit matrix.
 
 Dynamically enumerates EVERY canonical operator in the current registry and
-emits ``docs/R17_OPERATOR_CROSS_MARKET_AUDIT.{json,csv,md}``.  Hard requirements:
+emits ``factor_engine/docs/R17_OPERATOR_CROSS_MARKET_AUDIT.{json,csv,md}``.  Hard requirements:
 
 - every canonical appears, 0 unknown/unreviewed;
 - market-specific operators carry an explicit blocked reason;
@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-OUT = REPO / "docs"
+OUT = REPO / "factor_engine" / "docs"
 
 
 def _load() -> None:

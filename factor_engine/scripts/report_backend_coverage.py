@@ -236,7 +236,7 @@ def main() -> int:
         lines = [
             "# Backend 三层覆盖清单",
             "",
-            "> 自动生成：`python scripts/report_backend_coverage.py --write-backend-doc docs/backend_coverage.md`",
+            "> 自动生成：`python scripts/report_backend_coverage.py --write-backend-doc factor_engine/docs/backend_coverage.md`",
             "",
             "## 摘要",
             "",

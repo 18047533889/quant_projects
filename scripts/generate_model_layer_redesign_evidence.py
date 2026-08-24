@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Model Layer Major Redesign — evidence / deliverables (§83).
 
-Generates, under ``docs/evidence/model_layer_redesign/``, the twelve final
+Generates, under ``evidence/factor_engine/model_layer_redesign/``, the twelve final
 deliverables bound to the current git HEAD:
 
     MODEL_ARCHITECTURE_MIGRATION_REPORT.md
@@ -33,7 +33,7 @@ sys.path.insert(0, ".")
 sys.path.insert(0, "..")
 
 REPO = Path(__file__).resolve().parent.parent
-OUT = REPO / "docs" / "evidence" / "model_layer_redesign"
+OUT = REPO / "evidence" / "factor_engine" / "model_layer_redesign"
 OUT.mkdir(parents=True, exist_ok=True)
 
 

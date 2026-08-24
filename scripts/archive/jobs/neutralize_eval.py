@@ -22,7 +22,7 @@ from matplotlib.ticker import MaxNLocator
 
 PROJECT = Path("/home/sunhaiwei/quant_projects")
 FV_PATH = PROJECT / "weekly_backtest_output" / "factor_values.parquet"
-REPORT_DIR = PROJECT / "docs" / "reports" / "2026-08-23"
+REPORT_DIR = PROJECT / "factor_engine" / "docs" / "reports" / "2026-08-23"
 FACTORS_DIR = REPORT_DIR / "factors"
 COS_DATA = Path.home() / "cos_data"
 DAILY = COS_DATA / "StockDailyBar"

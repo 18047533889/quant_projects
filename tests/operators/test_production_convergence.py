@@ -83,9 +83,9 @@ def test_generated_manifests_share_the_final_registry_snapshot() -> None:
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[2]
-    operator_manifest = json.loads((root / "docs/operator_manifest.json").read_text())
-    catalog_payload = json.loads((root / "cleaned_operators/docs/operators_catalog.json").read_text())
-    backend_manifest = json.loads((root / "docs/backend_evidence_manifest.json").read_text())
+    operator_manifest = json.loads((root / "factor_engine/docs/operator_manifest.json").read_text())
+    catalog_payload = json.loads((root / "factor_engine/cleaned_operators/docs/operators_catalog.json").read_text())
+    backend_manifest = json.loads((root / "factor_engine/docs/backend_evidence_manifest.json").read_text())
 
     def _as_map(payload: dict) -> dict:
         ops = payload.get("operators")

@@ -15,7 +15,7 @@ sys.path.insert(0, ".")
 sys.path.insert(0, "..")
 
 FE = Path(__file__).resolve().parents[1]
-OUT = FE / "docs" / "evidence" / "r33"
+OUT = FE / "evidence" / "factor_engine" / "r33"
 OUT.mkdir(parents=True, exist_ok=True)
 
 

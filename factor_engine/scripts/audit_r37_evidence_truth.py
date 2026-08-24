@@ -9,9 +9,9 @@
    并增加 5 类负控把 gate 真正打红（R37 §3.1 强制）。
 
 输出：
-    docs/evidence/r37/R37_HEAD.json
-    docs/evidence/r37/R37_EVIDENCE_FRESHNESS.json
-    docs/evidence/r37/R37_EVIDENCE_TRUTH_GATES.json
+    evidence/factor_engine/r37/R37_HEAD.json
+    evidence/factor_engine/r37/R37_EVIDENCE_FRESHNESS.json
+    evidence/factor_engine/r37/R37_EVIDENCE_TRUTH_GATES.json
 """
 from __future__ import annotations
 
@@ -249,7 +249,7 @@ def main() -> int:
     # R37_CURRENT_HEAD_BOUND：前置条件——HEAD 非空
     gates["R37_CURRENT_HEAD_BOUND"] = GateResult.from_cases(
         "R37_CURRENT_HEAD_BOUND", [bool(head) and len(head) >= 7], commit_sha=head,
-        evidence_files=("docs/evidence/r37/R37_HEAD.json",))
+        evidence_files=("evidence/factor_engine/r37/R37_HEAD.json",))
 
     # current-round artifacts：只对本轮（r37）判定 strict freshness。
     # legacy artifacts（r28/r30/r31/r32/r34 + 顶层 evidence）由
@@ -286,7 +286,7 @@ def main() -> int:
     # R37_ZERO_HARDCODED_TRUE_GATES：非探针字面量 True/False gate = 0
     gates["R37_ZERO_HARDCODED_TRUE_GATES"] = GateResult.from_cases(
         "R37_ZERO_HARDCODED_TRUE_GATES", [len(suspicious) == 0], commit_sha=head,
-        evidence_files=("docs/evidence/r37/R37_AUDIT_NEGATIVE_CONTROL.json",))
+        evidence_files=("evidence/factor_engine/r37/R37_AUDIT_NEGATIVE_CONTROL.json",))
 
     # R37_ZERO_PRESENCE_ONLY_GATES：证明"0 个 presence-only gate"
     # ——每个 gate 都 executed_cases>0；负控 gate 必须全部 fired。

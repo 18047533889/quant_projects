@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""生成 docs/market_field_manifest.json — 每个 canonical 概念的双市场 provider 清单。
+"""生成 factor_engine/docs/market_field_manifest.json — 每个 canonical 概念的双市场 provider 清单。
 
 对 ``fields.concepts`` 中的每个概念，汇总 A/US 两侧的 provider binding：
 status / dataset / physical / transform / source_unit / coverage / pit。
@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]  # factor_engine
-OUT_JSON = ROOT / "docs" / "market_field_manifest.json"
+OUT_JSON = ROOT / "factor_engine" / "docs" / "market_field_manifest.json"
 
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))

@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 FE_ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE_DIR = FE_ROOT / "evidence"
+EVIDENCE_DIR = FE_ROOT.parent / "evidence"
 
 
 @dataclass

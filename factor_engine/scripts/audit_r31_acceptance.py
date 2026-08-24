@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """R31 验收：hard gates 探测 + 功能探测 + 轻量回归。
 
-探测 ``docs/evidence/r31/R31_HARD_GATES.json``（每 gate: passed/failed +
+探测 ``evidence/factor_engine/r31/R31_HARD_GATES.json``（每 gate: passed/failed +
 evidence）。只验证真实实现，不制造假通过；未实现项诚实标记 failed 并给原因。
 """
 
@@ -16,7 +16,7 @@ from typing import Any, Callable
 REPO = Path(__file__).resolve().parents[1]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
-EVIDENCE_DIR = REPO / "docs" / "evidence" / "r31"
+EVIDENCE_DIR = REPO / "evidence" / "factor_engine" / "r31"
 
 _ctx_holder: dict[str, Any] = {}
 
@@ -358,7 +358,7 @@ def probe_docs_and_deps() -> None:
     docs_exist = (EVIDENCE_DIR / "R31_SQL_EMITTER_CERTIFICATION.csv").exists() and (
         EVIDENCE_DIR / "R31_BACKEND_TARGET_MATRIX.csv"
     ).exists()
-    _gate("R31_DOCS_GENERATED_FROM_CURRENT_EVIDENCE", docs_exist, "docs/evidence/r31 artifacts generated from live code")
+    _gate("R31_DOCS_GENERATED_FROM_CURRENT_EVIDENCE", docs_exist, "evidence/factor_engine/r31 artifacts generated from live code")
     try:
         import tomllib  # py3.11+
     except ImportError:

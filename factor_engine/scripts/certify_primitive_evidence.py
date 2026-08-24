@@ -386,7 +386,7 @@ def _build_verified_payload(
         name for name in dual
         if {"pandas_numpy", "polars", "sql"}.issubset(set(OperatorRegistry.backends_for(name)))
     )
-    verified_path = FE_ROOT / "evidence" / "primitive_verified.json"
+    verified_path = FE_ROOT.parent / "evidence" / "primitive_verified.json"
     existing_ops: dict[str, dict] = {}
     if verified_path.is_file():
         existing_ops = json.loads(verified_path.read_text(encoding="utf-8")).get("operators") or {}
@@ -463,7 +463,7 @@ def main() -> int:
     )
     args = parser.parse_args()
     _bootstrap()
-    out = FE_ROOT / "evidence" / "primitive_verified.json"
+    out = FE_ROOT.parent / "evidence" / "primitive_verified.json"
 
     if args.check:
         from factor_engine.backend.evidence_provenance import evidence_artifact_validation_errors, load_verified_artifact

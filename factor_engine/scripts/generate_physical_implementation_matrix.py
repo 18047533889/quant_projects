@@ -3,7 +3,7 @@
 """R21-P0-MATRIX-TRUTH: machine-generated backend implementation matrix.
 
 Single source of truth for backend coverage counts.  Manual counts in
-``backend/README.md`` / ``docs/sql_pushdown_coverage.md`` /
+``backend/README.md`` / ``factor_engine/docs/sql_pushdown_coverage.md`` /
 ``evidence/r2/BACKEND_GAP_MATRIX.yaml`` are NOT authoritative — this generator
 walks the LIVE registry (``cleaned_operators.load_all`` +
 ``backend.sql_pushdown.sql_registry.register_sql_backends``) and the live
@@ -25,8 +25,8 @@ evidence authorities:
   never duplicated).
 
 Outputs (all generated artifacts):
-* ``docs/PHYSICAL_IMPLEMENTATION_MATRIX.md`` — per-(canonical, backend) rows.
-* ``docs/BACKEND_COVERAGE.md`` — counts summary derived from the matrix.
+* ``factor_engine/docs/PHYSICAL_IMPLEMENTATION_MATRIX.md`` — per-(canonical, backend) rows.
+* ``factor_engine/docs/BACKEND_COVERAGE.md`` — counts summary derived from the matrix.
 
 Run pinned: ``OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 POLARS_MAX_THREADS=1 python3 scripts/generate_physical_implementation_matrix.py``.
@@ -55,7 +55,7 @@ for _var in (
 
 MATRIX_DOC = FE_ROOT / "docs" / "PHYSICAL_IMPLEMENTATION_MATRIX.md"
 COVERAGE_DOC = FE_ROOT / "docs" / "BACKEND_COVERAGE.md"
-ORACLE_JSON = FE_ROOT / "evidence" / "factor_operator_verified.json"
+ORACLE_JSON = FE_ROOT.parent / "evidence" / "factor_operator_verified.json"
 
 
 def _bootstrap() -> None:
@@ -399,7 +399,7 @@ def write_coverage_doc(summary: dict[str, Any], head_sha: str) -> None:
         "# Backend coverage (generated counts summary)",
         "",
         "> MACHINE-GENERATED — do not edit by hand. Counts derive ONLY from",
-        "> `docs/PHYSICAL_IMPLEMENTATION_MATRIX.md` (same run). Manual counts elsewhere are not authoritative.",
+        "> `factor_engine/docs/PHYSICAL_IMPLEMENTATION_MATRIX.md` (same run). Manual counts elsewhere are not authoritative.",
         f"> Generated (UTC): {datetime.now(timezone.utc).isoformat()} | HEAD: `{head_sha}`.",
         "",
         f"- total canonicals: **{summary['total_canonicals']}**",

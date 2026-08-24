@@ -194,7 +194,7 @@ def test_generated_matrix_doc_on_disk_well_formed() -> None:
     """The real generated artifact on disk must have consistent column counts."""
     if not MATRIX_DOC.is_file():
         raise AssertionError(
-            "docs/PHYSICAL_IMPLEMENTATION_MATRIX.md missing — run the generator"
+            "factor_engine/docs/PHYSICAL_IMPLEMENTATION_MATRIX.md missing — run the generator"
         )
     text = MATRIX_DOC.read_text(encoding="utf-8")
     tables = _markdown_table_rows(text)

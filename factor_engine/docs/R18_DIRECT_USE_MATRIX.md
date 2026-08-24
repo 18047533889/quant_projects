@@ -1,8 +1,8 @@
 # R18 Direct-Use Matrix
 
-Fingerprint: `19d2ff954b56f5dfd034d8ec8e8631af0ff271d4` (dirty=True)
+Fingerprint: `0d22dc674d0e3e6d1437c2c67e801ace7bc4cc37` (dirty=True)
 
-Registered canonicals: **1528**  |  retained DIRECT_*: **1469**
+Registered canonicals: **1624**  |  retained DIRECT_*: **1558**
 
 ## DirectUseStatus histogram
 
@@ -10,7 +10,7 @@ Registered canonicals: **1528**  |  retained DIRECT_*: **1469**
 |---|---|
 | delete_no_data | 3 |
 | delete_obsolete | 1 |
-| direct_alpha | 1197 |
+| direct_alpha | 1286 |
 | direct_alpha_high_cost | 94 |
 | direct_condition | 15 |
 | direct_control_flow | 1 |
@@ -22,7 +22,7 @@ Registered canonicals: **1528**  |  retained DIRECT_*: **1469**
 | direct_source_transform | 9 |
 | direct_state | 15 |
 | move_internal | 26 |
-| research_tool | 29 |
+| research_tool | 36 |
 
 ## Delete / remediation plan
 

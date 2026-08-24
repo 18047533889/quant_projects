@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-_SCOPE_YAML = Path(__file__).resolve().parents[1] / "evidence" / "phase1_production_scope.yaml"
+_SCOPE_YAML = Path(__file__).resolve().parents[2] / "evidence" / "phase1_production_scope.yaml"
 
 
 class Phase1ScopeError(ValueError):

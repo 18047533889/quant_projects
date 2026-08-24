@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 CANON = ROOT / "factor-pool-standard" / "enums" / "canonical_data_fields.json"
 if not CANON.is_file():
-    CANON = Path(__file__).resolve().parents[2] / "docs" / "canonical_data_fields.json"
+    CANON = Path(__file__).resolve().parents[2] / "factor_engine" / "docs" / "canonical_data_fields.json"
 
 
 def test_us_stock_daily_bar_ohlcv_primary_signal():

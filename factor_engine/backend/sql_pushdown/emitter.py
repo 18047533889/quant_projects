@@ -74,7 +74,7 @@ def _is_production_sql_mode() -> bool:
 # R40 #214：emitter identity 从 build manifest 取（不用运行时 file inspection）。
 # ---------------------------------------------------------------------------
 
-EMITTER_IDENTITY_MANIFEST = FE_ROOT / "evidence" / "emitter_identity.json"
+EMITTER_IDENTITY_MANIFEST = FE_ROOT.parent / "evidence" / "emitter_identity.json"
 
 
 def _emitter_source_bytes() -> bytes:

@@ -6,7 +6,7 @@ Every §29 gate is computed live at current HEAD (never hand-filled).  A gate
 is PASS only when its condition provably holds; otherwise FAIL (with the
 offending canonicals listed) or NOT_RUN (no evidence path).
 
-Run:  python3 scripts/generate_model_hard_gates.py [--out docs/evidence/model_operators]
+Run:  python3 scripts/generate_model_hard_gates.py [--out evidence/factor_engine/model_operators]
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ sys.path.insert(0, ".")
 sys.path.insert(0, "..")
 
 REPO = Path(__file__).resolve().parent.parent
-DEFAULT_OUT = REPO / "docs" / "evidence" / "model_operators"
+DEFAULT_OUT = REPO / "evidence" / "factor_engine" / "model_operators"
 
 PROD_LANES = ("FAST_NATIVE_ALPHA", "EXPENSIVE_CERTIFIED_ALPHA",
               "MODEL_FEATURE_SCORE", "STATE_CONDITION_EVENT")

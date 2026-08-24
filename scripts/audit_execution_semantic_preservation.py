@@ -495,7 +495,7 @@ def main(argv: list[str] | None = None) -> int:
     # 把 factor_engine 根加入 sys.path，否则 ``import planner`` 失败。
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
-    docs_dir = Path(args.docs_dir) if args.docs_dir else repo_root / "docs"
+    docs_dir = Path(args.docs_dir) if args.docs_dir else repo_root / "factor_engine" / "docs"
 
     canonicals = _retained_canonicals()
     if args.limit is not None:

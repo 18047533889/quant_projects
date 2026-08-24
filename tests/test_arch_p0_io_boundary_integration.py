@@ -126,7 +126,7 @@ if __name__ == "__main__":
         print("  ✓ ARCH-P0-003: Single authority policy established")
         print("  ✓ 30 known violations documented (not silently blessed)")
         print()
-        print("See docs/ARCH_P0_IO_BOUNDARY_VIOLATIONS.md for migration plan")
+        print("See factor_engine/docs/ARCH_P0_IO_BOUNDARY_VIOLATIONS.md for migration plan")
 
     except AssertionError as e:
         print(f"\n✗ Test FAILED: {e}")

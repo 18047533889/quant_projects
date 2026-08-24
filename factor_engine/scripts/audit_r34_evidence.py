@@ -2,10 +2,10 @@
 """R34 Evidence Truth hard gates：current-HEAD 绑定、无硬编码 True、无 presence-only。
 
 输出：
-    docs/evidence/r34/R34_HEAD.json
-    docs/evidence/r34/R34_EVIDENCE_FRESHNESS.json
-    docs/evidence/r34/R34_AUDIT_NEGATIVE_CONTROL.json
-    docs/evidence/r34/R34_EVIDENCE_TRUTH_GATES.json
+    evidence/factor_engine/r34/R34_HEAD.json
+    evidence/factor_engine/r34/R34_EVIDENCE_FRESHNESS.json
+    evidence/factor_engine/r34/R34_AUDIT_NEGATIVE_CONTROL.json
+    evidence/factor_engine/r34/R34_EVIDENCE_TRUTH_GATES.json
 
 每个 gate 走 ``GateResult.from_cases`` —— 没有 executed_cases 的 gate 一律
 NOT_RUN，绝不写死 PASS。
@@ -116,7 +116,7 @@ def main() -> int:
     # R34_CURRENT_HEAD_BOUND：当前运行本身绑定一个非空 HEAD
     gates["R34_CURRENT_HEAD_BOUND"] = GateResult.from_cases(
         "R34_CURRENT_HEAD_BOUND", [bool(head) and len(head) >= 7], commit_sha=head,
-        evidence_files=("docs/evidence/r34/R34_HEAD.json",))
+        evidence_files=("evidence/factor_engine/r34/R34_HEAD.json",))
 
     # R34_CLEAN_TREE_CERTIFICATION：evidence 绑定 working-tree hash（dirty 时也绑定，
     # 因此未提交编辑必然令 evidence 失效；这是 dirty-tree 下最强的可绑定状态）。
@@ -124,12 +124,12 @@ def main() -> int:
         "R34_CLEAN_TREE_CERTIFICATION",
         [bool(header.dirty_tree_hash) and header.dirty_tree_hash == header_dict["dirty_tree_hash"]],
         commit_sha=head,
-        evidence_files=("docs/evidence/r34/R34_HEAD.json",))
+        evidence_files=("evidence/factor_engine/r34/R34_HEAD.json",))
 
     # R34_ZERO_HARDCODED_TRUE_GATES：非探针上下文中的字面量 True/False gate 赋值 = 0
     gates["R34_ZERO_HARDCODED_TRUE_GATES"] = GateResult.from_cases(
         "R34_ZERO_HARDCODED_TRUE_GATES", [len(suspicious) == 0], commit_sha=head,
-        evidence_files=("docs/evidence/r34/R34_AUDIT_NEGATIVE_CONTROL.json",))
+        evidence_files=("evidence/factor_engine/r34/R34_AUDIT_NEGATIVE_CONTROL.json",))
 
     # R34_ZERO_PRESENCE_ONLY_HARD_GATES：负控真实扫描到脚本（>0），且可疑字面量被逐条暴露
     gates["R34_ZERO_PRESENCE_ONLY_HARD_GATES"] = GateResult.from_cases(
@@ -137,7 +137,7 @@ def main() -> int:
         [len(negative_control["scanned_audit_scripts"]) > 0,
          "suspicious_non_probe_literal_gates" in negative_control],
         commit_sha=head,
-        evidence_files=("docs/evidence/r34/R34_AUDIT_NEGATIVE_CONTROL.json",))
+        evidence_files=("evidence/factor_engine/r34/R34_AUDIT_NEGATIVE_CONTROL.json",))
 
     # R34_ZERO_SOURCE_STRING_ONLY_HARD_GATES：扫描器基于 AST（本模块自身无字面量 gate）
     gates["R34_ZERO_SOURCE_STRING_ONLY_HARD_GATES"] = GateResult.from_cases(
@@ -145,14 +145,14 @@ def main() -> int:
         [len(scan_hardcoded_true_gates([Path("runtime/r34_evidence.py")])) == 0,
          len(scan_hardcoded_true_gates([Path("scripts/audit_r34_evidence.py")])) == 0],
         commit_sha=head,
-        evidence_files=("docs/evidence/r34/R34_AUDIT_NEGATIVE_CONTROL.json",))
+        evidence_files=("evidence/factor_engine/r34/R34_AUDIT_NEGATIVE_CONTROL.json",))
 
     # R34_AUDIT_NEGATIVE_CONTROL_PASS：负控已执行（扫描到至少一个脚本且能分类）
     gates["R34_AUDIT_NEGATIVE_CONTROL_PASS"] = GateResult.from_cases(
         "R34_AUDIT_NEGATIVE_CONTROL_PASS",
         [len(negative_control["scanned_audit_scripts"]) > 0],
         commit_sha=head,
-        evidence_files=("docs/evidence/r34/R34_AUDIT_NEGATIVE_CONTROL.json",))
+        evidence_files=("evidence/factor_engine/r34/R34_AUDIT_NEGATIVE_CONTROL.json",))
 
     # R34_ZERO_STALE_<ROUND>_ARTIFACTS：freshness 必须逐 artifact 判定出绑定 SHA 与
     # current-head 状态 —— stale artifact 必须被显式记录（detected），绝不 silent 沿用。
@@ -172,7 +172,7 @@ def main() -> int:
         gates[gid] = GateResult.from_cases(
             gid, cases, commit_sha=head,
             details={"artifact_count": len(round_artifacts)},
-            evidence_files=("docs/evidence/r34/R34_EVIDENCE_FRESHNESS.json",),
+            evidence_files=("evidence/factor_engine/r34/R34_EVIDENCE_FRESHNESS.json",),
         )
 
     # R34_ZERO_STALE_FACTOR_OPERATOR_EVIDENCE / R34_ZERO_STALE_PRIMITIVE_EVIDENCE：
@@ -181,12 +181,12 @@ def main() -> int:
         "R34_ZERO_STALE_FACTOR_OPERATOR_EVIDENCE",
         [bool(artifacts.get("factor_operator_verified", {}).get("bound_sha") is not None)],
         commit_sha=head,
-        evidence_files=("docs/evidence/r34/R34_EVIDENCE_FRESHNESS.json",))
+        evidence_files=("evidence/factor_engine/r34/R34_EVIDENCE_FRESHNESS.json",))
     gates["R34_ZERO_STALE_PRIMITIVE_EVIDENCE"] = GateResult.from_cases(
         "R34_ZERO_STALE_PRIMITIVE_EVIDENCE",
         [bool(artifacts.get("primitive_verified", {}).get("bound_sha") is not None)],
         commit_sha=head,
-        evidence_files=("docs/evidence/r34/R34_EVIDENCE_FRESHNESS.json",))
+        evidence_files=("evidence/factor_engine/r34/R34_EVIDENCE_FRESHNESS.json",))
 
     payload = {
         "generated_by": "scripts/audit_r34_evidence.py",
