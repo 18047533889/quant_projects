@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from planning.backend_region import (
+from factor_engine.planning.backend_region import (
     BackendRegion,
     ExecutionAxis,
     PhysicalBackend,
@@ -19,8 +19,8 @@ from planning.backend_region import (
     Representation,
     StateContract,
 )
-from planning.physical_region_plan import PhysicalRegionPlan, compute_plan_hash, estimate_plan_peak_memory
-from planning.transfer_edge import (
+from factor_engine.planning.physical_region_plan import PhysicalRegionPlan, compute_plan_hash, estimate_plan_peak_memory
+from factor_engine.planning.transfer_edge import (
     SemanticContract,
     TransferEdge,
     TransferKind,
@@ -448,13 +448,10 @@ class RegionOptimizer:
                 representation=self._infer_representation(backend),
                 node_ids=tuple(region_nodes),
                 execution_axis=ExecutionAxis.GLOBAL_PANEL,  # Default
-                required_properties=PhysicalProperty(),
-                state_contract=StateContract(),
                 estimated_rows=10000,  # Placeholder
-                estimated_bytes=total_bytes,
-                can_stream=False,
-                requires_global_sort=False,
-                requires_full_group=False,
+                estimated_compute_ms=0.0,
+                estimated_memory_bytes=total_bytes,
+                input_bytes=total_bytes,
             )
             regions.append(region)
 
@@ -502,19 +499,13 @@ class RegionOptimizer:
                             transfer_kind=transfer_kind,
                             estimated_rows=10000,  # Placeholder
                             estimated_bytes=10000 * 8 * 5,  # Placeholder
-                            requires_sort=requires_sort_for_properties(
-                                child_region.required_properties,
-                                region.required_properties,
-                            ),
-                            requires_repartition=requires_repartition_for_properties(
-                                child_region.required_properties,
-                                region.required_properties,
-                            ),
+                            requires_sort=False,
+                            requires_repartition=False,
                             requires_reshape="WIDE" in source_repr.value and "LONG" in target_repr.value,
                             requires_dtype_cast=False,
                             semantic_contract=SemanticContract(),
-                            source_properties=child_region.required_properties,
-                            target_properties=region.required_properties,
+                            source_properties=PhysicalProperty(),
+                            target_properties=PhysicalProperty(),
                         )
                         # Compute cost
                         object.__setattr__(edge, "estimated_cost_ms", estimate_transfer_cost(edge))
@@ -597,13 +588,10 @@ class RegionOptimizer:
                 representation=self._infer_representation(backend),
                 node_ids=tuple(region_nodes),
                 execution_axis=ExecutionAxis.GLOBAL_PANEL,
-                required_properties=PhysicalProperty(),
-                state_contract=StateContract(),
                 estimated_rows=10000,
-                estimated_bytes=total_bytes,
-                can_stream=False,
-                requires_global_sort=False,
-                requires_full_group=False,
+                estimated_compute_ms=0.0,
+                estimated_memory_bytes=total_bytes,
+                input_bytes=total_bytes,
             )
             regions.append(region)
 
@@ -629,7 +617,7 @@ class RegionOptimizer:
             return f"R{region_counter[0]}"
 
         for region in regions:
-            if region.estimated_bytes <= self.memory_budget * 0.7:
+            if region.estimated_memory_bytes <= self.memory_budget * 0.7:
                 # Region fits comfortably
                 result.append(region)
             else:
@@ -651,13 +639,10 @@ class RegionOptimizer:
                             representation=region.representation,
                             node_ids=tuple(current_batch),
                             execution_axis=region.execution_axis,
-                            required_properties=region.required_properties,
-                            state_contract=region.state_contract,
                             estimated_rows=region.estimated_rows,
-                            estimated_bytes=current_bytes,
-                            can_stream=region.can_stream,
-                            requires_global_sort=region.requires_global_sort,
-                            requires_full_group=region.requires_full_group,
+                            estimated_compute_ms=0.0,
+                            estimated_memory_bytes=current_bytes,
+                            input_bytes=current_bytes,
                         )
                         result.append(sub_region)
                         current_batch = []
@@ -674,13 +659,10 @@ class RegionOptimizer:
                         representation=region.representation,
                         node_ids=tuple(current_batch),
                         execution_axis=region.execution_axis,
-                        required_properties=region.required_properties,
-                        state_contract=region.state_contract,
                         estimated_rows=region.estimated_rows,
-                        estimated_bytes=current_bytes,
-                        can_stream=region.can_stream,
-                        requires_global_sort=region.requires_global_sort,
-                        requires_full_group=region.requires_full_group,
+                        estimated_compute_ms=0.0,
+                        estimated_memory_bytes=current_bytes,
+                        input_bytes=current_bytes,
                     )
                     result.append(sub_region)
 
@@ -710,7 +692,7 @@ class RegionOptimizer:
             # Sort by estimated cost (largest first for better load balancing)
             region_map = {r.region_id: r for r in regions}
             ready_queue.sort(
-                key=lambda rid: region_map[rid].estimated_bytes if rid in region_map else 0,
+                key=lambda rid: region_map[rid].estimated_memory_bytes if rid in region_map else 0,
                 reverse=True,
             )
 
@@ -736,7 +718,7 @@ class RegionOptimizer:
         """Estimate total time-to-durable-commit (section 31)."""
         # Sum all compute costs (each region executes once)
         # Note: In real implementation, this would consider parallelism
-        compute_ms = sum(r.estimated_bytes / 1_000_000.0 * 0.5 for r in regions)
+        compute_ms = sum(r.estimated_memory_bytes / 1_000_000.0 * 0.5 for r in regions)
         transfer_ms = sum(e.estimated_cost_ms for e in edges)
         overhead_ms = len(regions) * 0.5  # Scheduler overhead
         return compute_ms + transfer_ms + overhead_ms
@@ -759,15 +741,14 @@ class RegionOptimizer:
         return 2.0 + (estimated_rows / 1_000_000.0) * 0.5
 
     def _infer_representation(self, backend: PhysicalBackend) -> Representation:
-        """Infer default representation for backend."""
+        """Infer default representation for backend (R21-PLANNER-TYPE-UNIFICATION)."""
         mapping = {
             PhysicalBackend.PANDAS_NUMPY: Representation.PANDAS_LONG,
-            PhysicalBackend.POLARS_LAZY: Representation.POLARS_LAZY_LONG,
-            PhysicalBackend.POLARS_EAGER: Representation.POLARS_LONG,
+            PhysicalBackend.POLARS_PANEL: Representation.POLARS_LONG,
+            PhysicalBackend.POLARS_LONG: Representation.POLARS_LAZY_LONG,
             PhysicalBackend.DUCKDB_SQL: Representation.DUCKDB_RELATION,
             PhysicalBackend.CLICKHOUSE_SQL: Representation.DUCKDB_RELATION,  # Approximation
-            PhysicalBackend.Q_TABLE: Representation.Q_TABLE,
-            PhysicalBackend.ARROW_COMPUTE: Representation.ARROW_TABLE,
+            PhysicalBackend.Q_KDB: Representation.Q_TABLE,
         }
         return mapping.get(backend, Representation.PANDAS_LONG)
 

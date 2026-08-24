@@ -18,7 +18,7 @@ import os
 
 import pytest
 
-from parameter_canonicalizer import (
+from factor_engine.parameter_canonicalizer import (
     ParameterCanonicalizer,
     ParameterContractError,
     ParamNormalizer,

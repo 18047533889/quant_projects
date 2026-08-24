@@ -409,7 +409,7 @@ def run_semantic_closure_audit(
 
     research_tools = set()
     try:
-        from research_tools.registry import ResearchToolRegistry
+        from factor_engine.research_tools.registry import ResearchToolRegistry
 
         research_tools = set(ResearchToolRegistry.list_canonical())
     except Exception:  # pragma: no cover

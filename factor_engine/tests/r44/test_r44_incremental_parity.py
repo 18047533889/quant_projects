@@ -122,7 +122,7 @@ def test_corrupted_and_stale_checkpoint_fail_closed(tmp_path) -> None:
     from pathlib import Path
     from factor_engine.runtime.incremental_parity import _PanelSource, _segmented_ir
     from factor_engine.runtime.stateful_incremental import try_stateful_segmented_incremental
-    from stateful_contract import StateCheckpoint
+    from factor_engine.stateful_contract import StateCheckpoint
 
     panel = default_panel_factory(40)
     split = 20

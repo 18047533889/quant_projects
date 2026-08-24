@@ -37,7 +37,7 @@ import pandas as pd
 from factor_engine.ir.nodes import IRNode
 from factor_engine.runtime.stateful_checkpoint_store import StatefulCheckpointStore
 from factor_engine.runtime.stateful_incremental import try_stateful_segmented_incremental
-from stateful_runtime import execute_stateful_segment
+from factor_engine.stateful_runtime import execute_stateful_segment
 
 #: 该 parity 套件拟覆盖的 segmented canonical（各带一组小参数）。
 SEGMENTED_CANONICALS: tuple[str, ...] = (
@@ -802,7 +802,7 @@ def run_destructive_scenarios(
             start=panel.index[0], end=panel.index[split], bootstrap=True,
         )
         # 把 checkpoint.as_of 改成落后一天（伪造 stale）
-        from stateful_contract import StateCheckpoint
+        from factor_engine.stateful_contract import StateCheckpoint
         factor_dir = Path(str(store.root)) / "d16"
         for path in factor_dir.glob("*.json"):
             cp = StateCheckpoint.from_json(path.read_text(encoding="utf-8"))

@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from recursive_kernel import (
+from factor_engine.recursive_kernel import (
     adx_segment,
     atr_wilder_segment,
     ema_segment,

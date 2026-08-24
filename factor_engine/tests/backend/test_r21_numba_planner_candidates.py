@@ -5,7 +5,7 @@ Tests Numba backend as a planner-selectable candidate for recursive/stateful ope
 Targets planning/backend_selector.py and planning/dag_partition_optimizer.py.
 """
 import pytest
-from planning.backend_selector import (
+from factor_engine.planning.backend_selector import (
     IntelligentBackendSelector,
     DataScale,
     OperatorProfile,
@@ -13,7 +13,7 @@ from planning.backend_selector import (
     RoutingContext,
     RoutingDecision,
 )
-from planning.backend_region import PhysicalBackend, ExecutionAxis
+from factor_engine.planning.backend_region import PhysicalBackend, ExecutionAxis
 from factor_engine.backend.contracts import ExecutionKind
 
 
@@ -22,7 +22,7 @@ class TestNumbaBackendCharacteristics:
 
     def test_numba_backend_exists_in_characteristics(self):
         """Numba backend should be in _BACKEND_CHARACTERISTICS if implemented."""
-        from planning.backend_selector import _BACKEND_CHARACTERISTICS
+        from factor_engine.planning.backend_selector import _BACKEND_CHARACTERISTICS
 
         # If NUMBA backend is added, it should be in characteristics
         # This test ensures we don't break existing backends
@@ -34,7 +34,7 @@ class TestNumbaBackendCharacteristics:
     def test_cost_model_includes_numba_fields(self):
         """Cost model should include cold_jit_ms, warm_ms, cache_hit_probability when Numba is used."""
         # This test verifies the cost model structure
-        from planning.backend_selector import _BACKEND_CHARACTERISTICS
+        from factor_engine.planning.backend_selector import _BACKEND_CHARACTERISTICS
 
         selector = IntelligentBackendSelector()
 
@@ -157,7 +157,7 @@ class TestNumbaPlannerIntegration:
 
     def test_planner_selects_numba_for_recursive_ops(self):
         """Planner should consider Numba for recursive_time_per_instrument axis."""
-        from planning.backend_selector import select_optimal_backend_for_node, _BACKEND_CHARACTERISTICS
+        from factor_engine.planning.backend_selector import select_optimal_backend_for_node, _BACKEND_CHARACTERISTICS
 
         decision = select_optimal_backend_for_node(
             estimated_rows=200_000,
@@ -176,7 +176,7 @@ class TestNumbaPlannerIntegration:
 
     def test_numba_conversion_cost_with_polars(self):
         """Test conversion cost when switching from Polars to Numba backend."""
-        from planning.backend_selector import _BACKEND_CHARACTERISTICS
+        from factor_engine.planning.backend_selector import _BACKEND_CHARACTERISTICS
 
         selector = IntelligentBackendSelector()
 

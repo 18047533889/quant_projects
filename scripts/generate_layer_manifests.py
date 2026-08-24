@@ -19,8 +19,8 @@ from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E
 from factor_engine.factor_recipes.compiler import RecipeCompiler  # noqa: E402
 from factor_engine.factor_recipes.registry import FactorRecipeRegistry  # noqa: E402
 from factor_engine.factor_recipes.planner_bridge import compile_recipe_plans  # noqa: E402
-from research_tools.registry import ResearchToolRegistry  # noqa: E402
-from stateful_contract import StatefulCheckpointRegistry  # noqa: E402
+from factor_engine.research_tools.registry import ResearchToolRegistry  # noqa: E402
+from factor_engine.stateful_contract import StatefulCheckpointRegistry  # noqa: E402
 
 
 def _json_default(o: Any) -> Any:

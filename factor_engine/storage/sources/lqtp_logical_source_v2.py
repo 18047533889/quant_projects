@@ -401,7 +401,7 @@ class LQTPLogicalDataSource(_Base):
         elif transform not in {None, "financial_asof"}:
             raise MissingDataDependencyError(f"unsupported financial transform {transform!r}")
 
-        from pit_contract import PITColumns, pit_asof_join
+        from factor_engine.pit_contract import PITColumns, pit_asof_join
 
         anchor = self._anchor_index()
         decisions = anchor.to_frame(index=False)

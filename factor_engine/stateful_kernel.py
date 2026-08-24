@@ -18,8 +18,8 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
-from stateful_contract import StateCheckpoint, StatefulCheckpointRegistry
-from stateful_runtime import execute_stateful_segment
+from factor_engine.stateful_contract import StateCheckpoint, StatefulCheckpointRegistry
+from factor_engine.stateful_runtime import execute_stateful_segment
 
 
 @dataclass(frozen=True)

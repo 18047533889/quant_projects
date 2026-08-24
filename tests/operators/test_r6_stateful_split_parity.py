@@ -13,8 +13,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from stateful_contract import StatefulCheckpointRegistry, StatefulContractError
-from stateful_runtime import execute_stateful_segment
+from factor_engine.stateful_contract import StatefulCheckpointRegistry, StatefulContractError
+from factor_engine.stateful_runtime import execute_stateful_segment
 
 SEGMENTED = (
     "ts_ema",

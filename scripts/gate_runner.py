@@ -108,29 +108,38 @@ GATE_SPECS: tuple[GateSpec, ...] = (
         tests=("quant_evaluator/tests/test_metamorphic.py", "quant_evaluator/tests/test_consistency.py"),
     ),
     GateSpec(
-        gate_id="CROSS_PACKAGE",
+        gate_id="CROSS_PACKAGE_CORE",
         commands=(
             ("integration_tests/test_cross_package_contracts.py", "-q", _JUNIT_TOK, "-p", "no:cacheprovider"),
         ),
         tests=("integration_tests/test_cross_package_contracts.py",),
-        # INT-P1: 4 of 6 contract tests run clean; the remaining two packages
-        # (factor_assets / factor_optimizer.contracts / factor_preprocess.contracts
-        # under the repo-root namespace) are NOT wired into the chain yet — the
-        # skips carry explicit "import failure" reasons.  Those are the not-yet-wired
-        # chain steps the tests themselves document, so they are registered as
-        # legitimate expected skips.  Any OTHER skip reason fails the gate.
+        # P0-CP: CORE cross-package contract tolerates NO skip — an import
+        # failure anywhere in the core chain (factor_engine / quant_evaluator /
+        # factor_assets) is a FAIL, never a legitimate skip.  0 skips allowed.
+        skip_policy="fail_on_skip",
+        allowed_skip_inventory={},
+    ),
+    GateSpec(
+        gate_id="CROSS_PACKAGE_OPTIONAL",
+        commands=(
+            ("integration_tests/test_cross_package_contracts.py", "-q", _JUNIT_TOK, "-p", "no:cacheprovider"),
+        ),
+        tests=("integration_tests/test_cross_package_contracts.py",),
+        # P0-CP: OPTIONAL tolerates a skip ONLY for a genuinely optional adapter
+        # (factor_preprocess / factor_optimizer not wired).  A core-chain import
+        # failure (factor_engine / quant_evaluator / factor_assets) is still a
+        # FAIL.  The allowed reasons mirror the adapter-level skips in the test.
         skip_policy="fail_on_skip",
         expected_test_inventory={
             "integration_tests/test_cross_package_contracts.py": {
                 "min_passed": 4,
-                "allowed_skipped": 4,
+                "allowed_skipped": 2,
             },
         },
         allowed_skip_inventory={
             "integration_tests/test_cross_package_contracts.py": {
-                r"^import failure:.*": 2,
-                r"^factor_assets not importable here:.*": 1,
                 r"^factor_preprocess not importable here:.*": 1,
+                r"^import failure:.*factor_optimizer.contracts.*": 1,
             },
         },
     ),
@@ -481,6 +490,20 @@ class GateRunner:
         return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     @staticmethod
+    def _tree_identity() -> str:
+        """PlatformSourceTreeIdentity Merkle root of the live working tree.
+
+        P0-WT: bind each evidence entry to the WORKING-TREE content identity so
+        a direct uncommitted edit (git HEAD unchanged) still marks the evidence
+        STALE.  Returns "" if the identity cannot be computed (never fabricates).
+        """
+        try:
+            from evidence.source_snapshot import platform_source_tree_identity
+            return platform_source_tree_identity(REPO_ROOT)["root_merkle"]
+        except Exception:  # pragma: no cover - scan failure
+            return ""
+
+    @staticmethod
     def _parse_junit(xml_path: Path) -> dict | None:
         """Parse a pytest JUnit XML file into honest counts (or None)."""
         if xml_path is None or not Path(xml_path).is_file():
@@ -685,6 +708,7 @@ class GateRunner:
             "duration_sec": duration,
             "executed_at": self._now_iso(),
             "timed_out": timed_out,
+            "tree_identity": self._tree_identity(),
             "note": "TIMEOUT" if timed_out else None,
         }
         return entry
@@ -707,6 +731,7 @@ class GateRunner:
                 "tests": None, "collected_tests": None,
                 "duration_sec": 0.0, "executed_at": self._now_iso(),
                 "timed_out": False,
+                "tree_identity": self._tree_identity(),
                 "note": f"no verifier registered for {spec.verifier!r}",
             }
         started = time.time()
@@ -729,6 +754,7 @@ class GateRunner:
             "duration_sec": duration,
             "executed_at": self._now_iso(),
             "timed_out": False,
+            "tree_identity": self._tree_identity(),
             "note": note,
         }
 

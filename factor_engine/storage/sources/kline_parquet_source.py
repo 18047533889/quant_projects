@@ -5,7 +5,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from logging_utils import get_logger
+from factor_engine.util.logging_utils import get_logger
 
 from .datasource import DataSource
 

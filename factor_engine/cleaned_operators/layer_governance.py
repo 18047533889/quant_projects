@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 import factor_engine.factor_recipes  # noqa: F401 - populate FactorRecipeRegistry
 from factor_engine.factor_recipes.registry import FactorRecipeRegistry
-from research_tools.registry import ResearchToolRegistry
+from factor_engine.research_tools.registry import ResearchToolRegistry
 from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 # Fields or obsolete ambiguous transforms that must not remain executable names.

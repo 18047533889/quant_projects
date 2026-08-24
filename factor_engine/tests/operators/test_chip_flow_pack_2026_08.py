@@ -209,14 +209,14 @@ def test_constant_window_fails_closed():
 
 def _research_op(canonical):
     """micro_* ops are governed into the research-tool registry after load."""
-    from research_tools.registry import ResearchToolRegistry
+    from factor_engine.research_tools.registry import ResearchToolRegistry
 
     return ResearchToolRegistry.get(canonical)
 
 
 def _research_op_catalog(canonical):
     """Catalog metadata of a governed research tool."""
-    from research_tools.registry import ResearchToolRegistry
+    from factor_engine.research_tools.registry import ResearchToolRegistry
 
     entry = ResearchToolRegistry.catalog().get(canonical)
     return entry or {}

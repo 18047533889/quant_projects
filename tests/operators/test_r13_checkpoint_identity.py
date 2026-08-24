@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from stateful_contract import (
+from factor_engine.stateful_contract import (
     StateCheckpoint,
     StatefulCheckpointRegistry,
     StatefulContractError,
@@ -38,8 +38,8 @@ def test_implementation_hash_does_not_collide_on_constant_swap():
     disassembly identity must distinguish them, and the stateful runtime must
     delegate to it (never a third hash)."""
     from factor_engine.cleaned_operators.registry import _code_payload
-    from recursive_kernel import ema_segment, rsi_wilder_segment
-    from stateful_runtime import _implementation_hash
+    from factor_engine.recursive_kernel import ema_segment, rsi_wilder_segment
+    from factor_engine.stateful_runtime import _implementation_hash
 
     def f1(x):
         return 2 * x + 3
@@ -61,7 +61,7 @@ def test_implementation_hash_does_not_collide_on_constant_swap():
 
 
 def test_implementation_hash_is_deterministic():
-    from stateful_runtime import _implementation_hash
+    from factor_engine.stateful_runtime import _implementation_hash
 
     assert _implementation_hash("ts_ema") == _implementation_hash("ts_ema")
     assert len(_implementation_hash("ts_ema")) == 16
@@ -295,7 +295,7 @@ def test_segmented_incremental_contiguous_resume_still_works(tmp_path):
 def test_execute_segment_rejects_false_coverage_checkpoint():
     """NEW-P0-30 at the runtime boundary: a checkpoint whose as_of does not match
     the state's own last_timestamp must hard-fail, never resume."""
-    from stateful_runtime import execute_stateful_segment
+    from factor_engine.stateful_runtime import execute_stateful_segment
 
     # Bootstrap a genuine checkpoint ending Friday (as_of == state.last_timestamp).
     boot = execute_stateful_segment(

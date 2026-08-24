@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Compatibility facade for recipe-expanded operator usage governance."""
-from operator_usage_expanded import (
+from factor_engine.operator_usage_expanded import (
     FUSED_COMPOSITES,
     OperatorUsageReport,
     UsageEntry,

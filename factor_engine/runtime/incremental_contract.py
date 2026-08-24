@@ -262,7 +262,7 @@ def _cross_section_scope_for(canonical: str) -> CrossSectionScope:
 def _checkpoint_spec(canonical: str):
     """StatefulCheckpointRegistry.get（懒加载；失败返回 None）。"""
     try:
-        from stateful_contract import StatefulCheckpointRegistry
+        from factor_engine.stateful_contract import StatefulCheckpointRegistry
 
         return StatefulCheckpointRegistry.get(canonical)
     except Exception:

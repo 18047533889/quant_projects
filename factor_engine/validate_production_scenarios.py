@@ -27,7 +27,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import pandas as pd
 import numpy as np
 
-from logging_utils import configure_logging, get_logger
+from factor_engine.logging_utils import configure_logging, get_logger
 
 configure_logging("INFO")
 logger = get_logger("production_validation")

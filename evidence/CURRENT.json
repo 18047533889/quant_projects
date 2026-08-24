@@ -1,26 +1,28 @@
 {
   "schema_version": 3,
-  "generated_at": "2026-08-24T11:38:52.099744+00:00",
-  "source_snapshot_id": "src:v1:01f630d2bb7cf794",
+  "generated_at": "2026-08-24T15:47:30.668940+00:00",
+  "source_snapshot_id": "src:v1:ac4521ea097b3bce",
   "sha_bindings": {
-    "RootRepoSHA": "{\"HEAD\":\"7dea2af5d3c27fd6e85432aac098903797e4b93e\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"903910a6230382d3a59c9225adf786db7abcec791b3de46309e602cfffe1c8c9\",\"dirty\":true,\"identity_hash\":\"a38445f358268a74124a09338ba7e43b00898bb94b571602f7249ff69fdaa6f1\",\"untracked_source_hash\":\"6df36a74371cb78047283d6066ba22456a978ab06a30286faf239c9b98d7deb7\"}",
-    "SourceTreeIdentity": "{\"HEAD\":\"7dea2af5d3c27fd6e85432aac098903797e4b93e\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"903910a6230382d3a59c9225adf786db7abcec791b3de46309e602cfffe1c8c9\",\"dirty\":true,\"identity_hash\":\"a38445f358268a74124a09338ba7e43b00898bb94b571602f7249ff69fdaa6f1\",\"untracked_source_hash\":\"6df36a74371cb78047283d6066ba22456a978ab06a30286faf239c9b98d7deb7\"}",
-    "PlatformSourceTreeIdentity": "6c64a8acb8efb1526a0f934b32f9d9e064713b01ccd181b590c40f1f28fe2237",
-    "EvidenceAttestationIdentity": "cd35a79dc34cbb1f2d497a421300e7a2d6bf31f1eef23c2c88fa99320c5c09aa",
-    "OperatorCatalogSHA": "eddce188872effc39301d397dae95cfa6a46a2c3a299b26fb35f9063c1ab2372",
+    "RootRepoSHA": "{\"HEAD\":\"7f43f7469145ed506347ac3095e6a5945e35a7a0\",\"cached_diff_hash\":\"e46af8c6fb81069bda5762f1da7e5f3d39251af8b3f33920771da464b32b702a\",\"diff_hash\":\"300cbc1d15ff03ec81489080aea3e4b05617a4946f3806595bf837e235871130\",\"dirty\":true,\"identity_hash\":\"d856076445ac55b465b486431cc983b4832bb1b66256da481f4c940fcacb01a5\",\"untracked_source_hash\":\"7e0ac4a9239ae5b2d614229263904b78795ae5fbb1214ce97e209db2ee03e459\"}",
+    "SourceTreeIdentity": "{\"HEAD\":\"7f43f7469145ed506347ac3095e6a5945e35a7a0\",\"cached_diff_hash\":\"e46af8c6fb81069bda5762f1da7e5f3d39251af8b3f33920771da464b32b702a\",\"diff_hash\":\"300cbc1d15ff03ec81489080aea3e4b05617a4946f3806595bf837e235871130\",\"dirty\":true,\"identity_hash\":\"d856076445ac55b465b486431cc983b4832bb1b66256da481f4c940fcacb01a5\",\"untracked_source_hash\":\"7e0ac4a9239ae5b2d614229263904b78795ae5fbb1214ce97e209db2ee03e459\"}",
+    "PlatformSourceTreeIdentity": "fd0600968af2763b9fff83608f1438c7c77d36fce92bbf07fa8cbff00cc99676",
+    "AlphaGeneratorIdentity": "a2d47c9770f58d06a862e21009aafb3eadbb93f58eda61b4ad5579b95754787c",
+    "EvidenceAttestationIdentity": "5d727b917d3e10c325288eaa9b93ac1b29506db01336c39bce2dc4cf9c1e878c",
+    "OperatorCatalogSHA": "fc4c569dfd857bf55ab34f0656995576b4f6245726e82cac5132981d6e2870e3",
     "SemanticCatalogIdentity": "a336cab3bf6b4113942c317e1949efdb2b749e334910cc458b1daef9ff16774d",
-    "ImplementationClosureHashSet": "0dd6302426d9af34badd1baff55e7225b0488f5c2f4b6761013c683c2c42f6b9",
-    "DependencyLockHash": "b982526eea6469422787b2fe4031af472e1ceb49afaff11f2c0fe260bbc3ae1b",
+    "ImplementationClosureHashSet": "33354571963901b73ecb59d74f29cbcca64ceff068a2b986141f59587474a424",
+    "DependencyLockHash": "f567dd4f2d37e0b8aafba60014e90f488913d7315dea9609164b1e1b33ba3377",
     "TestEnvironmentIdentity": "0a0fd01455850a189a8f1589fc65f1157a517fb0c293c9c6d8eb3337daa205f7"
   },
-  "source_tree_identity": "6c64a8acb8efb1526a0f934b32f9d9e064713b01ccd181b590c40f1f28fe2237",
+  "source_tree_identity": "fd0600968af2763b9fff83608f1438c7c77d36fce92bbf07fa8cbff00cc99676",
   "sha_binding_metadata": {
     "OperatorCatalogPath": "build/mining/direct_mining_catalog.json",
-    "DependencyLockPath": "factor_engine/requirements-production.lock",
+    "DependencyLockPath": "requirements-production.lock",
     "OperatorCatalogCount": 1558,
     "gitlink_count": 0,
     "platform_packages": [
-      "dataaccess",
+      "alphaprobe",
+      "data_access",
       "factor_assets",
       "factor_engine",
       "factor_optimizer",
@@ -89,14 +91,28 @@
     "rebind_command": "python -m evidence.current --write",
     "staleness_rule": "An artifact is CURRENT only when its BOUND input identity (source_snapshot_id + ImplementationClosureHashSet + SemanticCatalogIdentity at the time it was built) equals the freshly recomputed live identity AND the artifact was produced by an actual verification run (executed_at present).  Any difference -> STALE.  Unresolvable source snapshot -> UNRESOLVED (fail-closed)."
   },
+  "dimensions": {
+    "build_health": "CURRENT",
+    "runtime_health": "CURRENT",
+    "research_validity": "STALE",
+    "release_validity": "STALE",
+    "production_readiness": "CURRENT"
+  },
   "evaluation": {
-    "staleness_evaluated_at": "2026-08-24T11:38:52.445856+00:00",
+    "staleness_evaluated_at": "2026-08-24T15:47:31.003529+00:00",
     "status": "STALE",
     "changed_artifacts": [
       "operator-benchmark-manifest",
       "operator-certification",
       "operator-inventory"
     ],
-    "note": "status is CURRENT only when every artifact's BOUND input identity matches the LIVE identity set AND the artifact has an executed_at from a real verification run."
+    "note": "status is CURRENT only when every artifact's BOUND input identity matches the LIVE identity set AND the artifact has an executed_at from a real verification run.",
+    "dimensions": {
+      "build_health": "CURRENT",
+      "runtime_health": "CURRENT",
+      "research_validity": "STALE",
+      "release_validity": "STALE",
+      "production_readiness": "CURRENT"
+    }
   }
 }

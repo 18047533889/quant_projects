@@ -36,7 +36,7 @@ from typing import Any, Iterable
 import pandas as pd
 
 from factor_engine.api.factor import Factor
-from logging_utils import get_logger
+from factor_engine.util.logging_utils import get_logger
 
 logger = get_logger("factor_engine.runtime.materialize_batch")
 

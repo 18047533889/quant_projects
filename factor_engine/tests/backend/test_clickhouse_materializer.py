@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-from workspace_paths import quant_projects_root
+from factor_engine.util.workspace_paths import quant_projects_root
 
 
 @pytest.fixture(autouse=True)

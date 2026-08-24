@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from planning.backend_region import ExecutionAxis, PhysicalBackend
+from factor_engine.planning.backend_region import ExecutionAxis, PhysicalBackend
 
 
 class DataScale(str, Enum):
@@ -62,6 +62,10 @@ class BackendCharacteristics:
     preferred_profiles: tuple[OperatorProfile, ...]  # 擅长的算子类型
     parallel_efficiency: float  # 并行效率（0.0-1.0）
     conversion_penalty_ms: float  # 转换惩罚（从其他 backend 转入）
+    # R21-NUMBA-COST-MODEL: Numba JIT specific fields for TTDC calculation
+    cold_jit_ms: float = 0.0  # Cold JIT compilation cost (one-time)
+    warm_ms: float = 0.0  # Warm execution cost after JIT cache hit
+    cache_hit_probability: float = 0.0  # Probability of JIT cache hit (0.0-1.0)
 
 
 # Backend 性能特征库（基于实测 + 架构特性）
@@ -81,8 +85,8 @@ _BACKEND_CHARACTERISTICS: dict[PhysicalBackend, BackendCharacteristics] = {
         parallel_efficiency=0.3,  # GIL 限制
         conversion_penalty_ms=5.0,
     ),
-    PhysicalBackend.POLARS_EAGER: BackendCharacteristics(
-        backend=PhysicalBackend.POLARS_EAGER,
+    PhysicalBackend.POLARS_PANEL: BackendCharacteristics(
+        backend=PhysicalBackend.POLARS_PANEL,
         startup_cost_ms=8.0,  # 中等启动
         per_row_throughput_mrows_per_sec=2.5,  # 高吞吐
         memory_overhead_factor=1.5,  # 中等内存开销
@@ -96,8 +100,8 @@ _BACKEND_CHARACTERISTICS: dict[PhysicalBackend, BackendCharacteristics] = {
         parallel_efficiency=0.85,  # 高并行效率
         conversion_penalty_ms=8.0,
     ),
-    PhysicalBackend.POLARS_LAZY: BackendCharacteristics(
-        backend=PhysicalBackend.POLARS_LAZY,
+    PhysicalBackend.POLARS_LONG: BackendCharacteristics(
+        backend=PhysicalBackend.POLARS_LONG,
         startup_cost_ms=10.0,  # 稍慢启动（优化器开销）
         per_row_throughput_mrows_per_sec=3.0,  # 最高吞吐（优化后）
         memory_overhead_factor=1.3,  # 低内存开销（lazy）
@@ -166,6 +170,12 @@ class IntelligentBackendSelector:
         3. 内存约束检查 → 强制 streaming/分块
         4. 成本模型评估 → 选择最优（compute + transfer + memory_risk）
         5. Transfer affinity → 父子节点 backend 亲和性调整
+
+    R21-ROUTING-AUTHORITY: this selector is a capability/cost CANDIDATE
+    PROVIDER only.  It may propose a backend but never finalizes the production
+    route.  The Global Physical Planner
+    (``runtime.multibackend.batch_global_optimizer.PhysicalBatchGlobalOptimizer``)
+    is the sole production routing authority.
     """
 
     def __init__(
@@ -295,7 +305,8 @@ class IntelligentBackendSelector:
                 # 允许跨规模使用，但有惩罚
                 if scale in (DataScale.TINY, DataScale.SMALL) and backend in (
                     PhysicalBackend.DUCKDB_SQL,
-                    PhysicalBackend.POLARS_LAZY,
+                    PhysicalBackend.POLARS_LONG,
+                    PhysicalBackend.POLARS_PANEL,
                 ):
                     # 小数据不推荐重型 backend
                     continue
@@ -425,18 +436,18 @@ class IntelligentBackendSelector:
         # Conversion cost matrix (ms baseline + per-GB scaling)
         # Key: (source, target) -> (baseline_ms, ms_per_gb)
         conversion_matrix = {
-            (PhysicalBackend.PANDAS_NUMPY, PhysicalBackend.POLARS_EAGER): (5.0, 30.0),
-            (PhysicalBackend.PANDAS_NUMPY, PhysicalBackend.POLARS_LAZY): (8.0, 40.0),
+            (PhysicalBackend.PANDAS_NUMPY, PhysicalBackend.POLARS_PANEL): (5.0, 30.0),
+            (PhysicalBackend.PANDAS_NUMPY, PhysicalBackend.POLARS_LONG): (8.0, 40.0),
             (PhysicalBackend.PANDAS_NUMPY, PhysicalBackend.DUCKDB_SQL): (15.0, 60.0),
-            (PhysicalBackend.POLARS_EAGER, PhysicalBackend.PANDAS_NUMPY): (4.0, 25.0),
-            (PhysicalBackend.POLARS_EAGER, PhysicalBackend.POLARS_LAZY): (2.0, 10.0),
-            (PhysicalBackend.POLARS_EAGER, PhysicalBackend.DUCKDB_SQL): (10.0, 45.0),
-            (PhysicalBackend.POLARS_LAZY, PhysicalBackend.PANDAS_NUMPY): (6.0, 35.0),
-            (PhysicalBackend.POLARS_LAZY, PhysicalBackend.POLARS_EAGER): (3.0, 15.0),
-            (PhysicalBackend.POLARS_LAZY, PhysicalBackend.DUCKDB_SQL): (8.0, 40.0),
+            (PhysicalBackend.POLARS_PANEL, PhysicalBackend.PANDAS_NUMPY): (4.0, 25.0),
+            (PhysicalBackend.POLARS_PANEL, PhysicalBackend.POLARS_LONG): (2.0, 10.0),
+            (PhysicalBackend.POLARS_PANEL, PhysicalBackend.DUCKDB_SQL): (10.0, 45.0),
+            (PhysicalBackend.POLARS_LONG, PhysicalBackend.PANDAS_NUMPY): (6.0, 35.0),
+            (PhysicalBackend.POLARS_LONG, PhysicalBackend.POLARS_PANEL): (3.0, 15.0),
+            (PhysicalBackend.POLARS_LONG, PhysicalBackend.DUCKDB_SQL): (8.0, 40.0),
             (PhysicalBackend.DUCKDB_SQL, PhysicalBackend.PANDAS_NUMPY): (12.0, 50.0),
-            (PhysicalBackend.DUCKDB_SQL, PhysicalBackend.POLARS_EAGER): (10.0, 45.0),
-            (PhysicalBackend.DUCKDB_SQL, PhysicalBackend.POLARS_LAZY): (8.0, 40.0),
+            (PhysicalBackend.DUCKDB_SQL, PhysicalBackend.POLARS_PANEL): (10.0, 45.0),
+            (PhysicalBackend.DUCKDB_SQL, PhysicalBackend.POLARS_LONG): (8.0, 40.0),
         }
 
         key = (source, target)
@@ -480,7 +491,7 @@ class IntelligentBackendSelector:
         # Apply complexity penalty based on backend capability
         if backend == PhysicalBackend.PANDAS_NUMPY and complexity_score > 3.0:
             return base_compute_ms * 0.2 * complexity_score
-        elif backend in (PhysicalBackend.POLARS_LAZY, PhysicalBackend.DUCKDB_SQL):
+        elif backend in (PhysicalBackend.POLARS_LONG, PhysicalBackend.DUCKDB_SQL):
             # These backends handle complexity better
             return base_compute_ms * 0.05 * complexity_score
         else:
@@ -514,7 +525,7 @@ class IntelligentBackendSelector:
             rows_per_group = ctx.estimated_rows / max(ctx.estimated_columns, 1)
             if rows_per_group > 10000:
                 # Large groups benefit from vectorized backends
-                if backend in (PhysicalBackend.POLARS_EAGER, PhysicalBackend.DUCKDB_SQL):
+                if backend in (PhysicalBackend.POLARS_PANEL, PhysicalBackend.DUCKDB_SQL):
                     penalty -= base_compute_ms * 0.1
                 else:
                     penalty += base_compute_ms * 0.05
@@ -636,6 +647,12 @@ def select_optimal_backend_for_node(
     performance_priority: str = "balanced",
 ) -> RoutingDecision:
     """便捷函数：为单个节点选择最优 backend。
+
+    R21-ROUTING-AUTHORITY: this is a capability/cost CANDIDATE PROVIDER only.
+    It may propose a backend but never finalizes the production route.  The
+    Global Physical Planner
+    (``runtime.multibackend.batch_global_optimizer.PhysicalBatchGlobalOptimizer``)
+    is the sole production routing authority.
 
     Args:
         estimated_rows: 估计行数

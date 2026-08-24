@@ -10,6 +10,7 @@ ENV/
 
 # Large data files
 *.parquet
+runs/
 runs/full-history-overnight/
 weekly_backtest_output/factor_values.parquet
 

@@ -12,13 +12,13 @@ FE_ROOT = Path(__file__).resolve().parents[1]
 if str(FE_ROOT) not in sys.path:
     sys.path.insert(0, str(FE_ROOT))
 
-from fundamental_cold_start import EXPECTED_FILENAME, load_cold_start
+from factor_engine.fundamental_cold_start import EXPECTED_FILENAME, load_cold_start
 
 
 def audit_row(row: dict[str, str]) -> dict[str, object]:
     from factor_engine.api.dsl_parser import parse_expr
     from factor_engine.ir.analyzer import Analyzer
-    from fundamental_rewrites import rewrite_for
+from factor_engine.fundamental_rewrites import rewrite_for
     from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     factor_id = row["factor_id"]

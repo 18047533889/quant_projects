@@ -180,7 +180,7 @@ def test_fastpath_output_is_canonicalized_before_execution() -> None:
 
 def test_research_tools_and_factor_research_both_have_entrypoints() -> None:
     registry = _loaded_registry()
-    from research_tools.runtime import ResearchToolRuntime
+    from factor_engine.research_tools.runtime import ResearchToolRuntime
     selection = ResearchToolRuntime.select("bartlett_test")
     assert selection.backend in selection.available_backends
     for name in ("ts_sma_cn","lqtp_historical_cvar","idio_vol","rank_corr"):

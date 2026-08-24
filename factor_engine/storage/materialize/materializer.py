@@ -42,7 +42,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from workspace_paths import default_factor_lake_root
+from factor_engine.util.workspace_paths import default_factor_lake_root
 
 from factor_engine.runtime.factor_identity import (
     NO_FACTOR_IDENTITY,
@@ -64,7 +64,7 @@ from ..partition_policy import (
     partition_key,
     partition_path_segments,
 )
-from logging_utils import ProgressLogger, get_logger
+from factor_engine.util.logging_utils import ProgressLogger, get_logger
 
 logger = get_logger("factor_engine.storage.materializer")
 

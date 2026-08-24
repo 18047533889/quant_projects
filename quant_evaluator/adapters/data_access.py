@@ -103,7 +103,7 @@ class DataAccessAdapter:
             OptionalDependencyMissing: If dataaccess package not installed
         """
         try:
-            import dataaccess  # noqa: F401
+            import data_access  # noqa: F401
             self._da_module = dataaccess
         except ImportError as e:
             raise OptionalDependencyMissing(

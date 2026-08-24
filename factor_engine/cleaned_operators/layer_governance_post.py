@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Post-governance compatibility and backend-independent production metadata."""
 from factor_engine.cleaned_operators.registry import OperatorRegistry
-from research_tools.registry import ResearchToolRegistry
+from factor_engine.research_tools.registry import ResearchToolRegistry
 
 _APPLIED = False
 
@@ -54,7 +54,7 @@ def _normalize_research_aliases() -> None:
 
 
 def _attach_checkpoint_contracts() -> None:
-    from stateful_contract import StatefulCheckpointRegistry
+    from factor_engine.stateful_contract import StatefulCheckpointRegistry
 
     for canonical, contract in StatefulCheckpointRegistry.catalog().items():
         catalog = OperatorRegistry._catalog.get(canonical)

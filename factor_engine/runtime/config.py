@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 import yaml
-from workspace_paths import default_factor_lake_root, resolve_path
+from factor_engine.util.workspace_paths import default_factor_lake_root, resolve_path
 
 _PROFILES_DIR = Path(__file__).resolve().parent.parent / "examples" / "profiles"
 

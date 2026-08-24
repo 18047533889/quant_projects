@@ -3,7 +3,7 @@ Tests for telemetry.health module.
 """
 
 import time
-from telemetry.health import (
+from factor_engine.telemetry.health import (
     HealthStatus,
     ComponentHealth,
     HealthChecker,

@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from logging_utils import get_logger
+from factor_engine.util.logging_utils import get_logger
 
 from .datasource import DataSource
 

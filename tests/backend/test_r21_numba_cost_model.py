@@ -7,7 +7,7 @@ Accelerator.NUMBA_CPU`` / ``ExecutionKind.NUMBA_CPU_KERNEL``), NOT a
 keeps the TTDC cost-model integration check (no NUMBA_CPU backend dependency).
 """
 import pytest
-from planning.backend_selector import (
+from factor_engine.planning.backend_selector import (
     IntelligentBackendSelector,
     DataScale,
     OperatorProfile,
@@ -17,7 +17,7 @@ from planning.backend_selector import (
     BackendCharacteristics,
     _BACKEND_CHARACTERISTICS,
 )
-from planning.backend_region import PhysicalBackend, ExecutionAxis
+from factor_engine.planning.backend_region import PhysicalBackend, ExecutionAxis
 from factor_engine.backend.contracts import Accelerator, ExecutionKind
 
 

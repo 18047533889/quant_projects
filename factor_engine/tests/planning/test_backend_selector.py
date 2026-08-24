@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import pytest
 
-from planning.backend_region import ExecutionAxis, PhysicalBackend
-from planning.backend_selector import (
+from factor_engine.planning.backend_region import ExecutionAxis, PhysicalBackend
+from factor_engine.planning.backend_selector import (
     DataScale,
     IntelligentBackendSelector,
     MemoryPressure,
@@ -23,7 +23,7 @@ from planning.backend_selector import (
     RoutingContext,
     select_optimal_backend_for_node,
 )
-from planning.hybrid_execution_planner import (
+from factor_engine.planning.hybrid_execution_planner import (
     FactorSpec,
     HybridExecutionPlanner,
     NodeMetadata,
@@ -358,14 +358,14 @@ class TestPerformanceComparison:
     def test_compare_single_vs_hybrid(self):
         """测试单一 vs 混合性能对比。"""
         # Mock a simple plan
-        from planning.backend_region import (
+        from factor_engine.planning.backend_region import (
             BackendRegion,
             ExecutionAxis,
             PhysicalProperty,
             Representation,
             StateContract,
         )
-        from planning.physical_region_plan import PhysicalRegionPlan, compute_plan_hash
+        from factor_engine.planning.physical_region_plan import PhysicalRegionPlan, compute_plan_hash
 
         regions = [
             BackendRegion(
@@ -392,7 +392,7 @@ class TestPerformanceComparison:
             ),
         ]
 
-        from planning.transfer_edge import SemanticContract, TransferEdge, TransferKind
+        from factor_engine.planning.transfer_edge import SemanticContract, TransferEdge, TransferKind
 
         edges = [
             TransferEdge(

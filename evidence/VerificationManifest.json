@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "manifest_id": "rel-v1:2026-08-24T08:47:42.466609+00:00",
-  "timestamp": "2026-08-24T08:47:42.466609+00:00",
+  "manifest_id": "rel-v1:2026-08-24T15:48:43.502351+00:00",
+  "timestamp": "2026-08-24T15:48:43.502351+00:00",
   "host": "qs-compute-gpu-hk-01",
   "source_snapshot": {
-    "git_sha": "97a4659a653cfb82e7fc40b655ffb1dcae3b6d86",
+    "git_sha": "7f43f7469145ed506347ac3095e6a5945e35a7a0",
     "git_dirty": false,
     "diff_hash": null,
     "cached_diff_hash": null,
@@ -14,27 +14,27 @@
   },
   "packages": {
     "factor_engine": {
-      "tree_sha256": "7263e461010f9b431742f420d08e01c8a15ff08576b3dcaff6e10746bfc65439",
+      "tree_sha256": "1bc4bd1fdcaaea2c900c5c9d1ba75dfbe411a7067272f6e4e116afc05c60e662",
       "wheel_sha256": null
     },
     "quant_evaluator": {
-      "tree_sha256": "668090569b223ed73c08be06a2ce5d3d1e2809ec69afafc7892f48b76ac5c3f3",
+      "tree_sha256": "3f886a289413ef3b7f67615f050f910a09ffa1ba41b9b11787cef6d9dff78ed8",
       "wheel_sha256": null
     },
     "factor_optimizer": {
-      "tree_sha256": "affc7663029ee7a8c98efd76a4ee9147a5b52120cf7e1504da668b17e3ecb692",
+      "tree_sha256": "7deeb338a7c1d7e578bb147d7aef85d4c5729a1a91cd97a694549da58a0f7357",
       "wheel_sha256": null
     },
     "factor_assets": {
-      "tree_sha256": "a9714dc2244361769d5813a5679efa4cf9be29e22ffb9a8c2f18431190b0f5e8",
+      "tree_sha256": "9891a7693a8fe0c9f7b50b92df48a50efc89f9dcf03de2474ee355821cb14d12",
       "wheel_sha256": null
     },
     "factor_preprocess": {
-      "tree_sha256": "6f705133acbfbf78620981138b0e019c739d7f99bfebccc0c8cdd459e25c6b21",
+      "tree_sha256": "05bea63cae83b784ce0981f7201f2add04e9dd556e7758a4530d82cb51d8a67e",
       "wheel_sha256": null
     },
     "dataaccess": {
-      "tree_sha256": "bac27ad8e2c2b0d3edcacdbd74c3bb79bf745fe0a73f20c6eb63dc3acbe0c45d",
+      "tree_sha256": null,
       "wheel_sha256": null
     }
   },
@@ -49,10 +49,10 @@
       "scipy": "1.15.3",
       "pytest": "9.1.1",
       "duckdb": "1.5.4",
-      "factor_engine": "0.3.1",
-      "dataaccess": "NOT_INSTALLED"
+      "factor_engine": "NOT_INSTALLED",
+      "dataaccess": "0.10.2"
     },
-    "hash": "13d7654e94f9219375467ab39134a0eb52d48c67b1c97b42d79f379a809108aa"
+    "hash": "0a0fd01455850a189a8f1589fc65f1157a517fb0c293c9c6d8eb3337daa205f7"
   },
   "executed_commands": [
     {
@@ -144,23 +144,16 @@
       "evidence": []
     },
     {
-      "name": "CROSS_PACKAGE",
-      "description": "Cross-package contracts hold: factor_engine -> factor_preprocess -> factor_optimizer -> factor_assets -> quant_evaluator.",
-      "status": "PASS",
-      "evidence": [
-        {
-          "test": "integration_tests/test_cross_package_contracts.py",
-          "command_hash": "b512eaba7f7a727fa319e03d342e887971ee6763f7984b92ac1fc0214cc407b6",
-          "exit_code": 0,
-          "passed": 4,
-          "failed": 0,
-          "errors": 0,
-          "skipped": 2,
-          "tests": 6,
-          "executed_at": "2026-08-24T08:30:44.577140+00:00",
-          "run_at": "2026-08-24T08:30:44.577140+00:00"
-        }
-      ]
+      "name": "CROSS_PACKAGE_CORE",
+      "description": "Core cross-package contracts hold: factor_engine -> quant_evaluator -> factor_assets. Import failure in the core chain is a FAIL, never a legitimate skip (0 skips tolerated).",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "name": "CROSS_PACKAGE_OPTIONAL",
+      "description": "Optional cross-package adapters: factor_preprocess / factor_optimizer may skip with an explicit 'not importable here' reason (wiring gap). Core-chain import failure is still a FAIL.",
+      "status": "NOT_RUN",
+      "evidence": []
     },
     {
       "name": "LEAKAGE",
@@ -499,9 +492,9 @@
       "note": ".pytest_full.txt artifacts in the pushed snapshot are stale. They reference tests/test_operators_extension.py:148 test_neutralize_ols_residual, which no longer exists in the current tree (grep finds the string only inside the stale artifact itself, not in any source file). Recommendation: stop treating .pytest_full.txt as release truth. Checked at manifest generation: tests/test_operators_extension.py does not exist in the current tree.",
       "artifacts": [
         {
-          "path": "factor_engine/.pytest_full.txt",
-          "bytes": 1867,
-          "mtime": "2026-08-22T19:53:24.149157+00:00"
+          "path": ".pytest_full.txt",
+          "bytes": 100,
+          "mtime": "2026-08-24T15:48:43.459988+00:00"
         }
       ]
     }

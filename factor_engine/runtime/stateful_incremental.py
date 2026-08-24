@@ -31,8 +31,8 @@ import numpy as np
 import pandas as pd
 
 from factor_engine.cleaned_operators.production_hardening import SEGMENTED_EXECUTION_CANONICALS
-from stateful_contract import StatefulCheckpointRegistry
-from stateful_runtime import _implementation_hash, execute_stateful_segment
+from factor_engine.stateful_contract import StatefulCheckpointRegistry
+from factor_engine.stateful_runtime import _implementation_hash, execute_stateful_segment
 
 logger = logging.getLogger(__name__)
 

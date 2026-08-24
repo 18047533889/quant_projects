@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pit_contract import (
+from factor_engine.pit_contract import (
     PITColumns,
     pit_asof_join,
     select_visible_row_bundles,

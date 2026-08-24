@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any
 
-from planning.backend_region import (
+from factor_engine.planning.backend_region import (
     BackendRegion,
     ExecutionAxis,
     PhysicalBackend,
@@ -23,12 +23,12 @@ from planning.backend_region import (
     Representation,
     StateContract,
 )
-from planning.backend_selector import (
+from factor_engine.planning.backend_selector import (
     IntelligentBackendSelector,
     OperatorProfile,
     RoutingContext,
 )
-from planning.cost_model_v2 import (
+from factor_engine.planning.cost_model_v2 import (
     CostBreakdown,
     build_cost_breakdown,
     estimate_compute_cost,
@@ -36,14 +36,14 @@ from planning.cost_model_v2 import (
     estimate_schedule_overhead,
     estimate_source_scan_cost,
 )
-from planning.memory_model import DataShapeEstimate, EdgeMemoryCost
-from planning.physical_region_plan import (
+from factor_engine.planning.memory_model import DataShapeEstimate, EdgeMemoryCost
+from factor_engine.planning.physical_region_plan import (
     PhysicalRegionPlan,
     compute_plan_hash,
     estimate_plan_peak_memory,
 )
-from planning.region_optimizer import NodeCost, RegionOptimizer
-from planning.transfer_edge import (
+from factor_engine.planning.region_optimizer import NodeCost, RegionOptimizer
+from factor_engine.planning.transfer_edge import (
     SemanticContract,
     TransferEdge,
     TransferKind,
@@ -183,7 +183,7 @@ class HybridExecutionPlanner:
     ) -> PhysicalRegionPlan:
         """使用 DAG 分区优化器进行全局优化。"""
         try:
-            from planning.dag_partition_optimizer import (
+            from factor_engine.planning.dag_partition_optimizer import (
                 DAGNode,
                 DAGPartitionOptimizer,
                 DataShape,
@@ -258,7 +258,7 @@ class HybridExecutionPlanner:
         factors: list[FactorSpec],
     ) -> PhysicalRegionPlan:
         """将分区方案转换为 PhysicalRegionPlan。"""
-        from planning.backend_region import (
+        from factor_engine.planning.backend_region import (
             BackendRegion,
             ExecutionAxis,
             PhysicalBackend,
@@ -270,10 +270,12 @@ class HybridExecutionPlanner:
         # 转换分区为 BackendRegion
         regions = []
         for p in partition_plan.partitions:
-            # 映射后端名称到 PhysicalBackend 枚举
+            # 映射后端名称到 PhysicalBackend 枚举 (R21-PLANNER-TYPE-UNIFICATION)
             backend_map = {
                 "pandas_numpy": PhysicalBackend.PANDAS_NUMPY,
-                "polars": PhysicalBackend.POLARS_LAZY,
+                "polars": PhysicalBackend.POLARS_PANEL,
+                "polars_panel": PhysicalBackend.POLARS_PANEL,
+                "polars_long": PhysicalBackend.POLARS_LONG,
                 "duckdb_sql": PhysicalBackend.DUCKDB_SQL,
             }
             backend_enum = backend_map.get(p.backend, PhysicalBackend.PANDAS_NUMPY)
@@ -281,7 +283,8 @@ class HybridExecutionPlanner:
             # 推断 representation
             repr_map = {
                 PhysicalBackend.PANDAS_NUMPY: Representation.PANDAS_LONG,
-                PhysicalBackend.POLARS_LAZY: Representation.POLARS_LAZY_LONG,
+                PhysicalBackend.POLARS_PANEL: Representation.POLARS_LONG,
+                PhysicalBackend.POLARS_LONG: Representation.POLARS_LAZY_LONG,
                 PhysicalBackend.DUCKDB_SQL: Representation.DUCKDB_RELATION,
             }
             representation = repr_map.get(backend_enum, Representation.PANDAS_LONG)
@@ -292,18 +295,15 @@ class HybridExecutionPlanner:
                 representation=representation,
                 node_ids=tuple(p.node_ids),
                 execution_axis=ExecutionAxis.GLOBAL_PANEL,
-                required_properties=PhysicalProperty(),
-                state_contract=StateContract(),
                 estimated_rows=p.total_rows,
-                estimated_bytes=sum(dag_nodes[nid].shape.bytes for nid in p.node_ids),
-                can_stream=False,
-                requires_global_sort=False,
-                requires_full_group=False,
+                estimated_compute_ms=0.0,
+                estimated_memory_bytes=sum(dag_nodes[nid].shape.bytes for nid in p.node_ids),
+                input_bytes=sum(dag_nodes[nid].shape.bytes for nid in p.node_ids),
             )
             regions.append(region)
 
         # 转换边
-        from planning.transfer_edge import (
+        from factor_engine.planning.transfer_edge import (
             SemanticContract,
             TransferEdge,
             TransferKind,
@@ -311,7 +311,7 @@ class HybridExecutionPlanner:
             infer_transfer_kind,
         )
 
-        partition_map = {p.partition_id: p for p in regions}
+        partition_map = {p.region_id: p for p in regions}
         edges = []
         edge_counter = [0]
 
@@ -336,14 +336,14 @@ class HybridExecutionPlanner:
                 target_representation=to_region.representation,
                 transfer_kind=transfer_kind,
                 estimated_rows=from_region.estimated_rows,
-                estimated_bytes=from_region.estimated_bytes,
+                estimated_bytes=from_region.estimated_memory_bytes,
                 requires_sort=False,
                 requires_repartition=False,
                 requires_reshape=False,
                 requires_dtype_cast=False,
                 semantic_contract=SemanticContract(),
-                source_properties=from_region.required_properties,
-                target_properties=to_region.required_properties,
+                source_properties=PhysicalProperty(),
+                target_properties=PhysicalProperty(),
             )
             object.__setattr__(edge, "estimated_cost_ms", estimate_transfer_cost(edge))
             edges.append(edge)
@@ -351,7 +351,7 @@ class HybridExecutionPlanner:
         # 拓扑排序
         topo_order = self._topological_sort_regions(regions, edges)
 
-        from planning.physical_region_plan import (
+        from factor_engine.planning.physical_region_plan import (
             PhysicalRegionPlan,
             compute_plan_hash,
         )
@@ -463,11 +463,10 @@ class HybridExecutionPlanner:
         for node_id, meta in node_metadata.items():
             backend_costs: dict[PhysicalBackend, NodeCost] = {}
 
-            # 为该节点尝试所有可能的 backend
+            # 为该节点尝试所有可能的 backend (R21-PLANNER-TYPE-UNIFICATION)
             for backend in [
                 PhysicalBackend.PANDAS_NUMPY,
-                PhysicalBackend.POLARS_EAGER,
-                PhysicalBackend.POLARS_LAZY,
+                PhysicalBackend.POLARS_PANEL,
                 PhysicalBackend.DUCKDB_SQL,
             ]:
                 # 使用智能选择器评估成本

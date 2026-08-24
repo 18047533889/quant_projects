@@ -13,7 +13,7 @@ from factor_engine.backend.context import ExecutionContext
 from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 from factor_engine.planner.logical_plan import PlanNode
 from tests.helpers import InMemorySeriesSource
-from workspace_paths import quant_projects_root
+from factor_engine.workspace_paths import quant_projects_root
 
 
 @pytest.fixture(autouse=True)

@@ -113,7 +113,7 @@ def test_current_snapshot_only_now_window_allowed():
 # #282 four-layer PIT eligibility
 # ---------------------------------------------------------------------------
 def test_four_layer_pit_combined_eligibility():
-    from pit_contract import PITLayerVerdict, four_layer_pit_allowed
+    from factor_engine.pit_contract import PITLayerVerdict, four_layer_pit_allowed
 
     ok, layers = four_layer_pit_allowed(
         field_pit_allowed=True,

@@ -16,7 +16,7 @@ from factor_engine.backend.sql_pushdown.source_resolver import resolve_pushdown_
 from factor_engine.planner.logical_plan import PlanNode
 from factor_engine.runtime.config import load_config
 from factor_engine.storage.factory import build_data_source
-from workspace_paths import quant_projects_root
+from factor_engine.workspace_paths import quant_projects_root
 
 
 @pytest.fixture(autouse=True)

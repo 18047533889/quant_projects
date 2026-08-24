@@ -700,7 +700,7 @@ def assign_mining_role_ex(
     registered = canonical in OperatorRegistry._catalog
     if not registered:
         try:
-            from research_tools.registry import ResearchToolRegistry
+            from factor_engine.research_tools.registry import ResearchToolRegistry
 
             if canonical in ResearchToolRegistry.list_canonical():
                 return MiningRole.DIAGNOSTIC, RoleSource.EXPLICIT
@@ -1283,7 +1283,7 @@ def get_mining_operators(
     market = validate_market(market)
     env_sources = tuple(str(s) for s in (available_sources or ())) if available_sources is not None else None
 
-    from research_tools.registry import ResearchToolRegistry
+    from factor_engine.research_tools.registry import ResearchToolRegistry
 
     research_tools = set(ResearchToolRegistry.list_canonical())
     out: list[MiningOperator] = []

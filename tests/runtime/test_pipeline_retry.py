@@ -10,7 +10,7 @@ import pytest
 pd = pytest.importorskip("pandas")
 yaml = pytest.importorskip("yaml")
 
-from pipeline import _execute_config_with_retries, run_from_config
+from factor_engine.pipeline import _execute_config_with_retries, run_from_config
 from factor_engine.runtime.config import FactorEngineConfig
 
 
@@ -39,7 +39,7 @@ def test_execute_config_with_retries_recovers_on_transient_failure():
             raise RuntimeError("transient")
         return {"analysis": None, "plan": None, "result": pd.Series(dtype=float)}
 
-    with patch("pipeline._execute_config", side_effect=flaky_execute):
+    with patch("factor_engine.pipeline._execute_config", side_effect=flaky_execute):
         out = _execute_config_with_retries(
             _minimal_config(),
             config_name="x",
@@ -52,7 +52,7 @@ def test_execute_config_with_retries_recovers_on_transient_failure():
 
 
 def test_execute_config_with_retries_raises_after_exhausted():
-    with patch("pipeline._execute_config", side_effect=RuntimeError("permanent")):
+    with patch("factor_engine.pipeline._execute_config", side_effect=RuntimeError("permanent")):
         with pytest.raises(RuntimeError, match="permanent"):
             _execute_config_with_retries(
                 _minimal_config(),

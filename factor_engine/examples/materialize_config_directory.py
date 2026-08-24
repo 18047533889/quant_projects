@@ -20,7 +20,7 @@ _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-from logging_utils import ProgressLogger, configure_logging, get_logger
+from factor_engine.util.logging_utils import ProgressLogger, configure_logging, get_logger
 from factor_engine.runtime.engine import FactorEngine
 
 

@@ -6,7 +6,7 @@ in a typical factor engine workflow.
 """
 
 import time
-from telemetry import (
+from factor_engine.telemetry import (
     get_metrics_registry,
     get_tracer,
     get_health_checker,

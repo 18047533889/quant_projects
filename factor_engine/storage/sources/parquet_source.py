@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .datasource import DataSource
-from logging_utils import ProgressLogger, get_logger
+from factor_engine.util.logging_utils import ProgressLogger, get_logger
 
 
 logger = get_logger("factor_engine.storage.parquet_source")

@@ -150,7 +150,7 @@ def test_recursive_release_evicts_children_from_leases():
 
 
 def test_da_governor_host_backed_admission():
-    from dataaccess.runtime.resource_governor import (
+    from data_access.runtime.resource_governor import (
         GlobalResourceGovernor,
         ResourceReservation,
     )

@@ -12,8 +12,8 @@ from factor_engine.cleaned_operators import load_all
 from factor_engine.cleaned_operators.edge_requirements import missing_edge_dimensions
 from factor_engine.cleaned_operators.operator_surface import classify_canonical, unclassified_canonicals
 from factor_engine.cleaned_operators.registry import OperatorRegistry
-from research_operators import build_research_dsl_allowlist, build_unsafe_dsl_allowlist
-from research_tools.registry import ResearchToolRegistry
+from factor_engine.research_operators import build_research_dsl_allowlist, build_unsafe_dsl_allowlist
+from factor_engine.research_tools.registry import ResearchToolRegistry
 
 
 def test_daily_surface_keeps_factor_primitives() -> None:

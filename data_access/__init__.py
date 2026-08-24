@@ -1,54 +1,126 @@
-"""Repository-local `data_access` namespace shim.
-
-The canonical dataaccess package source root is the flat `dataaccess/`
-directory (top-level modules like ``cos_contract.py`` and subpackages like
-``core/``, ``read/``, ``cos/`` sit directly inside it), and every internal
-import uses the ``data_access`` dotted name (e.g. ``from data_access.core.engine
-import ...``). To make the repo importable as the canonical ``data_access``
-package without editing hundreds of internal import statements, this shim
-forwards the ``data_access`` namespace to the ``dataaccess`` source directory —
-the same ``"data_access" = "."`` mapping that the wheel matrix uses at build
-time.
-
-This mirrors the deployed wheel layout: the package source root is treated as
-the ``data_access`` package, so ``data_access.cos_contract`` resolves to
-``dataaccess/cos_contract.py`` and ``data_access.core`` to ``dataaccess/core/``.
-"""
+"""Team DataAccess API with executable COS panel and PIT contracts."""
 from __future__ import annotations
 
-import sys as _sys
-from importlib import util as _util
+from data_access.core.engine import DuckDBEngine, get_shared_engine, reset_shared_engine
+from data_access.core.exceptions import (
+    AmbiguousSemanticFieldError,
+    DataAccessError,
+    DataError,
+    DeadlineExceeded,
+    EngineError,
+    ValidationError,
+)
+from data_access.read.key_policy import KeyPolicy
+from data_access.read.aggregation import (
+    AggregationItem,
+    AggregationSpec,
+    aggregate_minute_bundle,
+    aggregate_minute_to_daily,
+)
+from data_access.read.session_calendar import (
+    MarketCalendar,
+    MarketSession,
+    get_market_calendar,
+    get_market_session,
+)
+from data_access.read.pit_event_index import (
+    PITEventIndex,
+    PITEventRecord,
+)
+from data_access.read.physical_plan import PlanNode, build_physical_plan
+from data_access.read.contract_ir import ContractIR, build_contract_ir
+from data_access.read.query_budget import QueryBudget
+from data_access.read.read_contract import DataSnapshot, ReadResult, SqlReadResult
+from data_access.read.scan_handle import ScanHandle
+from data_access.read.read_handle import ReadHandle
+from data_access.read.relation_handle import RelationHandle
+from data_access.read.data_request import DataRequest, ReadPlan
+from data_access.read.semantic_catalog import (
+    SemanticField,
+    SemanticFieldCatalog,
+    get_semantic_catalog,
+)
+from . import store as _store_module
+from .store import DataAccessStore, get_store as _get_store, reset_store
+from .cos_contract import (
+    COSDatasetContract,
+    COS_DATASET_CONTRACTS,
+    get_cos_contract,
+    normalize_return_values,
+    require_cos_contract,
+    resolve_event_clock,
+    semantic_contract_fingerprint,
+    validate_panel_request,
+)
+from .cos_runtime import install_cos_runtime
 
-# Redirect the ``data_access`` package's import path to the flat source root.
-_dataaccess = _util.find_spec("dataaccess")
-if _dataaccess is not None and _dataaccess.origin is not None:
-    import os as _os
 
-    _root = _os.path.dirname(_dataaccess.origin)
-    # Point every submodule resolver at the real source directory so that
-    # ``data_access.cos_contract`` -> ``dataaccess/cos_contract.py`` etc.
-    __path__ = [_root]  # type: ignore[name-defined]
+def get_store() -> DataAccessStore:
+    """Return the process store with COS semantics installed exactly once."""
+    return install_cos_runtime(_get_store())
 
-# Make ``from data_access import X`` resolve through the source package.
-# Not a bare ``from dataaccess import *``: when this shim is first imported it
-# is triggered from *inside* ``dataaccess/__init__.py`` (line 4), so the source
-# package is only partially initialized and a star-import would capture an
-# incomplete attribute set (e.g. ``reset_store``, bound later at source line 44,
-# or the build dunders at line 125).  Everything is therefore forwarded lazily.
-def __getattr__(name: str):
-    """Forward any attribute through the canonical ``dataaccess`` package.
 
-    ``dataaccess`` imports this shim at the very top of its own ``__init__``,
-    so when a caller reaches for ``data_access.X`` the source package may still
-    be mid-initialization.  Deferring resolution until attribute access means
-    by the time the name is actually read the canonical module is fully loaded
-    (or, for names still being defined, we rely on the caller not racing the
-    import).  This covers both the build-identity dunders and every public name
-    (e.g. ``reset_store``, ``get_store``).
-    """
-    import dataaccess as _src  # noqa: PLC0415
+# Importing data_access.store still initializes this package first; expose the
+# same hardened factory there so callers cannot bypass COS contracts by import path.
+_store_module.get_store = get_store
 
-    try:
-        return getattr(_src, name)
-    except AttributeError:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None
+
+__all__ = [
+    "get_store",
+    "reset_store",
+    "get_shared_engine",
+    "reset_shared_engine",
+    "DataAccessStore",
+    "DuckDBEngine",
+    "DataAccessError",
+    "ValidationError",
+    "AmbiguousSemanticFieldError",
+    "DataError",
+    "EngineError",
+    "DeadlineExceeded",
+    "AggregationSpec",
+    "AggregationItem",
+    "aggregate_minute_to_daily",
+    "aggregate_minute_bundle",
+    "MarketCalendar",
+    "MarketSession",
+    "get_market_calendar",
+    "get_market_session",
+    "PITEventIndex",
+    "PITEventRecord",
+    "PlanNode",
+    "build_physical_plan",
+    "ContractIR",
+    "build_contract_ir",
+    "QueryBudget",
+    "KeyPolicy",
+    "DataSnapshot",
+    "ReadResult",
+    "SqlReadResult",
+    "ScanHandle",
+    "ReadHandle",
+    "RelationHandle",
+    "DataRequest",
+    "ReadPlan",
+    "SemanticField",
+    "SemanticFieldCatalog",
+    "get_semantic_catalog",
+    "COSDatasetContract",
+    "COS_DATASET_CONTRACTS",
+    "get_cos_contract",
+    "require_cos_contract",
+    "validate_panel_request",
+    "resolve_event_clock",
+    "normalize_return_values",
+    "semantic_contract_fingerprint",
+]
+
+# Build identity is frozen into _build_info at packaging time. Importing an
+# installed artifact never consults environment variables, package metadata, or Git.
+from data_access.core.build_metadata import load_build_info as _load_build_metadata
+
+_build_metadata = _load_build_metadata()
+__version__ = _build_metadata.version
+__build_sha__ = _build_metadata.build_sha
+__build_id__ = _build_metadata.build_id
+__build_time__ = _build_metadata.build_time

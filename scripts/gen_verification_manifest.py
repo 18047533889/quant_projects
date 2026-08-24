@@ -358,7 +358,8 @@ def load_gates() -> list[dict]:
     # Guard: every gate must exist even if config is missing/incomplete.
     known = {g["name"] for g in gates}
     all_gates = (
-        "UNIT", "NUMERICAL_ORACLE", "PROPERTY", "CROSS_PACKAGE",
+        "UNIT", "NUMERICAL_ORACLE", "PROPERTY", "CROSS_PACKAGE_CORE",
+        "CROSS_PACKAGE_OPTIONAL",
         "LEAKAGE", "PIT", "DETERMINISM", "SERIALIZATION",
         "CHECKPOINT_RESUME", "FRESH_WHEEL", "1K_SCALE", "10K_SCALE",
         "100K_SCALE", "ASHARE_SEMANTIC_CONTRACT_GOLDEN",
@@ -558,7 +559,9 @@ _FALLBACK_GATE_SPECS: list[Any] = [
                   commands=(("quant_evaluator/tests/test_numerical_oracle.py", "-q"),)),
     _FallbackSpec("PROPERTY", ("quant_evaluator/tests/test_metamorphic.py", "quant_evaluator/tests/test_consistency.py"),
                   commands=(("quant_evaluator/tests/test_metamorphic.py", "-q"), ("quant_evaluator/tests/test_consistency.py", "-q"))),
-    _FallbackSpec("CROSS_PACKAGE", ("integration_tests/test_cross_package_contracts.py",),
+    _FallbackSpec("CROSS_PACKAGE_CORE", ("integration_tests/test_cross_package_contracts.py",),
+                  commands=(("integration_tests/test_cross_package_contracts.py", "-q"),)),
+    _FallbackSpec("CROSS_PACKAGE_OPTIONAL", ("integration_tests/test_cross_package_contracts.py",),
                   commands=(("integration_tests/test_cross_package_contracts.py", "-q"),)),
     _FallbackSpec("ASHARE_SEMANTIC_CONTRACT_GOLDEN", ("integration_tests/test_ashare_semantic_golden.py",),
                   commands=(("integration_tests/test_ashare_semantic_golden.py", "-q"),)),

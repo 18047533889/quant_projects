@@ -11,7 +11,7 @@ from typing import Any
 from factor_engine.runtime.config_runtime import build_data_source_config, resolve_materialize_kwargs
 from factor_engine.runtime.engine import FactorEngine
 from factor_engine.runtime.incremental_scheduler import DataEvent
-from workspace_paths import default_factor_lake_root
+from factor_engine.util.workspace_paths import default_factor_lake_root
 
 
 def run_data_event(

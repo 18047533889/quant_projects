@@ -283,7 +283,7 @@ def test_unresolved_role_never_mines() -> None:
 
 
 def test_admission_matrix_no_vague_answers() -> None:
-    from audit.operator_admission_matrix import generate_admission_matrix
+    from factor_engine.audit.operator_admission_matrix import generate_admission_matrix
 
     records = generate_admission_matrix()
     assert len(records) >= 1000

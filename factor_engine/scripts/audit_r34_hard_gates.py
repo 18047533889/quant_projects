@@ -114,7 +114,7 @@ def _stateful_behavior_scan():
     from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
     ensure_cleaned_loaded()
-    from stateful_contract import detect_stateful_behavior
+    from factor_engine.stateful_contract import detect_stateful_behavior
 
     import numpy as np
     import pandas as pd

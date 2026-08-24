@@ -90,11 +90,33 @@ def gitlink_count() -> int:
     return n
 
 
+def live_tree_identity() -> str:
+    """PlatformSourceTreeIdentity Merkle root of the LIVE working tree.
+
+    P0-WT: binds gate evidence to the working-tree content (not just the git
+    HEAD SHA).  A direct uncommitted edit changes the Merkle root even though
+    HEAD is unchanged, so stale evidence can never silently match.
+    """
+    try:
+        sys.path.insert(0, REPO_ROOT)  # evidence.source_snapshot import
+        from pathlib import Path
+        from evidence.source_snapshot import platform_source_tree_identity
+        identity = platform_source_tree_identity(Path(REPO_ROOT))
+        return identity["root_merkle"]
+    except Exception as exc:  # pragma: no cover - scan failure
+        print(f"ERROR: cannot compute live tree identity: {exc}", file=sys.stderr)
+        sys.exit(2)
+
+
 # ── Package-to-gate mapping ──────────────────────────────────────────────────
 # Determined from test file paths in the evidence.
 # Cross-package / integration gates apply to every package.
+# R26 P0-CP: CROSS_PACKAGE is split into CROSS_PACKAGE_CORE (import failure in
+# the core chain is a FAIL) + CROSS_PACKAGE_OPTIONAL (optional adapters may
+# skip with an explicit reason).  Both replace the old monolithic CROSS_PACKAGE.
 CROSS_PACKAGE_GATES = {
-    "CROSS_PACKAGE",
+    "CROSS_PACKAGE_CORE",
+    "CROSS_PACKAGE_OPTIONAL",
     "ASHARE_SEMANTIC_CONTRACT_GOLDEN",
     "ASHARE_REAL_DATA_SHADOW",
 }
@@ -127,7 +149,8 @@ CRITICAL_GATES = {"UNIT", "PROPERTY", "NUMERICAL_ORACLE"}
 # VER-P0-05: gates that must ALL be PASS for exit 0 / "all green".
 # (the 15 existing gates + the 5 hard/structural gates)
 REQUIRED_GATES = {
-    "UNIT", "NUMERICAL_ORACLE", "PROPERTY", "CROSS_PACKAGE",
+    "UNIT", "NUMERICAL_ORACLE", "PROPERTY", "CROSS_PACKAGE_CORE",
+    "CROSS_PACKAGE_OPTIONAL",
     "LEAKAGE", "PIT", "DETERMINISM", "SERIALIZATION",
     "CHECKPOINT_RESUME", "FRESH_WHEEL", "1K_SCALE", "10K_SCALE",
     "100K_SCALE", "ASHARE_SEMANTIC_CONTRACT_GOLDEN",
@@ -158,7 +181,7 @@ PLATFORM_STRUCTURAL_GATES = {
 PLATFORM_CORE_GATES = {
     "SOURCE_AUTHORITY", "PACKAGE_UNIT", "PACKAGE_CONTRACT",
     "SERIALIZATION", "DETERMINISM", "FRESH_WHEEL", "SUPPLY_CHAIN",
-    "CROSS_PACKAGE",
+    "CROSS_PACKAGE_CORE", "CROSS_PACKAGE_OPTIONAL",
 }
 
 ASPIRATIONAL_GATES: set[str] = set()
@@ -376,10 +399,14 @@ def main() -> int:
         evidence_gate_objs[name] = gate_entry
 
     # R46 P0-X: single authoritative verifier, bound to the live source identity.
+    # P0-WT: bind the verifier to the live WORKING-TREE Merkle identity so a
+    # direct uncommitted edit marks stale evidence STALE even though git HEAD is
+    # unchanged.  git SHA is only an auxiliary signal.
     verifier = GateEvidenceVerifier(
         source_sha=evidence_sha,
         current_sha=current_sha,
         gitlinks_count=n_gitlinks,
+        live_tree_identity=live_tree_identity(),
     )
 
     # Determine gate order: from gates.json, then any extras from evidence

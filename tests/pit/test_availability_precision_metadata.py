@@ -6,7 +6,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from pit_contract import AvailabilityPrecision, pit_asof_join
+from factor_engine.pit_contract import AvailabilityPrecision, pit_asof_join
 
 
 def _events(*rows):

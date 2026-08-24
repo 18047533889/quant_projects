@@ -236,7 +236,7 @@ def generate_admission_matrix() -> list[AdmissionRecord]:
     from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
-    from research_tools.registry import ResearchToolRegistry
+    from factor_engine.research_tools.registry import ResearchToolRegistry
 
     research_tools = set(ResearchToolRegistry.list_canonical())
     records: list[AdmissionRecord] = []

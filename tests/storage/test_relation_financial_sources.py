@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pit_contract import select_visible_row_bundles
+from factor_engine.pit_contract import select_visible_row_bundles
 from factor_engine.storage.sources.financial import load_financial_row_bundle
 from factor_engine.storage.sources.logical_tables import ASHARE_LOGICAL_TABLES, logical_table_contract
 from factor_engine.storage.sources.relation import (

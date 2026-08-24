@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from factor_engine.storage.factory import build_data_source
-from workspace_paths import resolve_path
+from factor_engine.util.workspace_paths import resolve_path
 
 
 def test_build_data_source_expands_tilde_root(tmp_path, monkeypatch):
@@ -25,7 +25,7 @@ def test_build_data_source_expands_tilde_root(tmp_path, monkeypatch):
 
 
 def test_resolve_path_relative_to_quant_projects(monkeypatch):
-    from workspace_paths import quant_projects_root
+    from factor_engine.util.workspace_paths import quant_projects_root
 
     root = quant_projects_root()
     resolved = resolve_path("data/us_stock/massive_data/StockDailyBar")

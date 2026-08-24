@@ -115,7 +115,7 @@ def probe_client(
        失败（含 localhost 白名单 / TCP 拒绝 / 认证失败）→ None。
     4. 其余情况 → None。
 
-    ``config`` 为 ``dataaccess.clickhouse.panel.ClickHouseConfig``（或具备
+    ``config`` 为 ``data_access.clickhouse.panel.ClickHouseConfig``（或具备
     ``host/port/username/password/database/secure`` 属性的对象）。
     """
     try:
@@ -129,7 +129,7 @@ def probe_client(
         return None
     if config is None:
         try:
-            from dataaccess.clickhouse.panel import ClickHouseConfig
+            from data_access.clickhouse.panel import ClickHouseConfig
 
             config = ClickHouseConfig.from_env()
         except Exception:

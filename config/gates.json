@@ -17,8 +17,13 @@
       "default_status": "NOT_RUN"
     },
     {
-      "name": "CROSS_PACKAGE",
-      "description": "Cross-package contracts hold: factor_engine -> factor_preprocess -> factor_optimizer -> factor_assets -> quant_evaluator.",
+      "name": "CROSS_PACKAGE_CORE",
+      "description": "Core cross-package contracts hold: factor_engine -> quant_evaluator -> factor_assets. Import failure in the core chain is a FAIL, never a legitimate skip (0 skips tolerated).",
+      "default_status": "NOT_RUN"
+    },
+    {
+      "name": "CROSS_PACKAGE_OPTIONAL",
+      "description": "Optional cross-package adapters: factor_preprocess / factor_optimizer may skip with an explicit 'not importable here' reason (wiring gap). Core-chain import failure is still a FAIL.",
       "default_status": "NOT_RUN"
     },
     {

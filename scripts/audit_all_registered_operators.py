@@ -818,7 +818,7 @@ def audit_all_registered_operators() -> dict[str, Any]:
 
     load_all()
     from factor_engine.cleaned_operators.operator_surface import classify_canonical, unclassified_canonicals
-    from research_tools.registry import ResearchToolRegistry
+    from factor_engine.research_tools.registry import ResearchToolRegistry
 
     catalog = OperatorRegistry._catalog
     research_tools = set(ResearchToolRegistry.list_canonical())
@@ -835,7 +835,7 @@ def audit_all_registered_operators() -> dict[str, Any]:
         role, role_source = assign_mining_role_ex(canonical, cat)
         case, bucket = _case_and_bucket(canonical, role, cat)
         eligible = mining_eligible(canonical, catalog=cat, role=role)
-        from audit.operator_admission_matrix import _recommended_action, _record
+        from factor_engine.audit.operator_admission_matrix import _recommended_action, _record
 
         rec = _record(canonical, cat)
         verdicts.append(

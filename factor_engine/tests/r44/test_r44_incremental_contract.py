@@ -27,7 +27,7 @@ from factor_engine.runtime.incremental_contract import (
     register_incremental_contract,
     resolve_incremental_contract,
 )
-from stateful_contract import StatefulCheckpointRegistry
+from factor_engine.stateful_contract import StatefulCheckpointRegistry
 
 load_all()
 

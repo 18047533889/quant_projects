@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 import yaml
 
-from pipeline import (
+from factor_engine.pipeline import (
     _directory_batch_eligible,
     _directory_incremental_batch_eligible,
     run_config_directory,
@@ -140,7 +140,7 @@ def test_run_config_directory_uses_engine_batch(tmp_path, monkeypatch):
         return "x", {"status": "success", "config_name": "x", "factor_name": "x", "mode": "run"}
 
     monkeypatch.setattr(FactorEngine, "run_many_from_config", classmethod(_fake_run_many_from_config))
-    monkeypatch.setattr("pipeline._run_single_config_file", _fake_single)
+    monkeypatch.setattr("factor_engine.pipeline._run_single_config_file", _fake_single)
 
     out = run_config_directory(cfg_dir, output_root=tmp_path / "out", materialize=False, n_jobs=1)
     assert called["run_many"] == 1

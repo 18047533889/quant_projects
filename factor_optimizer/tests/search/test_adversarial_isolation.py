@@ -120,9 +120,10 @@ def test_no_method_returns_test_capability():
 
 
 def test_test_capability_not_constructible_without_broker():
-    # A TestDataCapability requires a full identity; constructing one without
-    # a broker's identity fields fails closed.
-    with pytest.raises(ValueError, match="search_session_id"):
+    # A TestDataCapability is only constructible through a TestAuthorityBroker;
+    # constructing one directly (outside a broker) is a forgery attempt and
+    # fails closed with CapabilityForgeryError.
+    with pytest.raises(CapabilityForgeryError, match="forgery"):
         TestDataCapability([False, False, True])
 
 
@@ -515,3 +516,107 @@ def test_scoped_evaluator_requires_test_provider():
     assert runner._test_authority_broker is None
     with pytest.raises(TypeError, match="TestDataProvider"):
         ScopedEvaluator(None, lambda t, f, d: {})
+
+
+# ---------------------------------------------------------------------------
+# R46 P0-Q/P0-R/P0-S: capability isolation on the SearchRunner execution path
+# ---------------------------------------------------------------------------
+
+
+def test_runner_capability_check_rejects_forged_identity():
+    # Tampering with the capability identity (mask/scope) must make the search
+    # evaluation fail closed via CapabilityForgeryError — the runner's
+    # `_evaluate_with_capability` calls `verify_identity()` first.
+    runner = _runner()
+    train = runner._data_capabilities[DataScope.TRAIN]
+    object.__setattr__(train, "_allowed_mask", (True, True, True))
+    trial = _trial()
+    with pytest.raises(CapabilityForgeryError, match="coordinate_hash"):
+        runner._evaluate_with_capability(train, trial, 0)
+
+
+def test_train_context_rejects_validation_capability():
+    """A train evaluation context must refuse a VALIDATION capability.
+
+    The capability check happens before any evaluation callback runs: the
+    train context's own scope guard rejects a swapped VALIDATION capability,
+    so it can never drive a training evaluation.
+    """
+    runner = _runner()
+    ctx = runner.create_train_evaluation_context()
+    val_cap = runner._data_capabilities[DataScope.VALIDATION]
+
+    # Context-level scope guard rejects the swapped capability outright.
+    ctx._capability = val_cap
+    with pytest.raises(ValueError, match="TRAIN capability"):
+        ctx.evaluate(_trial(), 0)
+
+
+def test_train_context_rejects_test_capability():
+    """A train evaluation context must refuse a TEST capability."""
+    from factor_optimizer.data_capabilities import build_data_capabilities
+
+    runner = _runner()
+    ctx = runner.create_train_evaluation_context()
+    # Use a disjoint test mask (train row 0, validation row 1, test row 2) so
+    # SplitPlan accepts the plan; the train context must reject the TEST
+    # capability by scope regardless of which coordinates it authorizes.
+    test_cap = build_data_capabilities(
+        _disjoint_plan(
+            [True, False, False], [False, True, False], [False, False, True]
+        )
+    )[DataScope.TEST]
+    ctx._capability = test_cap
+    with pytest.raises(ValueError, match="TRAIN capability"):
+        ctx.evaluate(_trial(), 0)
+
+
+def test_validation_context_rejects_train_capability():
+    """A validation evaluation context must refuse a TRAIN capability."""
+    runner = _runner()
+    ctx = runner.create_validation_evaluation_context()
+    train_cap = runner._data_capabilities[DataScope.TRAIN]
+    ctx._capability = train_cap
+    with pytest.raises(ValueError, match="VALIDATION capability"):
+        ctx.evaluate(_trial(), 0)
+
+
+def test_search_runner_evaluation_rejects_unauthorized_capability():
+    """`_evaluate_with_capability` fails closed when a capability does not
+    authorize the search plan's coordinates.
+
+    A TRAIN capability that authorizes no rows cannot authorize any
+    evaluation; the exact-subset check rejects it rather than evaluating.
+    """
+    from factor_optimizer.data_capabilities import TrainDataCapability
+
+    runner = _runner()
+    plan = _plan()
+    train = runner._data_capabilities[DataScope.TRAIN]
+    # Sanity: the real train capability authorizes the search train mask.
+    assert train.can_evaluate(plan)
+    # A TrainDataCapability bound to an all-masked-off authorized set cannot
+    # authorize the search plan's train coordinates.
+    forged = TrainDataCapability(
+        [False, False, False],
+        capability_id=train.capability_id,
+        search_session_id=train.search_session_id,
+        split_id=train.split_id,
+        dataset_identity=train.dataset_identity,
+        provider_identity=train.provider_identity,
+        issued_at=train.issued_at,
+        expiry=train.expiry,
+        nonce=train.nonce,
+    )
+    with pytest.raises(ValueError, match="does not authorize"):
+        runner._evaluate_with_capability(forged, _trial(), 0)
+
+
+def test_sealed_test_executor_requires_authority_for_any_evaluation():
+    # Without a broker, the sealed-test executor can never reach the test
+    # payload.  The capability boundary (P0-S) is the only path and it is
+    # gated behind the broker.
+    runner = _runner()
+    executor = runner.create_sealed_test_executor()
+    with pytest.raises(ValueError, match="no test authority broker"):
+        executor.evaluate_sealed_test(None, None, _plan())

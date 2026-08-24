@@ -14,7 +14,7 @@ if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 from logging_utils import configure_logging, get_logger
-from pipeline import run_config_directory, run_from_config
+from factor_engine.pipeline import run_config_directory, run_from_config
 
 logger = get_logger("run_pipeline")
 
@@ -421,7 +421,7 @@ def _dispatch_queue_job(job, *, profile=None, strict_dq=False, dq_strict=True, i
 
     job_type = job.payload.get("job_type", JOB_TYPE_CONFIG)
     if job_type == JOB_TYPE_DATA_EVENT:
-        from pipeline_event import run_data_event
+        from factor_engine.pipeline_event import run_data_event
 
         cfg = job.payload.get("config_path") or job.config_path
         config_path = None
@@ -512,7 +512,7 @@ def _run_queue_worker(args: argparse.Namespace) -> dict:
 
 def _run_data_event(args: argparse.Namespace) -> dict:
     """处理数据列更新事件，触发受影响因子的增量物化。"""
-    from pipeline_event import run_data_event
+    from factor_engine.pipeline_event import run_data_event
 
     out = run_data_event(
         dataset=args.dataset,

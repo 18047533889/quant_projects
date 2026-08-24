@@ -47,6 +47,8 @@ SCAN_DIRS: tuple[str, ...] = (
     "factor_preprocess",
     "dataaccess",
     "vectorbt_qs",
+    "alphaprobe",
+    "data_access",
 )
 
 # Directory / pattern exclusions (relative to each scanned dir root)
@@ -290,7 +292,28 @@ PLATFORM_PACKAGES: tuple[str, ...] = (
     "factor_preprocess",
     "dataaccess",
     "vectorbt_qs",
+    # P0-AP: AlphaProbe (independent project) is part of the platform source
+    # identity.  R26 P0-ALPHA: alphaprobe is scanned for real source only (its
+    # pdm.lock / pyproject / env / makefile are excluded from the tree hash —
+    # see _ALPHA_EXCLUDE_NAMES).  data_access (the repository-local namespace
+    # shim forwarding to dataaccess/) is a platform import boundary and is
+    # listed too.
+    "alphaprobe",
+    "data_access",
 )
+
+# P0-ALPHA: alphaprobe is a vendored independent project; its dependency lock /
+# packaging / template files are large and pinned to an external env, NOT
+# production source.  Excluding them keeps the platform Merkle identity stable
+# to REAL Alpha source code.  These file names are excluded from any package
+# tree hash (alphaprobe specifically).
+_ALPHA_EXCLUDE_NAMES: frozenset[str] = frozenset({
+    "pdm.lock",
+    "pyproject.toml",
+    ".env.example",
+    ".gitignore",
+    "makefile",
+})
 
 # Dirs that must never be treated as production source even if tracked.
 _PLATFORM_EXCLUDE_SUFFIXES: frozenset[str] = frozenset({
@@ -305,7 +328,14 @@ def _package_tree_merkle(pkg_dir: Path) -> str:
     Each leaf = hash(relative_path || mode || size || content_sha256).  Uses the
     platform exclusion set (no evidence/docs/build descent, no generated/binary
     suffixes).  Deterministic for a fixed file set.
+
+    P0-ALPHA: for the vendored alphaprobe project, dependency/packaging/template
+    files (pdm.lock, pyproject.toml, .env.example, .gitignore, makefile) are
+    EXCLUDED — they are pinned to an external env, not Alpha generation source,
+    so editing them must not perturb the platform source identity.  Real Alpha
+    source (*.py, configs, prompts, services) is still hashed.
     """
+    exclude_names = _ALPHA_EXCLUDE_NAMES if pkg_dir.name == "alphaprobe" else frozenset()
     leaves: list[str] = []
     for dirpath, dirnames, filenames in os.walk(pkg_dir):
         dirnames[:] = sorted(
@@ -314,6 +344,8 @@ def _package_tree_merkle(pkg_dir: Path) -> str:
         )
         rel_dir = os.path.relpath(dirpath, pkg_dir)
         for fname in sorted(filenames):
+            if fname in exclude_names:
+                continue
             if any(fname.endswith(s) for s in _PLATFORM_EXCLUDE_SUFFIXES):
                 continue
             if fname in EXCLUDE_SUFFIXES or fname.endswith(".py.pre_lazy_opt"):
@@ -465,9 +497,9 @@ def platform_source_tree_identity(
         hashlib.sha256(("packaging\x00" + packaging_identity).encode("utf-8")).hexdigest()
     )
 
-    # Dependency lock identity.
+    # Dependency lock identity (R26 P0-LOCK: SINGLE lock authority — root only).
     dep_leaves: list[str] = []
-    for rel in ("requirements-production.lock", "factor_engine/requirements-production.lock"):
+    for rel in ("requirements-production.lock",):
         h = _single_file_hash(rel, root)
         if h:
             dep_leaves.append(h)

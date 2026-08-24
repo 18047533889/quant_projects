@@ -42,7 +42,7 @@ def _load_script(rel: str):
 
 
 def test_phd0_group_normalization_contract():
-    from parameter_canonicalizer import ParamNormalizer, ParameterCanonicalizer
+    from factor_engine.parameter_canonicalizer import ParamNormalizer, ParameterCanonicalizer
 
     pc = ParameterCanonicalizer(
         "weighted_mean",
@@ -57,7 +57,7 @@ def test_phd0_group_normalization_contract():
 
 
 def test_non_phd0_group_is_not_normalized():
-    from parameter_canonicalizer import ParamNormalizer, ParameterCanonicalizer
+    from factor_engine.parameter_canonicalizer import ParamNormalizer, ParameterCanonicalizer
 
     pc = ParameterCanonicalizer(
         "weighted_sum",
@@ -74,7 +74,7 @@ def test_non_phd0_group_is_not_normalized():
 
 
 def test_mixed_type_weight_sequence_raises():
-    from parameter_canonicalizer import ParameterCanonicalizer
+    from factor_engine.parameter_canonicalizer import ParameterCanonicalizer
 
     pc = ParameterCanonicalizer("op", [])
     with pytest.raises(ValueError, match="non-numeric element"):
@@ -84,7 +84,7 @@ def test_mixed_type_weight_sequence_raises():
 
 
 def test_non_finite_sequence_raises():
-    from parameter_canonicalizer import ParameterCanonicalizer
+    from factor_engine.parameter_canonicalizer import ParameterCanonicalizer
 
     pc = ParameterCanonicalizer("op", [])
     with pytest.raises(ValueError, match="non-numeric element"):
@@ -94,7 +94,7 @@ def test_non_finite_sequence_raises():
 
 
 def test_valid_numeric_sequence_is_accepted():
-    from parameter_canonicalizer import ParameterCanonicalizer
+    from factor_engine.parameter_canonicalizer import ParameterCanonicalizer
 
     pc = ParameterCanonicalizer("op", [])
     key = pc.canonical_key({"weights": [1.0, 2.0, 3.0], "window": 5})

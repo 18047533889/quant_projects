@@ -5,7 +5,7 @@ import pytest
 pd = pytest.importorskip("pandas")
 yaml = pytest.importorskip("yaml")
 
-from pipeline import run_config_directory, run_from_config
+from factor_engine.pipeline import run_config_directory, run_from_config
 
 
 def _write_kline_day(root: Path, day: str, rows: list[tuple[str, float]]) -> None:

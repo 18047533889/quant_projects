@@ -10,7 +10,7 @@ import pytest
 yaml = pytest.importorskip("yaml")
 
 from factor_engine.runtime.engine import FactorEngine
-from workspace_paths import quant_projects_root, resolve_path
+from factor_engine.util.workspace_paths import quant_projects_root, resolve_path
 
 
 def _stock_daily_bar_root() -> Path:

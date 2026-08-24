@@ -13,7 +13,7 @@ import hashlib
 import json
 import os
 
-from workspace_paths import load_env_file
+from factor_engine.util.workspace_paths import load_env_file
 
 
 def _is_dev_profile() -> bool:

@@ -178,7 +178,7 @@ def test_financial_period_adapter_same_day_is_explicit_opt_in():
 def test_pit_asof_join_default_is_conservative():
     """pit_contract's asof default flips to next_trading_day (P0-03): a bar
     dated PubDate does not see the same-day announcement."""
-    from pit_contract import PITColumns, pit_asof_join
+    from factor_engine.pit_contract import PITColumns, pit_asof_join
 
     decisions = pd.DataFrame(
         {
@@ -208,7 +208,7 @@ def test_pit_asof_join_multi_instrument_global_key_sorted():
     """Two instruments with interleaved decision dates must not raise
     ``ValueError: left keys must be sorted`` and must join each instrument to
     its own history (no cross-instrument leakage)."""
-    from pit_contract import PITColumns, pit_asof_join
+    from factor_engine.pit_contract import PITColumns, pit_asof_join
 
     decisions = pd.DataFrame(
         {
@@ -244,7 +244,7 @@ def test_pit_asof_join_multi_instrument_global_key_sorted():
 def test_pit_asof_join_multi_instrument_shuffled_duplicates():
     """Shuffled decision grid + duplicated rows: output order preserved, each
     row maps to its own instrument history, and no asof key error."""
-    from pit_contract import PITColumns, pit_asof_join
+    from factor_engine.pit_contract import PITColumns, pit_asof_join
 
     rng = np.random.default_rng(7)
     instruments = [f"I{i:03d}" for i in range(100)]

@@ -13,7 +13,7 @@ if str(FACTOR_ENGINE) not in sys.path:
     sys.path.insert(0, str(FACTOR_ENGINE))
 
 from factor_engine.cleaned_operators import load_all  # noqa: E402
-from operator_usage_expanded import build_usage_report, scan_manifest_files  # noqa: E402
+from factor_engine.operator_usage_expanded import build_usage_report, scan_manifest_files  # noqa: E402
 
 
 def main() -> None:

@@ -10,7 +10,7 @@ from typing import Any
 
 from factor_engine.backend.cleaned_bridge import build_cleaned_dsl_allowlist, ensure_cleaned_loaded
 from factor_engine.cleaned_operators.operator_surface import UNSAFE_CANONICALS
-from research_tools.registry import ResearchToolRegistry
+from factor_engine.research_tools.registry import ResearchToolRegistry
 
 
 def build_research_dsl_allowlist(*, include_unsafe: bool = False) -> dict[str, Any]:

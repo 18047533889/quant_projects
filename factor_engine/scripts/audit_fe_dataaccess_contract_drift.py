@@ -54,7 +54,7 @@ def _dataaccess_registry_datasets() -> dict:
         except Exception:
             pass
     try:
-        import dataaccess.cos_registry_runtime as runtime
+        import data_access.cos_registry_runtime as runtime
 
         patch = getattr(runtime, "_REGISTRY_PATCHES", None)
         if patch is not None:

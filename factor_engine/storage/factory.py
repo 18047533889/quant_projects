@@ -8,7 +8,7 @@ from .cleaned_parquet_source import CleanedParquetSource
 from .data_access_source import DataAccessSource
 from .kline_parquet_source import KlineParquetSource
 from .parquet_source import ParquetSource
-from workspace_paths import resolve_path
+from factor_engine.util.workspace_paths import resolve_path
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from logging_utils import get_logger
+from factor_engine.util.logging_utils import get_logger
 
 from .datasource import DataSource
 from .field_plan import NormalizedFieldPlan, plan_from_field_spec

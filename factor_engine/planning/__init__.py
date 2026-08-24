@@ -15,6 +15,14 @@ Key modules:
 """
 from __future__ import annotations
 
+from factor_engine.planning.backend_region import (
+    BackendRegion,
+    PhysicalBackend,
+    PhysicalRegionPlan,
+    Representation,
+    TransferEdge,
+)
+
 __all__ = [
     "BackendRegion",
     "TransferEdge",

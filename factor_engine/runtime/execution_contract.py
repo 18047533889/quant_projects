@@ -549,7 +549,7 @@ def _is_production_direct(canonical: str) -> bool:
 
 def _checkpoint_spec(canonical: str, *, strict: bool = False) -> Any | None:
     try:
-        from stateful_contract import StatefulCheckpointRegistry
+        from factor_engine.stateful_contract import StatefulCheckpointRegistry
 
         return StatefulCheckpointRegistry.get(canonical)
     except Exception as exc:
@@ -576,7 +576,7 @@ def execution_contract(canonical: str, *, production: bool = False) -> Execution
     resolved = _resolve(canonical, strict=production)
     lookup_failed = False
     try:
-        from stateful_contract import StatefulCheckpointRegistry
+        from factor_engine.stateful_contract import StatefulCheckpointRegistry
 
         spec = StatefulCheckpointRegistry.get(resolved)
     except Exception as exc:

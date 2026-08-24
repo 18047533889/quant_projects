@@ -14,8 +14,8 @@ from factor_engine.runtime.stateful_incremental import (
     stateful_canonicals_in_ir,
     try_stateful_segmented_incremental,
 )
-from stateful_contract import StatefulCheckpointRegistry
-from stateful_runtime import execute_stateful_segment
+from factor_engine.stateful_contract import StatefulCheckpointRegistry
+from factor_engine.stateful_runtime import execute_stateful_segment
 
 
 class _PanelSource:

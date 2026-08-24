@@ -76,7 +76,7 @@ def test_checkpointable_claim_matches_runtime_registry():
     """P0 false-green guard: the contract must claim checkpointable for a Kalman
     canonical iff the runtime actually registers it in StatefulCheckpointRegistry
     (a real checkpoint-restore authority)."""
-    from stateful_contract import StatefulCheckpointRegistry
+    from factor_engine.stateful_contract import StatefulCheckpointRegistry
 
     registered = set(StatefulCheckpointRegistry.catalog())
     for c in sorted(KALMAN_STATEFUL_CANONICALS):
@@ -93,7 +93,7 @@ def test_no_kalman_canonical_is_registered_checkpointable():
     """P0: the runtime registry has NO Kalman registration (honest degradation —
     the kernels have no restore branch), so no Kalman contract may claim
     checkpointable either."""
-    from stateful_contract import StatefulCheckpointRegistry
+    from factor_engine.stateful_contract import StatefulCheckpointRegistry
 
     registered = set(StatefulCheckpointRegistry.catalog())
     assert not (registered & set(KALMAN_STATEFUL_CANONICALS)), sorted(

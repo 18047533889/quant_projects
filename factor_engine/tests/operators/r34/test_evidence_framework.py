@@ -106,7 +106,7 @@ def test_availability_clock_open_semantics():
 
 
 def test_stateful_behavior_detection():
-    from stateful_contract import detect_stateful_behavior
+    from factor_engine.stateful_contract import detect_stateful_behavior
 
     assert detect_stateful_behavior(np.cumsum, np.ones(40)) is True
     assert detect_stateful_behavior(np.abs, np.arange(-20, 20, dtype=float)) is False

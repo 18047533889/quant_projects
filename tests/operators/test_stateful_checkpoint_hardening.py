@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from stateful_runtime import execute_stateful_segment
+from factor_engine.stateful_runtime import execute_stateful_segment
 
 
 @pytest.mark.parametrize("canonical", ["ts_ewm_std", "ts_ewm_var", "ts_ewm_cov", "ts_ewm_corr"])

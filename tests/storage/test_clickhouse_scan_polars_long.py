@@ -11,7 +11,7 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _path():
-    from workspace_paths import quant_projects_root
+    from factor_engine.workspace_paths import quant_projects_root
 
     root = str(quant_projects_root())
     if root not in sys.path:

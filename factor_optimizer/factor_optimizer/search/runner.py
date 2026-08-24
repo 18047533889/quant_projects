@@ -887,9 +887,15 @@ class SearchRunner:
         # is always None inside a search session; sealed test evaluation
         # happens only through a separate test authority.
         self._test_authority_broker: Optional[TestAuthorityBroker] = None
+        # The search-time split plan.  Every capability check in the runner's
+        # evaluation path compares the requested coordinates against this plan
+        # (R46 P0-Q exact-subset authorization).
+        self._search_split_plan: Optional[SplitPlan] = None
         if isinstance(evaluation_fn, EvaluationProtocol):
             # Record the search-time data boundary so freeze_for_sealed_test
-            # can reject sealed plans that overlap search data.
+            # can reject sealed plans that overlap search data, and so every
+            # capability evaluation can be authorized against the plan.
+            self._search_split_plan = evaluation_fn.split_plan
             object.__setattr__(
                 self.config, "_search_split_plan", evaluation_fn.split_plan
             )
@@ -1030,10 +1036,19 @@ class SearchRunner:
 
                 trial.update_status(TrialStatus.EVALUATING)
                 try:
-                    result = (
-                        self.evaluation_fn.evaluate(trial, fidelity)
-                        if isinstance(self.evaluation_fn, EvaluationProtocol)
-                        else self.evaluation_fn(trial, fidelity)
+                    train_capability = None
+                    if self._data_capabilities is not None:
+                        train_capability = self._data_capabilities.get(
+                            DataScope.TRAIN
+                        )
+                    if train_capability is None:
+                        raise ValueError(
+                            "no TRAIN data capability available; the search "
+                            "runner cannot evaluate without a "
+                            "capability-authorized train boundary"
+                        )
+                    result = self._evaluate_with_capability(
+                        train_capability, trial, fidelity
                     )
                     actual_cost = result.get("cost")
                     if actual_cost is None:
@@ -1221,6 +1236,47 @@ class SearchRunner:
             )
         return self._default_plateau_detector.is_plateau(recent_scores)
 
+    def _evaluate_with_capability(
+        self, capability: DataCapability, trial: Trial, fidelity: int
+    ) -> Dict[str, Any]:
+        """Evaluate ``trial`` only after the capability authorizes it.
+
+        R46 P0-Q/P0-R/P0-S: every evaluation path in the runner funnels
+        through this method.  The capability's real identity is verified
+        (rejecting forgery) and the requested split plan must be an EXACT
+        SUBSET of the authorized coordinates (rejecting wrong-scope or
+        out-of-bound rows) BEFORE the underlying evaluation callback is
+        invoked.  This closes the isolation gap where a context/executor
+        called ``evaluation_fn.evaluate`` directly with no capability check.
+        """
+        if not isinstance(capability, DataCapability):
+            raise TypeError(
+                f"capability must be a DataCapability, got "
+                f"{type(capability).__name__}"
+            )
+        # Fail closed on a forged/altered identity (mask/scope tampering).
+        capability.verify_identity()
+        plan = self._search_split_plan
+        if not isinstance(plan, SplitPlan):
+            raise ValueError(
+                "no search SplitPlan available to authorize capability "
+                f"{capability.scope.value!r} evaluation"
+            )
+        if not capability.can_evaluate(plan):
+            raise ValueError(
+                f"capability scope={capability.scope.value!r} does not "
+                "authorize the current search split plan (exact-subset "
+                "authorization failed)"
+            )
+        if self._data_capabilities is None:
+            raise ValueError(
+                "no data capabilities available; refusing to evaluate without "
+                "a capability-authorized boundary"
+            )
+        if isinstance(self.evaluation_fn, EvaluationProtocol):
+            return self.evaluation_fn.evaluate(trial, fidelity)
+        return self.evaluation_fn(trial, fidelity)
+
 
 class TrainEvaluationContext:
     """Isolated evaluation context for training data.
@@ -1231,17 +1287,37 @@ class TrainEvaluationContext:
     def __init__(self, runner: SearchRunner):
         self._runner = runner
         self._split_plan = None
+        self._capability: Optional[DataCapability] = None
         if isinstance(runner.evaluation_fn, EvaluationProtocol):
             self._split_plan = runner.evaluation_fn.split_plan
+            if runner._data_capabilities is not None:
+                self._capability = runner._data_capabilities.get(DataScope.TRAIN)
 
     def evaluate(self, trial: Trial, fidelity: int) -> Dict[str, Any]:
-        """Evaluate a trial using only training data."""
+        """Evaluate a trial using only training data.
+
+        R46 P0-Q/P0-R: goes through the runner's capability-authorized
+        evaluation path using the TRAIN capability.  A caller that swaps in a
+        VALIDATION/TEST capability is rejected by the capability's exact-subset
+        authorization.
+        """
         if self._split_plan is None:
             raise ValueError("TrainEvaluationContext requires a SplitPlan")
         # Ensure we're only using train_mask
         if not any(self._split_plan.train_mask):
             raise ValueError("SplitPlan has no training data")
-        return self._runner.evaluation_fn.evaluate(trial, fidelity)
+        if self._capability is None:
+            raise ValueError(
+                "TrainEvaluationContext requires a TRAIN data capability"
+            )
+        if self._capability.scope is not DataScope.TRAIN:
+            raise ValueError(
+                "TrainEvaluationContext requires a TRAIN capability; got "
+                f"scope={self._capability.scope.value!r}"
+            )
+        return self._runner._evaluate_with_capability(
+            self._capability, trial, fidelity
+        )
 
 
 class ValidationEvaluationContext:
@@ -1253,17 +1329,37 @@ class ValidationEvaluationContext:
     def __init__(self, runner: SearchRunner):
         self._runner = runner
         self._split_plan = None
+        self._capability: Optional[DataCapability] = None
         if isinstance(runner.evaluation_fn, EvaluationProtocol):
             self._split_plan = runner.evaluation_fn.split_plan
+            if runner._data_capabilities is not None:
+                self._capability = runner._data_capabilities.get(
+                    DataScope.VALIDATION
+                )
 
     def evaluate(self, trial: Trial, fidelity: int) -> Dict[str, Any]:
-        """Evaluate a trial using only validation data."""
+        """Evaluate a trial using only validation data.
+
+        R46 P0-Q/P0-R: goes through the runner's capability-authorized
+        evaluation path using the VALIDATION capability.
+        """
         if self._split_plan is None:
             raise ValueError("ValidationEvaluationContext requires a SplitPlan")
         # Ensure we're only using validation_mask
         if not any(self._split_plan.validation_mask):
             raise ValueError("SplitPlan has no validation data")
-        return self._runner.evaluation_fn.evaluate(trial, fidelity)
+        if self._capability is None:
+            raise ValueError(
+                "ValidationEvaluationContext requires a VALIDATION data capability"
+            )
+        if self._capability.scope is not DataScope.VALIDATION:
+            raise ValueError(
+                "ValidationEvaluationContext requires a VALIDATION capability; "
+                f"got scope={self._capability.scope.value!r}"
+            )
+        return self._runner._evaluate_with_capability(
+            self._capability, trial, fidelity
+        )
 
 
 class SealedTestExecutor:
@@ -1303,6 +1399,13 @@ class SealedTestExecutor:
         Requires a test authority broker (the physical test-data path).  A
         search-runner-created executor without a broker raises rather than
         silently evaluating against search data.
+
+        R46 P0-S: with a broker, evaluation is fully capability-authorized.
+        The broker issues a TEST capability, resolves the test payload through
+        a provider gated on that capability, and only then runs the underlying
+        evaluation callback against the resolved test data.  This replaces the
+        old direct ``session.consume_sealed_test(..., evaluation_fn)`` call
+        which bypassed the capability boundary entirely.
         """
         if self._test_authority_broker is None:
             raise ValueError(
@@ -1315,4 +1418,62 @@ class SealedTestExecutor:
         # Ensure we're only using test_mask
         if not any(split_plan.test_mask):
             raise ValueError("SplitPlan has no test data")
-        return session.consume_sealed_test(handle, split_plan, self._runner.evaluation_fn)
+        validate_split_plan(split_plan)
+        if not isinstance(handle, SealedTestHandle):
+            raise TypeError("handle must be a SealedTestHandle")
+        if session.frozen_at is None:
+            raise ValueError("search session is not frozen")
+        if session.sealed_test_consumed:
+            raise ValueError("sealed test handle has already been consumed")
+        if session.sealed_trial_id != handle.trial_id:
+            raise ValueError("sealed test handle does not match frozen session")
+        winner = next(
+            (
+                trial
+                for trial in session.successful_trials()
+                if trial.trial_id == handle.trial_id
+            ),
+            None,
+        )
+        if winner is None or winner.evaluation_ref != handle.evaluation_ref:
+            raise ValueError(
+                "sealed test handle evidence does not match frozen winner"
+            )
+        # R46 P0-S: route the physical test-data path through the broker.
+        broker = self._test_authority_broker
+        test_capability = broker.issue_test_capability(split_plan.test_mask)
+        provider = broker.create_test_provider({"test_segment": handle.split_id})
+        data = provider.resolve(test_capability)
+        scoped = ScopedEvaluator(provider, self._runner.evaluation_fn.evaluator)
+        metrics = scoped.evaluate(test_capability, winner, 0)
+        if not isinstance(metrics, dict) or not all(
+            isinstance(name, str)
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and isfinite(value)
+            for name, value in metrics.items()
+        ):
+            raise ValueError(
+                "sealed test evaluator must return finite numeric metrics"
+            )
+        # Consume the seal via the guarded path (False->True is the one legal
+        # transition; any reset attempt stays blocked by __setattr__).
+        object.__setattr__(session, "sealed_test_consumed", True)
+        result = SealedTestResult(
+            trial_id=winner.trial_id,
+            test_metrics=dict(metrics),
+            frozen_at=session.frozen_at,
+            search_session_id=session.session_id,
+            split_id=split_plan.split_id,
+            evaluation_ref=winner.evaluation_ref,
+        )
+        session.sealed_test_results.append(
+            {
+                "trial_id": result.trial_id,
+                "split_id": result.split_id,
+                "evaluation_ref": result.evaluation_ref,
+                "frozen_at": result.frozen_at.isoformat(),
+                "test_metrics": dict(result.test_metrics),
+            }
+        )
+        return result

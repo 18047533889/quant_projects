@@ -8,7 +8,7 @@ from typing import Iterable, Literal
 import numpy as np
 import pandas as pd
 
-from pit_contract import PITColumns, pit_asof_join
+from factor_engine.pit_contract import PITColumns, pit_asof_join
 
 
 @dataclass(frozen=True)

@@ -11,7 +11,7 @@
 import time
 from dataclasses import dataclass
 
-from planning.dag_partition_optimizer import (
+from factor_engine.planning.dag_partition_optimizer import (
     DAGNode,
     DAGPartitionOptimizer,
     DataShape,

@@ -3,7 +3,7 @@ Tests for telemetry.metrics module.
 """
 
 import time
-from telemetry.metrics import (
+from factor_engine.telemetry.metrics import (
     Counter,
     Gauge,
     Histogram,

@@ -46,7 +46,7 @@ try:  # pragma: no cover - 类型引用（运行时惰性）
     from typing import TYPE_CHECKING
 
     if TYPE_CHECKING:
-        from dataaccess.read.object_store import ObjectStore
+        from data_access.read.object_store import ObjectStore
     else:
         ObjectStore = Any  # type: ignore
 except Exception:  # pragma: no cover

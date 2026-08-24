@@ -42,7 +42,7 @@ from factor_engine.api.columns import col
 from factor_engine.api.factor import Factor
 from factor_engine.api import rank, ts_mean, ts_std_dev, ts_delta
 from factor_engine.backend.pandas_backend import PandasBackend
-from logging_utils import ProgressLogger, configure_logging, get_logger
+from factor_engine.util.logging_utils import ProgressLogger, configure_logging, get_logger
 from factor_engine.runtime.engine import FactorEngine
 from factor_engine.storage import ParquetMaterializer
 from factor_engine.storage.datasource import DataSource

@@ -7,7 +7,7 @@ import pytest
 
 from factor_engine.cleaned_operators import load_all
 from factor_engine.cleaned_operators.registry import OperatorRegistry
-from stateful_contract import (
+from factor_engine.stateful_contract import (
     StateCheckpoint,
     StatefulCheckpointRegistry,
     StatefulContractError,

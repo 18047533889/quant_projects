@@ -418,7 +418,7 @@ class StateBlock:
         在块内未保存，回读为占位空值——适配器使用时以 operator 的 registry
         校验为准（见 ``StatefulCheckpointStoreAdapter``）。
         """
-        from stateful_contract import StateCheckpoint
+        from factor_engine.stateful_contract import StateCheckpoint
 
         operator = self.schema_version.rsplit("_state.", 1)[0] if "_state." in self.schema_version else ""
         fingerprints = list(self.input_fingerprints)
@@ -461,7 +461,7 @@ class StateBlockStore:
     def __init__(self, root: str | Path | None = None) -> None:
         if root is None:
             try:
-                from workspace_paths import default_factor_lake_root
+                from factor_engine.util.workspace_paths import default_factor_lake_root
             except Exception:  # pragma: no cover - 无 workspace shim 时
                 default_factor_lake_root = lambda: Path(".")  # type: ignore
             root = Path(default_factor_lake_root()) / "state_lake"
@@ -876,7 +876,7 @@ class StatefulCheckpointStoreAdapter:
 
         任一校验失败 → ``None``（fail-closed）。
         """
-        from stateful_contract import (
+        from factor_engine.stateful_contract import (
             StatefulCheckpointRegistry,
             StatefulContractError,
         )
@@ -958,7 +958,7 @@ class StatefulCheckpointStoreAdapter:
 
     def save(self, factor_id: str, checkpoint: Any) -> None:
         """单 checkpoint 保存：累积成一代并原子发布（多一个临时文件的成本可忽略）。"""
-        from stateful_contract import StatefulCheckpointRegistry
+        from factor_engine.stateful_contract import StatefulCheckpointRegistry
 
         StatefulCheckpointRegistry.validate(checkpoint)
         key = self._key(factor_id, checkpoint.operator)
@@ -979,7 +979,7 @@ class StatefulCheckpointStoreAdapter:
 
         任一 checkpoint 校验失败 → 抛异常，什么都不写（fail-closed）。
         """
-        from stateful_contract import StatefulCheckpointRegistry
+        from factor_engine.stateful_contract import StatefulCheckpointRegistry
 
         if not checkpoints:
             return

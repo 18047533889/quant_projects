@@ -317,7 +317,7 @@ class DataAccessAdapter:
 def check_data_access_available() -> bool:
     """Check if dataaccess package is available."""
     try:
-        import dataaccess
+        import data_access
         return True
     except ImportError:
         return False

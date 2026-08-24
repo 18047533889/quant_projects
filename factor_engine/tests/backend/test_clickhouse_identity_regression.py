@@ -27,7 +27,7 @@ from factor_engine.runtime.production_execution_certificate import (
     ProductionExecutionCertificate,
     normalize_backend,
 )
-from workspace_paths import quant_projects_root
+from factor_engine.util.workspace_paths import quant_projects_root
 
 
 @pytest.fixture(autouse=True)

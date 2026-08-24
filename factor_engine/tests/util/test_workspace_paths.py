@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from scripts.build_canonical_fields import get_table_meta
-from workspace_paths import quant_projects_root, resolve_path, repo_root
+from factor_engine.util.workspace_paths import quant_projects_root, resolve_path, repo_root
 
 
 def test_get_table_meta_stock_daily_bar_per_market():

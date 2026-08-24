@@ -7,7 +7,7 @@ from typing import Any
 
 import pandas as pd
 
-from logging_utils import get_logger
+from factor_engine.util.logging_utils import get_logger
 from factor_engine.storage.factor_format import long_table_to_series
 
 logger = get_logger("factor_engine.storage.staging_loader")

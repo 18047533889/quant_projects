@@ -23,7 +23,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from parameter_canonicalizer import (
+from factor_engine.parameter_canonicalizer import (
     ParamNormalizer,
     ParameterCanonicalizer,
     _PROBE_NOT_APPLICABLE,

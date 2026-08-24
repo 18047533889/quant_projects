@@ -129,7 +129,7 @@ def ensure_intermediate_materialized(
     if not name or version <= 0:
         raise ValueError("intermediate name must be non-empty and version positive")
 
-    from workspace_paths import default_factor_lake_root
+    from factor_engine.util.workspace_paths import default_factor_lake_root
 
     root = Path(lake_root or default_factor_lake_root())
     registry_file, entries = load_intermediate_registry(registry_path)

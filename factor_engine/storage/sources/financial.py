@@ -7,7 +7,7 @@ from typing import Iterable, Literal
 
 import pandas as pd
 
-from pit_contract import (
+from factor_engine.pit_contract import (
     AvailabilityPrecision,
     PITColumns,
     select_visible_row_bundles,
@@ -150,7 +150,7 @@ def load_financial_row_bundle(
         raise ValueError(f"financial events missing bundle fields: {missing}")
     # R24-056/057: explicit selector lattice — the caller may only keep or
     # tighten a field's registered contract (annual_only ⊂ latest_visible_period).
-    from pit_contract import selector_compatible
+    from factor_engine.pit_contract import selector_compatible
 
     for name in field_names:
         contract = FUNDAMENTAL_FIELD_CONTRACTS.get(name)

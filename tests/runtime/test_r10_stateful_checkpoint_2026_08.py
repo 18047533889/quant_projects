@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from stateful_contract import StateCheckpoint, StatefulCheckpointRegistry, StatefulContractError
+from factor_engine.stateful_contract import StateCheckpoint, StatefulCheckpointRegistry, StatefulContractError
 
 
 def test_source_snapshot_scope_is_window_independent():

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from factor_engine.runtime.real_data_factor_smoke import run_all_dataset_smokes
-from workspace_paths import resolve_path
+from factor_engine.workspace_paths import resolve_path
 import os
 
 MASSIVE_ROOT = resolve_path(

@@ -21,7 +21,7 @@ from factor_engine.runtime.state_block_store import (
     StatefulCheckpointStoreAdapter,
 )
 from factor_engine.runtime.stateful_incremental import try_stateful_segmented_incremental
-from stateful_runtime import execute_stateful_segment
+from factor_engine.stateful_runtime import execute_stateful_segment
 from factor_engine.ir.nodes import IRNode
 
 
@@ -106,7 +106,7 @@ def test_state_block_roundtrip_preserves_state_and_identity() -> None:
 
 def test_state_block_union_of_missing_fields() -> None:
     # 两个 instrument 的 state 字段不同 → 并集，缺失字段为 None。
-    from stateful_contract import StateCheckpoint
+    from factor_engine.stateful_contract import StateCheckpoint
 
     ck_a = StateCheckpoint(
         operator="ts_ema", instrument="A", as_of="2024-01-01T00:00:00+00:00",

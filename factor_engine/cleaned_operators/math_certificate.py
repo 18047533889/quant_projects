@@ -2223,7 +2223,7 @@ def check_chunk_invariance_all_segmented_canonicals(
     """
     import pandas as pd
 
-    from stateful_runtime import execute_stateful_segment
+    from factor_engine.stateful_runtime import execute_stateful_segment
 
     try:
         from factor_engine.cleaned_operators.production_hardening import SEGMENTED_EXECUTION_CANONICALS

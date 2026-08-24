@@ -15,7 +15,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from pit_contract import (
+from factor_engine.pit_contract import (
     PITColumns,
     pit_asof_join,
     select_visible_row_bundles,
@@ -109,7 +109,7 @@ def test_production_same_day_date_only_rejected():
 
 def test_production_same_day_declared_date_precision_rejected():
     # R24-046..048: precision comes from DECLARED metadata, not data inspection.
-    from pit_contract import AvailabilityPrecision
+    from factor_engine.pit_contract import AvailabilityPrecision
 
     events = _events(("2024-03-31", "2024-04-30", 100.0))
     with pytest.raises(ValueError, match="TIMESTAMP-precision"):

@@ -29,8 +29,8 @@ from factor_engine.runtime.metrics_export import (
 )
 from factor_engine.runtime.slo_rules import evaluate_slo_rules
 from factor_engine.runtime.task_queue import shard_config_paths
-from logging_utils import get_logger
-from workspace_paths import workspace_data_root
+from factor_engine.util.logging_utils import get_logger
+from factor_engine.util.workspace_paths import workspace_data_root
 
 
 def _safe_name(name: str, max_len: int = 100) -> str:

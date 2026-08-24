@@ -22,7 +22,7 @@ from factor_engine.planner.backend_region import (
     Representation as PlannerRepresentation,
     StateContract as PlannerStateContract,
 )
-from planning.backend_region import (
+from factor_engine.planning.backend_region import (
     BackendRegion as PlanningBackendRegion,
     PhysicalBackend as PlanningPhysicalBackend,
     PhysicalProperties as PlanningPhysicalProperties,
@@ -57,7 +57,7 @@ class TestImportsResolve:
         assert PlanningStateContract is not None
 
     def test_planning_reexports_execution_axis(self):
-        from planning.backend_region import ExecutionAxis as PlanningAxis
+        from factor_engine.planning.backend_region import ExecutionAxis as PlanningAxis
         from factor_engine.planner.backend_region import ExecutionAxis as PlannerAxis
 
         assert PlanningAxis is PlannerAxis
@@ -88,7 +88,7 @@ class TestNoDualAbi:
 
     def test_physical_properties_single_authority(self):
         # planning consumers use the alias PhysicalProperty (MB-P2-002 name).
-        from planning.backend_region import PhysicalProperty as PlanningProperty
+        from factor_engine.planning.backend_region import PhysicalProperty as PlanningProperty
 
         assert PlanningProperty is PlannerPhysicalProperties
 

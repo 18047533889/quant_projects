@@ -198,7 +198,7 @@ class LQTPLogicalDataSource(DataSource):
                     emitted.append({"instrument":inst,"period_end":period,
                                     "available_at":row.available_at,"value":value})
             events = pd.DataFrame(emitted)
-        from pit_contract import PITColumns, pit_asof_join
+        from factor_engine.pit_contract import PITColumns, pit_asof_join
         anchor = self._anchor_index()
         decisions = anchor.to_frame(index=False); decisions.columns = ["decision_timestamp","instrument"]
         # Conservative next_trading_day visibility (audit §2.9): a same-day

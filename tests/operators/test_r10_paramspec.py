@@ -28,7 +28,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from parameter_canonicalizer import (
+from factor_engine.parameter_canonicalizer import (
     CONTRACT_ERROR,
     ParameterCanonicalizer,
     ParameterContractError,

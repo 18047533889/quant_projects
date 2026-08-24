@@ -518,7 +518,7 @@ def _load_module_if_available(mod: str) -> None:
         _SKIPPED_OPTIONAL_MODULES.add(mod)
         logger = None
         try:
-            from logging_utils import get_logger
+            from factor_engine.util.logging_utils import get_logger
             logger = get_logger("cleaned_operators")
         except Exception:
             pass

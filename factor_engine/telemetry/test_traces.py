@@ -3,7 +3,7 @@ Tests for telemetry.traces module.
 """
 
 import time
-from telemetry.traces import (
+from factor_engine.telemetry.traces import (
     Span,
     SpanKind,
     SpanStatus,
@@ -20,7 +20,7 @@ from telemetry.traces import (
 
 def test_span_context_creation():
     """Test span context creation."""
-    from telemetry.traces import SpanContext
+    from factor_engine.telemetry.traces import SpanContext
 
     root = SpanContext.create_root()
     assert root.trace_id
@@ -35,7 +35,7 @@ def test_span_context_creation():
 
 def test_span_basic():
     """Test basic span operations."""
-    from telemetry.traces import SpanContext
+    from factor_engine.telemetry.traces import SpanContext
 
     context = SpanContext.create_root()
     span = Span(context, "test_span")
@@ -49,7 +49,7 @@ def test_span_basic():
 
 def test_span_context_manager():
     """Test span as context manager."""
-    from telemetry.traces import SpanContext
+    from factor_engine.telemetry.traces import SpanContext
 
     context = SpanContext.create_root()
     span = Span(context, "test_span")
@@ -62,7 +62,7 @@ def test_span_context_manager():
 
 def test_span_error_handling():
     """Test span error handling in context manager."""
-    from telemetry.traces import SpanContext
+    from factor_engine.telemetry.traces import SpanContext
 
     context = SpanContext.create_root()
     span = Span(context, "test_span")
@@ -327,7 +327,7 @@ def test_in_memory_exporter():
     """Test in-memory span exporter."""
     exporter = InMemorySpanExporter()
 
-    from telemetry.traces import SpanContext, SpanData
+    from factor_engine.telemetry.traces import SpanContext, SpanData
 
     span1 = SpanData(
         context=SpanContext.create_root(),

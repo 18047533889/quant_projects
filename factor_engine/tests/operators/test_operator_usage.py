@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from factor_engine.cleaned_operators import load_all
-from operator_usage_expanded import build_usage_report, expand_formula_recipes, extract_call_names
+from factor_engine.operator_usage_expanded import build_usage_report, expand_formula_recipes, extract_call_names
 
 
 @pytest.fixture(scope="module", autouse=True)

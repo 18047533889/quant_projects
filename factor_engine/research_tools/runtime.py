@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from research_tools.registry import ResearchToolRegistry
+from factor_engine.research_tools.registry import ResearchToolRegistry
 
 
 class ResearchToolError(RuntimeError):

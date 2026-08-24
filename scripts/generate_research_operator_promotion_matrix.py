@@ -16,7 +16,7 @@ from factor_engine.cleaned_operators.operator_policy import infer_operator_polic
 from factor_engine.cleaned_operators.operator_surface import RESEARCH_ONLY_CANONICALS, classify_canonical
 from factor_engine.cleaned_operators.registry import OperatorRegistry
 from factor_engine.cleaned_operators.operator_spec import build_operator_spec
-from stateful_contract import StatefulCheckpointRegistry
+from factor_engine.stateful_contract import StatefulCheckpointRegistry
 
 OUT = FE / "docs" / "research_operator_promotion_matrix.json"
 

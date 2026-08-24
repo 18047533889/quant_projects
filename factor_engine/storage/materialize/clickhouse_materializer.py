@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from logging_utils import get_logger
+from factor_engine.util.logging_utils import get_logger
 
 logger = get_logger("factor_engine.storage.clickhouse_materializer")
 

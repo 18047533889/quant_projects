@@ -261,9 +261,9 @@ def test_pipeline_config_dir_parallel_runs(tmp_path, monkeypatch):
             "errors": [],
         }
 
-    monkeypatch.setattr("pipeline._execute_config_with_retries", _fake_execute)
+    monkeypatch.setattr("factor_engine.pipeline._execute_config_with_retries", _fake_execute)
 
-    from pipeline import run_config_directory
+    from factor_engine.pipeline import run_config_directory
 
     out = run_config_directory(cfg_dir, output_root=tmp_path / "out", n_jobs=2)
     assert out["summary"]["configs_total"] == 2

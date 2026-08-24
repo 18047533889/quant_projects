@@ -341,7 +341,7 @@ def resolve_git_commit_hash(*, repo_root: str | None = None) -> str | None:
     if repo_root:
         candidates.append(Path(repo_root))
     try:
-        from workspace_paths import quant_projects_root
+        from factor_engine.util.workspace_paths import quant_projects_root
 
         candidates.append(quant_projects_root())
     except Exception:

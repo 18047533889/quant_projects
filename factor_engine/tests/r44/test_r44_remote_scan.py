@@ -23,14 +23,14 @@ import pytest
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from dataaccess.read.object_store import LocalObjectStore
-from dataaccess.read.remote_dataset_scanner import (
+from data_access.read.object_store import LocalObjectStore
+from data_access.read.remote_dataset_scanner import (
     RemoteDatasetScanner,
     RemoteScanPlan,
     RemoteScanStats,
 )
-from dataaccess.read.remote_io_cost import RemoteIOCost, estimate_remote_io
-from dataaccess.read.local_disk_policy import (
+from data_access.read.remote_io_cost import RemoteIOCost, estimate_remote_io
+from data_access.read.local_disk_policy import (
     LocalDiskPolicy,
     LocalDiskPolicyViolation,
     assert_no_local_persistent_write,

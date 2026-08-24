@@ -11,8 +11,8 @@ def test_segmented_execution_set_matches_runtime_restore_implementations():
     from factor_engine.cleaned_operators import load_all
     from factor_engine.cleaned_operators.production_hardening import SEGMENTED_EXECUTION_CANONICALS
     from factor_engine.cleaned_operators.registry import OperatorRegistry
-    from stateful_contract import StatefulCheckpointRegistry
-    from stateful_runtime import execute_stateful_segment
+    from factor_engine.stateful_contract import StatefulCheckpointRegistry
+    from factor_engine.stateful_runtime import execute_stateful_segment
 
     load_all()
     assert SEGMENTED_EXECUTION_CANONICALS, "segmented set must not be empty"
@@ -65,7 +65,7 @@ def test_stateful_operators_without_runtime_fail_closed():
     from factor_engine.cleaned_operators import load_all
     from factor_engine.cleaned_operators.production_hardening import STATEFUL_CHECKPOINTS
     from factor_engine.cleaned_operators.registry import OperatorRegistry
-    from stateful_contract import StatefulCheckpointRegistry
+    from factor_engine.stateful_contract import StatefulCheckpointRegistry
 
     load_all()
     spec = StatefulCheckpointRegistry.get("KAMA")

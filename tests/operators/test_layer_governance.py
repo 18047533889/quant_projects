@@ -10,8 +10,8 @@ from factor_engine.cleaned_operators.layer_governance import formula_field_names
 from factor_engine.cleaned_operators.overhaul.base import PandasFunctionOperator
 from factor_engine.cleaned_operators.registry import OperatorRegistry
 from factor_engine.factor_recipes.registry import FactorRecipeRegistry
-from pit_contract import pit_asof_join, validate_fundamental_events
-from research_tools.registry import ResearchToolRegistry
+from factor_engine.pit_contract import pit_asof_join, validate_fundamental_events
+from factor_engine.research_tools.registry import ResearchToolRegistry
 
 
 @pytest.fixture(scope="module", autouse=True)

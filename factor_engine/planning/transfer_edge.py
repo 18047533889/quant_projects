@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from planning.backend_region import PhysicalProperty, Representation
+from factor_engine.planning.backend_region import PhysicalProperty, Representation
 
 
 class TransferKind(str, Enum):

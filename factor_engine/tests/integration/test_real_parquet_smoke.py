@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from workspace_paths import quant_projects_root
+from factor_engine.util.workspace_paths import quant_projects_root
 
 
 def _expand(path: str) -> Path:

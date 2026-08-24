@@ -153,7 +153,7 @@ def test_clickhouse_does_not_inherit_duckdb_parity() -> None:
 
 
 def test_recursive_ewm_requires_native_checkpoint_for_segment_restart() -> None:
-    from stateful_contract import StatefulCheckpointRegistry, StatefulContractError
+    from factor_engine.stateful_contract import StatefulCheckpointRegistry, StatefulContractError
 
     spec = StatefulCheckpointRegistry.get("ts_ewm_std")
     assert spec is not None and spec.segmented_execution_supported

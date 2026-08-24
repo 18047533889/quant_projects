@@ -12,8 +12,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from planning.backend_region import BackendRegion
-from planning.transfer_edge import TransferEdge
+from factor_engine.planning.backend_region import BackendRegion
+from factor_engine.planning.transfer_edge import TransferEdge
 
 
 @dataclass(frozen=True)
@@ -165,10 +165,10 @@ class PhysicalRegionPlan:
             lines.append(f"   Nodes: {len(region.node_ids)}")
             lines.append(f"   Axis: {region.execution_axis.value}")
             lines.append(f"   Rows: ~{region.estimated_rows:,}")
-            lines.append(f"   Memory: ~{region.estimated_bytes / 1024.0 / 1024.0:.1f} MB")
-            if region.can_stream:
+            lines.append(f"   Memory: ~{region.estimated_memory_bytes / 1024.0 / 1024.0:.1f} MB")
+            if region.streaming_capable:
                 lines.append("   Streaming: Yes")
-            if region.required_properties.sorted_by:
+            if region.required_properties and region.required_properties.sorted_by:
                 lines.append(f"   Sorted by: {', '.join(region.required_properties.sorted_by)}")
             lines.append("")
 
@@ -206,7 +206,6 @@ def compute_plan_hash(
     regions: tuple[BackendRegion, ...],
     edges: tuple[TransferEdge, ...],
     logical_hash: str = "",
-    node_implementations: dict[str, dict[str, Any]] | None = None,
 ) -> str:
     """Compute stable hash of physical plan (MB-P2-014, section 68).
 
@@ -216,46 +215,26 @@ def compute_plan_hash(
     - Representation choices
     - Edge structure
     - Required properties
-    - Per-node implementation details (PI, bound_params, accelerator, kernel_signature)
 
     Does NOT include:
     - Actual runtime measurements
     - Estimated costs (these are predictions, not plan identity)
     - Telemetry metadata
     """
-    # Build region payload with node implementations
-    region_payload = []
-    for r in regions:
-        region_dict = {
-            "region_id": r.region_id,
-            "backend": r.backend.value if hasattr(r.backend, "value") else str(r.backend),
-            "representation": r.representation.value if hasattr(r.representation, "value") else str(r.representation),
-            "node_ids": sorted(r.node_ids),
-            "execution_axis": r.execution_axis.value if hasattr(r.execution_axis, "value") else str(r.execution_axis),
-            "sorted_by": list(r.required_properties.sorted_by),
-            "partitioned_by": list(r.required_properties.partitioned_by),
-        }
-
-        # Add per-node implementation details if provided
-        if node_implementations:
-            node_details = {}
-            for node_id in r.node_ids:
-                if node_id in node_implementations:
-                    impl = node_implementations[node_id]
-                    node_details[node_id] = {
-                        "node_id": node_id,
-                        "physical_implementation_id": impl.get("physical_implementation_id", ""),
-                        "bound_params": impl.get("bound_params", {}),
-                        "accelerator": impl.get("accelerator", "none"),
-                        "kernel_signature": impl.get("kernel_signature", ""),
-                    }
-            region_dict["node_implementations"] = node_details
-
-        region_payload.append(region_dict)
-
     payload: dict[str, Any] = {
         "logical_hash": logical_hash,
-        "regions": region_payload,
+        "regions": [
+            {
+                "region_id": r.region_id,
+                "backend": r.backend.value if hasattr(r.backend, "value") else str(r.backend),
+                "representation": r.representation.value if hasattr(r.representation, "value") else str(r.representation),
+                "node_ids": sorted(r.node_ids),
+                "execution_axis": r.execution_axis.value if hasattr(r.execution_axis, "value") else str(r.execution_axis),
+                "sorted_by": list(r.required_properties.sorted_by) if r.required_properties else [],
+                "partitioned_by": list(r.required_properties.partitioned_by) if r.required_properties else [],
+            }
+            for r in regions
+        ],
         "edges": [
             {
                 "producer": e.producer_region,
@@ -286,7 +265,7 @@ def estimate_plan_peak_memory(regions: tuple[BackendRegion, ...], edges: tuple[T
         return 0
 
     # Largest single region
-    max_region_bytes = max(r.estimated_bytes for r in regions)
+    max_region_bytes = max(r.estimated_memory_bytes for r in regions)
 
     # Largest transfer edge (source + target + 20% scratch)
     max_edge_bytes = 0

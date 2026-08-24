@@ -64,23 +64,16 @@ vectorbt = [
 
 [project.scripts]
 factor-engine-serve = "factor_engine.service.app:main"
-data-access-server = "dataaccess.data_access.service.__main__:main"
-data-access-quality = "dataaccess.data_access.quality.cli:main"
+data-access-server = "data_access.service.__main__:main"
+data-access-quality = "data_access.quality.cli:main"
 vectorbt-qs = "vectorbt_qs.cli:main"
 
 [tool.setuptools]
-py-modules = [
-    "logging_utils",
-    "workspace_paths",
-    "pit_contract",
-    "stateful_contract",
-    "stateful_runtime",
-]
+py-modules = []
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = [
-    "planning*",
     "modeling",
     "modeling.*",
     # R45: source authority is factor_engine.* ONLY. The historical root
@@ -88,10 +81,6 @@ include = [
     # ir/market/mining/planner/runtime/security/semantic/service/storage/util/
     # validation) were consolidated into factor_engine/ and deleted from root.
     "evidence*",
-    "export*",
-    "research_operators*",
-    "research_tools*",
-    "telemetry*",
     "factor_engine",
     "factor_engine.*",
     "factor_engine.api*",
@@ -118,25 +107,14 @@ include = [
     "factor_engine.storage*",
     "factor_engine.util*",
     "factor_engine.validation*",
-    "dataaccess",
-    "dataaccess.*",
+    "factor_engine.audit*",
+    "factor_engine.execution*",
+    "factor_engine.export*",
+    "factor_engine.operator_contracts*",
+    "factor_engine.research_operators*",
+    "factor_engine.telemetry*",
     "data_access",
-    "dataaccess.data_access",
-    "dataaccess.data_access.core",
-    "dataaccess.data_access.registry",
-    "dataaccess.data_access.read",
-    "dataaccess.data_access.write",
-    "dataaccess.data_access.cos",
-    "dataaccess.data_access.service",
-    "dataaccess.data_access.clickhouse",
-    "dataaccess.data_access.quality",
-    "dataaccess.data_access.contract",
-    "dataaccess.data_access.security",
-    "dataaccess.data_access.runtime",
-    "dataaccess.data_access.snapshot",
-    "dataaccess.data_access.r30",
-    "dataaccess.data_access.export",
-    "dataaccess.data_access.telemetry",
+    "data_access.*",
     "vectorbt_qs",
     "vectorbt_qs.mvp",
     "vectorbt_qs.mvp.analysis",
@@ -157,25 +135,12 @@ exclude = [
     "cleaned_operators_archived.*",
     "factor_engine.cleaned_operators_archived",
     "factor_engine.cleaned_operators_archived.*",
+    "factor_engine.cleaned_operators.cleaned_operators",
+    "factor_engine.cleaned_operators.cleaned_operators.*",
 ]
 
 [tool.setuptools.package-dir]
-"dataaccess" = "dataaccess"
-"dataaccess.data_access" = "dataaccess"
-"dataaccess.data_access.core" = "dataaccess/core"
-"dataaccess.data_access.registry" = "dataaccess/registry"
-"dataaccess.data_access.read" = "dataaccess/read"
-"dataaccess.data_access.write" = "dataaccess/write"
-"dataaccess.data_access.cos" = "dataaccess/cos"
-"dataaccess.data_access.clickhouse" = "dataaccess/clickhouse"
-"dataaccess.data_access.quality" = "dataaccess/quality"
-"dataaccess.data_access.contract" = "dataaccess/contract"
-"dataaccess.data_access.security" = "dataaccess/security"
-"dataaccess.data_access.runtime" = "dataaccess/runtime"
-"dataaccess.data_access.snapshot" = "dataaccess/snapshot"
-"dataaccess.data_access.r30" = "dataaccess/r30"
-"dataaccess.data_access.export" = "dataaccess/export"
-"dataaccess.data_access.telemetry" = "dataaccess/telemetry"
+"data_access" = "data_access"
 "vectorbt_qs" = "vectorbt_qs"
 
 [tool.setuptools.package-data]
@@ -188,7 +153,7 @@ exclude = [
 "factor_engine.docs" = ["*.json", "*.yaml", "*.md"]
 "factor_engine.evidence" = ["*.json", "*.yaml"]
 "factor_engine.cleaned_operators" = ["docs/*"]
-dataaccess = ["config/*.yaml", "config/README.md", "docs/*.md"]
+data_access = ["config/*.yaml", "config/README.md", "docs/*.md"]
 vectorbt_qs = [
     "vectorbt/vectorbt/*.py",
     "vectorbt/vectorbt/**/*.py",

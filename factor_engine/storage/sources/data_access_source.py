@@ -15,8 +15,8 @@ from typing import Any, Iterable
 
 import pandas as pd
 
-from logging_utils import get_logger
-from workspace_paths import quant_projects_root
+from factor_engine.util.logging_utils import get_logger
+from factor_engine.util.workspace_paths import quant_projects_root
 
 from .datasource import DataSource
 from .field_plan import (
@@ -1606,7 +1606,7 @@ class DataAccessSource(DataSource):
                 plans = self._ensure_field_plans(names_list)
         if not plans:
             return {}
-        from pit_contract import four_layer_pit_allowed
+        from factor_engine.pit_contract import four_layer_pit_allowed
 
         dataset_pit_allowed = self._dataset_pit_allowed()
         for name, plan in plans.items():
@@ -1647,7 +1647,7 @@ class DataAccessSource(DataSource):
                     table_pit_allowed = True
                 if dataset_pit_allowed is None:
                     dataset_pit_allowed = True
-            from pit_contract import PITLayerVerdict
+            from factor_engine.pit_contract import PITLayerVerdict
 
             combined, layers = four_layer_pit_allowed(
                 field_pit_allowed=bool(field_pit_allowed),

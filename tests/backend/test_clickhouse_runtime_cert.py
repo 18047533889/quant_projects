@@ -17,7 +17,7 @@ import sys
 
 import pytest
 
-from workspace_paths import quant_projects_root
+from factor_engine.workspace_paths import quant_projects_root
 
 REPO_ROOT = str(quant_projects_root())
 if REPO_ROOT not in sys.path:

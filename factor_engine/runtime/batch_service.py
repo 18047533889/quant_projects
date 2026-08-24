@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Sequence
 
 from factor_engine.api.factor import Factor
 from factor_engine.ir.analyzer import AnalysisResult
-from logging_utils import get_logger
+from factor_engine.util.logging_utils import get_logger
 from factor_engine.runtime.perf_config import PerfConfig
 from factor_engine.runtime.production_policy import (
     assert_production_fastpath_runtime,

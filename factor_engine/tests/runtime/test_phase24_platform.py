@@ -17,7 +17,7 @@ from factor_engine.api import rank, ts_mean
 from factor_engine.api.columns import col
 from factor_engine.api.factor import Factor
 from factor_engine.backend.pandas_backend import PandasBackend
-from pipeline_event import run_data_event
+from factor_engine.pipeline_event import run_data_event
 from factor_engine.runtime.engine import FactorEngine
 from factor_engine.storage.data_access_source import DataAccessSource
 from factor_engine.storage.materializer import ParquetMaterializer
@@ -67,7 +67,7 @@ def test_run_data_event_dry_run(tmp_path):
 
 
 def test_data_access_source_read_auto_flag():
-    from workspace_paths import quant_projects_root
+    from factor_engine.util.workspace_paths import quant_projects_root
 
     root = str(quant_projects_root())
     if root not in sys.path:

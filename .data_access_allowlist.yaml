@@ -134,63 +134,63 @@
   reason: "因子湖 schema 迁移 CLI 入口；委托 schema_migration 读改写本地 lake 分区"
 - path: data_access/clickhouse/write.py
   reason: "ClickHouse 物化读本地 parquet 单文件；CH ETL 专用路径，非 registry dataset"
-- path: dataaccess/clickhouse/write.py
+- path: data_access/clickhouse/write.py
   reason: "ClickHouse 物化读本地 parquet 单文件；CH ETL 专用路径，非 registry dataset"
-- path: dataaccess/scripts/compact_dataset.py
+- path: data_access/scripts/compact_dataset.py
   reason: "小文件 compaction 维护工具：读本地 parquet 重写成大文件（非读路径 consumer）"
-- path: dataaccess/core/duckdb_config.py
+- path: data_access/core/duckdb_config.py
   reason: "DuckDB PRAGMA 配置模块，供 dataaccess engine 复用"
-- path: dataaccess/core/engine.py
+- path: data_access/core/engine.py
   reason: "DuckDB 引擎封装本体，import/connect 是唯一合法落点"
-- path: dataaccess/cos/remote.py
+- path: data_access/cos/remote.py
   reason: "COS remote 模式使用隔离 DuckDB 连接探测 S3 路径"
-- path: dataaccess/quality/cli.py
+- path: data_access/quality/cli.py
   reason: "质量 CLI 直接读取待检查 parquet 文件"
-- path: dataaccess/read/stats.py
+- path: data_access/read/stats.py
   reason: "dataset footer 行数估算需要 pq.read_table"
-- path: dataaccess/r30/lineage.py
+- path: data_access/r30/lineage.py
   reason: "R30-P1-019 LineageStore 可查询 lineage 的 DuckDB 索引本体（R30 明示允许 DuckDB/SQLite/Parquet index），不自循环"
-- path: dataaccess/service/app.py
+- path: data_access/service/app.py
   reason: "HTTP 服务序列化 Arrow/Parquet 响应"
-- path: dataaccess/service/client.py
+- path: data_access/service/client.py
   reason: "HTTP 客户端解析远程 Parquet 响应"
-- path: dataaccess/store.py
+- path: data_access/store.py
   reason: "dataaccess 实现本体，内部原子写入 parquet"
-- path: dataaccess/write/upsert.py
+- path: data_access/write/upsert.py
   reason: "upsert 读取已有分区并原子写回"
-- path: dataaccess/write/publish.py
+- path: data_access/write/publish.py
   reason: "publish 校验 unique_key / 行数需直读 parquet + DuckDB（_validate_unique_key），不能递归调 read_arrow"
-- path: dataaccess/write/generation.py
+- path: data_access/write/generation.py
   reason: "R27-G generation 原子代写本体：hive 分区 data.parquet 直写 + manifest.json 单指针 flip（与 publish/upsert 同类，不能递归调自己）"
-- path: dataaccess/core/duckdb_capabilities.py
+- path: data_access/core/duckdb_capabilities.py
   reason: "dataaccess 自身实现：DuckDB 版本能力探测（import duckdb 读版本）"
-- path: dataaccess/core/retry.py
+- path: data_access/core/retry.py
   reason: "dataaccess 自身实现：ExceptionClassifier 需要 duckdb.Error 判断瞬时/致命错误是否可重试"
-- path: dataaccess/read/formats.py
+- path: data_access/read/formats.py
   reason: "dataaccess 自身实现：格式适配层，arrow/feather 直读（pyarrow feather/ipc）"
-- path: dataaccess/read/manifest.py
+- path: data_access/read/manifest.py
   reason: "dataaccess 自身实现：数据集 manifest 读写 parquet footer（pq.read_table/read_metadata）"
-- path: dataaccess/read/read_handle.py
+- path: data_access/read/read_handle.py
   reason: "dataaccess 自身实现：统一读句柄（无禁用 API，登记以防误报）"
-- path: dataaccess/read/scan_cost.py
+- path: data_access/read/scan_cost.py
   reason: "dataaccess 自身实现：读路径成本估算（无禁用 API）"
-- path: dataaccess/read/session_calendar.py
+- path: data_access/read/session_calendar.py
   reason: "dataaccess 自身实现：交易所 session/交易日历（#46），仅导入标准库与 pandas"
-- path: dataaccess/read/physical_plan.py
+- path: data_access/read/physical_plan.py
   reason: "dataaccess 自身实现：物理计划 DAG（#4），纯编译不读文件"
-- path: dataaccess/read/pit_event_index.py
+- path: data_access/read/pit_event_index.py
   reason: "dataaccess 自身实现：美股财务 PIT 物理索引（#8），构建时 pq.read_table 读取列"
-- path: dataaccess/read/contract_ir.py
+- path: data_access/read/contract_ir.py
   reason: "dataaccess 自身实现：Contract IR 编译器（#12），只编译不读文件"
-- path: dataaccess/read/coverage.py
+- path: data_access/read/coverage.py
   reason: "dataaccess 自身实现：覆盖/完整性报告（#14），glob() 枚举文件"
-- path: dataaccess/read/sql_escape.py
+- path: data_access/read/sql_escape.py
   reason: "SQL 逃生口实现本体（有限只读沙箱）：#P1-final closure 23 parser 级函数 allowlist 用隔离 :memory: DuckDB 连接读 duckdb_functions() 注册表（只读 introspection，不读数据）"
-- path: dataaccess/cos/serving.py
+- path: data_access/cos/serving.py
   reason: "dataaccess 自身实现：serving 层预聚合（#30），read_parquet + groupby 聚合"
-- path: dataaccess/read/query_cache.py
+- path: data_access/read/query_cache.py
   reason: "dataaccess 自身实现：查询结果缓存（#25），无禁用 API"
-- path: dataaccess/scripts/audit_contract_ir.py
+- path: data_access/scripts/audit_contract_ir.py
   reason: "dataaccess 自身实现：Contract IR 审计脚本（#12），只编译不读文件"
 - path: factor_engine/runtime/intermediate_registry.py
   reason: "factor_engine 独立下线计划（PR7 factor_engine→data_access）；迁移完成前暂豁免"
@@ -204,7 +204,7 @@
   reason: "factor_engine 数据源层；迁移前暂豁免"
 - path: ".replace_backup_20260802_181017/**"
   reason: "临时备份目录，不参与检查"
-- path: dataaccess/benchmarks/**
+- path: data_access/benchmarks/**
   reason: "基准脚本：对比各基础引擎（duckdb/polars/pyarrow），直读 parquet 是 benchmark 本身语义"
 - path: scripts/verify_gtja191_factor_lake.py
   reason: "GTJA191 factor lake 结构审计 + 重算对比；按 factors/<id>/year=*/data.parquet 逐分区读，非 registry dataset"
@@ -384,5 +384,5 @@
 #    读 parquet footer 元数据（不读数据）做跨 epoch schema 契约校验，是
 #    DataAccess 正式读路径的一部分，不是裸读旁路。
 # ============================================================================
-- path: dataaccess/read/schema_epoch.py
+- path: data_access/read/schema_epoch.py
   reason: "R26-P0-022 跨 epoch schema gate：pq.ParquetFile 读 footer 元数据校验字段存在性/dtype 兼容，属 DataAccess 内部运行时门禁"

@@ -85,9 +85,12 @@ def _is_non_source_path(rel: str) -> bool:
     return False
 
 CATALOG_PATH = _REPO_ROOT / "build" / "mining" / "direct_mining_catalog.json"
+# R26 P0-LOCK: SINGLE lock authority.  The root ``requirements-production.lock``
+# is the only release lock; the factor_engine/ copy was a parallel candidate
+# that allowed stale/multiple authority.  DependencyLockPath now always points
+# at the root lock.
 LOCK_CANDIDATES = (
     _REPO_ROOT / "requirements-production.lock",
-    _REPO_ROOT / "factor_engine" / "requirements-production.lock",
 )
 
 _ENV_PACKAGES: tuple[str, ...] = (
@@ -668,6 +671,17 @@ def build_current() -> dict[str, Any]:
     platform_identity = platform_source_tree_identity()
     source_tree_identity = platform_identity["root_merkle"]
 
+    # R26 P0-ALPHA: AlphaProbe's generator is part of the platform identity.
+    # A change to its model / prompts / source / env lock is detected even when
+    # the platform package trees are untouched.
+    try:
+        from evidence.alpha_identity import alpha_generator_identity
+        alpha_identity = alpha_generator_identity(_REPO_ROOT).content_hash
+    except Exception as _aexc:  # pragma: no cover - env-dependent
+        alpha_identity = "MISSING:" + _sha256_bytes(
+            f"alpha_identity:{type(_aexc).__name__}".encode("utf-8")
+        )
+
     live_bindings = {
         "RootRepoSHA": json.dumps(
             live_root.to_dict(), sort_keys=True, separators=(",", ":")
@@ -676,6 +690,7 @@ def build_current() -> dict[str, Any]:
             live_root.to_dict(), sort_keys=True, separators=(",", ":")
         ),
         "PlatformSourceTreeIdentity": source_tree_identity,
+        "AlphaGeneratorIdentity": alpha_identity,
         "EvidenceAttestationIdentity": evidence_attestation_identity(),
         "OperatorCatalogSHA": operator_catalog_sha(),
         "SemanticCatalogIdentity": semantic_catalog_identity(),
@@ -863,6 +878,13 @@ def evaluate(payload: dict[str, Any]) -> dict[str, Any]:
             changed_any.append(art_id)
 
     payload["summary"] = counts
+    # R26 P0-MULTI: multi-dimension CURRENT-ness.  BuildHealth / RuntimeHealth /
+    # ResearchValidity / ReleaseValidity / ProductionReadiness are evaluated
+    # independently so a healthy build is never conflated with a stale release
+    # certificate.  The overall evaluation status is still CURRENT only when
+    # every artifact is CURRENT.
+    dims = _evaluate_dimensions(payload)
+    payload["dimensions"] = dims
     payload["evaluation"] = {
         "staleness_evaluated_at": datetime.datetime.now(
             datetime.timezone.utc
@@ -876,8 +898,76 @@ def evaluate(payload: dict[str, Any]) -> dict[str, Any]:
             "matches the LIVE identity set AND the artifact has an executed_at "
             "from a real verification run."
         ),
+        "dimensions": dims,
     }
     return payload
+
+
+def _evaluate_dimensions(payload: dict[str, Any]) -> dict[str, str]:
+    """R26 P26-MULTI: five independent CURRENT/STALE release dimensions.
+
+    Each dimension is decided from the LIVE identity set WITHOUT certifying the
+    tree the caller just wrote.  STALE here means "the live tree does not match
+    a bound/certified state", so a healthy build can be CURRENT while the
+    release validity is still STALE (operator cert / source snapshot drift).
+    """
+    live = payload.get("sha_bindings", {})
+    prior = load_existing()
+    live_pl = live.get("PlatformSourceTreeIdentity") or ""
+    live_cl = live.get("ImplementationClosureHashSet") or ""
+    live_sem = live.get("SemanticCatalogIdentity") or ""
+    live_alpha = live.get("AlphaGeneratorIdentity") or ""
+
+    # Bound identities from the last certified state (fail-closed: no prior
+    # evidence -> STALE).
+    prior_pl = ""
+    prior_cl = ""
+    prior_sem = ""
+    prior_alpha = ""
+    if prior is not None:
+        prior_pl = prior.get("source_tree_identity") or ""
+        prior_pl = prior_pl or (prior.get("sha_bindings") or {}).get("PlatformSourceTreeIdentity") or ""
+        prior_cl = (prior.get("sha_bindings") or {}).get("ImplementationClosureHashSet") or ""
+        prior_sem = (prior.get("sha_bindings") or {}).get("SemanticCatalogIdentity") or ""
+        prior_alpha = (prior.get("sha_bindings") or {}).get("AlphaGeneratorIdentity") or ""
+
+    def _ok(bound: str, live: str, label: str) -> str:
+        if not bound:
+            return "STALE"  # nothing certified yet -> not CURRENT
+        if bound == live:
+            return "CURRENT"
+        return "STALE"
+
+    # build_health: the wheel/install env is reproducible and matches the lock.
+    # (DependencyLockHash + TestEnvironmentIdentity bound by the prior run.)
+    prior_dep = (prior.get("sha_bindings") or {}).get("DependencyLockHash") or "" \
+        if prior is not None else ""
+    prior_env = (prior.get("sha_bindings") or {}).get("TestEnvironmentIdentity") or "" \
+        if prior is not None else ""
+    build_health = "CURRENT" if (
+        prior_dep and prior_dep == (live.get("DependencyLockHash") or "")
+        and prior_env and prior_env == (live.get("TestEnvironmentIdentity") or "")
+    ) else "STALE"
+
+    # runtime_health: the semantic catalog identity is live (dataaccess importable).
+    runtime_health = "CURRENT" if prior_sem and prior_sem == live_sem else "STALE"
+
+    # research_validity: the research artifacts' operator closure matches.
+    research_validity = _ok(prior_cl, live_cl, "ImplementationClosureHashSet")
+
+    # release_validity: the release source identity matches the bound tree.
+    release_validity = _ok(prior_pl, live_pl, "PlatformSourceTreeIdentity")
+
+    # production_readiness: the Alpha generator identity matches the bound state.
+    production_readiness = _ok(prior_alpha, live_alpha, "AlphaGeneratorIdentity")
+
+    return {
+        "build_health": build_health,
+        "runtime_health": runtime_health,
+        "research_validity": research_validity,
+        "release_validity": release_validity,
+        "production_readiness": production_readiness,
+    }
 
 
 def load_existing() -> dict[str, Any] | None:

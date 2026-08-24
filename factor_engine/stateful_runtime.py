@@ -8,7 +8,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import pandas as pd
 
-from stateful_contract import StateCheckpoint, StatefulCheckpointRegistry
+from factor_engine.stateful_contract import StateCheckpoint, StatefulCheckpointRegistry
 
 # R5-09/10/11: the checkpoint incremental kernels ARE the full-history math now.
 # The production full-history reference is the pandas ``ewm(adjust=False,
@@ -17,11 +17,11 @@ from stateful_contract import StateCheckpoint, StatefulCheckpointRegistry
 # true-range = NaN, and recursive (not SMA) Wilder seeding), so
 # full-history == checkpoint-bootstrap == checkpoint-resume holds by
 # construction and is verified in tests/operators/test_recursive_kernel_parity.py.
-from recursive_kernel import adx_segment as _adx_segment
-from recursive_kernel import atr_wilder_segment as _atr_segment
-from recursive_kernel import ema_segment as _ema_segment
-from recursive_kernel import macd_segment as _macd_segment
-from recursive_kernel import rsi_wilder_segment as _rsi_segment
+from factor_engine.recursive_kernel import adx_segment as _adx_segment
+from factor_engine.recursive_kernel import atr_wilder_segment as _atr_segment
+from factor_engine.recursive_kernel import ema_segment as _ema_segment
+from factor_engine.recursive_kernel import macd_segment as _macd_segment
+from factor_engine.recursive_kernel import rsi_wilder_segment as _rsi_segment
 
 
 @dataclass(frozen=True)

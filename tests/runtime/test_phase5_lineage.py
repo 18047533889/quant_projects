@@ -14,7 +14,7 @@ from factor_engine.storage.data_access_source import DataAccessSource
 
 
 def test_resolve_git_commit_hash_in_quant_projects_repo():
-    from workspace_paths import quant_projects_root
+    from factor_engine.workspace_paths import quant_projects_root
 
     commit = resolve_git_commit_hash(repo_root=str(quant_projects_root()))
     assert commit is None or (len(commit) >= 7 and commit.isalnum())

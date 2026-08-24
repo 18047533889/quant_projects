@@ -16,7 +16,7 @@ from factor_engine.runtime.stateful_incremental import (
     shared_state_resume,
     try_interior_stateful_incremental,
 )
-from stateful_runtime import execute_stateful_segment
+from factor_engine.stateful_runtime import execute_stateful_segment
 
 
 class _PanelSource:

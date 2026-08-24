@@ -21,7 +21,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from logging_utils import get_logger
+from factor_engine.util.logging_utils import get_logger
 
 logger = get_logger("factor_engine.runtime.dual_write_service")
 

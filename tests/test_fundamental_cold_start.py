@@ -1,6 +1,6 @@
 # -*- coding: utf-8
 """Cold-start source contract tests; no alternate factor library fallback."""
-from fundamental_cold_start import EXPECTED_FILENAME, load_cold_start
+from factor_engine.fundamental_cold_start import EXPECTED_FILENAME, load_cold_start
 
 
 def test_missing_cold_start_is_explicitly_unavailable(tmp_path):

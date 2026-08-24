@@ -6,15 +6,15 @@ import os
 from pathlib import Path
 
 from factor_engine.runtime.env_bootstrap import bootstrap_runtime_env
-from workspace_paths import quant_projects_root
+from factor_engine.util.workspace_paths import quant_projects_root
 
 
 def test_bootstrap_loads_env_example_keys(tmp_path, monkeypatch):
     env_file = tmp_path / ".env"
     env_file.write_text("CLICKHOUSE_HOST=testhost.example\n", encoding="utf-8")
     monkeypatch.delenv("CLICKHOUSE_HOST", raising=False)
-    monkeypatch.setattr("workspace_paths.quant_projects_root", lambda: tmp_path)
-    from workspace_paths import load_env_file
+    monkeypatch.setattr("factor_engine.workspace_paths.quant_projects_root", lambda: tmp_path)
+    from factor_engine.util.workspace_paths import load_env_file
 
     load_env_file(path=env_file, override=True)
     assert os.environ.get("CLICKHOUSE_HOST") == "testhost.example"
@@ -25,7 +25,7 @@ def test_bootstrap_does_not_override_existing(monkeypatch):
     root = quant_projects_root()
     env_path = root / ".env"
     if env_path.is_file():
-        from workspace_paths import load_env_file
+        from factor_engine.util.workspace_paths import load_env_file
 
         load_env_file(path=env_path)
     assert os.environ.get("CLICKHOUSE_HOST") == "keep"

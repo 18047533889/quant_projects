@@ -13,7 +13,7 @@ from typing import Any
 import pandas as pd
 
 from factor_engine.api.factor import Factor
-from logging_utils import get_logger
+from factor_engine.util.logging_utils import get_logger
 from factor_engine.runtime import dual_write_service, lineage_service
 from factor_engine.runtime.production_policy import is_production_mode
 from factor_engine.storage.catalog import compute_ir_hash

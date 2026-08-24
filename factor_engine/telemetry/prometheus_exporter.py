@@ -11,7 +11,7 @@ import threading
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 if TYPE_CHECKING:
-    from telemetry.metrics import MetricValue
+    from factor_engine.telemetry.metrics import MetricValue
 
 try:
     import prometheus_client
@@ -41,7 +41,7 @@ class PrometheusExporter:
 
     def export(self, metrics: Dict[str, List[MetricValue]]) -> None:
         """Export metrics to Prometheus."""
-        from telemetry.metrics import MetricType, get_metrics_registry
+        from factor_engine.telemetry.metrics import MetricType, get_metrics_registry
 
         registry = get_metrics_registry()
 
@@ -81,7 +81,7 @@ class PrometheusExporter:
         label_names: tuple,
     ) -> object:
         """Create a Prometheus metric."""
-        from telemetry.metrics import MetricType
+        from factor_engine.telemetry.metrics import MetricType
 
         if metric_type == MetricType.COUNTER:
             return PromCounter(

@@ -240,7 +240,7 @@ def publish_factor_lake(
 
     from factor_engine.runtime.snapshot_reconcile import reconcile_data_snapshot
     from factor_engine.storage.catalog import FactorCatalog
-    from workspace_paths import default_factor_lake_root
+    from factor_engine.util.workspace_paths import default_factor_lake_root
 
     root = Path(lake_root or default_factor_lake_root())
     catalog = FactorCatalog(root / "_catalog.sqlite")

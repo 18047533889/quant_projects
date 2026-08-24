@@ -38,7 +38,7 @@ def _get(canonical: str, backend: str = "pandas_numpy"):
     op = OperatorRegistry.get(canonical, backend)
     if op is not None:
         return op
-    from research_tools.registry import ResearchToolRegistry
+    from factor_engine.research_tools.registry import ResearchToolRegistry
 
     return ResearchToolRegistry.get(canonical, backend)
 

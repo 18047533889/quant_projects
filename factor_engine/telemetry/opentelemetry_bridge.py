@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, List, Optional
 
 if TYPE_CHECKING:
-    from telemetry.traces import SpanData
+    from factor_engine.telemetry.traces import SpanData
 
 try:
     from opentelemetry import trace
@@ -63,7 +63,7 @@ class OpenTelemetryBridge:
 
     def export_span(self, span_data: SpanData) -> None:
         """Export a span to OpenTelemetry."""
-        from telemetry.traces import SpanKind as OurSpanKind, SpanStatus
+        from factor_engine.telemetry.traces import SpanKind as OurSpanKind, SpanStatus
 
         # Map span kind
         kind_mapping = {

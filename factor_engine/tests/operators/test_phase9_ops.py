@@ -199,9 +199,9 @@ def test_pipeline_shard_dispatch(tmp_path, monkeypatch):
             "errors": [],
         }
 
-    monkeypatch.setattr("pipeline._execute_config_with_retries", _fake_execute)
+    monkeypatch.setattr("factor_engine.pipeline._execute_config_with_retries", _fake_execute)
 
-    from pipeline import run_config_directory
+    from factor_engine.pipeline import run_config_directory
 
     out = run_config_directory(
         cfg_dir,

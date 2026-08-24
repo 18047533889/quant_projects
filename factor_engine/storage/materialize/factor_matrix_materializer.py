@@ -43,7 +43,7 @@ from typing import Any, Iterable
 import numpy as np
 import pandas as pd
 
-from logging_utils import get_logger
+from factor_engine.util.logging_utils import get_logger
 from factor_engine.storage.matrix_block_layout import (
     block_columns,
     block_file_name,

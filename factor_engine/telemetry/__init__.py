@@ -10,7 +10,7 @@ Supports Prometheus and OpenTelemetry exporters as optional dependencies.
 All telemetry is disabled by default and requires explicit opt-in.
 """
 
-from telemetry.metrics import (
+from factor_engine.telemetry.metrics import (
     Counter,
     Gauge,
     Histogram,
@@ -18,7 +18,7 @@ from telemetry.metrics import (
     get_metrics_registry,
     configure_metrics,
 )
-from telemetry.traces import (
+from factor_engine.telemetry.traces import (
     Tracer,
     Span,
     TracerProvider,
@@ -26,7 +26,7 @@ from telemetry.traces import (
     trace,
     configure_tracing,
 )
-from telemetry.health import (
+from factor_engine.telemetry.health import (
     HealthChecker,
     HealthStatus,
     ComponentHealth,

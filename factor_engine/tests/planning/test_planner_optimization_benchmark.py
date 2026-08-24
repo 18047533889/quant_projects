@@ -17,27 +17,27 @@ from typing import Any
 
 import pytest
 
-from planning.backend_region import ExecutionAxis, PhysicalBackend
-from planning.backend_selector import (
+from factor_engine.planning.backend_region import ExecutionAxis, PhysicalBackend
+from factor_engine.planning.backend_selector import (
     IntelligentBackendSelector,
     OperatorProfile,
     RoutingContext,
 )
-from planning.cost_model_v2 import (
+from factor_engine.planning.cost_model_v2 import (
     CostBreakdown,
     audit_double_count,
     build_cost_breakdown,
     compute_shared_benefit,
     estimate_compute_cost,
 )
-from planning.hybrid_execution_planner import (
+from factor_engine.planning.hybrid_execution_planner import (
     FactorSpec,
     HybridExecutionPlanner,
     NodeMetadata,
 )
-from planning.memory_model import DataShapeEstimate, estimate_shape_from_metadata
-from planning.query_optimizer import QueryNode, QueryOptimizer
-from planning.region_optimizer import NodeCost, RegionOptimizer
+from factor_engine.planning.memory_model import DataShapeEstimate, estimate_shape_from_metadata
+from factor_engine.planning.query_optimizer import QueryNode, QueryOptimizer
+from factor_engine.planning.region_optimizer import NodeCost, RegionOptimizer
 
 
 class BenchmarkResult:

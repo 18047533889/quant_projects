@@ -8,7 +8,7 @@ from typing import Any
 import pandas as pd
 
 from factor_engine.cleaned_operators.operator_policy import effective_lookback, infer_source_bar_freq
-from logging_utils import get_logger
+from factor_engine.util.logging_utils import get_logger
 from factor_engine.runtime.run_window import (
     RunWindow,
     build_full_history_run_window,

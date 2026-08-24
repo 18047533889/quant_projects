@@ -32,6 +32,7 @@ data based on the capability; the search worker never holds a test provider.
 
 import hashlib
 import secrets
+import threading
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Dict, Optional, Tuple
@@ -46,6 +47,13 @@ class DataScope(Enum):
     TRAIN = "train"
     VALIDATION = "validation"
     TEST = "test"
+
+
+# R46 P0-R/P0-S: thread-local "current issuing broker".  Only
+# ``TestAuthorityBroker.issue_test_capability`` sets this while it constructs a
+# ``TestDataCapability``; a bare construction outside that call sees no broker
+# and fails closed as a forgery.
+_capability_issuer = threading.local()
 
 
 def _as_bool_tuple(mask) -> Tuple[bool, ...]:
@@ -99,6 +107,18 @@ class DataCapability:
             raise TypeError("scope must be a DataScope")
         self._scope = scope
         self._allowed_mask = _as_bool_tuple(allowed_mask)
+        # R46 P0-R/P0-S: only a TestAuthorityBroker may construct a TEST
+        # capability.  A bare `TestDataCapability(...)` constructed outside a
+        # broker is a forgery (the search worker must never be able to mint
+        # its own test authorization).  The `_capability_issuer` thread-local
+        # is set exclusively by `TestAuthorityBroker.issue_test_capability`
+        # for the duration of that call.
+        if self._scope is DataScope.TEST:
+            if not getattr(_capability_issuer, "broker", None):
+                raise CapabilityForgeryError(
+                    "TestDataCapability is not constructible outside a "
+                    "TestAuthorityBroker; constructing one is a forgery attempt"
+                )
         # Real identity binding.  Every field is required and validated so a
         # capability cannot be constructed with a blank/forged identity.
         self._capability_id = self._require_str(
@@ -337,15 +357,19 @@ class TestAuthorityBroker:
     def issue_test_capability(self, test_mask) -> TestDataCapability:
         """Issue a TEST capability bound to this broker's identity."""
         now = datetime.now(timezone.utc)
-        return TestDataCapability(
-            test_mask,
-            search_session_id=self._search_session_id,
-            split_id=self._split_id,
-            dataset_identity=self._dataset_identity,
-            provider_identity=self._provider_identity,
-            issued_at=now,
-            expiry=now + timedelta(seconds=self._ttl_seconds),
-        )
+        _capability_issuer.broker = self
+        try:
+            return TestDataCapability(
+                test_mask,
+                search_session_id=self._search_session_id,
+                split_id=self._split_id,
+                dataset_identity=self._dataset_identity,
+                provider_identity=self._provider_identity,
+                issued_at=now,
+                expiry=now + timedelta(seconds=self._ttl_seconds),
+            )
+        finally:
+            _capability_issuer.broker = None
 
     def create_test_provider(self, test_data) -> "TestDataProvider":
         """Create a provider that resolves test data for a TEST capability."""
@@ -474,6 +498,10 @@ def build_data_capabilities(split_plan: SplitPlan) -> Dict[DataScope, DataCapabi
     search runner's object graph.  It is retained for callers that explicitly
     need all three scopes (e.g. a test authority that holds a broker).  The
     search runner must use ``build_search_capabilities`` instead.
+
+    R46 P0-R/P0-S: because a TEST capability is only constructible through a
+    ``TestAuthorityBroker``, this builder issues the TEST capability via a
+    broker so it stays compliant with the non-forgery rule.
     """
     if not isinstance(split_plan, SplitPlan):
         raise TypeError("split_plan must be a SplitPlan")
@@ -485,12 +513,18 @@ def build_data_capabilities(split_plan: SplitPlan) -> Dict[DataScope, DataCapabi
         provider_identity="unspecified",
         issued_at=now,
     )
+    _issuer = TestAuthorityBroker(
+        dataset_identity="unspecified",
+        provider_identity="unspecified",
+        search_session_id="unspecified",
+        split_id=split_plan.split_id,
+    )
     return {
         DataScope.TRAIN: TrainDataCapability(split_plan.train_mask, **common),
         DataScope.VALIDATION: ValidationDataCapability(
             split_plan.validation_mask, **common
         ),
-        DataScope.TEST: TestDataCapability(split_plan.test_mask, **common),
+        DataScope.TEST: _issuer.issue_test_capability(split_plan.test_mask),
     }
 
 

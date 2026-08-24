@@ -114,10 +114,19 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Run SUBMODULE_REACHABILITY verifier
         run: |
-          # Honest: the monorepo declares no git submodules, so this gate is
-          # NOT_RUN / NOT_APPLICABLE ("nothing to prove") — never a fabricated
-          # PASS.  Accept PASS / NOT_RUN / NOT_APPLICABLE; FAIL/BLOCKED fails.
-          python -c "import sys; sys.path.insert(0,'scripts'); from gate_runner import GateRunner, find_spec, Status; r=GateRunner(python=sys.executable); res=r.run_gate(find_spec('SUBMODULE_REACHABILITY')); print('SUBMODULE_REACHABILITY', res['status']); sys.exit(0 if res['status'] in (Status.PASS, Status.NOT_RUN) else 1)"
+          # Honest: the monorepo declares no git submodules (no .gitmodules /
+          # gitlinks), so the reachability verifier reports verified
+          # NOT_APPLICABLE ("monorepo contains no gitlinks") — never a
+          # fabricated PASS.  A real PASS is only required when submodules are
+          # actually present.  So this gate passes on PASS or NOT_APPLICABLE
+          # only; NOT_RUN / FAIL / BLOCKED all fail.
+          #
+          # NOTE: gate_runner.Status has NO NOT_APPLICABLE member (only
+          # PASS/FAIL/BLOCKED/NOT_RUN), so we match on the string literals
+          # 'PASS' and 'NOT_APPLICABLE' (the latter matching the
+          # gate_evidence_verifier.NOT_APPLICABLE sentinel value) rather than
+          # Status.NOT_APPLICABLE, which would raise AttributeError.
+          python -c "import sys; sys.path.insert(0,'scripts'); from gate_runner import GateRunner, find_spec, Status; r=GateRunner(python=sys.executable); res=r.run_gate(find_spec('SUBMODULE_REACHABILITY')); print('SUBMODULE_REACHABILITY', res['status']); sys.exit(0 if res['status'] in ('PASS', 'NOT_APPLICABLE') else 1)"
 
   # ---------------------------------------------------------------------------
   # FRESH_WHEEL_MATRIX — build the six canonical wheels from their own
@@ -137,8 +146,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install build tooling (setuptools, wheel, build, virtualenv)
-        run: python -m pip install --upgrade pip setuptools wheel build virtualenv
+      - name: Install build tooling (pinned lock, fallback to --upgrade)
+        run: |
+          # Prefer the pinned, hashed build-toolchain lock.  If the lock file is
+          # missing or the install fails, fall back to the plain --upgrade and
+          # warn on stderr so the drift is visible but does not silently hide.
+          if [ -f locks/ci-toolchain-py312.lock ]; then
+            python -m pip install --require-hashes -r locks/ci-toolchain-py312.lock && exit 0
+            echo "WARNING: pinned build-toolchain lock install failed; falling back to --upgrade" >&2
+          else
+            echo "WARNING: locks/ci-toolchain-py312.lock missing; falling back to --upgrade" >&2
+          fi
+          python -m pip install --upgrade pip setuptools wheel build virtualenv
       - name: Run FRESH_WHEEL_MATRIX verifier (bash scripts/fresh_wheel_matrix.sh)
         run: |
           python -c "import sys; sys.path.insert(0,'scripts'); from gate_runner import GateRunner, find_spec, Status; r=GateRunner(python=sys.executable); res=r.run_gate(find_spec('FRESH_WHEEL_MATRIX')); print('FRESH_WHEEL_MATRIX', res['status']); sys.exit(0 if res['status']==Status.PASS else 1)"

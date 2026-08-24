@@ -19,7 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from planning.memory_model import DataShapeEstimate, EdgeMemoryCost
+from factor_engine.planning.memory_model import DataShapeEstimate, EdgeMemoryCost
 
 
 @dataclass(frozen=True)

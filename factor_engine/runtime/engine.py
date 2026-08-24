@@ -40,7 +40,7 @@ from factor_engine.api.factor import Factor
 from factor_engine.backend.context import ExecutionContext
 from factor_engine.backend.factory import build_backend
 from factor_engine.ir.analyzer import AnalysisResult, Analyzer
-from logging_utils import get_logger
+from factor_engine.util.logging_utils import get_logger
 from factor_engine.planner.cse import apply_cse
 from factor_engine.planner.dag import (
     DAGPlan,

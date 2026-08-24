@@ -8,7 +8,7 @@ import sys
 import pandas as pd
 import pytest
 
-from workspace_paths import load_env_file, quant_projects_root
+from factor_engine.workspace_paths import load_env_file, quant_projects_root
 
 
 def _ch_available() -> bool:

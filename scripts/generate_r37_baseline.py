@@ -112,9 +112,9 @@ def build_fe_da_boundary() -> dict:
 
     boundary: dict = {"fe_da_modules": {}, "capability_handshake": False}
     for name, modname in {
-        "dataaccess_capabilities": "dataaccess.capabilities",
-        "dataaccess_resource_bridge": "dataaccess.runtime.resource_bridge",
-        "dataaccess_governor": "dataaccess.runtime.resource_governor",
+        "dataaccess_capabilities": "data_access.capabilities",
+        "dataaccess_resource_bridge": "data_access.runtime.resource_bridge",
+        "dataaccess_governor": "data_access.runtime.resource_governor",
         "fe_prepared_batch_session": "factor_engine.runtime.batch_service",
         "fe_batch_data_request": "factor_engine.runtime.batch_service",
     }.items():
@@ -130,7 +130,7 @@ def build_fe_da_boundary() -> dict:
         except Exception as e:
             boundary["fe_da_modules"][name] = {"importable": False, "error": str(e)}
     try:
-        from dataaccess.capabilities import DataAccessCapabilities  # type: ignore
+        from data_access.capabilities import DataAccessCapabilities  # type: ignore
 
         boundary["capability_handshake"] = True
     except Exception:

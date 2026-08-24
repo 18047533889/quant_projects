@@ -297,7 +297,7 @@ class ModelSemanticRegistry:
         # honestly be non-checkpointable (Kalman: full-history replay).
         if entry.checkpoint_supported:
             try:
-                from stateful_contract import StatefulCheckpointRegistry
+                from factor_engine.stateful_contract import StatefulCheckpointRegistry
 
                 cp = StatefulCheckpointRegistry.get(canonical)
             except Exception:

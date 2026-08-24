@@ -25,7 +25,9 @@ trap 'rm -f "$TMP_REQ"' EXIT
 
 awk '
   /^#/ { next }
-  /^python==/ { next }
+  /^python==/ { next }   # WHY: the interpreter version is an environment property, not a
+                         # pip-installable requirement — actions/setup-python picks the CI
+                         # CPython, so the python== marker in the lock must be dropped.
   /^data-access==/ || /^factor-engine==/ || /^quant-evaluator==/ || \
   /^factor-optimizer==/ || /^factor-assets==/ || /^factor-preprocess==/ { next }
   { print }

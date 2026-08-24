@@ -201,7 +201,7 @@ def _symbol_gates() -> dict[str, list[str]]:
     out: dict[str, list[str]] = {g: [] for g in _GATES}
     sys.path.insert(0, str(ROOT))
     try:
-        from pit_contract import PITLayerVerdict, four_layer_pit_allowed
+        from factor_engine.pit_contract import PITLayerVerdict, four_layer_pit_allowed
 
         ok, layers = four_layer_pit_allowed(field_pit_allowed=True)
         if ok or layers["table_pit_allowed"] != PITLayerVerdict.UNKNOWN:

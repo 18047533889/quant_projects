@@ -71,10 +71,18 @@ class GateEvidenceVerifier:
         source_sha: str | None = None,
         current_sha: str | None = None,
         gitlinks_count: int = 0,
+        live_tree_identity: str | None = None,
     ) -> None:
         self.source_sha = source_sha
         self.current_sha = current_sha
         self.gitlinks_count = gitlinks_count
+        # P0-WT: live PlatformSourceTreeIdentity Merkle root of the working tree.
+        # When the evidence entries carry a ``tree_identity`` field, staleness is
+        # judged on the WORKING TREE identity (a direct edit that never commits
+        # does not change git HEAD but DOES change the tree Merkle root).  When
+        # the evidence has no tree_identity field, we fall back to the git SHA
+        # comparison.  git SHA is only an auxiliary signal.
+        self.live_tree_identity = live_tree_identity
 
     # -- command identity (P0-Y) ----------------------------------------------
     @staticmethod
@@ -144,7 +152,30 @@ class GateEvidenceVerifier:
             )
 
         # 2) STALE — evidence was captured against a different source snapshot.
+        #    P0-WT: when the evidence binds a working-tree Merkle identity, stale
+        #    is decided on that TREE identity (catches direct uncommitted edits,
+        #    which do not move git HEAD).  When no tree_identity is present on
+        #    the evidence, fall back to the git SHA comparison.  git SHA is only
+        #    an auxiliary signal.
+        bound_tree_ids = {
+            str(e["tree_identity"])
+            for e in entries
+            if isinstance(e, dict) and e.get("tree_identity")
+        }
         if (
+            self.live_tree_identity is not None
+            and bound_tree_ids
+        ):
+            if self.live_tree_identity not in bound_tree_ids:
+                return Verdict(
+                    status=STALE,
+                    reasons=[
+                        "evidence tree identity 与 live working tree 不匹配"
+                        f" (evidence tree {sorted(bound_tree_ids)[0]!r} != "
+                        f"live working tree {self.live_tree_identity!r})"
+                    ],
+                )
+        elif (
             self.source_sha is not None
             and self.current_sha is not None
             and self.source_sha != self.current_sha

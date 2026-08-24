@@ -314,7 +314,7 @@ def _load_calendar_from_data_access(market: str) -> TradingCalendar | None:
         import os
         import sys
 
-        from workspace_paths import quant_projects_root
+        from factor_engine.util.workspace_paths import quant_projects_root
 
         root = str(quant_projects_root())
         if root not in sys.path:

@@ -7,8 +7,8 @@
 3. 混合执行规划示例
 """
 
-from planning.backend_region import ExecutionAxis, PhysicalBackend
-from planning.backend_selector import (
+from factor_engine.planning.backend_region import ExecutionAxis, PhysicalBackend
+from factor_engine.planning.backend_selector import (
     IntelligentBackendSelector,
     OperatorProfile,
     RoutingContext,
@@ -174,7 +174,7 @@ def demo_adaptive_learning():
     print("自适应学习演示")
     print("=" * 80)
 
-    from planning.backend_selector import DataScale
+    from factor_engine.planning.backend_selector import DataScale
 
     selector = IntelligentBackendSelector(enable_adaptive_learning=True)
 
@@ -233,7 +233,7 @@ def print_summary():
   • /tmp/intelligent_backend_routing_report.md (完整技术报告)
 
 使用示例：
-  from planning.backend_selector import select_optimal_backend_for_node
+  from factor_engine.planning.backend_selector import select_optimal_backend_for_node
 
   decision = select_optimal_backend_for_node(
       estimated_rows=100_000,

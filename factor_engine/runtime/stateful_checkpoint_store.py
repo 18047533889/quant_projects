@@ -18,7 +18,7 @@ from typing import Any
 
 import pandas as pd
 
-from stateful_contract import (
+from factor_engine.stateful_contract import (
     CheckpointSerializationError,
     StateCheckpoint,
     StatefulCheckpointRegistry,
@@ -40,7 +40,7 @@ class StatefulCheckpointStore:
 
     def __init__(self, root: str | Path | None = None) -> None:
         if root is None:
-            from workspace_paths import default_factor_lake_root
+            from factor_engine.util.workspace_paths import default_factor_lake_root
 
             root = Path(default_factor_lake_root()) / "stateful_checkpoints"
         self.root = Path(root)
