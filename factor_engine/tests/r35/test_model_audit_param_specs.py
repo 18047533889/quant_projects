@@ -25,10 +25,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from cleaned_operators import load_all  # noqa: E402
-from cleaned_operators.base import ParamRole, param_search_grade  # noqa: E402
-from cleaned_operators.model_lane import assign_model_lane  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators import load_all  # noqa: E402
+from factor_engine.cleaned_operators.base import ParamRole, param_search_grade  # noqa: E402
+from factor_engine.cleaned_operators.model_lane import assign_model_lane  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 #: The four production lanes (DIAGNOSTIC_RESEARCH / DELETE_TOMBSTONE are not
 #: default-search surfaces).

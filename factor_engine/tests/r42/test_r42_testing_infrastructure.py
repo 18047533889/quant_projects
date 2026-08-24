@@ -14,8 +14,8 @@ import pytest
 
 def test_r42_279_universe_mutation_invariance():
     """R42-279: Factor结果不受universe参数顺序变化影响（但PIT准入会变）。"""
-    from api import ts_mean, col
-    from ir.analyzer import Analyzer
+    from factor_engine.api import ts_mean, col
+    from factor_engine.ir.analyzer import Analyzer
 
     # 构造两个相同的factor（使用api.ts_mean）
     f1 = ts_mean(col("close"), 20)
@@ -39,7 +39,7 @@ def test_r42_279_universe_mutation_invariance():
 def test_r42_284_resolved_arrow_representation():
     """R42-284: Arrow Table作为resolved物理表示（不再wrap/unwrap pandas）。"""
     import pyarrow as pa
-    from runtime.buffer_ref import BufferRef, PhysicalRepresentation
+    from factor_engine.runtime.buffer_ref import BufferRef, PhysicalRepresentation
 
     # 构造Arrow Table
     table = pa.table({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
@@ -63,7 +63,7 @@ def test_r42_284_resolved_arrow_representation():
 
 def test_r42_285_writer_capacity_equality():
     """R42-285: normal writer在capacity相等时公平分配；预算不足时fail-closed。"""
-    from runtime.streaming_result_sink import StreamingResultSink
+    from factor_engine.runtime.streaming_result_sink import StreamingResultSink
 
     # 两个writer，capacity相等
     sink = StreamingResultSink(queue_bytes=2000, writer_count=2)
@@ -84,7 +84,7 @@ def test_r42_285_writer_capacity_equality():
 
 def test_r42_286_failed_submit_accounting():
     """R42-286: submit失败时不计入accepted，accounting保持一致。"""
-    from runtime.streaming_result_sink import StreamingResultSink
+    from factor_engine.runtime.streaming_result_sink import StreamingResultSink
     import queue
 
     sink = StreamingResultSink(queue_bytes=1024, writer_count=1)
@@ -115,8 +115,8 @@ def test_r42_286_failed_submit_accounting():
 def test_r42_293_reproducible_random_rewrite():
     """R42-293: 随机改写fuzz在固定seed下可复现。"""
     import random
-    from api import ts_mean, col
-    from ir.analyzer import Analyzer
+    from factor_engine.api import ts_mean, col
+    from factor_engine.ir.analyzer import Analyzer
 
     # 固定seed
     seed = 42
@@ -152,7 +152,7 @@ def test_r42_293_reproducible_random_rewrite():
 def test_r42_295_multi_output_parity():
     """R42-295: 多输出算子（RollingStateBlock等）各输出channel语义独立。"""
     # 这个需要真实的多输出算子，这里用mock验证概念
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     # 假设有rolling_linear_fit返回(coef, intercept, r2)
     # 验证registry能正确处理多输出声明
@@ -170,8 +170,8 @@ def test_r42_298_mixed_workload_fairness_stub():
 
     真实benchmark需要多因子并发执行+资源监控，这里只验证接口存在。
     """
-    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
-    from runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    from factor_engine.runtime.resource_broker import ResourceBroker
 
     # 验证scheduler支持混合workload
     broker = ResourceBroker()
@@ -199,5 +199,5 @@ def test_r42_300_frozen_snapshot_golden_stub():
     assert deserialized == test_result
 
     # 验证key组件存在
-    from runtime.batch_service import materialize_shared_nodes_parallel
+    from factor_engine.runtime.batch_service import materialize_shared_nodes_parallel
     assert callable(materialize_shared_nodes_parallel)

@@ -26,9 +26,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.relation.distribution  # noqa: F401  (registers relation ops)
-import cleaned_operators.relation.ops  # noqa: F401  (registers relation/index/event ops)
-from cleaned_operators.registry import OperatorRegistry
+import factor_engine.cleaned_operators.relation.distribution  # noqa: F401  (registers relation ops)
+import factor_engine.cleaned_operators.relation.ops  # noqa: F401  (registers relation/index/event ops)
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _op(canonical: str):

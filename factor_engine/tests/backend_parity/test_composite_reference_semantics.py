@@ -6,9 +6,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.context import ExecutionContext
-from cleaned_operators import load_all
-from planner.composite_lowering import list_composite_lowerings
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.cleaned_operators import load_all
+from factor_engine.planner.composite_lowering import list_composite_lowerings
 from tests.backend_parity.composite_reference_helpers import (
     COMPOSITE_REFERENCE_CASES,
     build_reference_panels,
@@ -140,7 +140,7 @@ def test_composite_reference_cases_cover_all_registered_lowerings():
 
 @pytest.mark.parametrize("case", COMPOSITE_REFERENCE_CASES, ids=lambda c: c.canon)
 def test_composite_reference_matches_lowered_pandas(ref_source, case):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     if case.canon not in OperatorRegistry._operators:
         pytest.skip("migrated to recipe or research layer")
     panels = build_reference_panels(ref_source, ref_source.data["close"].index)
@@ -162,7 +162,7 @@ def test_composite_reference_matches_lowered_pandas(ref_source, case):
 
 def test_obv_first_row_zero_reference_and_lowered(ref_source):
     from tests.backend_parity.composite_reference_helpers import CompositeReferenceCase
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if "OBV" not in OperatorRegistry._operators:
         pytest.skip("OBV is a recipe, not a primitive composite")
@@ -181,7 +181,7 @@ def test_obv_first_row_zero_reference_and_lowered(ref_source):
 
 
 def test_safe_div_null_ratio_zero_denominator(ref_source):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     if "operating_margin" not in OperatorRegistry._operators:
         pytest.skip("operating_margin is a recipe, not a primitive composite")
     case = next(c for c in COMPOSITE_REFERENCE_CASES if c.canon == "operating_margin")

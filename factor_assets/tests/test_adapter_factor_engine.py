@@ -79,7 +79,7 @@ class TestFEIdentityProvider:
         mock_expr.expression_payload = mock_expression_payload
         mock_expr.base.ensure_expr = lambda x: x
         sys.modules['expr'] = mock_expr
-        sys.modules['expr.base'] = mock_expr.base
+        sys.modules['factor_engine.expr.base'] = mock_expr.base
 
         # Force reload
         import importlib
@@ -342,7 +342,7 @@ class TestFEIdentityProviderStringParsing:
         mock_expr = MagicMock()
         mock_expr.Expr = MockExpr
         sys.modules['expr'] = mock_expr
-        sys.modules['expr.base'] = MagicMock()
+        sys.modules['factor_engine.expr.base'] = MagicMock()
 
         import importlib
         import factor_assets.adapters.factor_engine

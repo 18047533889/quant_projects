@@ -63,8 +63,8 @@ PRODUCTION_TRIPLE_PARITY_DUCKDB: frozenset[str] = frozenset(
 
 def is_any_backend_fastpath(canon: str) -> bool:
     """任一 backend production-safe 且未被 block。"""
-    from backend.fastpath_coverage import build_fastpath_coverage_row
-    from backend.operator_capability import resolve_canonical
+    from factor_engine.backend.fastpath_coverage import build_fastpath_coverage_row
+    from factor_engine.backend.operator_capability import resolve_canonical
 
     row = build_fastpath_coverage_row(resolve_canonical(canon))
     return row.production_fast_path or row.composite_dual_backend_fastpath
@@ -72,8 +72,8 @@ def is_any_backend_fastpath(canon: str) -> bool:
 
 def is_dual_backend_fastpath(canon: str) -> bool:
     """直接 dual-backend fastpath（不含 composite lowering）。"""
-    from backend.fastpath_coverage import build_fastpath_coverage_row
-    from backend.operator_capability import resolve_canonical
+    from factor_engine.backend.fastpath_coverage import build_fastpath_coverage_row
+    from factor_engine.backend.operator_capability import resolve_canonical
 
     row = build_fastpath_coverage_row(resolve_canonical(canon))
     return row.dual_backend_fastpath
@@ -81,8 +81,8 @@ def is_dual_backend_fastpath(canon: str) -> bool:
 
 def is_effective_dual_backend_fastpath(canon: str) -> bool:
     """统一 production 口径：direct 或 composite dual-backend fastpath。"""
-    from backend.fastpath_coverage import build_fastpath_coverage_row
-    from backend.operator_capability import resolve_canonical
+    from factor_engine.backend.fastpath_coverage import build_fastpath_coverage_row
+    from factor_engine.backend.operator_capability import resolve_canonical
 
     row = build_fastpath_coverage_row(resolve_canonical(canon))
     return row.effective_dual_backend_fastpath
@@ -95,12 +95,12 @@ def is_production_fast_path(canon: str) -> bool:
 
 def summarize_production_fast_path() -> dict[str, Any]:
     """生成 production fast path 覆盖报表摘要。"""
-    from cleaned_operators.operator_spec import PRODUCTION_DUAL_BACKEND_CORE_CANONICALS
+    from factor_engine.cleaned_operators.operator_spec import PRODUCTION_DUAL_BACKEND_CORE_CANONICALS
 
-    from backend.operator_capability import resolve_canonical
-    from backend.polars_long_policy import POLARS_LONG_NATIVE, infer_polars_long_tier
-    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
-    from backend.sql_pushdown.sql_registry import SQL_CAPABLE_CANONICALS
+    from factor_engine.backend.operator_capability import resolve_canonical
+    from factor_engine.backend.polars_long_policy import POLARS_LONG_NATIVE, infer_polars_long_tier
+    from factor_engine.backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    from factor_engine.backend.sql_pushdown.sql_registry import SQL_CAPABLE_CANONICALS
 
     triple = sorted(PRODUCTION_TRIPLE_PARITY_CANONICALS)
     duckdb_triple = sorted(PRODUCTION_TRIPLE_PARITY_DUCKDB)

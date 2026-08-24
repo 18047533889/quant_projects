@@ -159,9 +159,9 @@ def production_evidence_requirements() -> tuple[
     list[str], dict[str, dict[str, frozenset[str]]]
 ]:
     """Return the live production surface and each canonical's claimed backends."""
-    from backend.operator_capability import production_eligible_backends
-    from cleaned_operators import load_all
-    from cleaned_operators.production_hardening import factor_production_targets
+    from factor_engine.backend.operator_capability import production_eligible_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.production_hardening import factor_production_targets
 
     load_all()
     canonicals = sorted(factor_production_targets())

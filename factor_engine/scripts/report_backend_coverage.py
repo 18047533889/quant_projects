@@ -24,8 +24,8 @@ def _bootstrap():
     fe = str(FE_ROOT)
     if fe not in sys.path:
         sys.path.insert(0, fe)
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
@@ -33,7 +33,7 @@ def _bootstrap():
 
 def _build_rows() -> list[dict[str, object]]:
     """构建每个 canonical 的后端能力扁平行（pandas / polars / SQL 等）。"""
-    from backend.operator_capability import build_capability_matrix, polars_expr_capable, resolve_canonical
+    from factor_engine.backend.operator_capability import build_capability_matrix, polars_expr_capable, resolve_canonical
 
     rows: list[dict[str, object]] = []
     for summary in build_capability_matrix():
@@ -93,17 +93,17 @@ def main() -> int:
 
     _bootstrap()
 
-    from cleaned_operators.operator_policy import (
+    from factor_engine.cleaned_operators.operator_policy import (
         POLARS_PARITY_VERIFIED,
         POLARS_PRODUCTION_SAFE,
         polars_implemented_canonicals,
     )
-    from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
-    from cleaned_operators.registry import OperatorRegistry
-    from backend.sql_pushdown.sql_registry import SQL_CAPABLE_CANONICALS
-    from backend.polars_long_policy import get_polars_long_capable, POLARS_LONG_NATIVE
-    from backend.production_fast_path import summarize_production_fast_path
-    from backend.operator_capability import resolve_canonical
+    from factor_engine.cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.sql_pushdown.sql_registry import SQL_CAPABLE_CANONICALS
+    from factor_engine.backend.polars_long_policy import get_polars_long_capable, POLARS_LONG_NATIVE
+    from factor_engine.backend.production_fast_path import summarize_production_fast_path
+    from factor_engine.backend.operator_capability import resolve_canonical
 
     rows = _build_rows()
     canon = [r["canonical"] for r in rows]
@@ -191,7 +191,7 @@ def main() -> int:
             writer.writerow({k: row[k] for k in writer.fieldnames})
 
     if args.capability_csv:
-        from backend.operator_capability import export_flat_capabilities
+        from factor_engine.backend.operator_capability import export_flat_capabilities
 
         flat = export_flat_capabilities()
         writer = csv.DictWriter(

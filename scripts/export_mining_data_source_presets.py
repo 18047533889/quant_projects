@@ -35,7 +35,7 @@ def main() -> int:
     if fe not in sys.path:
         sys.path.insert(0, fe)
 
-    from api.mining_integration import default_mining_data_source_presets
+    from factor_engine.api.mining_integration import default_mining_data_source_presets
 
     presets = default_mining_data_source_presets()
     payload = json.dumps(presets, ensure_ascii=False, indent=2, sort_keys=True) + "\n"

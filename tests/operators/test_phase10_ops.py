@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from runtime.lake_replication import disaster_recovery_verify, replicate_lake_directory
-from runtime.slo_rules import evaluate_slo_rules
-from runtime.task_queue import FileTaskQueue, build_task_queue
+from factor_engine.runtime.lake_replication import disaster_recovery_verify, replicate_lake_directory
+from factor_engine.runtime.slo_rules import evaluate_slo_rules
+from factor_engine.runtime.task_queue import FileTaskQueue, build_task_queue
 
 
 def test_evaluate_slo_rules_pass():
@@ -53,7 +53,7 @@ def test_build_task_queue_file(tmp_path):
 
 
 def test_build_task_queue_object_store_delegates_local(tmp_path):
-    from runtime.task_queue import ObjectStoreTaskQueue
+    from factor_engine.runtime.task_queue import ObjectStoreTaskQueue
 
     q = build_task_queue(backend="object_store", root=tmp_path / "objq")
     assert isinstance(q, ObjectStoreTaskQueue)

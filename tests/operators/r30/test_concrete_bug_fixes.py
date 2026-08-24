@@ -15,9 +15,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from runtime.execution_contract import minimum_effective_samples
-from cleaned_operators.dmd import _log_finite_horizon_sum
-from cleaned_operators.stateful.survival import _survival_kernel
+from factor_engine.runtime.execution_contract import minimum_effective_samples
+from factor_engine.cleaned_operators.dmd import _log_finite_horizon_sum
+from factor_engine.cleaned_operators.stateful.survival import _survival_kernel
 
 
 # ---------- P0-011 DMD log geometric sum ----------

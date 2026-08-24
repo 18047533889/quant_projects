@@ -6,9 +6,16 @@ explicit backend assignments, transfer edges, and execution contracts.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+import hashlib
+import json
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+
+# R21-PLAN-HASH-STRENGTHEN: plan-hash payload version.  Bump when the set of
+# hashed physical-plan semantics changes so stale hashes cannot be confused
+# with hashes from a different binding contract.
+_PLAN_HASH_PAYLOAD_VERSION = 1
 
 
 class PhysicalBackend(str, Enum):
@@ -37,6 +44,30 @@ class Representation(str, Enum):
     Q_VECTOR = "q_vector"
     Q_KEYED_TABLE = "q_keyed_table"
     Q_SHARED_HANDLE = "q_shared_handle"
+
+
+class TransferTransform(str, Enum):
+    """Transfer operation type at region boundary.
+
+    R21-TRANSFER-BOUNDARIES: Formal transfer boundaries for cross-backend data movement.
+    Each transform has a specific cost model and semantic contract.
+    """
+
+    SAME_BACKEND_NATIVE = "same_backend_native"  # No conversion
+    DUCKDB_TO_ARROW = "duckdb_to_arrow"  # Section 21: Preferred boundary
+    Q_TO_ARROW = "q_to_arrow"  # R21: Q → Arrow for cross-backend consumption
+    CLICKHOUSE_TO_ARROW = "clickhouse_to_arrow"  # R21: ClickHouse → Arrow boundary
+    ARROW_TO_POLARS = "arrow_to_polars"  # Arrow → Polars DataFrame/LazyFrame
+    ARROW_TO_PANDAS = "arrow_to_pandas"  # Arrow → Pandas DataFrame
+    POLARS_TO_PANDAS = "polars_to_pandas"  # Polars → Pandas
+    PANDAS_TO_POLARS = "pandas_to_polars"  # Pandas → Polars
+    POLARS_TO_NUMPY = "polars_to_numpy"  # R21: Polars Series → NumPy ndarray
+    NUMPY_TO_POLARS = "numpy_to_polars"  # R21: NumPy ndarray → Polars Series
+    WIDE_TO_LONG = "wide_to_long"  # Reshape operation
+    LONG_TO_WIDE = "long_to_wide"  # Reshape operation
+    SORT = "sort"  # Explicit sort to satisfy downstream property
+    REPARTITION = "repartition"  # Repartition by different key
+    DTYPE_CAST = "dtype_cast"  # Type conversion
 
 
 class ExecutionAxis(str, Enum):
@@ -135,13 +166,16 @@ class BackendRegion:
     supports_direct_sink: bool = False
     # R21-P023: Four-backend plan identity and resource tracking
     implementation_id: str = ""  # PhysicalImplementationID ("pi:v1:...") binding
+    # R21-NODE-IMPL: Per-node implementation mapping for heterogeneous regions
+    node_implementations: dict[str, str] = field(default_factory=dict)
+    # node_id → PhysicalImplementationID for fine-grained implementation identity
     input_bytes: int = 0  # estimated input data volume
     output_bytes: int = 0  # estimated output data volume
     liveness: str = "eager"  # "eager" / "lazy" / "stream"
     parameter_domain_identity: str = ""  # parameter-domain hash identity
 
     def __post_init__(self):
-        """Validate region constraints (MB-P0-011, MB-P0-012)."""
+        """Validate region constraints and compute manifest hash (MB-P0-011, MB-P0-012, R21-NODE-IMPL)."""
         # MB-P0-011: CROSS_SECTION_PER_DATE cannot partition by instrument
         if self.execution_axis == ExecutionAxis.CROSS_SECTION_PER_DATE:
             if self.required_properties and "instrument" in self.required_properties.partitioned_by:
@@ -158,6 +192,45 @@ class BackendRegion:
                         "RECURSIVE_TIME without checkpoint must be sequential_only: "
                         "cannot parallelize stateful operations without checkpointing"
                     )
+
+        # R21-NODE-IMPL: Compute manifest hash for node implementations
+        if self.node_implementations and not self.implementation_id:
+            # Use object.__setattr__ for frozen dataclass
+            object.__setattr__(self, 'implementation_id', self._compute_manifest_hash_impl())
+        elif self.node_implementations and self.implementation_id:
+            # Verify consistency if both are provided
+            expected = self._compute_manifest_hash_impl()
+            if self.implementation_id != expected:
+                raise ValueError(
+                    f"implementation_id ({self.implementation_id}) does not match "
+                    f"computed manifest hash ({expected}) for node_implementations"
+                )
+
+    def _compute_manifest_hash_impl(self) -> str:
+        """Compute SHA256 manifest hash from node_implementations dict.
+
+        R21-NODE-IMPL: Deterministic hash of sorted (node_id, pi) pairs.
+        Returns "rimh:v1:<sha256>" format for RegionImplementationManifestHash.
+        """
+        if not self.node_implementations:
+            return ""
+        sorted_items = sorted(self.node_implementations.items())
+        payload = json.dumps(dict(sorted_items), sort_keys=True, separators=(",", ":"))
+        return "rimh:v1:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def compute_region_implementation_manifest_hash(node_implementations: dict[str, str]) -> str:
+        """Compute RegionImplementationManifestHash from node_implementations.
+
+        R21-NODE-IMPL: SHA256(sorted node_implementations items) for stable
+        identity of heterogeneous regions where different nodes may use
+        different PhysicalImplementationIDs.
+        """
+        if not node_implementations:
+            return ""
+        sorted_items = sorted(node_implementations.items())
+        payload = json.dumps(dict(sorted_items), sort_keys=True, separators=(",", ":"))
+        return "rimh:v1:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -176,6 +249,9 @@ class BackendRegion:
             "output_bytes": self.output_bytes,
             "liveness": self.liveness,
             "parameter_domain_identity": self.parameter_domain_identity,
+            # R21-NODE-IMPL: per-node implementation mapping
+            "node_implementations": self.node_implementations,
+            "region_implementation_manifest_hash": self._compute_manifest_hash_impl(),
         }
 
 
@@ -188,6 +264,7 @@ class TransferEdge:
     MB-P2-002: Typed contract for all transfer edges.
     Section 22: SQL ordering cannot be assumed — downstream requiring sorted data
     must check producer properties and set requires_sort=True if needed.
+    R21-TRANSFER-BOUNDARIES: Uses TransferTransform enum for formal transform type.
     """
 
     edge_id: str
@@ -197,6 +274,7 @@ class TransferEdge:
     target_backend: PhysicalBackend
     source_representation: Representation
     target_representation: Representation
+    transform: TransferTransform  # R21-TRANSFER-BOUNDARIES: formal transform type
     estimated_rows: int
     estimated_bytes: int
     estimated_transfer_ms: float
@@ -226,6 +304,7 @@ class TransferEdge:
             "consumer_region": self.consumer_region,
             "source_representation": self.source_representation.value if isinstance(self.source_representation, Enum) else str(self.source_representation),
             "target_representation": self.target_representation.value if isinstance(self.target_representation, Enum) else str(self.target_representation),
+            "transform": self.transform.value if isinstance(self.transform, Enum) else str(self.transform),
             "estimated_bytes": self.estimated_bytes,
             "requires_sort": self.requires_sort,
             "requires_repartition": self.requires_repartition,
@@ -354,59 +433,134 @@ class PhysicalRegionPlan:
         regions: tuple[BackendRegion, ...],
         edges: tuple[TransferEdge, ...],
         logical_hash: str,
-        node_implementations: dict[str, dict[str, Any]] | None = None,
     ) -> str:
         """Compute stable hash for the physical plan (§68, MB-P2-014).
 
-        Hash includes per-node implementation details when provided:
-        - node_id + PI + bound_params + accelerator + kernel_signature
+        R21-PLAN-HASH-STRENGTHEN: the hash must bind ALL physical plan
+        semantics — two plans that would execute even one byte differently
+        must not share a plan hash.  Previously the payload only covered
+        region_id/backend/node_count and edge producer/consumer/source_repr/
+        target_repr, so plans differing in node identity, representation,
+        execution axis, implementation identity, semantic contracts,
+        parameter domains, or transfer transforms collided silently.
+
+        Binds (per region): region_id, backend, node_ids, representation,
+        execution_axis, implementation_id (PhysicalImplementationID),
+        liveness, parameter_domain_identity, source identity
+        (source_snapshot/universe_contract), semantic contract
+        (grain/available_at/pit_safe), required/output physical properties
+        (sorted_by/partitioned_by/grouped_by/unique_key/grain), state
+        contract (checkpoint/seed/stateful operators/sequential).
+
+        Binds (per edge): edge_id, producer/consumer, source/target backend,
+        source/target representation, transfer transforms
+        (requires_sort/repartition/reshape/dtype_cast + producer ordering
+        guarantees), and preserved semantic contracts
+        (pit/universe/grain/source_snapshot).
+
+        Binds (per plan): the logical DAG hash.
+
+        Not included: cost/size estimates (estimated_rows, estimated_*_ms,
+        *_bytes) — these are predictions, not plan identity (§68).
         """
-        import hashlib
-        import json as _json
-        from typing import Any
-
-        # Build region payload with node implementations
-        region_payload = []
-        for r in regions:
-            region_dict = {
-                "region_id": r.region_id,
-                "backend": r.backend.value if isinstance(r.backend, Enum) else str(r.backend),
-                "node_count": len(r.node_ids),
-                "node_ids": sorted(r.node_ids),
-            }
-
-            # Add per-node implementation details if provided
-            if node_implementations:
-                node_details = {}
-                for node_id in r.node_ids:
-                    if node_id in node_implementations:
-                        impl = node_implementations[node_id]
-                        node_details[node_id] = {
-                            "node_id": node_id,
-                            "physical_implementation_id": impl.get("physical_implementation_id", ""),
-                            "bound_params": impl.get("bound_params", {}),
-                            "accelerator": impl.get("accelerator", "none"),
-                            "kernel_signature": impl.get("kernel_signature", ""),
-                        }
-                region_dict["node_implementations"] = node_details
-
-            region_payload.append(region_dict)
-
         payload = {
+            "version": _PLAN_HASH_PAYLOAD_VERSION,
             "logical_hash": logical_hash,
-            "regions": region_payload,
+            "regions": [
+                PhysicalRegionPlan._region_hash_payload(r) for r in regions
+            ],
             "edges": [
-                {
-                    "producer": e.producer_region,
-                    "consumer": e.consumer_region,
-                    "source_repr": e.source_representation.value if isinstance(e.source_representation, Enum) else str(e.source_representation),
-                    "target_repr": e.target_representation.value if isinstance(e.target_representation, Enum) else str(e.target_representation),
-                }
-                for e in edges
+                PhysicalRegionPlan._edge_hash_payload(e) for e in edges
             ],
         }
-        raw = _json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        raw = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _region_hash_payload(r: BackendRegion) -> dict[str, Any]:
+        """Full semantic identity of one BackendRegion for plan hashing."""
+
+        def _enum(v: Any) -> str:
+            return v.value if isinstance(v, Enum) else str(v)
+
+        def _props(p: PhysicalProperties | None) -> dict[str, Any]:
+            if p is None:
+                return {"__absent__": True}
+            return {
+                "sorted_by": list(p.sorted_by),
+                "partitioned_by": list(p.partitioned_by),
+                "grouped_by": list(p.grouped_by),
+                "unique_key": list(p.unique_key),
+                "grain": p.grain,
+            }
+
+        def _state(s: StateContract | None) -> dict[str, Any]:
+            if s is None:
+                return {"__absent__": True}
+            return {
+                "requires_checkpoint": s.requires_checkpoint,
+                "checkpoint_seed": s.checkpoint_seed,
+                "stateful_operators": list(s.stateful_operators),
+                "checkpoint_interval": s.checkpoint_interval,
+                "sequential_only": s.sequential_only,
+            }
+
+        return {
+            "region_id": r.region_id,
+            "backend": _enum(r.backend),
+            "node_ids": list(r.node_ids),
+            "representation": _enum(r.representation),
+            "execution_axis": _enum(r.execution_axis),
+            # R21-P023: PhysicalImplementationID binding ("pi:v1:...")
+            "implementation_id": r.implementation_id,
+            # R21-NODE-IMPL: per-node implementation mapping for plan identity
+            "node_implementations": r.node_implementations,
+            "region_implementation_manifest_hash": r._compute_manifest_hash_impl(),
+            # eager / lazy / stream
+            "liveness": r.liveness,
+            # parameter-domain hash identity
+            "parameter_domain_identity": r.parameter_domain_identity,
+            # source identity
+            "source_snapshot": r.source_snapshot,
+            "universe_contract": r.universe_contract,
+            # semantic contract
+            "grain": r.grain,
+            "available_at": r.available_at,
+            "pit_safe": r.pit_safe,
+            "required_properties": _props(r.required_properties),
+            "output_properties": _props(r.output_properties),
+            "state_contract": _state(r.state_contract),
+        }
+
+    @staticmethod
+    def _edge_hash_payload(e: TransferEdge) -> dict[str, Any]:
+        """Full semantic identity of one TransferEdge for plan hashing."""
+
+        def _enum(v: Any) -> str:
+            return v.value if isinstance(v, Enum) else str(v)
+
+        return {
+            "edge_id": e.edge_id,
+            "producer": e.producer_region,
+            "consumer": e.consumer_region,
+            "source_backend": _enum(e.source_backend),
+            "target_backend": _enum(e.target_backend),
+            "source_repr": _enum(e.source_representation),
+            "target_repr": _enum(e.target_representation),
+            "transform": _enum(e.transform),  # R21-TRANSFER-BOUNDARIES: bind transform type
+            # transfer transforms (§22: explicit and costed — hence hashed)
+            "requires_sort": e.requires_sort,
+            "requires_repartition": e.requires_repartition,
+            "requires_reshape": e.requires_reshape,
+            "requires_dtype_cast": e.requires_dtype_cast,
+            "producer_sorted_by": list(e.producer_sorted_by),
+            "producer_guarantees_order": e.producer_guarantees_order,
+            # semantic contracts preserved across the boundary (MB-P0-013)
+            "preserves_pit": e.preserves_pit,
+            "preserves_universe": e.preserves_universe,
+            "preserves_grain": e.preserves_grain,
+            "source_snapshot_id": e.source_snapshot_id,
+        }
 
 
 def normalize_backend_name(backend: str) -> PhysicalBackend:
@@ -487,6 +641,80 @@ def supports_streaming(backend: PhysicalBackend, operators: tuple[str, ...]) -> 
     return False
 
 
+def infer_transfer_transform(
+    source_repr: Representation,
+    target_repr: Representation,
+    source_backend: PhysicalBackend | None = None,
+    target_backend: PhysicalBackend | None = None,
+) -> TransferTransform:
+    """Infer transfer transform from source and target representations.
+
+    R21-TRANSFER-BOUNDARIES: Maps representation pairs to formal TransferTransform values.
+    When both representations are the same (e.g., both Arrow), the transform depends
+    on the backends (e.g., ClickHouse → DuckDB with both Arrow is CLICKHOUSE_TO_ARROW).
+    """
+    if source_repr == target_repr:
+        # Same representation: check if it's a cross-backend transfer
+        if source_backend and target_backend and source_backend != target_backend:
+            # Cross-backend with same representation: use backend-specific transform
+            if source_backend == PhysicalBackend.CLICKHOUSE_SQL:
+                return TransferTransform.CLICKHOUSE_TO_ARROW
+            if source_backend == PhysicalBackend.Q_KDB:
+                return TransferTransform.Q_TO_ARROW
+        return TransferTransform.SAME_BACKEND_NATIVE
+
+    # DuckDB → Arrow (Section 21: preferred boundary)
+    if source_repr == Representation.DUCKDB_RELATION and target_repr == Representation.ARROW_TABLE:
+        return TransferTransform.DUCKDB_TO_ARROW
+
+    # Q → Arrow (R21: Q → Arrow for cross-backend consumption)
+    if source_repr in {Representation.Q_TABLE, Representation.Q_VECTOR, Representation.Q_KEYED_TABLE} and target_repr == Representation.ARROW_TABLE:
+        return TransferTransform.Q_TO_ARROW
+
+    # Arrow → Polars
+    if source_repr == Representation.ARROW_TABLE and target_repr in {
+        Representation.POLARS_LONG, Representation.POLARS_WIDE, Representation.POLARS_LAZY_LONG
+    }:
+        return TransferTransform.ARROW_TO_POLARS
+
+    # Arrow → Pandas
+    if source_repr == Representation.ARROW_TABLE and target_repr in {
+        Representation.PANDAS_LONG, Representation.PANDAS_WIDE
+    }:
+        return TransferTransform.ARROW_TO_PANDAS
+
+    # Polars → Pandas
+    if source_repr in {Representation.POLARS_LONG, Representation.POLARS_WIDE, Representation.POLARS_LAZY_LONG} and target_repr in {
+        Representation.PANDAS_LONG, Representation.PANDAS_WIDE
+    }:
+        return TransferTransform.POLARS_TO_PANDAS
+
+    # Pandas → Polars
+    if source_repr in {Representation.PANDAS_LONG, Representation.PANDAS_WIDE} and target_repr in {
+        Representation.POLARS_LONG, Representation.POLARS_WIDE, Representation.POLARS_LAZY_LONG
+    }:
+        return TransferTransform.PANDAS_TO_POLARS
+
+    # Polars → NumPy (R21: Polars Series → NumPy ndarray)
+    if source_repr in {Representation.POLARS_LONG, Representation.POLARS_WIDE, Representation.POLARS_LAZY_LONG} and target_repr == Representation.NUMPY_PANEL:
+        return TransferTransform.POLARS_TO_NUMPY
+
+    # NumPy → Polars (R21: NumPy ndarray → Polars Series)
+    if source_repr == Representation.NUMPY_PANEL and target_repr in {
+        Representation.POLARS_LONG, Representation.POLARS_WIDE, Representation.POLARS_LAZY_LONG
+    }:
+        return TransferTransform.NUMPY_TO_POLARS
+
+    # Wide ↔ Long reshapes
+    if "wide" in source_repr.value and "long" in target_repr.value:
+        return TransferTransform.WIDE_TO_LONG
+    if "long" in source_repr.value and "wide" in target_repr.value:
+        return TransferTransform.LONG_TO_WIDE
+
+    # Default to PANDAS_TO_POLARS for unknown combinations
+    return TransferTransform.PANDAS_TO_POLARS
+
+
 def estimate_transfer_cost_ms(
     source_repr: Representation,
     target_repr: Representation,
@@ -498,15 +726,26 @@ def estimate_transfer_cost_ms(
     """Estimate transfer edge cost (MB-P1-021, §32).
 
     Includes representation conversion, sort, repartition, and reshape costs.
+    R21-TRANSFER-BOUNDARIES: Now supports all formal transfer transforms.
     """
-    # Base conversion cost by edge type
+    # Base conversion cost by edge type (R21-TRANSFER-BOUNDARIES: expanded)
     conversion_costs = {
         ("duckdb_relation", "arrow_table"): 3.0,
+        ("q_table", "arrow_table"): 4.0,  # R21: Q → Arrow
+        ("q_vector", "arrow_table"): 4.0,  # R21: Q → Arrow
         ("arrow_table", "polars_long"): 2.0,
+        ("arrow_table", "polars_lazy_long"): 2.0,
         ("arrow_table", "pandas_long"): 2.0,
         ("polars_long", "pandas_long"): 2.0,
+        ("polars_lazy_long", "pandas_long"): 2.0,
         ("pandas_wide", "pandas_long"): 2.0,  # reshape
         ("pandas_long", "pandas_wide"): 2.0,  # reshape
+        ("polars_long", "numpy_panel"): 1.5,  # R21: Polars → NumPy (zero-copy)
+        ("polars_wide", "numpy_panel"): 1.5,  # R21: Polars → NumPy (zero-copy)
+        ("polars_lazy_long", "numpy_panel"): 2.0,  # R21: Polars Lazy → NumPy
+        ("numpy_panel", "polars_long"): 2.0,  # R21: NumPy → Polars
+        ("numpy_panel", "polars_wide"): 2.0,  # R21: NumPy → Polars
+        ("numpy_panel", "polars_lazy_long"): 2.5,  # R21: NumPy → Polars Lazy
     }
 
     src = source_repr.value if isinstance(source_repr, Enum) else str(source_repr)

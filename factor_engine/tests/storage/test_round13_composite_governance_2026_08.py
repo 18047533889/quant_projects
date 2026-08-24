@@ -21,7 +21,7 @@ import pytest
 
 pd = pytest.importorskip("pandas")
 
-from storage.composite_source import (
+from factor_engine.storage.composite_source import (
     CompositeContractUnavailableError,
     CompositeDataSource,
     CompositeJoinPolicyError,
@@ -29,8 +29,8 @@ from storage.composite_source import (
     CompositeSnapshotVerificationError,
     SnapshotVerificationError,
 )
-from storage.datasource import DataSource
-from storage.factory import DataSourceBuildContext, build_data_source
+from factor_engine.storage.datasource import DataSource
+from factor_engine.storage.factory import DataSourceBuildContext, build_data_source
 from tests.storage.test_composite_source import CountingSeriesSource, _build_series
 
 
@@ -54,7 +54,7 @@ class _FailingRefreshSource(DataSource):
 
     def temporal_contract(self):
         # R24-084..087: plain panel — generic asof is allowed.
-        from storage.datasource import TemporalContract
+        from factor_engine.storage.datasource import TemporalContract
 
         return TemporalContract(
             temporal_sensitivity="none",
@@ -85,7 +85,7 @@ class _EraSource(DataSource):
 
     def temporal_contract(self):
         # R24-084..087: plain panel — generic asof is allowed.
-        from storage.datasource import TemporalContract
+        from factor_engine.storage.datasource import TemporalContract
 
         return TemporalContract(
             temporal_sensitivity="none",

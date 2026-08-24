@@ -15,9 +15,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.operator_surface import classify_canonical, DAILY_FACTOR_MIGRATED
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.operator_surface import classify_canonical, DAILY_FACTOR_MIGRATED
 
 load_all()
 

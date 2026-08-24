@@ -8,9 +8,9 @@ def test_segmented_execution_set_matches_runtime_restore_implementations():
     import numpy as np
     import pandas as pd
 
-    from cleaned_operators import load_all
-    from cleaned_operators.production_hardening import SEGMENTED_EXECUTION_CANONICALS
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.production_hardening import SEGMENTED_EXECUTION_CANONICALS
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     from stateful_contract import StatefulCheckpointRegistry
     from stateful_runtime import execute_stateful_segment
 
@@ -62,9 +62,9 @@ def test_stateful_operators_without_runtime_fail_closed():
     execution and must stay full-replay / non-streaming.  ``trade_when`` was
     audited 2026-08 as a pure elementwise conditional (np.where), so it is no
     longer treated as stateful."""
-    from cleaned_operators import load_all
-    from cleaned_operators.production_hardening import STATEFUL_CHECKPOINTS
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.production_hardening import STATEFUL_CHECKPOINTS
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     from stateful_contract import StatefulCheckpointRegistry
 
     load_all()
@@ -83,10 +83,10 @@ def test_stateful_operators_without_runtime_fail_closed():
 
 def test_pandas_production_status_does_not_fall_back_to_lifecycle_label(monkeypatch):
     """A production target without valid evidence must remain non-routable."""
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
-    import backend.evidence_provenance as provenance
-    import backend.operator_capability as capability
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    import factor_engine.backend.evidence_provenance as provenance
+    import factor_engine.backend.operator_capability as capability
 
     load_all()
     canonical = "KAMA"
@@ -109,12 +109,12 @@ def test_pandas_production_status_does_not_fall_back_to_lifecycle_label(monkeypa
 
 
 def test_every_unrestored_stateful_operator_is_full_replay_and_non_streaming():
-    from cleaned_operators import load_all
-    from cleaned_operators.production_hardening import (
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.production_hardening import (
         SEGMENTED_EXECUTION_CANONICALS,
         STATEFUL_CHECKPOINTS,
     )
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     unrestored = set(STATEFUL_CHECKPOINTS).difference(

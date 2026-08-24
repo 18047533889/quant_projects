@@ -44,7 +44,7 @@ import numpy as np
 import pandas as pd
 
 from logging_utils import get_logger
-from storage.matrix_block_layout import (
+from factor_engine.storage.matrix_block_layout import (
     block_columns,
     block_file_name,
     block_mode_enabled,
@@ -62,7 +62,7 @@ from storage.matrix_block_layout import (
     resolve_factor_blocks,
     wide_to_merged,
 )
-from storage.partition_object_ref import (
+from factor_engine.storage.partition_object_ref import (
     PartitionObjectRef,
     build_partition_inventory,
     inventory_from_dicts,
@@ -71,14 +71,14 @@ from storage.partition_object_ref import (
     materialize_generation_from_inventory,
     ref_from_frame,
 )
-from storage.partition_policy import (
+from factor_engine.storage.partition_policy import (
     PartitionPolicy,
     attach_partition_columns,
     iter_partition_groups,
     partition_path_segments,
 )
 
-logger = get_logger("storage.factor_matrix_materializer")
+logger = get_logger("factor_engine.storage.factor_matrix_materializer")
 
 
 class FactorMatrixCorruptionError(ValueError):
@@ -1030,7 +1030,7 @@ class FactorMatrixMaterializer:
                     # FactorBlockRef——多因子共享一份 axis 的观测/载体。记录计数与
                     # 可序列化元数据（随 manifest/summary），不改变写入文件。
                     if len(bfids) >= 2 and _j == 0:
-                        from runtime.factor_block_ref import (
+                        from factor_engine.runtime.factor_block_ref import (
                             block_ref_meta,
                             build_factor_block,
                             record_block_ref_used,
@@ -1172,7 +1172,7 @@ class FactorMatrixMaterializer:
         if production is not None:
             return bool(production)
         try:
-            from runtime.production_policy import is_production_mode
+            from factor_engine.runtime.production_policy import is_production_mode
 
             return is_production_mode()
         except Exception:  # pragma: no cover - 解析失败按 research 处理

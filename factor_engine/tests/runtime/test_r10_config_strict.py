@@ -14,7 +14,7 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from runtime.config import MarketExecutionSpec, RunConfig, load_config
+from factor_engine.runtime.config import MarketExecutionSpec, RunConfig, load_config
 
 
 def _write(tmp_path, payload: dict) -> str:

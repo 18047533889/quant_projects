@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from backend.sql_pushdown.emitter import compile_plan_to_sql, plan_is_sql_capable
-from planner.logical_plan import PlanNode
+from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql, plan_is_sql_capable
+from factor_engine.planner.logical_plan import PlanNode
 
 
 @pytest.fixture(scope="module", autouse=True)
 def _load():
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
@@ -102,7 +102,7 @@ def test_ewm_mean_sql():
 
 
 def test_zscore_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="zscore", inputs=[_col("close")])
     compiled = compile_plan_to_sql(
@@ -117,7 +117,7 @@ def test_zscore_sql():
 
 
 def test_ts_corr_sql():
-    from backend.sql_pushdown.emitter import compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql
 
     plan = PlanNode(
         op="ts_corr",
@@ -137,7 +137,7 @@ def test_ts_corr_sql():
 
 def test_ts_corr_sql_with_literal_window_input():
     """窗口参数在 literal 子节点时也应可编译（DSL 常见形态）。"""
-    from backend.sql_pushdown.emitter import compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql
 
     plan = PlanNode(
         op="ts_corr",
@@ -155,7 +155,7 @@ def test_ts_corr_sql_with_literal_window_input():
 
 
 def test_ts_beta_sql_with_literal_window_input():
-    from backend.sql_pushdown.emitter import compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql
 
     plan = PlanNode(
         op="ts_beta",
@@ -173,7 +173,7 @@ def test_ts_beta_sql_with_literal_window_input():
 
 
 def test_group_neutralize_sql():
-    from backend.sql_pushdown.emitter import compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql
 
     plan = PlanNode(
         op="group_neutralize",
@@ -190,7 +190,7 @@ def test_group_neutralize_sql():
 
 
 def test_where_sql():
-    from backend.sql_pushdown.emitter import compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql
 
     plan = PlanNode(
         op="where",
@@ -207,7 +207,7 @@ def test_where_sql():
 
 
 def test_ffill_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="ffill", inputs=[_col("close")])
     assert plan_is_sql_capable(plan)
@@ -224,7 +224,7 @@ def test_ffill_sql():
 
 
 def test_fillna_const_sql():
-    from backend.sql_pushdown.emitter import compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql
 
     plan = PlanNode(
         op="fillna_const",
@@ -242,7 +242,7 @@ def test_fillna_const_sql():
 
 
 def test_ts_decay_linear_sql():
-    from backend.sql_pushdown.emitter import compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql
 
     plan = PlanNode(
         op="ts_decay_linear",
@@ -272,7 +272,7 @@ def test_decay_linear_alias_sql_capable():
 
 def test_bfill_sql_not_capable():
     """bfill 禁止 SQL fast path silent passthrough。"""
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="bfill", inputs=[_col("close")])
     assert not plan_is_sql_capable(plan)
@@ -287,7 +287,7 @@ def test_bfill_sql_not_capable():
 
 
 def test_rank_skips_null_in_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="rank", inputs=[_col("close")])
     compiled = compile_plan_to_sql(
@@ -307,7 +307,7 @@ def test_rank_skips_null_in_sql():
 
 
 def test_group_rank_skips_null_in_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(
         op="group_rank",
@@ -330,7 +330,7 @@ def test_group_rank_skips_null_in_sql():
 
 
 def test_group_zscore_zero_std_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(
         op="group_zscore",
@@ -349,7 +349,7 @@ def test_group_zscore_zero_std_sql():
 
 
 def test_clickhouse_tier2_emitter():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     for op, attrs in (
         ("ffill", {}),
@@ -379,7 +379,7 @@ def test_clickhouse_tier2_emitter():
 
 
 def test_coalesce_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(
         op="coalesce",
@@ -400,7 +400,7 @@ def test_coalesce_sql():
 
 
 def test_coalesce_clickhouse_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="coalesce", inputs=[_col("close"), _col("open")])
     compiled = compile_plan_to_sql(
@@ -415,7 +415,7 @@ def test_coalesce_clickhouse_sql():
 
 
 def test_protected_div_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(
         op="protected_div",
@@ -435,7 +435,7 @@ def test_protected_div_sql():
 
 
 def test_winsorize_preserves_null_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="winsorize", inputs=[_col("close")], attrs={"a": 0.05})
     compiled = compile_plan_to_sql(
@@ -450,7 +450,7 @@ def test_winsorize_preserves_null_sql():
 
 
 def test_clip_positional_bounds_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(
         op="clip",
@@ -469,7 +469,7 @@ def test_clip_positional_bounds_sql():
 
 
 def test_protected_log_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="protected_log", inputs=[_col("close")])
     assert not plan_is_sql_capable(plan)
@@ -484,7 +484,7 @@ def test_protected_log_sql():
 
 
 def test_protected_sqrt_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="protected_sqrt", inputs=[_col("close")])
     assert not plan_is_sql_capable(plan)
@@ -499,7 +499,7 @@ def test_protected_sqrt_sql():
 
 
 def test_nan_to_num_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="nan_to_num", inputs=[_col("close"), _lit(-1.0)])
     assert not plan_is_sql_capable(plan)
@@ -514,7 +514,7 @@ def test_nan_to_num_sql():
 
 
 def test_is_nan_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="is_nan", inputs=[_col("close")])
     assert plan_is_sql_capable(plan)
@@ -532,7 +532,7 @@ def test_is_nan_sql():
 
 
 def test_is_null_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="is_null", inputs=[_col("close")])
     assert plan_is_sql_capable(plan)
@@ -548,7 +548,7 @@ def test_is_null_sql():
 
 
 def test_is_finite_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="is_finite", inputs=[_col("close")])
     assert plan_is_sql_capable(plan)
@@ -564,7 +564,7 @@ def test_is_finite_sql():
 
 
 def test_fillna_zero_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(
         op="fillna",
@@ -583,7 +583,7 @@ def test_fillna_zero_sql():
 
 
 def test_where_numeric_condition_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(
         op="where",
@@ -605,7 +605,7 @@ def test_where_numeric_condition_sql():
 
 
 def test_normalize_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="normalize", inputs=[_col("close")])
     assert plan_is_sql_capable(plan)
@@ -622,7 +622,7 @@ def test_normalize_sql():
 
 
 def test_standardize_resolves_to_zscore_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="standardize", inputs=[_col("close")])
     assert plan_is_sql_capable(plan)
@@ -638,7 +638,7 @@ def test_standardize_resolves_to_zscore_sql():
 
 
 def test_group_normalize_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(
         op="group_normalize",
@@ -658,7 +658,7 @@ def test_group_normalize_sql():
 
 
 def test_group_percentile_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(
         op="group_percentile",
@@ -678,7 +678,7 @@ def test_group_percentile_sql():
 
 
 def test_group_decay_linear_sql():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(
         op="group_decay_linear",
@@ -695,7 +695,7 @@ def test_group_decay_linear_sql():
     assert compiled is not None
     assert "RANK()" in compiled.query
     assert "WHEN x._v IS NULL THEN NULL" in compiled.query
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="cs_resid", inputs=[_col("close"), _col("open")])
     assert plan_is_sql_capable(plan)
@@ -714,7 +714,7 @@ def test_group_decay_linear_sql():
 
 
 def test_cs_regression_sql_modes():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     for mode, needle in ((0, "y._v -"), (1, "covar_samp"), (2, "+")):
         plan = PlanNode(

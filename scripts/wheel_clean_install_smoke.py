@@ -77,8 +77,8 @@ assert not os.getcwd().endswith('factor_engine')
 assert not any('factor_engine' in p and 'site-packages' not in p for p in sys.path), \
     f'sys.path leaks repo: {sys.path}'
 
-from api.dsl_parser import parse_expr, parse_factor
-from runtime.engine import FactorEngine
+from factor_engine.api.dsl_parser import parse_expr, parse_factor
+from factor_engine.runtime.engine import FactorEngine
 from modeling import __doc__ as modeling_doc
 import pandas as pd
 assert modeling_doc and 'SINGLE SOURCE OF TRUTH' in modeling_doc

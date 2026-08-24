@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.ts_model import state_space as ss
+from factor_engine.cleaned_operators.ts_model import state_space as ss
 
 
 def _reset_counter():
@@ -37,7 +37,7 @@ def test_kalman_level_dispatches_to_numba_main_chain():
 
 
 def test_kalman_level_numba_matches_reference():
-    from backend.numba_kernels.kalman import kalman_level_reference
+    from factor_engine.backend.numba_kernels.kalman import kalman_level_reference
 
     rng = np.random.default_rng(0)
     vals = rng.normal(size=500)
@@ -78,6 +78,6 @@ def test_trend_beta_not_dispatched_due_to_parity_drift():
 
 
 def test_numba_parity_gate_returns_kernel_for_float64():
-    from cleaned_operators.ts_model.state_space import _numba_kernel
+    from factor_engine.cleaned_operators.ts_model.state_space import _numba_kernel
 
     assert _numba_kernel("kalman_level") is not None  # float64 认证 kernel 可用

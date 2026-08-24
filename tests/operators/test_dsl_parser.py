@@ -1,7 +1,7 @@
 import pytest
 
-from api.dsl_parser import DSLParseError, parse_expr, parse_factor
-from expr.cleaned_call import CleanedCall
+from factor_engine.api.dsl_parser import DSLParseError, parse_expr, parse_factor
+from factor_engine.expr.cleaned_call import CleanedCall
 
 
 def test_parse_expr_builds_cleaned_call_tree():

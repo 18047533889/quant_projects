@@ -5,11 +5,11 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from api import rank, ts_delay, ts_mean
-from api.columns import col
-from api.factor import Factor
-from backend.pandas_backend import PandasBackend
-from runtime.engine import FactorEngine
+from factor_engine.api import rank, ts_delay, ts_mean
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime.engine import FactorEngine
 from tests.fixtures.golden_panel import (
     build_golden_close_panel,
     expected_ts_delay,

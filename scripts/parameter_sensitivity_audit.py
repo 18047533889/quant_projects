@@ -49,9 +49,9 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.search.factor_dedup import (
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.search.factor_dedup import (
     build_typed_fixtures,
     split_scalar_panel_params,
 )

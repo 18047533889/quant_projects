@@ -15,22 +15,22 @@ from __future__ import annotations
 
 from unittest.mock import patch, MagicMock
 
-from mining.direct_use import (
+from factor_engine.mining.direct_use import (
     DirectUseContext,
     get_direct_use_mining_operators,
 )
-from market.context import Market
+from factor_engine.market.context import Market
 
 
 # `_has_physical_production_evidence` imports the inventory lazily from
 # `backend.operator_capability`, so patch it there (not on mining.direct_use).
-_INVENTORY = "backend.operator_capability.enumerate_physical_inventory"
+_INVENTORY = "factor_engine.backend.operator_capability.enumerate_physical_inventory"
 
 
 def _admitted_record(canonical: str = "ts_mean"):
     """One fully-admitted physical inventory row for a canonical."""
-    from backend.contracts import PhysicalImplementationSpec, ExecutionKind
-    from backend.operator_capability import (
+    from factor_engine.backend.contracts import PhysicalImplementationSpec, ExecutionKind
+    from factor_engine.backend.operator_capability import (
         PhysicalInventoryAdmission,
         PhysicalInventoryRecord,
     )
@@ -78,7 +78,7 @@ class TestAvailableSourcesFailClosed:
         When context.available_sources is None and the operator requires
         sources, the operator must be filtered out (hard fail).
         """
-        from cleaned_operators import load_all
+        from factor_engine.cleaned_operators import load_all
 
         load_all()
         # ts_mean requires stock_daily source
@@ -87,12 +87,12 @@ class TestAvailableSourcesFailClosed:
         # Patch admission gates to focus only on source validation
         record = _admitted_record("ts_mean")
         with patch(_INVENTORY, return_value=[record]):
-            with patch("mining.direct_use.cost_contract_declared", return_value=True):
-                with patch("mining.direct_use.source_status") as mock_source:
+            with patch("factor_engine.mining.direct_use.cost_contract_declared", return_value=True):
+                with patch("factor_engine.mining.direct_use.source_status") as mock_source:
                     # Simulate operator with source requirements
                     mock_source.return_value = MagicMock(missing=())
                     with patch(
-                        "mining.direct_use._is_production_denied", return_value=False
+                        "factor_engine.mining.direct_use._is_production_denied", return_value=False
                     ):
                         operators = get_direct_use_mining_operators(
                             context=context, admission="eligible"
@@ -114,7 +114,7 @@ class TestAvailableSourcesFailClosed:
         When context.available_sources is () and the operator requires
         sources, the operator must be filtered out (explicit empty = nothing available).
         """
-        from cleaned_operators import load_all
+        from factor_engine.cleaned_operators import load_all
 
         load_all()
         # ts_mean requires stock_daily source
@@ -123,12 +123,12 @@ class TestAvailableSourcesFailClosed:
         # Patch admission gates to focus only on source validation
         record = _admitted_record("ts_mean")
         with patch(_INVENTORY, return_value=[record]):
-            with patch("mining.direct_use.cost_contract_declared", return_value=True):
-                with patch("mining.direct_use.source_status") as mock_source:
+            with patch("factor_engine.mining.direct_use.cost_contract_declared", return_value=True):
+                with patch("factor_engine.mining.direct_use.source_status") as mock_source:
                     # Simulate operator with source requirements
                     mock_source.return_value = MagicMock(missing=())
                     with patch(
-                        "mining.direct_use._is_production_denied", return_value=False
+                        "factor_engine.mining.direct_use._is_production_denied", return_value=False
                     ):
                         operators = get_direct_use_mining_operators(
                             context=context, admission="eligible"
@@ -147,7 +147,7 @@ class TestAvailableSourcesFailClosed:
         When context.available_sources is ("stock_daily",) and the operator
         requires stock_daily, the operator must pass validation.
         """
-        from cleaned_operators import load_all
+        from factor_engine.cleaned_operators import load_all
 
         load_all()
         # ts_mean requires stock_daily source
@@ -156,12 +156,12 @@ class TestAvailableSourcesFailClosed:
         # Patch admission gates to focus only on source validation
         record = _admitted_record("ts_mean")
         with patch(_INVENTORY, return_value=[record]):
-            with patch("mining.direct_use.cost_contract_declared", return_value=True):
-                with patch("mining.direct_use.source_status") as mock_source:
+            with patch("factor_engine.mining.direct_use.cost_contract_declared", return_value=True):
+                with patch("factor_engine.mining.direct_use.source_status") as mock_source:
                     # Simulate operator with source requirements satisfied
                     mock_source.return_value = MagicMock(missing=())
                     with patch(
-                        "mining.direct_use._is_production_denied", return_value=False
+                        "factor_engine.mining.direct_use._is_production_denied", return_value=False
                     ):
                         operators = get_direct_use_mining_operators(
                             context=context, admission="eligible"
@@ -207,16 +207,16 @@ class TestBidirectionalFrequencyGate:
 
     def test_minute_target_blocks_daily_output(self) -> None:
         """mining target_frequency=minute must reject a daily output operator."""
-        from mining.direct_use import _effective_output_grain
+        from factor_engine.mining.direct_use import _effective_output_grain
 
         # Raw daily operator: must NOT be admitted as minute target.
         grain = _effective_output_grain("dummy_daily_output", _INVALID_GRAIN_CATALOG["dummy_daily_output"], None)
         assert grain != "minute"
         # Direct use gate logic: daily output operator must be filtered when target_frequency='minute'.
-        from mining.direct_use import build_direct_use_operator, DirectUseContext, get_direct_use_mining_operators
+        from factor_engine.mining.direct_use import build_direct_use_operator, DirectUseContext, get_direct_use_mining_operators
 
         context = DirectUseContext(market=Market.ASHARE, target_frequency="minute")
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         patched_catalog = dict(OperatorRegistry._catalog)
         patched_catalog.update(_INVALID_GRAIN_CATALOG)
@@ -232,10 +232,10 @@ class TestBidirectionalFrequencyGate:
 
     def test_daily_target_blocks_raw_minute_output(self) -> None:
         """mining target_frequency=daily must reject a raw minute output operator."""
-        from mining.direct_use import build_direct_use_operator, DirectUseContext, get_direct_use_mining_operators
+        from factor_engine.mining.direct_use import build_direct_use_operator, DirectUseContext, get_direct_use_mining_operators
 
         context = DirectUseContext(market=Market.ASHARE, target_frequency="daily")
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         patched_catalog = dict(OperatorRegistry._catalog)
         patched_catalog.update(_INVALID_GRAIN_CATALOG)
@@ -247,10 +247,10 @@ class TestBidirectionalFrequencyGate:
 
     def test_daily_target_allows_intraday_eod_grain_transform(self) -> None:
         """mining target_frequency=daily must still allow certified INTRADAY_EOD operators."""
-        from mining.direct_use import build_direct_use_operator, DirectUseContext
+        from factor_engine.mining.direct_use import build_direct_use_operator, DirectUseContext
 
         context = DirectUseContext(market=Market.ASHARE, target_frequency="daily")
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         patched_catalog = dict(OperatorRegistry._catalog)
         patched_catalog.update(_INVALID_GRAIN_CATALOG)

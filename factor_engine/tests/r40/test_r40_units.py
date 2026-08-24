@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from fields import units as U
-from fields import units_v2 as U2
+from factor_engine.fields import units as U
+from factor_engine.fields import units_v2 as U2
 
 
 class TestCanonicalUnitKnown:

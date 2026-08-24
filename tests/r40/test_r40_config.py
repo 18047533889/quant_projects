@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from runtime.config import (
+from factor_engine.runtime.config import (
     CONFIG_SCHEMA_VERSION,
     DataSourceConfig,
     FactorDefinitionConfig,
@@ -106,7 +106,7 @@ def test_schema_version_missing_requires_explicit():
 
 
 def test_schema_version_older_requires_migration(monkeypatch):
-    monkeypatch.setattr("runtime.config.CONFIG_SCHEMA_VERSION", 2)
+    monkeypatch.setattr("factor_engine.runtime.config.CONFIG_SCHEMA_VERSION", 2)
     with pytest.raises(ValueError, match="older"):
         _validate_config_schema_version({"schema_version": 1})
 
@@ -121,7 +121,7 @@ def test_schema_version_current_accepted():
 
 
 def test_schema_version_validated_after_profile_merge(tmp_path, monkeypatch):
-    monkeypatch.setattr("runtime.config._PROFILES_DIR", tmp_path)
+    monkeypatch.setattr("factor_engine.runtime.config._PROFILES_DIR", tmp_path)
     (tmp_path / "inject.yaml").write_text(
         "schema_version: 99\n", encoding="utf-8"
     )
@@ -158,7 +158,7 @@ def test_data_access_label_rejected(tmp_path):
 
 def test_profile_injected_data_access_still_allowed(tmp_path):
     """profile 文件里 documented 的 data_access 段在合并时被剥掉，不触发拒绝。"""
-    from runtime.config import load_profile, _deep_merge, _forbid_unknown
+    from factor_engine.runtime.config import load_profile, _deep_merge, _forbid_unknown
 
     profile = load_profile("prod")  # prod.yaml has data_access section
     assert "data_access" in profile

@@ -24,16 +24,16 @@ import pytest
 
 
 def _ensure_technical_chain() -> None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if OperatorRegistry.lifecycle() == "frozen":
         return
     if OperatorRegistry.get("atr_pct", "pandas_numpy") is not None:
         return
-    from cleaned_operators.technical import signal  # noqa: F401
-    from cleaned_operators.technical import polars_signal  # noqa: F401
-    from cleaned_operators import composite_fastpath  # noqa: F401
-    from cleaned_operators.technical import indicators_v2  # noqa: F401
+    from factor_engine.cleaned_operators.technical import signal  # noqa: F401
+    from factor_engine.cleaned_operators.technical import polars_signal  # noqa: F401
+    from factor_engine.cleaned_operators import composite_fastpath  # noqa: F401
+    from factor_engine.cleaned_operators.technical import indicators_v2  # noqa: F401
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -42,7 +42,7 @@ def _bootstrap():
 
 
 def _op(name: str):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get(name, "pandas_numpy") or OperatorRegistry.get(name)
     assert op is not None, f"{name} not registered"
@@ -71,7 +71,7 @@ def test_atr_pct_masks_non_positive_close():
 
 def test_atr_zscore_matches_manual_trailing_oracle():
     high, low, close = _ohlc(np.linspace(10.0, 15.0, 40) + np.sin(np.arange(40) * 0.7) * 0.2)
-    from cleaned_operators.technical.indicators_v2 import atr_pct
+    from factor_engine.cleaned_operators.technical.indicators_v2 import atr_pct
 
     ratio = atr_pct(high, low, close, 5)
     mean = ratio.rolling(10, min_periods=10).mean()
@@ -122,7 +122,7 @@ def test_atr_short_long_ratio_rejects_reversed_windows():
 
 def test_atr_acceleration_is_first_difference():
     high, low, close = _ohlc(np.linspace(10.0, 15.0, 40) + np.sin(np.arange(40) * 0.5) * 0.2)
-    from cleaned_operators.technical.indicators_v2 import atr_pct
+    from factor_engine.cleaned_operators.technical.indicators_v2 import atr_pct
 
     expected = atr_pct(high, low, close, 5).diff()
     out = _op("atr_acceleration").calculate(high, low, close, window=5)
@@ -145,7 +145,7 @@ def test_atr_family_param_specs_and_relative_alpha_classification():
         for p in params:
             assert specs[p].dtype is not None, f"{name}.{p} has no dtype"
 
-    from mining.direct_use import _RELATIVE_ALPHA_OPS
+    from factor_engine.mining.direct_use import _RELATIVE_ALPHA_OPS
 
     promoted = {
         "atr_pct", "atr_zscore", "atr_percentile",

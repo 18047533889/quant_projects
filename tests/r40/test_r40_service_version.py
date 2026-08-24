@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import service.app as app
+import factor_engine.service.app as app
 
 
 def test_resolve_version_uses_package_metadata(monkeypatch):

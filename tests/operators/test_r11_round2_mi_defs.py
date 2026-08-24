@@ -26,9 +26,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.nonlinear_dependence  # noqa: F401  (import-triggered registration)
-from backend.operator_errors import OperatorParameterError
-from cleaned_operators.registry import OperatorRegistry
+import factor_engine.cleaned_operators.nonlinear_dependence  # noqa: F401  (import-triggered registration)
+from factor_engine.backend.operator_errors import OperatorParameterError
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _op(canonical: str):

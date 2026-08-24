@@ -14,9 +14,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators
-from cleaned_operators.base import SeriesOperator, register_operator
-from cleaned_operators.closure_audit import (
+import factor_engine.cleaned_operators
+from factor_engine.cleaned_operators.base import SeriesOperator, register_operator
+from factor_engine.cleaned_operators.closure_audit import (
     CLOSURE_CATEGORIES,
     _stem,
     run_closure_audit,
@@ -88,7 +88,7 @@ class _SilentlyTruncatesInt(SeriesOperator):
     catch (review §1: ``int()`` truncation / bool coercion).
     """
 
-    metadata = __import__("cleaned_operators.base", fromlist=["OperatorMetadata"]).OperatorMetadata(
+    metadata = __import__("factor_engine.cleaned_operators.base", fromlist=["OperatorMetadata"]).OperatorMetadata(
         name="test_bad_silent_int",
         category="test",
         description="lag_w with no contract — accepts 5.1",
@@ -106,7 +106,7 @@ class _SilentlyTruncatesInt(SeriesOperator):
 class _BadUnitTstat(SeriesOperator):
     """Bad operator: a t-statistic labelled as 'level'."""
 
-    metadata = __import__("cleaned_operators.base", fromlist=["OperatorMetadata"]).OperatorMetadata(
+    metadata = __import__("factor_engine.cleaned_operators.base", fromlist=["OperatorMetadata"]).OperatorMetadata(
         name="test_bad_tstat_unit",
         category="test",
         description="tstat",
@@ -127,8 +127,8 @@ def _check_direct(cls, category, frames, kwargs):
     test operators cannot be registered — call the category check directly with
     a hand-built context instead.
     """
-    from cleaned_operators.closure_audit import CLOSURE_CATEGORIES as _CATS
-    from cleaned_operators.semantic_audit import OperatorSample
+    from factor_engine.cleaned_operators.closure_audit import CLOSURE_CATEGORIES as _CATS
+    from factor_engine.cleaned_operators.semantic_audit import OperatorSample
 
     op = cls()
     sample = OperatorSample("test", frames, kwargs)
@@ -138,7 +138,7 @@ def _check_direct(cls, category, frames, kwargs):
 
 
 def _audit_panel():
-    from cleaned_operators.semantic_audit import _panel
+    from factor_engine.cleaned_operators.semantic_audit import _panel
 
     return [_panel(seed=7)]
 

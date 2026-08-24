@@ -14,7 +14,7 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.operator_policy import bar_freq_to_timedelta, bars_per_day
+from factor_engine.cleaned_operators.operator_policy import bar_freq_to_timedelta, bars_per_day
 
 
 def _minute(value: str) -> int:

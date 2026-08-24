@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from cleaned_operators.operator_policy import bars_per_day
-from runtime.session_calendar import SessionCalendar
+from factor_engine.cleaned_operators.operator_policy import bars_per_day
+from factor_engine.runtime.session_calendar import SessionCalendar
 
 
 def test_unknown_intraday_frequency_fails_closed() -> None:

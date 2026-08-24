@@ -18,7 +18,7 @@ import enum
 from dataclasses import dataclass
 from typing import Any
 
-from market.price_basis import PriceBasis
+from factor_engine.market.price_basis import PriceBasis
 
 
 class ReturnInterval(str, enum.Enum):

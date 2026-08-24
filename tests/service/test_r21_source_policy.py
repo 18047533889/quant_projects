@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from service.errors import ServiceError, sanitize_message
-from service.security import ApprovedSourcePolicy
+from factor_engine.service.errors import ServiceError, sanitize_message
+from factor_engine.service.security import ApprovedSourcePolicy
 
 
 def _policy(**kwargs):
@@ -61,13 +61,13 @@ class TestApprovedSourcePolicy:
         p.validate_source({"type": "data_access", "dataset": "anything"}, production=False)
 
     def test_profile_resolves_dataset(self):
-        from service.security import resolve_source_profile
+        from factor_engine.service.security import resolve_source_profile
 
         src = resolve_source_profile({"approved_source_profile_id": "prod_daily"}, policy=_policy())
         assert src == {"type": "data_access", "dataset": "ashare_stock_daily"}
 
     def test_unknown_profile_rejected(self):
-        from service.security import resolve_source_profile
+        from factor_engine.service.security import resolve_source_profile
 
         with pytest.raises(ServiceError):
             resolve_source_profile({"approved_source_profile_id": "nope"}, policy=_policy())

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from planner.backend_region import (
+from factor_engine.planner.backend_region import (
     BackendRegion as PlannerBackendRegion,
     PhysicalBackend as PlannerPhysicalBackend,
     PhysicalProperties as PlannerPhysicalProperties,
@@ -58,7 +58,7 @@ class TestImportsResolve:
 
     def test_planning_reexports_execution_axis(self):
         from planning.backend_region import ExecutionAxis as PlanningAxis
-        from planner.backend_region import ExecutionAxis as PlannerAxis
+        from factor_engine.planner.backend_region import ExecutionAxis as PlannerAxis
 
         assert PlanningAxis is PlannerAxis
 
@@ -113,7 +113,7 @@ class TestNumbaAndArrowNotBackends:
         )
 
     def test_numba_is_accelerator(self):
-        from backend.contracts import Accelerator, ExecutionKind
+        from factor_engine.backend.contracts import Accelerator, ExecutionKind
 
         assert hasattr(Accelerator, "NUMBA_CPU")
         assert Accelerator.NUMBA_CPU.value == "numba_cpu"

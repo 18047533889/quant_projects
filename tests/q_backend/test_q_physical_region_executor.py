@@ -20,19 +20,19 @@ from __future__ import annotations
 import pyarrow as pa
 import pytest
 
-from backend.context import ExecutionContext
-from backend.q_backend.q_adapter import QResidentTableHandle
-from backend.q_backend.q_backend import QBackend
-from backend.q_backend.q_errors import (
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.backend.q_backend.q_adapter import QResidentTableHandle
+from factor_engine.backend.q_backend.q_backend import QBackend
+from factor_engine.backend.q_backend.q_errors import (
     QDataUnavailableError,
     QPhysicalRegionNotImplemented,
 )
-from backend.q_backend.q_executor import (
+from factor_engine.backend.q_backend.q_executor import (
     QExecutionResult,
     QExecutor,
 )
-from backend.q_backend.q_process_manager import QAvailabilityStatus
-from planner.backend_region import (
+from factor_engine.backend.q_backend.q_process_manager import QAvailabilityStatus
+from factor_engine.planner.backend_region import (
     BackendRegion,
     ExecutionAxis,
     PhysicalBackend,
@@ -237,7 +237,7 @@ def test_execute_physical_region_returns_resident_handle_with_no_q_to_python() -
 
 def test_execute_physical_region_accepts_arrow_input() -> None:
     """The q region boundary must accept Arrow tables, not pandas only."""
-    from backend.q_backend.q_executor import QExecutor
+    from factor_engine.backend.q_backend.q_executor import QExecutor
 
     class RecordingQ:
         def __init__(self):
@@ -301,7 +301,7 @@ def test_execute_physical_region_accepts_arrow_input() -> None:
 
 def test_execute_physical_region_fails_closed_on_unavailable_runtime() -> None:
     """If q runtime is unavailable, the production path must fail closed."""
-    from backend.operator_capability import BackendUnavailableError
+    from factor_engine.backend.operator_capability import BackendUnavailableError
 
     backend = _make_backend(available=False)
     region = _make_region()

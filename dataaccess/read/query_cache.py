@@ -380,7 +380,7 @@ def _fe_cache_budget_bytes() -> int | None:
     """
     # 优先读 autopilot 最新 decision（无副作用；stale → 不看）。
     try:
-        from runtime.resource_autopilot_service import get_resource_autopilot
+        from factor_engine.runtime.resource_autopilot_service import get_resource_autopilot
 
         autopilot = get_resource_autopilot()
         if autopilot is not None:
@@ -392,7 +392,7 @@ def _fe_cache_budget_bytes() -> int | None:
     except Exception:
         pass
     try:
-        from runtime.host_resource_coordinator import get_host_coordinator
+        from factor_engine.runtime.host_resource_coordinator import get_host_coordinator
 
         decision = get_host_coordinator().decision()
         budget = getattr(decision, "cache_budget_bytes", None)

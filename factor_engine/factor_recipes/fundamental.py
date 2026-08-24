@@ -6,7 +6,7 @@ cumulative filing fields must use the explicit ``*_from_cumulative`` recipes in
 ``fundamental_cumulative.py`` or be converted with
 ``fin_quarter_from_cumulative`` first.
 """
-from factor_recipes.registry import FactorRecipe, FactorRecipeRegistry
+from factor_engine.factor_recipes.registry import FactorRecipe, FactorRecipeRegistry
 
 
 def _recipe(

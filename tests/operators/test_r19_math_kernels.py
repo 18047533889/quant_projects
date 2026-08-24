@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import _numpy_kernels as _k
+from factor_engine.cleaned_operators import _numpy_kernels as _k
 
 
 def _spearman(a: np.ndarray, b: np.ndarray) -> float:
@@ -304,7 +304,7 @@ def test_coalesce_first_finite():
 
 def _cs_module():
     try:
-        return importlib.import_module("cleaned_operators.common.cross_sectional")
+        return importlib.import_module("factor_engine.cleaned_operators.common.cross_sectional")
     except Exception:  # pragma: no cover - concurrent-session guard
         pytest.skip("cross_sectional import blocked by concurrent session edit")
 

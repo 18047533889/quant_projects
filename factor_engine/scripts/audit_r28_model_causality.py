@@ -34,14 +34,14 @@ def main() -> None:
     _load()
     OUT.mkdir(parents=True, exist_ok=True)
 
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
-    from cleaned_operators.model_timing import (
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.model_timing import (
         is_model_like_name,
         model_family_of,
         get_model_timing_contract,
     )
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     load_all()
     rows = []
@@ -153,7 +153,7 @@ def main() -> None:
 
 
 def _explicit_names():
-    import cleaned_operators.model_timing as mt
+    import factor_engine.cleaned_operators.model_timing as mt
 
     return set(mt.MODEL_TIMING_CONTRACTS.keys())
 

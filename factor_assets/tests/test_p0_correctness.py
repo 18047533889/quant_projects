@@ -7,7 +7,8 @@ Covers correctness issues fixed in central review response.
 import pytest
 
 from factor_assets.selection import (
-    GateResult,
+   
+        GateResult,
     CompositeGate,
     ThresholdGate,
     MetricBinding,
@@ -97,7 +98,9 @@ def test_hierarchical_clustering_explicit_override():
 
     graph = SparseCorrelationGraph(edges)
 
-    clustering = HierarchicalClustering(graph, max_factors=100)
+    clustering = HierarchicalClustering(
+        graph, max_factors=100, missing_distance_policy="treat_missing_as_max"
+    )
     dendrogram = clustering.build_dendrogram()
     assert len(dendrogram.factor_ids) == 50
 

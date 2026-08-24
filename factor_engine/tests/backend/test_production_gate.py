@@ -4,19 +4,19 @@ from __future__ import annotations
 
 import pytest
 
-from backend.operator_call_capability import CapabilityLevel, check_operator_call_capability
-from backend.production_signature import (
+from factor_engine.backend.operator_call_capability import CapabilityLevel, check_operator_call_capability
+from factor_engine.backend.production_signature import (
     PRODUCTION_SIGNATURES,
     operational_production_allowed,
     verify_production_signature,
 )
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 
 @pytest.fixture(scope="module")
 def _loaded():
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
@@ -33,7 +33,7 @@ def _ffill_plan(*, limit=None):
 
 def test_ffill_unlimited_not_operational_production(_loaded):
     assert not operational_production_allowed("ffill")
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     assert "ffill" not in OperatorRegistry._operators
 
@@ -57,7 +57,7 @@ def _plan(op: str, *values, **attrs) -> PlanNode:
 
 
 def test_every_daily_canonical_has_exact_production_signature(_loaded):
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
 
     assert set(PRODUCTION_SIGNATURES) == set(DAILY_CANONICALS)
 

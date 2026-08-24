@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 
-from cleaned_operators.fiscal_event_ops import (
+from factor_engine.cleaned_operators.fiscal_event_ops import (
     FiscalEventView,
     pd_fiscal_autocorr,
     pd_fiscal_perpetual_inventory,
@@ -18,7 +18,7 @@ from cleaned_operators.fiscal_event_ops import (
     pd_date_diff_days,
     pd_row_sum_skipna,
 )
-from storage.sources.relation_metrics import relation_entropy, relation_jaccard
+from factor_engine.storage.sources.relation_metrics import relation_entropy, relation_jaccard
 
 
 def _panel(values, periods):
@@ -67,8 +67,8 @@ def test_autocorr_and_reversal_are_event_based():
 
 
 def test_row_sum_skipna_has_real_sql_lowering():
-    from backend.sql_pushdown.emitter import compile_plan_to_sql
-    from planner.logical_plan import PlanNode
+    from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql
+    from factor_engine.planner.logical_plan import PlanNode
     plan = PlanNode(
         "row_sum_skipna",
         [PlanNode("column", [], {"name": "a"}), PlanNode("column", [], {"name": "b"})],

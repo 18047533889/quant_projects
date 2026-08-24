@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from planner.backend_region import (
+from factor_engine.planner.backend_region import (
     PhysicalBackend,
     Representation,
     BackendRegion,
@@ -35,7 +35,7 @@ class TestBackendMixedSourceRelationNameError:
         """MB-P0-001: source_lowered must not cause NameError."""
         # This was tested in test_p0_001_006.py
         # Verify the fix is in place by importing successfully
-        from backend.plan_cost_router import _dag_aware_mixed_cost, BoundNodeOccurrence
+        from factor_engine.backend.plan_cost_router import _dag_aware_mixed_cost, BoundNodeOccurrence
 
         occ = BoundNodeOccurrence(
             canonical="add",

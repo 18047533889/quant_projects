@@ -47,7 +47,7 @@ def window_order_columns(*, has_row_seq: bool = False) -> tuple[str, ...]:
 
 
 def order_dependent_op(canon: str) -> bool:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     return name in ORDER_DEPENDENT_OPS

@@ -6,10 +6,10 @@ import math
 import pytest
 import polars as pl
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from backend.operator_errors import FutureReferenceError
-from cleaned_operators.common.polars_ts_rolling import (
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.operator_errors import FutureReferenceError
+from factor_engine.cleaned_operators.common.polars_ts_rolling import (
     TSRegressionInterceptNative,
     TSRegressionR2Native,
     TSRegressionResidNative,

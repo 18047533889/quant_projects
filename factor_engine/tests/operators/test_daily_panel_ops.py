@@ -8,10 +8,10 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="historical daily-panel batch is now extended; daily certification is authoritative")
 
-from backend.sql_pushdown.emitter import compile_plan_to_sql, plan_is_sql_capable
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from planner.logical_plan import PlanNode
+from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql, plan_is_sql_capable
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.planner.logical_plan import PlanNode
 
 
 OPS = (
@@ -184,7 +184,7 @@ def test_polars_panel_backend_matches_pandas(op: str, panels) -> None:
 @pytest.mark.parametrize("op", OPS)
 def test_polars_long_backend_matches_pandas(op: str, panels) -> None:
     pl = pytest.importorskip("polars")
-    from backend.polars_expr_emitter import (
+    from factor_engine.backend.polars_expr_emitter import (
         compile_plan_to_polars,
         plan_is_polars_long_capable,
     )

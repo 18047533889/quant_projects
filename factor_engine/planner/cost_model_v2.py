@@ -23,8 +23,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from backend.operator_cost import CostContext, _cost_spec_for_registered, _resolve_canonical_name
-from planner.data_shape_estimate import DataShapeEstimate, shape_to_cost_context
+from factor_engine.backend.operator_cost import CostContext, _cost_spec_for_registered, _resolve_canonical_name
+from factor_engine.planner.data_shape_estimate import DataShapeEstimate, shape_to_cost_context
 
 _LOGGER = logging.getLogger(__name__)
 

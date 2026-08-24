@@ -38,12 +38,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.first_passage  # noqa: F401  (registers pandas backends)
-import cleaned_operators.markov_dynamics  # noqa: F401  (registers pandas backends)
+import factor_engine.cleaned_operators.first_passage  # noqa: F401  (registers pandas backends)
+import factor_engine.cleaned_operators.markov_dynamics  # noqa: F401  (registers pandas backends)
 
-from cleaned_operators.markov_dynamics import _state_dynamics_series
-from cleaned_operators.first_passage import _first_passage_series
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.markov_dynamics import _state_dynamics_series
+from factor_engine.cleaned_operators.first_passage import _first_passage_series
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _op(name: str):
@@ -160,7 +160,7 @@ def test_first_passage_scale_horizon_in_signature_and_identity():
     sig = next((t for t in op.metadata.tags if t.startswith("signature:")), "")
     assert "scale_horizon" in sig
     # 1-day vs 20-day scale_horizon are different bound semantic identities.
-    from cleaned_operators.base import bind_operator_call
+    from factor_engine.cleaned_operators.base import bind_operator_call
     x, scale = _fp_inputs()
     b1 = bind_operator_call(op, (x, scale),
                             dict(window=120, barrier=1.0, horizon=10, min_anchors=3, scale_horizon=1))
@@ -269,7 +269,7 @@ def test_markov_kernel_pit_excludes_current_value_from_estimates():
 
 
 def test_markov_module_docstring_declares_timing_semantics():
-    import cleaned_operators.markov_dynamics as md
+    import factor_engine.cleaned_operators.markov_dynamics as md
     doc = md.__doc__ or ""
     assert "strictly-past window" in doc and "max lookback" in doc
     assert "PRIOR_REFERENCE_CURRENT_QUERY" in doc

@@ -23,9 +23,9 @@ except ImportError as exc:  # pragma: no cover
         "需要 joblib：pip install 'factor-engine[parallel]' 或 pip install joblib"
     ) from exc
 
-from api.dsl_parser import parse_factor
-from backend.pandas_backend import PandasBackend
-from runtime.engine import FactorEngine
+from factor_engine.api.dsl_parser import parse_factor
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 

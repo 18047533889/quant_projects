@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from ir.nodes import IRNode
-from runtime.incremental_contract import (
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.ir.nodes import IRNode
+from factor_engine.runtime.incremental_contract import (
     CrossSectionScope,
     IncrementalContract,
     IncrementalContractResolutionError,
@@ -34,7 +34,7 @@ load_all()
 
 def _registered_once(*, unique: str) -> None:
     """每个 canonical 只注册一次（测试模块级共享注册表；幂等跳过）。"""
-    from runtime.incremental_contract import _REGISTRY
+    from factor_engine.runtime.incremental_contract import _REGISTRY
 
     if unique in _REGISTRY:
         raise AssertionError(f"duplicate registration fixture for {unique!r}")
@@ -99,7 +99,7 @@ def test_resolve_unknown_research_sets_resolution_error() -> None:
 
 def test_resolve_unknown_production_raises() -> None:
     """production 模式：解析失败抛 IncrementalContractResolutionError。"""
-    from runtime.incremental_contract import IncrementalContractResolutionError as E
+    from factor_engine.runtime.incremental_contract import IncrementalContractResolutionError as E
 
     with pytest.raises(E):
         resolve_incremental_contract("__r44_unknown_op__", production=True)

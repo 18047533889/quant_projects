@@ -7,12 +7,12 @@ import pytest
 pd = pytest.importorskip("pandas")
 pytest.importorskip("polars")
 
-from api import rank, ts_mean, ts_var, zscore
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from cleaned_operators import load_all
-from runtime.engine import FactorEngine
+from factor_engine.api import rank, ts_mean, ts_var, zscore
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.cleaned_operators import load_all
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 
@@ -42,7 +42,7 @@ def test_ts_var_polars_matches_pandas(panel_source):
 
 def test_ts_std_polars_matches_pandas(panel_source):
     load_all()
-    from api.cleaned_ops import make_cleaned_call_factory
+    from factor_engine.api.cleaned_ops import make_cleaned_call_factory
 
     ts_std = make_cleaned_call_factory("ts_std")
     expr = ts_std(col("close"), 3)
@@ -59,7 +59,7 @@ def test_ts_std_polars_matches_pandas(panel_source):
 
 def test_ts_corr_polars_matches_pandas(panel_source):
     load_all()
-    from api.cleaned_ops import make_cleaned_call_factory
+    from factor_engine.api.cleaned_ops import make_cleaned_call_factory
 
     ts_corr = make_cleaned_call_factory("ts_corr")
     expr = ts_corr(col("close"), col("close"), 3)
@@ -76,7 +76,7 @@ def test_ts_corr_polars_matches_pandas(panel_source):
 
 def test_rolling_beta_polars_backend_registered():
     load_all()
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     assert "polars" in OperatorRegistry.backends_for("rolling_beta")
     assert "polars" in OperatorRegistry.backends_for("RSI_WILDER")
@@ -85,7 +85,7 @@ def test_rolling_beta_polars_backend_registered():
 
 def test_if_else_polars_matches_pandas(panel_source):
     load_all()
-    from api.cleaned_ops import make_cleaned_call_factory
+    from factor_engine.api.cleaned_ops import make_cleaned_call_factory
 
     if_else = make_cleaned_call_factory("if_else")
     expr = if_else(rank(col("close")), col("close"), col("close") * 0.5)

@@ -15,15 +15,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.downside_risk as _dr
-import cleaned_operators.state_episode_excursion as _see
-import cleaned_operators.return_decomp as _rd
-import cleaned_operators.hankel as _hk
-import cleaned_operators.vector_path as _vp
-import cleaned_operators.memory_ext as _me
-import cleaned_operators.cross_section_local as _csl
+import factor_engine.cleaned_operators.downside_risk as _dr
+import factor_engine.cleaned_operators.state_episode_excursion as _see
+import factor_engine.cleaned_operators.return_decomp as _rd
+import factor_engine.cleaned_operators.hankel as _hk
+import factor_engine.cleaned_operators.vector_path as _vp
+import factor_engine.cleaned_operators.memory_ext as _me
+import factor_engine.cleaned_operators.cross_section_local as _csl
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 # Re-import modules is enough to register the WS-J operators; load_all() adds
 # the full audit + fiscal families that a concurrent session may be mid-edit on.

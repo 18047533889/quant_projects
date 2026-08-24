@@ -1,0 +1,9 @@
+# 日期段 — QuantaAlpha backtest 同构（spec §0.5）
+# 由主配置 experiment_ashare_pv.yaml 的 split 替代亦可；本文件供引用：
+#   backtest_config_path: configs/alphaprobe/backtest_ashare.yaml
+
+dataset:
+  segments:
+    train: ["2016-01-01", "2021-12-31"]
+    valid: ["2022-01-01", "2023-12-31"]
+    test: ["2024-01-01", "2026-07-31"]

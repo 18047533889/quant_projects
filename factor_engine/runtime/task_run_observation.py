@@ -85,7 +85,7 @@ class TaskRunObservation:
 def estimate_output_bytes(result: Any) -> int:
     """真实输出字节（R38-P0-009：不用 contract.output_bytes 预测值）。"""
     try:
-        from runtime.resource_governor import estimate_object_bytes
+        from factor_engine.runtime.resource_governor import estimate_object_bytes
 
         return max(0, int(estimate_object_bytes(result)))
     except Exception:

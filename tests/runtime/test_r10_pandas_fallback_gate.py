@@ -25,19 +25,19 @@ import pytest
 
 pytest.importorskip("polars")
 
-from api.columns import col
-from api.factor import Factor
-from api import ts_mean
-from backend.factory import build_backend
-from runtime.engine import FactorEngine
-from runtime.production_policy import ProductionPolicyViolation
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.api import ts_mean
+from factor_engine.backend.factory import build_backend
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.runtime.production_policy import ProductionPolicyViolation
 from tests.helpers import InMemorySeriesSource
 
 
 @pytest.fixture(scope="module")
 def _loaded():
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
@@ -64,7 +64,7 @@ def _factor():
 
 def _ctx_with_fallback(production_fallback_policy: str = "error"):
     """Build an ExecutionContext carrying a recorded pandas fallback."""
-    from backend.context import ExecutionContext
+    from factor_engine.backend.context import ExecutionContext
 
     # data_source is required by the dataclass; a trivial stand-in is fine for
     # the gate (it only reads run_mode / runtime_stats / production_fallback_policy).
@@ -87,7 +87,7 @@ def _ctx_with_fallback(production_fallback_policy: str = "error"):
 def test_research_run_invokes_gate_no_raise(_loaded, source, monkeypatch):
     # ``run()`` imports the gate from runtime.production_policy at call time, so
     # patching the gate there proves the engine path actually invokes it.
-    import runtime.production_policy as pp
+    import factor_engine.runtime.production_policy as pp
 
     called: list[str] = []
     orig = pp.assert_no_production_pandas_fallbacks
@@ -106,14 +106,14 @@ def test_research_run_invokes_gate_no_raise(_loaded, source, monkeypatch):
 
 
 def test_gate_raises_on_production_fallback():
-    from runtime.production_policy import assert_no_production_pandas_fallbacks
+    from factor_engine.runtime.production_policy import assert_no_production_pandas_fallbacks
 
     with pytest.raises(ProductionPolicyViolation):
         assert_no_production_pandas_fallbacks(_ctx_with_fallback())
 
 
 def test_gate_allows_warn_policy():
-    from runtime.production_policy import assert_no_production_pandas_fallbacks
+    from factor_engine.runtime.production_policy import assert_no_production_pandas_fallbacks
 
     # warn policy: no raise, but the fallback is still surfaced on the ctx.
     assert_no_production_pandas_fallbacks(
@@ -122,8 +122,8 @@ def test_gate_allows_warn_policy():
 
 
 def test_gate_research_mode_ignores_fallback():
-    from backend.context import ExecutionContext
-    from runtime.production_policy import assert_no_production_pandas_fallbacks
+    from factor_engine.backend.context import ExecutionContext
+    from factor_engine.runtime.production_policy import assert_no_production_pandas_fallbacks
 
     class _Sink:
         pass

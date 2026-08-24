@@ -15,30 +15,30 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.advanced_information  # noqa: F401
-import cleaned_operators.complexity_ext  # noqa: F401
-import cleaned_operators.conditional_dependence  # noqa: F401
-import cleaned_operators.multifractal  # noqa: F401
-import cleaned_operators.multifractal_asym  # noqa: F401
-import cleaned_operators.nonlinear_dependence  # noqa: F401
-import cleaned_operators.spectral  # noqa: F401
-import cleaned_operators.spectral_ext  # noqa: F401
+import factor_engine.cleaned_operators.advanced_information  # noqa: F401
+import factor_engine.cleaned_operators.complexity_ext  # noqa: F401
+import factor_engine.cleaned_operators.conditional_dependence  # noqa: F401
+import factor_engine.cleaned_operators.multifractal  # noqa: F401
+import factor_engine.cleaned_operators.multifractal_asym  # noqa: F401
+import factor_engine.cleaned_operators.nonlinear_dependence  # noqa: F401
+import factor_engine.cleaned_operators.spectral  # noqa: F401
+import factor_engine.cleaned_operators.spectral_ext  # noqa: F401
 
-from cleaned_operators.advanced_information import (
+from factor_engine.cleaned_operators.advanced_information import (
     _te_from_transitions,
     _te_state_space_floor,
 )
-from cleaned_operators.conditional_dependence import (
+from factor_engine.cleaned_operators.conditional_dependence import (
     _break_ties_deterministic,
     _conditional_te_window,
 )
-from cleaned_operators.multifractal import (
+from factor_engine.cleaned_operators.multifractal import (
     _LAGS,
     _common_cohort,
     _hurst_generalized,
 )
-from cleaned_operators.nonlinear_dependence import _quantile_hist_mi, _value_bins
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.nonlinear_dependence import _quantile_hist_mi, _value_bins
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _frame(values: np.ndarray, start: str = "2024-01-01") -> pd.DataFrame:
@@ -177,7 +177,7 @@ def test_conditional_te_collapsed_conditioning_bin_nan(monkeypatch):
     # manufactured one and never a collapsed-bin NaN.
     cw_binary = np.array([0.0] * 200 + [1.0] * 100)
     monkeypatch.setattr(
-        "cleaned_operators.conditional_dependence._break_ties_deterministic",
+        "factor_engine.cleaned_operators.conditional_dependence._break_ties_deterministic",
         lambda v: np.asarray(v, dtype=float),
     )
     with_binary = _conditional_te_window(tw, sw, cw_binary, 3, 1, 50, 1.0)
@@ -334,7 +334,7 @@ def test_lz_suffix_drop_guard():
     # The effective_n accounting is explicit in the kernel signature.
     import inspect
 
-    from cleaned_operators.complexity_ext import _lz_complexity_series
+    from factor_engine.cleaned_operators.complexity_ext import _lz_complexity_series
 
     params = inspect.signature(_lz_complexity_series).parameters
     assert "min_contiguous_fraction" in params and "min_effective_n" in params
@@ -344,7 +344,7 @@ def test_lz_suffix_drop_guard():
 # #88 — forbidden-ordinal null N excludes tie embeddings
 # ---------------------------------------------------------------------------
 def test_forbidden_ordinal_null_excludes_tie_embeddings():
-    from cleaned_operators.complexity_ext import _forbidden_ordinal_ratio_series
+    from factor_engine.cleaned_operators.complexity_ext import _forbidden_ordinal_ratio_series
 
     rng = np.random.default_rng(13)
     # A series with some ties: tied embeddings are dropped from the observed
@@ -379,7 +379,7 @@ def test_multifractal_q_grid_rejects_large_q():
 
 
 def test_multifractal_sample_floor_grows_with_q():
-    from cleaned_operators.multifractal import _structure_function
+    from factor_engine.cleaned_operators.multifractal import _structure_function
 
     rng = np.random.default_rng(15)
     v = rng.normal(size=60)
@@ -398,7 +398,7 @@ def test_multifractal_sample_floor_grows_with_q():
 # #90 — multifractal quadratic fit needs >= 4 valid q points
 # ---------------------------------------------------------------------------
 def test_multifractal_curvature_needs_four_points():
-    from cleaned_operators.multifractal import _curvature_series
+    from factor_engine.cleaned_operators.multifractal import _curvature_series
 
     rng = np.random.default_rng(16)
     # A random walk has genuine scaling structure, so H(q) is well-defined and

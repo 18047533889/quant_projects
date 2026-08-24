@@ -9,10 +9,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from runtime.input_dq import InputDQError, assert_input_dq, evaluate_input_columns
-from storage.materializer import ParquetMaterializer
+from factor_engine.runtime.input_dq import InputDQError, assert_input_dq, evaluate_input_columns
+from factor_engine.storage.materializer import ParquetMaterializer
 from tests.helpers import InMemorySeriesSource
-from storage.datasource import DataSource
+from factor_engine.storage.datasource import DataSource
 
 
 def _panel(values: list[float]) -> pd.Series:
@@ -116,7 +116,7 @@ def test_materializer_writes_metadata_columns(tmp_path):
     assert "factor_version" in df.columns
     # R11 #6: factor_version = 语义身份 digest 前缀（不再直接等于 ast_hash）。
     # 只传 ast_hash（无 ir_node）时仍计算身份（含 frequency），版本是其 digest。
-    from runtime.factor_identity import compute_identity_from_materialize_ctx
+    from factor_engine.runtime.factor_identity import compute_identity_from_materialize_ctx
 
     expected = compute_identity_from_materialize_ctx(
         ir_node=None,

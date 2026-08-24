@@ -14,14 +14,14 @@ import os
 # Ensure the project root is in the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from backend.contracts import (
+from factor_engine.backend.contracts import (
     BackendFamily,
     BackendKind,
     Accelerator,
     PhysicalImplementationSpec,
     ExecutionKind,
 )
-from backend.operator_capability import BackendName
+from factor_engine.backend.operator_capability import BackendName
 
 
 def test_backend_family_enum():

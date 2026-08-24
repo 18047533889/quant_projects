@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 from . import intraday_feature_extension as base
-from runtime.session_calendar import SessionCalendar
+from factor_engine.runtime.session_calendar import SessionCalendar
 
 _TIMESTAMP_CONVENTIONS = frozenset({"bar_end", "bar_start"})
 _PROFILE_FEATURES = frozenset({

@@ -14,9 +14,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from backend.model_family_kernels import fit_garch_block, fit_pca_block
-from cleaned_operators.cross_section.pca_state import PCAState, pca_commonality
-from cleaned_operators.cross_section.panel_model import (
+from factor_engine.backend.model_family_kernels import fit_garch_block, fit_pca_block
+from factor_engine.cleaned_operators.cross_section.pca_state import PCAState, pca_commonality
+from factor_engine.cleaned_operators.cross_section.panel_model import (
     _pca_commonality,
     _pca_svd,
 )
@@ -62,7 +62,7 @@ def test_canonical_commonality_matches_shared_block():
 
 
 def test_pca_state_transform_resid_consistent_with_canonical():
-    from cleaned_operators.cross_section.panel_model import _pca_resid, _pca_transform
+    from factor_engine.cleaned_operators.cross_section.panel_model import _pca_resid, _pca_transform
 
     X = _window(seed=9, missing=True)
     state = PCAState.from_window(X, 3)
@@ -74,7 +74,7 @@ def test_pca_state_transform_resid_consistent_with_canonical():
 
 def test_garch_shared_block_matches_canonical_fit():
     """shared ``fit_garch_block`` 与 canonical ``ts_model.volatility._fit_garch`` 同 MLE。"""
-    from cleaned_operators.ts_model.volatility import _fit_garch
+    from factor_engine.cleaned_operators.ts_model.volatility import _fit_garch
 
     rng = np.random.default_rng(10)
     n = 400

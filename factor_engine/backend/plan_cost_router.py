@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 
 @dataclass(frozen=True)
@@ -54,7 +54,7 @@ class BoundNodeOccurrence:
     inputs: tuple[str, ...] = ()
 
     def cost_ctx(self, rows: int, instruments: int) -> Any:
-        from backend.operator_cost import CostContext
+        from factor_engine.backend.operator_cost import CostContext
 
         return CostContext(
             rows=rows,
@@ -85,7 +85,7 @@ def plan_occurrences(plan: PlanNode) -> tuple[BoundNodeOccurrence, ...]:
     ``ts_mean(close,5) + ts_mean(volume,20) + ts_mean(amount,60) + ts_mean(close,120)``
     产生 4 个独立 occurrence，各带自己的 window——cost model 不再丢重复节点和参数。
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     occurrences: list[BoundNodeOccurrence] = []
     # R31-013 fix：node_id 用**独立计数器**（不是 len(occurrences)）。meta op
@@ -165,7 +165,7 @@ def _runtime_family() -> dict[str, str]:
     # Phase 5 P1-2：服务器硬件 fingerprint——不同机器（16核32GB vs 64核512GB、
     # 本地NVMe vs COS远程）的最优 backend 不同，不能共享同一 measured baseline。
     try:
-        from runtime.resource_governor import (
+        from factor_engine.runtime.resource_governor import (
             effective_cpu_slots,
             effective_memory_limit_bytes,
             spill_disk_speed_class,
@@ -273,7 +273,7 @@ def source_refs_lowerable(plan: PlanNode) -> bool:
     SQL/Polars candidate。返回 True = 可 lower（不阻断 native）。
     """
     try:
-        from api.source_ref import decode_source_ref, looks_like_source_ref
+        from factor_engine.api.source_ref import decode_source_ref, looks_like_source_ref
     except Exception:
         return False
     seen = False
@@ -306,11 +306,11 @@ def _contains_source_ref(plan: PlanNode) -> bool:
     try:
         # 审计 #392：三态判定——looks_like_source_ref 只判前缀形态；
         # payload 损坏时 decode_source_ref_strict 抛 ValueError，不吞异常。
-        from api.source_ref import decode_source_ref_strict, looks_like_source_ref
+        from factor_engine.api.source_ref import decode_source_ref_strict, looks_like_source_ref
     except ImportError:
         # 另一个代理尚未落 api/source_ref.py 的新原语：回退到旧 decode_source_ref，
         # 损坏时仍 re-raise（与旧行为一致）。
-        from api.source_ref import decode_source_ref
+        from factor_engine.api.source_ref import decode_source_ref
 
         def walk(node: PlanNode) -> None:
             nonlocal found
@@ -405,7 +405,7 @@ def estimate_plan_rows(ctx: Any) -> int:
 
     # MB-P1-002: Try DataShapeEstimate first
     try:
-        from planner.data_shape import estimate_shape_from_context
+        from factor_engine.planner.data_shape import estimate_shape_from_context
         shape = estimate_shape_from_context(ctx)
         if shape.estimated_rows > 0:
             return shape.estimated_rows
@@ -473,7 +473,7 @@ def _polars_delegate_ops(ops: tuple[str, ...]) -> frozenset[str]:
     pandas-delegating UDF (gap coverage), never a native polars implementation."""
     if not ops:
         return frozenset()
-    from backend.polars_backend_kind import canonical_polars_is_delegate
+    from factor_engine.backend.polars_backend_kind import canonical_polars_is_delegate
 
     return frozenset(op for op in ops if canonical_polars_is_delegate(op))
 
@@ -498,7 +498,7 @@ def _cost(
     ``occ`` 提供 bound params（window/feature_dim/regressors），经 CostContext
     进 ``estimate_backend_cost``——window=5 与 window=120 不再估出同一成本。
     """
-    from backend.operator_cost import estimate_backend_cost
+    from factor_engine.backend.operator_cost import estimate_backend_cost
 
     if backend in {"polars_long", "polars_panel"}:
         key = "polars"
@@ -639,7 +639,7 @@ def estimate_plan_peak_memory(
       - 考虑转换重叠（source + target + scratch 同时存在）
       - 区分 sort/hash/window 临时内存
     """
-    from backend.operator_cost import get_operator_cost
+    from factor_engine.backend.operator_cost import get_operator_cost
 
     # MB-P1-004: Use shape if available for more accurate column count
     if shape is not None:
@@ -727,7 +727,7 @@ def _dag_aware_mixed_cost(
     MB-P0-009: Fixed - shared DAG 成本不重复计（memo 机制确保每个 node compute 只计一次）
     MB-P0-010: Fixed - shared node id 稳定映射（使用 object_id_to_stable_node_id）
     """
-    from backend.operator_capability import supports_pandas, supports_polars, supports_sql
+    from factor_engine.backend.operator_capability import supports_pandas, supports_polars, supports_sql
 
     nodes = {occ.node_id: occ for occ in occurrences}
     # MB-P0-008: DP[node_id][backend] -> (cost, backend) for parent transfer affinity
@@ -857,11 +857,11 @@ def _build_execution_certificate(
     datasource_identity so clickhouse_sql route is not silently mapped to duckdb.
     """
     try:
-        from runtime.production_execution_certificate import (
+        from factor_engine.runtime.production_execution_certificate import (
             ProductionExecutionCertificate,
             normalize_backend,
         )
-        from planner.plan_hash import structural_key
+        from factor_engine.planner.plan_hash import structural_key
 
         structural_hash = structural_key(plan)
         bound_ops = frozenset(ops)
@@ -1030,8 +1030,8 @@ def predict_ttdc(shape: Any, backend: str) -> TtdcEstimate:
 
 
 def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
-    from backend.operator_capability import supports_pandas, supports_polars, supports_sql
-    from backend.polars_long_production import is_polars_long_native_production_safe
+    from factor_engine.backend.operator_capability import supports_pandas, supports_polars, supports_sql
+    from factor_engine.backend.polars_long_production import is_polars_long_native_production_safe
 
     mode = str(getattr(ctx, "run_mode", "research") or "research").lower()
     production = mode == "production"
@@ -1119,7 +1119,7 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
             candidates["hybrid"] = mixed
 
     if not candidates:
-        from backend.operator_capability import UnsupportedOperatorBackendError
+        from factor_engine.backend.operator_capability import UnsupportedOperatorBackendError
         raise UnsupportedOperatorBackendError(
             "no eligible physical plan for canonicals: " + ", ".join(ops)
         )
@@ -1311,7 +1311,7 @@ def plan_native_subgraph_fraction(
     用途：一个 unsupported op **不**再整 root 失去 native candidate
     （R33_SINGLE_UNSUPPORTED_OP_FULL_PANDAS_FALLBACK_ZERO）。
     """
-    from backend.operator_capability import supports_pandas, supports_polars, supports_sql
+    from factor_engine.backend.operator_capability import supports_pandas, supports_polars, supports_sql
 
     mode = mode or str(getattr(ctx, "run_mode", "research") or "research").lower()
     # R21-P027：用传入的 backend，不再 fallback 到 data_source_kind。

@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from backend.sql_pushdown.duckdb_capabilities import CapabilityLevel
+from factor_engine.backend.sql_pushdown.duckdb_capabilities import CapabilityLevel
 
 
 @dataclass
@@ -78,7 +78,7 @@ def probe_clickhouse_capabilities(client=None) -> ClickhouseCapabilityReport:
 
 def downgrade_clickhouse_canonicals(report: ClickhouseCapabilityReport) -> frozenset[str]:
     """根据 ClickHouse 探测结果降级 production SQL canonical。"""
-    from backend.sql_tiers import CLICKHOUSE_SQL_PRODUCTION_SAFE
+    from factor_engine.backend.sql_tiers import CLICKHOUSE_SQL_PRODUCTION_SAFE
 
     downgrade: set[str] = set()
     if not report.is_supported("corr_window"):
@@ -111,8 +111,8 @@ def get_clickhouse_capability_report(*, refresh: bool = False) -> ClickhouseCapa
 
 def effective_clickhouse_production_safe(canon: str, *, refresh: bool = False) -> bool:
     """判断 canonical 在 ClickHouse 上是否仍为 production-safe（含运行时降级）。"""
-    from backend.sql_tiers import CLICKHOUSE_SQL_PRODUCTION_SAFE
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.sql_tiers import CLICKHOUSE_SQL_PRODUCTION_SAFE
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     if name not in CLICKHOUSE_SQL_PRODUCTION_SAFE:

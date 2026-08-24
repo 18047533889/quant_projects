@@ -8,9 +8,9 @@ from typing import Any
 import pandas as pd
 
 from logging_utils import get_logger
-from storage.factor_format import long_table_to_series
+from factor_engine.storage.factor_format import long_table_to_series
 
-logger = get_logger("storage.staging_loader")
+logger = get_logger("factor_engine.storage.staging_loader")
 
 _STAGING_DATASET = "factor_lake_staging"
 _VALUE_COLUMNS = ("value",)
@@ -18,7 +18,7 @@ _VALUE_COLUMNS = ("value",)
 
 def _ensure_data_access() -> None:
     """R21-130..133: import the installed ``data_access`` (no sys.path injection)."""
-    from storage.data_access_loader import ensure_data_access_importable
+    from factor_engine.storage.data_access_loader import ensure_data_access_importable
 
     ensure_data_access_importable()
 

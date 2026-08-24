@@ -13,8 +13,8 @@ from time import perf_counter_ns
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Protocol, Sequence, runtime_checkable
 
-from planner.logical_plan import PlanNode
-from planner.plan_hash import structural_key
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.plan_hash import structural_key
 
 
 class IRKind(str, Enum):
@@ -312,7 +312,7 @@ def invariant_source_dependencies_preserved(
     before: PlanNode, after: PlanNode, context: PassContext
 ) -> InvariantResult:
     del context
-    from planner.source_dependencies import build_source_dependency_manifest
+    from factor_engine.planner.source_dependencies import build_source_dependency_manifest
 
     before_dependencies = set(build_source_dependency_manifest(before))
     after_dependencies = set(build_source_dependency_manifest(after))

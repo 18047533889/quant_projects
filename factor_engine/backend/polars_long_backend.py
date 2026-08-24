@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 from .base import Backend
 from .context import ExecutionContext
@@ -83,7 +83,7 @@ def _record_long_stats(
     if fallback_exc_type:
         runtime["polars_long_fallback_exception_type"] = fallback_exc_type
     ctx.runtime_stats = runtime  # type: ignore[attr-defined]
-    from backend.runtime_events import append_runtime_event
+    from factor_engine.backend.runtime_events import append_runtime_event
 
     if used_long_path:
         append_runtime_event(
@@ -374,7 +374,7 @@ class PolarsLongBackend(Backend):
             runtime["shared_lazy_compile_failed_op"] = str(plan.op)
             runtime["shared_lazy_compile_error_type"] = type(exc).__name__
             ctx.runtime_stats = runtime  # type: ignore[attr-defined]
-            from backend.runtime_events import append_runtime_event
+            from factor_engine.backend.runtime_events import append_runtime_event
 
             append_runtime_event(
                 ctx,
@@ -467,7 +467,7 @@ class PolarsLongBackend(Backend):
             )
             root_ctx.runtime_stats = ctx.runtime_stats  # type: ignore[attr-defined]
             result = finalize_panel_result(result, ctx)
-            from runtime.production_policy import assert_no_production_pandas_fallbacks
+            from factor_engine.runtime.production_policy import assert_no_production_pandas_fallbacks
 
             assert_no_production_pandas_fallbacks(ctx, context="polars_long_execute")
             return result

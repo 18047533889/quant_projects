@@ -19,9 +19,9 @@ REPO = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, REPO)
 sys.path.insert(0, os.path.join(REPO, "factor_engine"))
 
-from planner.factor_source_plan import FactorSourcePlan
-from planner.factor_batch_plan import plan_from_factors
-from planner.field_request_coalescer import (
+from factor_engine.planner.factor_source_plan import FactorSourcePlan
+from factor_engine.planner.factor_batch_plan import plan_from_factors
+from factor_engine.planner.field_request_coalescer import (
     FieldRequest,
     FieldRequestCoalescer,
     RequestCompatibilityKey,

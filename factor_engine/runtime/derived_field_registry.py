@@ -80,9 +80,9 @@ def evaluate_derived_field(name: str, data_source: Any):
         raise RuntimeError(f"cyclic derived-field dependency detected: {chain}")
     _ACTIVE.names = active | {name}
     try:
-        from api.dsl_parser import parse_factor
-        from backend.pandas_backend import PandasBackend
-        from runtime.engine import FactorEngine
+        from factor_engine.api.dsl_parser import parse_factor
+        from factor_engine.backend.pandas_backend import PandasBackend
+        from factor_engine.runtime.engine import FactorEngine
 
         factor = parse_factor(
             definition.expression,

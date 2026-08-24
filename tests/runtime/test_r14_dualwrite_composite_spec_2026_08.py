@@ -16,9 +16,9 @@ import pandas as pd
 import pytest
 from unittest import mock
 
-from runtime.incremental_scheduler import DataEvent  # noqa: F401 (import sanity)
-from storage.exceptions import UnreconstructableDataSource
-from storage.sources.composite_source import CompositeDataSource
+from factor_engine.runtime.incremental_scheduler import DataEvent  # noqa: F401 (import sanity)
+from factor_engine.storage.exceptions import UnreconstructableDataSource
+from factor_engine.storage.sources.composite_source import CompositeDataSource
 
 
 def _ser():
@@ -34,8 +34,8 @@ def _ser():
 
 
 def test_r14_dual_write_uses_canonical_factor_version():
-    from runtime.reconcile.dual_write_service import append_clickhouse_to_summary
-    from storage.write_targets import ClickHouseWriteTarget
+    from factor_engine.runtime.reconcile.dual_write_service import append_clickhouse_to_summary
+    from factor_engine.storage.write_targets import ClickHouseWriteTarget
 
     summary = {"factor_id": "f", "rows_written": 1}
     with mock.patch.object(
@@ -62,8 +62,8 @@ def test_r14_dual_write_uses_canonical_factor_version():
 
 def test_r14_dual_write_falls_back_to_ast_hash():
     """orchestrator 未传 factor_version（缺省）→ 才回退 ast_hash 前缀。"""
-    from runtime.reconcile.dual_write_service import append_clickhouse_to_summary
-    from storage.write_targets import ClickHouseWriteTarget
+    from factor_engine.runtime.reconcile.dual_write_service import append_clickhouse_to_summary
+    from factor_engine.storage.write_targets import ClickHouseWriteTarget
 
     with mock.patch.object(
         ClickHouseWriteTarget,
@@ -143,7 +143,7 @@ def test_r14_composite_production_child_spec_none_raises():
 def test_r14_composite_all_serializable_passes(tmp_path):
     """全部 child 可序列化 → production 仍返回完整 canonical spec（含 production 标记）。"""
 
-    from storage.sources.datasource import DataSource
+    from factor_engine.storage.sources.datasource import DataSource
 
     class _SpecSource(DataSource):
         def execution_spec(self) -> dict:

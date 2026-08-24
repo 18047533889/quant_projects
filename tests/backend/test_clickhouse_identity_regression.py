@@ -21,9 +21,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from planner.logical_plan import PlanNode
-from backend.plan_cost_router import choose_plan_route, record_plan_route
-from runtime.production_execution_certificate import (
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.backend.plan_cost_router import choose_plan_route, record_plan_route
+from factor_engine.runtime.production_execution_certificate import (
     ProductionExecutionCertificate,
     normalize_backend,
 )
@@ -166,7 +166,7 @@ def test_duckdb_certificate_does_not_validate_clickhouse_event():
     assert duck_cert.validate(legacy_event) is True
 
     # Router-built certificates carry the datasource dialect through.
-    from backend.plan_cost_router import _build_execution_certificate
+    from factor_engine.backend.plan_cost_router import _build_execution_certificate
 
     ch_router_cert = _build_execution_certificate(
         _sql_plan(),

@@ -15,8 +15,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 from .fixture_factory import price_panel, return_panel, two_return_panels
 

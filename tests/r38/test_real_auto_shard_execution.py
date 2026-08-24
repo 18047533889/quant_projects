@@ -16,13 +16,13 @@ import pandas as pd
 import pytest
 
 from tests.helpers import InMemorySeriesSource
-from api import col, ts_mean, cs_rank
-from backend.context import ExecutionContext
-from backend.pandas_backend import PandasBackend
-from runtime.auto_shard_planner import AutoShardPlanner
-from runtime.resource_shape import ResourceShapeKey
-from runtime.shard_execution_plan import SHARD_ASSET, SHARD_TIME
-from runtime.shard_executor import ShardExecutor
+from factor_engine.api import col, ts_mean, cs_rank
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime.auto_shard_planner import AutoShardPlanner
+from factor_engine.runtime.resource_shape import ResourceShapeKey
+from factor_engine.runtime.shard_execution_plan import SHARD_ASSET, SHARD_TIME
+from factor_engine.runtime.shard_executor import ShardExecutor
 
 
 def _make_series(dates: list[str], assets: list[str]) -> pd.Series:
@@ -37,7 +37,7 @@ def _make_series(dates: list[str], assets: list[str]) -> pd.Series:
 
 
 def _task(task_id: str, op: str, *, peak_bytes: int, dim: str, time_range, instruments):
-    from runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
     contract = TaskResourceContract(
         predicted_elapsed_ms=1.0,
@@ -98,10 +98,10 @@ def test_asset_shard_parity_elementwise():
     dates = pd.bdate_range("2024-01-01", "2024-06-30").strftime("%Y-%m-%d").tolist()
     assets = [f"A{i:03d}" for i in range(60)]
     src = InMemorySeriesSource(data={"close": _make_series(dates, assets)})
-    engine = __import__("runtime.engine", fromlist=["FactorEngine"]).FactorEngine(
+    engine = __import__("factor_engine.runtime.engine", fromlist=["FactorEngine"]).FactorEngine(
         backend=PandasBackend(), data_source=src
     )
-    f = __import__("api.factor", fromlist=["Factor"]).Factor(
+    f = __import__("factor_engine.api.factor", fromlist=["Factor"]).Factor(
         name="a", expr=ts_mean(col("close"), 3)
     )
     full = _execute_full(engine, f)
@@ -123,11 +123,11 @@ def test_time_shard_rolling_overlap_parity():
     dates = pd.bdate_range("2023-10-01", "2024-06-30").strftime("%Y-%m-%d").tolist()
     assets = [f"A{i:03d}" for i in range(40)]
     src = InMemorySeriesSource(data={"close": _make_series(dates, assets)})
-    engine = __import__("runtime.engine", fromlist=["FactorEngine"]).FactorEngine(
+    engine = __import__("factor_engine.runtime.engine", fromlist=["FactorEngine"]).FactorEngine(
         backend=PandasBackend(), data_source=src
     )
     # window=20 的 rolling mean —— time shard 必须带 warmup overlap 才与 full 一致。
-    f = __import__("api.factor", fromlist=["Factor"]).Factor(
+    f = __import__("factor_engine.api.factor", fromlist=["Factor"]).Factor(
         name="b", expr=ts_mean(col("close"), 20)
     )
     full = _execute_full(engine, f)
@@ -150,10 +150,10 @@ def test_cross_section_asset_shard_rejected():
     dates = pd.bdate_range("2024-01-01", "2024-04-30").strftime("%Y-%m-%d").tolist()
     assets = [f"A{i:03d}" for i in range(30)]
     src = InMemorySeriesSource(data={"close": _make_series(dates, assets)})
-    engine = __import__("runtime.engine", fromlist=["FactorEngine"]).FactorEngine(
+    engine = __import__("factor_engine.runtime.engine", fromlist=["FactorEngine"]).FactorEngine(
         backend=PandasBackend(), data_source=src
     )
-    f = __import__("api.factor", fromlist=["Factor"]).Factor(
+    f = __import__("factor_engine.api.factor", fromlist=["Factor"]).Factor(
         name="cs", expr=cs_rank(col("close"))
     )
     task = _task("root:cs", "cs_rank", peak_bytes=20 * 1024**2, dim="asset",
@@ -183,10 +183,10 @@ def test_cross_section_time_shard_parity():
     dates = pd.bdate_range("2024-01-01", "2024-04-30").strftime("%Y-%m-%d").tolist()
     assets = [f"A{i:03d}" for i in range(30)]
     src = InMemorySeriesSource(data={"close": _make_series(dates, assets)})
-    engine = __import__("runtime.engine", fromlist=["FactorEngine"]).FactorEngine(
+    engine = __import__("factor_engine.runtime.engine", fromlist=["FactorEngine"]).FactorEngine(
         backend=PandasBackend(), data_source=src
     )
-    f = __import__("api.factor", fromlist=["Factor"]).Factor(
+    f = __import__("factor_engine.api.factor", fromlist=["Factor"]).Factor(
         name="cs", expr=cs_rank(col("close"))
     )
     full = _execute_full(engine, f)
@@ -206,15 +206,15 @@ def test_cross_section_time_shard_parity():
 
 
 def test_shard_spool_reload_roundtrip():
-    from runtime.shard_executor import SPOOL_THRESHOLD_BYTES, SpooledShard
+    from factor_engine.runtime.shard_executor import SPOOL_THRESHOLD_BYTES, SpooledShard
 
     dates = pd.bdate_range("2024-01-01", "2024-03-31").strftime("%Y-%m-%d").tolist()
     assets = [f"A{i:03d}" for i in range(50)]
     src = InMemorySeriesSource(data={"close": _make_series(dates, assets)})
-    engine = __import__("runtime.engine", fromlist=["FactorEngine"]).FactorEngine(
+    engine = __import__("factor_engine.runtime.engine", fromlist=["FactorEngine"]).FactorEngine(
         backend=PandasBackend(), data_source=src
     )
-    f = __import__("api.factor", fromlist=["Factor"]).Factor(
+    f = __import__("factor_engine.api.factor", fromlist=["Factor"]).Factor(
         name="a", expr=ts_mean(col("close"), 5)
     )
     full = _execute_full(engine, f)
@@ -232,7 +232,7 @@ def test_shard_spool_reload_roundtrip():
 
 
 def test_shape_signature_changes_with_shard_count():
-    from runtime.shard_execution_plan import shape_signature
+    from factor_engine.runtime.shard_execution_plan import shape_signature
 
     s2 = shape_signature(task_id="t", dimension="time", shard_count=2, per_shard_peak_bytes=100)
     s4 = shape_signature(task_id="t", dimension="time", shard_count=4, per_shard_peak_bytes=50)

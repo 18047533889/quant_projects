@@ -4,9 +4,9 @@ import pandas as pd
 
 
 def test_logical_source_wrapper_preserves_native_series_index_order() -> None:
-    from backend.context import ExecutionContext
-    from backend.pandas_backend import PandasBackend
-    from planner.logical_plan import PlanNode
+    from factor_engine.backend.context import ExecutionContext
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.planner.logical_plan import PlanNode
     from tests.helpers import InMemorySeriesSource
 
     idx = pd.MultiIndex.from_tuples(

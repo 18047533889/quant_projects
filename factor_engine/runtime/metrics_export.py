@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from storage.catalog import FactorCatalog
+from factor_engine.storage.catalog import FactorCatalog
 
 
 def _iso_to_unix_nano(value: str | None) -> str:
@@ -216,7 +216,7 @@ def to_otlp_json(summary: dict[str, Any]) -> dict[str, Any]:
             {
                 "resource": {
                     "attributes": [
-                        {"key": "service.name", "value": {"stringValue": "factor_engine"}},
+                        {"key": "factor_engine.service.name", "value": {"stringValue": "factor_engine"}},
                     ]
                 },
                 "scopeMetrics": [{"metrics": metric_items}],
@@ -316,7 +316,7 @@ def push_otlp_grpc(
             pass
         exporter = OTLPMetricExporter(endpoint=host, insecure=True)
         reader = PeriodicExportingMetricReader(exporter, export_interval_millis=1000)
-        provider = MeterProvider(resource=Resource.create({"service.name": "factor_engine"}), metric_readers=[reader])
+        provider = MeterProvider(resource=Resource.create({"factor_engine.service.name": "factor_engine"}), metric_readers=[reader])
         meter = provider.get_meter("factor_engine")
         metrics = summary.get("metrics") or {}
         for key, value in metrics.items():

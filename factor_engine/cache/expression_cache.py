@@ -9,18 +9,18 @@ import threading
 from collections import OrderedDict
 from typing import Any
 
-from cache.layers import CacheHitStats, CacheLayer
+from factor_engine.cache.layers import CacheHitStats, CacheLayer
 
 
 def _governor():
     """惰性导入，避免 cache → runtime → storage → cache 循环导入。"""
-    from runtime.resource_governor import global_memory_governor
+    from factor_engine.runtime.resource_governor import global_memory_governor
 
     return global_memory_governor()
 
 
 def _estimate(value: Any) -> int:
-    from runtime.resource_governor import estimate_object_bytes
+    from factor_engine.runtime.resource_governor import estimate_object_bytes
 
     return estimate_object_bytes(value)
 

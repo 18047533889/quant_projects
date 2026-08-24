@@ -130,7 +130,7 @@ def _mem_source(close: pd.Series):
     The panel is SWAPPABLE (``set_panel``) so one FactorEngine instance can be
     reused across runs with different synthetic panels.
     """
-    from storage.sources.datasource import DataSource, TemporalContract
+    from factor_engine.storage.sources.datasource import DataSource, TemporalContract
 
     class MemSource(DataSource):
         def __init__(self, series):
@@ -155,9 +155,9 @@ def _mem_source(close: pd.Series):
 
 
 def _factor():
-    from api import ts_mean
-    from api.columns import col
-    from api.factor import Factor
+    from factor_engine.api import ts_mean
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
 
     return Factor(
         name="ts_mean_close_5",
@@ -175,11 +175,11 @@ def _fe_run_factor():
     bootstrap); reusing one engine with a swappable panel makes every
     subsequent run <0.5s.  Returns ``run(close) -> MultiIndex Series``.
     """
-    mod, err = _import_optional("runtime.engine")
+    mod, err = _import_optional("factor_engine.runtime.engine")
     if err:
         pytest.skip(f"factor_engine not importable here: {err}")
-    from backend.factory import build_backend
-    from runtime.engine import FactorEngine
+    from factor_engine.backend.factory import build_backend
+    from factor_engine.runtime.engine import FactorEngine
 
     source = _mem_source(_make_panel(seed=1234))
     engine = FactorEngine(

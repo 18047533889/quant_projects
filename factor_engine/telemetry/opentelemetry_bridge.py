@@ -44,7 +44,7 @@ class OpenTelemetryBridge:
             )
 
         # Create resource
-        resource = Resource.create({"service.name": service_name})
+        resource = Resource.create({"factor_engine.service.name": service_name})
 
         # Create tracer provider
         self._provider = OTelTracerProvider(resource=resource)

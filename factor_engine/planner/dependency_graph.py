@@ -20,8 +20,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Iterable, Sequence
 
 if TYPE_CHECKING:
-    from api.factor import Factor
-    from ir.analyzer import AnalysisResult
+    from factor_engine.api.factor import Factor
+    from factor_engine.ir.analyzer import AnalysisResult
 
 
 @dataclass(frozen=True)

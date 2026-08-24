@@ -10,8 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping
 
-from factor_recipes.compiler import CompiledRecipeBatch, PlanNode as RecipeNode, RecipeExpansionError
-from planner.logical_plan import PlanNode
+from factor_engine.factor_recipes.compiler import CompiledRecipeBatch, PlanNode as RecipeNode, RecipeExpansionError
+from factor_engine.planner.logical_plan import PlanNode
 
 _BINOPS = {
     "Add": "add",
@@ -123,7 +123,7 @@ def to_logical_plans(batch: CompiledRecipeBatch) -> LogicalRecipeBatch:
 
 def compile_recipe_plans(requests, *, allowed_statuses=("production",)) -> LogicalRecipeBatch:
     """Compile recipes once, preserve CSE, and return main logical plans."""
-    from factor_recipes.registry import FactorRecipeRegistry
+    from factor_engine.factor_recipes.registry import FactorRecipeRegistry
 
     return to_logical_plans(
         FactorRecipeRegistry.compile_batch(requests, allowed_statuses=allowed_statuses)

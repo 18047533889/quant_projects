@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from backend.numeric_semantics import semantics_for
+from factor_engine.backend.numeric_semantics import semantics_for
 
 if TYPE_CHECKING:
     import polars as pl

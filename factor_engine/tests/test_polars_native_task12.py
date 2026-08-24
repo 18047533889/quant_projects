@@ -21,7 +21,7 @@ def _load_module(name: str, relative_path: str):
 
 
 def test_technical_final_imports_with_authoritative_metadata_abi(monkeypatch) -> None:
-    import cleaned_operators.base_polars as base_polars
+    import factor_engine.cleaned_operators.base_polars as base_polars
 
     monkeypatch.setattr(base_polars, "register_operator", lambda **_kwargs: lambda cls: cls)
     module = _load_module(
@@ -34,7 +34,7 @@ def test_technical_final_imports_with_authoritative_metadata_abi(monkeypatch) ->
 
 
 def test_ts_leverage_effect_is_causal_and_matches_historical_definition(monkeypatch) -> None:
-    import cleaned_operators.base as base
+    import factor_engine.cleaned_operators.base as base
 
     monkeypatch.setattr(base, "register_operator", lambda **_kwargs: lambda cls: cls)
     module = _load_module(

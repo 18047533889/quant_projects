@@ -50,7 +50,7 @@ EXPECTED_INTRADAY_PROFILE_OPERATORS = [
 
 @pytest.fixture(scope="module")
 def registry():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     return OperatorRegistry
 
 
@@ -102,7 +102,7 @@ class TestIntradayProfileAvailability:
 
     def test_metadata_fields_exist_on_polars_base(self):
         """OperatorMetadata in base_polars must have available_at and same_session_usable fields."""
-        from cleaned_operators.base_polars import OperatorMetadata
+        from factor_engine.cleaned_operators.base_polars import OperatorMetadata
         # Should be able to construct with the new fields
         m = OperatorMetadata(
             name="test_op",

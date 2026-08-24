@@ -14,14 +14,14 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from runtime.buffer_store import (
+from factor_engine.runtime.buffer_store import (
     STATUS_MEMORY,
     STATUS_RECOMPUTE,
     STATUS_REFUSED,
     STATUS_SPILLED,
     GovernedBufferStore,
 )
-from runtime.spill_store import SpillStore
+from factor_engine.runtime.spill_store import SpillStore
 
 
 def test_put_refusal_not_silent():
@@ -74,7 +74,7 @@ def test_spill_checksum_failure_detected():
 def test_no_production_raw_cse_fallback():
     from types import SimpleNamespace
 
-    import runtime.batch_service as bs
+    import factor_engine.runtime.batch_service as bs
 
     # production ctx：只有 shared_result_cache（raw dict），无 buffer store →
     # _materialize_shared_subplan 必须 fail-closed（不写 raw）。
@@ -89,7 +89,7 @@ def test_no_production_raw_cse_fallback():
         supports_lazy_shared=False,
         execute=lambda sub, c: pd.Series([1.0]),
     )
-    from runtime.production_policy import is_production_mode
+    from factor_engine.runtime.production_policy import is_production_mode
 
     with pytest.raises(RuntimeError, match="fail-closed|governed"):
         bs._materialize_shared_subplan(backend, SimpleNamespace(op="ts_mean"), ctx, "sid1")
@@ -97,7 +97,7 @@ def test_no_production_raw_cse_fallback():
 
 
 def test_reconciliation_large_keyset_no_false_drift():
-    from runtime.buffer_store import _estimate_bytes
+    from factor_engine.runtime.buffer_store import _estimate_bytes
 
     store = GovernedBufferStore({}, budget_bytes=10**9)
     total = 0

@@ -27,7 +27,7 @@ import polars as pl
 import pyarrow as pa
 import pytest
 
-from runtime.multibackend.batch_transfer_optimizer import (
+from factor_engine.runtime.multibackend.batch_transfer_optimizer import (
     BatchTransferOptimizer,
     SemanticMismatchError,
     SemanticSnapshot,
@@ -144,7 +144,7 @@ class TestUnknownTargetFailsClosed:
             ex.execute(TransferTransform.ARROW_TO_POLARS, "not-a-table")
 
     def test_typed_error_is_factor_engine_error(self):
-        from runtime.exceptions import FactorEngineError
+        from factor_engine.runtime.exceptions import FactorEngineError
 
         assert issubclass(TypedTransferError, FactorEngineError)
 

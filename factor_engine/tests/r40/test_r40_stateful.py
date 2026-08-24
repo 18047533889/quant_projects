@@ -7,11 +7,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.math_certificate import (
+from factor_engine.cleaned_operators.math_certificate import (
     CHECKPOINT_CHUNK_INVARIANCE_FAILURE,
     check_chunk_invariance_all_segmented_canonicals,
 )
-from runtime.stateful_incremental import (
+from factor_engine.runtime.stateful_incremental import (
     AxisIdentityCertificate,
     BoundaryProbeResult,
     SegmentedFallbackReason,
@@ -103,7 +103,7 @@ def test_checkpoint_identity_differs_across_market_contexts() -> None:
 
 def test_segmented_path_hard_fails_on_corruption() -> None:
     """#249: corruption 类在 production 下 hard fail（StatefulSegmentedCorruptionError）。"""
-    from runtime.stateful_incremental import _CORRUPTION_REASONS
+    from factor_engine.runtime.stateful_incremental import _CORRUPTION_REASONS
 
     assert SegmentedFallbackReason.CHECKPOINT_CORRUPTION in _CORRUPTION_REASONS
     assert SegmentedFallbackReason.STATE_CORRUPTION in _CORRUPTION_REASONS

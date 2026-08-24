@@ -5,14 +5,14 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from storage.factor_format import (
+from factor_engine.storage.factor_format import (
     long_table_to_series,
     pivot_long_to_wide,
     pivot_multi_factor_long_to_wide,
     series_to_long_table,
     unpivot_wide_to_long,
 )
-from storage.result_store import PandasResultStore
+from factor_engine.storage.result_store import PandasResultStore
 from tests.storage.test_materializer import _setup_lake
 
 pd = pytest.importorskip("pandas")
@@ -68,7 +68,7 @@ def test_result_store_load_factor_wide(tmp_path):
         ["A", "B"],
         [1.0, 2.0, 3.0, 4.0],
     )
-    from storage.catalog import FactorCatalog
+    from factor_engine.storage.catalog import FactorCatalog
 
     store = PandasResultStore(tmp_path, FactorCatalog(tmp_path / "_catalog.sqlite"))
     wide = store.load_factor_wide("f1")
@@ -83,7 +83,7 @@ def test_result_store_load_factor_wide(tmp_path):
 def test_result_store_to_wide_multi_factor(tmp_path):
     _setup_lake(tmp_path, "f1", ["2024-01-15"], ["A"], [1.0], ast_hash="h1")
     _setup_lake(tmp_path, "f2", ["2024-01-15"], ["A"], [2.0], ast_hash="h2")
-    from storage.catalog import FactorCatalog
+    from factor_engine.storage.catalog import FactorCatalog
 
     store = PandasResultStore(tmp_path, FactorCatalog(tmp_path / "_catalog.sqlite"))
     wide = store.to_wide(["f1", "f2"])

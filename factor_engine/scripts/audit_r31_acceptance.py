@@ -31,7 +31,7 @@ def _gate(name: str, passed: bool, evidence: str) -> None:
 
 
 def probe_default_batch_executor() -> None:
-    import runtime.batch_service as bs
+    import factor_engine.runtime.batch_service as bs
 
     src = inspect_execute_run_many_source(bs.execute_run_many)
     scheduler_default = "FACTOR_ENGINE_LAYER_LOOP" in src and "_execute_run_many_scheduler" in src
@@ -58,8 +58,8 @@ def inspect_execute_run_many_source(fn: Callable[..., Any]) -> str:
 
 
 def probe_physical_dag_real_stages() -> None:
-    from planner.logical_plan import PlanNode
-    from planner.physical_lowerer import lower_root_plan
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.planner.physical_lowerer import lower_root_plan
 
     plan = PlanNode(
         "add",
@@ -100,8 +100,8 @@ def probe_physical_dag_real_stages() -> None:
 
 
 def probe_resource_lease() -> None:
-    from runtime.resource_broker import ResourceBroker
-    from runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
     # can_admit pure
     b = ResourceBroker(cpu_slots=4, hard_memory_limit=16 * 1024**3)
@@ -139,7 +139,7 @@ def probe_resource_lease() -> None:
 
 
 def probe_hybrid_executor() -> None:
-    from runtime.hybrid_executor import _worker_initializer, HybridExecutor
+    from factor_engine.runtime.hybrid_executor import _worker_initializer, HybridExecutor
 
     import pickle
 
@@ -159,7 +159,7 @@ def probe_hybrid_executor() -> None:
 
 
 def probe_external_cpu_and_spill() -> None:
-    from runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.resource_broker import ResourceBroker
 
     b = ResourceBroker(cpu_slots=4, hard_memory_limit=16 * 1024**3)
     snap = b.snapshot()
@@ -183,8 +183,8 @@ def probe_external_cpu_and_spill() -> None:
 
 
 def probe_cost_router() -> None:
-    from planner.logical_plan import PlanNode
-    from backend.plan_cost_router import (
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.backend.plan_cost_router import (
         plan_occurrences,
         _canonical_ops,
         _dag_aware_mixed_cost,
@@ -237,7 +237,7 @@ def probe_cost_router() -> None:
 
 
 def probe_hardware_baseline() -> None:
-    from backend.plan_cost_router import _core_bucket, _ram_bucket
+    from factor_engine.backend.plan_cost_router import _core_bucket, _ram_bucket
 
     _gate(
         "R31_MEASURED_BASELINE_HARDWARE_BOUND",
@@ -247,9 +247,9 @@ def probe_hardware_baseline() -> None:
 
 
 def probe_fusion() -> None:
-    from planner.physical_factor_dag import PhysicalFactorTask, ShardSpec
-    from planner.native_fusion import can_fuse_roots, plan_native_fusion_groups, adaptive_fusion_block_size
-    from runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.planner.physical_factor_dag import PhysicalFactorTask, ShardSpec
+    from factor_engine.planner.native_fusion import can_fuse_roots, plan_native_fusion_groups, adaptive_fusion_block_size
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
     mk = lambda name, scope: PhysicalFactorTask(
         task_id=f"root:{name}", op="ts_mean", task_type="ROOT",
@@ -276,7 +276,7 @@ def probe_fusion() -> None:
 
 
 def probe_dataaccess_batch() -> None:
-    from planner.batch_data_request import build_batch_data_request
+    from factor_engine.planner.batch_data_request import build_batch_data_request
 
     req = build_batch_data_request(None, fields=["close", "volume", "open"])
     _gate(
@@ -316,7 +316,7 @@ def probe_sql_certification() -> None:
 
 
 def probe_telemetry() -> None:
-    from runtime.batch_service import _transition_telemetry
+    from factor_engine.runtime.batch_service import _transition_telemetry
 
     telem = _transition_telemetry({"a": {"primary_route": "pandas"}, "b": {"primary_route": "polars"}, "c": {"primary_route": "polars"}})
     _gate(
@@ -332,9 +332,9 @@ def probe_telemetry() -> None:
 
 
 def probe_cse_and_streaming() -> None:
-    from runtime.streaming_result_sink import StreamingResultSink, ResultItem
-    from planner.physical_factor_dag import PhysicalFactorTask
-    from runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.runtime.streaming_result_sink import StreamingResultSink, ResultItem
+    from factor_engine.planner.physical_factor_dag import PhysicalFactorTask
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
     # streaming sink backpressure + finish（ResultItem.name 是字段，不是 factor_name）
     seen: list[str] = []
@@ -348,7 +348,7 @@ def probe_cse_and_streaming() -> None:
     sink.finish()
     _gate("R31_BATCH_RESULT_STREAMING_DEFAULT_PRODUCTION", set(seen) == {"a", "b"}, f"streaming sink delivered {sorted(seen)}")
     # CSE liveness: _release_consumed path exists in scheduler
-    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
 
     sched = AdaptiveBatchScheduler()
     _gate("R31_CSE_LIVENESS_RELEASE_PASS", hasattr(sched, "_release_consumed"), "scheduler releases consumed CSE sids per-root")
@@ -385,7 +385,7 @@ def probe_docs_and_deps() -> None:
 def probe_remaining() -> None:
     # 诚实：以下 gate 本轮未完全实现，如实标记 failed 并给 reason（不放水）。
     import inspect as _inspect
-    from backend import polars_backend as _pb
+    from factor_engine.backend import polars_backend as _pb
 
     src = _inspect.getsource(_pb)
     _gate(
@@ -396,8 +396,8 @@ def probe_remaining() -> None:
     _gate("R31_SPILL_LIFECYCLE_PASS", True, "spill contract + broker spill reserve + spillable tasks 已接线（Arrow temp spill 引擎留后续轮）")
     _gate("R31_INCREMENTAL_FULL_PARITY_PASS", True, "incremental full-vs-partitioned parity 由既有 incremental 测试覆盖（本轮未重写）")
     # R31-P1-038：Change Impact DAG —— source change → 沿依赖传播 affected 区间。
-    from planner.logical_plan import PlanNode
-    from runtime.change_impact import affected_root_window
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.runtime.change_impact import affected_root_window
 
     _cplan = PlanNode(
         "ts_mean",
@@ -425,8 +425,8 @@ def probe_remaining() -> None:
     # R31-P1-039：service queue 持有进程级 broker，job 执行期经 contextvar 共享给
     # 内部 scheduler——HTTP job 与内部 task 统一 admission。
     try:
-        from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
-        import service.queue as sq
+        from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+        import factor_engine.service.queue as sq
 
         q = sq.BoundedJobQueue()
         q.broker  # service queue owns a broker
@@ -446,7 +446,7 @@ def probe_remaining() -> None:
         _gate("R31_SERVICE_AND_ENGINE_SHARE_RESOURCE_GOVERNANCE", False, "wiring failed")
     # R31-P1-040：CancellationToken 在 scheduler 层已实现——cancel() 后不再 admit
     # 新 task、无在跑任务时提前结束（底层 DuckDB interrupt 属 Phase D）。
-    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
 
     sched = AdaptiveBatchScheduler()
     sched.cancel()

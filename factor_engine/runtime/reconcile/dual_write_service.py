@@ -23,7 +23,7 @@ import pandas as pd
 
 from logging_utils import get_logger
 
-logger = get_logger("runtime.dual_write_service")
+logger = get_logger("factor_engine.runtime.dual_write_service")
 
 
 # ---------------------------------------------------------------------------
@@ -170,8 +170,8 @@ def append_clickhouse_to_summary(
     使 CH 与 Parquet 一样把历史删除映射为 NaN；NEW-P1-61：``generation`` /
     ``transaction_id`` 透传到 summary，供 watermark commit 幂等重试。
     """
-    from storage.exceptions import DualWriteError
-    from storage.write_targets import ClickHouseWriteTarget
+    from factor_engine.storage.exceptions import DualWriteError
+    from factor_engine.storage.write_targets import ClickHouseWriteTarget
 
     effective_delta = delta or MaterializationDelta(
         upserts=result,
@@ -285,7 +285,7 @@ def dual_write_clickhouse(
     ``semantic_identity_digest`` / ``tombstones`` / ``generation`` /
     ``transaction_id``。
     """
-    from storage.exceptions import DualWriteError
+    from factor_engine.storage.exceptions import DualWriteError
 
     req = request
     if req is not None:

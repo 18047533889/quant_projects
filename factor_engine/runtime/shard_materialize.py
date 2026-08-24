@@ -18,7 +18,7 @@ def shard_merge_mode_for(contract: Any, chunks: list[Any]) -> Any:
     物化端（materialize_sharded 等批量落盘路径）据此决定：能直接落盘 → 只提交
     manifest；已证明排序 + 不重叠 → 单次 concat；否则 ordered merge。
     """
-    from runtime.shard_executor import choose_shard_merge_mode
+    from factor_engine.runtime.shard_executor import choose_shard_merge_mode
 
     return choose_shard_merge_mode(contract, chunks)
 

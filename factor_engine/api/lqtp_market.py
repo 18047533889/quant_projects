@@ -8,12 +8,12 @@ DEFAULT_INDEX = "000985.SH"
 
 
 def _factory(canonical: str) -> Callable[..., Any]:
-    from api.cleaned_ops import make_cleaned_call_factory
+    from factor_engine.api.cleaned_ops import make_cleaned_call_factory
     return make_cleaned_call_factory(canonical)
 
 
 def benchmark_return(index: str = DEFAULT_INDEX):
-    from api.source_ref import source_col
+    from factor_engine.api.source_ref import source_col
     return source_col(
         "BenchmarkIndexDailyBar",
         "Return",

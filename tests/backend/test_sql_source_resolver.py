@@ -2,9 +2,9 @@
 """resolve_pushdown_source 单元测试。"""
 from __future__ import annotations
 
-from backend.sql_pushdown.source_resolver import resolve_pushdown_source
-from storage.data_access_source import DataAccessSource
-from storage.long_table_source import LongTableDataSource
+from factor_engine.backend.sql_pushdown.source_resolver import resolve_pushdown_source
+from factor_engine.storage.data_access_source import DataAccessSource
+from factor_engine.storage.long_table_source import LongTableDataSource
 
 
 def test_long_table_resolves():
@@ -16,7 +16,7 @@ def test_long_table_resolves():
 
 
 def test_clickhouse_source_resolves():
-    from storage.clickhouse_source import ClickHouseSource
+    from factor_engine.storage.clickhouse_source import ClickHouseSource
 
     ch = ClickHouseSource(table="panel_daily")
     resolved = resolve_pushdown_source(ch)
@@ -25,7 +25,7 @@ def test_clickhouse_source_resolves():
 
 
 def test_composite_unwraps_anchor():
-    from storage.composite_source import CompositeDataSource
+    from factor_engine.storage.composite_source import CompositeDataSource
 
     anchor = DataAccessSource(dataset="anchor_ds")
     other = DataAccessSource(dataset="other_ds")

@@ -19,8 +19,8 @@ from enum import Enum
 from numbers import Real
 from typing import Any, Literal
 
-from backend.q_backend.q_capability import QBackendCapability
-from backend.q_backend.q_physical_implementation_registry import (
+from factor_engine.backend.q_backend.q_capability import QBackendCapability
+from factor_engine.backend.q_backend.q_physical_implementation_registry import (
     QPhysicalImplementationRegistry,
     get_installed_q_physical_implementation_registry,
     install_q_physical_implementation_registry,

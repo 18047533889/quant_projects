@@ -11,7 +11,7 @@ import hashlib
 
 import pytest
 
-from backend.operator_capability import (
+from factor_engine.backend.operator_capability import (
     CapabilityInfrastructureError,
     _safe_payload_hash,
     _sql_contract,

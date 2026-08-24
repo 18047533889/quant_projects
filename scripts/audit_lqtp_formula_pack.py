@@ -15,9 +15,9 @@ FE = Path(__file__).resolve().parents[1]
 if str(FE) not in sys.path:
     sys.path.insert(0, str(FE))
 
-from api.dsl_parser import parse_expr
-from api.source_ref import decode_source_ref
-from ir.analyzer import Analyzer
+from factor_engine.api.dsl_parser import parse_expr
+from factor_engine.api.source_ref import decode_source_ref
+from factor_engine.ir.analyzer import Analyzer
 
 
 def _factor_payload(payload: dict[str, Any]) -> tuple[str, str]:

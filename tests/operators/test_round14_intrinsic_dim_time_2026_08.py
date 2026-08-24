@@ -30,8 +30,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.intrinsic_dimension as im
-from cleaned_operators.registry import OperatorRegistry
+import factor_engine.cleaned_operators.intrinsic_dimension as im
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 CANONICAL = "ts_delay_intrinsic_dimension"
 

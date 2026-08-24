@@ -15,14 +15,14 @@ try:
 except ImportError:
     HAS_POLARS = False
 
-from cleaned_operators.same_clock_lag import (
+from factor_engine.cleaned_operators.same_clock_lag import (
     SameClockLagPandas,
     _same_clock_lag_pandas,
     _extract_clock_key,
 )
 
 if HAS_POLARS:
-    from cleaned_operators.same_clock_lag import (
+    from factor_engine.cleaned_operators.same_clock_lag import (
         SameClockLagPolars,
         _same_clock_lag_polars,
     )

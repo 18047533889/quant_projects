@@ -27,23 +27,23 @@ import pandas as pd
 import pytest
 
 def _ensure_technical_chain() -> None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if OperatorRegistry.lifecycle() == "frozen":
         return
     if OperatorRegistry.get("spectral_energy_ratio", "pandas_numpy") is not None:
         return
-    from cleaned_operators.technical import signal  # noqa: F401
-    from cleaned_operators.technical import polars_signal  # noqa: F401
-    from cleaned_operators import composite_fastpath  # noqa: F401
-    from cleaned_operators.technical import indicators_v2  # noqa: F401
+    from factor_engine.cleaned_operators.technical import signal  # noqa: F401
+    from factor_engine.cleaned_operators.technical import polars_signal  # noqa: F401
+    from factor_engine.cleaned_operators import composite_fastpath  # noqa: F401
+    from factor_engine.cleaned_operators.technical import indicators_v2  # noqa: F401
 
 @pytest.fixture(scope="module", autouse=True)
 def _bootstrap():
     _ensure_technical_chain()
 
 def _op(name: str):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get(name, "pandas_numpy") or OperatorRegistry.get(name)
     assert op is not None, f"{name} not registered"
@@ -320,7 +320,7 @@ def test_spectral_family_param_specs_and_governance():
     specs = _op("wavelet_detail_energy_ratio").metadata.param_specs
     assert set(specs) == {"window"}
 
-    from cleaned_operators.technical.indicators_v2 import _RECURSIVE_EWM
+    from factor_engine.cleaned_operators.technical.indicators_v2 import _RECURSIVE_EWM
 
     for name in ("spectral_energy_ratio", "spectral_trend_share", "wavelet_detail_energy_ratio"):
         assert name not in _RECURSIVE_EWM
@@ -330,11 +330,11 @@ def test_spectral_family_param_specs_and_governance():
 
 def test_spectral_family_promotion_membership():
     promoted = {"spectral_energy_ratio", "spectral_trend_share", "wavelet_detail_energy_ratio"}
-    from mining.direct_use import _RELATIVE_ALPHA_OPS
+    from factor_engine.mining.direct_use import _RELATIVE_ALPHA_OPS
 
     assert promoted <= _RELATIVE_ALPHA_OPS
 
-    from cleaned_operators.operator_surface import (
+    from factor_engine.cleaned_operators.operator_surface import (
         _DAILY_SPECTRAL_PACK_2026_08,
         classify_canonical,
         daily_factor_migrated,
@@ -346,7 +346,7 @@ def test_spectral_family_promotion_membership():
         assert classify_canonical(name) == "daily"
 
     # dimensionless alphas, never price-scale intermediates
-    from mining.direct_use import _PRICE_LEVEL_INTERMEDIATE_OPS
+    from factor_engine.mining.direct_use import _PRICE_LEVEL_INTERMEDIATE_OPS
 
     for name in promoted:
         assert name not in _PRICE_LEVEL_INTERMEDIATE_OPS

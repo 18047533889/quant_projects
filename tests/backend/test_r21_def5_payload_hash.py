@@ -16,14 +16,14 @@ import json
 
 import pytest
 
-from backend.operator_capability import (
+from factor_engine.backend.operator_capability import (
     CapabilityInfrastructureError,
     _json_contract_value,
     _safe_payload_hash,
     _sql_contract,
 )
-from cleaned_operators.base import ParamSpec
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.base import ParamSpec
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 # 20 offending canonicals（coordinator-verified exact list，R21-DEF5 ticket）
@@ -119,7 +119,7 @@ def test_missing_default_sentinel_serialized_deterministically() -> None:
             if isinstance(spec, ParamSpec) and spec.default is not None and not isinstance(
                 spec.default, (str, int, float, bool)
             ):
-                from cleaned_operators.base import MISSING
+                from factor_engine.cleaned_operators.base import MISSING
 
                 if spec.default is MISSING:
                     contract = _sql_contract(canon)

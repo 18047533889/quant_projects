@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.relation.ops import strict_relation_align
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.relation.ops import strict_relation_align
 
 ensure_cleaned_loaded()
 
@@ -80,7 +80,7 @@ def test_strict_relation_align_rejects_non_dataframe() -> None:
 
 def test_relation_category_share_shuffled_group_raises() -> None:
     # R24-007 mutation: random column shuffle of the secondary panel MUST raise.
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     value = pd.DataFrame(
         np.arange(1.0, 13.0).reshape(4, 3), index=pd.date_range("2024-01-01", periods=4),
@@ -98,7 +98,7 @@ def test_relation_category_share_shuffled_group_raises() -> None:
 
 
 def test_event_abnormal_return_positional_mismatch_raises() -> None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     rng = np.random.default_rng(3)
     idx = pd.date_range("2024-01-01", periods=8)
@@ -115,6 +115,6 @@ def test_event_abnormal_return_positional_mismatch_raises() -> None:
 
 @pytest.mark.parametrize("canon", sorted(MULTI_PANEL))
 def test_operator_registered(canon: str) -> None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     assert OperatorRegistry.get(canon) is not None, canon

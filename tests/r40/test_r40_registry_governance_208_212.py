@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator
-from cleaned_operators.registry import (
+from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator
+from factor_engine.cleaned_operators.registry import (
     BackendOverrideSpec,
     CanonicalOperatorManifest,
     OperatorRegistry,
@@ -124,7 +124,7 @@ class TestRegistryMutationToken:
 # ---------------------------------------------------------------------------
 class TestBackendOverrideSpec:
     def test_override_spec_records_contract_hash(self):
-        from cleaned_operators.registry import _contract_hash
+        from factor_engine.cleaned_operators.registry import _contract_hash
 
         reg = _TestRegistry
         op, names, src = _make_op("ovr_op", source="src_a")
@@ -145,7 +145,7 @@ class TestBackendOverrideSpec:
                      status="research", expected_old_source="src_a", replacement_reason="r40")
 
     def test_override_spec_wrong_contract_hash_rejected(self):
-        from cleaned_operators.registry import _contract_hash
+        from factor_engine.cleaned_operators.registry import _contract_hash
 
         reg = _TestRegistry
         op, _, _ = _make_op("ovr3_op", source="src_a")

@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Literal
 
-from backend.contracts import (
+from factor_engine.backend.contracts import (
     PhysicalImplementationID,
     PhysicalImplementationSpec,
 )

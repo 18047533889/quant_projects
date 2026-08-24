@@ -23,8 +23,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import OperatorRegistry, load_all
-from cleaned_operators.common._pivot_ledger import PEAK, confirmed_pivot_events
+from factor_engine.cleaned_operators import OperatorRegistry, load_all
+from factor_engine.cleaned_operators.common._pivot_ledger import PEAK, confirmed_pivot_events
 
 
 # ---------------------------------------------------------------------------

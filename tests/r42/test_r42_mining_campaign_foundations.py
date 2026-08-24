@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from api.dsl_parser import parse_factor
-from mining.campaign import (
+from factor_engine.api.dsl_parser import parse_factor
+from factor_engine.mining.campaign import (
     MiningCampaignSession,
     MiningCampaignSnapshot,
     NegativeCompileCache,

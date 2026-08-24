@@ -16,8 +16,8 @@ import pytest
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
-from service.app import STORE, create_app
-from service.jobstore import JobRecord, JobStatus
+from factor_engine.service.app import STORE, create_app
+from factor_engine.service.jobstore import JobRecord, JobStatus
 
 
 @pytest.fixture()
@@ -27,10 +27,10 @@ def client(monkeypatch, tmp_path):
         "FACTOR_ENGINE_SERVICE_API_KEY_MAPPING",
         json.dumps({"test-secret": {"identity": "alice", "roles": ["ADMIN"]}}),
     )
-    from service.security import reset_principal_registry
+    from factor_engine.service.security import reset_principal_registry
 
     reset_principal_registry()
-    from service import app as service_app
+    from factor_engine.service import app as service_app
 
     monkeypatch.setattr(service_app, "STORE", service_app.JobStore(tmp_path))
     client_ = TestClient(create_app())
@@ -146,7 +146,7 @@ class TestAuthorization:
 class TestErrorsAndReadiness:
     def test_error_never_leaks_secret(self, client, monkeypatch):
         # a job error containing a password-shaped token must be redacted
-        from service import app as service_app
+        from factor_engine.service import app as service_app
 
         rec = JobRecord(run_id="redacted-test", status=JobStatus.FAILED, error="password=hunter2")
         service_app.STORE.create(rec)
@@ -175,9 +175,9 @@ class TestQueue:
         import threading
         import time
 
-        from service.errors import ServiceError
-        from service.jobstore import JobStore
-        from service.queue import BoundedJobQueue
+        from factor_engine.service.errors import ServiceError
+        from factor_engine.service.jobstore import JobStore
+        from factor_engine.service.queue import BoundedJobQueue
 
         monkeypatch.setenv("FACTOR_ENGINE_SERVICE_PER_PRINCIPAL_JOBS", "1")
         store = JobStore()

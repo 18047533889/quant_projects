@@ -9,8 +9,8 @@ import pytest
 pd = pytest.importorskip("pandas")
 pytest.importorskip("polars")
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _panel(n: int = 30) -> pd.DataFrame:

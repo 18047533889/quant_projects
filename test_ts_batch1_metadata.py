@@ -164,7 +164,7 @@ class MockOperatorRegistry:
         return "building"
 
 # Inject mocks
-sys.modules['cleaned_operators.base'] = type('module', (), {
+sys.modules['factor_engine.cleaned_operators.base'] = type('module', (), {
     'Operator': MockOperator,
     'SeriesOperator': MockSeriesOperator,
     'ScalarOperator': MockScalarOperator,
@@ -182,18 +182,18 @@ sys.modules['cleaned_operators.base'] = type('module', (), {
 
 # Also mock cleaned_operators.registry and cleaned_operators.__init__
 sys.modules['cleaned_operators'] = type('module', (), {'__path__': []})()
-sys.modules['cleaned_operators.registry'] = type('module', (), {
+sys.modules['factor_engine.cleaned_operators.registry'] = type('module', (), {
     'OperatorRegistry': MockOperatorRegistry,
     'MISSING': MISSING,
 })()
 
 # Mock other dependencies that ts_batch1.py might need
-sys.modules['cleaned_operators.base_polars'] = type('module', (), {
+sys.modules['factor_engine.cleaned_operators.base_polars'] = type('module', (), {
     'panel_pandas_bridge': lambda *args, **kwargs: None,
 })()
 
 sys.modules['backend'] = type('module', (), {'__path__': []})()
-sys.modules['backend.contracts'] = type('module', (), {
+sys.modules['factor_engine.backend.contracts'] = type('module', (), {
     'ExecutionKind': type('ExecutionKind', (), {
         'COMPUTE': 'compute',
         'POLARS_NUMPY_KERNEL': 'polars_numpy_kernel',
@@ -202,7 +202,7 @@ sys.modules['backend.contracts'] = type('module', (), {
         '__init__': lambda self, **kwargs: None,
     }),
 })()
-sys.modules['backend.operator_errors'] = type('module', (), {
+sys.modules['factor_engine.backend.operator_errors'] = type('module', (), {
     'OperatorParameterError': type('OperatorParameterError', (Exception,), {}),
 })()
 

@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
@@ -77,7 +77,7 @@ def test_structural_zero_treats_empty_as_zero() -> None:
 
 
 def test_missing_policy_enum_strict() -> None:
-    from cleaned_operators.relation.ops import HolderRankMissingSemantic
+    from factor_engine.cleaned_operators.relation.ops import HolderRankMissingSemantic
 
     assert HolderRankMissingSemantic.permits_zero("structural_zero")
     assert HolderRankMissingSemantic.permits_zero("outside_top_k")

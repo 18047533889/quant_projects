@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from storage.datasource import DataSource
+from factor_engine.storage.datasource import DataSource
 
 
 class _MemorySource(DataSource):
@@ -33,8 +33,8 @@ class _MemorySource(DataSource):
 
 
 def test_generic_window_preserves_read_contracts_and_public_bounds():
-    import runtime  # noqa: F401 - installs narrowing contract
-    from storage.time_window import narrow_data_source_for_window
+    import factor_engine.runtime  # noqa: F401 - installs narrowing contract
+    from factor_engine.storage.time_window import narrow_data_source_for_window
 
     source = _MemorySource()
     narrowed = narrow_data_source_for_window(
@@ -55,9 +55,9 @@ def test_generic_window_preserves_read_contracts_and_public_bounds():
 
 
 def test_logical_source_remains_logical_after_windowing():
-    import runtime  # noqa: F401
-    from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
-    from storage.time_window import narrow_data_source_for_window
+    import factor_engine.runtime  # noqa: F401
+    from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+    from factor_engine.storage.time_window import narrow_data_source_for_window
 
     logical = LQTPLogicalDataSource(_MemorySource(), factor_freq="1d")
     logical._execution_id = "execution-1"

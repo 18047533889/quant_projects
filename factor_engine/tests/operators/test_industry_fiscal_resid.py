@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.fundamental.transforms_v2 import industry_fiscal_resid
+from factor_engine.cleaned_operators.fundamental.transforms_v2 import industry_fiscal_resid
 
 
 def _panel(values, periods, industries=None):

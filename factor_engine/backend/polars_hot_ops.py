@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from cleaned_operators.operator_policy import POLARS_PRODUCTION_SAFE
+from factor_engine.cleaned_operators.operator_policy import POLARS_PRODUCTION_SAFE
 
 # 向后兼容别名
 POLARS_TS_OPS: frozenset[str] = POLARS_PRODUCTION_SAFE

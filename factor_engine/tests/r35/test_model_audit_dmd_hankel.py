@@ -25,14 +25,14 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-import cleaned_operators.dmd as D  # noqa: E402
-import cleaned_operators.hankel as H  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+import factor_engine.cleaned_operators.dmd as D  # noqa: E402
+import factor_engine.cleaned_operators.hankel as H  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 
 @pytest.fixture(scope="module", autouse=True)
 def _registry_loaded():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
     yield
@@ -99,7 +99,7 @@ def test_m091_typed_dmd_variants_not_stamped():
 def test_m091_generic_dmd_still_registered_not_deleted():
     """M-091 must NOT delete the generic names (DSL compatibility) — they stay
     registered with both backends and research surface."""
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     for name in _GENERIC_DMD:
         backends = OperatorRegistry.backends_for(name)
@@ -208,7 +208,7 @@ def test_m094_ssa_residual_reconciler_flag():
 def test_m094_ssa_residual_lane_diagnostic_research():
     """M-094 reconciler closure: a self-fit structural residual must NOT sit in
     an alpha-certified lane."""
-    from cleaned_operators.model_lane import assign_model_lane
+    from factor_engine.cleaned_operators.model_lane import assign_model_lane
 
     lane = assign_model_lane("ts_ssa_reconstruction_residual")
     assert lane == "DIAGNOSTIC_RESEARCH", lane
@@ -225,7 +225,7 @@ def test_m095_prior_canonical_registered_both_backends():
 
 
 def test_m095_prior_surface_extended():
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     assert classify_canonical("ts_ssa_prior_reconstruction_error") == "extended"
 

@@ -18,7 +18,7 @@ import time
 
 import pytest
 
-from runtime.streaming_result_sink import StreamingResultSink, _PER_ITEM_JOIN_BUDGET_S
+from factor_engine.runtime.streaming_result_sink import StreamingResultSink, _PER_ITEM_JOIN_BUDGET_S
 
 
 class _Item:

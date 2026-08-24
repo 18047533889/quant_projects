@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from ir.types import OPERATOR_INPUT_TYPE_CONTRACTS
+from factor_engine.ir.types import OPERATOR_INPUT_TYPE_CONTRACTS
 
 
 @pytest.mark.parametrize("canon", [

@@ -21,10 +21,10 @@ import dataclasses
 import enum
 import inspect
 from dataclasses import dataclass
-from typing import Any, Literal, Sequence
+from typing import Any, Callable, Literal, Mapping, Sequence
 
 # Import unified enums from contracts (FE-P0-003)
-from backend.contracts import (
+from factor_engine.backend.contracts import (
     Accelerator,
     BackendFamily,
     BackendKind,
@@ -145,6 +145,10 @@ class BackendCapability:
         """Check if execution is truly native (not delegate).
 
         FE-BE-P0-002: Updated to use unified ExecutionKind enum members.
+        R21-IS-NATIVE-EXECUTION-SYNC: All native ExecutionKind members are
+        covered. New backends (Numba CPU kernel, ClickHouse SQL, Q/kdb) must
+        be listed here so that downstream routing can rely on a single
+        capability query instead of ad-hoc enum checks.
         """
         return self.execution_kind in {
             ExecutionKind.NATIVE_EXPR,
@@ -153,6 +157,9 @@ class BackendCapability:
             ExecutionKind.POLARS_NATIVE_EXPR,
             ExecutionKind.POLARS_NUMPY_KERNEL,
             ExecutionKind.DUCKDB_NATIVE_SQL,
+            ExecutionKind.NUMBA_CPU_KERNEL,
+            ExecutionKind.CLICKHOUSE_NATIVE_SQL,
+            ExecutionKind.Q_NATIVE,
         }
 
     # Legacy compatibility properties
@@ -169,6 +176,7 @@ class OperatorCapabilitySummary:
     polars: CapabilityStatus
     duckdb_sql: CapabilityStatus
     clickhouse_sql: CapabilityStatus
+    q_kdb: CapabilityStatus
     allow_in_production: bool
     parity_verified: bool
     polars_long_tier: str = "unsupported"
@@ -247,7 +255,7 @@ def _declared_physical_spec(
 def _default_production_surface(canonical: str, catalog: dict[str, Any]) -> bool:
     """Query DirectUse rather than treating registry presence as production."""
     try:
-        from mining.direct_use import PublicMiningDisposition, public_mining_disposition, resolve_direct_use
+        from factor_engine.mining.direct_use import PublicMiningDisposition, public_mining_disposition, resolve_direct_use
 
         contract = resolve_direct_use(canonical, catalog)
         return public_mining_disposition(contract.status) == PublicMiningDisposition.DIRECT_VISIBLE
@@ -258,7 +266,7 @@ def _default_production_surface(canonical: str, catalog: dict[str, Any]) -> bool
 def _default_policy_admission(canonical: str) -> bool:
     """Query the canonical spec/policy authority, failing closed on any error."""
     try:
-        from cleaned_operators.operator_spec import build_operator_spec
+        from factor_engine.cleaned_operators.operator_spec import build_operator_spec
 
         spec = build_operator_spec(canonical)
         return bool(spec is not None and spec.allow_in_production)
@@ -281,7 +289,7 @@ def enumerate_physical_inventory(
     visible inventory rows but are never admitted.
     """
     if registry is None:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         registry = OperatorRegistry
     surface_query = production_surface or _default_production_surface
@@ -406,25 +414,25 @@ class CapabilityQueryResult:
 
 
 def resolve_canonical(name: str) -> str:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     return OperatorRegistry.resolve_canonical(name)
 
 
 def polars_long_native(canonical: str) -> bool:
-    from backend.polars_long_policy import POLARS_LONG_NATIVE
+    from factor_engine.backend.polars_long_policy import POLARS_LONG_NATIVE
 
     return resolve_canonical(canonical) in POLARS_LONG_NATIVE
 
 
 def polars_long_tier(canonical: str) -> str:
-    from backend.polars_long_policy import infer_polars_long_tier
+    from factor_engine.backend.polars_long_policy import infer_polars_long_tier
 
     return infer_polars_long_tier(canonical)
 
 
 def polars_long_tier_status(canon: str) -> CapabilityStatus:
-    from backend.polars_long_production import polars_long_production_tier
+    from factor_engine.backend.polars_long_production import polars_long_production_tier
 
     tier = polars_long_production_tier(resolve_canonical(canon))
     if tier == "production_safe":
@@ -445,19 +453,19 @@ def polars_long_tier_status(canon: str) -> CapabilityStatus:
 
 
 def polars_expr_capable(canonical: str) -> bool:
-    from backend.polars_long_policy import POLARS_LONG_COMPATIBLE
+    from factor_engine.backend.polars_long_policy import POLARS_LONG_COMPATIBLE
 
     return resolve_canonical(canonical) in POLARS_LONG_COMPATIBLE
 
 
 def polars_long_capable(canonical: str) -> bool:
-    from backend.polars_long_policy import get_polars_long_capable
+    from factor_engine.backend.polars_long_policy import get_polars_long_capable
 
     return resolve_canonical(canonical) in get_polars_long_capable()
 
 
 def _sql_capable_canonicals() -> frozenset[str]:
-    from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
+    from factor_engine.backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
 
     return SQL_IMPLEMENTED_CANONICALS
 
@@ -516,7 +524,7 @@ def _emitter_source_hash() -> str:
     import inspect
 
     try:
-        from backend.sql_pushdown import emitter as _emitter_mod
+        from factor_engine.backend.sql_pushdown import emitter as _emitter_mod
 
         src = inspect.getsourcefile(_emitter_mod)
         if src:
@@ -536,7 +544,7 @@ def _safe_payload_hash(payload: Any) -> str:
     → :class:`CapabilityInfrastructureError`，绝不返回基于 ``repr()`` 的伪 identity。
     """
     try:
-        from backend.evidence_provenance import compute_payload_hash
+        from factor_engine.backend.evidence_provenance import compute_payload_hash
 
         return compute_payload_hash(payload)
     except CapabilityInfrastructureError:
@@ -571,7 +579,7 @@ def _json_contract_value(value: Any) -> Any:
     if isinstance(value, enum.Enum):
         return value.value
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
-        from cleaned_operators.base import MISSING, ParamSpec
+        from factor_engine.cleaned_operators.base import MISSING, ParamSpec
 
         if not isinstance(value, ParamSpec):
             raise CapabilityInfrastructureError(
@@ -607,7 +615,7 @@ def _sql_contract(canon: str) -> dict:
     hash/manifest 消费方拿到的是 deterministic、可直接 ``json.dumps`` 的
     contract，而不是 registry 内部对象图。未知对象类型仍然 fail-closed。
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     return _json_contract_value(
         dict(OperatorRegistry._catalog.get(canon, {}) or {})
@@ -622,7 +630,7 @@ def _sql_bound_param_names(canon: str) -> frozenset[str]:
     if isinstance(specs, dict):
         names.update(specs.keys())
     try:
-        from backend.production_signature import PRODUCTION_SIGNATURES
+        from factor_engine.backend.production_signature import PRODUCTION_SIGNATURES
 
         sig = PRODUCTION_SIGNATURES.get(canon)
         if sig is not None:
@@ -648,8 +656,8 @@ def _validate_bound_params(canon: str, bound_params: dict) -> None:
 
 def _build_bound_plan(canon: str, bound_params: dict | None):
     """用 ``minimal_plan(canon)`` 打底、把 bound_params 填入 attrs 构造 bound-call plan。"""
-    from planner.logical_plan import PlanNode
-    from backend.sql_pushdown.plan_fixtures import minimal_plan
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.backend.sql_pushdown.plan_fixtures import minimal_plan
 
     plan = minimal_plan(canon)
     if bound_params:
@@ -673,7 +681,7 @@ def _sql_emitter_ok(
     缓存 key 由 ``(canon, dialect, registry_version, emitter_hash, contract_hash,
     params_key)`` 组成，参数摘要独立缓存——同一 canonical 的不同参数组合结果分开。
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     registry_version = OperatorRegistry.version()
     emitter_hash = _emitter_source_hash()
@@ -698,7 +706,7 @@ def _sql_emitter_ok(
 
     ok = False
     try:
-        from backend.sql_pushdown.emitter import (
+        from factor_engine.backend.sql_pushdown.emitter import (
             SqlDialect,
             compile_plan_to_sql,
             plan_is_sql_capable,
@@ -740,19 +748,19 @@ def _polars_status(canon: str, *, production_mode: bool = True) -> CapabilitySta
     FE-P0-005: Defaults to production_mode=True (fail closed). Operators without
     explicit PhysicalImplementationSpec are classified as unsupported in production.
     """
-    from backend.primitive_evidence import (
+    from factor_engine.backend.primitive_evidence import (
         POLARS_EDGE_VERIFIED,
         POLARS_NO_FALLBACK_VERIFIED,
         POLARS_REFERENCE_PARITY_VERIFIED,
     )
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if "polars" not in OperatorRegistry.backends_for(canon):
         return "unsupported"
 
     # Delegates must never reach production_safe (they round-trip through pandas)
     # FE-P0-005: Pass production_mode flag to enforce explicit spec requirement
-    from backend.polars_backend_kind import canonical_polars_is_delegate, canonical_polars_kind, PolarsImplementationKind
+    from factor_engine.backend.polars_backend_kind import canonical_polars_is_delegate, canonical_polars_kind, PolarsImplementationKind
 
     polars_kind = canonical_polars_kind(canon, production_mode=production_mode)
     if production_mode and polars_kind == PolarsImplementationKind.UNSUPPORTED:
@@ -784,7 +792,7 @@ def _pandas_status(canon: str) -> CapabilityStatus:
     to primitive evidence; non-Daily factor operators are bound to the
     factor-operator evidence artifact through the certification overlay.
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if "pandas_numpy" not in OperatorRegistry.backends_for(canon):
         return "unsupported"
@@ -797,8 +805,8 @@ def _pandas_status(canon: str) -> CapabilityStatus:
             return "production_safe"
 
     try:
-        from backend.evidence_provenance import evidence_artifact_valid
-        from backend.primitive_evidence import PRIMITIVE_BACKEND_EXECUTION_CERTIFIED
+        from factor_engine.backend.evidence_provenance import evidence_artifact_valid
+        from factor_engine.backend.primitive_evidence import PRIMITIVE_BACKEND_EXECUTION_CERTIFIED
 
         if evidence_artifact_valid() and canon in PRIMITIVE_BACKEND_EXECUTION_CERTIFIED:
             return "production_safe"
@@ -811,7 +819,7 @@ def _pandas_status(canon: str) -> CapabilityStatus:
 
 
 def _sql_status(canon: str, *, dialect: BackendName) -> CapabilityStatus:
-    from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
+    from factor_engine.backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
 
     if canon not in SQL_IMPLEMENTED_CANONICALS:
         return "unsupported"
@@ -823,10 +831,10 @@ def _sql_status(canon: str, *, dialect: BackendName) -> CapabilityStatus:
     if not _sql_emitter_ok(canon, dialect=dialect):
         return "implemented"
     if dialect == "clickhouse_sql":
-        from backend.sql_pushdown.clickhouse_capabilities import (
+        from factor_engine.backend.sql_pushdown.clickhouse_capabilities import (
             effective_clickhouse_production_safe,
         )
-        from backend.sql_tiers import CLICKHOUSE_SQL_PARITY_VERIFIED
+        from factor_engine.backend.sql_tiers import CLICKHOUSE_SQL_PARITY_VERIFIED
 
         if effective_clickhouse_production_safe(canon):
             return "production_safe"
@@ -834,7 +842,7 @@ def _sql_status(canon: str, *, dialect: BackendName) -> CapabilityStatus:
             return "parity_verified"
         return "implemented"
 
-    from backend.sql_tiers import (
+    from factor_engine.backend.sql_tiers import (
         DUCKDB_SQL_PARITY_VERIFIED,
         effective_sql_production_safe,
     )
@@ -844,6 +852,30 @@ def _sql_status(canon: str, *, dialect: BackendName) -> CapabilityStatus:
     if canon in DUCKDB_SQL_PARITY_VERIFIED:
         return "parity_verified"
     return "implemented"
+
+
+def _q_status(canon: str) -> CapabilityStatus:
+    """Q/KDB status derived from the q physical-implementation evidence authority.
+
+    Mirrors ``backend.q_backend.q_capability.QBackendCapability`` admission
+    exactly: production_safe only for registry production-ready (fully
+    certified) operators; ``implemented`` for declared operators with a
+    lowering (research-ready). Everything else — including any failure to
+    reach the q authority — fails closed to ``unsupported``.
+    """
+    try:
+        from factor_engine.backend.q_backend.q_physical_implementation_registry import (
+            get_q_physical_implementation_registry,
+        )
+
+        registry = get_q_physical_implementation_registry()
+        if canon in registry.get_production_ready():
+            return "production_safe"
+        if registry.has_lowering(canon) and canon in registry.declared_targets():
+            return "implemented"
+    except Exception:
+        return "unsupported"
+    return "unsupported"
 
 
 def backend_status(
@@ -867,8 +899,9 @@ def backend_status(
     if backend in _SQL_BACKENDS:
         return _sql_status(canon, dialect=backend)
     if backend == "q_kdb":
-        # Q/KDB backend: fail-closed until certified
-        return "unsupported"
+        # R21-BACKENDNAME-Q-ALIGN: route through the q evidence authority
+        # (fail-closed). Previously hardcoded "unsupported".
+        return _q_status(canon)
     return "unsupported"
 
 
@@ -895,7 +928,7 @@ def check_call_capability(
             ``UnsupportedOperatorBackendError``（#363）。
         dialect: SQL 方言，``duckdb_sql`` 或 ``clickhouse_sql``。
     """
-    from backend.operator_cost import default_backend_speedup
+    from factor_engine.backend.operator_cost import default_backend_speedup
 
     canon = resolve_canonical(canonical)
     if canon == "if_else":
@@ -973,9 +1006,9 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
 
     FE-BE-P0-002: Returns unified BackendCapability with enum types.
     """
-    from backend.operator_cost import default_backend_speedup
-    from cleaned_operators.operator_policy import infer_operator_policy
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.operator_cost import default_backend_speedup
+    from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     canon = resolve_canonical(canonical)
     if canon == "if_else":
@@ -995,6 +1028,8 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
         status = _pandas_status(canon)
     elif backend == "polars":
         status = _polars_status(canon)
+    elif backend == "q_kdb":
+        status = _q_status(canon)
     else:
         status = _sql_status(canon, dialect=backend)
 
@@ -1019,6 +1054,8 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
             )
 
     notes = ""
+    if backend == "q_kdb" and status != "unsupported":
+        notes = "q/kdb physical backend; evidence authority: q_physical_implementation_registry"
     if backend == "clickhouse_sql" and status != "unsupported":
         notes = "dialect=clickhouse; verify per deployment"
     supports_streaming = bool(backend_meta.get("supports_streaming", False))
@@ -1069,6 +1106,9 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
         "polars_numpy_kernel": ExecutionKind.POLARS_NUMPY_KERNEL,
         "polars_pandas_delegate": ExecutionKind.POLARS_PANDAS_DELEGATE,
         "duckdb_native_sql": ExecutionKind.DUCKDB_NATIVE_SQL,
+        "clickhouse_native_sql": ExecutionKind.CLICKHOUSE_NATIVE_SQL,
+        "numba_cpu_kernel": ExecutionKind.NUMBA_CPU_KERNEL,
+        "q_native": ExecutionKind.Q_NATIVE,
     }
     exec_kind = execution_kind_map.get(execution_kind_str, ExecutionKind.UNSUPPORTED)
 
@@ -1099,8 +1139,8 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
 
 
 def summarize_operator(canonical: str) -> OperatorCapabilitySummary:
-    from cleaned_operators.operator_policy import POLARS_PARITY_VERIFIED
-    from cleaned_operators.operator_spec import build_operator_spec
+    from factor_engine.cleaned_operators.operator_policy import POLARS_PARITY_VERIFIED
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec
 
     canon = resolve_canonical(canonical)
     if canon == "if_else":
@@ -1112,6 +1152,7 @@ def summarize_operator(canonical: str) -> OperatorCapabilitySummary:
         polars=_polars_status(canon),
         duckdb_sql=_sql_status(canon, dialect="duckdb_sql"),
         clickhouse_sql=_sql_status(canon, dialect="clickhouse_sql"),
+        q_kdb=_q_status(canon),
         allow_in_production=bool(spec.allow_in_production) if spec is not None else False,
         parity_verified=canon in POLARS_PARITY_VERIFIED,
         polars_long_tier=spec.polars_long_tier if spec is not None else "unsupported",
@@ -1121,7 +1162,7 @@ def summarize_operator(canonical: str) -> OperatorCapabilitySummary:
 def build_capability_matrix(
     canonicals: Sequence[str] | None = None,
 ) -> list[OperatorCapabilitySummary]:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if canonicals is None:
         names = sorted(
@@ -1146,6 +1187,7 @@ def export_flat_capabilities(
             "polars",
             "duckdb_sql",
             "clickhouse_sql",
+            "q_kdb",
         ):
             rows.append(capability_for(summary.canonical, backend))
     return rows
@@ -1184,7 +1226,7 @@ def _backend_cost(
     row_count_estimate: int | None,
     requires_conversion: bool,
 ) -> float:
-    from backend.operator_cost import estimate_backend_cost
+    from factor_engine.backend.operator_cost import estimate_backend_cost
 
     return estimate_backend_cost(
         canonical,
@@ -1202,20 +1244,37 @@ def get_best_backend(
     row_count_estimate: int | None = None,
     prefer: str = "auto",
     allow_unverified_backend: bool = False,
+    registry: Any | None = None,
 ) -> tuple[object | None, str]:
     """Select the cheapest eligible operator backend.
 
     Production never silently falls back to an implementation that lacks
     current evidence.  SQL is normally selected at the plan/subtree layer, but
-    explicit ``prefer='sql'`` remains supported.
+    explicit ``prefer='sql'`` remains supported.  ``registry`` is an
+    injectable OperatorRegistry for tests (defaults to the global one).
+
+    R21-ROUTING-AUTHORITY: this function is a capability/cost CANDIDATE
+    PROVIDER only.  It may propose a backend but never finalizes the production
+    route.  The Global Physical Planner
+    (``runtime.multibackend.batch_global_optimizer.PhysicalBatchGlobalOptimizer``)
+    is the sole production routing authority.  When a caller supplies an
+    explicit ``prefer`` (a whole-plan route already chosen by the planner), the
+    candidate is returned as-is and the caller is responsible for honoring it.
     """
     import os
 
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
-    canonical = resolve_canonical(name)
+    if registry is None:
+        registry = OperatorRegistry
+
+    def resolve(name_: str) -> str:
+        resolver = getattr(registry, "resolve_canonical", None)
+        return resolver(name_) if callable(resolver) else resolve_canonical(name_)
+
+    canonical = resolve(name)
     mode = str(mode or "research").lower()
-    backends = OperatorRegistry.backends_for(canonical)
+    backends = registry.backends_for(canonical)
     prod = mode == "production"
 
     def permitted(registry_backend: str) -> bool:
@@ -1230,6 +1289,10 @@ def get_best_backend(
                 else "duckdb_sql"
             )
             status = _sql_status(canonical, dialect=dialect)
+        elif registry_backend == "q_kdb":
+            # R21-BACKENDNAME-Q-ALIGN: q_kdb routes through the q evidence
+            # authority. Fail-closed: unavailable authority => unsupported.
+            status = _q_status(canonical)
         else:
             return False
         if prod:
@@ -1240,8 +1303,23 @@ def get_best_backend(
         )
 
     requested = str(prefer or "auto").lower()
-    if requested in {"pandas_numpy", "polars", "sql"}:
-        op = OperatorRegistry.get(canonical, requested)
+    if requested in {"pandas_numpy", "polars", "sql", "q_kdb"}:
+        # R21-BACKENDNAME-Q-ALIGN: explicit prefer="q_kdb" selects the Q/KDB
+        # physical backend. The q evidence authority gates production eligibility;
+        # research admission is allowed when the request is explicit and the
+        # operator object is registered in the injected registry.
+        if requested == "q_kdb":
+            if prod and not permitted("q_kdb"):
+                raise UnsupportedOperatorBackendError(
+                    f"{canonical!r} backend='q_kdb' is not eligible in mode={mode!r}"
+                )
+            op = registry.get(canonical, "q_kdb")
+            if op is None:
+                raise UnsupportedOperatorBackendError(
+                    f"{canonical!r} backend='q_kdb' has no registered q operator"
+                )
+            return op, "q_kdb"
+        op = registry.get(canonical, requested)
         if op is None or not permitted(requested):
             raise UnsupportedOperatorBackendError(
                 f"{canonical!r} backend={requested!r} is not eligible in mode={mode!r}"
@@ -1302,8 +1380,8 @@ def get_best_backend(
         # round-trip); a ``pandas_materialization_fallback`` stays behind the
         # certified pandas reference unless benchmark evidence says otherwise.
         if any(candidate == "polars" for candidate, _ in candidates):
-            pl_op = OperatorRegistry.get(canonical, "polars")
-            from backend.polars_backend_kind import polars_backend_kind
+            pl_op = registry.get(canonical, "polars")
+            from factor_engine.backend.polars_backend_kind import polars_backend_kind
 
             kind = polars_backend_kind(pl_op)
             if kind.value != "polars_udf_pandas_delegate":
@@ -1313,12 +1391,40 @@ def get_best_backend(
         else:
             chosen = candidates[0][0]
 
-    op = OperatorRegistry.get(canonical, chosen)
+    op = registry.get(canonical, chosen)
     if op is None:
         raise UnsupportedOperatorBackendError(
             f"selected backend {chosen!r} disappeared for {canonical!r}"
         )
     return op, chosen
+
+
+class _OperatorBackendRegistryStub:
+    """Minimal injectable stub for ``get_best_backend`` tests.
+
+    This is intentionally private; production callers still use
+    ``cleaned_operators.registry.OperatorRegistry`` by default.
+    """
+
+    def __init__(
+        self,
+        *,
+        backends_for: Mapping[str, Sequence[str]] | None = None,
+        get_impl: Callable[[str, str], object | None] | None = None,
+        resolve_canonical: Callable[[str], str] | None = None,
+    ) -> None:
+        self._backends = backends_for or {}
+        self._get = get_impl or (lambda canonical, backend: None)
+        self._resolve = resolve_canonical
+
+    def backends_for(self, canonical: str) -> Sequence[str]:
+        return self._backends.get(canonical, ())
+
+    def get(self, canonical: str, backend: str) -> object | None:
+        return self._get(canonical, backend)
+
+    def resolve_canonical(self, canonical: str) -> str:
+        return self._resolve(canonical) if self._resolve is not None else canonical
 
 
 class BackendCapabilityRegistry:
@@ -1345,8 +1451,8 @@ class BackendCapabilityRegistry:
         if cls._version_hash is not None:
             return cls._version_hash
 
-        from backend.polars_long_policy import POLARS_LONG_NATIVE
-        from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
+        from factor_engine.backend.polars_long_policy import POLARS_LONG_NATIVE
+        from factor_engine.backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
 
         components = [
             CAPABILITY_REGISTRY_VERSION,
@@ -1355,7 +1461,7 @@ class BackendCapabilityRegistry:
         ]
 
         try:
-            from backend.primitive_evidence import evidence_generation
+            from factor_engine.backend.primitive_evidence import evidence_generation
             components.append(str(evidence_generation()))
         except Exception:
             pass
@@ -1411,8 +1517,37 @@ class BackendCapabilityRegistry:
         else:
             backend_kind = backend
 
-        # Handle SQL bound params validation
-        if backend_kind in {BackendKind.DUCKDB_SQL, BackendKind.CLICKHOUSE_SQL} and bound_params:
+        backend_kind_map = {
+            BackendKind.PANDAS_NUMPY: "pandas_numpy",
+            BackendKind.POLARS: "polars",
+            BackendKind.DUCKDB_SQL: "duckdb_sql",
+            BackendKind.CLICKHOUSE_SQL: "clickhouse_sql",
+            BackendKind.Q_KDB: "q_kdb",
+        }
+        if backend_kind not in backend_kind_map:
+            return CapabilityQueryResult(
+                supported=False,
+                production_safe=False,
+                record=None,
+                reason=f"Backend {backend_kind!r} not implemented",
+            )
+
+        # Q_KDB: bypass SQL bound-param path; use q evidence authority.
+        if backend_kind is BackendKind.Q_KDB:
+            q_status = _q_status(canon)
+            record = cls._build_record(canon, backend_kind, data_source_kind)
+            return CapabilityQueryResult(
+                supported=q_status != "unsupported",
+                production_safe=q_status == "production_safe",
+                record=record,
+                reason=f"Status: {q_status}",
+            )
+
+        # SQL bound-param validation for DuckDB/ClickHouse only.
+        if backend_kind in {
+            BackendKind.DUCKDB_SQL,
+            BackendKind.CLICKHOUSE_SQL,
+        } and bound_params:
             dialect = "duckdb_sql" if backend_kind == BackendKind.DUCKDB_SQL else "clickhouse_sql"
             decision = check_call_capability(canon, bound_params, dialect=dialect)
 
@@ -1432,23 +1567,7 @@ class BackendCapabilityRegistry:
                 reason=decision.reason,
             )
 
-        # Standard capability lookup
-        backend_name_map = {
-            BackendKind.PANDAS_NUMPY: "pandas_numpy",
-            BackendKind.POLARS: "polars",
-            BackendKind.DUCKDB_SQL: "duckdb_sql",
-            BackendKind.CLICKHOUSE_SQL: "clickhouse_sql",
-        }
-
-        if backend_kind not in backend_name_map:
-            return CapabilityQueryResult(
-                supported=False,
-                production_safe=False,
-                record=None,
-                reason=f"Backend {backend_kind} not yet implemented",
-            )
-
-        backend_name: BackendName = backend_name_map[backend_kind]  # type: ignore
+        backend_name: BackendName = backend_kind_map[backend_kind]  # type: ignore
         status = backend_status(canon, backend_name, data_source_kind=data_source_kind)
 
         supported = status != "unsupported"

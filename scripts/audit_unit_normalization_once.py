@@ -33,7 +33,7 @@ def _load() -> None:
 
 def main() -> int:
     _load()
-    from fields.providers import PROVIDER_REGISTRY
+    from factor_engine.fields.providers import PROVIDER_REGISTRY
 
     problems: list[str] = []
     checked = 0
@@ -66,7 +66,7 @@ def main() -> int:
                 f"{[(e[0], e[1], e[2]) for e in entries]} — double-normalization hazard"
             )
     # Sentinel: A Return bp binding is 0.0001 once.
-    from fields.providers import binding as get_binding
+    from factor_engine.fields.providers import binding as get_binding
 
     a_ret = get_binding("return_decimal", "ashare")
     if a_ret is None or abs(float(a_ret.source_unit.scale / a_ret.canonical_unit.scale) - 0.0001) > 1e-12:

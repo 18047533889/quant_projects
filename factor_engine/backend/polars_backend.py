@@ -25,9 +25,9 @@ import os
 from dataclasses import replace
 from typing import Any
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
-from runtime.perf_config import PerfConfig
+from factor_engine.runtime.perf_config import PerfConfig
 
 from .context import ExecutionContext
 from .pandas_backend import PandasBackend
@@ -201,7 +201,7 @@ class PolarsBackend(PandasBackend):
                         ctx.runtime_stats = runtime  # type: ignore[attr-defined]
                         root_ctx.runtime_stats = runtime  # type: ignore[attr-defined]
                         result = finalize_panel_result(result, ctx)
-                        from runtime.production_policy import assert_no_production_pandas_fallbacks
+                        from factor_engine.runtime.production_policy import assert_no_production_pandas_fallbacks
 
                         assert_no_production_pandas_fallbacks(ctx, context="polars_execute")
                         return result
@@ -213,7 +213,7 @@ class PolarsBackend(PandasBackend):
                         root_ctx.runtime_stats = runtime  # type: ignore[attr-defined]
 
             result = finalize_panel_result(self._eval(plan, ctx), ctx)
-            from runtime.production_policy import assert_no_production_pandas_fallbacks
+            from factor_engine.runtime.production_policy import assert_no_production_pandas_fallbacks
 
             assert_no_production_pandas_fallbacks(ctx, context="polars_execute")
             return result

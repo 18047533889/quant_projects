@@ -125,21 +125,21 @@ def main() -> int:
     out_dir = Path(sys.argv[sys.argv.index("--out") + 1]) if "--out" in sys.argv else DEFAULT_OUT
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
-    from cleaned_operators.model_timing import (
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.model_timing import (
         MODEL_TIMING_CONTRACTS,
         TimingKind,
         is_model_like_name,
         timing_kind_for,
     )
-    from cleaned_operators.model_lane import (
+    from factor_engine.cleaned_operators.model_lane import (
         assign_model_lane,
         model_lane_dead_key_errors,
         model_lane_inventory,
         _MODEL_LANE_EXPLICIT,
     )
-    from cleaned_operators.tombstones import is_tombstoned
+    from factor_engine.cleaned_operators.tombstones import is_tombstoned
 
     load_all()
     canonicals = sorted(OperatorRegistry.list_canonical())
@@ -185,7 +185,7 @@ def main() -> int:
          not missing_timing, f"missing={sorted(missing_timing)}")
 
     # M-007/M-050: no in-sample diagnostic in predictive lane
-    from cleaned_operators import semantic_certification as sc
+    from factor_engine.cleaned_operators import semantic_certification as sc
     diag_in_alpha = []
     try:
         diag_set = sc._DIAGNOSTIC_IN_SAMPLE
@@ -227,7 +227,7 @@ def main() -> int:
         "close", "y1", "y2", "pv", "rv",
     })
     try:
-        from cleaned_operators import base as _base
+        from factor_engine.cleaned_operators import base as _base
         for c in direct_use:
             ops = (OperatorRegistry._operators.get(c) or {}).values()
             for op in ops:

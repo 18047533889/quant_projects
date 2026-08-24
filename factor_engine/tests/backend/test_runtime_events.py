@@ -7,17 +7,17 @@ import pytest
 
 pytest.importorskip("polars")
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from backend.polars_long_production import (
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.backend.polars_long_production import (
     is_polars_long_native_production_safe,
     polars_long_production_tier,
 )
-from backend.runtime_events import append_runtime_event, rollup_runtime_fields
-from cleaned_operators import load_all
-from runtime.engine import FactorEngine
+from factor_engine.backend.runtime_events import append_runtime_event, rollup_runtime_fields
+from factor_engine.cleaned_operators import load_all
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 
@@ -59,7 +59,7 @@ def test_rollup_runtime_fields_merges_latest():
 
 
 def test_winsorize_native_tier_production_safe():
-    from backend.polars_long_production import polars_long_production_tier
+    from factor_engine.backend.polars_long_production import polars_long_production_tier
 
     tier = polars_long_production_tier("winsorize")
     assert tier == "production_safe"
@@ -74,8 +74,8 @@ def test_ts_std_native_tier_production_safe():
 
 
 def test_rebuild_runtime_from_events_only():
-    from backend.path_summary import build_backend_path_summary
-    from backend.runtime_events import rebuild_runtime_from_events
+    from factor_engine.backend.path_summary import build_backend_path_summary
+    from factor_engine.backend.runtime_events import rebuild_runtime_from_events
 
     runtime = {
         "events": [

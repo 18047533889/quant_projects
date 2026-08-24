@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from storage.factory import build_data_source
+from factor_engine.storage.factory import build_data_source
 from workspace_paths import resolve_path
 
 
@@ -33,7 +33,7 @@ def test_resolve_path_relative_to_quant_projects(monkeypatch):
 
 
 def test_composite_top_level_date_range_propagates_to_subsources():
-    from storage.data_access_source import DataAccessSource
+    from factor_engine.storage.data_access_source import DataAccessSource
 
     composite = build_data_source(
         {

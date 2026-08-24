@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import pytest
 
-from planner.compiler_pass import CompilerPassManager, NumericPolicy, PassContext
-from planner.logical_plan import PlanNode
-from planner.optimizer import Optimizer
-from planner.plan_hash import structural_key
+from factor_engine.planner.compiler_pass import CompilerPassManager, NumericPolicy, PassContext
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.optimizer import Optimizer
+from factor_engine.planner.plan_hash import structural_key
 
 
 def _col(name="close", **kw):
@@ -244,7 +244,7 @@ def test_numeric_policy_enforced_in_production():
 
 def test_pass_contract_invariants_are_enforced():
     """REM-012: PassContract 的 invariants 必须在 pass manager 中真实检查。"""
-    from planner.optimizer_passes import build_optimizer_pass_manager
+    from factor_engine.planner.optimizer_passes import build_optimizer_pass_manager
 
     plan = PlanNode(op="add", inputs=(_col(), _lit(1.0)), semantic_attrs=SEM)
     opt = Optimizer()
@@ -269,7 +269,7 @@ def test_pass_contract_invariants_are_enforced():
 
 def test_pass_ordering_preserves_r6_p0_04_constraint():
     """REM-011: 验证参数验证发生在 composite lowering 之前（R6 P0-04 约束）。"""
-    from planner.optimizer_passes import build_optimizer_pass_manager
+    from factor_engine.planner.optimizer_passes import build_optimizer_pass_manager
 
     plan = PlanNode(op="add", inputs=(_col(), _lit(1.0)), semantic_attrs=SEM)
     opt = Optimizer()

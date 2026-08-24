@@ -24,17 +24,17 @@ import pytest
 
 from data_access.core.exceptions import ValidationError
 
-from api.factor import Factor, FactorSemanticIdentity
-from expr.base import Expr
-from planner.dag import FactorExecutionScope
-from planner.logical_plan import PlanNode
-from runtime.engine import (
+from factor_engine.api.factor import Factor, FactorSemanticIdentity
+from factor_engine.expr.base import Expr
+from factor_engine.planner.dag import FactorExecutionScope
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.runtime.engine import (
     _is_whole_market_universe,
     _scope_from_factor,
     assert_execution_scope_contract,
     compute_source_scope_hash,
 )
-from runtime.production_policy import ProductionPolicyViolation
+from factor_engine.runtime.production_policy import ProductionPolicyViolation
 
 
 def _column(name: str = "close") -> PlanNode:
@@ -103,7 +103,7 @@ def test_data_source_scoped_universe_mismatch_rejected():
 
 
 def test_data_source_scoped_direct():
-    from runtime.engine import _data_source_scoped
+    from factor_engine.runtime.engine import _data_source_scoped
 
     class _NoScope:
         pass
@@ -255,7 +255,7 @@ def test_compute_source_scope_hash_preserves_typed_collision_distinction():
 
 
 def test_compute_source_scope_hash_accepts_typed_source_scope_id():
-    from planner.physical_factor_dag import SourceScopeId
+    from factor_engine.planner.physical_factor_dag import SourceScopeId
 
     scope = SourceScopeId(dataset="prices", snapshot_id="s1", market="A")
     digest = compute_source_scope_hash(data_source_config={"scope": scope})
@@ -273,7 +273,7 @@ def test_scope_from_factor_with_data_source_computes_source_hash():
 
 
 def test_physical_region_plan_hash_is_full_sha256():
-    from planner.backend_region import PhysicalRegionPlan
+    from factor_engine.planner.backend_region import PhysicalRegionPlan
 
     digest = PhysicalRegionPlan.compute_plan_hash((), (), "logical")
     assert len(digest) == 64

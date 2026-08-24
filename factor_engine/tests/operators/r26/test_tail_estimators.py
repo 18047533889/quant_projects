@@ -11,8 +11,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from cleaned_operators.extreme_tail import _hill_series
-from cleaned_operators.spread_estimators import _roll_spread_series
+from factor_engine.cleaned_operators.extreme_tail import _hill_series
+from factor_engine.cleaned_operators.spread_estimators import _roll_spread_series
 
 
 def test_hill_upper_pareto_positive():

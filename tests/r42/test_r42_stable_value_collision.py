@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from mining.campaign import _stable_key, _stable_value, candidate_semantic_hash
+from factor_engine.mining.campaign import _stable_key, _stable_value, candidate_semantic_hash
 
 
 def test_stable_key_type_tags_int_vs_str():
@@ -38,8 +38,8 @@ def test_stable_value_mapping_preserves_int_vs_str_keys():
 
 def test_candidate_semantic_hash_distinguishes_int_vs_str_kwargs():
     """Candidates differing only in int-vs-str kwarg keys must hash differently."""
-    from expr.cleaned_call import CleanedCall
-    from expr.column import ColumnRef
+    from factor_engine.expr.cleaned_call import CleanedCall
+    from factor_engine.expr.column import ColumnRef
 
     close = ColumnRef("close")
     volume = ColumnRef("volume")

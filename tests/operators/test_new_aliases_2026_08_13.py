@@ -8,7 +8,7 @@ import pytest
 
 def test_ema_ewm_aliases(_loaded):
     """EMA/EWM family aliases map to ts_ema and ewm_* canonicals."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     # ts_ema aliases
     assert OperatorRegistry.get("ts_ewm_mean") is OperatorRegistry.get("ts_ema")
@@ -23,28 +23,28 @@ def test_ema_ewm_aliases(_loaded):
 
 def test_sma_aliases(_loaded):
     """SMA aliases map to ts_mean canonical."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     assert OperatorRegistry.get("ts_sma") is OperatorRegistry.get("ts_mean")
 
 
 def test_lag_delay_aliases(_loaded):
     """Lag/delay aliases map to ts_delay canonical."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     assert OperatorRegistry.get("ts_lag") is OperatorRegistry.get("ts_delay")
 
 
 def test_decay_aliases(_loaded):
     """Decay aliases map to ts_decay_linear canonical."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     assert OperatorRegistry.get("wdecay") is OperatorRegistry.get("ts_decay_linear")
 
 
 def test_safe_division_aliases(_loaded):
     """Safe division aliases map to safe_div_null canonical."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     assert OperatorRegistry.get("safe_divide") is OperatorRegistry.get("safe_div_null")
     assert OperatorRegistry.get("div_safe") is OperatorRegistry.get("safe_div_null")
@@ -52,28 +52,28 @@ def test_safe_division_aliases(_loaded):
 
 def test_returns_aliases(_loaded):
     """Returns aliases map to ts_pct canonical."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     assert OperatorRegistry.get("ret") is OperatorRegistry.get("ts_pct")
 
 
 def test_clip_aliases(_loaded):
     """Clipping aliases map to clip canonical."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     assert OperatorRegistry.get("bound") is OperatorRegistry.get("clip")
 
 
 def test_normalization_aliases(_loaded):
     """Normalization aliases map to zscore canonical."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     assert OperatorRegistry.get("cs_standardize") is OperatorRegistry.get("zscore")
 
 
 def test_all_14_new_aliases_bidirectional(_loaded):
     """All 14 new aliases resolve correctly in both directions."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     ALIAS_MAPPINGS = {
         "ts_ewm_mean": "ts_ema",
@@ -100,7 +100,7 @@ def test_all_14_new_aliases_bidirectional(_loaded):
 
 def test_alias_count(_loaded):
     """Verify the registry has sufficient aliases registered."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     # Should have at least 141 + 14 = 155 aliases now
     alias_count = len(OperatorRegistry._aliases)
@@ -110,6 +110,6 @@ def test_alias_count(_loaded):
 @pytest.fixture(scope="module")
 def _loaded():
     """Load all operators once per module."""
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
     load_all()
     return True

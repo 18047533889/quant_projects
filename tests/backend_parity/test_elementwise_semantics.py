@@ -12,17 +12,17 @@ pytestmark = pytest.mark.skip(reason="legacy protected operator aliases were rem
 
 pytest.importorskip("polars")
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.factor import Factor
-from backend.elementwise_semantics import (
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.elementwise_semantics import (
     comparison_null_propagates,
     protected_div_null_preserved,
     protected_log_null_preserved,
 )
-from backend.factory import build_backend
-from cleaned_operators import load_all
-from runtime.engine import FactorEngine
+from factor_engine.backend.factory import build_backend
+from factor_engine.cleaned_operators import load_all
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 F = make_cleaned_call_factory

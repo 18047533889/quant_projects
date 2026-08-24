@@ -17,20 +17,20 @@ import pytest
 
 def setup_module():
     """Reset registry lifecycle to allow operator registration during test imports."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     if OperatorRegistry._lifecycle != OperatorRegistry.Lifecycle.BUILDING:
         OperatorRegistry._lifecycle = OperatorRegistry.Lifecycle.BUILDING
 
     # Bypass layer governance check
     try:
-        import cleaned_operators.layer_governance as gov
+        import factor_engine.cleaned_operators.layer_governance as gov
         gov._FINALIZED = False
     except (ImportError, AttributeError):
         pass
 
     # Bypass mutation token check for test isolation
     try:
-        from cleaned_operators import registry
+        from factor_engine.cleaned_operators import registry
         registry.OperatorRegistry._mutation_token = registry._BOOTSTRAP_TOKEN
         # Reset _operators and _catalog to mutable dicts if they're frozen
         if not isinstance(registry.OperatorRegistry._operators, type({})):
@@ -41,13 +41,13 @@ def setup_module():
         pass
 
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module")
 def ensure_registered():
     """Ensure fiscal_batch3 operators are registered."""
-    import cleaned_operators.fundamental.fiscal_batch3
+    import factor_engine.cleaned_operators.fundamental.fiscal_batch3
     return True
 
 

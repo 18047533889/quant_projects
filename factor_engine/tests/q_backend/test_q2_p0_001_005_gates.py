@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.q_backend.q_capability_evidence import (
+from factor_engine.backend.q_backend.q_capability_evidence import (
     QCapabilityEvidence,
     QCapabilityGate,
     compute_q_capability_evidence,
@@ -27,8 +27,8 @@ from backend.q_backend.q_capability_evidence import (
     get_q_production_safe_ops,
     run_all_q_capability_gates,
 )
-from backend.q_backend.q_compiler import get_q_compiler
-from backend.q_backend.q_physical_implementation_registry import (
+from factor_engine.backend.q_backend.q_compiler import get_q_compiler
+from factor_engine.backend.q_backend.q_physical_implementation_registry import (
     QEvidenceArtifact,
     QEvidenceValidationContext,
     QPhysicalImplementation,
@@ -212,7 +212,7 @@ class TestQ2P0003RemoveDuplicateAuthority:
 
     def test_phase1_native_ops_still_exists(self):
         """_PHASE1_NATIVE_OPS exists but is deprecated (documented)."""
-        from backend.q_backend import q_capability
+        from factor_engine.backend.q_backend import q_capability
 
         # It's allowed to exist for backward compatibility
         # but must not be the admission authority
@@ -318,7 +318,7 @@ class TestQPhysicalImplementationRegistry:
         }
 
     def test_empty_authority_gates_fail_closed(self, monkeypatch):
-        import backend.q_backend.q_capability_evidence as evidence_module
+        import factor_engine.backend.q_backend.q_capability_evidence as evidence_module
 
         registry = QPhysicalImplementationRegistry()
         monkeypatch.setattr(evidence_module, "_get_authority", lambda: registry)
@@ -638,7 +638,7 @@ class TestQPhysicalImplementationRegistry:
         assert registry.is_production_certified("add") is False
 
     def test_capability_evidence_does_not_hide_global_validation_failure(self, tmp_path, monkeypatch):
-        import backend.q_backend.q_capability_evidence as evidence_module
+        import factor_engine.backend.q_backend.q_capability_evidence as evidence_module
 
         registry, impl = self._certified_registry(tmp_path)
         stale = replace(impl, git_sha="b" * 40)

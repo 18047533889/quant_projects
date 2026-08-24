@@ -20,7 +20,7 @@ if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 from logging_utils import configure_logging
-from runtime.engine import FactorEngine
+from factor_engine.runtime.engine import FactorEngine
 
 
 def parse_args() -> argparse.Namespace:

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from runtime.incremental_parity import (
+from factor_engine.runtime.incremental_parity import (
     DEFAULT_PARAMS,
     IncrementalParityChecker,
     SEGMENTED_CANONICALS,
@@ -14,7 +14,7 @@ from runtime.incremental_parity import (
     default_panel_factory,
     run_destructive_scenarios,
 )
-from runtime.stateful_checkpoint_store import StatefulCheckpointStore
+from factor_engine.runtime.stateful_checkpoint_store import StatefulCheckpointStore
 
 
 def _store(tmp_path) -> StatefulCheckpointStore:
@@ -120,8 +120,8 @@ def test_destructive_runner_completes_and_certificate_has_all_keys(tmp_path) -> 
 
 def test_corrupted_and_stale_checkpoint_fail_closed(tmp_path) -> None:
     from pathlib import Path
-    from runtime.incremental_parity import _PanelSource, _segmented_ir
-    from runtime.stateful_incremental import try_stateful_segmented_incremental
+    from factor_engine.runtime.incremental_parity import _PanelSource, _segmented_ir
+    from factor_engine.runtime.stateful_incremental import try_stateful_segmented_incremental
     from stateful_contract import StateCheckpoint
 
     panel = default_panel_factory(40)

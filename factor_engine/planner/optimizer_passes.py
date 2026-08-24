@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from planner.compiler_pass import (
+from factor_engine.planner.compiler_pass import (
     DEFAULT_REWRITE_INVARIANTS,
     CompilerPassManager,
     IRKind,
@@ -14,7 +14,7 @@ from planner.compiler_pass import (
     PassContract,
     SemanticEquivalence,
 )
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 
 PassFunction = Callable[[PlanNode, PassContext], PlanNode]
@@ -31,12 +31,12 @@ class FunctionCompilerPass:
 
 def build_optimizer_pass_manager(optimizer: object) -> CompilerPassManager:
     """Build the compatibility optimizer as an explicit, observable pass pipeline."""
-    from planner.canonicalize_params import (
+    from factor_engine.planner.canonicalize_params import (
         canonicalize_plan_parameters,
         validate_plan_params,
     )
-    from planner.composite_lowering import lower_composite_operators
-    from planner.rewrite_fastpath import rewrite_plan_for_fastpath
+    from factor_engine.planner.composite_lowering import lower_composite_operators
+    from factor_engine.planner.rewrite_fastpath import rewrite_plan_for_fastpath
 
     exact_contract = dict(
         input_ir=IRKind.LOGICAL_QUERY_GRAPH,

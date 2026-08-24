@@ -19,8 +19,8 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Sequence
 
-from cleaned_operators.registry import OperatorRegistry
-from planner.logical_plan import PlanNode
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.planner.logical_plan import PlanNode
 
 FE_ROOT = Path(__file__).resolve().parents[2]
 
@@ -63,7 +63,7 @@ def _record_compile_status(status: CompileStatus) -> None:
 
 def _is_production_sql_mode() -> bool:
     try:
-        from runtime.production_policy import is_production_mode
+        from factor_engine.runtime.production_policy import is_production_mode
 
         return is_production_mode()
     except Exception:
@@ -90,7 +90,7 @@ def generate_emitter_identity_manifest(
     运行期绝不读源码算 hash（那会受工作区脏改动影响且无法区分「真缺失」）。
     返回 manifest dict 并落盘。
     """
-    from backend.evidence_provenance import compute_implementation_hash
+    from factor_engine.backend.evidence_provenance import compute_implementation_hash
 
     out = Path(out_path) if out_path is not None else EMITTER_IDENTITY_MANIFEST
     build_commit = ""
@@ -245,7 +245,7 @@ class SqlTemplate:
         binding 一致 → 直接复用缓存编译结果（零重编译）；binding 不一致 →
         诚实重编译（结构参数变化时 SQL 形状可能不同，绝不硬凑复用）。
         """
-        from backend.sql_pushdown.emitter import compile_plan_to_sql
+        from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql
 
         if _literal_binding_key(plan) == self.binding_key:
             return self.compiled
@@ -324,7 +324,7 @@ class SqlDialect(str, Enum):
 
 
 # 可通过 SQL 下推的 canonical（与 sql_registry 同步）
-from backend.sql_pushdown.sql_registry import SQL_CAPABLE_CANONICALS as SQL_CAPABLE_OPS  # noqa: E402
+from factor_engine.backend.sql_pushdown.sql_registry import SQL_CAPABLE_CANONICALS as SQL_CAPABLE_OPS  # noqa: E402
 
 
 class InstrumentFilterKind(str, Enum):
@@ -367,7 +367,7 @@ class CompiledSql:
 def _resolve_canonical(op: str) -> str:
     """将算子别名解析为 canonical 名称。"""
     resolved = OperatorRegistry._aliases.get(op, op)
-    from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
+    from factor_engine.backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
 
     if op in SQL_IMPLEMENTED_CANONICALS and resolved not in SQL_IMPLEMENTED_CANONICALS:
         return op
@@ -381,7 +381,7 @@ def _window_int(node: PlanNode, default: int = 3) -> int:
 
 def _window_spec(node: PlanNode, default: int = 3):
     """完整 WindowSpec。"""
-    from backend.plan_params import PlanParamError, window_spec_from_plan_node
+    from factor_engine.backend.plan_params import PlanParamError, window_spec_from_plan_node
 
     spec = window_spec_from_plan_node(node, default=default)
     if spec.closed != "right":
@@ -404,7 +404,7 @@ def _float_attr(node: PlanNode, *keys: str, default: float) -> float:
     注意 ``lo``/``hi`` 在 clip 语境是任意实数界（非 [0,1] 概率），故只走
     ``parse_finite_float``，不按 unit-interval 校验。
     """
-    from backend.plan_params import parse_finite_float, parse_unit_interval
+    from factor_engine.backend.plan_params import parse_finite_float, parse_unit_interval
 
     for key in keys:
         if key in (node.attrs or {}) and node.attrs[key] is not None:
@@ -423,7 +423,7 @@ def _int_attr(node: PlanNode, *keys: str, default: int) -> int:
     需要的钳制（如 ``max(1, ...)``）由调用点显式完成——emitter 参数已
     canonicalize，非整数出现说明上游 bug，应 fail。
     """
-    from backend.plan_params import parse_positive_int_literal
+    from factor_engine.backend.plan_params import parse_positive_int_literal
 
     for key in keys:
         if key in node.attrs and node.attrs[key] is not None:
@@ -464,7 +464,7 @@ def _clip_bounds(node: PlanNode, *, default_lo: float = -3.0, default_hi: float 
 
 def _truthy_sql(value_col: str, *, dialect: SqlDialect | None = None) -> str:
     """浮点条件真值：NULL/NaN/0 → false。"""
-    from backend.logical_semantics import truthy_sql
+    from factor_engine.backend.logical_semantics import truthy_sql
 
     is_ch = dialect == SqlDialect.CLICKHOUSE if dialect is not None else False
     return truthy_sql(value_col, dialect_is_clickhouse=is_ch)
@@ -612,7 +612,7 @@ _sql_memo_ctx: ContextVar[_SqlCompileMemo | None] = ContextVar("_sql_memo_ctx", 
 
 def _structural_use_counts(plan: PlanNode) -> dict[str, int]:
     """统计计划树中各 structural_key 的出现次数（用于 CTE 去重）。"""
-    from planner.plan_hash import structural_key
+    from factor_engine.planner.plan_hash import structural_key
 
     counts: dict[str, int] = {}
 
@@ -864,7 +864,7 @@ def _average_rank_frac_correlated(
     descending: bool = False,
 ) -> str:
     """pandas ``rank(method='average', pct=True)`` 相关子查询表达式。"""
-    from backend.stat_valid import row_stat_invalid_sql, stat_valid_sql
+    from factor_engine.backend.stat_valid import row_stat_invalid_sql, stat_valid_sql
 
     match = " AND ".join(f"p.{k} = {row_alias}.{k}" for k in partition_keys)
     valid = stat_valid_sql("p._v", dialect=dialect, exclude_nan=exclude_nan)
@@ -919,7 +919,7 @@ def _average_rank_01_correlated(
     exclude_nan: bool = True,
 ) -> str:
     """截面 0-1 average rank，对齐 ``cs_rank_01``。"""
-    from backend.stat_valid import row_stat_invalid_sql, stat_valid_sql
+    from factor_engine.backend.stat_valid import row_stat_invalid_sql, stat_valid_sql
 
     match = " AND ".join(f"p.{k} = {row_alias}.{k}" for k in partition_keys)
     valid = stat_valid_sql("p._v", dialect=dialect, exclude_nan=exclude_nan)
@@ -1060,7 +1060,7 @@ def _ts_pct_rank_sql(
     exclude_nan: bool = True,
 ) -> str:
     """滚动百分位 rank，对齐 ``pandas rolling.rank(pct=True, method='average')``。"""
-    from backend.stat_valid import row_stat_invalid_sql, stat_valid_sql
+    from factor_engine.backend.stat_valid import row_stat_invalid_sql, stat_valid_sql
 
     w = max(int(window), 1)
     mp = max(int(min_periods), 1)
@@ -1176,7 +1176,7 @@ def _ts_expanding_rank_sql(
 ) -> str:
     """``x.expanding(min_periods=1).rank(pct=True)``：从头到当前行的平均百分位
     rank（与 ``_ts_pct_rank_sql`` 同款相关子查询，frame 换成 ``rn <= b.rn``）。"""
-    from backend.stat_valid import row_stat_invalid_sql, stat_valid_sql
+    from factor_engine.backend.stat_valid import row_stat_invalid_sql, stat_valid_sql
 
     valid = stat_valid_sql("p._v", dialect=dialect, exclude_nan=True)
     invalid_row = row_stat_invalid_sql("b._v", dialect=dialect, exclude_nan=True)
@@ -1243,7 +1243,7 @@ def _group_zscore_expr(
     canon: str = "group_zscore",
 ) -> str:
     """组内 zscore；零/缺失标准差时输出语义见 ``numeric_semantics``。"""
-    from backend.numeric_semantics import sql_stddev_fn_key, zscore_zero_std_fill
+    from factor_engine.backend.numeric_semantics import sql_stddev_fn_key, zscore_zero_std_fill
 
     std_fn = _dialect_fn(dialect, sql_stddev_fn_key(canon))
     nf = _dialect_fn(dialect, "nullif")
@@ -1394,7 +1394,7 @@ def _int_attr(node: PlanNode, *keys: str, input_index: int | None = None, defaul
     #357：非整数（float 5.9 / 字符串）→ raise ``PlanParamError``；需要的钳制
     （如 ``max(1, ...)``）由调用点显式完成。
     """
-    from backend.plan_params import parse_positive_int_literal
+    from factor_engine.backend.plan_params import parse_positive_int_literal
 
     for key in keys:
         if key in node.attrs and node.attrs[key] is not None:
@@ -1403,7 +1403,7 @@ def _int_attr(node: PlanNode, *keys: str, input_index: int | None = None, defaul
         pos = _literal_positional(node, input_index, default=float(default))
         if pos is not None:
             if isinstance(pos, float) and pos != int(pos):
-                from backend.plan_params import PlanParamError
+                from factor_engine.backend.plan_params import PlanParamError
 
                 raise PlanParamError(
                     f"positional integer 参数必须为整数 literal，收到 {pos!r}"
@@ -1512,8 +1512,8 @@ def _scalar_from_plan(node: PlanNode, *, default: float | None = None) -> float 
 
 def _compare_binary_sql(op: str, left_sql: str, right_sql: str, *, dialect: SqlDialect) -> str:
     """二元比较算子 SQL（NULL/NaN → NULL）。"""
-    from backend.elementwise_semantics import compare_sql
-    from backend.long_alignment import anchor_join_sql
+    from factor_engine.backend.elementwise_semantics import compare_sql
+    from factor_engine.backend.long_alignment import anchor_join_sql
 
     expr = compare_sql(op, "l._v", "r._v", dialect_is_clickhouse=dialect == SqlDialect.CLICKHOUSE)
     return f"SELECT l.ts, l.inst, {expr} AS _v {anchor_join_sql(left_sql, right_sql)}"
@@ -1577,7 +1577,7 @@ def _cs_broadcast_agg(agg: str, inner_sql: str, *, all_null_null: bool = False) 
 
 def _cs_mad_sql(inner_sql: str, *, dialect: SqlDialect) -> str:
     """截面 MAD：median(|x - median(x)|) 广播到各行（finite sample）。"""
-    from backend.stat_valid import row_stat_invalid_sql
+    from factor_engine.backend.stat_valid import row_stat_invalid_sql
 
     med_fn = "median"
     invalid = row_stat_invalid_sql("_v", dialect=dialect, exclude_nan=True)
@@ -1597,7 +1597,7 @@ def _cs_mad_sql(inner_sql: str, *, dialect: SqlDialect) -> str:
 
 def _cs_mad_zscore_sql(inner_sql: str, *, dialect: SqlDialect) -> str:
     """MAD 稳健 zscore：(x - median) / MAD；MAD=0 → NULL（finite sample）。"""
-    from backend.stat_valid import row_stat_invalid_sql
+    from factor_engine.backend.stat_valid import row_stat_invalid_sql
 
     med_fn = "median"
     invalid = row_stat_invalid_sql("_v", dialect=dialect, exclude_nan=True)
@@ -2071,8 +2071,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         right = _compile_layer(node.inputs[1], dialect=dialect)
         if left is None or right is None:
             return None
-        from backend.elementwise_semantics import protected_div_sql
-        from backend.numeric_semantics import protected_div_default, protected_epsilon_default
+        from factor_engine.backend.elementwise_semantics import protected_div_sql
+        from factor_engine.backend.numeric_semantics import protected_div_default, protected_epsilon_default
 
         eps = _float_attr(node, "epsilon", default=protected_epsilon_default())
         default = _float_attr(node, "default", default=protected_div_default())
@@ -2100,7 +2100,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         right = _compile_layer(node.inputs[1], dialect=dialect)
         if left is None or right is None:
             return None
-        from backend.numeric_semantics import protected_epsilon_default
+        from factor_engine.backend.numeric_semantics import protected_epsilon_default
 
         eps = _float_attr(node, "epsilon", default=protected_epsilon_default())
         abs_fn = _dialect_fn(dialect, "abs")
@@ -2135,7 +2135,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         right = _compile_layer(node.inputs[1], dialect=dialect)
         if left is None or right is None:
             return None
-        from backend.numeric_semantics import protected_epsilon_default
+        from factor_engine.backend.numeric_semantics import protected_epsilon_default
 
         eps = _float_attr(node, "epsilon", default=protected_epsilon_default())
         abs_fn = _dialect_fn(dialect, "abs")
@@ -2156,8 +2156,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         right = _compile_layer(node.inputs[1], dialect=dialect)
         if left is None or right is None:
             return None
-        from backend.elementwise_semantics import div_or_default_sql
-        from backend.numeric_semantics import protected_div_default, protected_epsilon_default
+        from factor_engine.backend.elementwise_semantics import div_or_default_sql
+        from factor_engine.backend.numeric_semantics import protected_div_default, protected_epsilon_default
 
         eps = _float_attr(node, "epsilon", default=protected_epsilon_default())
         default = _float_attr(node, "default", default=protected_div_default())
@@ -2174,7 +2174,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        from backend.elementwise_semantics import protected_log_sql
+        from factor_engine.backend.elementwise_semantics import protected_log_sql
 
         eps = _float_attr(node, "epsilon", default=1e-12)
         expr = protected_log_sql("_v", eps=eps, ln_fn=ln)
@@ -2189,7 +2189,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        from backend.elementwise_semantics import log_fill_invalid_sql
+        from factor_engine.backend.elementwise_semantics import log_fill_invalid_sql
 
         eps = _float_attr(node, "epsilon", default=1e-12)
         expr = log_fill_invalid_sql("_v", eps=eps, ln_fn=ln)
@@ -2323,7 +2323,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        from backend.logical_semantics import is_null_sql
+        from factor_engine.backend.logical_semantics import is_null_sql
 
         return _Layer(
             f"SELECT ts, inst, {is_null_sql('_v')} AS _v FROM ({inner.sql}) t",
@@ -2335,7 +2335,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        from backend.logical_semantics import is_null_sql
+        from factor_engine.backend.logical_semantics import is_null_sql
 
         return _Layer(
             f"SELECT ts, inst, CASE WHEN {is_null_sql('_v')} = 1.0 THEN 0.0 ELSE 1.0 END AS _v "
@@ -2348,7 +2348,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        from backend.logical_semantics import is_nan_sql
+        from factor_engine.backend.logical_semantics import is_nan_sql
 
         expr = is_nan_sql("_v", dialect_is_clickhouse=dialect == SqlDialect.CLICKHOUSE)
         return _Layer(
@@ -2376,7 +2376,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        from backend.elementwise_semantics import is_infinite_sql
+        from factor_engine.backend.elementwise_semantics import is_infinite_sql
 
         expr = is_infinite_sql("_v", dialect_is_clickhouse=dialect == SqlDialect.CLICKHOUSE)
         return _Layer(
@@ -3337,7 +3337,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        from backend.stat_valid import row_stat_invalid_sql
+        from factor_engine.backend.stat_valid import row_stat_invalid_sql
 
         invalid = row_stat_invalid_sql("_v", dialect=dialect, exclude_nan=True)
         cleaned = (
@@ -3584,7 +3584,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         vol = _compile_layer(node.inputs[1], dialect=dialect)
         if price is None or vol is None:
             return None
-        from backend.pairwise_rolling import sql_pairwise_vwap_expr
+        from factor_engine.backend.pairwise_rolling import sql_pairwise_vwap_expr
 
         spec = _window_spec(node, default=20)
         over = (
@@ -3821,7 +3821,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        from backend.stat_valid import row_stat_invalid_sql
+        from factor_engine.backend.stat_valid import row_stat_invalid_sql
 
         invalid = row_stat_invalid_sql("_v", dialect=dialect, exclude_nan=True)
         cleaned = (
@@ -3847,7 +3847,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             dialect, y_col="y._v", x_col="x._v", partition=part
         )
         fit = f"({alpha}) + ({beta}) * x._v"
-        from backend.plan_params import int_mode_from_plan_node
+        from factor_engine.backend.plan_params import int_mode_from_plan_node
 
         mode = 0 if op == "cs_resid" else int_mode_from_plan_node(node, input_index=2, default=0)
         if mode == 1:
@@ -4084,8 +4084,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         right = _compile_layer(node.inputs[1], dialect=dialect)
         if left is None or right is None:
             return None
-        from backend.pair_window_spec import PairWindowSpec
-        from backend.stat_valid import stat_valid_sql
+        from factor_engine.backend.pair_window_spec import PairWindowSpec
+        from factor_engine.backend.stat_valid import stat_valid_sql
 
         pspec = PairWindowSpec.from_plan_node(node, default_min_periods=2)
         w = pspec.size
@@ -4178,8 +4178,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         right = _compile_layer(node.inputs[1], dialect=dialect)
         if left is None or right is None:
             return None
-        from backend.pair_window_spec import PairWindowSpec
-        from backend.stat_valid import stat_valid_sql
+        from factor_engine.backend.pair_window_spec import PairWindowSpec
+        from factor_engine.backend.stat_valid import stat_valid_sql
 
         pspec = PairWindowSpec.from_plan_node(node, default_min_periods=2)
         w = pspec.size
@@ -4206,8 +4206,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         right = _compile_layer(node.inputs[1], dialect=dialect)
         if left is None or right is None:
             return None
-        from backend.pair_window_spec import PairWindowSpec
-        from backend.pairwise_rolling import sql_pairwise_beta_expr
+        from factor_engine.backend.pair_window_spec import PairWindowSpec
+        from factor_engine.backend.pairwise_rolling import sql_pairwise_beta_expr
 
         pspec = PairWindowSpec.from_plan_node(node, default_min_periods=5)
         w = pspec.size
@@ -7321,7 +7321,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         right = _compile_layer(node.inputs[1], dialect=dialect)
         if left is None or right is None:
             return None
-        from backend.inf_sanitize import apply_inf_policy_sql
+        from factor_engine.backend.inf_sanitize import apply_inf_policy_sql
 
         pow_fn = "pow" if dialect == SqlDialect.CLICKHOUSE else "POW"
         raw = (
@@ -7404,8 +7404,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         right = _compile_layer(node.inputs[1], dialect=dialect)
         if left is None or right is None:
             return None
-        from backend.pair_window_spec import PairWindowSpec
-        from backend.stat_valid import stat_valid_sql
+        from factor_engine.backend.pair_window_spec import PairWindowSpec
+        from factor_engine.backend.stat_valid import stat_valid_sql
 
         pspec = PairWindowSpec.from_plan_node(node, default_min_periods=2)
         w = pspec.size
@@ -8274,7 +8274,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         except (TypeError, ValueError):
             return None
         mp = max(1, int(_raw_literal(node, 3, _int_attr(node, "min_periods", default=1)) or 1))
-        from backend.stat_valid import row_stat_invalid_sql
+        from factor_engine.backend.stat_valid import row_stat_invalid_sql
 
         invalid = row_stat_invalid_sql("_v", dialect=dialect, exclude_nan=True)
         if op == "ts_positive_ratio":
@@ -8310,7 +8310,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if k not in (2, 3, 4):
             return None
         win = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {d - 1} PRECEDING AND CURRENT ROW"
-        from backend.stat_valid import row_stat_invalid_sql
+        from factor_engine.backend.stat_valid import row_stat_invalid_sql
 
         invalid = row_stat_invalid_sql("_v", dialect=dialect, exclude_nan=True)
         power_terms = ", ".join(
@@ -8346,7 +8346,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         grp = _compile_layer(node.inputs[1], dialect=dialect)
         if inner is None or grp is None:
             return None
-        from backend.stat_valid import row_stat_invalid_sql
+        from factor_engine.backend.stat_valid import row_stat_invalid_sql
 
         x_inv = row_stat_invalid_sql("x._v", dialect=dialect, exclude_nan=True)
         g_inv = row_stat_invalid_sql("g._v", dialect=dialect, exclude_nan=True)
@@ -8368,7 +8368,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         wgt = _compile_layer(node.inputs[2], dialect=dialect)
         if inner is None or grp is None or wgt is None:
             return None
-        from backend.stat_valid import row_stat_invalid_sql
+        from factor_engine.backend.stat_valid import row_stat_invalid_sql
 
         x_inv = row_stat_invalid_sql("x._v", dialect=dialect, exclude_nan=True)
         w_inv = row_stat_invalid_sql("w._v", dialect=dialect, exclude_nan=True)
@@ -10421,7 +10421,7 @@ def _collect_columns(node: PlanNode, out: set[str]) -> None:
 
 def plan_is_sql_capable(plan: PlanNode) -> bool:
     """判断计划树是否全部由 SQL backend 支持（委托 ``sql_registry.is_sql_capable``）。"""
-    from backend.sql_pushdown.sql_registry import is_sql_capable
+    from factor_engine.backend.sql_pushdown.sql_registry import is_sql_capable
 
     return is_sql_capable(plan)
 
@@ -10496,7 +10496,7 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
     """带 optional CTE memo 的编译入口（递归经此函数以共享子树）。"""
     memo = _sql_memo_ctx.get()
     if memo is not None:
-        from planner.plan_hash import structural_key
+        from factor_engine.planner.plan_hash import structural_key
 
         key = structural_key(node)
         if key in memo.refs:
@@ -10504,7 +10504,7 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
     layer = _compile_layer_impl(node, dialect=dialect)
     if layer is None or memo is None:
         return layer
-    from planner.plan_hash import structural_key
+    from factor_engine.planner.plan_hash import structural_key
 
     key = structural_key(node)
     canon = _resolve_canonical(node.op)

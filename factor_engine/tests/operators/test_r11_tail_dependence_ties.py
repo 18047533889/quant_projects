@@ -32,17 +32,17 @@ import pytest
 
 pytest.importorskip("polars")
 
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 
 load_all()
 
-from cleaned_operators.nonlinear_dependence import (
+from factor_engine.cleaned_operators.nonlinear_dependence import (
     TsLowerTailDependence,
     TsUpperTailDependence,
     _fractional_tail_membership,
     _tail_dependence,
 )
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 UPPER_COEX = "ts_upper_tail_coexceedance_probability"
 LOWER_COEX = "ts_lower_tail_coexceedance_probability"

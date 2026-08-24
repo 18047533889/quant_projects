@@ -6,11 +6,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.nonlinear_dependence  # noqa: F401
-import cleaned_operators.spectral_ext  # noqa: F401
-from backend.operator_errors import OperatorParameterError
-from cleaned_operators.operator_surface import extended_only_canonicals
-from cleaned_operators.registry import OperatorRegistry
+import factor_engine.cleaned_operators.nonlinear_dependence  # noqa: F401
+import factor_engine.cleaned_operators.spectral_ext  # noqa: F401
+from factor_engine.backend.operator_errors import OperatorParameterError
+from factor_engine.cleaned_operators.operator_surface import extended_only_canonicals
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _op(name: str):

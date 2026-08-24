@@ -1,7 +1,7 @@
-from api import rank, ts_mean
-from api.columns import col
-from expr.base import ensure_expr
-from expr.cleaned_call import CleanedCall
+from factor_engine.api import rank, ts_mean
+from factor_engine.api.columns import col
+from factor_engine.expr.base import ensure_expr
+from factor_engine.expr.cleaned_call import CleanedCall
 
 
 def test_binop_builds_cleaned_call():
@@ -20,7 +20,7 @@ def test_rank_ts_mean_chain():
 
 def test_ensure_expr_wraps_scalar():
     lit = ensure_expr(3)
-    from expr.literal import Literal
+    from factor_engine.expr.literal import Literal
 
     assert isinstance(lit, Literal)
     assert lit.value == 3

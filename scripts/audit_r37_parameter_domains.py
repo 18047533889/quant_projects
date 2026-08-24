@@ -32,9 +32,9 @@ import pandas as pd
 sys.path.insert(0, ".")
 sys.path.insert(0, "..")
 
-from backend.cleaned_bridge import ensure_cleaned_loaded  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
-from runtime.parameter_domain_store import (  # noqa: E402
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.runtime.parameter_domain_store import (  # noqa: E402
     CertificationKey,
     ParameterDomainCertificationStore,
 )
@@ -351,7 +351,7 @@ def _full_bound_point(canonical: str, operator: Any, panel: pd.DataFrame,
     """R39 #27：显式参数 + kernel 默认参数 → 完整 canonical BoundParameterPoint
     （alias 解析 + 默认合并 + 类型归一），与 runtime ``_bound_scalar_parameters``
     完全一致，确保 production 查询能命中认证点。"""
-    from cleaned_operators.base import bind_operator_call, _kernel_param_defaults
+    from factor_engine.cleaned_operators.base import bind_operator_call, _kernel_param_defaults
 
     meta = getattr(operator, "metadata", None)
     names = list(getattr(meta, "param_names", None) or [])
@@ -379,7 +379,7 @@ def _certify_dimensions(canonical: str) -> dict:
     - source_context：memory（oracle 内存面板）；
     - dtype/grain：float64/daily（测试面板）。
     """
-    from backend.operator_semantic_version import versioned_name
+    from factor_engine.backend.operator_semantic_version import versioned_name
 
     return {
         "semantic_version": versioned_name(canonical),

@@ -5,12 +5,12 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from api.columns import col
-from api.factor import Factor
-from backend.pandas_backend import PandasBackend
-from runtime.engine import FactorEngine
-from storage.cache import CacheManager, PersistentPlanCache
-from storage.data_scope import compute_data_scope
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.storage.cache import CacheManager, PersistentPlanCache
+from factor_engine.storage.data_scope import compute_data_scope
 from tests.helpers import InMemorySeriesSource
 
 

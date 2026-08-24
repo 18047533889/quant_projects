@@ -24,7 +24,7 @@ import pytest
 
 # 先 import 算子模块（触发 cleaned_operators.base 完整加载），再 import
 # backend.numeric_semantics —— 避免并发会话修改 base.py 期间的循环导入部分态。
-from cleaned_operators.common.cross_sectional import (  # noqa: E402
+from factor_engine.cleaned_operators.common.cross_sectional import (  # noqa: E402
     CrossSectionalMadZscore,
     CrossSectionalNeutralize,
     CrossSectionalNeutralizePolars,
@@ -35,11 +35,11 @@ from cleaned_operators.common.cross_sectional import (  # noqa: E402
     Rank,
     RankPct,
 )
-from cleaned_operators.common.elementwise import Acos, Asin, BlomTransform, Exp, Pow  # noqa: E402
-from cleaned_operators.common.polars_math_extended import AsinPolars  # noqa: E402
+from factor_engine.cleaned_operators.common.elementwise import Acos, Asin, BlomTransform, Exp, Pow  # noqa: E402
+from factor_engine.cleaned_operators.common.polars_math_extended import AsinPolars  # noqa: E402
 
-from backend import numeric_semantics as ns  # noqa: E402
-from backend.numeric_semantics import NumericSemantics  # noqa: E402
+from factor_engine.backend import numeric_semantics as ns  # noqa: E402
+from factor_engine.backend.numeric_semantics import NumericSemantics  # noqa: E402
 
 try:
     import polars as pl

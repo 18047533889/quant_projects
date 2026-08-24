@@ -17,12 +17,12 @@ from __future__ import annotations
 
 import pytest
 
-from runtime.dependency_catalog import (
+from factor_engine.runtime.dependency_catalog import (
     DependencyCatalog,
     FactorDependencyEdge,
     UNBOUNDED_FORWARD_IMPACT,
 )
-from runtime.incremental_scheduler import (
+from factor_engine.runtime.incremental_scheduler import (
     DataEvent,
     DataEventLedger,
     DataEventStaleError,
@@ -31,7 +31,7 @@ from runtime.incremental_scheduler import (
     execute_incremental_updates_from_event,
     plan_updates_from_data_event,
 )
-from storage.catalog import FactorCatalog
+from factor_engine.storage.catalog import FactorCatalog
 
 
 def _mk_catalog(tmp_path) -> tuple[FactorCatalog, DependencyCatalog]:
@@ -167,7 +167,7 @@ def test_delete_event_forward_propagation(tmp_path):
 def test_param_spec_min_is_never_used_as_default():
     from types import SimpleNamespace
 
-    from runtime.execution_contract import _bound_param
+    from factor_engine.runtime.execution_contract import _bound_param
 
     # ParamSpec with min=2 but NO default: an unbound window must resolve to
     # None (unknown history), NOT to 2 (the legal-domain boundary).
@@ -179,8 +179,8 @@ def test_param_spec_min_is_never_used_as_default():
 
 
 def test_incremental_plan_uses_history_requirement_not_sentinel():
-    from runtime.execution_contract import HistoryRequirement
-    from runtime.incremental import build_incremental_plan
+    from factor_engine.runtime.execution_contract import HistoryRequirement
+    from factor_engine.runtime.incremental import build_incremental_plan
 
     plan = build_incremental_plan(
         factor_id="f1",
@@ -268,7 +268,7 @@ def test_ledger_idempotent_and_stale(tmp_path):
 def test_execute_event_rejects_stale_in_production(tmp_path):
     """P0-20 wiring: a stale event (snapshot_before != ledger last committed) is
     rejected before any materialization attempt."""
-    from runtime.dependency_catalog import DependencyCatalog
+    from factor_engine.runtime.dependency_catalog import DependencyCatalog
 
     catalog = FactorCatalog(tmp_path / "_catalog.sqlite")
     _register(catalog, "f_plain")

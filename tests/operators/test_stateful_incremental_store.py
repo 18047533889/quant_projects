@@ -6,10 +6,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.production_hardening import SEGMENTED_EXECUTION_CANONICALS
-from ir.nodes import IRNode
-from runtime.stateful_checkpoint_store import StatefulCheckpointStore
-from runtime.stateful_incremental import (
+from factor_engine.cleaned_operators.production_hardening import SEGMENTED_EXECUTION_CANONICALS
+from factor_engine.ir.nodes import IRNode
+from factor_engine.runtime.stateful_checkpoint_store import StatefulCheckpointStore
+from factor_engine.runtime.stateful_incremental import (
     segmented_incremental_available,
     stateful_canonicals_in_ir,
     try_stateful_segmented_incremental,
@@ -147,12 +147,12 @@ def _make_source(n: int) -> pd.Series:
 
 
 def test_run_incremental_bootstraps_then_resumes_from_checkpoint(tmp_path) -> None:
-    from api import ts_ema
-    from api.columns import col
-    from api.factor import Factor
-    from backend.pandas_backend import PandasBackend
-    from runtime.engine import FactorEngine
-    from storage.materializer import ParquetMaterializer
+    from factor_engine.api import ts_ema
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.storage.materializer import ParquetMaterializer
     from tests.helpers import InMemorySeriesSource
 
     lake = tmp_path / "lake"
@@ -197,12 +197,12 @@ def test_run_incremental_bootstraps_then_resumes_from_checkpoint(tmp_path) -> No
 def test_run_incremental_stateful_falls_back_for_unsupported_root(tmp_path) -> None:
     # A factor whose root is not a segmented-execution canonical is not
     # checkpoint-eligible and must run the standard path, still matching full.
-    from api import rank, ts_mean
-    from api.columns import col
-    from api.factor import Factor
-    from backend.pandas_backend import PandasBackend
-    from runtime.engine import FactorEngine
-    from storage.materializer import ParquetMaterializer
+    from factor_engine.api import rank, ts_mean
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.storage.materializer import ParquetMaterializer
     from tests.helpers import InMemorySeriesSource
 
     lake = tmp_path / "lake2"

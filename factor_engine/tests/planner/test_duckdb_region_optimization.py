@@ -10,20 +10,20 @@ from __future__ import annotations
 
 import pytest
 
-from planner.backend_region import (
+from factor_engine.planner.backend_region import (
     BackendRegion,
     ExecutionAxis,
     PhysicalBackend,
     Representation,
 )
-from planner.duckdb_region_optimizer import (
+from factor_engine.planner.duckdb_region_optimizer import (
     estimate_duckdb_to_arrow_cost,
     estimate_duckdb_to_pandas_cost,
     infer_duckdb_region_output_properties,
     optimize_duckdb_region_boundary,
     should_keep_duckdb_relation,
 )
-from planner.transfer_cost import (
+from factor_engine.planner.transfer_cost import (
     check_producer_ordering,
     estimate_sort_cost,
     estimate_transfer_edge_cost,
@@ -332,7 +332,7 @@ def test_sort_cost_included_when_required():
 
 def test_concrete_backend_identity_duckdb_sql():
     """MB-P0-002: Must use concrete backend 'duckdb_sql' not generic 'sql'."""
-    from backend.duckdb_pushdown_backend import DuckDBPushdownBackend
+    from factor_engine.backend.duckdb_pushdown_backend import DuckDBPushdownBackend
 
     backend = DuckDBPushdownBackend()
 

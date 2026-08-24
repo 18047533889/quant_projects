@@ -16,8 +16,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-import cleaned_operators.ts_model.volatility as V  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+import factor_engine.cleaned_operators.ts_model.volatility as V  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -57,7 +57,7 @@ def test_m081_gjr_leverage_timing_contract_explicit_descriptive():
     reviewed ModelTimingContract with fit_cutoff_offset=0 (descriptive) — it must
     MATCH the kernel, which fits through the current row.  If this ever flips to
     a predictive contract, the kernel/contract are inconsistent again."""
-    from cleaned_operators.model_timing import (
+    from factor_engine.cleaned_operators.model_timing import (
         get_model_timing_contract,
         model_timing_contract_is_explicit,
     )
@@ -74,7 +74,7 @@ def test_m081_gjr_leverage_timing_contract_explicit_descriptive():
 def test_m081_gjr_leverage_lane_diagnostic_research():
     """M-081 reconciler closure: an in-sample fit-through-t model must NOT sit in
     an alpha-certified lane — it must be DIAGNOSTIC_RESEARCH."""
-    from cleaned_operators.model_lane import assign_model_lane
+    from factor_engine.cleaned_operators.model_lane import assign_model_lane
 
     assert assign_model_lane("ts_gjr_leverage") == "DIAGNOSTIC_RESEARCH", (
         "M-081: ts_gjr_leverage lane must be DIAGNOSTIC_RESEARCH (in-sample "

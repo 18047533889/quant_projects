@@ -75,8 +75,8 @@ def _register_catalog_fundamental_fields() -> None:
     statements) are ``mining_allowed=False`` metadata, not period-selected
     features, and are exempt from period contracts.
     """
-    from fields import ASHARE_FIELD_SPECS
-    from fields.catalog_us import US_FIELD_SPECS
+    from factor_engine.fields import ASHARE_FIELD_SPECS
+    from factor_engine.fields.catalog_us import US_FIELD_SPECS
     from .logical_tables import logical_table_contract
 
     for market, specs in (("ashare", ASHARE_FIELD_SPECS), ("us", US_FIELD_SPECS)):

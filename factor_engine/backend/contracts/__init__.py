@@ -21,12 +21,24 @@ if TYPE_CHECKING:
 
 __all__ = [
     "BackendFamily",
+    "PhysicalBackend",
     "BackendKind",
+    "Representation",
     "ExecutionKind",
     "CapabilityLevel",
     "PhysicalImplementationID",
     "PhysicalImplementationSpec",
     "Accelerator",
+    # Canonical string vocabulary + validation
+    "CANONICAL_BACKEND_STRINGS",
+    "BACKEND_FAMILY_CANONICAL",
+    "PHYSICAL_BACKEND_CANONICAL",
+    "REPRESENTATION_CANONICAL",
+    "EXECUTION_KIND_CANONICAL",
+    "ACCELERATOR_CANONICAL",
+    "canonical_backend_string",
+    "validate_backend_string",
+    "is_canonical_backend_string",
 ]
 
 
@@ -39,12 +51,61 @@ class BackendFamily(str, Enum):
 
 
 class BackendKind(str, Enum):
-    """Physical backend execution engines."""
+    """Physical backend execution engines (legacy alias of :class:`PhysicalBackend`).
+
+    Kept for backward compatibility with existing consumers. New code should
+    prefer :class:`PhysicalBackend`, which is the single canonical authority for
+    physical backend identifiers (R21-BACKEND-VOCABULARY).
+    """
     PANDAS_NUMPY = "pandas_numpy"
     POLARS = "polars"
     DUCKDB_SQL = "duckdb_sql"
     CLICKHOUSE_SQL = "clickhouse_sql"
     Q_KDB = "q_kdb"
+
+
+class PhysicalBackend(str, Enum):
+    """Canonical physical backend execution engines (single authority).
+
+    This is the authoritative vocabulary for physical backend identifiers.
+    ``BackendKind`` is retained as a backward-compatible alias so existing
+    consumers keep working; new code must use :class:`PhysicalBackend`.
+
+    Canonical strings (each member's ``.value`` is the only accepted spelling):
+        pandas_numpy   — certified pandas/numpy reference implementation
+        polars         — Polars native expression / columnar execution
+        duckdb_sql     — DuckDB SQL lowering
+        clickhouse_sql — ClickHouse SQL lowering
+        q_kdb          — Q/KDB physical execution backend
+    """
+    PANDAS_NUMPY = "pandas_numpy"
+    POLARS = "polars"
+    DUCKDB_SQL = "duckdb_sql"
+    CLICKHOUSE_SQL = "clickhouse_sql"
+    Q_KDB = "q_kdb"
+
+
+class Representation(str, Enum):
+    """Data representation / layout layer for a backend execution.
+
+    Distinguishes the physical layout a backend operates on, independent of the
+    execution engine. This is the canonical vocabulary for representation
+    identifiers (R21-BACKEND-VOCABULARY).
+
+    Canonical strings:
+        wide_panel   — wide panel layout (rows=instruments, cols=dates)
+        long         — long/tidy layout (one row per instrument-date)
+        lazy         — deferred / lazy evaluation graph (not yet materialized)
+        eager        — eager / materialized execution
+        sql          — SQL relational representation
+        table        — generic tabular representation (e.g. Q/KDB table)
+    """
+    WIDE_PANEL = "wide_panel"
+    LONG = "long"
+    LAZY = "lazy"
+    EAGER = "eager"
+    SQL = "sql"
+    TABLE = "table"
 
 
 class Accelerator(str, Enum):
@@ -71,6 +132,8 @@ class ExecutionKind(str, Enum):
     # Polars-specific native execution
     POLARS_NATIVE_EXPR = "polars_native_expr"
     POLARS_NUMPY_KERNEL = "polars_numpy_kernel"
+    # Backward-compatible alias kept for existing runtime/type-level consumers.
+    POLARS_NATIVE_KERNEL = "polars_numpy_kernel"
 
     # Numba CPU kernel execution (NUMBA_CPU_KERNEL is an accelerator, not a backend kind)
     NUMBA_CPU_KERNEL = "numba_cpu_kernel"
@@ -85,6 +148,7 @@ class ExecutionKind(str, Enum):
 
     # SQL execution
     DUCKDB_NATIVE_SQL = "duckdb_native_sql"
+    SQL_NATIVE = "duckdb_native_sql"
     CLICKHOUSE_NATIVE_SQL = "clickhouse_native_sql"
     SQL_PYTHON_UDF = "sql_python_udf"
 
@@ -157,6 +221,13 @@ class PhysicalImplementationSpec:
 
     # R2-P0-017 identity/evidence bindings. Defaults preserve constructor ABI,
     # but an omitted binding is deliberately ineligible for production.
+    #
+    # ``implementation_closure_hash`` binds the full semantic closure of the
+    # implementation: source/AST, transitive helper source, emitter/kernel
+    # identity, production parameter signature (ParamSpec), and numerical
+    # semantic policies.  The digest must be a 64-hex SHA-256 computed from the
+    # canonical closure payload returned by
+    # :func:`backend.evidence_provenance.implementation_closure_hash_for`.
     implementation_source_hash: str = ""
     emitter_identity: str = ""
     kernel_identity: str = ""
@@ -164,10 +235,21 @@ class PhysicalImplementationSpec:
     kernel_signature: str = ""
     parameter_domain_hash: str = ""
     semantic_contract_hash: str = ""
+    implementation_closure_hash: str = ""
 
     @staticmethod
     def _nonblank(value: object) -> bool:
         return isinstance(value, str) and bool(value.strip())
+
+    @staticmethod
+    def _valid_sha256(value: object) -> bool:
+        """Validate that value is a 64-character lowercase hexadecimal SHA256 hash."""
+        if not isinstance(value, str):
+            return False
+        value = value.strip()
+        if len(value) != 64:
+            return False
+        return all(c in "0123456789abcdef" for c in value)
 
     def validation_errors(self) -> tuple[str, ...]:
         """Return deterministic, fail-closed validation failures."""
@@ -184,32 +266,47 @@ class PhysicalImplementationSpec:
             "implementation_source_hash",
             "parameter_domain_hash",
             "semantic_contract_hash",
+            "implementation_closure_hash",
         ):
-            if not self._nonblank(getattr(self, field_name)):
+            value = getattr(self, field_name)
+            if not self._nonblank(value):
                 errors.append(f"blank {field_name}")
+            elif not self._valid_sha256(value):
+                errors.append(f"invalid {field_name} format (expected 64-char lowercase hex SHA256)")
         if not (self._nonblank(self.emitter_identity) or self._nonblank(self.kernel_identity)):
             errors.append("blank emitter/kernel identity")
         return tuple(errors)
 
     @property
     def physical_implementation_id(self) -> PhysicalImplementationID | None:
-        """Return the bound ID, or ``None`` for an incomplete declaration."""
+        """Return the bound ID, or ``None`` for an incomplete declaration.
+
+        Version history:
+            v1: original payload (backend, canonical, emitter_identity, execution_kind,
+                implementation_source_hash, kernel_identity, parameter_domain_hash,
+                semantic_contract_hash).
+            v2: added accelerator and kernel_signature to payload.
+            v3: added implementation_closure_hash binding (full semantic closure).
+        """
         if self.validation_errors():
             return None
         payload = {
+            "accelerator": self.accelerator.value,
             "backend": self.backend.strip(),
             "canonical": self.canonical.strip(),
             "emitter_identity": self.emitter_identity.strip(),
             "execution_kind": self.execution_kind.value,
+            "implementation_closure_hash": self.implementation_closure_hash.strip(),
             "implementation_source_hash": self.implementation_source_hash.strip(),
             "kernel_identity": self.kernel_identity.strip(),
+            "kernel_signature": self.kernel_signature.strip(),
             "parameter_domain_hash": self.parameter_domain_hash.strip(),
             "semantic_contract_hash": self.semantic_contract_hash.strip(),
         }
         digest = hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
-        return PhysicalImplementationID(f"pi:v1:{digest}")
+        return PhysicalImplementationID(f"pi:v3:{digest}")
 
     def is_production_eligible(self) -> bool:
         """Check if this spec allows production eligibility.

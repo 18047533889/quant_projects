@@ -4,9 +4,9 @@ from __future__ import annotations
 
 
 def test_fastpath_p0_subset_of_production_allowed():
-    from backend.production_fastpath_tiers import P0_PRODUCTION_FASTPATH_CANONICALS
-    from cleaned_operators import load_all
-    from cleaned_operators.operator_spec import build_operator_spec
+    from factor_engine.backend.production_fastpath_tiers import P0_PRODUCTION_FASTPATH_CANONICALS
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec
 
     load_all()
     for canon in sorted(P0_PRODUCTION_FASTPATH_CANONICALS):
@@ -17,11 +17,11 @@ def test_fastpath_p0_subset_of_production_allowed():
 
 def test_production_core_equals_fastpath_p0_p1_plus_legacy():
     """PRODUCTION_CORE = dual-backend core + deferred allowed。"""
-    from backend.production_fastpath_tiers import (
+    from factor_engine.backend.production_fastpath_tiers import (
         P0_PRODUCTION_FASTPATH_CANONICALS,
         P1_POLARS_CORE_PRODUCTION_SAFE,
     )
-    from cleaned_operators.operator_spec import (
+    from factor_engine.cleaned_operators.operator_spec import (
         PRODUCTION_ALLOWED_DEFERRED_CANONICALS,
         PRODUCTION_AUTHORING_CANONICALS,
         PRODUCTION_CORE_CANONICALS,
@@ -43,8 +43,8 @@ def test_production_core_equals_fastpath_p0_p1_plus_legacy():
 
 
 def test_production_allowed_equals_core_plus_composites():
-    from cleaned_operators import load_all
-    from cleaned_operators.operator_spec import (
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.operator_spec import (
         PRODUCTION_CORE_CANONICALS,
         production_allowed_canonicals,
         production_allowed_composite_canonicals,

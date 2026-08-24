@@ -9,15 +9,15 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="legacy SQL rollout tier superseded by canonical evidence certification")
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql, plan_is_sql_capable
-from backend.sql_pushdown.plan_fixtures import minimal_plan
-from backend.sql_pushdown.sql_registry import SQL_CAPABLE_CANONICALS, register_sql_backends
-from runtime.engine import FactorEngine
-from storage.factory import build_data_source
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql, plan_is_sql_capable
+from factor_engine.backend.sql_pushdown.plan_fixtures import minimal_plan
+from factor_engine.backend.sql_pushdown.sql_registry import SQL_CAPABLE_CANONICALS, register_sql_backends
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.storage.factory import build_data_source
 
 
 _TIER6_OPS = frozenset(
@@ -35,7 +35,7 @@ _TIER6_OPS = frozenset(
 
 @pytest.fixture(scope="module", autouse=True)
 def _load():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
     register_sql_backends()

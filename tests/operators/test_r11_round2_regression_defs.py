@@ -22,8 +22,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
@@ -64,7 +64,7 @@ def _random_walk_price(n: int = 400, seed: int = 0, drift: float = 0.0) -> pd.Da
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize("name", NEW_CANONICALS)
 def test_new_canonicals_registered_and_classified_extended(name: str) -> None:
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     assert OperatorRegistry.get(name) is not None, name
     assert OperatorRegistry.get(name, "polars") is not None, f"{name}: polars backend"

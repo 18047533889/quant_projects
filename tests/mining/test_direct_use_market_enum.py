@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from market.context import Market
-from mining.direct_use import DirectUseContext
+from factor_engine.market.context import Market
+from factor_engine.mining.direct_use import DirectUseContext
 
 
 class TestDirectUseContextMarketEnum:

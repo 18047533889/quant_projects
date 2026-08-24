@@ -25,13 +25,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.base import (
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
     ParamSpec,
     validate_operator_call,
 )
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 load_all()
 
@@ -181,7 +181,7 @@ def test_active_when_active_param_allowed():
 # ---------------------------------------------------------------------------
 
 def test_manifest_input_fields_are_panels_only():
-    from cleaned_operators.operator_spec import build_operator_spec, spec_to_manifest_entry
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec, spec_to_manifest_entry
 
     e = spec_to_manifest_entry(build_operator_spec("ts_mean"))
     assert "x" in e["input_fields"]
@@ -211,7 +211,7 @@ def test_registry_catalog_persists_full_contract():
 # ---------------------------------------------------------------------------
 
 def test_dsl_numeric_string_coerced_at_parser():
-    from api.dsl_parser import _coerce_numeric_string
+    from factor_engine.api.dsl_parser import _coerce_numeric_string
 
     assert _coerce_numeric_string("20") == 20 and isinstance(_coerce_numeric_string("20"), int)
     assert _coerce_numeric_string("0.05") == 0.05 and isinstance(_coerce_numeric_string("0.05"), float)

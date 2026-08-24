@@ -13,12 +13,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 
 load_all()
 
-from cleaned_operators.operator_surface import classify_canonical
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _frame(values: np.ndarray, start: str = "2024-01-01") -> pd.DataFrame:
@@ -38,7 +38,7 @@ def _ones(n: int) -> pd.DataFrame:
 # Registration / surface classification
 # ---------------------------------------------------------------------------
 def test_market_language_ops_registered_and_classified():
-    from cleaned_operators.operator_surface import (
+    from factor_engine.cleaned_operators.operator_surface import (
         DAILY_CANONICALS,
         EXTENDED_ONLY_CANONICALS,
         RESEARCH_ONLY_CANONICALS,

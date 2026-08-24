@@ -19,11 +19,11 @@ for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "POLA
 
 import pytest
 
-from planner.logical_plan import DuplicateLogicalNodeIdentityError, PlanNode
-from runtime.multibackend.batch_global_optimizer import (
+from factor_engine.planner.logical_plan import DuplicateLogicalNodeIdentityError, PlanNode
+from factor_engine.runtime.multibackend.batch_global_optimizer import (
     _raise_duplicate_logical_node_identity,
 )
-from planner.batch_global_optimizer import BatchGlobalOptimizer
+from factor_engine.planner.batch_global_optimizer import BatchGlobalOptimizer
 
 
 def _ctx():

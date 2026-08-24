@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.operator_spec import (
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.operator_spec import (
     PERMANENTLY_FORBIDDEN_CANONICALS,
     PRODUCTION_DENIED_CANONICALS,
 )
@@ -31,7 +31,7 @@ FUTURE_NAMES = {
 
 
 def test_no_future_names_registered():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     names = set(OperatorRegistry.list_canonical())
     present = sorted(FUTURE_NAMES & names)
@@ -42,7 +42,7 @@ def test_no_future_names_registered():
 
 
 def test_no_future_names_in_authoring_surfaces():
-    import cleaned_operators.operator_surface as surf
+    import factor_engine.cleaned_operators.operator_surface as surf
 
     for surf_name, surf_set in (
         ("DAILY", surf.DAILY_CANONICALS),
@@ -54,7 +54,7 @@ def test_no_future_names_in_authoring_surfaces():
 
 
 def test_alias_cannot_resolve_to_future_primitive():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     aliases = dict(getattr(OperatorRegistry, "_aliases", {}) or {})
     escapes = {a: c for a, c in aliases.items() if c in FUTURE_NAMES}
@@ -67,9 +67,9 @@ def test_alias_cannot_resolve_to_future_primitive():
 def test_production_deny_covers_non_causal_names():
     """Names that were removed as factor terminals must remain denied so legacy
     expressions cannot silently re-enter production."""
-    import cleaned_operators.operator_spec as spec
+    import factor_engine.cleaned_operators.operator_spec as spec
 
-    from cleaned_operators.tombstones import is_tombstoned
+    from factor_engine.cleaned_operators.tombstones import is_tombstoned
 
     for name in ("bfill", "causal_bfill", "fillna_interpolate", "shuffle"):
         covered = spec.is_production_denied(name) or is_tombstoned(name)
@@ -80,8 +80,8 @@ def test_production_deny_covers_non_causal_names():
     # registry, so a name is "covered" if it is denied OR permanently-forbidden
     # OR tombstoned.  Names never canonicals (lowercase ``lead``, ``backfill``)
     # legitimately have no entry.
-    from cleaned_operators.registry import OperatorRegistry
-    from cleaned_operators.tombstones import is_tombstoned
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.tombstones import is_tombstoned
 
     known = (
         set(OperatorRegistry.list_canonical())

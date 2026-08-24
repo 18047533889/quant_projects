@@ -9,11 +9,11 @@ from typing import Any
 
 
 def build_lqtp_capability_manifest() -> dict[str, Any]:
-    from api.lqtp_compat import DEFAULT_LQTP_DIALECT_VERSION
-    from backend.backend_certification import backend_certification
-    from cleaned_operators.operator_spec import build_operator_spec
-    from cleaned_operators.registry import OperatorRegistry
-    from backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.api.lqtp_compat import DEFAULT_LQTP_DIALECT_VERSION
+    from factor_engine.backend.backend_certification import backend_certification
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
     ensure_cleaned_loaded()
     aliases = {

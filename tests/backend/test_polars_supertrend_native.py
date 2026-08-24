@@ -402,7 +402,7 @@ def test_pandas_reference_parity_clean_and_gappy(native):
 
 
 def test_physical_spec_is_numpy_kernel_not_native_expr(native):
-    from backend.contracts import ExecutionKind
+    from factor_engine.backend.contracts import ExecutionKind
 
     op = native()
     spec = getattr(op, "_physical_spec", None)

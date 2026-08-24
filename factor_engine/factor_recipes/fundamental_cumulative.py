@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Fundamental recipes for fiscal-YTD cumulative filing fields."""
-from factor_recipes.registry import FactorRecipe, FactorRecipeRegistry
+from factor_engine.factor_recipes.registry import FactorRecipe, FactorRecipeRegistry
 
 
 def _register(name, description, expression, parameters):

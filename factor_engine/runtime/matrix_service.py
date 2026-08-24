@@ -5,11 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable, Iterator, Sequence
 
-from api.factor import Factor
+from factor_engine.api.factor import Factor
 
 if TYPE_CHECKING:
-    from runtime.engine import FactorEngine
-    from runtime.materialization_identity_certificate import (
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.runtime.materialization_identity_certificate import (
         MaterializationIdentityCertificate,
     )
 
@@ -31,9 +31,9 @@ def _matrix_factor_digest(
     ``build_materialize_lineage`` + ``_build_semantic_identity`` 机制，保证
     Parquet 落盘、catalog、ClickHouse、matrix 四处的 version 同源。
     """
-    from runtime import lineage_service
-    from runtime.materialize_service import _build_semantic_identity
-    from storage.catalog import compute_ir_hash
+    from factor_engine.runtime import lineage_service
+    from factor_engine.runtime.materialize_service import _build_semantic_identity
+    from factor_engine.storage.catalog import compute_ir_hash
 
     lineage = lineage_service.build_materialize_lineage(
         factor=factor,
@@ -76,7 +76,7 @@ def _validate_matrix_scope(
     下游按错误语义读取。factor 未声明 universe（默认 ALL/动态）时由 matrix
     universe 治理，不判冲突；未声明 freq（默认 1d）时与 matrix freq=1d 一致。
     """
-    from runtime.engine import _scope_from_factor
+    from factor_engine.runtime.engine import _scope_from_factor
 
     scopes: list[Any] = []
     for factor, fid in zip(factors, ids):
@@ -102,7 +102,7 @@ def _validate_matrix_scope(
 def _operator_manifest_hash() -> str | None:
     """Best-effort operator manifest hash (computed once per batch)."""
     try:
-        from cleaned_operators.operator_policy import compute_operator_catalog_hash
+        from factor_engine.cleaned_operators.operator_policy import compute_operator_catalog_hash
 
         return compute_operator_catalog_hash()
     except Exception:  # pragma: no cover - 失败按 None 记录，digest 仍权威
@@ -131,7 +131,7 @@ def build_certificates(
     contract mechanism as ``execute_materialize``); other fields are extracted
     cheaply from the execution scope + engine.
     """
-    from runtime.materialization_identity_certificate import (
+    from factor_engine.runtime.materialization_identity_certificate import (
         MaterializationIdentityCertificate,
         extract_scope_fields,
     )
@@ -215,14 +215,14 @@ def materialize_matrix_streaming(
     Defaults to the column-factor block layout; pass ``layout="legacy"`` for the
     monolithic single-wide-file writer.
     """
-    from storage.materialize.factor_matrix_materializer import FactorMatrixMaterializer
+    from factor_engine.storage.materialize.factor_matrix_materializer import FactorMatrixMaterializer
 
     ids = list(factor_ids) if factor_ids is not None else [f.name for f in factors]
     if len(ids) != len(factors):
         raise ValueError("factor_ids 长度必须与 factors 一致")
 
-    from runtime.production_policy import is_production_mode
-    from runtime.materialize_service import _effective_data_source_config
+    from factor_engine.runtime.production_policy import is_production_mode
+    from factor_engine.runtime.materialize_service import _effective_data_source_config
 
     production = is_production_mode(engine.run_mode)
     effective_config = _effective_data_source_config(None, engine.data_source)
@@ -338,8 +338,8 @@ def execute_materialize_matrix(
     if len(ids) != len(factors):
         raise ValueError("factor_ids 长度必须与 factors 一致")
 
-    from runtime.production_policy import is_production_mode
-    from runtime.materialize_service import _effective_data_source_config
+    from factor_engine.runtime.production_policy import is_production_mode
+    from factor_engine.runtime.materialize_service import _effective_data_source_config
 
     production = is_production_mode(engine.run_mode)
     effective_config = _effective_data_source_config(None, engine.data_source)
@@ -399,7 +399,7 @@ def execute_materialize_matrix(
         for fid, digest in auto_versions.items():
             bound_versions.setdefault(fid, digest)
 
-    from storage.factor_matrix_materializer import FactorMatrixMaterializer
+    from factor_engine.storage.factor_matrix_materializer import FactorMatrixMaterializer
 
     materializer = FactorMatrixMaterializer(matrix_root=matrix_root)
     summary = materializer.materialize(

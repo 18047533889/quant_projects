@@ -7,17 +7,17 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="legacy ffill/Tier-1 whitelist contract superseded by static evidence governance")
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from backend.operator_cost import tier1_has_explicit_cost
-from cleaned_operators.operator_policy import (
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.backend.operator_cost import tier1_has_explicit_cost
+from factor_engine.cleaned_operators.operator_policy import (
     POLARS_PRODUCTION_SAFE,
     TIER1_ALIASES,
     infer_operator_policy,
     resolve_tier1_canonical,
     tier1_policy_keys,
 )
-from cleaned_operators.registry import OperatorRegistry
-from runtime.pit_audit import audit_ir
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.runtime.pit_audit import audit_ir
 
 
 @pytest.fixture(scope="module")
@@ -65,7 +65,7 @@ def test_tier1_policy_keys_are_canonical():
 
 
 def test_audit_flags_missing_runtime(fail_on_missing=True):
-    from ir.nodes import IRNode
+    from factor_engine.ir.nodes import IRNode
 
     ir = IRNode(op="definitely_not_registered_op_xyz", inputs=[], attrs={})
     report = audit_ir(ir, fail_on_missing=True)
@@ -74,9 +74,9 @@ def test_audit_flags_missing_runtime(fail_on_missing=True):
 
 
 def test_audit_forbid_forward_fill_includes_ffill():
-    from expr.cleaned_call import CleanedCall
-    from expr.column import ColumnRef
-    from ir.analyzer import Analyzer
+    from factor_engine.expr.cleaned_call import CleanedCall
+    from factor_engine.expr.column import ColumnRef
+    from factor_engine.ir.analyzer import Analyzer
 
     call = CleanedCall("ffill", (ColumnRef("close"),))
     ir = Analyzer().lower(call).ir

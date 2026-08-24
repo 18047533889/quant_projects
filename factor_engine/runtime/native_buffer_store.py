@@ -35,7 +35,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from planner.backend_region import Representation
+from factor_engine.planner.backend_region import Representation
 
 
 class BufferState(str, Enum):
@@ -418,7 +418,7 @@ class NativeBufferStore:
     def _estimate_bytes(self, value: Any) -> int:
         """Estimate memory footprint of a value."""
         try:
-            from runtime.resource_governor import estimate_object_bytes
+            from factor_engine.runtime.resource_governor import estimate_object_bytes
             return max(0, int(estimate_object_bytes(value)))
         except Exception:
             return 1_000_000  # Conservative fallback

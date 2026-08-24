@@ -264,7 +264,7 @@ def init_polars_capability_registry() -> None:
 
     Bridges existing polars_long_policy tiers to new capability system.
     """
-    from backend.polars_long_policy import (
+    from factor_engine.backend.polars_long_policy import (
         POLARS_LONG_NATIVE,
         POLARS_LONG_STATEFUL,
         POLARS_LONG_PYTHON_ROLLING,

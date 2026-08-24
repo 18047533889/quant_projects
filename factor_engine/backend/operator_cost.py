@@ -256,7 +256,7 @@ _FEATURE_DIM_OPS = frozenset({
 def _resolve_canonical_name(canon: str) -> str:
     """将算子名解析为 canonical；解析失败时原样返回（兼容未 load_all 环境）。"""
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         return OperatorRegistry.resolve_canonical(str(canon))
     except Exception:
@@ -496,7 +496,7 @@ def production_requires_cost_spec(canon: str) -> bool:
     if _resolve_canonical_name(canon) in _COSTS:
         return False
     try:
-        from runtime.production_policy import resolve_run_mode
+        from factor_engine.runtime.production_policy import resolve_run_mode
 
         return resolve_run_mode() == "production"
     except Exception:
@@ -582,7 +582,7 @@ def tier1_has_explicit_cost(canon: str) -> bool:
         是否在 ``_COSTS`` 字典中有专属条目（非仅 ``_DEFAULT``）。
     """
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         name = OperatorRegistry.resolve_canonical(str(canon))
     except Exception:
@@ -691,7 +691,7 @@ def record_plan_actual(
     (operator, backend, shape, window) 的预测会乘上校准因子。
     """
     try:
-        from runtime.runtime_calibration import record_task_actual
+        from factor_engine.runtime.runtime_calibration import record_task_actual
 
         summary = estimate_plan_cost(plan, rows=rows or None)
         predicted_ms = float(summary.get("total_work", 0.0))
@@ -731,11 +731,11 @@ def calibrated_plan_peak_bytes(
     summary = estimate_plan_cost(plan, rows=rows)
     static_peak = int(summary.get("peak_live_memory_bytes", 0))
     try:
-        from runtime.runtime_calibration import (
+        from factor_engine.runtime.runtime_calibration import (
             calibration_key,
             calibrated_peak_bytes,
         )
-        from runtime.runtime_calibration import _shape_bucket, _window_bucket
+        from factor_engine.runtime.runtime_calibration import _shape_bucket, _window_bucket
 
         key = calibration_key(
             operator=str(getattr(plan, "op", "") or "plan"),

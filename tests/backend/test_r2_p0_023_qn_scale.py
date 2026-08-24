@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import polars as pl
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 load_all()
 
@@ -49,8 +49,8 @@ def _qn_oracle(values: np.ndarray) -> float:
 
 
 def test_bootstrap_selects_genuine_qn_authorities() -> None:
-    assert type(PANDAS_AUTHORITY).__module__ == "cleaned_operators.gemini_v2_common"
-    assert type(POLARS_AUTHORITY).__module__ == "cleaned_operators.gemini_v2_common"
+    assert type(PANDAS_AUTHORITY).__module__ == "factor_engine.cleaned_operators.gemini_v2_common"
+    assert type(POLARS_AUTHORITY).__module__ == "factor_engine.cleaned_operators.gemini_v2_common"
     assert PANDAS_AUTHORITY.metadata.param_names == ["x", "window", "min_periods"]
     assert POLARS_AUTHORITY.metadata.param_names == ["x", "window", "min_periods"]
     assert OperatorRegistry.get("ts_qn_scale", backend="duckdb") is None

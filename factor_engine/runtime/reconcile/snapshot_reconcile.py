@@ -8,8 +8,8 @@ from typing import Any
 
 import pyarrow.parquet as pq
 
-from runtime.lineage import hash_data_source_config
-from storage.catalog import FactorCatalog
+from factor_engine.runtime.lineage import hash_data_source_config
+from factor_engine.storage.catalog import FactorCatalog
 
 
 def _parse_json_field(raw: Any) -> dict[str, Any]:

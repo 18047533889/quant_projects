@@ -15,11 +15,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from planner.cse import deep_copy_plan
-from planner.logical_plan import PlanNode
-from planner.plan_hash import structural_key
-from planner.rewrite_fastpath import rewrite_node
-from planner.rolling_cache import (
+from factor_engine.planner.cse import deep_copy_plan
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.plan_hash import structural_key
+from factor_engine.planner.rewrite_fastpath import rewrite_node
+from factor_engine.planner.rolling_cache import (
     _ensure_rolling_ops_refreshed,
     _resolve_canonical,
     _window_from_attrs,
@@ -110,7 +110,7 @@ def _output_semantic_digest(node: PlanNode) -> str:
     ``plan_hash._semantic_digest``（typed JSON schema，未知类型抛
     ``PlanSemanticAttrTypeError``）。
     """
-    from planner.plan_hash import _semantic_digest as _typed_semantic_digest
+    from factor_engine.planner.plan_hash import _semantic_digest as _typed_semantic_digest
 
     return _typed_semantic_digest(node) or ""
 

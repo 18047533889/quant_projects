@@ -5,12 +5,12 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from api import rank, ts_mean
-from api.columns import col
-from api.factor import Factor
-from backend.pandas_backend import PandasBackend
-from runtime.engine import FactorEngine
-from storage.materializer import ParquetMaterializer
+from factor_engine.api import rank, ts_mean
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.storage.materializer import ParquetMaterializer
 from tests.helpers import InMemorySeriesSource
 
 

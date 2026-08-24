@@ -73,7 +73,7 @@ def _measure_memory_growth(func, iterations: int = 100, warmup: int = 10):
 
 def test_memory_leak_resource_governor_reserve_release():
     """MemoryGovernor reserve/release 循环无泄漏。"""
-    from runtime.resource_governor import MemoryGovernor
+    from factor_engine.runtime.resource_governor import MemoryGovernor
 
     gov = MemoryGovernor(process_budget_bytes=100 * 1024**2, duckdb_budget_bytes=20 * 1024**2)
 
@@ -89,7 +89,7 @@ def test_memory_leak_resource_governor_reserve_release():
 
 def test_memory_leak_buffer_store_put_release():
     """GovernedBufferStore put/release 循环无泄漏。"""
-    from runtime.buffer_store import GovernedBufferStore
+    from factor_engine.runtime.buffer_store import GovernedBufferStore
     import pandas as pd
 
     store = GovernedBufferStore(budget_bytes=50 * 1024**2)
@@ -108,7 +108,7 @@ def test_memory_leak_buffer_store_put_release():
 
 def test_memory_leak_execution_resource_scope():
     """ExecutionResourceScope enter/exit 循环无泄漏。"""
-    from runtime.resource_governor import ExecutionResourcePlan, ExecutionResourceScope
+    from factor_engine.runtime.resource_governor import ExecutionResourcePlan, ExecutionResourceScope
 
     plan = ExecutionResourcePlan.auto()
 
@@ -124,7 +124,7 @@ def test_memory_leak_execution_resource_scope():
 
 def test_memory_leak_cache_lru_eviction():
     """Cache LRU 淘汰无泄漏（register_layer + evict hook）。"""
-    from runtime.resource_governor import MemoryGovernor
+    from factor_engine.runtime.resource_governor import MemoryGovernor
     import pandas as pd
 
     gov = MemoryGovernor(process_budget_bytes=10 * 1024**2, duckdb_budget_bytes=2 * 1024**2)
@@ -164,7 +164,7 @@ def test_memory_leak_cache_lru_eviction():
 
 def test_resource_governance_l0_buffer_lifecycle():
     """L0 buffer 生命周期：put → pin → release → 内存释放。"""
-    from runtime.buffer_store import GovernedBufferStore, BufferEntryState
+    from factor_engine.runtime.buffer_store import GovernedBufferStore, BufferEntryState
     import pandas as pd
 
     store = GovernedBufferStore(budget_bytes=100 * 1024**2)
@@ -191,7 +191,7 @@ def test_resource_governance_l0_buffer_lifecycle():
 
 def test_resource_governance_cache_expiration():
     """Cache 过期机制验证（使用 ExecutionCacheSession）。"""
-    from cache.session import ExecutionCacheSession
+    from factor_engine.cache.session import ExecutionCacheSession
 
     # ExecutionCacheSession 没有 TTL 过期机制，跳过此测试
     pytest.skip("ExecutionCacheSession 不支持 TTL 过期（按执行周期管理）")
@@ -231,7 +231,7 @@ def test_resource_governance_file_handle_cleanup():
 
 def test_resource_governance_memory_governor_unregister():
     """MemoryGovernor unregister_layer 正确清理。"""
-    from runtime.resource_governor import MemoryGovernor
+    from factor_engine.runtime.resource_governor import MemoryGovernor
 
     gov = MemoryGovernor(process_budget_bytes=10 * 1024**2, duckdb_budget_bytes=2 * 1024**2)
 
@@ -252,7 +252,7 @@ def test_resource_governance_memory_governor_unregister():
 
 def test_resource_governance_buffer_store_refcount():
     """BufferStore refcount 正确管理（acquire/release）。"""
-    from runtime.buffer_store import GovernedBufferStore
+    from factor_engine.runtime.buffer_store import GovernedBufferStore
     import pandas as pd
 
     store = GovernedBufferStore(budget_bytes=50 * 1024**2)
@@ -283,7 +283,7 @@ def test_resource_governance_buffer_store_refcount():
 
 def test_stress_high_concurrency_buffer_store():
     """高并发场景：多线程同时 put/get/release。"""
-    from runtime.buffer_store import GovernedBufferStore
+    from factor_engine.runtime.buffer_store import GovernedBufferStore
     import pandas as pd
 
     store = GovernedBufferStore(budget_bytes=50 * 1024**2)
@@ -317,7 +317,7 @@ def test_stress_high_concurrency_buffer_store():
 
 def test_stress_memory_constrained_scenario():
     """内存受限场景：预算很小，频繁 evict。"""
-    from runtime.buffer_store import GovernedBufferStore
+    from factor_engine.runtime.buffer_store import GovernedBufferStore
     import pandas as pd
 
     # 只给 5MB 预算
@@ -337,7 +337,7 @@ def test_stress_memory_constrained_scenario():
 
 def test_stress_large_panel_data():
     """大数据量场景：超大面板数据。"""
-    from runtime.buffer_store import GovernedBufferStore
+    from factor_engine.runtime.buffer_store import GovernedBufferStore
     import pandas as pd
 
     store = GovernedBufferStore(budget_bytes=200 * 1024**2)
@@ -363,7 +363,7 @@ def test_stress_large_panel_data():
 
 def test_stress_repeated_execution_scope_threading():
     """压力测试：多线程重复进入 ExecutionResourceScope。"""
-    from runtime.resource_governor import ExecutionResourcePlan, ExecutionResourceScope
+    from factor_engine.runtime.resource_governor import ExecutionResourcePlan, ExecutionResourceScope
 
     plan = ExecutionResourcePlan.auto()
     errors = []
@@ -392,7 +392,7 @@ def test_stress_repeated_execution_scope_threading():
 
 def test_failure_recovery_buffer_store_partial_release():
     """失败恢复：部分 release 后内存状态一致。"""
-    from runtime.buffer_store import GovernedBufferStore
+    from factor_engine.runtime.buffer_store import GovernedBufferStore
     import pandas as pd
 
     store = GovernedBufferStore(budget_bytes=50 * 1024**2)
@@ -424,7 +424,7 @@ def test_failure_recovery_buffer_store_partial_release():
 
 def test_failure_recovery_memory_governor_evict_exception():
     """失败恢复：evict hook 抛异常后 governor 状态一致。"""
-    from runtime.resource_governor import MemoryGovernor
+    from factor_engine.runtime.resource_governor import MemoryGovernor
 
     gov = MemoryGovernor(process_budget_bytes=10 * 1024**2, duckdb_budget_bytes=2 * 1024**2)
 
@@ -444,7 +444,7 @@ def test_failure_recovery_memory_governor_evict_exception():
 
 def test_failure_recovery_execution_scope_exception_in_body():
     """失败恢复：ExecutionResourceScope body 内异常，exit 仍清理。"""
-    from runtime.resource_governor import ExecutionResourcePlan, ExecutionResourceScope
+    from factor_engine.runtime.resource_governor import ExecutionResourcePlan, ExecutionResourceScope
     import os
 
     plan = ExecutionResourcePlan.auto()
@@ -471,7 +471,7 @@ def test_failure_recovery_execution_scope_exception_in_body():
 
 def test_stats_memory_governor_summary():
     """统计信息：MemoryGovernor summary 完整。"""
-    from runtime.resource_governor import MemoryGovernor
+    from factor_engine.runtime.resource_governor import MemoryGovernor
 
     gov = MemoryGovernor(process_budget_bytes=100 * 1024**2, duckdb_budget_bytes=20 * 1024**2)
     gov.register_layer("layer1", lambda t: 1000)
@@ -490,7 +490,7 @@ def test_stats_memory_governor_summary():
 
 def test_stats_buffer_store_summary():
     """统计信息：BufferStore summary 完整。"""
-    from runtime.buffer_store import GovernedBufferStore
+    from factor_engine.runtime.buffer_store import GovernedBufferStore
     import pandas as pd
 
     store = GovernedBufferStore(budget_bytes=50 * 1024**2)
@@ -514,7 +514,7 @@ def test_stats_buffer_store_summary():
 
 def test_stats_execution_resource_plan_to_dict():
     """统计信息：ExecutionResourcePlan 序列化。"""
-    from runtime.resource_governor import ExecutionResourcePlan
+    from factor_engine.runtime.resource_governor import ExecutionResourcePlan
 
     plan = ExecutionResourcePlan.auto()
     d = plan.to_dict()
@@ -530,7 +530,7 @@ def test_stats_execution_resource_plan_to_dict():
 
 def test_stats_process_family_memory():
     """统计信息：进程族内存探测。"""
-    from runtime.resource_governor import process_family_memory_bytes
+    from factor_engine.runtime.resource_governor import process_family_memory_bytes
 
     mem = process_family_memory_bytes(prefer_pss=True)
 
@@ -542,7 +542,7 @@ def test_stats_process_family_memory():
 
 def test_stats_live_memory_headroom():
     """统计信息：live headroom 探测。"""
-    from runtime.resource_governor import live_memory_headroom_bytes
+    from factor_engine.runtime.resource_governor import live_memory_headroom_bytes
 
     headroom = live_memory_headroom_bytes()
 
@@ -560,7 +560,7 @@ def test_tracemalloc_top_allocations():
     """使用 tracemalloc 追踪 top 内存分配。"""
     tracemalloc.start()
 
-    from runtime.buffer_store import GovernedBufferStore
+    from factor_engine.runtime.buffer_store import GovernedBufferStore
     import pandas as pd
 
     store = GovernedBufferStore(budget_bytes=100 * 1024**2)
@@ -594,8 +594,8 @@ def test_tracemalloc_top_allocations():
 @pytest.mark.slow
 def test_long_running_stability():
     """长时间运行稳定性：1000 次迭代，内存增长 < 50MB。"""
-    from runtime.buffer_store import GovernedBufferStore
-    from runtime.resource_governor import MemoryGovernor
+    from factor_engine.runtime.buffer_store import GovernedBufferStore
+    from factor_engine.runtime.resource_governor import MemoryGovernor
     import pandas as pd
 
     gov = MemoryGovernor(process_budget_bytes=100 * 1024**2, duckdb_budget_bytes=20 * 1024**2)

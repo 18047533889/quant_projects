@@ -28,15 +28,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module")
 def registry():
     """加载filter算子。"""
-    import cleaned_operators.filter_despike
-    import cleaned_operators.filter_smooth
-    import cleaned_operators.filter_hysteresis
+    import factor_engine.cleaned_operators.filter_despike
+    import factor_engine.cleaned_operators.filter_smooth
+    import factor_engine.cleaned_operators.filter_hysteresis
     return OperatorRegistry
 
 
@@ -137,7 +137,7 @@ def test_kama_min_periods_removed_or_semantics():
 
     当前实现：min_periods默认=er_window，但未在warmup逻辑中使用。
     """
-    from cleaned_operators.filter_smooth import ts_kama
+    from factor_engine.cleaned_operators.filter_smooth import ts_kama
 
     dates = pd.date_range("2020-01-01", periods=30, freq="D")
     data = pd.DataFrame({"X": np.linspace(100, 120, 30)}, index=dates)
@@ -160,7 +160,7 @@ def test_kama_min_periods_removed_or_semantics():
 
 def test_kama_rejects_bool_params():
     """FL-P0-004: er_window/fast_period/slow_period必须拒绝bool。"""
-    from cleaned_operators.filter_smooth import ts_kama
+    from factor_engine.cleaned_operators.filter_smooth import ts_kama
 
     dates = pd.date_range("2020-01-01", periods=20, freq="D")
     data = pd.DataFrame({"X": np.arange(20, dtype=float) + 100}, index=dates)
@@ -178,7 +178,7 @@ def test_kama_rejects_bool_params():
 
 def test_kama_rejects_float_params():
     """FL-P0-004: 拒绝float（即使5.0这种整数值）。"""
-    from cleaned_operators.filter_smooth import ts_kama
+    from factor_engine.cleaned_operators.filter_smooth import ts_kama
 
     dates = pd.date_range("2020-01-01", periods=20, freq="D")
     data = pd.DataFrame({"X": np.arange(20, dtype=float) + 100}, index=dates)

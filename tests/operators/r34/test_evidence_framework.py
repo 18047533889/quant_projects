@@ -20,7 +20,7 @@ os.environ.setdefault("FACTOR_ENGINE_CPU_BUDGET", "4")
 
 
 def test_gate_result_requires_executed_cases():
-    from runtime.r34_evidence import GateResult
+    from factor_engine.runtime.r34_evidence import GateResult
 
     g = GateResult.from_cases("G", [True, True])
     assert g.status == "PASS" and g.executed_cases == 2
@@ -33,7 +33,7 @@ def test_gate_result_requires_executed_cases():
 
 
 def test_evidence_header_binds_commit_and_tree():
-    from runtime.r34_evidence import current_evidence_header
+    from factor_engine.runtime.r34_evidence import current_evidence_header
 
     h = current_evidence_header()
     assert h.commit_sha, "HEAD 必须非空"
@@ -44,7 +44,7 @@ def test_evidence_header_binds_commit_and_tree():
 
 
 def test_hardcoded_true_gate_scanner_finds_literal():
-    from runtime.r34_evidence import scan_hardcoded_true_gates
+    from factor_engine.runtime.r34_evidence import scan_hardcoded_true_gates
 
     import tempfile
     from pathlib import Path
@@ -94,7 +94,7 @@ def test_parameter_domain_evidence_generated():
 
 
 def test_availability_clock_open_semantics():
-    from cleaned_operators.availability_clock import (
+    from factor_engine.cleaned_operators.availability_clock import (
         default_available_at,
         default_same_session_usable,
     )
@@ -113,7 +113,7 @@ def test_stateful_behavior_detection():
 
 
 def test_production_dataevent_no_env_bypass():
-    from runtime.production_policy import (
+    from factor_engine.runtime.production_policy import (
         is_production_mode,
         production_data_event_auto_publish_enabled,
     )
@@ -143,7 +143,7 @@ def test_production_dataevent_no_env_bypass():
 
 
 def test_model_timing_explicit_contract_required():
-    from cleaned_operators.model_timing import (
+    from factor_engine.cleaned_operators.model_timing import (
         MODEL_TIMING_CONTRACTS,
         model_timing_contract_is_explicit,
     )
@@ -154,7 +154,7 @@ def test_model_timing_explicit_contract_required():
 
 
 def test_financial_grain_contract_accepts_market_context():
-    from cleaned_operators.operator_spec import check_financial_grain_contract
+    from factor_engine.cleaned_operators.operator_spec import check_financial_grain_contract
 
     # 无 market_context 默认 A 股（向后兼容）；不抛错即可
     errs = check_financial_grain_contract("fin_qoq(field('revenue'), field('period'))")
@@ -163,7 +163,7 @@ def test_financial_grain_contract_accepts_market_context():
 
 def test_engine_production_frequency_fail_closed():
     """production 下缺 frequency 必须 fail-closed（P0-019）。"""
-    from runtime.production_policy import is_production_mode
+    from factor_engine.runtime.production_policy import is_production_mode
     import os
 
     _prev = os.environ.get("QUANT_PRODUCTION_MODE")

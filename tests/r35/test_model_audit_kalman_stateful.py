@@ -48,9 +48,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 # import).  ``load_all()`` is NOT used: the full-registry registration audit is
 # broken in this tree by a concurrent WIP on an unrelated operator, which would
 # make every load-dependent test fail for reasons unrelated to Kalman.
-import cleaned_operators.ts_model.state_space as _state_space  # noqa: F401,E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
-from cleaned_operators.ts_model.state_space import (  # noqa: E402
+import factor_engine.cleaned_operators.ts_model.state_space as _state_space  # noqa: F401,E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators.ts_model.state_space import (  # noqa: E402
     KALMAN_STATEFUL_CANONICALS,
     _finite_variance,
     kalman_stateful_contract,
@@ -127,7 +127,7 @@ def test_execution_contract_is_required_full_history():
     required_full_history (NOT checkpoint), because there is no checkpoint
     restore authority.  This is what mining/operator_catalog derives
     checkpoint_supported=False + full_history_replay=True from."""
-    from runtime.execution_contract import execution_contract
+    from factor_engine.runtime.execution_contract import execution_contract
 
     for c in sorted(KALMAN_STATEFUL_CANONICALS):
         contract = execution_contract(c)

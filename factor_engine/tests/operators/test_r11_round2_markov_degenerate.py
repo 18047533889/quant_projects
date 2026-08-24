@@ -26,10 +26,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.markov_dynamics  # noqa: F401  (registers pandas backends)
-import cleaned_operators.polars_dynamics  # noqa: F401  (registers polars backends)
+import factor_engine.cleaned_operators.markov_dynamics  # noqa: F401  (registers pandas backends)
+import factor_engine.cleaned_operators.polars_dynamics  # noqa: F401  (registers polars backends)
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _pandas(name: str, *args, **kwargs) -> np.ndarray:
@@ -63,7 +63,7 @@ def _frame(values: np.ndarray) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 def test_state_with_no_outgoing_transitions_row_is_all_nan():
-    from cleaned_operators.markov_dynamics import _state_dynamics_series
+    from factor_engine.cleaned_operators.markov_dynamics import _state_dynamics_series
 
     # Blocks of 0s with a single 1 landing at the very end of a window: that 1
     # is the last element of the window, so it is observed as a *value* (counts
@@ -100,7 +100,7 @@ def test_state_with_no_outgoing_transitions_row_is_all_nan():
 # ---------------------------------------------------------------------------
 
 def test_zero_incoming_destination_not_presented_as_confident():
-    from cleaned_operators.markov_dynamics import _state_dynamics_series
+    from factor_engine.cleaned_operators.markov_dynamics import _state_dynamics_series
 
     # A single spike (100) followed by zeros: the spike maps to its own top
     # state, appears as the FIRST element of each window, so it is a *source*
@@ -172,7 +172,7 @@ def test_blocky_window_persistence_not_zero_or_uniform():
 # ---------------------------------------------------------------------------
 
 def test_two_state_chain_recovers_sensible_transition_matrix():
-    from cleaned_operators.markov_dynamics import _state_dynamics_series
+    from factor_engine.cleaned_operators.markov_dynamics import _state_dynamics_series
 
     # Alternating 0/10 with 3 quantile bins maps to exactly two states that
     # alternate deterministically 0->1, 1->0, ...  Each row holds ~half the
@@ -219,7 +219,7 @@ def test_min_count_relational_rejection():
 
 
 def test_kernel_min_count_guard_direct():
-    from cleaned_operators.markov_dynamics import _state_dynamics_series
+    from factor_engine.cleaned_operators.markov_dynamics import _state_dynamics_series
 
     s = np.random.default_rng(1).normal(size=(50,))
     # Direct kernel call bypasses the registry relational spec; the kernel's own

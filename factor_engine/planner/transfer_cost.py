@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from planner.backend_region import PhysicalBackend, Representation
+from factor_engine.planner.backend_region import PhysicalBackend, Representation
 
 
 @dataclass(frozen=True)

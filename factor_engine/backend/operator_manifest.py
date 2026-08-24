@@ -6,18 +6,18 @@ import json
 from pathlib import Path
 from typing import Any
 
-from backend.composite_evidence import COMPOSITE_REFERENCE_TO_LOWERED_PANDAS_VERIFIED
+from factor_engine.backend.composite_evidence import COMPOSITE_REFERENCE_TO_LOWERED_PANDAS_VERIFIED
 
 
 def build_operator_manifest_entry(canon: str) -> dict[str, Any]:
     """构建单个 canonical 的 manifest 条目（capability + fastpath 视图）。"""
-    from backend.fastpath_coverage import build_fastpath_coverage_row
-    from backend.operator_capability import capability_for, resolve_canonical
-    from backend.polars_long_policy import infer_polars_long_tier
-    from backend.sql_tiers import effective_sql_production_safe
-    from cleaned_operators.operator_spec import build_operator_spec, spec_to_manifest_entry
-    from planner.composite_lowering import lowered_primitives as probe_lowered_primitives
-    from backend.polars_long_production import polars_long_production_tier
+    from factor_engine.backend.fastpath_coverage import build_fastpath_coverage_row
+    from factor_engine.backend.operator_capability import capability_for, resolve_canonical
+    from factor_engine.backend.polars_long_policy import infer_polars_long_tier
+    from factor_engine.backend.sql_tiers import effective_sql_production_safe
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec, spec_to_manifest_entry
+    from factor_engine.planner.composite_lowering import lowered_primitives as probe_lowered_primitives
+    from factor_engine.backend.polars_long_production import polars_long_production_tier
 
     name = resolve_canonical(canon)
     spec = build_operator_spec(name)
@@ -83,7 +83,7 @@ def build_operator_manifest(
     fastpath_only: bool = False,
 ) -> list[dict[str, Any]]:
     """构建全量或过滤后的算子 manifest 列表。"""
-    from cleaned_operators.operator_spec import iter_operator_specs
+    from factor_engine.cleaned_operators.operator_spec import iter_operator_specs
 
     rows: list[dict[str, Any]] = []
     for spec in iter_operator_specs():

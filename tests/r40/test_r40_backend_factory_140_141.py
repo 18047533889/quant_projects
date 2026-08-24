@@ -14,8 +14,8 @@ import pytest
 
 class TestPandasModinContextScoped:
     def test_pandas_modin_choice_context_scoped_not_env(self, monkeypatch):
-        import backend.factory as factory
-        import backend.pandas_compat as pc
+        import factor_engine.backend.factory as factory
+        import factor_engine.backend.pandas_compat as pc
 
         calls = {}
 
@@ -44,8 +44,8 @@ class TestPandasModinContextScoped:
             pc._MODIN_ENABLED.set(False)
 
     def test_pandas_plain_does_not_enable_modin(self, monkeypatch):
-        import backend.factory as factory
-        import backend.pandas_compat as pc
+        import factor_engine.backend.factory as factory
+        import factor_engine.backend.pandas_compat as pc
 
         calls = {}
 
@@ -63,7 +63,7 @@ class TestPandasModinContextScoped:
             pc._MODIN_ENABLED.set(False)
 
     def test_set_modin_enabled_uses_contextvar_not_env(self):
-        import backend.pandas_compat as pc
+        import factor_engine.backend.pandas_compat as pc
 
         os.environ.pop("FACTOR_ENGINE_USE_MODIN", None)
         pc.set_modin_enabled(True)
@@ -75,8 +75,8 @@ class TestPandasModinContextScoped:
 
 class TestClickhouseCertificateChain:
     def test_clickhouse_sql_certificate_records_backend_chain(self, monkeypatch):
-        from backend.factory import build_backend, build_backend_execution_certificate
-        from runtime.production_execution_certificate import (
+        from factor_engine.backend.factory import build_backend, build_backend_execution_certificate
+        from factor_engine.runtime.production_execution_certificate import (
             ProductionExecutionCertificate,
         )
 
@@ -86,7 +86,7 @@ class TestClickhouseCertificateChain:
         class _StubBackend:
             pass
 
-        import backend.duckdb_pushdown_backend as dpb
+        import factor_engine.backend.duckdb_pushdown_backend as dpb
 
         monkeypatch.setattr(dpb, "DuckDBPushdownBackend", _StubBackend)
         backend = build_backend("clickhouse_sql")

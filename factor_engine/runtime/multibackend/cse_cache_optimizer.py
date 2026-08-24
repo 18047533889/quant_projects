@@ -12,11 +12,9 @@ CSE (Common Subexpression Elimination) cache 命中率优化：
     - Cache hit rate > 80%（同一 batch 内 shared node 复用）
     - Memory overhead < 20%（cache 不占用过多内存）
 
-Fail-closed 治理（R21-CSE-CACHE-IDENTITY / R23 P0-2）：
-    1. Cache key 绑定完整 8 维语义身份（CSECacheKey：LogicalNodeID /
-       BoundParams / DataReadIdentity / Universe / Market / DecisionClock /
-       PhysicalImplementation / SemanticContract）—— 绝不能用裸 shared-node
-       字符串当 key，否则两个不同 snapshot/universe/params 的同一 node 会错误复用。
+Fail-closed 治理（R21-CSE-CACHE-IDENTITY）：
+    1. Cache key 绑定完整语义身份，绝不能用裸 shared-node 字符串当 key ——
+       否则两个不同 snapshot/universe/params 的同一 node 会错误复用。
     2. ``size_bytes`` 未知/<=0 一律拒绝（CacheCapacityExceeded），绝不静默
        无上限缓存。
     3. 更新已有 key 时先把旧 key 从 ``_lru_order`` 移除再重排，避免重复 LRU
@@ -24,42 +22,20 @@ Fail-closed 治理（R21-CSE-CACHE-IDENTITY / R23 P0-2）：
     4. 全部 pinned + 超容量时抛 CacheCapacityExceeded（backpressure），绝不静默
        ``break`` 突破硬上限。
     5. LIRS 未实现则 fail-closed（UnsupportedEvictionPolicy），绝不静默回落到 LRU。
-    6. Production 模式（``production_mode=True`` 或环境变量
-       ``FACTOR_ENGINE_PRODUCTION_MODE`` / 既有 ``runtime.production_policy``
-       判定）：任何 correctness-critical 语义字段为空 → 抛 ``ValueError`` /
-       ``TypeError`` fail-closed；裸 ``CSECacheKey(logical_node="abc")`` 或 str
-       裸 key 一律禁止进 production cache。
 """
 
 from __future__ import annotations
 
 import hashlib
 import logging
-import os
 import threading
 import time
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from runtime.resource_errors import ResourceGovernanceError
+from factor_engine.runtime.resource_errors import ResourceGovernanceError
 
 _logger = logging.getLogger(__name__)
-
-#: CSECacheKey 中 correctness-critical 的语义维度（production 全部必须非空）。
-_CORRECTNESS_CRITICAL_FIELDS = (
-    "logical_node",
-    "bound_params",
-    "data_source",
-    "universe",
-    "market",
-    "decision_clock",
-    "physical_impl",
-    "semantic_contract",
-)
-
-
-def _truthy_env(name: str) -> bool:
-    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 class CacheCapacityExceeded(ResourceGovernanceError):
@@ -85,17 +61,17 @@ class CSECacheKey:
     semantic contract 不能互相复用缓存。
 
     字段（与任务指定维度一一对应）：
-        logical_node:      LogicalNodeID
-        bound_params:      BoundParams
+        logical_node:      LogicalNodeIdentity
+        bound_params:      BoundParameterIdentity
         data_source:       DataReadIdentity
-        universe:          Universe
+        universe:          UniverseSnapshotIdentity
         market:            Market
         decision_clock:    DecisionClock
-        physical_impl:     PhysicalImplementation
-        semantic_contract: SemanticContract
+        physical_impl:     PhysicalImplementationID
+        semantic_contract: SemanticContractIdentity
 
     调用方负责把各权威 identity 对象折叠成稳定字符串（如 ``DecisionClock`` 的
-    ``semantic_hash``、``PhysicalImplementation.value``、universe 的
+    ``semantic_hash``、``PhysicalImplementationID.value``、universe 的
     ``membership_hash``）。本类只负责组合 + 稳定哈希。
     """
 
@@ -190,16 +166,12 @@ class CSECacheOptimizer:
         *,
         max_cache_bytes: int = 4 * 1024**3,
         eviction_policy: str = "lru",
-        production_mode: bool | None = None,
     ) -> None:
         """
         Args:
             max_cache_bytes: Cache 最大内存占用
             eviction_policy: Eviction 策略（"lru" | "lfu"）。"lirs" 未实现，
                 fail-closed 抛 ``UnsupportedEvictionPolicy``，绝不静默回退 LRU。
-            production_mode: 显式开关 production fail-closed 语义。``None``
-                （默认）时按环境判定：``FACTOR_ENGINE_PRODUCTION_MODE`` 环境变量
-                或既有 ``runtime.production_policy.is_production_mode()``。
         """
         if eviction_policy not in {"lru", "lfu"}:
             raise UnsupportedEvictionPolicy(
@@ -209,77 +181,32 @@ class CSECacheOptimizer:
             )
         self.max_cache_bytes = max_cache_bytes
         self.eviction_policy = eviction_policy
-        self._production = self._resolve_production(production_mode)
 
         self._cache: dict[CSECacheKey, CacheEntry] = {}
         self._lru_order: list[CSECacheKey] = []  # LRU eviction queue
         self._metrics = CSECacheMetrics()
         self._lock = threading.RLock()
 
-    # ------------------------------------------------------------------
-    # Production mode resolution / validation
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _resolve_production(production_mode: bool | None) -> bool:
-        if production_mode is not None:
-            return bool(production_mode)
-        if _truthy_env("FACTOR_ENGINE_PRODUCTION_MODE"):
-            return True
-        try:
-            from runtime.production_policy import is_production_mode
-
-            return bool(is_production_mode())
-        except Exception:  # pragma: no cover - import failure should not crash
-            return False
-
-    def _validate_production_key(self, ckey: CSECacheKey) -> None:
-        """production fail-closed：任何 correctness-critical 字段为空即拒绝。"""
-        empty = [
-            f
-            for f in _CORRECTNESS_CRITICAL_FIELDS
-            if not str(getattr(ckey, f, "") or "").strip()
-        ]
-        if empty:
-            raise ValueError(
-                "production 模式 CSE cache 禁止裸 key / 不完整语义 key: "
-                f"empty correctness-critical field(s) = {empty}. "
-                f"CSECacheKey 必须绑定完整 8 维语义身份 "
-                f"(logical_node/bound_params/data_source/universe/market/"
-                f"decision_clock/physical_impl/semantic_contract)。"
-            )
-
     def _normalize_key(self, key: Any) -> CSECacheKey:
         """把用户 key 归一为完整语义 key。
 
-        research（非 production）模式：``str`` 作为向后兼容的裸 node id ——
-        仅作为 ``logical_node`` 维度，其余语义维度为空。
-
-        production 模式：fail-closed —— 仅接受完整 8 维 ``CSECacheKey``；
-        str / 裸 key 一律抛错，禁止 ``CSECacheKey(logical_node="abc")`` 进生产。
+        ``str`` 是向后兼容的裸 node id —— 仅作为 ``logical_node`` 维度，其余
+        语义维度为空；生产应传完整 ``CSECacheKey``。
         """
         if isinstance(key, CSECacheKey):
-            ckey = key
-        elif isinstance(key, str):
-            if self._production:
-                raise TypeError(
-                    "production 模式 CSE cache 禁止 str 裸 key（仅 logical_node）。"
-                    "必须传完整 CSECacheKey（8 维语义身份）。"
-                )
-            ckey = CSECacheKey(logical_node=key)
-        else:
-            raise TypeError(
-                f"cache key must be CSECacheKey or str, got {type(key).__module__}."
-                f"{type(key).__qualname__}"
-            )
-        if self._production:
-            self._validate_production_key(ckey)
-        return ckey
+            return key
+        if isinstance(key, str):
+            return CSECacheKey(logical_node=key)
+        raise TypeError(
+            f"cache key must be CSECacheKey or str, got {type(key).__module__}."
+            f"{type(key).__qualname__}"
+        )
 
     def get(self, key: Any) -> Any | None:
         """从 cache 读取（记录访问统计）。
 
         Args:
-            key: Cache key（完整 ``CSECacheKey``；非 production 兼容 str）
+            key: Cache key（完整 ``CSECacheKey`` 或向后兼容的 str）
 
         Returns:
             Cached value 或 None（miss）
@@ -309,7 +236,7 @@ class CSECacheOptimizer:
         """写入 cache（可能触发 eviction）。
 
         Args:
-            key: Cache key（完整 ``CSECacheKey``；非 production 兼容 str）
+            key: Cache key（完整 ``CSECacheKey``）
             value: Cached value
             size_bytes: Value 内存占用（字节）。未知/非正数一律拒绝
                 （CacheCapacityExceeded）—— 绝不静默无限缓存。
@@ -390,23 +317,6 @@ class CSECacheOptimizer:
             if entry is not None:
                 entry.pin_count = max(0, entry.pin_count - 1)
                 self._metrics.unpin_operations += 1
-
-    def evict(self, key: Any) -> None:
-        """Evict 指定 key（若存在且未 pinned）。
-
-        Args:
-            key: Cache key
-        """
-        with self._lock:
-            ckey = self._normalize_key(key)
-            entry = self._cache.get(ckey)
-            if entry is None or entry.is_pinned():
-                return
-            self._cache.pop(ckey)
-            if ckey in self._lru_order:
-                self._lru_order.remove(ckey)
-            self._metrics.total_size_bytes -= entry.size_bytes
-            self._metrics.evictions += 1
 
     def _evict_one(self, protected: Any = None) -> bool:
         """Evict 一个 entry（按 eviction policy 选择）。
@@ -538,7 +448,6 @@ class CSECacheOptimizer:
                 "pinned_entries": pinned_count,
                 "max_cache_bytes": self.max_cache_bytes,
                 "eviction_policy": self.eviction_policy,
-                "production_mode": self._production,
                 "metrics": metrics,
             }
 

@@ -13,15 +13,15 @@ import datetime
 from pathlib import Path
 
 sys.path.insert(0, ".")
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 load_all()
 
-from cleaned_operators.registry import OperatorRegistry as R
-from cleaned_operators.operator_surface import classify_canonical
-from cleaned_operators.tombstones import ALL_TOMBSTONED_NAMES
-from cleaned_operators.operator_spec import _infer_status
-from cleaned_operators.operator_policy import infer_operator_policy
-from cleaned_operators.registry import _contract_hash
+from factor_engine.cleaned_operators.registry import OperatorRegistry as R
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
+from factor_engine.cleaned_operators.tombstones import ALL_TOMBSTONED_NAMES
+from factor_engine.cleaned_operators.operator_spec import _infer_status
+from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
+from factor_engine.cleaned_operators.registry import _contract_hash
 
 FE = Path(__file__).resolve().parents[1]
 OUT = FE / "docs" / "evidence" / "r30"
@@ -67,7 +67,7 @@ with open(OUT / "R30_ALIAS_AUDIT.csv", "w", newline="") as f:
 with open(OUT / "R30_DELETION_MANIFEST.csv", "w", newline="") as f:
     w = csv.writer(f)
     w.writerow(["name", "risk_class", "removed_since", "had_executable"])
-    from cleaned_operators.tombstones import TOMBSTONES
+    from factor_engine.cleaned_operators.tombstones import TOMBSTONES
     for name, tb in sorted(TOMBSTONES.items()):
         w.writerow([name, tb.risk_class, tb.removed_since,
                     name in R._operators])
@@ -86,7 +86,7 @@ for c in sorted(R.list_canonical()):
         continue
     pol = infer_operator_policy(op, canonical=c)
     st = _infer_status(R._catalog.get(c, {}))
-    from cleaned_operators.operator_spec import _compute_allow_in_production
+    from factor_engine.cleaned_operators.operator_spec import _compute_allow_in_production
     allow = _compute_allow_in_production(c, status=st, pit_safe=pol.pit_safe,
                                          shape_preserving=pol.shape_preserving)
     admission.append({"canonical": c, "surface": classify_canonical(c),
@@ -105,7 +105,7 @@ for c in sorted(R.list_canonical()):
     meta = getattr(op, "metadata", None)
     if meta is None:
         continue
-    from cleaned_operators.operator_spec import _infer_panel_params
+    from factor_engine.cleaned_operators.operator_spec import _infer_panel_params
     declared = tuple(getattr(meta, "panel_params", None) or ())
     panels = set(declared) or set(_infer_panel_params(op, meta, R._catalog.get(c, {})))
     specs = getattr(meta, "param_specs", None) or {}

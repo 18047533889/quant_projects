@@ -35,10 +35,10 @@ from typing import Any, Iterable
 
 import pandas as pd
 
-from api.factor import Factor
+from factor_engine.api.factor import Factor
 from logging_utils import get_logger
 
-logger = get_logger("runtime.materialize_batch")
+logger = get_logger("factor_engine.runtime.materialize_batch")
 
 
 @dataclass
@@ -158,9 +158,9 @@ def _prepare_one(
 
     返回 dict 供 ``_write_one`` 与 manifest 批量提交共用（避免两处重建）。
     """
-    from runtime import lineage_service
-    from runtime.engine import _scope_from_factor
-    from storage.catalog import compute_ir_hash
+    from factor_engine.runtime import lineage_service
+    from factor_engine.runtime.engine import _scope_from_factor
+    from factor_engine.storage.catalog import compute_ir_hash
 
     analysis = item.output["analysis"]
     factor = item.factor
@@ -180,7 +180,7 @@ def _prepare_one(
     frequency_effective = (
         opts.get("frequency") or getattr(scope, "frequency", None) or factor.freq
     )
-    from storage.materialize.materializer import storage_precision_policy_for
+    from factor_engine.storage.materialize.materializer import storage_precision_policy_for
 
     _eff_dtype, _precision_policy = storage_precision_policy_for(
         opts.get("value_dtype"),
@@ -189,7 +189,7 @@ def _prepare_one(
     )
     lineage.extra["storage_precision_policy"] = _precision_policy
     lineage.extra["storage_value_dtype"] = _eff_dtype
-    from runtime.materialize_service import _build_semantic_identity
+    from factor_engine.runtime.materialize_service import _build_semantic_identity
 
     semantic_identity = _build_semantic_identity(
         engine=engine,
@@ -270,11 +270,11 @@ def _write_one(
     counters.physical_partition_write_rounds += len(summary.get("partitions") or [])
 
     if need_ch:
-        from runtime.dual_write_service import (
+        from factor_engine.runtime.dual_write_service import (
             MaterializationDelta,
             dual_write_clickhouse,
         )
-        from runtime import lineage_service
+        from factor_engine.runtime import lineage_service
 
         semantic_identity = prep["semantic_identity"]
         canonical_factor_version = (
@@ -348,14 +348,14 @@ def _build_manifest_payloads(
     build 仍 per-item（依赖单因子 analysis），但 DB 写入由
     ``record_factor_manifests_many`` 收敛到单个事务。
     """
-    from runtime.dependency_catalog import DependencyCatalog  # noqa: F401
-    from runtime.incremental_scheduler import (
+    from factor_engine.runtime.dependency_catalog import DependencyCatalog  # noqa: F401
+    from factor_engine.runtime.incremental_scheduler import (
         _calendar_version,
         _edges_from_analysis,
         _operator_manifest_from_ir,
         _resolve_source_dataset,
     )
-    from runtime.materialize_service import _build_full_factor_definition
+    from factor_engine.runtime.materialize_service import _build_full_factor_definition
 
     payloads: list[dict[str, Any]] = []
     for prep in preps:
@@ -410,7 +410,7 @@ def _record_shared_axes(preps: list[dict[str, Any]]) -> int:
     **不同**的共享 axis 构造一个 ``FactorBlockRef`` 并返回共享 axis 数（同一 index
     不重复计数）。逐因子 parquet 写路径保持原样——本观测/载体不改变写入文件。
     """
-    from runtime.factor_block_ref import build_factor_block, group_by_shared_axis
+    from factor_engine.runtime.factor_block_ref import build_factor_block, group_by_shared_axis
 
     series_by_fid: dict[str, pd.Series] = {}
     for prep in preps:
@@ -453,13 +453,13 @@ def execute_materialize_batch(
         ``{"materializations": {factor_name: summary}, "per_item": [...],
           "counters": {...}, "generation": generation_id}``。
     """
-    from runtime import lineage_service
-    from runtime.materialize_service import (
+    from factor_engine.runtime import lineage_service
+    from factor_engine.runtime.materialize_service import (
         _effective_data_source_config,
         resolve_parquet_write_target,
     )
-    from runtime.production_policy import is_production_mode
-    from storage.materializer import ParquetMaterializer
+    from factor_engine.runtime.production_policy import is_production_mode
+    from factor_engine.storage.materializer import ParquetMaterializer
 
     items = list(items)
     counters = BatchMaterializeCounters(item_count=len(items))
@@ -504,7 +504,7 @@ def execute_materialize_batch(
     if generation is not None:
         generation_id = generation.generation_id
     else:
-        from runtime.lineage import new_run_id
+        from factor_engine.runtime.lineage import new_run_id
 
         generation_id = f"batch-{new_run_id()}"
     run_generation = generation_id
@@ -566,7 +566,7 @@ def execute_materialize_batch(
         payloads = _build_manifest_payloads(
             engine, written_preps, production=production, data_source=engine.data_source
         )
-        from runtime.dependency_catalog import DependencyCatalog
+        from factor_engine.runtime.dependency_catalog import DependencyCatalog
 
         dep_catalog = DependencyCatalog(materializer.catalog)
         try:
@@ -577,7 +577,7 @@ def execute_materialize_batch(
             # 与 execute_materialize 的 catalog 提交失败语义一致：production 下
             # 数据已落盘但目录未提交 → IN_DOUBT（fail-closed）；research 保留 warning。
             if production:
-                from storage.exceptions import MaterializedButCatalogCommitFailed
+                from factor_engine.storage.exceptions import MaterializedButCatalogCommitFailed
 
                 raise MaterializedButCatalogCommitFailed(
                     f"batch materialize: 因子数据已落盘但依赖/full-definition catalog "

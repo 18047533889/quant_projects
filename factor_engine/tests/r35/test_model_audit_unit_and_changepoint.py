@@ -29,8 +29,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from cleaned_operators import load_all  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators import load_all  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 
 def _load():
@@ -124,7 +124,7 @@ def test_m200_change_point_tags_diagnostic_structure():
 # --------------------------------------------------------------------------
 
 def test_m201_glr_policy_digest_stable():
-    from cleaned_operators.glr_change import (
+    from factor_engine.cleaned_operators.glr_change import (
         _GLR_MAX_LLR,
         _GLR_MEASURE_NOISE_MULT,
         _GLR_POLICY_DIGEST,
@@ -142,7 +142,7 @@ def test_m201_glr_policy_digest_stable():
 
 
 def test_m201_glr_policy_digest_changes_on_cap_change():
-    from cleaned_operators.glr_change import (
+    from factor_engine.cleaned_operators.glr_change import (
         _GLR_MAX_LLR,
         _GLR_MEASURE_NOISE_MULT,
         _GLR_POLICY_DIGEST,
@@ -162,7 +162,7 @@ def test_m201_glr_policy_digest_changes_on_cap_change():
 # --------------------------------------------------------------------------
 
 def test_m202_glr_mean_shift_sign_post_regime_higher():
-    from cleaned_operators.glr_change import _mean_shift_score
+    from factor_engine.cleaned_operators.glr_change import _mean_shift_score
 
     rng = np.random.default_rng(1)
     up = np.concatenate([rng.normal(0.0, 0.05, 30), rng.normal(1.0, 0.05, 30)])
@@ -247,7 +247,7 @@ def test_m180_kernel_granger_hsic_live_names_and_no_dead_aliases():
 
 def test_m182_kernel_granger_oos_blocked_timing_documented():
     _load()
-    import cleaned_operators.research_spectral as rs
+    import factor_engine.cleaned_operators.research_spectral as rs
 
     doc = rs.__doc__ or ""
     assert "blocked" in doc and "out-of-sample" in doc

@@ -14,7 +14,7 @@ import time
 
 def test_r42_015_cse_certificate_construction():
     """R42-015: CSE证书预计算包含size/cost/consumer/lifetime/reuse_distance。"""
-    from runtime.cse_execution_certificate import (
+    from factor_engine.runtime.cse_execution_certificate import (
         build_cse_certificate_store,
         CSEExecutionCertificate,
     )
@@ -82,7 +82,7 @@ def test_r42_015_cse_certificate_construction():
 
 def test_r42_016_reuse_distance_eviction():
     """R42-016: Reuse distance影响eviction顺序（Belady-like）。"""
-    from runtime.buffer_store import GovernedBufferStore
+    from factor_engine.runtime.buffer_store import GovernedBufferStore
 
     store = GovernedBufferStore(budget_bytes=1024)
 
@@ -110,7 +110,7 @@ def test_r42_016_reuse_distance_eviction():
 
 def test_r42_016_reuse_distance_fallback_lru():
     """R42-016: next_use_distance=0时fallback到LRU（stale_ms）。"""
-    from runtime.buffer_store import GovernedBufferStore
+    from factor_engine.runtime.buffer_store import GovernedBufferStore
 
     store = GovernedBufferStore(budget_bytes=1024)
 
@@ -133,12 +133,12 @@ def test_r42_016_reuse_distance_fallback_lru():
 
 def test_r42_015_materialize_shared_reads_certificate():
     """R42-015: _materialize_shared_subplan从certificate读取cost，避免运行期重算。"""
-    from runtime.batch_service import _materialize_shared_subplan
-    from runtime.cse_execution_certificate import (
+    from factor_engine.runtime.batch_service import _materialize_shared_subplan
+    from factor_engine.runtime.cse_execution_certificate import (
         CSEExecutionCertificate,
         CSECertificateStore,
     )
-    from runtime.buffer_store import GovernedBufferStore
+    from factor_engine.runtime.buffer_store import GovernedBufferStore
 
     # Mock backend
     class MockBackend:
@@ -186,7 +186,7 @@ def test_r42_015_materialize_shared_reads_certificate():
 
 def test_r42_007_canonical_membership_table():
     """R42-007: Canonical membership table提供operator_id -> canonical O(1)查询。"""
-    from planner.analyzer_canonical_tables import (
+    from factor_engine.planner.analyzer_canonical_tables import (
         build_canonical_tables,
         CanonicalMembership,
     )
@@ -232,7 +232,7 @@ def test_r42_007_canonical_membership_table():
 
 def test_r42_008_canonical_dependency_table():
     """R42-008: Canonical dependency table提供dependencies O(1)查询。"""
-    from planner.analyzer_canonical_tables import build_canonical_tables
+    from factor_engine.planner.analyzer_canonical_tables import build_canonical_tables
 
     # Mock registry with dependencies
     class MockOperatorSpec:
@@ -278,7 +278,7 @@ def test_r42_008_canonical_dependency_table():
 
 def test_r42_014_no_temporary_threadpool():
     """R42-014: materialize_shared_nodes_parallel使用传入executor，不创建临时线程池。"""
-    from runtime.batch_service import materialize_shared_nodes_parallel
+    from factor_engine.runtime.batch_service import materialize_shared_nodes_parallel
     from concurrent.futures import ThreadPoolExecutor
 
     # Mock DAG
@@ -301,7 +301,7 @@ def test_r42_014_no_temporary_threadpool():
         def __init__(self):
             self.shared_result_cache = {}
             self.runtime_stats = {}
-            from runtime.buffer_store import GovernedBufferStore
+            from factor_engine.runtime.buffer_store import GovernedBufferStore
             self.shared_buffers = GovernedBufferStore(budget_bytes=10240)
 
     dag = MockDAG()

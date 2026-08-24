@@ -11,7 +11,7 @@ import textwrap
 
 import pytest
 
-from runtime.endpoint_policy import (
+from factor_engine.runtime.endpoint_policy import (
     EndpointExecutionPolicy,
     ProductionPolicyConflictError,
     collect_config_policy_conflicts,
@@ -19,7 +19,7 @@ from runtime.endpoint_policy import (
 
 
 def _config_dict(*, mode="research", pit=False, dq=False, target="local"):
-    from runtime.config import (
+    from factor_engine.runtime.config import (
         DQConfig,
         FactorEngineConfig,
         MaterializationConfig,
@@ -93,8 +93,8 @@ def test_collect_conflicts_direct_local_write():
 )
 def test_from_config_raises_conflict_for_downgrade(kwargs, match):
     """R21-005 regression: production endpoint + downgraded config -> reject."""
-    import runtime.engine as engine_mod
-    from runtime.engine import FactorEngine
+    import factor_engine.runtime.engine as engine_mod
+    from factor_engine.runtime.engine import FactorEngine
 
     cfg = _config_dict(**kwargs)
     original = engine_mod.load_config

@@ -165,7 +165,7 @@ class CapabilityManifest:
 PUBLIC_R30_MODULES = frozenset(
     {
         "adapter", "api_surface", "artifact_meta", "cache_hierarchy",
-        "calendar_snapshot", "change_impact", "concepts", "contracts",
+        "calendar_snapshot", "change_impact", "change_impact_types", "concepts", "contracts",
         "coverage_service", "data_change", "data_quality", "distributed",
         "execution_lease", "experiment_snapshot", "formats_contract", "join_cost",
         "lineage", "metrics", "mining_profile", "multi_asset", "partition_index",

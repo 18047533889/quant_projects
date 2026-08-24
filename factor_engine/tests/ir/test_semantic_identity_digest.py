@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from ir.types import (
+from factor_engine.ir.types import (
     PeriodDuration,
     SemanticIdentityDigest,
     SemanticType,

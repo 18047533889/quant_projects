@@ -150,25 +150,25 @@ class EvidenceHeader:
 
 
 def current_commit_sha() -> str:
-    from backend.evidence_provenance import current_commit_sha as _cur
+    from factor_engine.backend.evidence_provenance import current_commit_sha as _cur
 
     return _cur()
 
 
 def _tree_hash(root: Path, patterns: tuple[str, ...]) -> str:
-    from backend.evidence_provenance import _tree_hash as _th
+    from factor_engine.backend.evidence_provenance import _tree_hash as _th
 
     return _th(root, patterns)
 
 
 def _source_hash(path: Path) -> str:
-    from backend.evidence_provenance import _source_hash as _sh
+    from factor_engine.backend.evidence_provenance import _source_hash as _sh
 
     return _sh(path)
 
 
 def _compute_payload_hash(payload: Any) -> str:
-    from backend.evidence_provenance import compute_payload_hash
+    from factor_engine.backend.evidence_provenance import compute_payload_hash
 
     return compute_payload_hash(payload)
 
@@ -213,7 +213,7 @@ def component_hashes() -> dict[str, str]:
 
     # operator semantic：同一份 semantic contract hash（与 primitive evidence 共用）
     try:
-        from backend.evidence_provenance import semantic_hashes_for
+        from factor_engine.backend.evidence_provenance import semantic_hashes_for
 
         semantic_hash = _compute_payload_hash(
             {

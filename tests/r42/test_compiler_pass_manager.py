@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from planner.compiler_pass import (
+from factor_engine.planner.compiler_pass import (
     CompilerCost,
     CompilerPassManager,
     IRKind,
@@ -17,8 +17,8 @@ from planner.compiler_pass import (
     PassLegalityError,
     SemanticEquivalence,
 )
-from planner.logical_plan import PlanNode
-from planner.optimizer import Optimizer
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.optimizer import Optimizer
 
 
 @dataclass(frozen=True)

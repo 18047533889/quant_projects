@@ -14,13 +14,13 @@ from dataclasses import dataclass
 import pandas as pd
 import pytest
 
-from api import rank, ts_mean
-from api.columns import col
-from api.factor import Factor
-from backend.pandas_backend import PandasBackend
-from cleaned_operators.operator_policy import effective_lookback
-from runtime.engine import FactorEngine
-from storage.time_window import business_day_offset
+from factor_engine.api import rank, ts_mean
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.cleaned_operators.operator_policy import effective_lookback
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.storage.time_window import business_day_offset
 from tests.helpers import InMemorySeriesSource
 
 

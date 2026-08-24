@@ -47,7 +47,7 @@ def _cat(params, *, role=None, status="implemented", surf="daily", grain=None,
 
 @pytest.fixture(scope="module")
 def _loaded():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
 
@@ -62,7 +62,7 @@ def test_mining_allowlist_is_direct_use_authority(_loaded):
     ``research`` tier uses admission=all — every retained DIRECT_* operator,
     independent of evidence certification — so this holds in any tree.
     """
-    from api.mining_integration import (
+    from factor_engine.api.mining_integration import (
         default_mining_operator_allowlist,
         default_typed_mining_search_space_config,
     )
@@ -77,7 +77,7 @@ def test_mining_allowlist_is_direct_use_authority(_loaded):
 
 
 def test_typed_search_space_inputs_are_data_only(_loaded):
-    from api.mining_integration import default_typed_mining_search_space_config
+    from factor_engine.api.mining_integration import default_typed_mining_search_space_config
 
     cfg = default_typed_mining_search_space_config(tier="research")
     by_name = {s["name"]: s for s in cfg["operators"]}
@@ -96,7 +96,7 @@ def test_terminal_allowed_positive_authority(_loaded):
     """R18-003: terminal comes from a POSITIVE authority — a condition op is
     never terminal regardless of certification, and an alpha's flag matches its
     DirectUseStatus verdict."""
-    from api.mining_integration import default_typed_mining_search_space_config
+    from factor_engine.api.mining_integration import default_typed_mining_search_space_config
 
     cfg = default_typed_mining_search_space_config(tier="research")
     by_name = {s["name"]: s for s in cfg["operators"]}
@@ -162,20 +162,20 @@ def test_terminal_allowed_positive_authority(_loaded):
     ],
 )
 def test_family_reclassification(canonical, params, want):
-    from mining.direct_use import resolve_direct_use_status
+    from factor_engine.mining.direct_use import resolve_direct_use_status
 
     got = resolve_direct_use_status(canonical, _cat(params))
     assert got == want, f"{canonical}: got {got} want {want}"
 
 
 def test_retired_ghost_is_obsolete():
-    from mining.direct_use import resolve_direct_use_status
+    from factor_engine.mining.direct_use import resolve_direct_use_status
 
     assert resolve_direct_use_status("state_since_reduce", _cat(["x"], role="state")) == "delete_obsolete"
 
 
 def test_terminal_allowed_is_positive():
-    from mining.direct_use import terminal_allowed_for
+    from factor_engine.mining.direct_use import terminal_allowed_for
 
     assert terminal_allowed_for("ts_mean", _cat(["x", "window"])) is True
     assert terminal_allowed_for("and_", _cat(["x", "y"])) is False
@@ -188,7 +188,7 @@ def test_terminal_allowed_is_positive():
 # ---------------------------------------------------------------------------
 
 def test_input_slot_split_condition():
-    from mining.direct_use import split_input_slots
+    from factor_engine.mining.direct_use import split_input_slots
 
     s = split_input_slots("ts_mean_if", _cat(["x", "condition", "window"]))
     assert s["data_inputs"] == ["x"]
@@ -199,7 +199,7 @@ def test_input_slot_split_condition():
 
 
 def test_input_slot_split_panels_and_knobs():
-    from mining.direct_use import split_input_slots
+    from factor_engine.mining.direct_use import split_input_slots
 
     s = split_input_slots("ts_regression_slope", _cat(["y", "x", "window", "add_intercept"]))
     assert s["data_inputs"] == ["y", "x"]
@@ -211,7 +211,7 @@ def test_input_slot_split_panels_and_knobs():
 # ---------------------------------------------------------------------------
 
 def test_monotonic_transform_class():
-    from mining.direct_use import monotonic_transform_class
+    from factor_engine.mining.direct_use import monotonic_transform_class
 
     assert monotonic_transform_class("exp") == "monotonic_increasing"
     assert monotonic_transform_class("rank") == "monotonic_equiv"
@@ -219,7 +219,7 @@ def test_monotonic_transform_class():
 
 
 def test_min_effective_sample_contracts():
-    from mining.direct_use import min_effective_sample_contract
+    from factor_engine.mining.direct_use import min_effective_sample_contract
 
     assert min_effective_sample_contract("ts_markov_chain_entropy")["min_effective_samples"] == 50
     assert min_effective_sample_contract("ts_extremal_index")["min_event_count"] == 20
@@ -227,7 +227,7 @@ def test_min_effective_sample_contracts():
 
 
 def test_default_input_recipe():
-    from mining.direct_use import default_input_recipe
+    from factor_engine.mining.direct_use import default_input_recipe
 
     r = default_input_recipe("amihud_illiquidity")
     assert r.get("ret") == "return_decimal"
@@ -258,10 +258,10 @@ def test_direct_use_audit_script_runs(_loaded):
 # ---------------------------------------------------------------------------
 
 def _direct_canonicals():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
-    from mining.direct_use import retained_direct_rows, direct_use_matrix_rows
+    from factor_engine.mining.direct_use import retained_direct_rows, direct_use_matrix_rows
 
     return [r.canonical for r in retained_direct_rows(direct_use_matrix_rows())]
 
@@ -286,7 +286,7 @@ def test_smoke_recipes_cover_all_direct_ops(_loaded):
     ``R18_OPERATOR_SMOKE_RECIPES.json`` is a snapshot regenerated by the
     exporter.
     """
-    from mining.direct_use import retained_direct_rows, direct_use_matrix_rows
+    from factor_engine.mining.direct_use import retained_direct_rows, direct_use_matrix_rows
 
     rows = retained_direct_rows(direct_use_matrix_rows())
     missing = [r.canonical for r in rows if not r.data_inputs and not r.scalar_parameters and not r.input_slots]
@@ -298,8 +298,8 @@ def test_smoke_recipes_cover_all_direct_ops(_loaded):
 @pytest.mark.parametrize("canonical", ["ts_mean", "ts_rank"])
 def test_direct_operator_roles_are_consistent(_loaded, canonical):
     """R18-036: role/output consistency for a sample of direct operators."""
-    from mining.direct_use import build_direct_use_operator
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.mining.direct_use import build_direct_use_operator
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     row = build_direct_use_operator(canonical, OperatorRegistry._catalog[canonical])
     assert row.direct_use_status.value.startswith("direct_")

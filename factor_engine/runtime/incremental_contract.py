@@ -207,7 +207,7 @@ def _resolve_alias(canonical: str, *, strict: bool = False) -> str:
     if not canonical:
         return canonical
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         return OperatorRegistry.resolve_canonical(canonical)
     except Exception as exc:
@@ -221,7 +221,7 @@ def _resolve_alias(canonical: str, *, strict: bool = False) -> str:
 def _catalog_category(canonical: str) -> str | None:
     """算子 metadata.category（懒加载；缺省 None，绝不抛错阻塞分类）。"""
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         op = OperatorRegistry.get(canonical)
         return getattr(getattr(op, "metadata", None), "category", None)
@@ -231,7 +231,7 @@ def _catalog_category(canonical: str) -> str | None:
 
 def _catalog_param_names(canonical: str) -> tuple[str, ...]:
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         op = OperatorRegistry.get(canonical)
         return tuple(getattr(getattr(op, "metadata", None), "param_names", None) or ())
@@ -277,7 +277,7 @@ def _is_known_canonical(resolved: str) -> bool:
     显式查 registry。registry 内部错误也按未知处理（fail-closed → FULL_REPLAY）。
     """
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         operators, _aliases, catalog = OperatorRegistry._read_state()
         return resolved in operators or resolved in catalog
@@ -310,7 +310,7 @@ def classify_incremental_mode(
     try:
         if not _is_known_canonical(resolved):
             return IncrementalMode.FULL_REPLAY
-        from runtime.execution_contract import (
+        from factor_engine.runtime.execution_contract import (
             execution_contract,
             forward_impact,
             history_requirement,
@@ -413,7 +413,7 @@ def resolve_incremental_contract(
         )
 
     try:
-        from runtime.execution_contract import (
+        from factor_engine.runtime.execution_contract import (
             execution_contract,
             forward_impact,
             history_requirement,
@@ -506,11 +506,11 @@ def incremental_capability_matrix(
     """
     if canonicals is None:
         try:
-            from cleaned_operators.registry import OperatorRegistry
+            from factor_engine.cleaned_operators.registry import OperatorRegistry
 
             canonicals = sorted(OperatorRegistry._catalog)
         except Exception:
-            from cleaned_operators.registry import OperatorRegistry
+            from factor_engine.cleaned_operators.registry import OperatorRegistry
 
             canonicals = sorted(getattr(OperatorRegistry, "_catalog", {}))
     rows: list[dict[str, Any]] = []
@@ -557,7 +557,7 @@ def parity_proven_canonicals() -> frozenset[str]:
     若 import 失败回退到本模块内联快照。
     """
     try:
-        from runtime.incremental_parity import SEGMENTED_CANONICALS
+        from factor_engine.runtime.incremental_parity import SEGMENTED_CANONICALS
 
         return frozenset(SEGMENTED_CANONICALS)
     except Exception:
@@ -598,7 +598,7 @@ _CAPABILITY_EXTRA_FIELDS = (
 def _registry_catalog_entry(canonical: str) -> dict[str, Any]:
     """读取 OperatorRegistry._catalog 的单条目；registry 不可用时回退空 dict。"""
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         return dict(OperatorRegistry._catalog.get(canonical, {}))
     except Exception:
@@ -664,11 +664,11 @@ def _matrix_canonicals(
     if canonicals is not None:
         return list(canonicals)
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         return sorted(OperatorRegistry._catalog)
     except Exception:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         return sorted(getattr(OperatorRegistry, "_catalog", {}))
 
@@ -782,7 +782,7 @@ def _node_params(node: Any) -> dict[str, Any]:
     if getattr(node, "attrs", None):
         params.update(dict(node.attrs))
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         meta = getattr(OperatorRegistry.get(getattr(node, "op", "")), "metadata", None)
     except Exception:

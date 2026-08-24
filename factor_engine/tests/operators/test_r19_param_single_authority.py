@@ -32,7 +32,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.base import (
+from factor_engine.cleaned_operators.base import (
     MISSING,
     OperatorMetadata,
     ParamSpec,
@@ -40,11 +40,11 @@ from cleaned_operators.base import (
     bind_operator_call,
     validate_operator_call,
 )
-from cleaned_operators.common.strict_params import (
+from factor_engine.cleaned_operators.common.strict_params import (
     normalize_and_validate_scalar_param,
     strict_int,
 )
-from backend.operator_errors import OperatorParameterError
+from factor_engine.backend.operator_errors import OperatorParameterError
 
 
 def _panel():
@@ -56,7 +56,7 @@ def _panel():
 # ---------------------------------------------------------------------------
 
 def test_r19_140_hash_key_callable_and_deterministic():
-    from planner.canonicalize_params import ParameterCanonicalizer
+    from factor_engine.planner.canonicalize_params import ParameterCanonicalizer
 
     pc = ParameterCanonicalizer("custom_op")
     key = pc.hash_key({"window": 20})
@@ -78,7 +78,7 @@ def test_r19_140_hash_key_callable_and_deterministic():
 
 
 def test_r19_001_hash_key_no_str_plus_tuple_type_error():
-    from planner.canonicalize_params import ParameterCanonicalizer
+    from factor_engine.planner.canonicalize_params import ParameterCanonicalizer
 
     # The old ``(canonical or "") + tuple(...)`` raised TypeError at call time.
     pc = ParameterCanonicalizer("ts_mean")
@@ -154,14 +154,14 @@ def test_r19_002_explicit_none_with_declared_none_default_accepted():
 
 @pytest.fixture(scope="module")
 def _registry():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
     return None
 
 
 def _literal_plan(op: str, panel_count: int, *values):
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     def _col(name: str) -> PlanNode:
         return PlanNode(op="column", inputs=[], attrs={"name": name})
@@ -175,7 +175,7 @@ def _literal_plan(op: str, panel_count: int, *values):
 
 
 def test_r19_003_explicit_none_positional_literal_enters_validation(_registry):
-    from planner.canonicalize_params import validate_plan_params
+    from factor_engine.planner.canonicalize_params import validate_plan_params
 
     # ts_transfer_entropy declares window as ParamSpec(dtype=int, min=2) with no
     # None default -> an explicit positional None for window is a contract
@@ -193,7 +193,7 @@ def test_r19_003_explicit_none_positional_literal_enters_validation(_registry):
 
 
 def test_r19_003_explicit_none_tolerated_when_declared_none_default(_registry):
-    from planner.canonicalize_params import validate_plan_params
+    from factor_engine.planner.canonicalize_params import validate_plan_params
 
     # ts_topk_sum declares k: ParamSpec(dtype=int, min=1, default=None) -> an
     # explicit positional None for k is a LEGAL bound value (the declared None
@@ -207,8 +207,8 @@ def test_r19_003_explicit_none_tolerated_when_declared_none_default(_registry):
 # ---------------------------------------------------------------------------
 
 def test_r19_004_parameter_validation_is_pure_reexport():
-    import cleaned_operators.parameter_validation as pv
-    from cleaned_operators.common.strict_params import strict_float, strict_int
+    import factor_engine.cleaned_operators.parameter_validation as pv
+    from factor_engine.cleaned_operators.common.strict_params import strict_float, strict_int
 
     assert pv.strict_integer is strict_int
     assert pv.strict_finite_scalar is strict_float
@@ -234,7 +234,7 @@ def test_r19_004_parameter_validation_is_pure_reexport():
 # ---------------------------------------------------------------------------
 
 def test_r19_139_numeric_string_binder_kernel_separation():
-    from cleaned_operators.base import (
+    from factor_engine.cleaned_operators.base import (
         bind_numeric_string_if_declared,
         strict_int_param,
         strict_int_runtime,
@@ -277,7 +277,7 @@ def test_r19_005_runtime_call_gate_converts_then_kernel_rejects_strings():
 # ---------------------------------------------------------------------------
 
 def test_r19_006_alias_single_authority_derived_from_metadata(_registry):
-    from backend.parameter_aliases import (
+    from factor_engine.backend.parameter_aliases import (
         DERIVED_METADATA_ALIAS_MAP,
         GLOBAL_ALIAS_MAP,
         PARAMETER_ALIASES,
@@ -389,7 +389,7 @@ def test_r19_008_bind_operator_call_single_bound_shared():
     call2 = bind_operator_call(op, (_panel(),), {"m": "A"})
     assert "center" in call2.bound.inactive_params
     # relational specs / common relations are evaluated on the same bound.
-    from cleaned_operators.base import RelationalParamSpec
+    from factor_engine.cleaned_operators.base import RelationalParamSpec
 
     meta_rel = OperatorMetadata(
         name="op",

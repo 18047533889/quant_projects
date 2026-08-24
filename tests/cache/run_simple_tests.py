@@ -28,10 +28,10 @@ def _load_direct(module_name, relative_path):
     return mod
 
 # 按依赖顺序加载
-_unified = _load_direct("cache.unified_cache", "cache/unified_cache.py")
-_tiered = _load_direct("cache.tiered_cache", "cache/tiered_cache.py")
-_decorator = _load_direct("cache.cache_decorator", "cache/cache_decorator.py")
-_manager = _load_direct("cache.cache_manager", "cache/cache_manager.py")
+_unified = _load_direct("factor_engine.cache.unified_cache", "cache/unified_cache.py")
+_tiered = _load_direct("factor_engine.cache.tiered_cache", "cache/tiered_cache.py")
+_decorator = _load_direct("factor_engine.cache.cache_decorator", "cache/cache_decorator.py")
+_manager = _load_direct("factor_engine.cache.cache_manager", "cache/cache_manager.py")
 
 UnifiedCache = _unified.UnifiedCache
 EvictionPolicy = _unified.EvictionPolicy

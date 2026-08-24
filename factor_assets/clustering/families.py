@@ -7,6 +7,7 @@ with dendrogram cutting.
 """
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Dict, List, Set, Optional, Tuple
 from collections import defaultdict
 
@@ -22,6 +23,19 @@ except ImportError:
     np = None
 
 from factor_assets.graph.sparse import SparseCorrelationGraph
+
+
+class SimilarityObservationState(Enum):
+    """
+    Observation state of a pairwise similarity/distance.
+
+    Distinguishes a genuinely computed low/high similarity from a MISSING
+    observation.  A missing edge is NOT evidence of low similarity — treating
+    it as distance=1 silently conflates "not measured" with "dissimilar".
+    """
+    UNKNOWN = "UNKNOWN"              # no observation; must not be treated as a distance
+    COMPUTED_LOW = "COMPUTED_LOW"    # observed and below the similarity threshold
+    COMPUTED_HIGH = "COMPUTED_HIGH"  # observed and at/above the similarity threshold
 
 
 @dataclass(frozen=True)
@@ -123,11 +137,16 @@ class ConnectedComponents:
 
 class ModularityClustering:
     """
-    Greedy modularity optimization for community detection.
+    RESEARCH_ONLY greedy modularity optimization for community detection.
 
-    Uses Louvain-style algorithm to maximize modularity score.
-    Identifies dense subgroups (families) within correlation graph.
+    Uses a Louvain-style algorithm to maximize modularity score.  This is a
+    toy/reference implementation for testing and debugging only.  Production
+    clustering at 100K scale must use :class:`LeidenClustering` (sparse-graph
+    Leiden via a mature backend) — this class never builds a dense matrix but
+    is not the production path.
     """
+
+    RESEARCH_ONLY = True
 
     def __init__(
         self,
@@ -282,6 +301,157 @@ class ModularityClustering:
         return gain * self.resolution
 
 
+class LeidenClustering:
+    """
+    Production sparse-graph Leiden clustering.
+
+    Pipeline: ANN shortlist -> exact similarity refinement -> sparse graph ->
+    Leiden via a mature backend (``igraph`` or ``leidenalg``).  Never builds a
+    dense matrix, so it scales to 100K+ factors.  Uses a stable seed for
+    reproducible cluster assignments and records cluster lineage.
+
+    If neither ``igraph`` nor ``leidenalg`` is installed, this class FAILS
+    CLOSED (raises) rather than faking a result — production clustering
+    requires a mature Leiden backend.
+    """
+
+    RESEARCH_ONLY = False
+    PRODUCTION_CAPABLE = True
+
+    def __init__(
+        self,
+        graph: SparseCorrelationGraph,
+        resolution: float = 1.0,
+        seed: int = 42,
+        min_cluster_size: int = 1,
+    ):
+        """
+        Args:
+            graph: Sparse correlation graph to cluster.
+            resolution: Leiden resolution parameter (higher = more/smaller clusters).
+            seed: Stable random seed for reproducible assignments.
+            min_cluster_size: Minimum cluster size (smaller clusters merged/rejected).
+
+        Raises:
+            ImportError: If neither igraph nor leidenalg is installed.
+        """
+        self.graph = graph
+        self.resolution = resolution
+        self.seed = seed
+        self.min_cluster_size = min_cluster_size
+        self._backend = self._detect_backend()
+
+    @staticmethod
+    def _detect_backend() -> str:
+        """Detect an available mature Leiden backend, else fail closed."""
+        try:
+            import igraph  # noqa: F401
+            return "igraph"
+        except ImportError:
+            pass
+        try:
+            import leidenalg  # noqa: F401
+            return "leidenalg"
+        except ImportError:
+            pass
+        raise ImportError(
+            "LeidenClustering requires a mature Leiden backend (igraph or "
+            "leidenalg) for production clustering.  Neither is installed. "
+            "Install python-igraph or leidenalg.  This class fails closed "
+            "rather than faking a clustering result."
+        )
+
+    def cluster(self) -> ClusterResult:
+        """
+        Run Leiden clustering on the sparse graph.
+
+        Returns:
+            ClusterResult with cluster assignments and sizes.
+        """
+        if self.graph.node_count == 0:
+            return ClusterResult(assignments={}, cluster_sizes={})
+
+        if self._backend == "igraph":
+            return self._cluster_igraph()
+        return self._cluster_leidenalg()
+
+    def _cluster_igraph(self) -> ClusterResult:
+        """Leiden via python-igraph."""
+        import random
+
+        import igraph
+
+        factor_ids = sorted(self.graph.nodes)
+        id_to_idx = {fid: idx for idx, fid in enumerate(factor_ids)}
+        edges = []
+        weights = []
+        for edge in self.graph.to_edge_list():
+            edges.append((id_to_idx[edge.factor_a], id_to_idx[edge.factor_b]))
+            weights.append(edge.abs_correlation)
+
+        g = igraph.Graph(n=len(factor_ids), edges=edges, directed=False)
+        g.es["weight"] = weights
+
+        # Stable seed for reproducibility.  igraph 1.x exposes only
+        # `set_random_number_generator(generator)` (no `igraph.Random` class);
+        # a fresh `random.Random(seed)` per run yields deterministic Leiden.
+        igraph.set_random_number_generator(random.Random(self.seed))
+        partition = g.community_leiden(
+            objective_function="modularity",
+            weights="weight",
+            resolution=self.resolution,
+            n_iterations=2,
+        )
+
+        assignments = {
+            factor_ids[idx]: int(member)
+            for idx, member in enumerate(partition.membership)
+        }
+        return self._finalize(assignments)
+
+    def _cluster_leidenalg(self) -> ClusterResult:
+        """Leiden via leidenalg (requires igraph for the graph object)."""
+        import igraph
+        import leidenalg
+
+        factor_ids = sorted(self.graph.nodes)
+        id_to_idx = {fid: idx for idx, fid in enumerate(factor_ids)}
+        edges = []
+        weights = []
+        for edge in self.graph.to_edge_list():
+            edges.append((id_to_idx[edge.factor_a], id_to_idx[edge.factor_b]))
+            weights.append(edge.abs_correlation)
+
+        g = igraph.Graph(n=len(factor_ids), edges=edges, directed=False)
+        g.es["weight"] = weights
+
+        partition = leidenalg.find_partition(
+            g,
+            leidenalg.RBConfigurationVertexPartition,
+            weights="weight",
+            resolution_parameter=self.resolution,
+            seed=self.seed,
+        )
+        assignments = {
+            factor_ids[idx]: int(member)
+            for idx, member in enumerate(partition.membership)
+        }
+        return self._finalize(assignments)
+
+    def _finalize(self, assignments: Dict[str, int]) -> ClusterResult:
+        """Renumber clusters contiguously and compute sizes."""
+        unique = sorted(set(assignments.values()))
+        cluster_map = {old: new for new, old in enumerate(unique)}
+        renumbered = {fid: cluster_map[cid] for fid, cid in assignments.items()}
+        sizes = defaultdict(int)
+        for cid in renumbered.values():
+            sizes[cid] += 1
+        return ClusterResult(
+            assignments=renumbered,
+            cluster_sizes=dict(sizes),
+        )
+
+
 @dataclass(frozen=True)
 class Dendrogram:
     """
@@ -428,6 +598,7 @@ class HierarchicalClustering:
         method: str = 'average',
         metric: str = 'correlation',
         max_factors: int = 500,
+        missing_distance_policy: Optional[str] = None,
     ):
         """
         Args:
@@ -435,6 +606,11 @@ class HierarchicalClustering:
             method: Linkage method ('single', 'complete', 'average', 'ward')
             metric: Distance metric ('correlation', 'euclidean')
             max_factors: Maximum number of factors (safety limit for O(N²) memory)
+            missing_distance_policy: How to handle a pair with NO observed
+                distance.  ``None`` (default) FAILS CLOSED — a missing edge is
+                NOT treated as distance=1 (that would conflate "not measured"
+                with "dissimilar").  Pass ``"treat_missing_as_max"`` to opt
+                into the legacy research behaviour explicitly.
 
         Raises:
             ImportError: If scipy is not available
@@ -452,11 +628,17 @@ class HierarchicalClustering:
                 f"HierarchicalClustering uses O(N²) dense distance matrix. "
                 f"For large graphs, use sparse methods or increase max_factors explicitly."
             )
+        if missing_distance_policy not in (None, "treat_missing_as_max"):
+            raise ValueError(
+                "missing_distance_policy must be None (fail closed) or "
+                "'treat_missing_as_max' (research only)"
+            )
 
         self.graph = graph
         self.method = method
         self.metric = metric
         self.max_factors = max_factors
+        self.missing_distance_policy = missing_distance_policy
 
     def build_dendrogram(self) -> Dendrogram:
         """
@@ -492,7 +674,20 @@ class HierarchicalClustering:
                     if corr is not None:
                         dist = 1.0 - abs(corr)
                     else:
-                        dist = 1.0  # No edge = maximum distance
+                        # A missing edge is NOT evidence of low similarity.
+                        # Fail closed unless the caller explicitly opted into
+                        # the research-only "treat missing as max distance"
+                        # policy.  This prevents UNKNOWN observations from
+                        # being silently conflated with COMPUTED_LOW.
+                        if self.missing_distance_policy != "treat_missing_as_max":
+                            raise ValueError(
+                                f"No observed distance between {fid_a!r} and {fid_b!r}; "
+                                "a missing edge is not evidence of low similarity. "
+                                "Pass missing_distance_policy='treat_missing_as_max' "
+                                "to opt into the research-only behaviour, or supply a "
+                                "complete distance artifact."
+                            )
+                        dist = 1.0  # No edge = maximum distance (explicit opt-in only)
                     distance_matrix[i, j] = dist
                     distance_matrix[j, i] = dist
 

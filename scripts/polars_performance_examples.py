@@ -20,7 +20,7 @@ def example_1_basic_configuration():
     print("示例 1: 基本配置")
     print("=" * 60)
 
-    from backend.polars_performance_config import PolarsPerformanceConfig
+    from factor_engine.backend.polars_performance_config import PolarsPerformanceConfig
 
     # 从环境变量加载配置
     config = PolarsPerformanceConfig.from_env()
@@ -43,7 +43,7 @@ def example_2_custom_configuration():
     print("示例 2: 自定义配置")
     print("=" * 60)
 
-    from backend.polars_performance_config import PolarsPerformanceConfig
+    from factor_engine.backend.polars_performance_config import PolarsPerformanceConfig
 
     # 显式创建配置
     config = PolarsPerformanceConfig(
@@ -68,7 +68,7 @@ def example_3_memory_estimation():
     print("示例 3: 内存估算")
     print("=" * 60)
 
-    from backend.polars_memory_optimizer import (
+    from factor_engine.backend.polars_memory_optimizer import (
         estimate_polars_dataframe_memory,
         should_use_streaming,
     )
@@ -96,7 +96,7 @@ def example_4_adaptive_batch_size():
     print("示例 4: 自适应批处理")
     print("=" * 60)
 
-    from backend.polars_memory_optimizer import calculate_optimal_chunk_size
+    from factor_engine.backend.polars_memory_optimizer import calculate_optimal_chunk_size
 
     available_memory = 2 * 1024**3  # 2GB
 
@@ -118,7 +118,7 @@ def example_5_memory_monitoring():
     print("示例 5: 内存监控")
     print("=" * 60)
 
-    from backend.polars_memory_optimizer import PolarsMemoryMonitor
+    from factor_engine.backend.polars_memory_optimizer import PolarsMemoryMonitor
 
     monitor = PolarsMemoryMonitor(budget_bytes=4 * 1024**3)  # 4GB
 

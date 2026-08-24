@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
@@ -83,7 +83,7 @@ def _daily_weights(days: int = 3, cols: int = 2) -> pd.DataFrame:
 
 @pytest.mark.parametrize("name", sorted(set(ALL)))
 def test_registered_and_classified(name: str) -> None:
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     assert OperatorRegistry.get(name) is not None, name
     # 2026-08 daily migration promoted the intra_* factor operators to daily.

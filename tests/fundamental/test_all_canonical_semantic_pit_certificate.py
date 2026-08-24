@@ -9,8 +9,8 @@ import os
 
 import pandas as pd
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 LEGAL_STATES = frozenset({
     "CERTIFIED",

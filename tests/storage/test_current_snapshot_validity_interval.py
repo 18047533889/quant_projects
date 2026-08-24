@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from storage.sources.data_access_source import (
+from factor_engine.storage.sources.data_access_source import (
     DataAccessSource,
     HistoricalSnapshotBackfillError,
 )

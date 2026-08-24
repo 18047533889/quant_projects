@@ -4,17 +4,53 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 import sys
 import platform
 from functools import lru_cache
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 FE_ROOT = Path(__file__).resolve().parents[1]
 CASE_REGISTRY_JSON = FE_ROOT / "evidence" / "primitive_case_registry.json"
 VERIFIED_JSON = FE_ROOT / "evidence" / "primitive_verified.json"
+
+#: R22-EVIDENCE-CONTAMINATION: test-certified fixture artifacts live inside the
+#: evidence tree but are NOT production evidence.  They are generated on demand
+#: by ``tests/q_backend/q_certified_compiler.py`` with a synthetic git sha and a
+#: PASS status so Q region-executor tests can exercise the production compile
+#: path without a live q runtime.  They must never feed production evidence
+#: discovery (dirty-tree / TCB / golden hashes), so every recursive evidence
+#: tree walk excludes these directory names.  Production evidence lives in
+#: ``evidence/r2/`` as committed YAML/JSON, never under these fixture dirs.
+EVIDENCE_EXCLUDED_DIRS: frozenset[str] = frozenset(
+    {"_test_certified", "fixtures", "tests", "synthetic"}
+)
+
+
+def evidence_path_excluded(path: Path, *, root: Path | None = None) -> bool:
+    """Return True when *path* is a test-certified / fixture / synthetic artifact.
+
+    Production evidence discovery must never recursively read these subtrees:
+    they contain PASS-looking artifacts (q_version 4.1, pykx 2.6.0,
+    executed=true) that are test fixtures, not production evidence.
+
+    Exclusion is evaluated **relative to the hash root** so deliberate
+    test-binding hashes keep working: ``_tree_hash(FE_ROOT / "tests" /
+    "backend_parity", ...)`` hashes ``tests/backend_parity/…`` files (relative
+    components contain no excluded dir), while a whole-tree production discovery
+    scan (root = FE_ROOT) sees ``tests/backend_parity`` as an intermediate
+    component and skips it.
+    """
+    base = (root or FE_ROOT).resolve()
+    try:
+        relative = path.resolve().relative_to(base)
+    except ValueError:
+        # Path escapes the hashed root: fail closed for discovery safety.
+        return True
+    return any(part in EVIDENCE_EXCLUDED_DIRS for part in relative.parts)
 
 
 def current_commit_sha() -> str:
@@ -108,6 +144,23 @@ def compute_implementation_hash(source: str) -> str:
     Collision could certify wrong implementation. Use full 256-bit.
     """
     return hashlib.sha256(source.encode("utf-8")).hexdigest()
+
+
+def numeric_policy_digest() -> str:
+    """Digest of the active production numeric policy (R23 P0-10).
+
+    The numeric policy drives the signature generator's constraint tables, sign
+    tables, operator precedence and dtype mapping.  Binding it into
+    ``parameter_domain_hash_for`` means any numeric-policy change alters the
+    parameter domain hash and therefore the implementation closure hash.
+    Deterministic across processes: built from the R42 ``NumericPolicy``
+    identity (compute/accumulation/output dtype, determinism level, reduction
+    algorithm, division/overflow/underflow policies, degeneracy policy,
+    tolerance profile).
+    """
+    from factor_engine.backend.numeric_policy import NumericPolicy
+
+    return NumericPolicy.default().identity_hash()
 
 
 def emitter_hashes() -> dict[str, str]:
@@ -356,7 +409,18 @@ def _tree_hash(root: Path, patterns: tuple[str, ...] = ("*.py", "*.json", "*.csv
 
 
 def _tracked_tree_files(root: Path, patterns: tuple[str, ...]) -> set[Path]:
-    """Return only version-controlled semantic inputs below ``root``."""
+    """Return only version-controlled semantic inputs below ``root``.
+
+    R22-EVIDENCE-CONTAMINATION: test-certified / fixture / synthetic artifacts
+    (notably ``evidence/r2/_test_certified/``) are excluded from recursive
+    discovery so they can never pollute production evidence hashes.
+    """
+    def _allowed(path: Path) -> bool:
+        # Relative to the hashed root so explicit test-binding tree hashes
+        # (e.g. ``tests/backend_parity``) keep working while whole-repo
+        # production discovery still skips test/fixture/synthetic subtrees.
+        return not evidence_path_excluded(path, root=root)
+
     try:
         repo_root = FE_ROOT.parent.resolve()
         relative_root = root.resolve().relative_to(repo_root)
@@ -370,7 +434,9 @@ def _tracked_tree_files(root: Path, patterns: tuple[str, ...]) -> set[Path]:
             for item in raw.decode("utf-8").split("\0")
             if item
             for path in [(repo_root / item).resolve()]
-            if path.is_file() and any(path.match(pattern) for pattern in patterns)
+            if path.is_file()
+            and any(path.match(pattern) for pattern in patterns)
+            and _allowed(path)
         }
     except (OSError, subprocess.SubprocessError, UnicodeError, ValueError):
         files: set[Path] = set()
@@ -378,7 +444,7 @@ def _tracked_tree_files(root: Path, patterns: tuple[str, ...]) -> set[Path]:
             files.update(
                 path
                 for path in root.rglob(pattern)
-                if "__pycache__" not in path.parts
+                if "__pycache__" not in path.parts and _allowed(path)
             )
         return files
 
@@ -471,23 +537,30 @@ def semantic_hashes_for(canonical: str) -> dict[str, str]:
 
 
 def parameter_domain_hash_for(canonical: str) -> str:
-    """Recompute the exact signature-domain digest stored in evidence."""
-    from backend.operator_evidence_schema import compute_implementation_hash
+    """Recompute the exact signature-domain digest stored in evidence.
+
+    R23 P0-10: the digest additionally binds the numeric policy that drives the
+    signature generator (constraint tables, sign tables, operator precedence,
+    dtype mapping), so a numeric-policy change alters the parameter domain hash
+    and therefore the implementation closure hash.
+    """
+    from factor_engine.backend.operator_evidence_schema import compute_implementation_hash
     import sys
 
     # Signature v2 is normally installed during cleaned-operator bootstrap.  In
     # a fresh provenance-only process install it here too, but never touch a
     # partially initialized production_signature module during import cycles.
-    signature_module = sys.modules.get("backend.production_signature")
+    signature_module = sys.modules.get("factor_engine.backend.production_signature")
     if signature_module is None or hasattr(signature_module, "PRODUCTION_SIGNATURES"):
-        from backend.production_signature_v2 import apply_production_signature_v2
+        from factor_engine.backend.production_signature_v2 import apply_production_signature_v2
 
         apply_production_signature_v2()
-    from backend.production_signature import signature_for
+    from factor_engine.backend.production_signature import signature_for
 
     sig = signature_for(canonical)
     if sig is None:
         return ""
+    numeric_policy = numeric_policy_digest()
     return compute_implementation_hash(
         json.dumps(
             {
@@ -497,15 +570,180 @@ def parameter_domain_hash_for(canonical: str) -> str:
                     (p.name, p.constraint, p.status, p.input_index, p.choices)
                     for p in sig.params
                 ],
+                "numeric_policy": numeric_policy,
             },
             sort_keys=True,
         )
     )
 
 
+@lru_cache(maxsize=None)
+def implementation_closure_hash_for(canonical: str) -> str:
+    """Compute the implementation closure hash for one canonical operator.
+
+    The closure binds every source-level and policy-level input that can
+    change the observable behaviour of the implementation:
+
+    * source/AST of the operator class owning the implementation,
+    * transitive helper sources discovered through the operator module,
+    * emitter / kernel identity sources,
+    * production parameter signature (ParamSpec snapshot),
+    * numerical semantic policies,
+    * numeric helper closure (each helper's code + AST + identity),
+    * numeric policy (constraints, signs, precedence, dtype map).
+
+    The returned digest is always a 64-character lowercase hex SHA-256 so
+    ``PhysicalImplementationSpec`` can consume it directly.
+    """
+
+    def _safe_text(path: Path) -> str:
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError:
+            return ""
+
+    def _relative(path: Path) -> str:
+        try:
+            return str(path.resolve().relative_to(FE_ROOT.resolve()))
+        except ValueError:
+            return str(path)
+
+    # 1. Source / AST surface for the operator implementation.
+    impl_sources = implementation_sources_for(canonical)
+    source_text = ""
+    source_path = ""
+    for key in ("implementation_source_pandas", "implementation_source_polars", "implementation_source_duckdb"):
+        candidate = impl_sources.get(key, "")
+        if not candidate:
+            continue
+        resolved = (FE_ROOT / candidate).resolve()
+        if resolved.is_file():
+            source_path = candidate
+            source_text = _safe_text(resolved)
+            break
+
+    # 2. Operator module + transitive helper discovery.
+    operator_module_path: Path | None = None
+    try:
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+        for backend in ("pandas_numpy", "polars"):
+            impl = OperatorRegistry.get(canonical, backend)
+            if impl is None:
+                continue
+            mod = __import__(impl.__class__.__module__, fromlist=["*"])
+            candidate = Path(getattr(mod, "__file__") or "")
+            if candidate.is_file():
+                operator_module_path = candidate
+                break
+    except Exception:
+        pass
+
+    # Walk the operator module import graph (bounded depth) to collect helper
+    # sources that may influence the implementation behaviour.
+    helper_sources: dict[str, str] = {}
+    if operator_module_path is not None and operator_module_path.is_file():
+        boundary = operator_module_path.resolve().parent
+        pending = [operator_module_path.resolve()]
+        visited: set[Path] = set()
+        while pending and len(helper_sources) < 64:
+            current = pending.pop()
+            if current in visited or not current.is_file():
+                continue
+            visited.add(current)
+            try:
+                text = current.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            rel = _relative(current)
+            helper_sources[rel] = text
+            # Discover direct imports that live under the same package boundary.
+            for match in re.findall(r"from\s+([A-Za-z0-9_.]+)\s+import", text):
+                mod_path = match.replace(".", "/") + ".py"
+                candidate_file = (FE_ROOT / mod_path).resolve()
+                if candidate_file.is_file() and candidate_file.resolve().parent == boundary and candidate_file not in visited:
+                    pending.append(candidate_file)
+            for match in re.findall(r"import\s+([A-Za-z0-9_.]+)", text):
+                mod_path = match.replace(".", "/") + ".py"
+                candidate_file = (FE_ROOT / mod_path).resolve()
+                if candidate_file.is_file() and candidate_file.resolve().parent == boundary and candidate_file not in visited:
+                    pending.append(candidate_file)
+
+    # 3. Emitter / kernel identity sources.
+    emitter_sources: dict[str, str] = {}
+    emitter_path = FE_ROOT / "backend" / "sql_pushdown" / "emitter.py"
+    if emitter_path.is_file():
+        emitter_sources["backend/sql_pushdown/emitter.py"] = _safe_text(emitter_path)
+    polars_emitter = FE_ROOT / "backend" / "polars_expr_emitter.py"
+    if polars_emitter.is_file():
+        emitter_sources["backend/polars_expr_emitter.py"] = _safe_text(polars_emitter)
+    kernel_identity_text = ""
+    if operator_module_path is not None and operator_module_path.is_file():
+        kernel_identity_text = _safe_text(operator_module_path)
+
+    # 4. Production parameter signature (ParamSpec snapshot).
+    parameter_signature_text = ""
+    parameter_domain_hash = parameter_domain_hash_for(canonical)
+    if parameter_domain_hash:
+        parameter_signature_text = f"parameter_domain_hash:{parameter_domain_hash}"
+
+    # 5. Numerical semantic policies.
+    semantic_sources = {
+        "backend/numeric_semantics.py": FE_ROOT / "backend" / "numeric_semantics.py",
+        "backend/cross_section_spec.py": FE_ROOT / "backend" / "cross_section_spec.py",
+        "backend/production_signature.py": FE_ROOT / "backend" / "production_signature.py",
+        "cleaned_operators/operator_policy.py": FE_ROOT / "cleaned_operators" / "operator_policy.py",
+    }
+    semantic_text = "".join(
+        f"{name}:{_safe_text(path)}" for name, path in semantic_sources.items() if path.is_file()
+    )
+
+    # Assemble canonical closure payload.
+    payload = {
+        "closure_version": 1,
+        "canonical": canonical,
+        "source_path": source_path,
+        "source_text": source_text,
+        "operator_module": str(operator_module_path) if operator_module_path is not None else "",
+        "helpers": dict(sorted(helper_sources.items())),
+        "emitter_sources": dict(sorted(emitter_sources.items())),
+        "kernel_identity_text": kernel_identity_text,
+        "parameter_signature_text": parameter_signature_text,
+        "semantic_text": semantic_text,
+    }
+    return compute_payload_hash(payload)
+
+
+def implementation_closure_hash_set(canonicals: Iterable[str]) -> str:
+    """Aggregate the per-canonical implementation closure hashes into one digest.
+
+    R23 P0-10: the release-level ImplementationClosureHashSet must change
+    whenever *any* physical implementation detail changes, not just when the
+    canonical name population changes.  Each canonical contributes the full
+    closure digest from ``implementation_closure_hash_for`` (source/AST,
+    helper closure, emitter / kernel identity, parameter domain, numeric
+    policy); the sorted per-canonical digests are aggregated together with the
+    sorted canonical set into a single SHA-256.  Any numeric-helper change is
+    therefore reflected through the affected canonical's closure digest.
+
+    Accepts any iterable of canonical names (callers pass lists from the
+    mining catalog).  The per-canonical closure digests are lru-cached inside
+    ``implementation_closure_hash_for``, so no set-level cache is needed here.
+    """
+    sorted_canonicals = sorted(set(canonicals))
+    per_canonical = {
+        c: implementation_closure_hash_for(c) for c in sorted_canonicals
+    }
+    return compute_payload_hash({
+        "closure_version": 2,
+        "canonicals": sorted_canonicals,
+        "implementation_closure_hashes": per_canonical,
+    })
+
+
 def implementation_hashes_for(canonical: str) -> dict[str, str]:
     """Hash the registered implementation sources for one canonical operator."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     hashes: dict[str, str] = {}
     for backend, key in (("pandas_numpy", "pandas"), ("polars", "polars")):
@@ -533,7 +771,7 @@ def implementation_hashes_for(canonical: str) -> dict[str, str]:
 
 def implementation_sources_for(canonical: str) -> dict[str, str]:
     """Record reviewable relative source paths for bootstrap-safe validation."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     sources: dict[str, str] = {}
     for backend, key in (("pandas_numpy", "pandas"), ("polars", "polars")):
@@ -550,10 +788,10 @@ def implementation_sources_for(canonical: str) -> dict[str, str]:
     return sources
 
 _EVIDENCE_CACHE_MODULES: tuple[str, ...] = (
-    "backend.evidence_provenance",
-    "backend.factor_operator_evidence",
-    "backend.primitive_evidence",
-    "cleaned_operators.edge_requirements",
+    "factor_engine.backend.evidence_provenance",
+    "factor_engine.backend.factor_operator_evidence",
+    "factor_engine.backend.primitive_evidence",
+    "factor_engine.cleaned_operators.edge_requirements",
 )
 
 
@@ -602,8 +840,8 @@ def enrich_operator_metadata(
     certified: frozenset[str],
     existing: Mapping[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    from backend.operator_evidence_schema import compute_implementation_hash
-    from backend.production_signature import signature_for
+    from factor_engine.backend.operator_evidence_schema import compute_implementation_hash
+    from factor_engine.backend.production_signature import signature_for
     from tests.backend_parity.evidence_case_registry import EXECUTION_VARIANTS, operator_evidence_meta
 
     emitter = emitter_hashes()

@@ -32,7 +32,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from runtime.session_calendar import SessionCalendar
+from factor_engine.runtime.session_calendar import SessionCalendar
 
 _ASHARE_CAL = SessionCalendar(
     market="CN", timestamp_convention="bar_start", bar_freq="1min"
@@ -45,9 +45,9 @@ def _owned_modules_loaded():
     # Register + surface the owned modules directly (load_all() is blocked by an
     # unrelated pre-existing tree conflict in polars_geometry_math.py, a file
     # outside this task's ownership).
-    import cleaned_operators.advanced_intraday  # noqa: F401
-    import cleaned_operators.intraday_session  # noqa: F401
-    import cleaned_operators.session_recovery  # noqa: F401
+    import factor_engine.cleaned_operators.advanced_intraday  # noqa: F401
+    import factor_engine.cleaned_operators.intraday_session  # noqa: F401
+    import factor_engine.cleaned_operators.session_recovery  # noqa: F401
     yield
 
 
@@ -70,7 +70,7 @@ def _session_panel(day_mods_by_day, value_fn=None):
 # ---------------------------------------------------------------------------
 
 def test_same_count_shifted_grid_not_complete():
-    from cleaned_operators.intraday_session import (
+    from factor_engine.cleaned_operators.intraday_session import (
         _official_grid,
         _minute_of_day,
         _session_runs,
@@ -95,7 +95,7 @@ def test_same_count_shifted_grid_not_complete():
 
 
 def test_missing_slot_plus_stray_slot_not_complete():
-    from cleaned_operators.intraday_session import (
+    from factor_engine.cleaned_operators.intraday_session import (
         _official_grid,
         _minute_of_day,
         _session_runs,
@@ -124,7 +124,7 @@ def test_missing_slot_plus_stray_slot_not_complete():
 # ---------------------------------------------------------------------------
 
 def test_bar_width_comes_from_calendar_bar_freq():
-    from cleaned_operators.intraday_session import IntradaySessionShapeNovelty
+    from factor_engine.cleaned_operators.intraday_session import IntradaySessionShapeNovelty
 
     cal5 = SessionCalendar(market="CN", timestamp_convention="bar_start", bar_freq="5min")
     # 5-min bar labels: morning 09:30..11:25, afternoon 13:00..14:55 -> 48 bars.
@@ -144,7 +144,7 @@ def test_bar_width_comes_from_calendar_bar_freq():
 
 
 def test_bar_width_unknown_calendar_fails_closed():
-    from cleaned_operators.intraday_session import _official_grid
+    from factor_engine.cleaned_operators.intraday_session import _official_grid
 
     class _NoResolutionCalendar:
         segments = (("09:30", "11:30"), ("13:00", "15:00"))
@@ -159,7 +159,7 @@ def test_bar_width_unknown_calendar_fails_closed():
 # ---------------------------------------------------------------------------
 
 def test_history_days_reaches_past_incomplete_days():
-    from cleaned_operators.intraday_session import IntradaySessionShapeNovelty
+    from factor_engine.cleaned_operators.intraday_session import IntradaySessionShapeNovelty
 
     partial = list(range(570, 660))  # truncated at 11:00 -> incomplete
     x, sid = _session_panel([_ASHARE_FULL_MODS, partial, _ASHARE_FULL_MODS, _ASHARE_FULL_MODS])
@@ -186,7 +186,7 @@ def test_history_days_reaches_past_incomplete_days():
 # ---------------------------------------------------------------------------
 
 def test_novelty_distance_is_rmse_not_raw_euclidean():
-    from cleaned_operators.intraday_session import (
+    from factor_engine.cleaned_operators.intraday_session import (
         _canonical_shape,
         _official_grid,
         _shape_novelty_series,
@@ -236,7 +236,7 @@ def test_novelty_distance_is_rmse_not_raw_euclidean():
 # ---------------------------------------------------------------------------
 
 def test_recovery_utc_index_without_tz_fails_closed():
-    from cleaned_operators.session_recovery import SessionEventRecoveryScore
+    from factor_engine.cleaned_operators.session_recovery import SessionEventRecoveryScore
 
     idx = pd.DatetimeIndex(
         [
@@ -253,7 +253,7 @@ def test_recovery_utc_index_without_tz_fails_closed():
 
 
 def test_recovery_explicit_session_tz_converts_utc():
-    from cleaned_operators.session_recovery import SessionEventRecoveryScore
+    from factor_engine.cleaned_operators.session_recovery import SessionEventRecoveryScore
 
     idx = pd.DatetimeIndex(
         [
@@ -272,7 +272,7 @@ def test_recovery_explicit_session_tz_converts_utc():
 
 
 def test_recovery_calendar_market_supplies_tz():
-    from cleaned_operators.session_recovery import _resolve_session_tz
+    from factor_engine.cleaned_operators.session_recovery import _resolve_session_tz
 
     cal = SessionCalendar(market="CN", timestamp_convention="bar_start", bar_freq="1min")
     idx = pd.DatetimeIndex(["2024-01-01 09:30:00+00:00", "2024-01-01 09:31:00+00:00"])
@@ -287,7 +287,7 @@ def test_recovery_calendar_market_supplies_tz():
 # ---------------------------------------------------------------------------
 
 def test_recovery_min_events_gate():
-    from cleaned_operators.session_recovery import _recovery_day
+    from factor_engine.cleaned_operators.session_recovery import _recovery_day
 
     x = np.array([10.0, 10.5, 10.05, 10.02, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0])
     event = np.zeros(10)
@@ -299,7 +299,7 @@ def test_recovery_min_events_gate():
 
 
 def test_recovery_min_events_via_operator():
-    from cleaned_operators.session_recovery import SessionEventRecoveryScore
+    from factor_engine.cleaned_operators.session_recovery import SessionEventRecoveryScore
 
     # R26-050/051: the operator grid-aligns to the official A-share session, so
     # the fixture must be the full 240-bar session with a reachable close.
@@ -321,7 +321,7 @@ def test_recovery_min_events_via_operator():
 # ---------------------------------------------------------------------------
 
 def test_recovery_residual_fraction_zero_compile_invalid():
-    from cleaned_operators.session_recovery import SessionEventRecoveryScore
+    from factor_engine.cleaned_operators.session_recovery import SessionEventRecoveryScore
 
     idx = pd.DatetimeIndex([pd.Timestamp("2024-01-01") + pd.Timedelta(minutes=m) for m in range(120)])
     x = pd.DataFrame(np.linspace(10.0, 10.5, 120), index=idx, columns=["S0"])
@@ -345,8 +345,8 @@ def test_recovery_residual_fraction_zero_compile_invalid():
 # ---------------------------------------------------------------------------
 
 def test_baseline_scaled_wasserstein_registered_extended():
-    from cleaned_operators.operator_surface import classify_canonical
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     canon = set(OperatorRegistry.list_canonical())
     assert "baseline_scaled_wasserstein_distance" in canon
@@ -370,7 +370,7 @@ def _minute_frame(days=2, cols=3, per_day=60):
 
 
 def test_baseline_scaled_wasserstein_asymmetric():
-    from cleaned_operators.advanced_intraday import BaselineScaledWassersteinDistance
+    from factor_engine.cleaned_operators.advanced_intraday import BaselineScaledWassersteinDistance
 
     m1 = _minute_frame(2, 3)
     m2 = m1 * 1.5
@@ -385,7 +385,7 @@ def test_baseline_scaled_wasserstein_asymmetric():
 
 
 def test_baseline_scaled_wasserstein_identical_is_zero():
-    from cleaned_operators.advanced_intraday import BaselineScaledWassersteinDistance
+    from factor_engine.cleaned_operators.advanced_intraday import BaselineScaledWassersteinDistance
 
     m1 = _minute_frame(2, 3)
     out = BaselineScaledWassersteinDistance()._calculate_series(m1, m1)

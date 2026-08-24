@@ -9,13 +9,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.q_backend.q_errors import (
+from factor_engine.backend.q_backend.q_errors import (
     QOutputContract,
     QOutputContractViolation,
     semantic_kind_to_output_dtype,
     semantic_null_policy,
 )
-from backend.q_backend.q_backend import QBackend
+from factor_engine.backend.q_backend.q_backend import QBackend
 
 
 @dataclass

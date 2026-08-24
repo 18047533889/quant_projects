@@ -21,11 +21,11 @@ import time
 import pandas as pd
 import pytest
 
-from api import rank, ts_mean, ts_std
-from api.columns import col
-from api.factor import Factor
-from backend.pandas_backend import PandasBackend
-from runtime.engine import FactorEngine
+from factor_engine.api import rank, ts_mean, ts_std
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 
@@ -86,7 +86,7 @@ def test_gate02_custom_factor_id_mapping_dynamic(tmp_path, engine, monkeypatch):
     （``builtins.list.index`` 是 CPython 不可变 C 类型方法，无法 monkeypatch；
     O(1) 由 ``test_gate02_static_no_oN2_lookup_in_writer`` 静态断言保证。）
     """
-    from runtime import materialize_batch
+    from factor_engine.runtime import materialize_batch
 
     captured: list[tuple[str, str]] = []
 
@@ -129,7 +129,7 @@ def test_gate02_custom_factor_id_mapping_dynamic(tmp_path, engine, monkeypatch):
 
 
 def _read_factor_long(lake_root, factor_id):
-    from security.factor_id import factor_dir_for
+    from factor_engine.security.factor_id import factor_dir_for
 
     fdir = factor_dir_for(lake_root, factor_id)
     parts = sorted(fdir.rglob("data.parquet"))
@@ -141,7 +141,7 @@ def _read_factor_long(lake_root, factor_id):
 
 
 def _serial_materialize(engine, factor, output, lake_root):
-    from runtime.materialize_service import execute_materialize
+    from factor_engine.runtime.materialize_service import execute_materialize
 
     return execute_materialize(
         engine,
@@ -178,7 +178,7 @@ def _serial_materialize(engine, factor, output, lake_root):
 
 
 def test_execute_materialize_batch_parity(tmp_path, engine):
-    from runtime.materialize_batch import (
+    from factor_engine.runtime.materialize_batch import (
         MaterializeItem,
         execute_materialize_batch,
     )
@@ -233,8 +233,8 @@ def test_execute_materialize_batch_parity(tmp_path, engine):
         )
 
     # catalog parity：factor_version + 依赖边
-    from runtime.dependency_catalog import DependencyCatalog
-    from storage.materializer import ParquetMaterializer
+    from factor_engine.runtime.dependency_catalog import DependencyCatalog
+    from factor_engine.storage.materializer import ParquetMaterializer
 
     serial_cat = ParquetMaterializer(lake_root=serial_lake).catalog
     batch_cat = ParquetMaterializer(lake_root=batch_lake).catalog
@@ -256,7 +256,7 @@ def test_execute_materialize_batch_parity(tmp_path, engine):
 
 
 def test_batch_transaction_count_lt_item_count(tmp_path, engine):
-    from runtime.materialize_batch import (
+    from factor_engine.runtime.materialize_batch import (
         GenerationTransaction,
         MaterializeItem,
         execute_materialize_batch,
@@ -317,7 +317,7 @@ def test_materialize_many_fast_batch_transaction_count_lt_items(tmp_path):
 
 
 def test_flush_predicate_bytes_age_count():
-    from runtime.streaming_result_sink import _should_flush
+    from factor_engine.runtime.streaming_result_sink import _should_flush
 
     # 旧 count-only 默认：target=None/age=None → batch_size 主导
     assert _should_flush(1, 0, 0.0, batch_size=1, target_batch_bytes=None, max_batch_age_s=None) is True
@@ -335,7 +335,7 @@ def test_flush_predicate_bytes_age_count():
 
 
 def test_sink_flushes_by_bytes():
-    from runtime.streaming_result_sink import StreamingResultSink
+    from factor_engine.runtime.streaming_result_sink import StreamingResultSink
 
     batches: list[list[str]] = []
     lock = threading.Lock()
@@ -363,7 +363,7 @@ def test_sink_flushes_by_bytes():
 
 
 def test_sink_default_stays_count_only():
-    from runtime.streaming_result_sink import StreamingResultSink
+    from factor_engine.runtime.streaming_result_sink import StreamingResultSink
 
     batches: list[int] = []
 
@@ -385,7 +385,7 @@ def test_sink_default_stays_count_only():
 
 
 def test_least_loaded_routing_pins_partition():
-    from runtime.streaming_result_sink import ResultItem, StreamingResultSink
+    from factor_engine.runtime.streaming_result_sink import ResultItem, StreamingResultSink
 
     sink = StreamingResultSink(
         writer=lambda b: None,
@@ -410,7 +410,7 @@ def test_least_loaded_routing_pins_partition():
 
 
 def test_auto_writer_threads_backcompat():
-    from runtime.streaming_result_sink import StreamingResultSink
+    from factor_engine.runtime.streaming_result_sink import StreamingResultSink
 
     # 无 partition_key → 单 worker（保持旧默认）
     sink = StreamingResultSink(writer=lambda b: None)

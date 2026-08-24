@@ -15,12 +15,12 @@ import time
 
 import pytest
 
-from runtime.streaming_result_sink import BoundedResultQueue, StreamingResultSink
+from factor_engine.runtime.streaming_result_sink import BoundedResultQueue, StreamingResultSink
 
 
 def test_elastic_queue_shrink_keeps_items_blocks_producer():
     q = BoundedResultQueue(max_bytes=100)
-    from runtime.streaming_result_sink import ResultItem
+    from factor_engine.runtime.streaming_result_sink import ResultItem
 
     assert q.put(ResultItem("a", b"x" * 40, bytes=40)) is True
     # 缩容到 10 —— 已有 item 保留，producer 阻塞直到消费降到新 target 以下。
@@ -68,7 +68,7 @@ def test_sink_submit_false_after_writer_fatal():
     # writer 首次提交即 permanent 失败 → fatal；后续 submit 返回 False。
     sink.finish_async_mark_fatal() if hasattr(sink, "finish_async_mark_fatal") else None
     # 直接验证：writer FAILED 后 submit 拒绝。
-    from runtime.streaming_result_sink import _WriterWorker, WS_FAILED
+    from factor_engine.runtime.streaming_result_sink import _WriterWorker, WS_FAILED
     sink._workers[0].state = WS_FAILED
     sink._workers[0].fatal_error = OSError("disk full")
     sink._set_fatal(sink._workers[0].fatal_error)
@@ -78,9 +78,9 @@ def test_sink_submit_false_after_writer_fatal():
 def test_service_job_lease_admission():
     from types import SimpleNamespace
 
-    from runtime.host_resource_coordinator import HostResourceCoordinator, reset_host_coordinator
-    from service import queue as sq
-    from service.jobstore import JobRecord, JobStatus
+    from factor_engine.runtime.host_resource_coordinator import HostResourceCoordinator, reset_host_coordinator
+    from factor_engine.service import queue as sq
+    from factor_engine.service.jobstore import JobRecord, JobStatus
 
     reset_host_coordinator()
     coord = HostResourceCoordinator()
@@ -116,9 +116,9 @@ def test_service_job_lease_admission():
 
 
 def test_qos_background_paused_under_pressure():
-    from runtime.resource_broker import ResourceBroker
-    from service import queue as sq
-    from service.jobstore import JobRecord, JobStatus
+    from factor_engine.runtime.resource_broker import ResourceBroker
+    from factor_engine.service import queue as sq
+    from factor_engine.service.jobstore import JobRecord, JobStatus
 
     broker = ResourceBroker(hard_memory_limit=2 * 1024**3, cpu_slots=4,
                             min_host_reserve_gb=0.0, min_host_reserve_fraction=0.0)

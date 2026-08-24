@@ -7,6 +7,6 @@ import pytest
 
 @pytest.fixture(scope="session", autouse=True)
 def r25_load_all() -> None:
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()

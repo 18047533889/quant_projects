@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import contextvars
 
-from backend.panel_polars import get_request_perf_counters
+from factor_engine.backend.panel_polars import get_request_perf_counters
 
 
 def test_contextvar_default_is_lazily_isolated_per_context() -> None:

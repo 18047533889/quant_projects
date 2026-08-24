@@ -33,7 +33,7 @@ COUNT_OP_SPECS: dict[str, CountOpSpec] = {
 
 
 def count_op_spec_for(canon: str) -> CountOpSpec:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     return COUNT_OP_SPECS.get(name, CountOpSpec(kind="count_non_null"))

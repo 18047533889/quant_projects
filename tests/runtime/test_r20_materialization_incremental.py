@@ -40,8 +40,8 @@ def test_macd_explicit_zero_literal_is_not_treated_as_missing():
     """R20-176..179: 显式 0 必须原样保留，而不是被 ``or default`` 当「未提供」
     换成默认 12。fast=0 < slow=26 是合法域，lowering 必须生成 ema(x, 0)，绝不能
     ema(x, 12)。"""
-    from planner.composite_lowering import lower_composite_operators
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.composite_lowering import lower_composite_operators
+    from factor_engine.planner.logical_plan import PlanNode
 
     probe = PlanNode(
         op="MACD_line",
@@ -61,8 +61,8 @@ def test_macd_explicit_zero_literal_is_not_treated_as_missing():
 
 
 def test_macd_no_params_lowers_with_defaults():
-    from planner.composite_lowering import lower_composite_operators
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.composite_lowering import lower_composite_operators
+    from factor_engine.planner.logical_plan import PlanNode
 
     probe = PlanNode(
         op="MACD_line",
@@ -82,7 +82,7 @@ def test_macd_no_params_lowers_with_defaults():
 # ---------------------------------------------------------------------------
 
 def test_composite_contract_declares_panel_arity():
-    from planner.composite_lowering import registered_lowering_contract
+    from factor_engine.planner.composite_lowering import registered_lowering_contract
 
     macd = registered_lowering_contract("MACD_line")
     assert macd is not None
@@ -93,21 +93,21 @@ def test_composite_contract_declares_panel_arity():
 
 
 def test_lowering_contract_invariants_hold():
-    from planner.composite_lowering import assert_lowering_contract_invariants
+    from factor_engine.planner.composite_lowering import assert_lowering_contract_invariants
 
     assert_lowering_contract_invariants()
 
 
 def test_macd_line_declared_deps_no_signal():
     """R20-184: MACD_line 不消费 signal——deps 只含 fast/slow。"""
-    from planner.composite_lowering import registered_lowering_contract
+    from factor_engine.planner.composite_lowering import registered_lowering_contract
 
     macd = registered_lowering_contract("MACD_line")
     assert macd.deps == ("fast", "slow")
 
 
 def test_lowering_audit_flags_unused_and_undeclared():
-    from planner.composite_lowering import lowering_contract_audit
+    from factor_engine.planner.composite_lowering import lowering_contract_audit
 
     audit = lowering_contract_audit("MACD_line")
     assert audit.ok
@@ -116,8 +116,8 @@ def test_lowering_audit_flags_unused_and_undeclared():
 
 
 def test_illegal_macd_domain_raises_not_noop():
-    from planner.composite_lowering import lower_composite_operators
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.composite_lowering import lower_composite_operators
+    from factor_engine.planner.logical_plan import PlanNode
 
     probe = PlanNode(
         op="MACD_hist",
@@ -133,7 +133,7 @@ def test_illegal_macd_domain_raises_not_noop():
 
 
 def test_certified_for_declared_branch_coverage_alias():
-    from planner.composite_lowering import (
+    from factor_engine.planner.composite_lowering import (
         certified_for_all_branches,
         certified_for_declared_branch_coverage,
     )
@@ -149,8 +149,8 @@ def test_certified_for_declared_branch_coverage_alias():
 # ---------------------------------------------------------------------------
 
 def test_limit_state_defaults_to_absolute_price_tolerance():
-    from planner.composite_lowering import lower_composite_operators
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.composite_lowering import lower_composite_operators
+    from factor_engine.planner.logical_plan import PlanNode
 
     probe = PlanNode(
         op="limit_up_state",
@@ -168,8 +168,8 @@ def test_limit_state_defaults_to_absolute_price_tolerance():
 
 
 def test_limit_state_ratio_tolerance_uses_multiply():
-    from planner.composite_lowering import lower_composite_operators
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.composite_lowering import lower_composite_operators
+    from factor_engine.planner.logical_plan import PlanNode
 
     probe = PlanNode(
         op="limit_up_state",
@@ -190,13 +190,13 @@ def test_limit_state_ratio_tolerance_uses_multiply():
 # ---------------------------------------------------------------------------
 
 def _make_materializer(tmp_path):
-    from storage.materialize.materializer import ParquetMaterializer
+    from factor_engine.storage.materialize.materializer import ParquetMaterializer
 
     return ParquetMaterializer(lake_root=str(tmp_path))
 
 
 def test_production_defaults_to_float64():
-    from storage.materialize.materializer import storage_precision_policy_for
+    from factor_engine.storage.materialize.materializer import storage_precision_policy_for
 
     dtype, policy = storage_precision_policy_for(None, production=True)
     assert dtype == "float64"
@@ -206,7 +206,7 @@ def test_production_defaults_to_float64():
 
 
 def test_float32_requires_certificate():
-    from storage.materialize.materializer import storage_precision_policy_for
+    from factor_engine.storage.materialize.materializer import storage_precision_policy_for
 
     _, p1 = storage_precision_policy_for("float32", production=True)
     assert p1 == "float32_legacy"
@@ -217,7 +217,7 @@ def test_float32_requires_certificate():
 
 
 def test_r20_466_live_materialized_roundtrip_report(tmp_path):
-    from storage.materialize.materializer import compare_live_vs_materialized
+    from factor_engine.storage.materialize.materializer import compare_live_vs_materialized
 
     live = _panel([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
     m = _make_materializer(tmp_path)
@@ -238,7 +238,7 @@ def test_r20_466_live_materialized_roundtrip_report(tmp_path):
 
 
 def test_compare_reports_quantization_error():
-    from storage.materialize.materializer import compare_live_vs_materialized
+    from factor_engine.storage.materialize.materializer import compare_live_vs_materialized
 
     live = _panel([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
     quantized = live.astype("float32").astype("float64")
@@ -270,7 +270,7 @@ def test_r20_467_resolved_snapshot_in_row_metadata(tmp_path):
 
 
 def test_identity_exception_classes_exist():
-    from storage.materialize.materializer import (
+    from factor_engine.storage.materialize.materializer import (
         IdentityComputationFailed,
         IdentityUnavailable,
     )
@@ -281,13 +281,13 @@ def test_identity_exception_classes_exist():
 
 def test_identity_computation_failure_raises_in_production(tmp_path, monkeypatch):
     m = _make_materializer(tmp_path)
-    import storage.materialize.materializer as mm
+    import factor_engine.storage.materialize.materializer as mm
 
     def _boom(*a, **k):
         raise RuntimeError("identity code exploded")
 
     monkeypatch.setattr(mm, "compute_identity_from_materialize_ctx", _boom)
-    from storage.materialize.materializer import IdentityComputationFailed
+    from factor_engine.storage.materialize.materializer import IdentityComputationFailed
 
     with pytest.raises(IdentityComputationFailed):
         m.materialize("f1", _panel([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),
@@ -309,8 +309,8 @@ def test_production_missing_identity_rejected(tmp_path):
 def test_catalog_strict_decode_fails_closed_on_import_error(monkeypatch):
     """R20-220..225: 运行模式解析意外异常必须 fail closed（抛错），不再静默
     返回 False 退化成 permissive decode。"""
-    import runtime.production_policy as pp
-    import storage.catalog as cat
+    import factor_engine.runtime.production_policy as pp
+    import factor_engine.storage.catalog as cat
 
     def _boom():
         raise ImportError("production_policy import exploded")
@@ -321,7 +321,7 @@ def test_catalog_strict_decode_fails_closed_on_import_error(monkeypatch):
 
 
 def test_catalog_thread_safety(tmp_path):
-    from storage.catalog import FactorCatalog
+    from factor_engine.storage.catalog import FactorCatalog
 
     cat = FactorCatalog(str(tmp_path / "cat.sqlite"))
     cat.register("base", "a", "1d", "h")
@@ -417,8 +417,8 @@ def test_catalog_register_failure_fails_closed(tmp_path, monkeypatch):
 
 def test_partition_failure_does_not_advance_watermark(tmp_path, monkeypatch):
     """分区落盘失败 -> 抛 MaterializePartitionError，水位线不得推进。"""
-    import storage.materialize.materializer as mm
-    from storage.exceptions import MaterializePartitionError
+    import factor_engine.storage.materialize.materializer as mm
+    from factor_engine.storage.exceptions import MaterializePartitionError
 
     m = _make_materializer(tmp_path)
     monkeypatch.setattr(mm.ParquetMaterializer, "_upsert_partition", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("disk full")))
@@ -448,8 +448,8 @@ def _load_all_broken() -> bool:
     global _LOAD_ALL_BROKEN
     if _LOAD_ALL_BROKEN is None:
         try:
-            import cleaned_operators.common.cross_sectional  # noqa: F401
-            import cleaned_operators.common.polars_cs_misc  # noqa: F401
+            import factor_engine.cleaned_operators.common.cross_sectional  # noqa: F401
+            import factor_engine.cleaned_operators.common.polars_cs_misc  # noqa: F401
 
             _LOAD_ALL_BROKEN = False
         except Exception:  # noqa: BLE001 - concurrent session breakage
@@ -461,7 +461,7 @@ def _load_all_broken() -> bool:
 def test_incremental_plan_respects_history_anchor():
     """incremental plan 的 load_start 必须覆盖 backward_history，不能因 since 而
     退化成短窗（history anchor 保持）。"""
-    from runtime.incremental import build_incremental_plan
+    from factor_engine.runtime.incremental import build_incremental_plan
 
     plan = build_incremental_plan(
         factor_id="f1",
@@ -481,7 +481,7 @@ def test_incremental_plan_respects_history_anchor():
 def test_incremental_plan_full_vs_incremental_anchor(tmp_path):
     """full 与 incremental 的 backward_history 一致（semantic history anchor 不因
     窗口优化改变）。"""
-    from runtime.incremental import build_incremental_plan
+    from factor_engine.runtime.incremental import build_incremental_plan
 
     full = build_incremental_plan(
         factor_id="f1", analysis_lookback=20, watermark=None, factor_freq="1d",

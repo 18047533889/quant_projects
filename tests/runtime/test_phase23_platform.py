@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import pandas as pd
 
-from api import rank, ts_mean
-from api.columns import col
-from api.factor import Factor
-from backend.operator_cost import estimate_plan_cost, get_operator_cost
-from backend.pandas_backend import PandasBackend
-from backend.routing import resolve_execution_tier, select_operator_backend
-from runtime.engine import FactorEngine
-from runtime.incremental_scheduler import DataEvent, execute_incremental_updates_from_event
-from storage.materializer import ParquetMaterializer
+from factor_engine.api import rank, ts_mean
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.operator_cost import estimate_plan_cost, get_operator_cost
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.backend.routing import resolve_execution_tier, select_operator_backend
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.runtime.incremental_scheduler import DataEvent, execute_incremental_updates_from_event
+from factor_engine.storage.materializer import ParquetMaterializer
 from tests.helpers import InMemorySeriesSource
 
 
@@ -103,7 +103,7 @@ def test_operator_cost_and_routing():
     assert select_operator_backend(mean_cost) == "bottleneck"
     assert resolve_execution_tier("ts_rank", window=600) >= 1
 
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     plan = PlanNode(op="ts_mean", attrs={"window": 5}, inputs=[PlanNode(op="col", attrs={"name": "close"})])
     summary = estimate_plan_cost(plan)

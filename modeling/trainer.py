@@ -85,7 +85,7 @@ def _raise_if_cancelled(cancel_token: Any | None) -> None:
     token = cancel_token
     if token is None:
         try:
-            from runtime.exceptions import get_active_cancellation_token
+            from factor_engine.runtime.exceptions import get_active_cancellation_token
             token = get_active_cancellation_token()
         except Exception:
             token = None

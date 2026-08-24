@@ -28,14 +28,14 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from cleaned_operators.base import OperatorParameterError  # noqa: E402
-from cleaned_operators.candle_state_space import (  # noqa: E402
+from factor_engine.cleaned_operators.base import OperatorParameterError  # noqa: E402
+from factor_engine.cleaned_operators.candle_state_space import (  # noqa: E402
     TsVectorStateLocalDensity,
     TsVectorStateMahalanobis,
     _mahalanobis_series,
     last_mahalanobis_telemetry,
 )
-from cleaned_operators.ts_model.sequence_anomaly import _mp_stats  # noqa: E402
+from factor_engine.cleaned_operators.ts_model.sequence_anomaly import _mp_stats  # noqa: E402
 
 
 def _series(n: int = 60, seed: int = 0) -> np.ndarray:

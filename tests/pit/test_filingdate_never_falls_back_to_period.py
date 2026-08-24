@@ -7,7 +7,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from ir.types import FilingDate
+from factor_engine.ir.types import FilingDate
 
 
 def test_filing_date_resolves_from_filing_column() -> None:
@@ -41,6 +41,6 @@ def test_report_date_column_is_no_longer_a_filing_fallback() -> None:
 
 
 def test_filing_date_is_knowledge_kind() -> None:
-    from ir.types import KnowledgeAvailabilityExpr
+    from factor_engine.ir.types import KnowledgeAvailabilityExpr
 
     assert isinstance(FilingDate(), KnowledgeAvailabilityExpr)

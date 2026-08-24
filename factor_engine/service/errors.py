@@ -207,7 +207,7 @@ def classify_exception(exc: BaseException, *, run_mode: str = "research") -> tup
     R21-166: error codes flow into metrics; never parse exception message text
     downstream.
     """
-    from runtime.resource_errors import ResourceGovernanceError, is_fail_closed_error
+    from factor_engine.runtime.resource_errors import ResourceGovernanceError, is_fail_closed_error
 
     if isinstance(exc, ServiceError):
         return exc.code, exc.family

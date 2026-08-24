@@ -4,29 +4,29 @@ from __future__ import annotations
 
 import pytest
 
-from backend.aggregation_spec import sum_all_null_is_null
-from backend.calendar_spec import calendar_ops_require_explicit_spec
-from backend.count_semantics import canonical_count_is_expanding_non_null
-from backend.cross_section_spec import is_effectively_zero_std, zscore_zero_std_epsilon
-from backend.cumulative_state_spec import cumulative_batch_only_phase1
-from backend.fill_semantics import ffill_production_requires_limit
-from backend.group_key_spec import null_group_outputs_null
-from backend.group_spec import group_std_singleton_is_null
-from backend.lag_spec import ts_delay_is_row_delay
-from backend.ordering_spec import (
+from factor_engine.backend.aggregation_spec import sum_all_null_is_null
+from factor_engine.backend.calendar_spec import calendar_ops_require_explicit_spec
+from factor_engine.backend.count_semantics import canonical_count_is_expanding_non_null
+from factor_engine.backend.cross_section_spec import is_effectively_zero_std, zscore_zero_std_epsilon
+from factor_engine.backend.cumulative_state_spec import cumulative_batch_only_phase1
+from factor_engine.backend.fill_semantics import ffill_production_requires_limit
+from factor_engine.backend.group_key_spec import null_group_outputs_null
+from factor_engine.backend.group_spec import group_std_singleton_is_null
+from factor_engine.backend.lag_spec import ts_delay_is_row_delay
+from factor_engine.backend.ordering_spec import (
     duplicate_ts_inst_keys_forbidden,
     production_output_sorted_by_ts_inst,
 )
-from backend.pairwise_spec import beta_uses_pairwise_var
-from backend.plan_params import PlanParamError, parse_winsorize_quantiles
-from backend.production_checklist import PRODUCTION_CHECKLIST, checklist_complete_for_phase1
-from backend.production_signature import param_allowed
-from backend.universe_spec import empty_universe_preserves_keys
-from planner.logical_plan import PlanNode
+from factor_engine.backend.pairwise_spec import beta_uses_pairwise_var
+from factor_engine.backend.plan_params import PlanParamError, parse_winsorize_quantiles
+from factor_engine.backend.production_checklist import PRODUCTION_CHECKLIST, checklist_complete_for_phase1
+from factor_engine.backend.production_signature import param_allowed
+from factor_engine.backend.universe_spec import empty_universe_preserves_keys
+from factor_engine.planner.logical_plan import PlanNode
 
 
 def test_production_checklist_phase1_tracks_wiring():
-    from backend.production_checklist import PHASE1_COMPLETE_STATUSES, checklist_summary
+    from factor_engine.backend.production_checklist import PHASE1_COMPLETE_STATUSES, checklist_summary
 
     summary = checklist_summary()
     assert summary.get("defined", 0) > 0

@@ -207,9 +207,9 @@ def main() -> None:
     # ---- forbidden operator audit ----
     # Exact forbidden names (tombstoned / PERMANENTLY_FORBIDDEN), NOT substring
     # matches — "next" is a legitimate substring of ts_garch_next_vol_forecast.
-    from cleaned_operators.operator_spec import PERMANENTLY_FORBIDDEN_CANONICALS
-    from cleaned_operators.tombstones import is_tombstoned
-    from cleaned_operators.operator_surface import INTERNAL_ONLY_CANONICALS
+    from factor_engine.cleaned_operators.operator_spec import PERMANENTLY_FORBIDDEN_CANONICALS
+    from factor_engine.cleaned_operators.tombstones import is_tombstoned
+    from factor_engine.cleaned_operators.operator_surface import INTERNAL_ONLY_CANONICALS
 
     forbidden_set = set(PERMANENTLY_FORBIDDEN_CANONICALS) | {
         n for n in canonicals if is_tombstoned(n)

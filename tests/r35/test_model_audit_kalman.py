@@ -40,7 +40,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from cleaned_operators.ts_model.state_space import (  # noqa: E402
+from factor_engine.cleaned_operators.ts_model.state_space import (  # noqa: E402
     KALMAN_STATEFUL_CANONICALS,
     _scale_qr,
     kalman_stateful_contract,
@@ -56,11 +56,11 @@ def _load():
     # registration audit is broken in this tree by a concurrent WIP on an
     # unrelated operator (ts_first_passage_bias/polars arity), which would make
     # every load-dependent test fail for reasons unrelated to Kalman.
-    import cleaned_operators.ts_model.state_space  # noqa: F401
+    import factor_engine.cleaned_operators.ts_model.state_space  # noqa: F401
 
 
 def _get(name: str):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get(name, "pandas_numpy", mode="any")
     assert op is not None, name

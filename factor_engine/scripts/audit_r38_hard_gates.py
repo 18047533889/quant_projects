@@ -42,26 +42,26 @@ def _g(name: str, fn, *, defer: str = "") -> dict[str, str]:
 
 
 def _gates() -> list[dict[str, str]]:
-    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler, classify_error, ERROR_OOM
-    from runtime.auto_shard_planner import AutoShardPlanner, build_time_blocks, split_instrument_universe
-    from runtime.resource_broker import ResourceBroker
-    from runtime.shard_execution_plan import shape_signature
-    from runtime.memory_budget_allocator import MemoryBudgetAllocator
-    from runtime.buffer_store import GovernedBufferStore, STATUS_MEMORY, STATUS_SPILLED
-    from runtime.spill_store import SpillStore
-    from runtime.task_resource_contract import TaskResourceContract
-    from runtime.host_resource_coordinator import HostResourceCoordinator, KIND_JOB
-    from backend.fast_linear_window import sliding_parity_check
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler, classify_error, ERROR_OOM
+    from factor_engine.runtime.auto_shard_planner import AutoShardPlanner, build_time_blocks, split_instrument_universe
+    from factor_engine.runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.shard_execution_plan import shape_signature
+    from factor_engine.runtime.memory_budget_allocator import MemoryBudgetAllocator
+    from factor_engine.runtime.buffer_store import GovernedBufferStore, STATUS_MEMORY, STATUS_SPILLED
+    from factor_engine.runtime.spill_store import SpillStore
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.runtime.host_resource_coordinator import HostResourceCoordinator, KIND_JOB
+    from factor_engine.backend.fast_linear_window import sliding_parity_check
 
     # ---- R38_REAL_AUTOSHARD_EXECUTION_PASS（真实 workload）----
     def autoshard_execution():
         import pandas as pd
 
-        from backend.pandas_backend import PandasBackend
-        from runtime.engine import FactorEngine
-        from api import col, ts_mean
-        from api.factor import Factor
-        from runtime.shard_executor import ShardExecutor
+        from factor_engine.backend.pandas_backend import PandasBackend
+        from factor_engine.runtime.engine import FactorEngine
+        from factor_engine.api import col, ts_mean
+        from factor_engine.api.factor import Factor
+        from factor_engine.runtime.shard_executor import ShardExecutor
         from tests.helpers import InMemorySeriesSource
         from tests.r38.test_real_auto_shard_execution import _make_series, _task
 
@@ -96,7 +96,7 @@ def _gates() -> list[dict[str, str]]:
         return sliding_parity_check(X, y, 60, rtol=1e-5).get("status") == "PASS"
 
     def cs_zero_asset_shard():
-        from runtime.auto_shard_planner import legal_shard_dimensions
+        from factor_engine.runtime.auto_shard_planner import legal_shard_dimensions
 
         t = type("T", (), {"op": "cs_rank", "resource_contract": TaskResourceContract(
             predicted_elapsed_ms=1.0, cpu_tokens=1, peak_memory_bytes=10**9, output_bytes=10**9,
@@ -106,7 +106,7 @@ def _gates() -> list[dict[str, str]]:
 
     # ---- OOM replan ----
     def oom_replan_smaller():
-        from planner.physical_factor_dag import PhysicalFactorDAG, PhysicalFactorTask, TASK_ROOT
+        from factor_engine.planner.physical_factor_dag import PhysicalFactorDAG, PhysicalFactorTask, TASK_ROOT
 
         dag = PhysicalFactorDAG()
         t = PhysicalFactorTask(task_id="root:r", op="ts_mean", task_type=TASK_ROOT, factor_name="r",
@@ -122,14 +122,14 @@ def _gates() -> list[dict[str, str]]:
         return classify_error(MemoryError("oom")) == ERROR_OOM
 
     def same_shape_oom_retry_zero():
-        from runtime.shard_execution_plan import shape_signature
+        from factor_engine.runtime.shard_execution_plan import shape_signature
 
         return shape_signature(task_id="t", dimension="time", shard_count=2, per_shard_peak_bytes=10) != \
             shape_signature(task_id="t", dimension="time", shard_count=4, per_shard_peak_bytes=5)
 
     # ---- calibration truth ----
     def calibration_elapsed_is_duration():
-        from runtime.task_run_observation import TaskRunObservation
+        from factor_engine.runtime.task_run_observation import TaskRunObservation
 
         obs = TaskRunObservation(task_id="t", started_at_monotonic=0.0, finished_at_monotonic=0.05,
                                  elapsed_ms=50.0, baseline_family_pss=0, peak_family_pss=None,
@@ -138,8 +138,8 @@ def _gates() -> list[dict[str, str]]:
         return obs.elapsed_ms == 50.0 and obs.elapsed_ms < 1e6
 
     def calibration_peak_is_observed():
-        from runtime.resource_calibration_store import ResourceCalibrationStore
-        from runtime.resource_shape import ResourceShapeKey
+        from factor_engine.runtime.resource_calibration_store import ResourceCalibrationStore
+        from factor_engine.runtime.resource_shape import ResourceShapeKey
 
         store = ResourceCalibrationStore()
         key = ResourceShapeKey("ts_mean", "pandas_numpy", rows_bucket=1, instruments_bucket=1, window_bucket=0)
@@ -148,7 +148,7 @@ def _gates() -> list[dict[str, str]]:
         return p["sample_count"] == 0  # unattributed peak 不进 P99 模型
 
     def calibration_output_bytes_actual():
-        from runtime.task_run_observation import estimate_output_bytes
+        from factor_engine.runtime.task_run_observation import estimate_output_bytes
         import pandas as pd
 
         return estimate_output_bytes(pd.Series([1.0, 2.0, 3.0])) > 0
@@ -167,7 +167,7 @@ def _gates() -> list[dict[str, str]]:
         return r1 is not None and r2 is None
 
     def host_lease_io_enforced():
-        from runtime.host_resource_coordinator import HostResourceCoordinator
+        from factor_engine.runtime.host_resource_coordinator import HostResourceCoordinator
 
         # io cap = hard_cpu_slots=2；两个 root 各 io=2 超限 → 第二个拒绝。
         c = HostResourceCoordinator(broker=ResourceBroker(cpu_slots=2))
@@ -176,7 +176,7 @@ def _gates() -> list[dict[str, str]]:
         return r1 is not None and r2 is None
 
     def host_lease_spill_enforced():
-        from runtime.host_resource_coordinator import HostResourceCoordinator
+        from factor_engine.runtime.host_resource_coordinator import HostResourceCoordinator
 
         broker = ResourceBroker(cpu_slots=4)
         broker._usable_spill = lambda: 100  # 确定性：可用 spill=100B
@@ -201,7 +201,7 @@ def _gates() -> list[dict[str, str]]:
 
     # ---- DA bridge (sync_da_limits is explicit) ----
     def fe_da_same_authority():
-        from runtime.host_resource_coordinator import HostResourceCoordinator
+        from factor_engine.runtime.host_resource_coordinator import HostResourceCoordinator
 
         c = HostResourceCoordinator()
         out = c.sync_da_limits()
@@ -224,7 +224,7 @@ def _gates() -> list[dict[str, str]]:
 
     # ---- fixed cadence ----
     def controller_fixed_cadence():
-        from runtime.resource_autopilot_service import ResourceAutopilotService
+        from factor_engine.runtime.resource_autopilot_service import ResourceAutopilotService
 
         svc = ResourceAutopilotService(ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=4), interval_s=0.2)
         svc.start()
@@ -249,7 +249,7 @@ def _gates() -> list[dict[str, str]]:
     def no_production_raw_cse_fallback():
         from types import SimpleNamespace
         import pandas as pd
-        import runtime.batch_service as bs
+        import factor_engine.runtime.batch_service as bs
 
         ctx = SimpleNamespace(shared_result_cache={}, shared_buffers=None, expression_cache=None,
                               runtime_stats={}, run_mode="production")
@@ -261,7 +261,7 @@ def _gates() -> list[dict[str, str]]:
             return "sid" not in ctx.shared_result_cache
 
     def real_spill_reload():
-        from runtime.spill_store import SpillStore
+        from factor_engine.runtime.spill_store import SpillStore
         import pandas as pd
 
         store = SpillStore()
@@ -271,7 +271,7 @@ def _gates() -> list[dict[str, str]]:
 
     def buffer_accounting_reconciles():
         store = GovernedBufferStore({}, budget_bytes=10**9)
-        from runtime.buffer_store import _estimate_bytes
+        from factor_engine.runtime.buffer_store import _estimate_bytes
         import pandas as pd
 
         for i in range(100):
@@ -282,7 +282,7 @@ def _gates() -> list[dict[str, str]]:
 
     # ---- dynamic sink ----
     def dynamic_sink_shrink():
-        from runtime.streaming_result_sink import BoundedResultQueue, ResultItem
+        from factor_engine.runtime.streaming_result_sink import BoundedResultQueue, ResultItem
 
         q = BoundedResultQueue(100)
         q.put(ResultItem("a", b"x" * 40, bytes=40))
@@ -291,7 +291,7 @@ def _gates() -> list[dict[str, str]]:
 
     def writer_live_thread_fatal():
         import time as _t
-        from runtime.streaming_result_sink import StreamingResultSink
+        from factor_engine.runtime.streaming_result_sink import StreamingResultSink
 
         sink = StreamingResultSink(writer=lambda b: _t.sleep(30), queue_bytes=1024, batch_size=1)
         sink.start()
@@ -303,7 +303,7 @@ def _gates() -> list[dict[str, str]]:
             return True
 
     def sink_failure_stops_admission():
-        from runtime.streaming_result_sink import StreamingResultSink
+        from factor_engine.runtime.streaming_result_sink import StreamingResultSink
 
         sink = StreamingResultSink(writer=lambda b: (_ for _ in ()).throw(OSError("disk full")),
                                    queue_bytes=1024, batch_size=1)
@@ -357,7 +357,7 @@ def _gates() -> list[dict[str, str]]:
     DEFER_WAVE = "运行中 read-wave 拆小（JIT repartition）未全量实现；本版已做 wave 预算随 decision 刷新 + sink 弹性缩容，wave 级 JIT 重排 DEFERRED"
 
     def numba_end_to_end_dispatch():
-        from cleaned_operators.ts_model import state_space as ss
+        from factor_engine.cleaned_operators.ts_model import state_space as ss
 
         ss._NUMBA_DISPATCH_COUNTER.clear()
         import numpy as np
@@ -369,8 +369,8 @@ def _gates() -> list[dict[str, str]]:
     def numba_end_to_end_parity():
         import numpy as np
 
-        from backend.numba_kernels.kalman import kalman_level_reference
-        from cleaned_operators.ts_model.state_space import _kalman_level
+        from factor_engine.backend.numba_kernels.kalman import kalman_level_reference
+        from factor_engine.cleaned_operators.ts_model.state_space import _kalman_level
 
         rng = np.random.default_rng(0)
         vals = rng.normal(size=400)
@@ -384,8 +384,8 @@ def _gates() -> list[dict[str, str]]:
     def pca_shared_state_parity():
         import numpy as np
 
-        from backend.model_family_kernels import fit_pca_block
-        from cleaned_operators.cross_section.panel_model import _pca_commonality
+        from factor_engine.backend.model_family_kernels import fit_pca_block
+        from factor_engine.cleaned_operators.cross_section.panel_model import _pca_commonality
 
         rng = np.random.default_rng(3)
         X = rng.standard_normal((80, 6))
@@ -401,8 +401,8 @@ def _gates() -> list[dict[str, str]]:
     def garch_shared_state_parity():
         import numpy as np
 
-        from backend.model_family_kernels import fit_garch_block
-        from cleaned_operators.ts_model.volatility import _fit_garch
+        from factor_engine.backend.model_family_kernels import fit_garch_block
+        from factor_engine.cleaned_operators.ts_model.volatility import _fit_garch
 
         rng = np.random.default_rng(10)
         n = 400
@@ -424,9 +424,9 @@ def _gates() -> list[dict[str, str]]:
         """R38_P0-041：运行中 wave 预算显著缩小 → 未执行 SOURCE_SCAN 重新拆小。"""
         from types import SimpleNamespace
 
-        from runtime.resource_autopilot import ResourceDecision
+        from factor_engine.runtime.resource_autopilot import ResourceDecision
 
-        from planner.physical_factor_dag import (
+        from factor_engine.planner.physical_factor_dag import (
             TASK_SOURCE_SCAN,
             PhysicalFactorDAG,
             PhysicalFactorTask,

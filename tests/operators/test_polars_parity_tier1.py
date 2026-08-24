@@ -12,17 +12,17 @@ pytestmark = pytest.mark.skip(reason="legacy Polars rollout tier superseded by s
 pd = pytest.importorskip("pandas")
 pytest.importorskip("polars")
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from cleaned_operators import load_all
-from cleaned_operators.operator_policy import (
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.operator_policy import (
     POLARS_PARITY_VERIFIED,
     POLARS_PARITY_VERIFIED_TIER1,
     POLARS_PRODUCTION_SAFE,
 )
-from runtime.engine import FactorEngine
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 ts_std = make_cleaned_call_factory("ts_std")
@@ -78,7 +78,7 @@ def _parity_exprs():
 
 
 def test_parity_verified_tier1_subset_of_production_safe():
-    from cleaned_operators.operator_policy import POLARS_PRODUCTION_SAFE
+    from factor_engine.cleaned_operators.operator_policy import POLARS_PRODUCTION_SAFE
 
     assert POLARS_PARITY_VERIFIED_TIER1 <= POLARS_PRODUCTION_SAFE
     assert POLARS_PARITY_VERIFIED_TIER1 <= POLARS_PARITY_VERIFIED

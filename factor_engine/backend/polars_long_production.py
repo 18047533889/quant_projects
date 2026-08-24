@@ -2,16 +2,16 @@
 """PolarsLong native 三层准入：Implemented / Parity Verified / Production Safe。"""
 from __future__ import annotations
 
-from backend.polars_long_policy import (
+from factor_engine.backend.polars_long_policy import (
     POLARS_LONG_MAP_GROUPS,
     POLARS_LONG_NATIVE,
     infer_polars_long_tier,
 )
-from backend.primitive_evidence import (
+from factor_engine.backend.primitive_evidence import (
     POLARS_REFERENCE_PARITY_VERIFIED,
     PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE,
 )
-from backend.production_fastpath_tiers import (
+from factor_engine.backend.production_fastpath_tiers import (
     P0_PRODUCTION_FASTPATH_CANONICALS,
     P1_POLARS_PRODUCTION_SAFE,
     FASTPATH_DEFERRED_CANONICALS,
@@ -27,7 +27,7 @@ POLARS_LONG_MAP_GROUPS_PRODUCTION_ALLOWED: frozenset[str] = frozenset()
 
 POLARS_LONG_NATIVE_PARITY_VERIFIED: frozenset[str] = POLARS_REFERENCE_PARITY_VERIFIED
 
-from cleaned_operators.operator_surface import DAILY_CANONICALS as _DAILY_CANONICALS
+from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS as _DAILY_CANONICALS
 
 _STATIC_POLARS_CANDIDATES: frozenset[str] = frozenset(_DAILY_CANONICALS) | frozenset({"protected_div"})
 
@@ -83,6 +83,6 @@ def polars_long_production_tier(canon: str) -> str:
 
 def duckdb_triple_parity_verified(canon: str) -> bool:
     """DuckDB 真实 SQL parity 是否已通过（primitive evidence）。"""
-    from backend.primitive_evidence import primitive_duckdb_real_sql_verified
+    from factor_engine.backend.primitive_evidence import primitive_duckdb_real_sql_verified
 
     return primitive_duckdb_real_sql_verified(_resolve(canon))

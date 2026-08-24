@@ -31,7 +31,7 @@ def _load_payload(path: Path) -> dict[str, Any]:
 
 
 def _factory(canonical: str):
-    from api.cleaned_ops import make_cleaned_call_factory
+    from factor_engine.api.cleaned_ops import make_cleaned_call_factory
     return make_cleaned_call_factory(canonical)
 
 
@@ -169,7 +169,7 @@ def augment_from_functions_yaml(
     aliases, templates = _entries(payload)
     out = dict(allow)
 
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     for external, canonical_or_alias in aliases.items():
         try:
             canonical = OperatorRegistry.resolve_canonical_strict(canonical_or_alias)

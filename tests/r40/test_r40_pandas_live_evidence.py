@@ -8,7 +8,7 @@ pd = pytest.importorskip("pandas")
 
 
 def test_pandas_backend_live_evidence_validates_actual_behavior():
-    from backend.pandas_backend import PandasBackendLiveEvidence
+    from factor_engine.backend.pandas_backend import PandasBackendLiveEvidence
 
     ev = PandasBackendLiveEvidence()
     summary = ev.validate_known_set()
@@ -21,7 +21,7 @@ def test_pandas_backend_live_evidence_validates_actual_behavior():
 
 
 def test_pandas_backend_live_evidence_detects_wrong_reference():
-    from backend.pandas_backend import PandasBackendLiveEvidence, _REFERENCE_CANONICALS
+    from factor_engine.backend.pandas_backend import PandasBackendLiveEvidence, _REFERENCE_CANONICALS
 
     wrong = dict(_REFERENCE_CANONICALS)
     wrong["abs"] = (wrong["abs"][0], [999.0] * 6)
@@ -32,7 +32,7 @@ def test_pandas_backend_live_evidence_detects_wrong_reference():
 
 
 def test_pandas_backend_live_evidence_singleton():
-    from backend.pandas_backend import (
+    from factor_engine.backend.pandas_backend import (
         get_pandas_live_evidence,
         reset_pandas_live_evidence,
     )

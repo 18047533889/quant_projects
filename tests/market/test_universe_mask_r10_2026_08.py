@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from market.universe import (
+from factor_engine.market.universe import (
     MaskComponentSpec,
     UniverseContractError,
     apply_mask_predicate,

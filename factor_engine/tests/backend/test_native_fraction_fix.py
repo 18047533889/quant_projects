@@ -11,8 +11,8 @@ import types
 
 import pytest
 
-from backend.plan_cost_router import plan_native_subgraph_fraction
-from planner.logical_plan import PlanNode
+from factor_engine.backend.plan_cost_router import plan_native_subgraph_fraction
+from factor_engine.planner.logical_plan import PlanNode
 
 
 def _ctx(data_kind: str = "memory") -> types.SimpleNamespace:

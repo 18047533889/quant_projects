@@ -31,7 +31,7 @@ def _load() -> None:
 
 
 def row_for(canonical: str) -> dict:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     try:
         meta = OperatorRegistry.get(canonical, "pandas_numpy").metadata
@@ -88,12 +88,12 @@ def main() -> None:
     # Load the FULL registry explicitly — import-time registration alone can
     # under-populate during concurrent edits, which would silently shrink the
     # audited canonical set.
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
 
-    from market.capability_resolver import operator_support
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.market.capability_resolver import operator_support
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     canonicals = sorted(OperatorRegistry.list_canonical())
     rows = []
@@ -217,7 +217,7 @@ def main() -> None:
 
 
 def _supported(status: str) -> bool:
-    from market.capabilities import MarketStatus
+    from factor_engine.market.capabilities import MarketStatus
 
     try:
         return MarketStatus(status).is_supported

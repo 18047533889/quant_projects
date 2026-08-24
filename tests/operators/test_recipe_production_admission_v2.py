@@ -8,9 +8,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from backend.context import ExecutionContext
-from backend.factory import build_backend
-from factor_recipes.planner_bridge import compile_recipe_plans
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.backend.factory import build_backend
+from factor_engine.factor_recipes.planner_bridge import compile_recipe_plans
 from tests.helpers import InMemorySeriesSource
 
 _SCALARS: dict[str, Any] = {
@@ -169,10 +169,10 @@ def _plan_ops(plan) -> set[str]:
 
 def test_every_production_recipe_executes_on_certified_reference_path():
     os.environ["FACTOR_ENGINE_CERTIFY_RECIPE_EVIDENCE"] = "1"
-    from backend.operator_capability import production_eligible_backends
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
-    from factor_recipes import FactorRecipeRegistry
+    from factor_engine.backend.operator_capability import production_eligible_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.factor_recipes import FactorRecipeRegistry
 
     load_all()
     recipes = [
@@ -206,7 +206,7 @@ def test_every_production_recipe_executes_on_certified_reference_path():
 
 
 def test_production_recipe_names_are_unique_and_registered():
-    from factor_recipes import FactorRecipeRegistry
+    from factor_engine.factor_recipes import FactorRecipeRegistry
 
     names = FactorRecipeRegistry.list_names(status="production")
     assert len(names) == len(set(names))

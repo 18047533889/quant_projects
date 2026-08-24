@@ -7,22 +7,22 @@ import pytest
 
 @pytest.fixture(scope="module")
 def _loaded():
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
 
 
 def test_production_fastpath_dsl_accepts_ts_mean(_loaded):
-    from api.mining_integration import validate_production_fastpath_dsl
+    from factor_engine.api.mining_integration import validate_production_fastpath_dsl
 
     ok, msg = validate_production_fastpath_dsl("ts_mean(col('close'), 5)")
     assert ok, msg
 
 
 def test_fastpath_allowlists_json_shape(_loaded):
-    from api.mining_integration import export_fastpath_allowlists_json
+    from factor_engine.api.mining_integration import export_fastpath_allowlists_json
 
     payload = export_fastpath_allowlists_json()
     assert "research_allowlist" in payload
@@ -32,7 +32,7 @@ def test_fastpath_allowlists_json_shape(_loaded):
 
 
 def test_validate_manifest_fastpath_when_env(monkeypatch):
-    from api.mining_integration import validate_manifest_for_execution
+    from factor_engine.api.mining_integration import validate_manifest_for_execution
 
     monkeypatch.setenv("FACTOR_ENGINE_MINING_REQUIRE_FASTPATH", "1")
     ok, msg = validate_manifest_for_execution(
@@ -44,14 +44,14 @@ def test_validate_manifest_fastpath_when_env(monkeypatch):
 
 
 def test_default_mining_operator_allowlist_fastpath(_loaded):
-    from api.mining_integration import default_mining_operator_allowlist
+    from factor_engine.api.mining_integration import default_mining_operator_allowlist
 
     ops = default_mining_operator_allowlist(tier="production_fastpath")
     assert "ts_mean" in ops
 
 
 def test_default_mining_search_space_config(_loaded):
-    from api.mining_integration import default_mining_search_space_config
+    from factor_engine.api.mining_integration import default_mining_search_space_config
 
     cfg = default_mining_search_space_config(tier="production_fastpath")
     assert cfg["schema_version"] == "factor_engine.mining_search_space.v2"
@@ -64,7 +64,7 @@ def test_default_mining_search_space_config(_loaded):
 
 
 def test_typed_mining_search_space_v2_preserves_v1_allowlist(_loaded):
-    from api.mining_integration import default_mining_search_space_config
+    from factor_engine.api.mining_integration import default_mining_search_space_config
 
     v1 = default_mining_search_space_config(tier="research", version="v1")
     v2 = default_mining_search_space_config(tier="research", version="v2", max_cost=1)
@@ -80,7 +80,7 @@ def test_typed_mining_search_space_v2_preserves_v1_allowlist(_loaded):
 
 
 def test_typed_mining_rejects_invalid_constraints(_loaded):
-    from api.mining_integration import default_mining_search_space_config
+    from factor_engine.api.mining_integration import default_mining_search_space_config
 
     with pytest.raises(ValueError, match="max_domains"):
         default_mining_search_space_config(tier="research", version="v2", max_domains=3)
@@ -91,11 +91,11 @@ def test_typed_mining_rejects_invalid_constraints(_loaded):
 
 
 def test_typed_mining_uses_field_catalog_hash_and_filters_cost(tmp_path, _loaded):
-    from api.mining_integration import (
+    from factor_engine.api.mining_integration import (
         default_mining_search_space_config,
         write_mining_search_space,
     )
-    from fields import compute_field_catalog_hash
+    from factor_engine.fields import compute_field_catalog_hash
 
     cfg = default_mining_search_space_config(
         tier="research", version="v2", max_cost=0.5
@@ -111,7 +111,7 @@ def test_typed_mining_uses_field_catalog_hash_and_filters_cost(tmp_path, _loaded
 
 
 def test_validate_formula_in_mining_allowlist(_loaded):
-    from api.mining_integration import validate_formula_in_mining_allowlist
+    from factor_engine.api.mining_integration import validate_formula_in_mining_allowlist
 
     ok, msg = validate_formula_in_mining_allowlist(
         "rank(ts_mean(col('close'), 3))",
@@ -128,7 +128,7 @@ def test_validate_formula_in_mining_allowlist(_loaded):
 
 
 def test_validate_manifest_python_is_research_only():
-    from api.mining_integration import validate_manifest_for_execution
+    from factor_engine.api.mining_integration import validate_manifest_for_execution
 
     ok, msg = validate_manifest_for_execution(
         market="ashare", expression_type="python", formula="close.mean()"
@@ -146,7 +146,7 @@ def test_validate_manifest_python_is_research_only():
 
 
 def test_resolve_mining_allowlist_tier_env(monkeypatch, _loaded):
-    from api.mining_integration import resolve_mining_allowlist_tier
+    from factor_engine.api.mining_integration import resolve_mining_allowlist_tier
 
     monkeypatch.setenv("FACTOR_ENGINE_MINING_ALLOWLIST_TIER", "research")
     assert resolve_mining_allowlist_tier() == "research"

@@ -6,20 +6,20 @@ import pytest
 
 
 def _loaded_registry():
-    from backend.cleaned_bridge import ensure_cleaned_loaded
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     ensure_cleaned_loaded()
     return OperatorRegistry
 
 
 def _analysis(formula: str):
-    from api.dsl_parser import parse_expr
-    from ir.analyzer import Analyzer
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.ir.analyzer import Analyzer
     return Analyzer().lower(parse_expr(formula, surface="lqtp"))
 
 
 def test_lqtp_exact_aliases_share_canonical_expr() -> None:
-    from api.dsl_parser import parse_expr
+    from factor_engine.api.dsl_parser import parse_expr
     cases = {
         "decay_linear(close, 5)": "ts_decay_linear",
         "ts_rank_pct(close, 5)": "ts_rank",
@@ -33,7 +33,7 @@ def test_lqtp_exact_aliases_share_canonical_expr() -> None:
 
 
 def test_surface_and_dialect_are_orthogonal() -> None:
-    from api.dsl_parser import DSLParseError, parse_expr
+    from factor_engine.api.dsl_parser import DSLParseError, parse_expr
     with pytest.raises(DSLParseError):
         parse_expr("safe_log(close)", surface="daily", dialect="native")
     assert parse_expr("safe_log(close)", surface="daily", dialect="lqtp").op == "where"
@@ -42,7 +42,7 @@ def test_surface_and_dialect_are_orthogonal() -> None:
 
 
 def test_safe_log_and_momentum_are_macros_not_duplicate_kernels() -> None:
-    from api.dsl_parser import parse_expr
+    from factor_engine.api.dsl_parser import parse_expr
     assert parse_expr("safe_log(close)", surface="lqtp").op == "where"
     assert parse_expr("momentum(close, 20)", surface="lqtp").op == "ts_delta"
     registry = _loaded_registry()
@@ -51,7 +51,7 @@ def test_safe_log_and_momentum_are_macros_not_duplicate_kernels() -> None:
 
 
 def test_lqtp_sma_keeps_two_distinct_semantics() -> None:
-    from api.dsl_parser import parse_expr
+    from factor_engine.api.dsl_parser import parse_expr
     assert parse_expr("sma(close, 7)", surface="lqtp").op == "ts_mean"
     assert parse_expr("sma(close, 7, 2)", surface="lqtp").op == "ts_sma_cn"
 
@@ -61,7 +61,7 @@ def test_lqtp_bare_true_range_expands_before_field_analysis() -> None:
 
 
 def test_parameterized_datatable_attribute_becomes_opaque_source_ref() -> None:
-    from api.source_ref import decode_source_ref
+    from factor_engine.api.source_ref import decode_source_ref
     analysis = _analysis('BenchmarkIndexDailyBar(index="000985.SH").Close')
     assert len(analysis.referenced_columns) == 1
     name = next(iter(analysis.referenced_columns))
@@ -73,14 +73,14 @@ def test_parameterized_datatable_attribute_becomes_opaque_source_ref() -> None:
 
 
 def test_legacy_benchmark_index_attribute_is_supported() -> None:
-    from api.source_ref import decode_source_ref
+    from factor_engine.api.source_ref import decode_source_ref
     analysis = _analysis('benchmark_index(index="000985.SH").Close')
     spec = decode_source_ref(next(iter(analysis.referenced_columns)))
     assert spec is not None and spec.table == "BenchmarkIndexDailyBar"
 
 
 def test_real_turnover_rate_uses_turnover_base_source_ref() -> None:
-    from api.source_ref import decode_source_ref
+    from factor_engine.api.source_ref import decode_source_ref
     analysis = _analysis("real_turnover_rate()")
     assert "volume" in analysis.referenced_columns
     refs = [decode_source_ref(name) for name in analysis.referenced_columns]
@@ -91,7 +91,7 @@ def test_real_turnover_rate_uses_turnover_base_source_ref() -> None:
 
 
 def test_minute_helpers_accept_legacy_daily_field_shorthand() -> None:
-    from api.source_ref import decode_source_ref
+    from factor_engine.api.source_ref import decode_source_ref
     analysis = _analysis("minute_bar(close, 5, 0)")
     spec = decode_source_ref(next(iter(analysis.referenced_columns)))
     assert spec is not None
@@ -102,7 +102,7 @@ def test_minute_helpers_accept_legacy_daily_field_shorthand() -> None:
 
 
 def test_financial_asof_and_lag_are_source_level_transforms() -> None:
-    from api.source_ref import decode_source_ref
+    from factor_engine.api.source_ref import decode_source_ref
     for formula, transform in [
         ("asof(StockIncome.TotalOperatingRevenue)", "financial_asof"),
         ("financial_lag(StockIncome.TotalOperatingRevenue, 2)", "financial_lag"),
@@ -115,8 +115,8 @@ def test_financial_asof_and_lag_are_source_level_transforms() -> None:
 
 
 def test_default_market_risk_helpers_inject_benchmark_source() -> None:
-    from api.source_ref import decode_source_ref
-    from api.dsl_parser import parse_expr
+    from factor_engine.api.source_ref import decode_source_ref
+    from factor_engine.api.dsl_parser import parse_expr
     for formula in [
         "rolling_beta_to_market(ret, 20)",
         "tail_beta(ret, 20, 0.05)",
@@ -130,7 +130,7 @@ def test_default_market_risk_helpers_inject_benchmark_source() -> None:
 
 
 def test_historical_risk_macros_and_cvar_kernel() -> None:
-    from api.dsl_parser import parse_expr
+    from factor_engine.api.dsl_parser import parse_expr
     assert parse_expr("historical_var(ret, 20, 0.05)", surface="lqtp").op == "neg"
     assert parse_expr("historical_cvar(ret, 20, 0.05)", surface="lqtp").op == "lqtp_historical_cvar"
     registry = _loaded_registry()
@@ -141,7 +141,7 @@ def test_historical_risk_macros_and_cvar_kernel() -> None:
 
 
 def test_intermediate_is_versioned_source_ref() -> None:
-    from api.source_ref import decode_source_ref
+    from factor_engine.api.source_ref import decode_source_ref
     analysis = _analysis('intermediate("turnover_zscore", 1)')
     spec = decode_source_ref(next(iter(analysis.referenced_columns)))
     assert spec is not None and spec.table == "Intermediate"
@@ -149,7 +149,7 @@ def test_intermediate_is_versioned_source_ref() -> None:
 
 
 def test_ambiguous_lqtp_names_fail_instead_of_guessing() -> None:
-    from api.dsl_parser import DSLParseError, parse_expr
+    from factor_engine.api.dsl_parser import DSLParseError, parse_expr
     for formula in ("ts_sumac(close, 20)", "ts_regression_slope_sequence(close, 20)"):
         with pytest.raises(DSLParseError, match="recognized"):
             parse_expr(formula, surface="lqtp")
@@ -170,8 +170,8 @@ def test_where_scalar_branches_broadcast_to_panel() -> None:
 
 
 def test_fastpath_output_is_canonicalized_before_execution() -> None:
-    from planner.logical_plan import PlanNode
-    from planner.optimizer import Optimizer
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.planner.optimizer import Optimizer
     x = PlanNode(op="column", inputs=[], attrs={"name":"close"})
     root = PlanNode(op="divide", inputs=[PlanNode(op="subtract", inputs=[x, PlanNode(op="ts_mean",inputs=[x],attrs={"window":20})],attrs={}), PlanNode(op="ts_std",inputs=[x],attrs={"window":20})], attrs={})
     out = Optimizer().optimize(root)
@@ -189,8 +189,8 @@ def test_research_tools_and_factor_research_both_have_entrypoints() -> None:
 
 def test_pandas_first_production_is_independent_from_duckdb() -> None:
     registry = _loaded_registry()
-    from backend.backend_certification import backend_certification
-    from cleaned_operators.operator_spec import build_operator_spec
+    from factor_engine.backend.backend_certification import backend_certification
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec
     assert registry.get("ts_quantile", "pandas_numpy") is not None
     spec = build_operator_spec("ts_quantile")
     assert spec is not None and spec.allow_in_production is True
@@ -199,6 +199,6 @@ def test_pandas_first_production_is_independent_from_duckdb() -> None:
 
 def test_recursive_sma_is_production_hardened() -> None:
     _loaded_registry()
-    from cleaned_operators.operator_spec import build_operator_spec
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec
     spec = build_operator_spec("ts_sma_cn")
     assert spec is not None and spec.status == "production" and spec.allow_in_production is True

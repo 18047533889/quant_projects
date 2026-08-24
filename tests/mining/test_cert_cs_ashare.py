@@ -8,9 +8,9 @@ has six-way evidence, so none are certified.
 from __future__ import annotations
 
 import pytest
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators import load_all
-from mining.direct_use import build_direct_use_operator
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.mining.direct_use import build_direct_use_operator
 
 # The 21 cross_sectional canonicals certified by R23 P1 certification
 R23_CERTIFIED_CANONICALS = frozenset({
@@ -69,7 +69,7 @@ def test_all_certified_have_production_status():
 
 def test_experimental_not_certified():
     """Operators in scope that are NOT certified must NOT have production_admitted."""
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
     import json
 
     d = json.load(open("/home/shw/quant_projects/docs/R23_PER_CANONICAL_AUDIT.json"))
@@ -95,7 +95,7 @@ def test_experimental_not_certified():
 
 def test_certified_count():
     """Exactly 21 operators are certified."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     catalog = OperatorRegistry._catalog
     actual = sum(

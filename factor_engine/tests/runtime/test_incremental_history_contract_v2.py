@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from storage.datasource import DataSource
+from factor_engine.storage.datasource import DataSource
 
 
 class _Source(DataSource):
@@ -22,7 +22,7 @@ class _Source(DataSource):
 
 
 def _incremental_plan():
-    from runtime.incremental import build_incremental_plan
+    from factor_engine.runtime.incremental import build_incremental_plan
 
     return build_incremental_plan(
         factor_id="momentum",
@@ -38,8 +38,8 @@ def _incremental_plan():
 
 
 def _narrow_for_plan(plan):
-    import runtime  # noqa: F401 - installs contract-preserving narrowing
-    from storage.time_window import narrow_data_source_for_window
+    import factor_engine.runtime  # noqa: F401 - installs contract-preserving narrowing
+    from factor_engine.storage.time_window import narrow_data_source_for_window
 
     return narrow_data_source_for_window(
         _Source(),
@@ -50,7 +50,7 @@ def _narrow_for_plan(plan):
 
 
 def test_plan_alone_does_not_certify_incremental_history():
-    from runtime.production_policy import (
+    from factor_engine.runtime.production_policy import (
         ProductionPolicyViolation,
         assert_production_run_flags,
     )
@@ -68,7 +68,7 @@ def test_plan_alone_does_not_certify_incremental_history():
 
 
 def test_matching_source_narrowing_issues_one_shot_history_certificate():
-    from runtime.production_policy import (
+    from factor_engine.runtime.production_policy import (
         ProductionPolicyViolation,
         assert_production_run_flags,
     )
@@ -96,12 +96,12 @@ def test_matching_source_narrowing_issues_one_shot_history_certificate():
 
 
 def test_mismatched_source_window_invalidates_pending_plan():
-    import runtime  # noqa: F401
-    from runtime.production_policy import (
+    import factor_engine.runtime  # noqa: F401
+    from factor_engine.runtime.production_policy import (
         ProductionPolicyViolation,
         assert_production_run_flags,
     )
-    from storage.time_window import narrow_data_source_for_window
+    from factor_engine.storage.time_window import narrow_data_source_for_window
 
     plan = _incremental_plan()
     narrow_data_source_for_window(
@@ -121,8 +121,8 @@ def test_mismatched_source_window_invalidates_pending_plan():
 
 
 def test_direct_production_run_cannot_bypass_warmup():
-    from runtime.incremental import clear_incremental_history_contract
-    from runtime.production_policy import (
+    from factor_engine.runtime.incremental import clear_incremental_history_contract
+    from factor_engine.runtime.production_policy import (
         ProductionPolicyViolation,
         assert_production_run_flags,
     )
@@ -139,11 +139,11 @@ def test_direct_production_run_cannot_bypass_warmup():
 
 
 def test_full_history_incremental_plan_never_issues_tail_certificate():
-    from runtime.incremental import (
+    from factor_engine.runtime.incremental import (
         FULL_HISTORY_LOOKBACK_SENTINEL,
         build_incremental_plan,
     )
-    from runtime.production_policy import (
+    from factor_engine.runtime.production_policy import (
         ProductionPolicyViolation,
         assert_production_run_flags,
     )

@@ -9,10 +9,10 @@ explicit ParamRole on every searchable scalar.
 """
 from __future__ import annotations
 
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.operator_spec import _infer_panel_params
-from cleaned_operators.operator_surface import classify_canonical
-from cleaned_operators.base import missing_role_defaults_to_searchable
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.operator_spec import _infer_panel_params
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
+from factor_engine.cleaned_operators.base import missing_role_defaults_to_searchable
 
 
 def test_required_scalar_thresholds_not_misclassified_as_panels():
@@ -58,8 +58,8 @@ def test_no_production_scalar_resolves_to_silent_economic():
 
 
 def test_technical_window_helpers_carry_horizon_role():
-    from cleaned_operators.technical.indicators_v2 import _WIN_GE2, _WIN_GE1, _POS_FLOAT
-    from cleaned_operators.base import ParamRole
+    from factor_engine.cleaned_operators.technical.indicators_v2 import _WIN_GE2, _WIN_GE1, _POS_FLOAT
+    from factor_engine.cleaned_operators.base import ParamRole
 
     assert _WIN_GE2.param_role is ParamRole.HORIZON
     assert _WIN_GE1.param_role is ParamRole.HORIZON

@@ -18,18 +18,18 @@ from __future__ import annotations
 
 import pytest
 
-from planner.logical_plan import PlanNode
-from planner.optimizer import Optimizer
-from planner.cse import apply_cse, collect_consumed_sids
-from planner.plan_hash import structural_key
-from planner.rewrite_fastpath import rewrite_plan_for_fastpath
-from planner.canonicalize_params import (
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.optimizer import Optimizer
+from factor_engine.planner.cse import apply_cse, collect_consumed_sids
+from factor_engine.planner.plan_hash import structural_key
+from factor_engine.planner.rewrite_fastpath import rewrite_plan_for_fastpath
+from factor_engine.planner.canonicalize_params import (
     canonicalize_parameter_values,
     canonicalize_plan_parameters,
     validate_plan_params,
 )
 
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 
 load_all()  # real ParamSpec contracts for ts_mean validation
 
@@ -86,7 +86,7 @@ def test_optimizer_pipeline_preserves_semantic_attrs():
 
 
 def test_rewrite_node_preserves_semantic_attrs_by_default():
-    from planner.rewrite_fastpath import rewrite_node
+    from factor_engine.planner.rewrite_fastpath import rewrite_node
 
     old = PlanNode(op="x", inputs=[_col()], attrs={"a": 1}, semantic_attrs=_semantic(grain="minute"))
     new = rewrite_node(old, op="y", inputs=[_col("b")])

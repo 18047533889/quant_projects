@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.elementwise_semantics import (
+from factor_engine.backend.elementwise_semantics import (
     compare_pandas,
     compare_sql,
     div_or_default_pandas,

@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
 
-from storage.catalog import FactorCatalog
+from factor_engine.storage.catalog import FactorCatalog
 
 
 def _parse_ts(value: str | None) -> datetime | None:

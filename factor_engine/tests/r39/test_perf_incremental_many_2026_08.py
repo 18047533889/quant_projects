@@ -23,9 +23,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from runtime.engine import FactorEngine
-from runtime.execution_identity import ExecutionIdentity, execution_identity_from_config
-from runtime.factor_campaign_session import FactorCampaignSession
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.runtime.execution_identity import ExecutionIdentity, execution_identity_from_config
+from factor_engine.runtime.factor_campaign_session import FactorCampaignSession
 
 
 def _write_factor_yaml(
@@ -96,9 +96,9 @@ def _patch_from_loaded_config(monkeypatch, counter: dict[str, int]) -> None:
 
 def _reference_serial(engine_cls, config_paths):
     """旧行为的逐配置串行参考实现（不跑真实引擎）。"""
-    from runtime.config import load_config
-    from runtime.config_runtime import resolve_materialize_kwargs_for_pipeline
-    from runtime.incremental_event_service import _factor_from_config
+    from factor_engine.runtime.config import load_config
+    from factor_engine.runtime.config_runtime import resolve_materialize_kwargs_for_pipeline
+    from factor_engine.runtime.incremental_event_service import _factor_from_config
 
     outputs: dict[str, object] = {}
     for path in config_paths:
@@ -233,7 +233,7 @@ def test_materialize_incremental_many_shared_engine_reuses_materialize(
 
 
 def _identity_for(tmp_path: Path) -> ExecutionIdentity:
-    from runtime.config import load_config
+    from factor_engine.runtime.config import load_config
 
     root = tmp_path / "data"
     root.mkdir(parents=True, exist_ok=True)
@@ -243,7 +243,7 @@ def _identity_for(tmp_path: Path) -> ExecutionIdentity:
 
 
 def _factor(name: str):
-    from api.dsl_parser import parse_factor
+    from factor_engine.api.dsl_parser import parse_factor
 
     return parse_factor("close", name=name)
 
@@ -280,7 +280,7 @@ def test_factor_campaign_session_compile_reuse(tmp_path):
 
 def test_execution_identity_hashable_and_strict():
     """ExecutionIdentity 可哈希；任一字段不同即不同 identity。"""
-    from runtime.execution_identity import freeze_options
+    from factor_engine.runtime.execution_identity import freeze_options
 
     identity = ExecutionIdentity(
         source_snapshot=(("type", "parquet_kline"),),

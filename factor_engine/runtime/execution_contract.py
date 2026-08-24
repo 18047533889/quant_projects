@@ -25,7 +25,7 @@ from typing import Any, Mapping
 # R19 semantic policies: anchor / missing-topology / current-row / time-unit /
 # rank & quantile declarations, imported from the runtime-owned policy module so
 # the history layer exposes them without touching the operator catalog.
-from runtime.semantic_policies import (
+from factor_engine.runtime.semantic_policies import (
     AnchorPolicy,
     CurrentRowRequirement,
     MissingTopologyPolicy,
@@ -215,8 +215,8 @@ def minimum_effective_samples(
     # treated as needing at least 2 effective samples, never 1.
     if canonical in ("ts_regression", "ts_regression_forecast_error", "ts_poly2_coeff", "ts_poly2_resid"):
         try:
-            from cleaned_operators.base import _kernel_param_defaults
-            from cleaned_operators.registry import OperatorRegistry
+            from factor_engine.cleaned_operators.base import _kernel_param_defaults
+            from factor_engine.cleaned_operators.registry import OperatorRegistry
 
             op = OperatorRegistry.get(canonical, mode="any")
             defaults = _kernel_param_defaults(op) if op is not None else {}
@@ -468,7 +468,7 @@ def _resolve(canonical: str, *, strict: bool = False) -> str:
     if not canonical:
         return canonical
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         return OperatorRegistry.resolve_canonical(canonical)
     except Exception as exc:
@@ -489,7 +489,7 @@ def validate_stateful_seed() -> list[str]:
     the caller (load_all finalization) treats a non-empty list as a hard
     failure.  An explicitly-migrated mapping may exempt a name.
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     stale: list[str] = []
     try:
@@ -512,7 +512,7 @@ _MIGRATED_STATEFUL_NAMES: frozenset[str] = frozenset()
 
 def _metadata(canonical: str, *, strict: bool = False) -> Any | None:
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         op = OperatorRegistry.get(canonical)
         return getattr(op, "metadata", None)
@@ -540,7 +540,7 @@ def _is_production_direct(canonical: str) -> bool:
     classification is unavailable or the operator is not yet classified —
     never raises, so a research session is never blocked."""
     try:
-        from cleaned_operators.operator_surface import classify_canonical
+        from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
         return classify_canonical(canonical) == _PRODUCTION_DIRECT_TIER
     except Exception:
@@ -664,8 +664,8 @@ def _kernel_signature_default(canonical: str, name: str) -> int | None:
     has no default for ``name`` or the operator cannot be inspected.
     """
     try:
-        from cleaned_operators.base import _kernel_param_defaults
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.base import _kernel_param_defaults
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         op = OperatorRegistry.get(canonical)
         if op is None:
@@ -1120,7 +1120,7 @@ def _financial_report_extension(canonical: str, params: Mapping[str, Any]) -> in
     """
     n_events = _report_period_count(canonical, params)
     try:
-        from backend.financial_semantics import (
+        from factor_engine.backend.financial_semantics import (
             fiscal_event_lookback,
             get_active_financial_source,
         )
@@ -1288,7 +1288,7 @@ def _declared_history_extension(
     if not formulas and not semantics_known:
         return None
     if formulas:
-        from cleaned_operators.base import _eval_rel_ast, parse_relational_expression
+        from factor_engine.cleaned_operators.base import _eval_rel_ast, parse_relational_expression
 
         best = 0
         for _name, formula in formulas:
@@ -1508,7 +1508,7 @@ def history_fallback_canonicals(catalog: dict[str, Any] | None = None) -> list[s
     """R16-066: mineable canonicals still relying on the name-based history
     fallback (no factory, no ``_HISTORY_TRANSFORMS`` entry).  A mining candidate
     in this list means the planner guessed history from parameter names."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     catalog = catalog if catalog is not None else getattr(OperatorRegistry, "_catalog", {})
     fallback: list[str] = []

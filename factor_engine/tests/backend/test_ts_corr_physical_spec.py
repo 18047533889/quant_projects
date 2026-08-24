@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import polars as pl
 
-from backend.operator_capability import enumerate_physical_inventory
-from cleaned_operators.common.polars_ts_rolling import TSCorrNative
+from factor_engine.backend.operator_capability import enumerate_physical_inventory
+from factor_engine.cleaned_operators.common.polars_ts_rolling import TSCorrNative
 
 
 def test_ts_corr_native_has_complete_physical_spec_and_exact_id_admission() -> None:

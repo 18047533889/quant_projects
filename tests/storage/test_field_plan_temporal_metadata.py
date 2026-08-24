@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from storage.sources.field_plan import (
+from factor_engine.storage.sources.field_plan import (
     MissingSemantic,
     NormalizedFieldPlan,
     missing_semantic_for_plan,

@@ -8,10 +8,10 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="microstructure session recipes are outside the active primitive registry")
 
-from api.mining_integration import validate_production_dsl
-from backend.cleaned_bridge import build_production_dsl_allowlist, ensure_cleaned_loaded
-from cleaned_operators.microstructure.session import pct_change_by_session, rolling_by_session
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.api.mining_integration import validate_production_dsl
+from factor_engine.backend.cleaned_bridge import build_production_dsl_allowlist, ensure_cleaned_loaded
+from factor_engine.cleaned_operators.microstructure.session import pct_change_by_session, rolling_by_session
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module")
@@ -56,7 +56,7 @@ def test_micro_realized_vol_session_aware(_loaded):
 
 
 def test_production_dsl_allowlist_subset(_loaded):
-    full = len(__import__("backend.cleaned_bridge", fromlist=["build_cleaned_dsl_allowlist"]).build_cleaned_dsl_allowlist())
+    full = len(__import__("factor_engine.backend.cleaned_bridge", fromlist=["build_cleaned_dsl_allowlist"]).build_cleaned_dsl_allowlist())
     prod = build_production_dsl_allowlist()
     assert 0 < len(prod) <= full
 
@@ -67,6 +67,6 @@ def test_validate_production_dsl_accepts_tier1(_loaded):
 
 
 def test_microstructure_param_names_nonempty(_loaded):
-    from cleaned_operators.operator_spec import check_microstructure_param_contracts
+    from factor_engine.cleaned_operators.operator_spec import check_microstructure_param_contracts
 
     assert not check_microstructure_param_contracts()

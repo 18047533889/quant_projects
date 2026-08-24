@@ -13,7 +13,7 @@ FE_ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.fixture(scope="module", autouse=True)
 def _load():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
 
@@ -31,7 +31,7 @@ def test_operator_upgrade_matrix_yaml_fresh():
 
 
 def test_batch_a_pending_has_block_reason():
-    from backend.operator_upgrade_matrix import build_operator_upgrade_row, infer_upgrade_batch
+    from factor_engine.backend.operator_upgrade_matrix import build_operator_upgrade_row, infer_upgrade_batch
     from tests.backend_parity.operator_case_registry import batch_a_pending
 
     pending = batch_a_pending()
@@ -44,8 +44,8 @@ def test_batch_a_pending_has_block_reason():
 
 
 def test_ts_argmax_is_python_rolling_not_native():
-    from backend.operator_upgrade_matrix import build_operator_upgrade_row
-    from backend.polars_long_policy import POLARS_LONG_NATIVE, POLARS_LONG_PYTHON_ROLLING
+    from factor_engine.backend.operator_upgrade_matrix import build_operator_upgrade_row
+    from factor_engine.backend.polars_long_policy import POLARS_LONG_NATIVE, POLARS_LONG_PYTHON_ROLLING
 
     for op in ("ts_argmax", "ts_argmin"):
         assert op in POLARS_LONG_PYTHON_ROLLING
@@ -56,9 +56,9 @@ def test_ts_argmax_is_python_rolling_not_native():
 
 
 def test_composite_requires_lowered_primitives_certified():
-    from backend.composite_evidence import composite_production_safe
-    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
-    from planner.composite_lowering import lowered_primitives
+    from factor_engine.backend.composite_evidence import composite_production_safe
+    from factor_engine.backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    from factor_engine.planner.composite_lowering import lowered_primitives
 
     for name in ("MOM", "ROC", "OBV"):
         prims = lowered_primitives(name)

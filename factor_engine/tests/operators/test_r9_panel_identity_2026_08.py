@@ -5,7 +5,7 @@ loud-fail) while UNKNOWN metadata enters compatibility resolution — and the
 hash must stay consistent with equality and deterministic."""
 from __future__ import annotations
 
-from cleaned_operators.common._polars_bridge import PanelIdentity
+from factor_engine.cleaned_operators.common._polars_bridge import PanelIdentity
 
 
 def test_known_metadata_match_is_equal():

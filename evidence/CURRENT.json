@@ -1,21 +1,33 @@
 {
   "schema_version": 3,
-  "generated_at": "2026-08-24T04:44:40.433023+00:00",
-  "source_snapshot_id": "src:v1:97ca5e9e3f6988f1",
+  "generated_at": "2026-08-24T11:38:52.099744+00:00",
+  "source_snapshot_id": "src:v1:01f630d2bb7cf794",
   "sha_bindings": {
-    "RootRepoSHA": "{\"HEAD\":\"c0893da04d1177a4d8fbc07de35e4db368935f68\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"dirty\":true,\"untracked_source_hash\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"}",
-    "FactorEngineSubmoduleSHA": "c0893da04d1177a4d8fbc07de35e4db368935f68",
-    "DataAccessSubmoduleSHA": "c0893da04d1177a4d8fbc07de35e4db368935f68",
-    "OperatorCatalogSHA": "faaa8200e1a27bc9574f91fbc84547e649e48eb9413ff4b967b5a682063f1428",
+    "RootRepoSHA": "{\"HEAD\":\"7dea2af5d3c27fd6e85432aac098903797e4b93e\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"903910a6230382d3a59c9225adf786db7abcec791b3de46309e602cfffe1c8c9\",\"dirty\":true,\"identity_hash\":\"a38445f358268a74124a09338ba7e43b00898bb94b571602f7249ff69fdaa6f1\",\"untracked_source_hash\":\"6df36a74371cb78047283d6066ba22456a978ab06a30286faf239c9b98d7deb7\"}",
+    "SourceTreeIdentity": "{\"HEAD\":\"7dea2af5d3c27fd6e85432aac098903797e4b93e\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"903910a6230382d3a59c9225adf786db7abcec791b3de46309e602cfffe1c8c9\",\"dirty\":true,\"identity_hash\":\"a38445f358268a74124a09338ba7e43b00898bb94b571602f7249ff69fdaa6f1\",\"untracked_source_hash\":\"6df36a74371cb78047283d6066ba22456a978ab06a30286faf239c9b98d7deb7\"}",
+    "PlatformSourceTreeIdentity": "6c64a8acb8efb1526a0f934b32f9d9e064713b01ccd181b590c40f1f28fe2237",
+    "EvidenceAttestationIdentity": "cd35a79dc34cbb1f2d497a421300e7a2d6bf31f1eef23c2c88fa99320c5c09aa",
+    "OperatorCatalogSHA": "eddce188872effc39301d397dae95cfa6a46a2c3a299b26fb35f9063c1ab2372",
     "SemanticCatalogIdentity": "a336cab3bf6b4113942c317e1949efdb2b749e334910cc458b1daef9ff16774d",
-    "ImplementationClosureHashSet": "5e9db85f3b7aa69e32f4e9335a104fc6803c73eab06a7687c4dac2932d4f07b4",
+    "ImplementationClosureHashSet": "0dd6302426d9af34badd1baff55e7225b0488f5c2f4b6761013c683c2c42f6b9",
     "DependencyLockHash": "b982526eea6469422787b2fe4031af472e1ceb49afaff11f2c0fe260bbc3ae1b",
-    "TestEnvironmentIdentity": "9097a407115a2ffd8a33d93ee25a89c02c14002193309537a989d8674efda3fb"
+    "TestEnvironmentIdentity": "0a0fd01455850a189a8f1589fc65f1157a517fb0c293c9c6d8eb3337daa205f7"
   },
+  "source_tree_identity": "6c64a8acb8efb1526a0f934b32f9d9e064713b01ccd181b590c40f1f28fe2237",
   "sha_binding_metadata": {
     "OperatorCatalogPath": "build/mining/direct_mining_catalog.json",
     "DependencyLockPath": "factor_engine/requirements-production.lock",
-    "OperatorCatalogCount": 1558
+    "OperatorCatalogCount": 1558,
+    "gitlink_count": 0,
+    "platform_packages": [
+      "dataaccess",
+      "factor_assets",
+      "factor_engine",
+      "factor_optimizer",
+      "factor_preprocess",
+      "quant_evaluator",
+      "vectorbt_qs"
+    ]
   },
   "artifacts": {
     "operator-benchmark-manifest": {
@@ -78,7 +90,7 @@
     "staleness_rule": "An artifact is CURRENT only when its BOUND input identity (source_snapshot_id + ImplementationClosureHashSet + SemanticCatalogIdentity at the time it was built) equals the freshly recomputed live identity AND the artifact was produced by an actual verification run (executed_at present).  Any difference -> STALE.  Unresolvable source snapshot -> UNRESOLVED (fail-closed)."
   },
   "evaluation": {
-    "staleness_evaluated_at": "2026-08-24T04:44:40.466721+00:00",
+    "staleness_evaluated_at": "2026-08-24T11:38:52.445856+00:00",
     "status": "STALE",
     "changed_artifacts": [
       "operator-benchmark-manifest",

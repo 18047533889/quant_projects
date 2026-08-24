@@ -12,13 +12,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from market.capabilities import (
+from factor_engine.market.capabilities import (
     CoverageClass,
     MarketStatus,
     MarketSupport,
     ProviderQuality,
 )
-from market.context import ASHARE_CONTEXT, US_CONTEXT, MarketContext
+from factor_engine.market.context import ASHARE_CONTEXT, US_CONTEXT, MarketContext
 
 from .units_v2 import (
     CNY,
@@ -436,7 +436,7 @@ class MarketFieldBinding:
         (``TimestampColumn(name)``).  ``knowledge_time`` / ``effective_time``
         remain explicit column references.
         """
-        from ir.types import availability_expr_of, normalize_availability_descriptor
+        from factor_engine.ir.types import availability_expr_of, normalize_availability_descriptor
 
         return normalize_availability_descriptor(self.available_at)
 
@@ -625,7 +625,7 @@ class ProviderResolver:
 
 def canonicalize_provider_market(market: str) -> str:
     """Canonical market id for provider resolution (R17-048 authority)."""
-    from market.capabilities import canonicalize_market_id
+    from factor_engine.market.capabilities import canonicalize_market_id
 
     return canonicalize_market_id(market)
 
@@ -1394,7 +1394,7 @@ def require_binding(concept_id: str, market: str) -> MarketFieldBinding:
 def _market_ctx(market: str) -> MarketContext:
     # Strict market_context (raises on unknown markets) — never a ternary that
     # silently defaults unknown markets to "us" (P1-1).
-    from market.context import market_context
+    from factor_engine.market.context import market_context
 
     return market_context(market)
 

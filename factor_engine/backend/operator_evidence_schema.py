@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 _EVIDENCE_JSON = Path(__file__).resolve().parents[1] / "evidence" / "primitive_verified.json"
 
@@ -48,7 +48,7 @@ def supported_calls_match(node: PlanNode, supported: Mapping[str, Any]) -> bool:
         return True
     for key, allowed in supported.items():
         if key == "mode":
-            from backend.plan_params import int_mode_from_plan_node
+            from factor_engine.backend.plan_params import int_mode_from_plan_node
 
             mode = int_mode_from_plan_node(node, input_index=2, default=None)
             if mode is None:
@@ -86,7 +86,7 @@ def parameter_domain_verified(canon: str, node: PlanNode | None = None, *, produ
     supported = rec.get("supported_calls")
     if not supported:
         if production:
-            from backend.production_signature import signature_for
+            from factor_engine.backend.production_signature import signature_for
 
             sig = signature_for(canon)
             if sig is not None and sig.default_status != "production":

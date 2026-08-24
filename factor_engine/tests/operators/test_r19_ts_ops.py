@@ -20,9 +20,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.operator_errors import OperatorParameterError
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.operator_errors import OperatorParameterError
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -138,7 +138,7 @@ def test_ts_corr_current_row_policy_matches_numba_fastpath():
     op = _get("ts_corr")
     slow = op.calculate(x, y, 3)["A"].to_numpy()
     try:
-        from backend.numba_kernels import rolling_corr_panel
+        from factor_engine.backend.numba_kernels import rolling_corr_panel
         fast = rolling_corr_panel(x.to_numpy(dtype=float), y.to_numpy(dtype=float), 3, min_count=2)
     except Exception:
         pytest.skip("numba kernel unavailable")

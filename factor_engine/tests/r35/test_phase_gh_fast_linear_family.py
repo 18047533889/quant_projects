@@ -17,11 +17,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from backend.fast_linear_window import (  # noqa: E402
+from factor_engine.backend.fast_linear_window import (  # noqa: E402
     rolling_ols_sufficient,
     rolling_ridge_sufficient,
 )
-from backend.model_family_kernels import (  # noqa: E402
+from factor_engine.backend.model_family_kernels import (  # noqa: E402
     fit_garch_block,
     fit_pca_block,
     garch_variance_path,
@@ -111,7 +111,7 @@ def test_pca_block_feeds_multiple_outputs():
     assert resid.shape == (6,)
     assert np.isfinite(resid[block.active]).all()
     # loading from block equals direct SVD loading
-    from cleaned_operators.cross_section.panel_model import _pca_svd
+    from factor_engine.cleaned_operators.cross_section.panel_model import _pca_svd
 
     direct = _pca_svd(X, 3)
     assert direct is not None
@@ -158,7 +158,7 @@ def test_garch_block_feeds_persistence_and_vol():
 
 
 def test_garch_block_matches_engine_persistence():
-    from cleaned_operators.ts_model.volatility import _garch_path
+    from factor_engine.cleaned_operators.ts_model.volatility import _garch_path
 
     rng = np.random.default_rng(6)
     rets = rng.standard_normal(300)

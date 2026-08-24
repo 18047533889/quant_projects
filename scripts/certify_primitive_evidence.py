@@ -74,8 +74,8 @@ def _bootstrap() -> None:
     for p in (root, fe):
         if p not in sys.path:
             sys.path.insert(0, p)
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
     load_all()
     register_sql_backends()
 
@@ -123,7 +123,7 @@ _PARAM_DOMAINS: dict[str, dict] = {}
 
 def _resolve_canonical(name: str) -> str:
     """Normalise a parametrized case name through the operator alias table."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     return str(OperatorRegistry._aliases.get(name, name))
 
@@ -331,11 +331,11 @@ def _build_verified_payload(
     executed_records: list[dict],
     downgraded: dict[str, str] | None = None,
 ) -> dict:
-    from backend.evidence_provenance import (
+    from factor_engine.backend.evidence_provenance import (
         build_provenance, compute_case_registry_hash, enrich_operator_metadata, load_case_registry,
     )
     from tests.backend_parity.evidence_case_registry import six_way_certified_names
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     registry = load_case_registry()
     # Audit #382/#383: the verified set is derived from executed+passed test
@@ -466,7 +466,7 @@ def main() -> int:
     out = FE_ROOT / "evidence" / "primitive_verified.json"
 
     if args.check:
-        from backend.evidence_provenance import evidence_artifact_validation_errors, load_verified_artifact
+        from factor_engine.backend.evidence_provenance import evidence_artifact_validation_errors, load_verified_artifact
         # Squash/rebase-safe: semantic and implementation hashes are the hard
         # identity. commit_sha is retained only for audit/debug provenance.
         validation_errors = evidence_artifact_validation_errors(require_commit_match=False)
@@ -494,7 +494,7 @@ def main() -> int:
         print("unverified_preview: --skip-pytest cannot write verified evidence")
         return 0
 
-    from backend.evidence_provenance import load_case_registry
+    from factor_engine.backend.evidence_provenance import load_case_registry
 
     registry = load_case_registry()
     stages_passed: list[str] = ["case_registry_sync"]

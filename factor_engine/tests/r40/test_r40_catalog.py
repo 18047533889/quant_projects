@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from storage.catalog import CatalogJsonField, _canonical_checksum, _parse_json_field
-from storage.exceptions import CatalogCorruptionError
+from factor_engine.storage.catalog import CatalogJsonField, _canonical_checksum, _parse_json_field
+from factor_engine.storage.exceptions import CatalogCorruptionError
 
 
 # ---------------------------------------------------------------------------

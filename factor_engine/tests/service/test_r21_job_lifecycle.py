@@ -9,8 +9,8 @@ import os
 
 import pytest
 
-from service.jobstore import JobRecord, JobStatus, JobStore
-from service.queue import (
+from factor_engine.service.jobstore import JobRecord, JobStatus, JobStore
+from factor_engine.service.queue import (
     BoundedJobQueue,
     JobCancelledError,
     JobDeadlineExceeded,
@@ -93,8 +93,8 @@ class TestDurableStore:
         assert store2.get_by_idempotency_key("ik1").run_id == "s1"
 
     def test_single_process_workers_refused(self, monkeypatch):
-        from service.jobstore import check_single_process_workers
-        from service.errors import ServiceError
+        from factor_engine.service.jobstore import check_single_process_workers
+        from factor_engine.service.errors import ServiceError
 
         # R32-P0-023: SQLite JobStore 不等于全局多进程 Queue —— 多个 Uvicorn
         # worker 各有本地 queue/max_running/per-user counter，4×4 worker 可能跑

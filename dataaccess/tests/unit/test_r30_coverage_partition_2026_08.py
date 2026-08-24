@@ -255,7 +255,7 @@ def test_index_fingerprint_stable_and_distinct():
     i1 = build_index(store, "ds")
     i2 = build_index(store, "ds")
     assert i1.index_fingerprint() == i2.index_fingerprint()
-    assert isinstance(i1.index_fingerprint(), str) and len(i1.index_fingerprint()) == 16
+    assert isinstance(i1.index_fingerprint(), str) and len(i1.index_fingerprint()) == 64
     # 不同对象集合 → 指纹不同
     i3 = PartitionMetadataIndex(
         dataset="ds",

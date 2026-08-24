@@ -10,21 +10,21 @@ pytestmark = pytest.mark.skip(reason="legacy removed-composite contract; current
 
 pytest.importorskip("polars")
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from backend.production_fastpath_gate import (
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.backend.production_fastpath_gate import (
     check_original_operator_policy,
     check_production_fastpath_formula_ops,
 )
-from cleaned_operators import load_all
-from planner.logical_plan import PlanNode
-from planner.optimizer import Optimizer
+from factor_engine.cleaned_operators import load_all
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.optimizer import Optimizer
 
 
 @pytest.fixture(scope="module")
 def _loaded():
     load_all()
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     register_sql_backends()
 
@@ -95,8 +95,8 @@ def test_formula_gate_accepts_rank_primitive(_loaded):
 
 
 def test_policy_gate_rejects_bfill_permanently_forbidden(_loaded):
-    from planner.logical_plan import PlanNode
-    from planner.optimizer import Optimizer
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.planner.optimizer import Optimizer
 
     plan = PlanNode(op="bfill", inputs=[PlanNode(op="column", attrs={"name": "close"}, inputs=[])], attrs={"limit": 1})
     violations = check_original_operator_policy(Optimizer()._fold_literals(plan))
@@ -109,7 +109,7 @@ def test_formula_gate_rejects_bfill(_loaded):
 
 
 def test_safe_div_null_zero_denominator_is_null(_loaded):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     idx = pd.MultiIndex.from_tuples(
         [(pd.Timestamp("2024-01-01"), "A"), (pd.Timestamp("2024-01-02"), "A")],
@@ -152,8 +152,8 @@ def test_obv_first_row_zero_reference(_loaded):
 
 def test_policy_gate_rejects_composite_allowed_without_evidence(_loaded, monkeypatch):
     """policy=allowed 但 composite_production_safe=False 时 gate 必须拒绝。"""
-    from planner.logical_plan import PlanNode
-    from planner.optimizer import Optimizer
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.planner.optimizer import Optimizer
 
     plan = PlanNode(
         op="MOM",
@@ -162,8 +162,8 @@ def test_policy_gate_rejects_composite_allowed_without_evidence(_loaded, monkeyp
     )
     folded = Optimizer()._fold_literals(plan)
 
-    from cleaned_operators import operator_spec as ospec
-    import backend.composite_evidence as cev
+    from factor_engine.cleaned_operators import operator_spec as ospec
+    import factor_engine.backend.composite_evidence as cev
 
     real_infer = ospec.infer_production_policy
     real_build = ospec.build_operator_spec

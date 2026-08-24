@@ -7,7 +7,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.operator_audits import (
+from factor_engine.cleaned_operators.operator_audits import (
     _output_signature,
     audit_searchable_params,
 )
@@ -39,9 +39,9 @@ def test_output_signature_has_three_levels():
 def test_audit_searchable_params_produces_three_proofs():
     """A real searchable-param operator (ts_qn_scale window) yields
     feasibility / sensitivity / non-equivalence proofs, each pass."""
-    import cleaned_operators  # noqa: F401
+    import factor_engine.cleaned_operators  # noqa: F401
     cleaned_operators.load_all()
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get("ts_qn_scale")
     assert op is not None
@@ -58,10 +58,10 @@ def test_audit_searchable_params_produces_three_proofs():
 
 def test_audit_searchable_params_result_shape():
     """Every audit result is a structured AuditResult with the 6 fields."""
-    import cleaned_operators  # noqa: F401
+    import factor_engine.cleaned_operators  # noqa: F401
     cleaned_operators.load_all()
-    from cleaned_operators.operator_audits import AuditResult
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_audits import AuditResult
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get("ts_ema")
     assert op is not None

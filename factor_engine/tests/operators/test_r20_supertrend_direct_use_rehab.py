@@ -23,16 +23,16 @@ import pytest
 
 
 def _ensure_technical_chain() -> None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if OperatorRegistry.lifecycle() == "frozen":
         return
     if OperatorRegistry.get("supertrend_direction", mode="any") is not None:
         return
-    from cleaned_operators.technical import signal  # noqa: F401
-    from cleaned_operators.technical import polars_signal  # noqa: F401
-    from cleaned_operators import composite_fastpath  # noqa: F401
-    from cleaned_operators.technical import indicators_v2  # noqa: F401
+    from factor_engine.cleaned_operators.technical import signal  # noqa: F401
+    from factor_engine.cleaned_operators.technical import polars_signal  # noqa: F401
+    from factor_engine.cleaned_operators import composite_fastpath  # noqa: F401
+    from factor_engine.cleaned_operators.technical import indicators_v2  # noqa: F401
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -41,7 +41,7 @@ def _bootstrap():
 
 
 def _op(name: str):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get(name, mode="any")
     assert op is not None, f"{name} not registered"
@@ -57,7 +57,7 @@ def _panel(seed=7, n=200):
 
 def test_supertrend_direction_matches_close_vs_line_sign():
     high, low, close = _panel()
-    from cleaned_operators.technical.indicators_v2 import Supertrend
+    from factor_engine.cleaned_operators.technical.indicators_v2 import Supertrend
 
     st = Supertrend(high, low, close, 10, 3.0)
     out = _op("supertrend_direction").calculate(high, low, close, atr_window=10, multiplier=3.0)
@@ -75,7 +75,7 @@ def test_supertrend_direction_matches_close_vs_line_sign():
 
 def test_supertrend_distance_pct_formula_and_positive_close_masking():
     high, low, close = _panel()
-    from cleaned_operators.technical.indicators_v2 import Supertrend
+    from factor_engine.cleaned_operators.technical.indicators_v2 import Supertrend
 
     st = Supertrend(high, low, close, 10, 3.0)
     out = _op("supertrend_distance_pct").calculate(high, low, close, atr_window=10, multiplier=3.0)
@@ -204,7 +204,7 @@ def test_supertrend_full_history_determinism():
 
 
 def test_supertrend_relative_alpha_classification():
-    from mining.direct_use import _RELATIVE_ALPHA_OPS
+    from factor_engine.mining.direct_use import _RELATIVE_ALPHA_OPS
 
     promoted = {
         "supertrend_direction", "supertrend_distance_pct",

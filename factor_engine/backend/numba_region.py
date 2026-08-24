@@ -373,11 +373,11 @@ def _kernel_callable(kernel_name: str) -> Callable | None:
     # 硬失败冒泡 —— 绝不把「内部错误」吞成「numba 后端不可用」。因此这里只
     # 捕获 ImportError（pykx/numba 可选依赖缺失 = 真正的 BackendUnavailable），
     # 其余异常（ValueError/TypeError/RuntimeError…）原样上抛。
-    from backend.numba_kernel_registry import NumbaKernelRegistry, NUMBA_AVAILABLE
+    from factor_engine.backend.numba_kernel_registry import NumbaKernelRegistry, NUMBA_AVAILABLE
 
     try:
         if not NumbaKernelRegistry.kernels():
-            import backend.numba_kernels  # noqa: F401  (registers kernels)
+            import factor_engine.backend.numba_kernels  # noqa: F401  (registers kernels)
     except ImportError:
         # 仅 numba 可选依赖缺失属于「Numba 不可用」，可软排除；注册逻辑内部
         # 错误（如 DuplicateKernelRegistrationError）不得被吞成 unavailable。
@@ -730,7 +730,7 @@ class NumbaFusedRegion:
 def _pandas_ewm_reference(values: np.ndarray, span: int) -> np.ndarray:
     """pandas ``Series.ewm(span=span, adjust=False, ignore_na=False).mean()``."""
     try:
-        from backend.pandas_compat import pd
+        from factor_engine.backend.pandas_compat import pd
     except Exception:
         import pandas as pd  # type: ignore
 
@@ -765,7 +765,7 @@ def run_reference(canonical: str, arr: np.ndarray, window: int, min_count: int =
 #: pandas-compat facade used internally (avoids importing pandas at module top)
 def pd_Series(values=None, index=None, dtype=None):
     try:
-        from backend.pandas_compat import pd
+        from factor_engine.backend.pandas_compat import pd
     except Exception:
         import pandas as pd  # type: ignore
     return pd.Series(values, index=index, dtype=dtype)

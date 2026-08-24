@@ -14,8 +14,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
@@ -92,7 +92,7 @@ def test_huber_robust_to_outliers_with_sqrt_weight() -> None:
 
 def test_ridge_penalises_first_feature_without_intercept() -> None:
     """Ridge without intercept must still shrink the first *feature* column."""
-    from cleaned_operators.ts_model._rolling_core import build_design, ols_fit, ridge_fit
+    from factor_engine.cleaned_operators.ts_model._rolling_core import build_design, ols_fit, ridge_fit
 
     rng = np.random.default_rng(7)
     x = rng.standard_normal(60)
@@ -168,7 +168,7 @@ def test_autoencoder_rank_below_feature_count() -> None:
 # ---------------------------------------------------------------------------
 
 def test_kalman_innovation_uses_predicted_state() -> None:
-    from cleaned_operators.ts_model.state_space import _kalman_level
+    from factor_engine.cleaned_operators.ts_model.state_space import _kalman_level
 
     v = np.array([1.0, 1.1, 0.9, 1.2, 1.05, 0.95, 1.15, 1.1])
     out = _kalman_level(v, 0.01, 0.1, "innovation_z")
@@ -189,7 +189,7 @@ def test_kalman_innovation_uses_predicted_state() -> None:
 
 
 def test_garch_shock_uses_h_t() -> None:
-    from cleaned_operators.ts_model.volatility import _garch_path, _fit_garch
+    from factor_engine.cleaned_operators.ts_model.volatility import _garch_path, _fit_garch
 
     rng = np.random.default_rng(12)
     n = 400
@@ -221,7 +221,7 @@ def test_garch_shock_uses_h_t() -> None:
 # ---------------------------------------------------------------------------
 
 def test_cusum_vol_break_uses_max_abs_cumsum() -> None:
-    from cleaned_operators.ts_model.complexity import _cusum_vol_break
+    from factor_engine.cleaned_operators.ts_model.complexity import _cusum_vol_break
 
     # A window whose last cumulative sum is ~0 but which has a mid-window spike
     # must still report a large score via max(|cumsum|).

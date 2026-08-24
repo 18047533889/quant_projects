@@ -14,12 +14,12 @@ from __future__ import annotations
 
 import pytest
 
-from runtime.multibackend.concurrent_token_manager import (
+from factor_engine.runtime.multibackend.concurrent_token_manager import (
     ConcurrentTokenManager,
     RevocationToken,
     TokenReservation,
 )
-from runtime.resource_governor import (
+from factor_engine.runtime.resource_governor import (
     detect_resource_budget,
     effective_cpu_slots,
     effective_memory_limit_bytes,

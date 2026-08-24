@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from api.label_spec import (
+from factor_engine.api.label_spec import (
     LabelSpec,
     assert_no_label_overlap,
     label_available_mask,

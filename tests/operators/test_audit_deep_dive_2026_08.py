@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _get(name: str):
@@ -29,7 +29,7 @@ def _dates(n: int = 80) -> pd.DatetimeIndex:
 
 @pytest.fixture(scope="module", autouse=True)
 def _load():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
 
@@ -39,7 +39,7 @@ def _load():
 # ---------------------------------------------------------------------------
 
 def test_markov_kernel_nan_not_a_state():
-    from cleaned_operators.markov_dynamics import _bin, _state_dynamics_series
+    from factor_engine.cleaned_operators.markov_dynamics import _bin, _state_dynamics_series
 
     edges = np.array([-np.inf, 0.0, 1.0, np.inf])
     s = np.array([1.0, 2.0, np.nan, 3.0, 1.0, 5.0, np.nan, 2.0, 4.0, 1.0])
@@ -86,7 +86,7 @@ def test_first_passage_bias_includes_nonhit_zeros():
 # ---------------------------------------------------------------------------
 
 def test_mean_reversion_half_life_exact_discrete():
-    from cleaned_operators.ts_model.ar_meanrev import _mean_reversion_half_life
+    from factor_engine.cleaned_operators.ts_model.ar_meanrev import _mean_reversion_half_life
 
     # Deterministic AR(1) (no noise): the OLS fit recovers phi exactly, so the
     # exact discrete half-life log(0.5)/log(phi) is recovered to machine error.
@@ -109,7 +109,7 @@ def test_mean_reversion_half_life_exact_discrete():
 # ---------------------------------------------------------------------------
 
 def test_kalman_trend_missing_propagates_covariance():
-    from cleaned_operators.ts_model.state_space import _kalman_trend_slope
+    from factor_engine.cleaned_operators.ts_model.state_space import _kalman_trend_slope
 
     v = np.array([1.0, 1.1, np.nan, np.nan, np.nan, 1.3, 1.4, 1.5])
     slope = _kalman_trend_slope(v, q_level=1e-3, q_trend=1e-3, r=0.1)
@@ -119,7 +119,7 @@ def test_kalman_trend_missing_propagates_covariance():
 
 
 def test_kalman_beta_not_single_ratio_init():
-    from cleaned_operators.ts_model.state_space import _kalman_beta
+    from factor_engine.cleaned_operators.ts_model.state_space import _kalman_beta
 
     rng = np.random.default_rng(8)
     n = 200
@@ -139,7 +139,7 @@ def test_kalman_beta_not_single_ratio_init():
 # ---------------------------------------------------------------------------
 
 def test_group_feature_rename_and_nan_member():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     assert OperatorRegistry.resolve_canonical("group_corr_mode_share") == "group_feature_mode_share"
     op = _get("group_feature_mode_share")
@@ -166,8 +166,8 @@ def test_group_feature_rename_and_nan_member():
 # ---------------------------------------------------------------------------
 
 def _analyze(formula: str):
-    from api.dsl_parser import parse_expr
-    from ir.analyzer import Analyzer, TypedInputContractError
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.ir.analyzer import Analyzer, TypedInputContractError
 
     expr = parse_expr(formula)
     try:
@@ -201,7 +201,7 @@ def test_typed_input_contracts_legal_forms():
 # ---------------------------------------------------------------------------
 
 def test_matrix_profile_exclusion_zone_and_new_outputs():
-    from cleaned_operators.candle_state_space import _matrix_profile_series
+    from factor_engine.cleaned_operators.candle_state_space import _matrix_profile_series
 
     rng = np.random.default_rng(6)
     x = rng.normal(size=120).astype(float)
@@ -249,7 +249,7 @@ def test_dc_online_clock_uses_per_bar_historical_scale():
 
 
 def test_kama_missing_state_break_rewarm():
-    from cleaned_operators.technical.indicators_v2 import KAMA
+    from factor_engine.cleaned_operators.technical.indicators_v2 import KAMA
 
     x = _series(1.0, 2.0, np.nan, 3.0, 4.0, 5.0)
     out = KAMA(x, 3, 2, 5)
@@ -263,7 +263,7 @@ def test_kama_missing_state_break_rewarm():
 
 
 def test_kama_hidden_missing_policy_knobs_removed():
-    from cleaned_operators.technical.indicators_v2 import KAMA
+    from factor_engine.cleaned_operators.technical.indicators_v2 import KAMA
 
     x = _series(1.0, 2.0, np.nan, 3.0, 4.0)
     # The hidden missing_policy / max_gap knobs are gone (round-2 review §7):
@@ -273,7 +273,7 @@ def test_kama_hidden_missing_policy_knobs_removed():
 
 
 def test_supertrend_and_psar_missing_state_interrupt():
-    from cleaned_operators.technical.indicators_v2 import Supertrend, PSAR
+    from factor_engine.cleaned_operators.technical.indicators_v2 import Supertrend, PSAR
 
     high = _series(1.0, 2.0, 3.0, np.nan, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0)
     low = _series(0.0, 1.0, 2.0, np.nan, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0)
@@ -294,13 +294,13 @@ def test_supertrend_and_psar_missing_state_interrupt():
 def test_supertrend_pandas_polars_parity_with_gap():
     import polars as pl
 
-    from cleaned_operators.technical.polars_tech_misc import Supertrend as PlST
+    from factor_engine.cleaned_operators.technical.polars_tech_misc import Supertrend as PlST
 
     high = _series(1.0, 2.0, 3.0, np.nan, 4.0, 5.0, 6.0, 7.0, 8.0)
     low = _series(0.0, 1.0, 2.0, np.nan, 3.0, 4.0, 5.0, 6.0, 7.0)
     close = _series(1.5, 2.5, 3.5, np.nan, 4.5, 5.5, 6.5, 7.5, 8.5)
 
-    from cleaned_operators.technical.indicators_v2 import Supertrend as PdST
+    from factor_engine.cleaned_operators.technical.indicators_v2 import Supertrend as PdST
 
     a = PdST(high, low, close, 3, 2.0)["c"].to_numpy()
     ph = pl.DataFrame({"c": high["c"].to_numpy()})

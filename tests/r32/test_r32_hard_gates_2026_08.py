@@ -21,7 +21,7 @@ import pytest
 
 class TestCalendarHardGates:
     def test_calendar_out_of_coverage_fails(self):
-        from storage.trading_calendar import (
+        from factor_engine.storage.trading_calendar import (
             TradingCalendar,
             CalendarCoverageError,
         )
@@ -35,7 +35,7 @@ class TestCalendarHardGates:
         assert cal.offset("2024-01-01", -5, clamp=True) == pd.Timestamp("2024-01-01")
 
     def test_calendar_n0_anchor_policy(self):
-        from storage.trading_calendar import (
+        from factor_engine.storage.trading_calendar import (
             TradingCalendar,
             CalendarCoverageError,
         )
@@ -49,7 +49,7 @@ class TestCalendarHardGates:
         assert prev.offset("2024-01-06", 0) == pd.Timestamp("2024-01-05")
 
     def test_calendar_metadata_source_tracked(self):
-        from storage.trading_calendar import TradingCalendar
+        from factor_engine.storage.trading_calendar import TradingCalendar
 
         cal = TradingCalendar(["2024-01-01"], source="data_access", snapshot="s1")
         meta = cal.metadata()
@@ -57,8 +57,8 @@ class TestCalendarHardGates:
         assert meta["snapshot"] == "s1"
 
     def test_calendar_production_no_bdate_fallback(self, monkeypatch):
-        import runtime.production_policy as pp
-        from storage.trading_calendar import (
+        import factor_engine.runtime.production_policy as pp
+        from factor_engine.storage.trading_calendar import (
             trading_day_offset,
             CalendarUnavailableError,
         )
@@ -68,7 +68,7 @@ class TestCalendarHardGates:
             trading_day_offset("2024-01-01", 2)
 
     def test_session_clock_skips_lunch(self):
-        from runtime.session_calendar import SessionCalendar
+        from factor_engine.runtime.session_calendar import SessionCalendar
 
         sc = SessionCalendar.ashare()
         slots = sc.bar_slots("2024-01-05")
@@ -89,7 +89,7 @@ class TestCalendarHardGates:
         )
 
     def test_intraday_window_session_clock(self):
-        from storage.time_window import resolve_incremental_window_for_bar_freq
+        from factor_engine.storage.time_window import resolve_incremental_window_for_bar_freq
 
         w = resolve_incremental_window_for_bar_freq(
             watermark_end="2024-01-05", lookback_bars=125, bar_freq="1min", market="ashare"
@@ -101,7 +101,7 @@ class TestCalendarHardGates:
     def test_tz_naive_strip_is_converted_not_stripped(self):
         import inspect
 
-        from storage import time_window
+        from factor_engine.storage import time_window
 
         src = inspect.getsource(time_window._normalize_bound_for_index)
         assert 'tz_convert("UTC").tz_localize(None)' in src
@@ -115,7 +115,7 @@ class TestCalendarHardGates:
 
 class TestCatalogHardGates:
     def test_foreign_keys_on(self):
-        from storage.catalog import FactorCatalog
+        from factor_engine.storage.catalog import FactorCatalog
 
         with tempfile.TemporaryDirectory() as tmp:
             cat = FactorCatalog(os.path.join(tmp, "c.sqlite"))
@@ -124,7 +124,7 @@ class TestCatalogHardGates:
             cat.close()
 
     def test_transaction_rollback(self):
-        from storage.catalog import FactorCatalog
+        from factor_engine.storage.catalog import FactorCatalog
 
         with tempfile.TemporaryDirectory() as tmp:
             cat = FactorCatalog(os.path.join(tmp, "c.sqlite"))
@@ -137,7 +137,7 @@ class TestCatalogHardGates:
             cat.close()
 
     def test_partition_key_not_null(self):
-        from storage.catalog import FactorCatalog
+        from factor_engine.storage.catalog import FactorCatalog
 
         with tempfile.TemporaryDirectory() as tmp:
             cat = FactorCatalog(os.path.join(tmp, "c.sqlite"))
@@ -149,9 +149,9 @@ class TestCatalogHardGates:
             cat.close()
 
     def test_production_mode_fail_closed(self, monkeypatch):
-        import runtime.production_policy as pp
-        from storage.catalog import FactorCatalog
-        from storage.exceptions import ProductionModeResolutionError
+        import factor_engine.runtime.production_policy as pp
+        from factor_engine.storage.catalog import FactorCatalog
+        from factor_engine.storage.exceptions import ProductionModeResolutionError
 
         with tempfile.TemporaryDirectory() as tmp:
             cat = FactorCatalog(os.path.join(tmp, "c.sqlite"))
@@ -164,7 +164,7 @@ class TestCatalogHardGates:
             cat.close()
 
     def test_catalog_integrity_check(self):
-        from storage.catalog import FactorCatalog
+        from factor_engine.storage.catalog import FactorCatalog
 
         with tempfile.TemporaryDirectory() as tmp:
             cat = FactorCatalog(os.path.join(tmp, "c.sqlite"))
@@ -177,8 +177,8 @@ class TestCatalogHardGates:
 
 class TestJobStoreHardGates:
     def test_idempotency_compound_key_and_conflict(self):
-        from service.jobstore import JobStore, JobRecord
-        from service.errors import ServiceError
+        from factor_engine.service.jobstore import JobStore, JobRecord
+        from factor_engine.service.errors import ServiceError
 
         with tempfile.TemporaryDirectory() as tmp:
             s = JobStore(tmp)
@@ -196,7 +196,7 @@ class TestJobStoreHardGates:
             s.close()
 
     def test_terminal_state_not_overwritten(self):
-        from service.jobstore import JobStore, JobRecord, JobStatus
+        from factor_engine.service.jobstore import JobStore, JobRecord, JobStatus
 
         with tempfile.TemporaryDirectory() as tmp:
             s = JobStore(tmp)
@@ -211,7 +211,7 @@ class TestJobStoreHardGates:
     def test_reconciliation_durable(self):
         import inspect
 
-        from service.jobstore import JobStore
+        from factor_engine.service.jobstore import JobStore
 
         src = inspect.getsource(JobStore._reconcile_stale_running)
         assert "write_manifest=True" in src
@@ -221,9 +221,9 @@ class TestQueueHardGates:
     def test_drain_consumes_queued(self):
         import time
 
-        from service.jobstore import JobStore, JobRecord, JobStatus
-        from service.queue import BoundedJobQueue
-        from service.errors import ServiceError
+        from factor_engine.service.jobstore import JobStore, JobRecord, JobStatus
+        from factor_engine.service.queue import BoundedJobQueue
+        from factor_engine.service.errors import ServiceError
 
         with tempfile.TemporaryDirectory() as tmp:
             s = JobStore(tmp)
@@ -246,8 +246,8 @@ class TestQueueHardGates:
     def test_worker_survives_unexpected_exception(self):
         import time
 
-        from service.jobstore import JobStore, JobRecord, JobStatus
-        from service.queue import BoundedJobQueue
+        from factor_engine.service.jobstore import JobStore, JobRecord, JobStatus
+        from factor_engine.service.queue import BoundedJobQueue
 
         with tempfile.TemporaryDirectory() as tmp:
             s = JobStore(tmp)
@@ -276,7 +276,7 @@ class TestQueueHardGates:
             q.drain(timeout=5)
 
     def test_global_concurrency_policy_explicit(self):
-        from service.jobstore import (
+        from factor_engine.service.jobstore import (
             resolve_service_concurrency_policy,
             SERVICE_CONCURRENCY_POLICY_SINGLE_PROCESS,
         )
@@ -292,7 +292,7 @@ class TestQueueHardGates:
 class TestMaterializerHardGates:
     def _mk(self):
         tmp = tempfile.mkdtemp()
-        from storage.materialize.materializer import ParquetMaterializer
+        from factor_engine.storage.materialize.materializer import ParquetMaterializer
 
         return ParquetMaterializer(tmp), tmp
 
@@ -330,7 +330,7 @@ class TestMaterializerHardGates:
             m.materialize("f3", s, value_dtype="float64", frequency="1d", write_mode="upsertt")
 
     def test_precision_parity_nan_mask(self):
-        from storage.materialize.materializer import compare_live_vs_materialized
+        from factor_engine.storage.materialize.materializer import compare_live_vs_materialized
 
         live = pd.Series(
             np.array([1.0, 2.0, np.nan, 4.0]),
@@ -345,7 +345,7 @@ class TestMaterializerHardGates:
         assert r["equal"] is False
 
     def test_precision_parity_inf_mask(self):
-        from storage.materialize.materializer import compare_live_vs_materialized
+        from factor_engine.storage.materialize.materializer import compare_live_vs_materialized
 
         live = pd.Series(
             np.array([1.0, np.inf, 3.0]),
@@ -360,7 +360,7 @@ class TestMaterializerHardGates:
         assert r["equal"] is False
 
     def test_factor_schema_single_truth(self):
-        from storage.factor_schema import FACTOR_METADATA_COLUMNS, FACTOR_LAKE_SCHEMA_VERSION
+        from factor_engine.storage.factor_schema import FACTOR_METADATA_COLUMNS, FACTOR_LAKE_SCHEMA_VERSION
 
         assert "resolved_snapshot_id" in FACTOR_METADATA_COLUMNS
         assert "storage_precision_policy" in FACTOR_METADATA_COLUMNS
@@ -374,28 +374,28 @@ class TestMaterializerHardGates:
 
 class TestFactorIdHardGates:
     def test_no_truncation_reject_long(self):
-        from security.factor_id import validate_factor_id, FactorIdError
+        from factor_engine.security.factor_id import validate_factor_id, FactorIdError
 
         with pytest.raises(FactorIdError):
             validate_factor_id("x" * 129)
 
     def test_path_traversal_rejected(self):
-        from security.factor_id import validate_factor_id, FactorIdError
+        from factor_engine.security.factor_id import validate_factor_id, FactorIdError
 
         for bad in ("a/b", "a\\b", "..", "../x", "a..b", "x\x00y"):
             with pytest.raises(FactorIdError):
                 validate_factor_id(bad)
 
     def test_confine_path_escape_rejected(self):
-        from security.factor_id import confine_path, FactorIdError
+        from factor_engine.security.factor_id import confine_path, FactorIdError
 
         with tempfile.TemporaryDirectory() as tmp:
             with pytest.raises(FactorIdError):
                 confine_path(tmp, os.path.join(tmp, "..", "evil"))
 
     def test_factor_name_domain_validated(self):
-        from api.factor import Factor
-        from expr.base import Expr
+        from factor_engine.api.factor import Factor
+        from factor_engine.expr.base import Expr
 
         with pytest.raises(ValueError):
             Factor(name="../evil", expr=Expr())
@@ -403,7 +403,7 @@ class TestFactorIdHardGates:
         assert f.name == "alpha_001"
 
     def test_dsn_sanitizer_keeps_identity(self):
-        from runtime.lineage import hash_data_source_config
+        from factor_engine.runtime.lineage import hash_data_source_config
 
         c1 = hash_data_source_config({"url": "postgres://u:pw1@h:5432/db"})
         c2 = hash_data_source_config({"url": "postgres://u:pw2@h:5432/db"})
@@ -414,8 +414,8 @@ class TestFactorIdHardGates:
         assert "TOPSECRET" not in h
 
     def test_dependency_scoped_digest(self):
-        from planner.logical_plan import PlanNode
-        from runtime.factor_identity import (
+        from factor_engine.planner.logical_plan import PlanNode
+        from factor_engine.runtime.factor_identity import (
             scoped_operator_contract_hash,
             scoped_field_contract_hash,
         )
@@ -439,7 +439,7 @@ class TestFactorIdHardGates:
         )
 
     def test_engine_version_present(self):
-        from runtime.lineage import build_engine_version
+        from factor_engine.runtime.lineage import build_engine_version
 
         ev = build_engine_version()
         assert "git_sha" in ev and "python" in ev and "numpy" in ev
@@ -452,7 +452,7 @@ class TestFactorIdHardGates:
 
 class TestCseHardGates:
     def _mk(self):
-        from planner.logical_plan import PlanNode
+        from factor_engine.planner.logical_plan import PlanNode
 
         def lit(v):
             return PlanNode(op="literal", attrs={"value": v}, inputs=[])
@@ -466,7 +466,7 @@ class TestCseHardGates:
         return lit, col, op
 
     def test_cse_nested_dag_no_orphan(self):
-        from planner.cse import apply_cse, verify_cse_dag
+        from factor_engine.planner.cse import apply_cse, verify_cse_dag
 
         lit, col, op = self._mk()
         inner = op("ts_std", col("close"), lit(5))
@@ -479,7 +479,7 @@ class TestCseHardGates:
         assert verify_cse_dag(new_roots, shared) == []
 
     def test_literal_not_shared(self):
-        from planner.cse import apply_cse, cse_benefit, _recompute_cost
+        from factor_engine.planner.cse import apply_cse, cse_benefit, _recompute_cost
 
         lit, col, op = self._mk()
         common = op("ts_mean", col("close"), lit(20))
@@ -492,14 +492,14 @@ class TestCseHardGates:
     def test_rolling_cse_typed_hash_only(self):
         import inspect
 
-        from planner import rolling_cse
+        from factor_engine.planner import rolling_cse
 
         src = inspect.getsource(rolling_cse)
         assert "default=repr" not in src
         assert "_typed_semantic_digest" in src
 
     def test_max_plan_depth_enforced(self):
-        from planner.cse import assert_plan_depth_bounded, PlanDepthLimitError
+        from factor_engine.planner.cse import assert_plan_depth_bounded, PlanDepthLimitError
 
         lit, col, op = self._mk()
         deep = col("x")
@@ -509,7 +509,7 @@ class TestCseHardGates:
             assert_plan_depth_bounded(deep, max_depth=512)
 
     def test_critical_path_linear(self):
-        from planner.physical_factor_dag import PhysicalFactorDAG, PhysicalFactorTask
+        from factor_engine.planner.physical_factor_dag import PhysicalFactorDAG, PhysicalFactorTask
 
         dag = PhysicalFactorDAG()
         for tid, inputs, consumers in [
@@ -530,16 +530,16 @@ class TestCseHardGates:
 
 class TestPersistentCacheHardGates:
     def test_lock_registry_bounded(self):
-        from storage.cache import _save_lock_for, _SAVE_LOCKS, _SAVE_LOCK_MAX
+        from factor_engine.storage.cache import _save_lock_for, _SAVE_LOCKS, _SAVE_LOCK_MAX
 
         for i in range(5000):
             _save_lock_for(f"key-{i}")
         assert len(_SAVE_LOCKS) <= _SAVE_LOCK_MAX
 
     def test_unknown_namespace_production_blocked(self, monkeypatch):
-        import storage.cache as cache
-        from storage.cache import UNKNOWN_CACHE_NAMESPACE
-        import runtime.production_policy as pp
+        import factor_engine.storage.cache as cache
+        from factor_engine.storage.cache import UNKNOWN_CACHE_NAMESPACE
+        import factor_engine.runtime.production_policy as pp
 
         monkeypatch.setattr(cache, "_operator_namespace", lambda: UNKNOWN_CACHE_NAMESPACE)
         monkeypatch.setattr(pp, "is_production_mode", lambda *a, **k: True)

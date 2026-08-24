@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from storage.catalog import FactorCatalog
+from factor_engine.storage.catalog import FactorCatalog
 
 pd = pytest.importorskip("pandas")
 

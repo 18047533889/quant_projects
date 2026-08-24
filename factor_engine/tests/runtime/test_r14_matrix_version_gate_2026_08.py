@@ -26,12 +26,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from api import rank, ts_mean
-from api.columns import col
-from api.factor import Factor
-from backend.pandas_backend import PandasBackend
-from runtime import matrix_service
-from runtime.engine import FactorEngine
+from factor_engine.api import rank, ts_mean
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime import matrix_service
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 
@@ -121,7 +121,7 @@ def test_r14_semantic_identity_frequency_drives_digest(tmp_path):
     eng = FactorEngine(
         backend=PandasBackend(), data_source=InMemorySeriesSource(data=_data())
     )
-    from runtime.factor_identity import FactorSemanticIdentity
+    from factor_engine.runtime.factor_identity import FactorSemanticIdentity
 
     # 语义身份频率 5m（模拟 rebuild 场景：执行按 5m，但 factor.freq=1d）。
     # ``_scope_from_factor`` 必须优先 semantic_identity.frequency → scope=5m →

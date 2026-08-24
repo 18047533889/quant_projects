@@ -8,8 +8,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from runtime.config_runtime import config_materialize_batch_key, resolve_materialize_kwargs
-from runtime.engine import FactorEngine
+from factor_engine.runtime.config_runtime import config_materialize_batch_key, resolve_materialize_kwargs
+from factor_engine.runtime.engine import FactorEngine
 
 
 def _write_factor_yaml(tmp_path: Path, name: str, expr: str, root: Path) -> Path:
@@ -139,7 +139,7 @@ def test_materialize_many_from_config_batches_run_many(tmp_path, monkeypatch):
     monkeypatch.setattr(FactorEngine, "run_many", _fake_run_many)
     monkeypatch.setattr(FactorEngine, "materialize", _fake_materialize)
     monkeypatch.setattr(
-        "runtime.materialize_service.execute_materialize_from_resolved",
+        "factor_engine.runtime.materialize_service.execute_materialize_from_resolved",
         _fake_execute,
     )
 

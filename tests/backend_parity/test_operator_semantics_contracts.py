@@ -12,11 +12,11 @@ pytestmark = pytest.mark.skip(reason="legacy rollout semantics superseded by can
 
 pytest.importorskip("polars")
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from backend.numeric_semantics import (
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.backend.numeric_semantics import (
     group_percentile_null_is_null,
     is_nan_excludes_null,
     truthy_nan_is_false,
@@ -24,11 +24,11 @@ from backend.numeric_semantics import (
     ts_argmax_empty_window_is_null,
     ts_sharpe_zero_std_is_null,
 )
-from backend.plan_params import PlanParamError
-from backend.window_spec import WindowSpec
-from cleaned_operators import load_all
-from planner.logical_plan import PlanNode
-from runtime.engine import FactorEngine
+from factor_engine.backend.plan_params import PlanParamError
+from factor_engine.backend.window_spec import WindowSpec
+from factor_engine.cleaned_operators import load_all
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.runtime.engine import FactorEngine
 from tests.backend_parity.test_p0_edge_cases_triple_parity import duckdb_source, edge_source
 from tests.helpers import InMemorySeriesSource
 
@@ -152,8 +152,8 @@ def test_window_spec_rejects_fractional_ddof(_loaded):
 
 
 def test_backend_specific_capability(_loaded):
-    from backend.evidence_provenance import evidence_artifact_valid
-    from backend.operator_call_capability import CapabilityLevel, check_operator_call_capability
+    from factor_engine.backend.evidence_provenance import evidence_artifact_valid
+    from factor_engine.backend.operator_call_capability import CapabilityLevel, check_operator_call_capability
 
     ok_polars = check_operator_call_capability("rank", backend="polars_long", production=True)
     ok_duck = check_operator_call_capability("rank", backend="duckdb_sql", production=True)
@@ -169,7 +169,7 @@ def test_backend_specific_capability(_loaded):
 
 def test_duplicate_keys_raise_alignment_error(_loaded):
     import polars as pl
-    from backend.long_alignment import AlignmentError, anchor_left_join_binary
+    from factor_engine.backend.long_alignment import AlignmentError, anchor_left_join_binary
 
     left = pl.LazyFrame(
         {"ts": [1, 1], "inst": ["A", "A"], "_v": [1.0, 2.0]},
@@ -203,9 +203,9 @@ def test_expanding_std_high_dynamic_range(_loaded):
 
 
 def test_ewm_spec_rejects_invalid_span(_loaded):
-    from backend.ewm_spec import EwmSpec
-    from backend.plan_params import PlanParamError
-    from planner.logical_plan import PlanNode
+    from factor_engine.backend.ewm_spec import EwmSpec
+    from factor_engine.backend.plan_params import PlanParamError
+    from factor_engine.planner.logical_plan import PlanNode
 
     bad = PlanNode(op="ewm_mean", inputs=[PlanNode(op="column", attrs={"name": "x"})], attrs={"span": 2.5})
     with pytest.raises(PlanParamError):

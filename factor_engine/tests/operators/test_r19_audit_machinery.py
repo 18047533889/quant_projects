@@ -45,7 +45,7 @@ def _load_mc():
         spec.loader.exec_module(mod)
         return mod
     except Exception:  # noqa: BLE001
-        from cleaned_operators import math_certificate as mc
+        from factor_engine.cleaned_operators import math_certificate as mc
         return mc
 
 

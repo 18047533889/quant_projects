@@ -31,8 +31,8 @@ import pytest
 # operators under test via ``_mk(...)``, so this module does NOT need the full
 # ``ensure_cleaned_loaded()`` load_all() (which is currently blocked by the
 # concurrent session's in-flight edits).
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.fundamental.accruals_scores import (
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.fundamental.accruals_scores import (
     _fin_altman_z_score,
     _fin_piotroski_f_score,
     _fin_piotroski_f_score_tolerant,

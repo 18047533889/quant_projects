@@ -7,10 +7,10 @@ import sys
 import json
 
 sys.path.insert(0, ".")
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 load_all()
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.operator_surface import classify_canonical
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
 canon_to_mod = {}
 for canonical, backends in OperatorRegistry._operators.items():
@@ -19,20 +19,20 @@ for canonical, backends in OperatorRegistry._operators.items():
         break
 
 TARGET_MODS = [
-    "cleaned_operators.research_polars",
-    "cleaned_operators.cross_section.panel_model",
-    "cleaned_operators.research_transform",
-    "cleaned_operators.dmd",
-    "cleaned_operators.research_spectral",
-    "cleaned_operators.ts_model.dynamic_regression",
-    "cleaned_operators.ts_model.ar_meanrev",
-    "cleaned_operators.ts_model.state_space",
-    "cleaned_operators.ts_model.volatility",
-    "cleaned_operators.ts_model.complexity",
-    "cleaned_operators.ts_model.wavelet_spectral",
-    "cleaned_operators.ts_model.sequence_anomaly",
-    "cleaned_operators.ts_model.path_signature",
-    "cleaned_operators.ts_model.polars_regression",
+    "factor_engine.cleaned_operators.research_polars",
+    "factor_engine.cleaned_operators.cross_section.panel_model",
+    "factor_engine.cleaned_operators.research_transform",
+    "factor_engine.cleaned_operators.dmd",
+    "factor_engine.cleaned_operators.research_spectral",
+    "factor_engine.cleaned_operators.ts_model.dynamic_regression",
+    "factor_engine.cleaned_operators.ts_model.ar_meanrev",
+    "factor_engine.cleaned_operators.ts_model.state_space",
+    "factor_engine.cleaned_operators.ts_model.volatility",
+    "factor_engine.cleaned_operators.ts_model.complexity",
+    "factor_engine.cleaned_operators.ts_model.wavelet_spectral",
+    "factor_engine.cleaned_operators.ts_model.sequence_anomaly",
+    "factor_engine.cleaned_operators.ts_model.path_signature",
+    "factor_engine.cleaned_operators.ts_model.polars_regression",
 ]
 
 from collections import Counter

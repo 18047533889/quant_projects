@@ -17,8 +17,8 @@ def _bootstrap() -> None:
     for p in (root, fe):
         if p not in sys.path:
             sys.path.insert(0, p)
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
@@ -56,7 +56,7 @@ def _git_commit_time() -> str:
 
 
 def _default_semantics(canon: str, policy_row: dict) -> dict:
-    from backend.numeric_semantics import rank_tie_method, semantics_for
+    from factor_engine.backend.numeric_semantics import rank_tie_method, semantics_for
 
     scope = str(policy_row.get("scope") or "elementwise")
     sem = semantics_for(canon)
@@ -74,27 +74,27 @@ def _default_semantics(canon: str, policy_row: dict) -> dict:
 
 
 def build_scope_document() -> dict:
-    from backend.composite_evidence import composite_production_safe
-    from backend.fastpath_coverage import build_fastpath_coverage_row
-    from backend.operator_capability import polars_long_tier
-    from backend.phase1_scope import current_git_sha
-    from backend.polars_long_production import polars_long_production_tier
-    from backend.primitive_evidence import primitive_dual_backend_production_safe
-    from backend.production_fastpath_tiers import (
+    from factor_engine.backend.composite_evidence import composite_production_safe
+    from factor_engine.backend.fastpath_coverage import build_fastpath_coverage_row
+    from factor_engine.backend.operator_capability import polars_long_tier
+    from factor_engine.backend.phase1_scope import current_git_sha
+    from factor_engine.backend.polars_long_production import polars_long_production_tier
+    from factor_engine.backend.primitive_evidence import primitive_dual_backend_production_safe
+    from factor_engine.backend.production_fastpath_tiers import (
         FASTPATH_DEFERRED_CANONICALS,
         FORBIDDEN_PRODUCTION_FASTPATH,
         P0_PRODUCTION_FASTPATH_CANONICALS,
         P1_POLARS_CORE_PRODUCTION_SAFE,
         dual_backend_structural_candidates,
     )
-    from backend.sql_tiers import effective_sql_production_safe, is_sql_implemented
-    from cleaned_operators.operator_policy import infer_operator_policy
-    from cleaned_operators.operator_spec import (
+    from factor_engine.backend.sql_tiers import effective_sql_production_safe, is_sql_implemented
+    from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
+    from factor_engine.cleaned_operators.operator_spec import (
         PRODUCTION_ALLOWED_DEFERRED_CANONICALS,
         PRODUCTION_DUAL_BACKEND_CORE_CANONICALS,
         infer_production_policy,
     )
-    from planner.composite_lowering import list_composite_lowerings
+    from factor_engine.planner.composite_lowering import list_composite_lowerings
 
     primitives: dict = {}
     batch2 = frozenset({"ts_argmax", "ts_argmin"})

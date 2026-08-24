@@ -31,20 +31,20 @@ import pandas as pd
 import pytest
 
 # Direct import registers every owned operator (pandas_numpy + polars bridges).
-import cleaned_operators.structural_levels  # noqa: F401
-import cleaned_operators.candle_state_space  # noqa: F401
-import cleaned_operators.rqa_ext  # noqa: F401
-import cleaned_operators.recurrence_analysis  # noqa: F401
+import factor_engine.cleaned_operators.structural_levels  # noqa: F401
+import factor_engine.cleaned_operators.candle_state_space  # noqa: F401
+import factor_engine.cleaned_operators.rqa_ext  # noqa: F401
+import factor_engine.cleaned_operators.recurrence_analysis  # noqa: F401
 
-from cleaned_operators.candle_state_space import (
+from factor_engine.cleaned_operators.candle_state_space import (
     _local_density_series,
     _mahalanobis_series,
     _matrix_profile_series,
     _z_normalize,
 )
-from cleaned_operators.rqa_ext import _rqa_epsilon_for_target_rr, _rqa_stats_window_fixed_rr
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.rolling_pack import frame_like
+from factor_engine.cleaned_operators.rqa_ext import _rqa_epsilon_for_target_rr, _rqa_stats_window_fixed_rr
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.rolling_pack import frame_like
 
 
 def _get(name: str):

@@ -35,7 +35,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.extreme_tail import (
+from factor_engine.cleaned_operators.extreme_tail import (
     _extremal_index_series,
     _hill_series,
     _mean_excess_slope_series,
@@ -48,7 +48,7 @@ from cleaned_operators.extreme_tail import (
 def _clear_price_warning_dedup():
     """ISSUE 4: reset the module-level price-level warning dedup flag so each
     test observes the warning independently (it persists across calls/cases)."""
-    import cleaned_operators.extreme_tail as _et
+    import factor_engine.cleaned_operators.extreme_tail as _et
 
     _et._WARNED_PRICE_LEVEL.clear()
     yield

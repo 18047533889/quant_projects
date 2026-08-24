@@ -11,7 +11,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from storage.factor_schema import FACTOR_METADATA_COLUMNS
+from factor_engine.storage.factor_schema import FACTOR_METADATA_COLUMNS
 
 _DEFAULTS: dict[str, Any] = {
     "calc_time": "",

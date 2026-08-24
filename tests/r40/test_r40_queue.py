@@ -8,8 +8,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from service.jobstore import JobRecord, JobStore, _utc_now
-from service.queue import (
+from factor_engine.service.jobstore import JobRecord, JobStore, _utc_now
+from factor_engine.service.queue import (
     BoundedJobQueue,
     JobCancelledError,
     _cancel_event_ctx_var,

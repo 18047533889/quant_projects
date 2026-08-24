@@ -18,12 +18,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
-import cleaned_operators.operator_surface as S  # noqa: E402
+import factor_engine.cleaned_operators.operator_surface as S  # noqa: E402
 
 
 def _dates(n: int = 6) -> pd.DatetimeIndex:
@@ -91,7 +91,7 @@ def test_group_demean_fallback_default_nan() -> None:
 # ---------------------------------------------------------------------------
 
 def test_relation_transition_nan_breaks_sequence() -> None:
-    from cleaned_operators.relation.ops import RelationEntryCount, RelationExitCount
+    from factor_engine.cleaned_operators.relation.ops import RelationEntryCount, RelationExitCount
 
     mem = pd.DataFrame({"A": [1.0, np.nan, 1.0, 0.0]}, index=_dates(4))
     # 唯一已知转换是 row2->row3 的 1→0（退出）；NaN 两侧都不计数。
@@ -106,7 +106,7 @@ def test_relation_transition_nan_breaks_sequence() -> None:
 # ---------------------------------------------------------------------------
 
 def test_event_decay_asof_nan_before_first_valid() -> None:
-    from cleaned_operators.state_event import EventDecayAsOf
+    from factor_engine.cleaned_operators.state_event import EventDecayAsOf
 
     dates = _dates(4)
     ev = pd.DataFrame({"A": [np.nan, 1.0, 0.0, 0.0]}, index=dates)
@@ -117,7 +117,7 @@ def test_event_decay_asof_nan_before_first_valid() -> None:
 
 
 def test_event_decay_asof_break_resets() -> None:
-    from cleaned_operators.state_event import EventDecayAsOf
+    from factor_engine.cleaned_operators.state_event import EventDecayAsOf
 
     dates = _dates(5)
     ev = pd.DataFrame({"A": [1.0, np.nan, 1.0, 0.0, 0.0]}, index=dates)
@@ -239,7 +239,7 @@ def test_no_unclassified_canonicals() -> None:
 
 
 def test_daily_dsl_exposes_migrated_ops_and_hides_off_daily() -> None:
-    from api.operator_registry import build_dsl_allowlist
+    from factor_engine.api.operator_registry import build_dsl_allowlist
 
     pub = build_dsl_allowlist()
     assert "ts_regression_forecast_error" in pub
@@ -260,7 +260,7 @@ def test_daily_dsl_exposes_migrated_ops_and_hides_off_daily() -> None:
 # ---------------------------------------------------------------------------
 
 def test_six_gate_certification_fields_present() -> None:
-    from cleaned_operators.semantic_certification import OperatorCertification, operator_certification_for
+    from factor_engine.cleaned_operators.semantic_certification import OperatorCertification, operator_certification_for
 
     for name in ("ts_mean", "ts_argmax"):
         catalog = OperatorRegistry._catalog[name]

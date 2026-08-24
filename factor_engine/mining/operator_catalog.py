@@ -456,7 +456,7 @@ _STATE_LITERAL_OPS = frozenset(
 # ---------------------------------------------------------------------------
 
 def _catalog_record(canonical: str) -> dict[str, Any]:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     return OperatorRegistry._catalog.get(canonical) or {}
 
@@ -466,7 +466,7 @@ def _surface_of(canonical: str, catalog: dict[str, Any]) -> str:
     if surface:
         return surface
     try:
-        from cleaned_operators.operator_surface import classify_canonical
+        from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
         return classify_canonical(canonical)
     except Exception:
@@ -494,7 +494,7 @@ def cost_tier(canonical: str, catalog: dict[str, Any]) -> int:
             return int(match.group(1))
     # Fallback by declared cost_model (a callable contract), then category.
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         operator = OperatorRegistry.get(canonical, "pandas_numpy")
         metadata = getattr(operator, "metadata", None)
@@ -521,7 +521,7 @@ def cost_contract_declared(canonical: str, catalog: dict[str, Any]) -> bool:
     if any(re.fullmatch(r"cost:\d+", tag.strip()) for tag in tags):
         return True
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         operator = OperatorRegistry.get(canonical, "pandas_numpy")
         metadata = getattr(operator, "metadata", None)
@@ -664,7 +664,7 @@ def _role_from_direct_status(status: Any) -> MiningRole | None:
     MiningRole so the authoring tier (surface) and the semantic role stay
     orthogonal.  DIRECT_INTERMEDIATE / DIRECT_RECIPE / DIRECT_CONTROL_FLOW map to
     ALPHA (their ast positions and terminal authority come from DirectUse)."""
-    from mining.direct_use import DirectUseStatus
+    from factor_engine.mining.direct_use import DirectUseStatus
 
     mapping = {
         DirectUseStatus.DIRECT_ALPHA: MiningRole.ALPHA,
@@ -695,7 +695,7 @@ def assign_mining_role_ex(
     role/scope fields.
     """
     catalog = dict(catalog) if catalog is not None else _catalog_record(canonical)
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     registered = canonical in OperatorRegistry._catalog
     if not registered:
@@ -712,7 +712,7 @@ def assign_mining_role_ex(
 
     # 1. Permanently forbidden / non-factor / unsafe / internal / legacy.
     try:
-        from cleaned_operators.operator_spec import PERMANENTLY_FORBIDDEN_CANONICALS
+        from factor_engine.cleaned_operators.operator_spec import PERMANENTLY_FORBIDDEN_CANONICALS
 
         if canonical in PERMANENTLY_FORBIDDEN_CANONICALS:
             return MiningRole.DENIED, RoleSource.EXPLICIT
@@ -724,7 +724,7 @@ def assign_mining_role_ex(
         return MiningRole.INTERNAL, RoleSource.VERIFIED_RULE
 
     try:
-        from cleaned_operators.production_hardening import NON_FACTOR_PRODUCTION_CANONICALS
+        from factor_engine.cleaned_operators.production_hardening import NON_FACTOR_PRODUCTION_CANONICALS
 
         if canonical in NON_FACTOR_PRODUCTION_CANONICALS:
             if canonical.startswith(("holder_", "relation_")):
@@ -791,7 +791,7 @@ def assign_mining_role_ex(
     #    they just cost more (full replay), so they land in the high-cost lane
     #    until checkpoint-backed incremental execution is certified.
     try:
-        from cleaned_operators.production_hardening import FULL_HISTORY_REPLAY_CANONICALS
+        from factor_engine.cleaned_operators.production_hardening import FULL_HISTORY_REPLAY_CANONICALS
 
         if canonical in FULL_HISTORY_REPLAY_CANONICALS:
             return MiningRole.ALPHA_HIGH_COST, RoleSource.VERIFIED_RULE
@@ -809,7 +809,7 @@ def assign_mining_role_ex(
     #    table lookup, so there is no recursion back into role assignment.
     if surface == "research":
         try:
-            from mining.direct_use import _resolve_explicit
+            from factor_engine.mining.direct_use import _resolve_explicit
 
             contract = _resolve_explicit(canonical, catalog)
             if contract is not None and contract.status.value.startswith("direct_"):
@@ -873,7 +873,7 @@ _BENCHMARK_ONLY_CANONICALS = frozenset(
 def _execution_flags(canonical: str) -> tuple[bool, ExecutionModel, bool, bool]:
     """(stateful, execution_model, checkpoint_supported, full_history_replay)."""
     try:
-        from runtime.execution_contract import execution_contract
+        from factor_engine.runtime.execution_contract import execution_contract
 
         contract = execution_contract(canonical)
         state_model = str(getattr(contract, "state_model", "stateless"))
@@ -899,8 +899,8 @@ def _checkpoint_flags(canonical: str) -> tuple[bool, bool, bool]:
 
 def _missing_policy(canonical: str) -> str | None:
     try:
-        from cleaned_operators.operator_policy import infer_operator_policy
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         operator = OperatorRegistry.get(canonical, "pandas_numpy")
         policy = infer_operator_policy(operator, canonical=canonical)
@@ -949,8 +949,8 @@ def _searchable_params(canonical: str, catalog: dict[str, Any]) -> tuple[str, ..
     restricted to an audited preset / robustness lane — it is excluded from the
     default searchable set here."""
     try:
-        from cleaned_operators.base import ParamRole, searchable_param_names
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.base import ParamRole, searchable_param_names
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         operator = OperatorRegistry.get(canonical, "pandas_numpy")
         grades = searchable_param_names(getattr(operator, "metadata", None))
@@ -1187,7 +1187,7 @@ def audit_multi_source_contract(catalog: dict[str, Any] | None = None) -> list[d
     SourceConcept binding.  A canonical that relies on the legacy migration map
     is reported as ``legacy_migration`` (accepted for now, not silent).
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     catalog = dict(catalog) if catalog is not None else OperatorRegistry._catalog
     findings: list[dict[str, Any]] = []
@@ -1263,8 +1263,8 @@ def get_mining_operators(
 
     Returns a stable list sorted by (role, canonical).
     """
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     mode = str(admission or "eligible").strip().lower()
@@ -1322,7 +1322,7 @@ def get_mining_operators(
         if mode == "pending" and not (certified or catalog.get("pit_safe")):
             continue
         ast_positions = _ROLE_AST_POSITIONS.get(role, ())
-        from cleaned_operators.operator_surface import classify_canonical
+        from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
         state, blockers, actions = _admission_decision(
             canonical, catalog, role, role_source, status
@@ -1373,8 +1373,8 @@ def get_mining_operators(
 
 def mining_role_manifest() -> dict[str, MiningRole]:
     """canonical → role for every registered canonical (admission matrix input)."""
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     return {

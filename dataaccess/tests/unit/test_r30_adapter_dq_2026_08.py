@@ -327,7 +327,7 @@ def test_policy_manifest_digest_stable_and_changes():
         "v1", {"a": {"role": "trader"}}, {"d1": "restricted"}, {"f1": "read"}
     )
     assert m1.digest() == m2.digest()          # 同字段 → 同 digest
-    assert isinstance(m1.digest(), str) and len(m1.digest()) == 16
+    assert isinstance(m1.digest(), str) and len(m1.digest()) == 64
 
     m3 = PolicyManifest(
         "v1", {"a": {"role": "admin"}}, {"d1": "restricted"}, {"f1": "read"}

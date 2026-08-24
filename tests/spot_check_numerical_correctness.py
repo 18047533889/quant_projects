@@ -20,17 +20,17 @@ import pandas as pd
 import pytest
 
 # Import operator implementations directly to avoid registration conflicts
-from cleaned_operators.fundamental.fiscal_batch1 import (
+from factor_engine.cleaned_operators.fundamental.fiscal_batch1 import (
     pd_fiscal_acceleration,
     pd_fiscal_pct_change,
     pd_fiscal_rolling_std,
     pd_fiscal_accrual_quality,
     pd_fiscal_direction_consistency,
 )
-from cleaned_operators.fundamental.fiscal_batch2 import (
+from factor_engine.cleaned_operators.fundamental.fiscal_batch2 import (
     pd_fiscal_standardized_surprise,
 )
-from cleaned_operators.fundamental.fiscal_batch3 import (
+from factor_engine.cleaned_operators.fundamental.fiscal_batch3 import (
     pd_years_since_date,
 )
 
@@ -504,7 +504,7 @@ class TestKalmanFilters:
         BUG CHECK: Position update should be x_pos + alpha * residual.
         Velocity update should be x_vel + beta * residual.
         """
-        from cleaned_operators.technical.kalman_variants import TSAlphaBetaFilter
+        from factor_engine.cleaned_operators.technical.kalman_variants import TSAlphaBetaFilter
 
         # Constant velocity: [100, 101, 102, 103, 104]
         data = pd.DataFrame(
@@ -524,7 +524,7 @@ class TestKalmanFilters:
 
         BUG CHECK: With constant velocity, estimated velocity should converge to true velocity.
         """
-        from cleaned_operators.technical.kalman_variants import TSAlphaBetaFilter
+        from factor_engine.cleaned_operators.technical.kalman_variants import TSAlphaBetaFilter
 
         # Constant velocity of 2 units per period
         data = pd.DataFrame(
@@ -544,7 +544,7 @@ class TestKalmanFilters:
 
         BUG CHECK: Missing data should trigger predict-only step.
         """
-        from cleaned_operators.technical.kalman_variants import TSAlphaBetaFilter
+        from factor_engine.cleaned_operators.technical.kalman_variants import TSAlphaBetaFilter
 
         data = pd.DataFrame(
             {"C0": [100.0, 101.0, np.nan, np.nan, 104.0]},
@@ -566,7 +566,7 @@ class TestCrossSectionalOperators:
 
         BUG CHECK: Buckets should be assigned by rank, returns averaged within bucket.
         """
-        from cleaned_operators.cs_batch1 import CsFactorBucketReturn
+        from factor_engine.cleaned_operators.cs_batch1 import CsFactorBucketReturn
 
         # 12 stocks (need >= 10 for MIN_BREADTH), 2 buckets
         # Factor ranks: [1..12] -> buckets [0,0,0,0,0,0,1,1,1,1,1,1]
@@ -599,7 +599,7 @@ class TestCrossSectionalOperators:
 
         BUG CHECK: ascending=False should reverse the bucketing.
         """
-        from cleaned_operators.cs_batch1 import CsFactorBucketReturn
+        from factor_engine.cleaned_operators.cs_batch1 import CsFactorBucketReturn
 
         factor = pd.DataFrame(
             [[float(12 - i) for i in range(12)]],
@@ -627,7 +627,7 @@ class TestCrossSectionalOperators:
         BUG CHECK: High std_err -> strong shrinkage toward mean.
                    Low std_err -> weak shrinkage.
         """
-        from cleaned_operators.cs_batch1 import CsEmpiricalBayesShrinkage
+        from factor_engine.cleaned_operators.cs_batch1 import CsEmpiricalBayesShrinkage
 
         # 12 estimates with varying precision (need >= 10 for MIN_BREADTH)
         estimate = pd.DataFrame(
@@ -662,7 +662,7 @@ class TestTimeSemanticOperators:
 
         BUG CHECK: Should lag by N valid observations, not calendar periods.
         """
-        from cleaned_operators.time_semantic_gap import FinancialSnapshotLag
+        from factor_engine.cleaned_operators.time_semantic_gap import FinancialSnapshotLag
 
         data = pd.DataFrame(
             {"C0": [10.0, np.nan, 12.0, np.nan, np.nan, 15.0, 18.0]},
@@ -684,7 +684,7 @@ class TestTimeSemanticOperators:
 
         BUG CHECK: lag > number of prior valid observations -> NaN.
         """
-        from cleaned_operators.time_semantic_gap import FinancialSnapshotLag
+        from factor_engine.cleaned_operators.time_semantic_gap import FinancialSnapshotLag
 
         data = pd.DataFrame(
             {"C0": [10.0, 12.0, 15.0]},
@@ -704,7 +704,7 @@ class TestTimeSemanticOperators:
 
         BUG CHECK: Should average only same-weekday values within window.
         """
-        from cleaned_operators.time_semantic_gap import SameCalendarDayMean
+        from factor_engine.cleaned_operators.time_semantic_gap import SameCalendarDayMean
 
         # Create data with Monday pattern
         dates = pd.date_range("2024-01-01", periods=15, freq="D")  # Starts Monday

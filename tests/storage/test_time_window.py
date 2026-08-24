@@ -5,8 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from runtime.incremental import build_incremental_plan, slice_factor_result_for_incremental
-from storage.time_window import (
+from factor_engine.runtime.incremental import build_incremental_plan, slice_factor_result_for_incremental
+from factor_engine.storage.time_window import (
     WindowedDataSource,
     business_day_offset,
     resolve_incremental_window,

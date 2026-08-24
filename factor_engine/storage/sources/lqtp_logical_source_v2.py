@@ -22,14 +22,14 @@ def _minute_fallback_allowed(exc: BaseException) -> bool:
     - OOM / ResourceBudgetExceeded / Deadline / PIT / Schema / DQ → 禁止 fallback
     - 未知异常：production fail-closed，research 允许
     """
-    from runtime.resource_errors import ResourceGovernanceError, is_fail_closed_error
+    from factor_engine.runtime.resource_errors import ResourceGovernanceError, is_fail_closed_error
 
     if is_fail_closed_error(exc):
         return False
     if isinstance(exc, ResourceGovernanceError):
         return True
     try:
-        from runtime.production_policy import is_production_mode
+        from factor_engine.runtime.production_policy import is_production_mode
 
         return not is_production_mode()
     except Exception:
@@ -70,7 +70,7 @@ class LQTPLogicalDataSource(_Base):
 
     @staticmethod
     def _is_source_ref_name(name: str) -> bool:
-        from api.source_ref import decode_source_ref
+        from factor_engine.api.source_ref import decode_source_ref
         return decode_source_ref(str(name)) is not None
 
     #: 显式降维提示（relation one_to_many 标量化必须有其一）
@@ -110,8 +110,8 @@ class LQTPLogicalDataSource(_Base):
             "aggregate (e.g. SourceRef params rank=1 / aggregate=top1 / holder_count) "
             "is nondeterministic. Specify a reduction."
         )
-        from runtime.production_policy import is_production_mode
-        from runtime.resource_errors import SemanticContractError
+        from factor_engine.runtime.production_policy import is_production_mode
+        from factor_engine.runtime.resource_errors import SemanticContractError
 
         if is_production_mode():
             raise SemanticContractError(msg)
@@ -150,7 +150,7 @@ class LQTPLogicalDataSource(_Base):
             - DailyBar/Intermediate/TurnoverBaseDaily/MinuteBar/DerivedField
               等特殊路径仍走单字段 ``_load_source_ref``
         """
-        from api.source_ref import decode_source_ref
+        from factor_engine.api.source_ref import decode_source_ref
 
         decoded = [(str(n), decode_source_ref(str(n))) for n in names]
         decoded = [(n, s) for n, s in decoded if s is not None]
@@ -370,7 +370,7 @@ class LQTPLogicalDataSource(_Base):
         events["available_at"] = pd.to_datetime(events["available_at"])
 
         if transform == "financial_lag":
-            from api.source_ref import _strict_int
+            from factor_engine.api.source_ref import _strict_int
 
             quarters = _strict_int(params.get("quarters", 1), name="financial_lag.quarters")
             if quarters <= 0:
@@ -434,12 +434,12 @@ class LQTPLogicalDataSource(_Base):
         )
 
     def _load_intermediate(self, spec) -> pd.Series:
-        from runtime.intermediate_registry import (
+        from factor_engine.runtime.intermediate_registry import (
             ensure_intermediate_materialized,
             intermediate_dependency_lineage,
         )
 
-        from api.source_ref import _strict_int
+        from factor_engine.api.source_ref import _strict_int
 
         params = spec.params_dict()
         name = str(params.get("name", ""))
@@ -465,7 +465,7 @@ class LQTPLogicalDataSource(_Base):
         anchor = self._anchor_index()
 
         if table == "DerivedField":
-            from runtime.derived_field_registry import evaluate_derived_field, derived_field_lineage
+            from factor_engine.runtime.derived_field_registry import evaluate_derived_field, derived_field_lineage
 
             lineage = derived_field_lineage(field)
             self._record_dependency(
@@ -687,7 +687,7 @@ class LQTPLogicalDataSource(_Base):
             # R17-001: the LQTP source is A-share-only; resolve StockMinuteBar in
             # the A-share market registry explicitly, never the implicit legacy
             # default.
-            from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+            from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
             table_spec = MULTI_MARKET_FIELD_REGISTRY.registry_for("ashare").resolve_table(
                 "StockMinuteBar"
@@ -716,7 +716,7 @@ class LQTPLogicalDataSource(_Base):
 
     @classmethod
     def _session_slots(cls, frame: pd.DataFrame) -> pd.DataFrame:
-        from runtime.session_calendar import SessionCalendar
+        from factor_engine.runtime.session_calendar import SessionCalendar
 
         out = frame.copy()
         timestamps = pd.to_datetime(out["timestamp"])
@@ -912,7 +912,7 @@ class LQTPLogicalDataSource(_Base):
                 rows.append((date, inst, self._minute_semantic_aggregate_frame(grp.sort_values("timestamp"), field)))
             agg = pd.DataFrame(rows, columns=["date", "instrument", "value"])
         elif transform in {"minute_bar", "minute_resample"}:
-            from api.source_ref import _strict_int
+            from factor_engine.api.source_ref import _strict_int
 
             period = _strict_int(params.get("period", 1), name="minute period")
             offset = _strict_int(params.get("index", 0), name="minute index")

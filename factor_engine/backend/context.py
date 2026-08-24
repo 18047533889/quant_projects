@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
-from storage.cache import CacheManager
-from storage.datasource import DataSource
+from factor_engine.storage.cache import CacheManager
+from factor_engine.storage.datasource import DataSource
 
 
 @dataclass
@@ -55,7 +55,7 @@ class ExecutionContext:
         # ``storage.sources.data_access_source.register_logical_wrapper``）。
         self._logical_wrapper = None  # type: ignore[attr-defined]
         try:
-            from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+            from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
 
             if not isinstance(self.data_source, LQTPLogicalDataSource):
                 inner = self.data_source
@@ -65,7 +65,7 @@ class ExecutionContext:
                 wrapper = LQTPLogicalDataSource(inner)
                 setattr(wrapper, "_execution_id", self.execution_id)
                 try:
-                    from storage.sources.data_access_source import (
+                    from factor_engine.storage.sources.data_access_source import (
                         register_logical_wrapper,
                     )
 

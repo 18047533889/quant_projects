@@ -7,14 +7,14 @@ R27-003：``ts_mean(close,5)`` 与 ``ts_std(close,20)`` 共享只读 close，但
 """
 from __future__ import annotations
 
-from api.columns import col
-from api.factor import Factor
-from planner.dependency_graph import build_factor_batch_graph
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.planner.dependency_graph import build_factor_batch_graph
 
 
 def _analysis(name: str, cols: set[str], lookback: int = 0):
-    from ir.analyzer import AnalysisResult
-    from ir.nodes import IRNode
+    from factor_engine.ir.analyzer import AnalysisResult
+    from factor_engine.ir.nodes import IRNode
 
     return AnalysisResult(
         ir=IRNode(op="column", attrs={"name": next(iter(cols))}),
@@ -67,8 +67,8 @@ def test_locality_groups_kept_as_hint():
 
 def test_true_factor_dependency_still_serializes():
     # 若一因子 root 真实内嵌另一因子 root（对象 identity），必须串行。
-    from ir.analyzer import AnalysisResult
-    from ir.nodes import IRNode
+    from factor_engine.ir.analyzer import AnalysisResult
+    from factor_engine.ir.nodes import IRNode
 
     inner = IRNode(op="column", attrs={"name": "close"})
     # B 的 IR 内嵌 A 的 IR root → B 依赖 A。

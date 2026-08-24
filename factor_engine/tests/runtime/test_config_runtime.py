@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from runtime.config import load_config
-from runtime.config_runtime import resolve_materialize_kwargs, resolve_run_kwargs
+from factor_engine.runtime.config import load_config
+from factor_engine.runtime.config_runtime import resolve_materialize_kwargs, resolve_run_kwargs
 
 
 def test_resolve_run_kwargs_production_enables_input_dq(tmp_path):

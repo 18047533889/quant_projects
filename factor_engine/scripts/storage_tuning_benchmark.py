@@ -46,7 +46,7 @@ def _install_storage_shim_if_needed() -> None:
     处于中间态（SyntaxError）。本基准只依赖 storage.parquet_batch_writer
     （独立基础设施），在真实包导入失败时安装轻量 shim 包绕过 __init__。"""
     try:
-        import storage  # noqa: F401
+        import factor_engine.storage  # noqa: F401
 
         return
     except Exception:
@@ -63,7 +63,7 @@ def _install_storage_shim_if_needed() -> None:
 
 _install_storage_shim_if_needed()
 
-from storage.parquet_batch_writer import (  # noqa: E402
+from factor_engine.storage.parquet_batch_writer import (  # noqa: E402
     BatchParquetWriter,
     ROW_GROUP_BYTES_LITERALS,
 )

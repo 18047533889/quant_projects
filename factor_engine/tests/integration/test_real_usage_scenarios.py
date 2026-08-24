@@ -103,8 +103,8 @@ def sample_panel_data():
 @pytest.fixture
 def engine_with_data(sample_panel_data):
     """创建带有样本数据的FactorEngine实例"""
-    from runtime.engine import FactorEngine
-    from backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.backend.pandas_backend import PandasBackend
     from tests.helpers import InMemorySeriesSource
 
     # Convert DataFrame columns to Series for InMemorySeriesSource
@@ -128,8 +128,8 @@ def test_scenario_1_technical_indicators(engine_with_data):
     - 动量指标（RSI, MACD, KDJ）
     - 趋势指标（ADX, Aroon）
     """
-    from api import col, Factor
-    from api.operator_registry import build_dsl_allowlist
+    from factor_engine.api import col, Factor
+    from factor_engine.api.operator_registry import build_dsl_allowlist
 
     # Get all available operators
     allowlist = build_dsl_allowlist(surface="extended")
@@ -168,7 +168,7 @@ def test_scenario_1_technical_indicators(engine_with_data):
     for op_name, expr_str, description in technical_indicators:
         try:
             # Parse and execute expression
-            from api.dsl_parser import parse_expr
+            from factor_engine.api.dsl_parser import parse_expr
             expr = parse_expr(expr_str)
             factor = Factor(name=f"test_{op_name}", expr=expr)
             result = engine_with_data.run(factor)
@@ -237,9 +237,9 @@ def test_scenario_2_fundamental_factors(engine_with_data):
     - 成长性指标（revenue_growth, profit_growth）
     - 质量指标（ROE, ROA, gross_margin）
     """
-    from api.dsl_parser import parse_expr
-    from api import Factor
-    from api.operator_registry import build_dsl_allowlist
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.api import Factor
+    from factor_engine.api.operator_registry import build_dsl_allowlist
 
     allowlist = build_dsl_allowlist(surface="extended")
 
@@ -333,9 +333,9 @@ def test_scenario_3_cross_sectional_factors(engine_with_data):
     - 中性化（neutralize, cs_neutralize, group_neutralize）
     - 截面回归（cs_regression）
     """
-    from api.dsl_parser import parse_expr
-    from api import Factor
-    from api.operator_registry import build_dsl_allowlist
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.api import Factor
+    from factor_engine.api.operator_registry import build_dsl_allowlist
 
     allowlist = build_dsl_allowlist(surface="extended")
 
@@ -429,8 +429,8 @@ def test_scenario_4_composite_factors(engine_with_data):
     - 复杂组合（4+层嵌套）
     - 多输入组合
     """
-    from api.dsl_parser import parse_expr
-    from api import Factor
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.api import Factor
 
     # Define composite factor test cases
     composite_factors = [
@@ -517,8 +517,8 @@ def test_scenario_5_batch_alpha_factors(engine_with_data):
     测试100个常用的alpha因子表达式，确保全部可计算。
     这些因子来自实际研究场景中最常用的模式。
     """
-    from api.dsl_parser import parse_expr
-    from api import Factor
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.api import Factor
 
     # Generate 100 common alpha factor patterns
     alpha_factors = []
@@ -672,7 +672,7 @@ def test_generate_comprehensive_report(engine_with_data, tmp_path):
     汇总所有场景的测试结果，生成详细的Markdown报告。
     """
     import datetime
-    from api.operator_registry import build_dsl_allowlist
+    from factor_engine.api.operator_registry import build_dsl_allowlist
 
     # Get all available operators
     allowlist = build_dsl_allowlist(surface="all")

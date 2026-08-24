@@ -13,10 +13,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.technical.kalman_variants  # noqa: F401
+import factor_engine.cleaned_operators.technical.kalman_variants  # noqa: F401
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
@@ -64,7 +64,7 @@ def _with_outliers(df: pd.DataFrame, outlier_positions: list[int], scale: float 
 @pytest.mark.parametrize("name", CANONICALS)
 def test_registered_and_classified(name: str) -> None:
     """All four operators are registered and classified as extended."""
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     assert OperatorRegistry.get(name) is not None, f"{name} not registered"
     classification = classify_canonical(name)
@@ -74,7 +74,7 @@ def test_registered_and_classified(name: str) -> None:
 @pytest.mark.parametrize("name", CANONICALS)
 def test_explicit_policy_present(name: str) -> None:
     """All four operators have explicit policies in r47_policy_pack."""
-    from cleaned_operators.r47_policy_pack import _R47_POLICIES
+    from factor_engine.cleaned_operators.r47_policy_pack import _R47_POLICIES
 
     assert name in _R47_POLICIES, f"{name} missing from _R47_POLICIES"
     policy = _R47_POLICIES[name]
@@ -385,6 +385,6 @@ def test_all_nan_input(name: str) -> None:
 @pytest.mark.parametrize("name", CANONICALS)
 def test_polars_bridge_registered(name: str) -> None:
     """Polars backend bridge is registered (delegates to pandas)."""
-    from cleaned_operators.rolling_pack import _POLARS_BRIDGES
+    from factor_engine.cleaned_operators.rolling_pack import _POLARS_BRIDGES
 
     assert name in _POLARS_BRIDGES, f"{name} missing Polars bridge"

@@ -13,7 +13,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from storage.cache import PersistentPlanCache, _load_value, _save_value
+from factor_engine.storage.cache import PersistentPlanCache, _load_value, _save_value
 
 
 def test_cache_key_digest_stored_on_write(tmp_path):

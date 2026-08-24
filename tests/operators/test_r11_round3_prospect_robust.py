@@ -19,9 +19,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.base import ParamRole
-from cleaned_operators.operator_surface import classify_canonical
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.base import ParamRole
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 pl = pytest.importorskip("polars")
 

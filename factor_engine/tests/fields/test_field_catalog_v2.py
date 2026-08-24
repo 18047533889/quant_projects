@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from fields import FIELD_REGISTRY, FieldRegistry, FieldSpec, TableSpec
+from factor_engine.fields import FIELD_REGISTRY, FieldRegistry, FieldSpec, TableSpec
 
 
 def test_catalog_v2_is_deterministic_and_semantic() -> None:
@@ -81,7 +81,7 @@ def test_one_to_many_fields_cannot_be_mined_directly() -> None:
 
 
 def test_data_access_normalizes_registered_units_without_filling_nan(monkeypatch) -> None:
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     source = DataAccessSource(dataset="ashare_stock_daily")
     values = pd.Series([10_000.0, np.nan], dtype=float)
@@ -98,7 +98,7 @@ def test_data_access_normalizes_registered_units_without_filling_nan(monkeypatch
 
 
 def test_data_access_resolves_catalog_physical_columns() -> None:
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     daily = DataAccessSource(dataset="ashare_stock_daily")
     physical, output = daily._resolve_columns(["ret", "close"])

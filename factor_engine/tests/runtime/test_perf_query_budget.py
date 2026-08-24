@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from backend.context import ExecutionContext
-from runtime.perf_config import PerfConfig
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.runtime.perf_config import PerfConfig
 
 
 def test_perf_config_build_query_budget(monkeypatch):

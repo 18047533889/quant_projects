@@ -18,8 +18,8 @@ import tokenize
 import numpy as np
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 import importlib.util
 from pathlib import Path
@@ -68,7 +68,7 @@ def test_claimed_backends_are_instantiables():
 def test_unknown_kwargs_rejected():
     """Passing an undeclared keyword parameter must raise OperatorParameterError
     (not be silently swallowed by **kwargs)."""
-    from backend.operator_errors import OperatorParameterError
+    from factor_engine.backend.operator_errors import OperatorParameterError
 
     op = OperatorRegistry.get("ts_mean", "pandas_numpy")
     x = audit._panels()["x"]
@@ -78,7 +78,7 @@ def test_unknown_kwargs_rejected():
 
 def test_scalar_param_out_of_domain_fails_closed():
     """A window < 1 must be rejected by the parameter contract."""
-    from backend.operator_errors import OperatorParameterError
+    from factor_engine.backend.operator_errors import OperatorParameterError
 
     op = OperatorRegistry.get("ts_mean", "pandas_numpy")
     x = audit._panels()["x"]
@@ -89,7 +89,7 @@ def test_scalar_param_out_of_domain_fails_closed():
 def test_no_bare_kwargs_swallowing_behavioral():
     """Passing an unknown keyword must be REJECTED across families (not silently
     swallowed by a **kwargs forwarder).  A representative cross-family sample."""
-    from backend.operator_errors import OperatorParameterError
+    from factor_engine.backend.operator_errors import OperatorParameterError
 
     x = audit._panels()["x"]
     y = audit._panels()["ret"]
@@ -117,7 +117,7 @@ def test_no_bare_kwargs_swallowing_behavioral():
 
 def test_parameter_feasibility_contracts():
     """Rank/window/component feasibility must hold at runtime (R28 §一百三十二)."""
-    from backend.operator_errors import OperatorParameterError
+    from factor_engine.backend.operator_errors import OperatorParameterError
 
     x = audit._panels()["x"]
     # ts_bottomk requires k <= window (feasibility) — an infeasible k must fail

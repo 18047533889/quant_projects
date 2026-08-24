@@ -6,14 +6,14 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from api.label_pit import (
+from factor_engine.api.label_pit import (
     LabelWindowSpec,
     align_feature_and_label_windows,
     assert_label_feature_no_overlap,
     build_forward_return_series,
     default_mining_label_config,
 )
-from runtime.pit_audit import PitSafetyError
+from factor_engine.runtime.pit_audit import PitSafetyError
 
 pd = pytest.importorskip("pandas")
 

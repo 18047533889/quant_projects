@@ -35,7 +35,7 @@ def _repo_relative(path: Path) -> str:
 
 @pytest.fixture(scope="module")
 def _evidence_provenance():
-    import backend.evidence_provenance as ep
+    import factor_engine.backend.evidence_provenance as ep
 
     return ep
 

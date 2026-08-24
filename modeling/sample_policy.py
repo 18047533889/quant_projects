@@ -25,7 +25,7 @@ import pandas as pd
 
 from modeling.contracts import LabelContract, SampleAdequacyContract, sample_adequacy_met
 from modeling.dataset import PanelDataset
-from market.exchange_session_calendar import ExchangeSessionCalendar
+from factor_engine.market.exchange_session_calendar import ExchangeSessionCalendar
 
 __all__ = [
     "SampleWeightPolicy",

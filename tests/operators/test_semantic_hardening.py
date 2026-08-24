@@ -6,11 +6,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from api.dsl_parser import parse_expr
-from cleaned_operators import load_all
-from cleaned_operators.operator_surface import classify_canonical
-from cleaned_operators.registry import OperatorRegistry
-from ir.analyzer import Analyzer
+from factor_engine.api.dsl_parser import parse_expr
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.ir.analyzer import Analyzer
 
 
 @pytest.fixture(scope="module", autouse=True)

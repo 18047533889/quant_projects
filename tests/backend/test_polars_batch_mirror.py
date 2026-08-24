@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 pytest.importorskip("polars")
 
@@ -17,13 +17,13 @@ def _load():
 
 @pytest.mark.parametrize("canonical", ["nan_to_num", "protected_log", "rank_transform", "product", "quarter", "ttm", "yoy", "row_kurt", "row_skew", "row_prod"])
 def test_removed_batch_mirror_names_are_not_daily(canonical: str):
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
 
     assert canonical not in DAILY_CANONICALS
 
 
 def test_daily_polars_coverage_is_evidence_backed():
-    from backend.fastpath_evidence import polars_executed_parity_canonicals
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.backend.fastpath_evidence import polars_executed_parity_canonicals
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
 
     assert DAILY_CANONICALS <= polars_executed_parity_canonicals()

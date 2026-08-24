@@ -25,12 +25,12 @@ import inspect
 import numpy as np
 import pandas as pd
 
-import cleaned_operators.cross_spectrum  # noqa: F401  (registers)
-import cleaned_operators.research_spectral  # noqa: F401  (registers)
+import factor_engine.cleaned_operators.cross_spectrum  # noqa: F401  (registers)
+import factor_engine.cleaned_operators.research_spectral  # noqa: F401  (registers)
 
-from cleaned_operators.cross_spectrum import _cross_spectrum_window
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.research_spectral import (
+from factor_engine.cleaned_operators.cross_spectrum import _cross_spectrum_window
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.research_spectral import (
     _bicoherence_top_decile_excess,
     _bicoherence_top_decile_mean,
     _kernel_granger_score,
@@ -182,7 +182,7 @@ def test_residualized_hsic_public_op_exposes_purge_gap() -> None:
 # P1-14 — cross-spectral phase coherence gate
 # ---------------------------------------------------------------------------
 def test_cross_spectral_phase_default_gate_is_nonzero() -> None:
-    from cleaned_operators.cross_spectrum import _ts_cross_spectral_phase
+    from factor_engine.cleaned_operators.cross_spectrum import _ts_cross_spectral_phase
 
     sig = inspect.signature(_ts_cross_spectral_phase)
     # was 0.0 (every finite spectrum emitted a random angle); now a meaningful

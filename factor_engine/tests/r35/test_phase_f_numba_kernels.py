@@ -24,8 +24,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-import backend.numba_kernels  # noqa: E402  (registers kernels)
-from backend.numba_kernel_registry import (  # noqa: E402
+import factor_engine.backend.numba_kernels  # noqa: E402  (registers kernels)
+from factor_engine.backend.numba_kernel_registry import (  # noqa: E402
     NumbaKernelRegistry,
     NUMBA_AVAILABLE,
     benchmark_kernel,

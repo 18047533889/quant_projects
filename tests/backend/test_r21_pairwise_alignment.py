@@ -19,7 +19,7 @@ import pytest
 
 import polars as pl
 
-from backend.pairwise_alignment import (
+from factor_engine.backend.pairwise_alignment import (
     AlignmentMode,
     PanelSchemaMismatchError,
     PairwiseAlignmentSpec,
@@ -300,7 +300,7 @@ class TestProductionAlignmentPolicy:
 class TestDuplicateKeyFail:
     def test_duplicate_keys_raise(self):
         """Duplicate (ts, inst) keys in long-panel raise AlignmentError (wrapped as PanelSchemaMismatchError)."""
-        from backend.long_alignment import AlignmentError
+        from factor_engine.backend.long_alignment import AlignmentError
 
         # Create a frame with duplicate keys
         lf = pl.DataFrame(

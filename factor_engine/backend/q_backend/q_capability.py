@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Literal
 
-from backend.q_backend.q_physical_implementation_registry import (
+from factor_engine.backend.q_backend.q_physical_implementation_registry import (
     QPhysicalImplementationRegistry,
     get_q_physical_implementation_registry,
 )

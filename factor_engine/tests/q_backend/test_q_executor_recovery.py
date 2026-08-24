@@ -10,14 +10,14 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from backend.q_backend.q_compiler import QRegionPlan
-from backend.q_backend.q_adapter import QResidentTableHandle
-from backend.q_backend.q_errors import (
+from factor_engine.backend.q_backend.q_compiler import QRegionPlan
+from factor_engine.backend.q_backend.q_adapter import QResidentTableHandle
+from factor_engine.backend.q_backend.q_errors import (
     QDataUnavailableError,
     QExecutionError,
     QProcessUnavailableError,
 )
-from backend.q_backend.q_executor import (
+from factor_engine.backend.q_backend.q_executor import (
     QExecutionFallbackPolicy,
     QExecutionResult,
     QExecutor,
@@ -25,7 +25,7 @@ from backend.q_backend.q_executor import (
     get_q_executor_telemetry,
     reset_q_executor_telemetry,
 )
-from backend.q_backend.q_process_manager import QAvailabilityStatus
+from factor_engine.backend.q_backend.q_process_manager import QAvailabilityStatus
 
 
 def _plan(
@@ -65,7 +65,7 @@ def test_public_executor_abi_is_importable_and_constructible():
 
 
 def test_q_backend_module_import_resolves_executor_symbols():
-    from backend.q_backend.q_backend import QBackend
+    from factor_engine.backend.q_backend.q_backend import QBackend
 
     assert QBackend.__name__ == "QBackend"
 
@@ -166,7 +166,7 @@ def test_batch_fan_in_preserves_base_and_all_resident_predecessors(monkeypatch):
         is_resident = kwargs["return_resident_handle"]
         handle = None
         if is_resident:
-            from backend.q_backend.q_adapter import QResidentTableHandle
+            from factor_engine.backend.q_backend.q_adapter import QResidentTableHandle
 
             handle = QResidentTableHandle(
                 table_name=plan.output_table,

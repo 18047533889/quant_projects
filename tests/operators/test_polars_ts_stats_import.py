@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from cleaned_operators.base import ParamRole
+from factor_engine.cleaned_operators.base import ParamRole
 
 
 _MODULE_PATH = (
@@ -16,8 +16,8 @@ _MODULE_PATH = (
 
 
 def _load_by_path(monkeypatch, *, bridge_threshold: bool = False):
-    import cleaned_operators.base as base
-    import cleaned_operators.base_polars as base_polars
+    import factor_engine.cleaned_operators.base as base
+    import factor_engine.cleaned_operators.base_polars as base_polars
 
     if bridge_threshold:
         class _ImportProbeParamRole:

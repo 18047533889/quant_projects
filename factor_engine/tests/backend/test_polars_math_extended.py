@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 pd = pytest.importorskip("pandas")
 pl = pytest.importorskip("polars")
@@ -119,7 +119,7 @@ def test_atan2_lerp_polars_matches_pandas():
 
 
 def test_removed_convenience_names_are_not_daily():
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
 
     for name in ("avg2", "at_imax", "at_imin", "digital_count", "blom_transform"):
         assert name not in DAILY_CANONICALS

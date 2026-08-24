@@ -86,7 +86,7 @@ def assert_production_run_flags(
     incremental_history_satisfied = False
     if not auto_warmup:
         try:
-            from runtime.incremental import consume_incremental_history_certificate
+            from factor_engine.runtime.incremental import consume_incremental_history_certificate
 
             incremental_history_satisfied = consume_incremental_history_certificate()
         except ImportError:
@@ -155,8 +155,8 @@ def assert_production_plan_ops(
 ) -> None:
     if not is_production_mode(mode):
         return
-    from backend.pandas_first_signature import check_pandas_first_plan_signatures
-    from cleaned_operators.operator_spec import check_production_plan_ops
+    from factor_engine.backend.pandas_first_signature import check_pandas_first_plan_signatures
+    from factor_engine.cleaned_operators.operator_spec import check_production_plan_ops
 
     violations = check_production_plan_ops(plan)
     violations.extend(check_pandas_first_plan_signatures(plan))
@@ -178,7 +178,7 @@ def assert_production_fastpath_plan(
 ) -> None:
     if not is_production_mode(mode) or not _fastpath_gate_enabled():
         return
-    from backend.production_fastpath_gate import (
+    from factor_engine.backend.production_fastpath_gate import (
         check_production_fastpath_plan_ops,
         fastpath_gate_strict,
     )
@@ -200,7 +200,7 @@ def assert_production_fastpath_runtime(
 ) -> None:
     if not is_production_mode(mode) or not _fastpath_gate_enabled():
         return
-    from backend.production_fastpath_gate import audit_runtime_fastpath_violations
+    from factor_engine.backend.production_fastpath_gate import audit_runtime_fastpath_violations
 
     runtime = dict(getattr(ctx, "runtime_stats", None) or {})
     violations = audit_runtime_fastpath_violations(runtime)
@@ -218,11 +218,11 @@ def assert_no_unapproved_map_groups_in_production(
 ) -> None:
     if not is_production_mode(mode) or not _fastpath_gate_enabled():
         return
-    from backend.polars_long_policy import infer_polars_long_tier
-    from backend.polars_long_production import (
+    from factor_engine.backend.polars_long_policy import infer_polars_long_tier
+    from factor_engine.backend.polars_long_production import (
         APPROVED_POLARS_LONG_MAP_GROUPS_PRODUCTION,
     )
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     bad: list[str] = []
 
@@ -254,7 +254,7 @@ def record_production_fastpath_check(
         runtime["production_fastpath_required"] = False
         ctx.runtime_stats = runtime
         return
-    from backend.production_fastpath_gate import (
+    from factor_engine.backend.production_fastpath_gate import (
         check_production_fastpath_plan_ops,
         fastpath_gate_strict,
     )
@@ -278,10 +278,10 @@ def assert_production_factors(
 ) -> None:
     if not is_production_mode(mode):
         return
-    from api.mining_integration import validate_production_dsl
-    from api.dsl_parser import parse_expr
-    from ir.analyzer import Analyzer
-    from storage.catalog import compute_ir_hash
+    from factor_engine.api.mining_integration import validate_production_dsl
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.ir.analyzer import Analyzer
+    from factor_engine.storage.catalog import compute_ir_hash
 
     violations: list[str] = []
     for factor in factors:

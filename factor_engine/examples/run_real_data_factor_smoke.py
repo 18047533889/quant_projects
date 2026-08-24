@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from runtime.real_data_factor_smoke import run_all_dataset_smokes
+from factor_engine.runtime.real_data_factor_smoke import run_all_dataset_smokes
 from workspace_paths import resolve_path
 import os
 

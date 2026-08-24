@@ -393,12 +393,12 @@ class FactorEngineStressTester:
 
 def test_simple_factor_compilation(num_factors: int) -> dict:
     """Test compilation of simple factors."""
-    from api.columns import col
-    from api.factor import Factor
-    from api import rank, ts_mean
-    from backend.debug_backend import DebugBackend
-    from runtime.engine import FactorEngine
-    from storage.datasource import DataSource
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.api import rank, ts_mean
+    from factor_engine.backend.debug_backend import DebugBackend
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.storage.datasource import DataSource
 
     class DummyDataSource(DataSource):
         def load_column(self, name: str):
@@ -424,12 +424,12 @@ def test_simple_factor_compilation(num_factors: int) -> dict:
 
 def test_deep_dag_compilation(depth: int) -> dict:
     """Test compilation of deeply nested factor DAG."""
-    from api.columns import col
-    from api.factor import Factor
-    from api import ts_mean
-    from backend.debug_backend import DebugBackend
-    from runtime.engine import FactorEngine
-    from storage.datasource import DataSource
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.api import ts_mean
+    from factor_engine.backend.debug_backend import DebugBackend
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.storage.datasource import DataSource
 
     class DummyDataSource(DataSource):
         def load_column(self, name: str):
@@ -450,12 +450,12 @@ def test_deep_dag_compilation(depth: int) -> dict:
 
 def test_wide_dag_compilation(width: int) -> dict:
     """Test compilation of wide factor DAG (many parallel factors)."""
-    from api.columns import col
-    from api.factor import Factor
-    from api import ts_mean, rank, ts_std
-    from backend.debug_backend import DebugBackend
-    from runtime.engine import FactorEngine
-    from storage.datasource import DataSource
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.api import ts_mean, rank, ts_std
+    from factor_engine.backend.debug_backend import DebugBackend
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.storage.datasource import DataSource
 
     class DummyDataSource(DataSource):
         def load_column(self, name: str):
@@ -503,12 +503,12 @@ def test_memory_allocation_limit(size_mb: int) -> dict:
 def test_concurrent_factor_requests(num_concurrent: int, complexity: int) -> dict:
     """Test concurrent factor compilation/execution."""
     import threading
-    from api.columns import col
-    from api.factor import Factor
-    from api import ts_mean
-    from backend.debug_backend import DebugBackend
-    from runtime.engine import FactorEngine
-    from storage.datasource import DataSource
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.api import ts_mean
+    from factor_engine.backend.debug_backend import DebugBackend
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.storage.datasource import DataSource
 
     class DummyDataSource(DataSource):
         def load_column(self, name: str):
@@ -555,12 +555,12 @@ def test_process_pool_factor_execution(num_processes: int) -> dict:
 
     def compile_factor(factor_id: int):
         # Import inside worker
-        from api.columns import col
-        from api.factor import Factor
-        from api import ts_mean
-        from backend.debug_backend import DebugBackend
-        from runtime.engine import FactorEngine
-        from storage.datasource import DataSource
+        from factor_engine.api.columns import col
+        from factor_engine.api.factor import Factor
+        from factor_engine.api import ts_mean
+        from factor_engine.backend.debug_backend import DebugBackend
+        from factor_engine.runtime.engine import FactorEngine
+        from factor_engine.storage.datasource import DataSource
 
         class DummyDataSource(DataSource):
             def load_column(self, name: str):

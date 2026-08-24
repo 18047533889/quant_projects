@@ -19,8 +19,8 @@ def _bootstrap() -> None:
     fe = str(FE_ROOT)
     if fe not in sys.path:
         sys.path.insert(0, fe)
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
@@ -33,8 +33,8 @@ def _validate_strict(
     require_dual_backend: bool = False,
 ) -> list[str]:
     """严格模式校验：production core 全覆盖、SQL emitter 与 block_reason 完整性。"""
-    from backend.operator_capability import resolve_canonical
-    from cleaned_operators.operator_spec import (
+    from factor_engine.backend.operator_capability import resolve_canonical
+    from factor_engine.cleaned_operators.operator_spec import (
         PRODUCTION_CORE_CANONICALS,
         PRODUCTION_DUAL_BACKEND_CORE_CANONICALS,
     )
@@ -72,9 +72,9 @@ def _validate_strict(
             errors.append(f"PRODUCTION_CORE {rc}: 缺少 fastpath_block_reason")
 
     if require_dual_backend:
-        from backend.polars_long_production import POLARS_LONG_FASTPATH_DEFERRED
-        from backend.sql_tiers import SQL_PRODUCTION_DEFERRED_CANONICALS
-        from planner.composite_lowering import infer_execution_kind
+        from factor_engine.backend.polars_long_production import POLARS_LONG_FASTPATH_DEFERRED
+        from factor_engine.backend.sql_tiers import SQL_PRODUCTION_DEFERRED_CANONICALS
+        from factor_engine.planner.composite_lowering import infer_execution_kind
 
         for r in rows:
             if not r.allow_in_production:
@@ -132,12 +132,12 @@ def main() -> int:
 
     _bootstrap()
 
-    from backend.fastpath_coverage import (
+    from factor_engine.backend.fastpath_coverage import (
         build_fastpath_coverage_matrix,
         summarize_fastpath_coverage,
     )
-    from backend.operator_capability import resolve_canonical
-    from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
+    from factor_engine.backend.operator_capability import resolve_canonical
+    from factor_engine.cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
 
     if args.production_core_only:
         rows = build_fastpath_coverage_matrix(sorted(PRODUCTION_CORE_CANONICALS))

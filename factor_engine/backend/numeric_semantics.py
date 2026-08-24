@@ -59,7 +59,7 @@ def moment_convention_for(canon: str) -> MomentConvention:
     与 ``semantics_for`` 的 ``std_ddof`` 对齐（sample -> ddof=1，
     population -> ddof=0）。
     """
-    from backend.numeric_semantics import std_ddof_value
+    from factor_engine.backend.numeric_semantics import std_ddof_value
 
     try:
         ddof = std_ddof_value(canon)
@@ -173,7 +173,7 @@ def semantics_for(canon: str) -> NumericSemantics:
     返回:
         对应的 ``NumericSemantics`` 配置。
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     return OPERATOR_SEMANTICS.get(name, DEFAULT_SEMANTICS)
@@ -211,28 +211,28 @@ def protected_div_default() -> float:
 
 def rank_ignore_nan(canon: str) -> bool:
     """截面/组内 rank 是否忽略 NaN（输出仍为 null）。"""
-    from backend.rank_spec import rank_ignore_nan as _rank_ignore_nan
+    from factor_engine.backend.rank_spec import rank_ignore_nan as _rank_ignore_nan
 
     return _rank_ignore_nan(canon)
 
 
 def zscore_zero_std_fill(canon: str) -> float | None:
     """std=0 时 zscore 填充值；``null`` 策略返回 ``None``。"""
-    from backend.cross_section_spec import zscore_zero_std_fill as _zscore_zero_std_fill
+    from factor_engine.backend.cross_section_spec import zscore_zero_std_fill as _zscore_zero_std_fill
 
     return _zscore_zero_std_fill(canon)
 
 
 def normalize_single_valid_is_null() -> bool:
     """截面 normalize：仅一个有效值时输出 NULL（非常数截面）。"""
-    from backend.cross_section_spec import normalize_single_valid_is_null as _norm_single
+    from factor_engine.backend.cross_section_spec import normalize_single_valid_is_null as _norm_single
 
     return _norm_single()
 
 
 def normalize_constant_cross_section_fill() -> float:
     """截面 normalize：全部有效值相同（span=0）时输出 0.5。"""
-    from backend.cross_section_spec import normalize_constant_cross_section_fill as _norm_const
+    from factor_engine.backend.cross_section_spec import normalize_constant_cross_section_fill as _norm_const
 
     return _norm_const()
 
@@ -358,7 +358,7 @@ def rank_tie_method(canon: str) -> str:
     """截面/组内/时序 rank 并列策略（见 ``rank_spec.RANK_SPECS``）。"""
     if canon in {"ts_argmax", "ts_argmin"}:
         return "first"
-    from backend.rank_spec import rank_tie_method as _rank_tie_method
+    from factor_engine.backend.rank_spec import rank_tie_method as _rank_tie_method
 
     return _rank_tie_method(canon)
 
@@ -390,7 +390,7 @@ def canonical_numeric_algorithm(canon: str) -> str:
     不得用朴素 numpy 顺序累加。声明进 numeric contract，parity evidence 据此
     检查实现。
     """
-    from cleaned_operators._numpy_kernels import canonical_numeric_algorithm as _cna
+    from factor_engine.cleaned_operators._numpy_kernels import canonical_numeric_algorithm as _cna
 
     return _cna(canon)
 

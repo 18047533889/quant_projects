@@ -116,7 +116,7 @@ def fit_pca_block(X: np.ndarray, n_components: int, *, min_obs: int = 2) -> PCAB
     R38 P0-060（§23）：fit 走唯一 authoritative ``PCAState``（coverage-gated
     active + 标准化 SVD），与 canonical ``panel_model._pca_svd`` 逐位一致。
     """
-    from cleaned_operators.cross_section.pca_state import PCAState, pca_commonality
+    from factor_engine.cleaned_operators.cross_section.pca_state import PCAState, pca_commonality
 
     state = PCAState.from_window(X, n_components, absolute_min_obs=int(min_obs))
     if state is None:

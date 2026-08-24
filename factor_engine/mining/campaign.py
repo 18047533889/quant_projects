@@ -12,17 +12,17 @@ from threading import RLock
 from types import MappingProxyType
 from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence
 
-from api.factor import Factor
-from expr.base import Expr
-from expr.cleaned_call import CleanedCall
-from expr.column import ColumnRef
-from expr.field import FieldRef
+from factor_engine.api.factor import Factor
+from factor_engine.expr.base import Expr
+from factor_engine.expr.cleaned_call import CleanedCall
+from factor_engine.expr.column import ColumnRef
+from factor_engine.expr.field import FieldRef
 
 
 def compiler_generation() -> str:
     """Return a deterministic generation for compile-result invalidation."""
-    from cleaned_operators.operator_policy import compute_operator_catalog_hash
-    from fields import compute_field_catalog_hash
+    from factor_engine.cleaned_operators.operator_policy import compute_operator_catalog_hash
+    from factor_engine.fields import compute_field_catalog_hash
 
     payload = {
         "field_catalog": compute_field_catalog_hash(),
@@ -80,7 +80,7 @@ def _expr_payload(expr: Expr) -> dict[str, Any]:
         return {"kind": "column", "name": expr.name}
     if isinstance(expr, CleanedCall):
         try:
-            from cleaned_operators.registry import OperatorRegistry
+            from factor_engine.cleaned_operators.registry import OperatorRegistry
 
             op = OperatorRegistry._aliases.get(expr.op, expr.op)
         except (ImportError, AttributeError, RuntimeError):

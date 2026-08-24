@@ -7,17 +7,6 @@ from types import MappingProxyType
 from typing import Any, Mapping
 
 
-class DuplicateLogicalNodeIdentityError(ValueError):
-    """R21-LOGICAL-NODE-ID: two DISTINCT objects carry the same canonical node_id.
-
-    Plan graph discovery keys every node by ``node_id``.  When two distinct
-    objects claim the same id the graph is ambiguous (the id can no longer
-    identify a single node) and a silent rename would make the physical graph
-    depend on traversal order / object identity — the same formula could produce
-    different physical graphs across runs.  Fail closed instead.
-    """
-
-
 @dataclass(frozen=True)
 class PlanNode:
     """单棵计划子树：算子名、有序子节点、属性字典。

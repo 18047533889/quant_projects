@@ -29,12 +29,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 
 load_all()
 
-from cleaned_operators.directional_change import _dc_column
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.directional_change import _dc_column
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 _DC_NAMES = (
     "ts_dc_overshoot_ratio",

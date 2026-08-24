@@ -21,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from planner.physical_factor_dag import PhysicalFactorTask
+from factor_engine.planner.physical_factor_dag import PhysicalFactorTask
 
 
 @dataclass(frozen=True)
@@ -73,7 +73,7 @@ def dispatch_micro_batch(
         results:  ``{task_id: result}``
         failures: ``{task_id: exception}``
     """
-    from runtime.execution_traits import thread_budget
+    from factor_engine.runtime.execution_traits import thread_budget
 
     results: dict[str, Any] = {}
     failures: dict[str, BaseException] = {}

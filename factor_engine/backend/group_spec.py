@@ -31,7 +31,7 @@ GROUP_SPECS: dict[str, GroupSpec] = {
 
 
 def group_spec_for(canon: str) -> GroupSpec:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     return GROUP_SPECS.get(name, GroupSpec())

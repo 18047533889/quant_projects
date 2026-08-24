@@ -20,7 +20,7 @@ _STORE_PATH = os.path.join("docs", "evidence", "r37", "R37_PARAMETER_DOMAIN_STOR
 
 def _dims(canonical: str) -> dict:
     """R39 #28：与审计脚本 ``_certify_dimensions`` 一致的全维度 identity。"""
-    from backend.operator_semantic_version import versioned_name
+    from factor_engine.backend.operator_semantic_version import versioned_name
 
     return {
         "semantic_version": versioned_name(canonical),
@@ -33,7 +33,7 @@ def _dims(canonical: str) -> dict:
 
 
 def _load_store():
-    from runtime.parameter_domain_store import ParameterDomainCertificationStore
+    from factor_engine.runtime.parameter_domain_store import ParameterDomainCertificationStore
 
     store = ParameterDomainCertificationStore()
     n = store.load_json(_STORE_PATH)
@@ -101,8 +101,8 @@ def test_production_assert_parameter_point_fail_closed():
     """
     import os
 
-    from runtime.exceptions import ParameterDomainError
-    from runtime.parameter_domain_store import (
+    from factor_engine.runtime.exceptions import ParameterDomainError
+    from factor_engine.runtime.parameter_domain_store import (
         ParameterDomainCertificationStore,
         assert_parameter_point_certified,
         reset_parameter_domain_store,
@@ -143,7 +143,7 @@ def test_production_assert_parameter_point_fail_closed():
 
 def test_research_uncertified_allow_telemetry():
     """P0-009：research + uncertified => allow（不抛）。"""
-    from runtime.parameter_domain_store import (
+    from factor_engine.runtime.parameter_domain_store import (
         ParameterDomainCertificationStore,
         assert_parameter_point_certified,
     )
@@ -160,8 +160,8 @@ def test_assert_parameter_domain_ready_loads_and_freshness():
     ``assert_parameter_domain_ready`` 从默认 R37 证据装载；当 store 被显式伪造
     generated_commit 与当前 HEAD 不一致时 strict 拒绝（旧 SHA 证据不得悄悄存在）。
     """
-    from runtime.exceptions import ParameterDomainError
-    from runtime.parameter_domain_store import (
+    from factor_engine.runtime.exceptions import ParameterDomainError
+    from factor_engine.runtime.parameter_domain_store import (
         assert_parameter_domain_ready,
         get_parameter_domain_store,
         reset_parameter_domain_store,
@@ -179,7 +179,7 @@ def test_assert_parameter_domain_ready_loads_and_freshness():
     assert store._loaded and len(store._points) > 0, "默认证据必须已装载"
     assert store._evidence_hash, "装载后必须记录证据 hash"
     # 负控：已知 invalid 点不得 certified（证据完整性）
-    from runtime.parameter_domain_store import run_negative_controls
+    from factor_engine.runtime.parameter_domain_store import run_negative_controls
 
     run_negative_controls(store)  # 不抛即通过
 
@@ -204,8 +204,8 @@ def test_default_param_call_is_certified_after_bound_normalization():
     ``ts_mean(x)``（window 走默认 20、attrs 无 window）合成 ``{window: 20}`` 参数点，
     命中认证点 → 不抛；而 ``window=13``（未认证）即使 production 也必须 fail closed。
     """
-    from runtime.exceptions import ParameterDomainError
-    from runtime.parameter_domain_store import (
+    from factor_engine.runtime.exceptions import ParameterDomainError
+    from factor_engine.runtime.parameter_domain_store import (
         ParameterDomainCertificationStore,
         assert_parameter_point_certified,
     )
@@ -226,7 +226,7 @@ def test_default_param_call_is_certified_after_bound_normalization():
 
 def test_certification_key_distinguishes_points():
     """P0-006：认证 key 必须区分精确参数点。"""
-    from runtime.parameter_domain_store import CertificationKey
+    from factor_engine.runtime.parameter_domain_store import CertificationKey
 
     k1 = CertificationKey.from_kwargs("ts_mean", {"window": 20})
     k2 = CertificationKey.from_kwargs("ts_mean", {"window": 60})

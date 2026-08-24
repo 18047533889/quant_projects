@@ -26,17 +26,17 @@ import pytest
 
 pl = pytest.importorskip("polars")
 
-from cleaned_operators.common.polars_robust_stats import (  # noqa: E402
+from factor_engine.cleaned_operators.common.polars_robust_stats import (  # noqa: E402
     ts_best_lag_corr_excess as pl_best_lag_corr_excess,
     ts_best_lag_corr_raw as pl_best_lag_corr_raw,
     ts_current_drawdown_duration as pl_drawdown_duration,
 )
-from cleaned_operators.downside_risk import (  # noqa: E402
+from factor_engine.cleaned_operators.downside_risk import (  # noqa: E402
     TsBestLagCorrExcess,
     TsBestLagCorrRaw,
     TsCurrentDrawdownDuration,
 )
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 
 @pytest.fixture(scope="session", autouse=True)

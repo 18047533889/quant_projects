@@ -70,23 +70,23 @@ def main() -> int:
     sha = git_sha()
     now = time.strftime("%Y-%m-%dT%H:%M:%S%z")
 
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
-    from cleaned_operators.model_timing import (
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.model_timing import (
         MODEL_TIMING_CONTRACTS,
         get_model_timing_contract,
         is_model_like_name,
     )
-    from cleaned_operators.model_lane import (
+    from factor_engine.cleaned_operators.model_lane import (
         assign_model_lane,
         model_lane_inventory,
         model_lane_errors,
     )
-    from cleaned_operators.model_contract import (
+    from factor_engine.cleaned_operators.model_contract import (
         feature_label_timing_of,
         get_model_operator_contract,
     )
-    from cleaned_operators.model_lane import _category_of
+    from factor_engine.cleaned_operators.model_lane import _category_of
 
     load_all()
     canonicals = sorted(OperatorRegistry.list_canonical())
@@ -136,8 +136,8 @@ def main() -> int:
     _write_csv("R35_MODEL_LANES.csv", lane_rows)
 
     # ---- numba kernel parity + benchmark ----
-    import backend.numba_kernels  # noqa: F401
-    from backend.numba_kernel_registry import (
+    import factor_engine.backend.numba_kernels  # noqa: F401
+    from factor_engine.backend.numba_kernel_registry import (
         NumbaKernelRegistry,
         NUMBA_AVAILABLE,
         benchmark_kernel,
@@ -187,7 +187,7 @@ def main() -> int:
         RiskProfile,
         obligations_for,
     )
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     obl_rows: list[dict] = []
     for name in canonicals:

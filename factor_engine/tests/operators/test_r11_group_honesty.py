@@ -17,8 +17,8 @@ import pytest
 
 pl = pytest.importorskip("polars")
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -99,7 +99,7 @@ def test_cs_robust_resid_is_deprecated_alias() -> None:
         assert op.metadata.name == "cs_trimmed_ols_resid"
     # surface classification still holds for the deprecated spelling (the
     # pre-rename contract: daily-promoted, never an unclassified stray).
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     assert classify_canonical("cs_robust_resid") in {"daily", "extended"}
     # the new canonical is surface-registered too (so layer_governance's exact
@@ -144,7 +144,7 @@ def test_cs_trimmed_ols_resid_metadata_is_honest() -> None:
 def test_hierarchical_neutralize_pandas_twin_unknown_group_stays_nan() -> None:
     """P0-9 pandas twin: a cell whose group/subgroup label is unknown keeps its
     residual NaN — it must never be demeaned alone into a perfectly-neutralized 0."""
-    from cleaned_operators.group_ext import HierarchicalGroupNeutralize
+    from factor_engine.cleaned_operators.group_ext import HierarchicalGroupNeutralize
 
     values = np.array([10.0, 12.0, 11.0, 5.0, 7.0])
     groups = np.array(["A", "A", "A", np.nan, "B"], dtype=object)

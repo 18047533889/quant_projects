@@ -8,12 +8,12 @@ from datetime import time
 import pandas as pd
 import pytest
 
-from market.exchange_session_calendar import (
+from factor_engine.market.exchange_session_calendar import (
     ExchangeSessionCalendar,
     default_exchange_session_calendar,
 )
-from market.session import EarlyCloseNormalizationPolicy, SessionSpec, US_SESSION
-from runtime.session_calendar import (
+from factor_engine.market.session import EarlyCloseNormalizationPolicy, SessionSpec, US_SESSION
+from factor_engine.runtime.session_calendar import (
     EXCHANGE_CERTIFIED,
     WEEKDAY_APPROXIMATION,
     CalendarAuthorityError,

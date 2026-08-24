@@ -89,7 +89,7 @@ def test_authorized_modules_recognized():
     from check_dataaccess_io_boundary import is_authorized
 
     # Test authorized module
-    authorized = repo_root / "storage" / "cache.py"
+    authorized = repo_root / "storage" / "factor_engine.cache.py"
     assert is_authorized(authorized, repo_root), "storage/cache.py should be authorized"
     print("✓ Authorized modules recognized")
 

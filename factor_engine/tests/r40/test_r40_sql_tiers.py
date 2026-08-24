@@ -9,11 +9,11 @@ from __future__ import annotations
 
 
 def test_sql_production_safe_requires_parameter_domain_cert():
-    from backend.sql_tiers import (
+    from factor_engine.backend.sql_tiers import (
         effective_sql_production_safe,
         is_sql_production_safe,
     )
-    from runtime.parameter_domain_store import (
+    from factor_engine.runtime.parameter_domain_store import (
         CertificationKey,
         get_parameter_domain_store,
         reset_parameter_domain_store,
@@ -43,8 +43,8 @@ def test_sql_production_safe_requires_parameter_domain_cert():
 
 def test_sql_production_safe_fail_closed_without_store():
     """store 未装载（无认证证据）→ 一律 False（fail-closed，不静默放行）。"""
-    from backend.sql_tiers import is_sql_production_safe
-    from runtime.parameter_domain_store import reset_parameter_domain_store
+    from factor_engine.backend.sql_tiers import is_sql_production_safe
+    from factor_engine.runtime.parameter_domain_store import reset_parameter_domain_store
 
     reset_parameter_domain_store()
     try:
@@ -59,7 +59,7 @@ def test_sql_production_safe_fail_closed_without_store():
 
 
 def test_sql_emitter_capability_cache_bounded_lru():
-    from backend.sql_tiers import _BoundedLRU, duckdb_downgrade_cache_info
+    from factor_engine.backend.sql_tiers import _BoundedLRU, duckdb_downgrade_cache_info
 
     cache = _BoundedLRU(max_entries=2, max_bytes=2000)
     cache.put("k1", frozenset({"a"}))

@@ -16,9 +16,9 @@ import pytest
 
 pytest.importorskip("polars")
 
-from cleaned_operators import load_all
-from cleaned_operators.fundamental.component_score import FinComponentScore
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.fundamental.component_score import FinComponentScore
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 load_all()
 
@@ -110,6 +110,6 @@ def test_fin_component_score_sql_pushdown_is_deliberately_unsupported():
     该断言防止未来有人误把 fin_component_score 加入 SQL_IMPLEMENTED ——
     除非 emitter 引入多面板 layer（大改动，需独立评审）。
     """
-    from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
+    from factor_engine.backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
 
     assert "fin_component_score" not in SQL_IMPLEMENTED_CANONICALS

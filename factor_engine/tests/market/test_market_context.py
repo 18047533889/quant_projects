@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from market import (
+from factor_engine.market import (
     ASHARE_CONTEXT,
     US_CONTEXT,
     InstrumentKey,
@@ -13,7 +13,7 @@ from market import (
     market_context,
     qualified_instrument,
 )
-from market.capabilities import (
+from factor_engine.market.capabilities import (
     MarketCapability,
     MarketStatus,
     ProviderQuality,

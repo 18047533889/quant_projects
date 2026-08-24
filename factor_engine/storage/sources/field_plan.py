@@ -197,11 +197,11 @@ def _resolve_table_spec(
         return None, TableResolutionStatus.TABLE_NOT_REGISTERED
     try:
         if market:
-            from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+            from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
             registry = MULTI_MARKET_FIELD_REGISTRY.registry_for(market)
         else:
-            from fields import FIELD_REGISTRY
+            from factor_engine.fields import FIELD_REGISTRY
 
             registry = FIELD_REGISTRY
         spec = registry.resolve_table(str(table))

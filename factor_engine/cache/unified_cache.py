@@ -234,7 +234,7 @@ class UnifiedCache(Generic[T]):
     def _default_size_estimator(value: Any) -> int:
         """默认大小估算（惰性导入 resource_governor）。"""
         try:
-            from runtime.resource_governor import estimate_object_bytes
+            from factor_engine.runtime.resource_governor import estimate_object_bytes
             return estimate_object_bytes(value)
         except Exception:
             # Fallback: 简单估算

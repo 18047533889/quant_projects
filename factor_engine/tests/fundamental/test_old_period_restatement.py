@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.fundamental.transforms_v2 import fin_lag, fin_pct_change
+from factor_engine.cleaned_operators.fundamental.transforms_v2 import fin_lag, fin_pct_change
 
 
 def test_restated_old_period_does_not_move_current_anchor():

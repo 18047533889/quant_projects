@@ -19,8 +19,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
-from service.errors import ServiceError, classify_exception, sanitize_message
-from service.jobstore import JobPhase, JobRecord, JobStatus, _utc_now
+from factor_engine.service.errors import ServiceError, classify_exception, sanitize_message
+from factor_engine.service.jobstore import JobPhase, JobRecord, JobStatus, _utc_now
 
 
 class JobCancelledError(RuntimeError):
@@ -152,7 +152,7 @@ class BoundedJobQueue:
         # admission + task admission 与 FE 内部 scheduler / DA 共享同一资源权威
         # （不再各自建独立 broker）。
         try:
-            from runtime.host_resource_coordinator import get_host_coordinator
+            from factor_engine.runtime.host_resource_coordinator import get_host_coordinator
 
             self.coordinator = get_host_coordinator()
             self.broker = self.coordinator.broker

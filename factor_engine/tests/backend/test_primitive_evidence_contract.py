@@ -7,8 +7,8 @@ import pytest
 
 @pytest.fixture(scope="module")
 def _loaded():
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
@@ -31,7 +31,7 @@ def _merged_cases():
 
 
 def _case_registry_sets():
-    from backend.primitive_evidence import (
+    from factor_engine.backend.primitive_evidence import (
         CASE_REGISTRY_DUCKDB_EDGE,
         CASE_REGISTRY_DUCKDB_NAN_EDGE,
         CASE_REGISTRY_DUCKDB_REFERENCE,
@@ -78,7 +78,7 @@ def test_primitive_case_registry_six_way_intersection(_loaded):
 
 
 def test_primitive_verified_subset_of_case_registry(_loaded):
-    from backend.primitive_evidence import (
+    from factor_engine.backend.primitive_evidence import (
         DUCKDB_EDGE_VERIFIED,
         DUCKDB_REAL_SQL_VERIFIED,
         DUCKDB_REFERENCE_PARITY_VERIFIED,
@@ -101,7 +101,7 @@ def test_primitive_verified_subset_of_case_registry(_loaded):
 def test_verified_artifact_has_provenance_when_present(_loaded):
     from pathlib import Path
 
-    from backend.evidence_provenance import evidence_artifact_valid, load_verified_artifact
+    from factor_engine.backend.evidence_provenance import evidence_artifact_valid, load_verified_artifact
 
     path = Path(__file__).resolve().parents[2] / "evidence" / "primitive_verified.json"
     if not path.is_file():
@@ -116,8 +116,8 @@ def test_verified_artifact_has_provenance_when_present(_loaded):
 
 
 def test_sql_production_safe_subset_of_primitive_evidence(_loaded):
-    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
-    from backend.sql_tiers import SQL_PRODUCTION_SAFE_CANONICALS
+    from factor_engine.backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    from factor_engine.backend.sql_tiers import SQL_PRODUCTION_SAFE_CANONICALS
 
     meta = {"column", "literal"}
     assert SQL_PRODUCTION_SAFE_CANONICALS - meta <= PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE

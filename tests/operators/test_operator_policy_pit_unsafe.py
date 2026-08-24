@@ -6,14 +6,14 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="legacy intentionally-Pandas inventory superseded by static surface policy")
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.operator_policy import (
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.operator_policy import (
     INTENTIONALLY_PANDAS_ONLY,
     PANDAS_ONLY_PIT_SAFE,
     PIT_UNSAFE_CANONICALS,
     infer_operator_policy,
 )
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module", autouse=True)

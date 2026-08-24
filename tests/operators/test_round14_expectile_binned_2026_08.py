@@ -25,15 +25,15 @@ import pytest
 # can be broken mid-edit by concurrent sessions in this workspace; importing
 # each module runs its ``_register_surface()`` and registers exactly the
 # operators exercised here.
-import cleaned_operators.advanced_expectile as _ae  # noqa: F401
-import cleaned_operators.binned_response as _br  # noqa: F401
+import factor_engine.cleaned_operators.advanced_expectile as _ae  # noqa: F401
+import factor_engine.cleaned_operators.binned_response as _br  # noqa: F401
 
-from cleaned_operators.binned_response import (
+from factor_engine.cleaned_operators.binned_response import (
     _balanced_quantile_split,
     _binned_empirical_medians,
     _binned_medians,
 )
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 _EPS = 1e-12
 

@@ -13,7 +13,7 @@ project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
 
 # 直接导入模块（避免触发 registry）
-from backend.sql_pushdown.advanced_sql_operators import (
+from factor_engine.backend.sql_pushdown.advanced_sql_operators import (
     SqlDialect,
     cs_zscore_sql,
     cs_winsorize_sql,

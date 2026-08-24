@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from runtime.resource_shape import ResourceShapeKey, hardware_fingerprint
+from factor_engine.runtime.resource_shape import ResourceShapeKey, hardware_fingerprint
 
 
 def _utc_now_ms() -> float:
@@ -150,7 +150,7 @@ class ShapeCalibration:
         # 比较，否则本次样本会成为自己的尾部，ratio 恒≈1，低估永远不触发。
         predicted_before = self.predict_memory_p99()
 
-        from runtime.task_run_observation import P99_TRUSTED_ATTRIBUTION
+        from factor_engine.runtime.task_run_observation import P99_TRUSTED_ATTRIBUTION
 
         trusted = (
             peak_is_trusted
@@ -340,7 +340,7 @@ class ResourceCalibrationStore:
         self, *, underpredict_streak: int = 0, overpredict_streak: int = 0
     ) -> None:
         """全局 uncertainty 反馈（R27-201..203 对接）。"""
-        from runtime.task_resource_contract import DEFAULT_UNCERTAINTY
+        from factor_engine.runtime.task_resource_contract import DEFAULT_UNCERTAINTY
 
         # 由 broker 的 adapt_uncertainty 保留；此处仅记录（shape 级反馈已在
         # ShapeCalibration.record 内闭环）。

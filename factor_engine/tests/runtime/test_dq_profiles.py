@@ -5,13 +5,13 @@ from __future__ import annotations
 
 import pytest
 
-from runtime.dq_gates import DQThresholds
-from runtime.dq_profiles import (
+from factor_engine.runtime.dq_gates import DQThresholds
+from factor_engine.runtime.dq_profiles import (
     list_dq_profiles,
     resolve_input_dq_thresholds,
     resolve_output_dq_thresholds,
 )
-from runtime.input_dq import InputDQThresholds
+from factor_engine.runtime.input_dq import InputDQThresholds
 
 
 def test_list_dq_profiles_includes_prod_and_research():

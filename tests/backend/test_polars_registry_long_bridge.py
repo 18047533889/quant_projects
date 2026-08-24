@@ -7,15 +7,15 @@ import pytest
 
 pytest.importorskip("polars")
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from backend.polars_expr_emitter import POLARS_EXPR_CAPABLE, POLARS_LONG_CAPABLE, plan_is_polars_long_capable
-from backend.polars_registry_bridge import polars_registry_long_capable
-from cleaned_operators import load_all
-from cleaned_operators.operator_policy import polars_implemented_canonicals
-from runtime.engine import FactorEngine
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.backend.polars_expr_emitter import POLARS_EXPR_CAPABLE, POLARS_LONG_CAPABLE, plan_is_polars_long_capable
+from factor_engine.backend.polars_registry_bridge import polars_registry_long_capable
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.operator_policy import polars_implemented_canonicals
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 
@@ -45,7 +45,7 @@ def _run(source, expr, backend_name: str):
 
 
 def test_polars_long_covers_registry_polars():
-    from backend.polars_expr_emitter import get_polars_long_capable
+    from factor_engine.backend.polars_expr_emitter import get_polars_long_capable
 
     load_all()  # governance renames/moves legacy names before the live query
     reg = polars_implemented_canonicals() - {"column", "literal"}
@@ -60,7 +60,7 @@ def test_polars_long_covers_registry_polars():
 
 
 def test_registry_bridge_disjoint_from_native():
-    from backend.polars_expr_emitter import POLARS_EXPR_CAPABLE
+    from factor_engine.backend.polars_expr_emitter import POLARS_EXPR_CAPABLE
 
     bridge = polars_registry_long_capable(
         exclude_native=POLARS_EXPR_CAPABLE - {"column", "literal"}

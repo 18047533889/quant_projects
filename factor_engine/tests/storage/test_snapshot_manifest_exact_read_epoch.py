@@ -8,11 +8,11 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from storage.composite_source import (
+from factor_engine.storage.composite_source import (
     CompositeDataSource,
     CompositeSnapshotVerificationError,
 )
-from storage.datasource import DataSource
+from factor_engine.storage.datasource import DataSource
 from tests.storage.test_composite_source import _build_series
 
 
@@ -41,7 +41,7 @@ class _AdvancingSnapshotSource(DataSource):
 
     def temporal_contract(self):
         # R24-087: a plain panel with a token is safe for generic asof.
-        from storage.datasource import TemporalContract
+        from factor_engine.storage.datasource import TemporalContract
 
         return TemporalContract(
             temporal_sensitivity="none",

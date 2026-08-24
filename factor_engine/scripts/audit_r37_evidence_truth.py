@@ -25,7 +25,7 @@ import numpy as np
 sys.path.insert(0, ".")
 sys.path.insert(0, "..")
 
-from runtime.r34_evidence import (  # noqa: E402
+from factor_engine.runtime.r34_evidence import (  # noqa: E402
     GateResult,
     component_hashes,
     current_commit_sha,
@@ -33,7 +33,7 @@ from runtime.r34_evidence import (  # noqa: E402
     scan_hardcoded_true_gates,
     stale_evidence_report,
 )
-from runtime.evidence_truth import (  # noqa: E402
+from factor_engine.runtime.evidence_truth import (  # noqa: E402
     EvidenceTruthEngine,
     evidence_store_path,
 )
@@ -123,7 +123,7 @@ def _run_negative_controls(engine: EvidenceTruthEngine) -> dict[str, dict[str, o
 
     # NC-3：PIT mutation（shift(1) -> shift(-1)）必须红
     # 用一个真实算子验证：若源码含前视 shift，PIT gate 必须拒绝。
-    from cleaned_operators.availability_clock import default_available_at
+    from factor_engine.cleaned_operators.availability_clock import default_available_at
     future_shift_inputs = ("close",)
     pit_ok = default_available_at(("close",)) == "session_close"
     controls["nc_pit_future_shift_rejected"] = {
@@ -290,7 +290,7 @@ def main() -> int:
 
     # R37_ZERO_PRESENCE_ONLY_GATES：证明"0 个 presence-only gate"
     # ——每个 gate 都 executed_cases>0；负控 gate 必须全部 fired。
-    from runtime.evidence_truth import no_presence_only_gate_cases
+    from factor_engine.runtime.evidence_truth import no_presence_only_gate_cases
 
     presence_cases = no_presence_only_gate_cases(gates)
     gates["R37_ZERO_PRESENCE_ONLY_GATES"] = GateResult.from_cases(

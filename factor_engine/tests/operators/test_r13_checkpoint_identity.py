@@ -37,7 +37,7 @@ def test_implementation_hash_does_not_collide_on_constant_swap():
     identical bytecode; the old sorted-consts digest collided.  The registry's
     disassembly identity must distinguish them, and the stateful runtime must
     delegate to it (never a third hash)."""
-    from cleaned_operators.registry import _code_payload
+    from factor_engine.cleaned_operators.registry import _code_payload
     from recursive_kernel import ema_segment, rsi_wilder_segment
     from stateful_runtime import _implementation_hash
 
@@ -88,7 +88,7 @@ def test_chunk_auditor_rejects_missing_bar_between_friday_and_tuesday():
     """NEW-P0-30: checkpoint ends Friday, the next expected bar is Monday, but a
     Tuesday segment would resume directly and silently skip Monday.  The auditor
     rejects the resume (fail-closed)."""
-    from runtime.stateful_incremental import audit_segment_continuity
+    from factor_engine.runtime.stateful_incremental import audit_segment_continuity
 
     cp = _ema_checkpoint("2024-01-05T00:00:00+00:00")  # Friday
     # Monday (2024-01-08) exists in the source timeline but is NOT the segment
@@ -116,7 +116,7 @@ def test_chunk_auditor_rejects_boundary_mismatch_when_observable():
     """The last source bar before the segment start must equal the checkpoint's
     last-covered bar — a stale checkpoint whose bar is not the immediate
     predecessor is rejected (NEW-P0-26)."""
-    from runtime.stateful_incremental import audit_segment_continuity
+    from factor_engine.runtime.stateful_incremental import audit_segment_continuity
 
     cp = _ema_checkpoint("2024-01-05T00:00:00+00:00")  # Friday
     # The observable timeline shows the bar before the segment start is Monday,
@@ -135,7 +135,7 @@ def test_chunk_auditor_rejects_false_coverage_claim():
     """NEW-P0-30: the checkpoint record claims coverage up to/through Monday but
     the state's own last_timestamp is Friday — a direct Tuesday resume must be
     rejected (no forward-bar interpolation)."""
-    from runtime.stateful_incremental import audit_segment_continuity
+    from factor_engine.runtime.stateful_incremental import audit_segment_continuity
 
     cp = StateCheckpoint(
         operator="ts_ema",
@@ -189,9 +189,9 @@ def test_segmented_incremental_gap_returns_none(tmp_path):
     """NEW-P0-30 integration: a Tuesday resume from a Friday checkpoint with a
     Monday bar in the data is marked resume-impossible (returns None -> full
     replay) instead of silently skipping Monday."""
-    from runtime.stateful_checkpoint_store import StatefulCheckpointStore
-    from runtime.stateful_incremental import try_stateful_segmented_incremental
-    from ir.nodes import IRNode
+    from factor_engine.runtime.stateful_checkpoint_store import StatefulCheckpointStore
+    from factor_engine.runtime.stateful_incremental import try_stateful_segmented_incremental
+    from factor_engine.ir.nodes import IRNode
 
     # Data: Fri(01-05) -> Mon(01-08) -> Tue(01-09).
     full = pd.DataFrame(
@@ -245,9 +245,9 @@ def test_segmented_incremental_gap_returns_none(tmp_path):
 def test_segmented_incremental_contiguous_resume_still_works(tmp_path):
     """A legitimate Monday-after-Friday resume must still proceed (the auditor
     only rejects real gaps / false coverage)."""
-    from runtime.stateful_checkpoint_store import StatefulCheckpointStore
-    from runtime.stateful_incremental import try_stateful_segmented_incremental
-    from ir.nodes import IRNode
+    from factor_engine.runtime.stateful_checkpoint_store import StatefulCheckpointStore
+    from factor_engine.runtime.stateful_incremental import try_stateful_segmented_incremental
+    from factor_engine.ir.nodes import IRNode
 
     full = pd.DataFrame(
         {
@@ -341,7 +341,7 @@ def test_execute_segment_rejects_false_coverage_checkpoint():
 # ---------------------------------------------------------------------------
 
 def test_partition_fingerprint_failure_raises_not_empty():
-    from runtime.factor_identity import partition_input_fingerprint
+    from factor_engine.runtime.factor_identity import partition_input_fingerprint
 
     class _BrokenFrame:
         columns = ["datetime", "asset", "value"]
@@ -370,7 +370,7 @@ def test_partition_fingerprint_failure_raises_not_empty():
 
 
 def test_partition_fingerprint_empty_never_matches_resume():
-    from runtime.factor_identity import (
+    from factor_engine.runtime.factor_identity import (
         checkpoint_fingerprint_matches,
         partition_input_fingerprint,
     )

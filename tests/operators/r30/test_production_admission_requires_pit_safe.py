@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from cleaned_operators.operator_spec import _compute_allow_in_production
+from factor_engine.cleaned_operators.operator_spec import _compute_allow_in_production
 
 
 def test_pit_safe_false_is_hard_rejected():

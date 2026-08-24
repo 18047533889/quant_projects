@@ -21,9 +21,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from cleaned_operators import load_all  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
-from cleaned_operators.model_timing import (  # noqa: E402
+from factor_engine.cleaned_operators import load_all  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators.model_timing import (  # noqa: E402
     MODEL_TIMING_CONTRACTS,
     MODEL_LIKE_HINTS,
     TimingKind,
@@ -31,7 +31,7 @@ from cleaned_operators.model_timing import (  # noqa: E402
     model_timing_production_errors,
     timing_kind_for,
 )
-from cleaned_operators.model_lane import (  # noqa: E402
+from factor_engine.cleaned_operators.model_lane import (  # noqa: E402
     MODEL_LANE_EXPLICIT,
     assign_model_lane,
     model_lane_dead_key_errors,
@@ -170,7 +170,7 @@ def test_m006_timing_keys_map_live_or_alias():
 
 
 def test_m006_no_wildcards_in_effective_lane_map():
-    from cleaned_operators.model_lane import _MODEL_LANE_EXPLICIT
+    from factor_engine.cleaned_operators.model_lane import _MODEL_LANE_EXPLICIT
     # M-006: no wildcard placeholders survive into the effective lane map —
     # every key must be a concrete live canonical (or alias/tombstone).
     assert all("*" not in k for k in _MODEL_LANE_EXPLICIT)

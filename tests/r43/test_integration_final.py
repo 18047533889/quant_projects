@@ -14,7 +14,7 @@ class TestStartupGatesClassification:
 
     def test_unknown_gates_do_not_block_readiness_indefinitely(self):
         """T-R43-INT-003: EVIDENCE gates should not block runtime readiness."""
-        from service.release_blockers import evaluate_blockers, BlockerStatus
+        from factor_engine.service.release_blockers import evaluate_blockers, BlockerStatus
 
         results = evaluate_blockers()
 
@@ -39,7 +39,7 @@ class TestStartupGatesClassification:
 
     def test_readiness_logic_with_evidence_gates(self):
         """REM-109: /readyz must not require UNKNOWN==0 for evidence gates."""
-        from service.app import _readiness_check
+        from factor_engine.service.app import _readiness_check
 
         # Current implementation requires unknown==0, which is wrong
         # This test documents the current BROKEN behavior
@@ -62,7 +62,7 @@ class TestBackendIdentity:
 
     def test_backend_aliases_exist(self):
         """REM-013: Backend aliases must normalize early."""
-        from service.models import BACKEND_ALIASES
+        from factor_engine.service.models import BACKEND_ALIASES
 
         # Verify aliases are defined
         assert isinstance(BACKEND_ALIASES, (set, frozenset, list, tuple))
@@ -76,7 +76,7 @@ class TestBackendIdentity:
 
     def test_validate_spec_backend_contract(self):
         """REM-014: validate_spec must reject unknown backends."""
-        from service.app import validate_spec
+        from factor_engine.service.app import validate_spec
 
         # Valid backend should pass
         result = validate_spec({"formula": "close", "backend": "pandas"})
@@ -95,7 +95,7 @@ class TestUnitSystem:
 
     def test_unit_spec_round_trip_serialization(self):
         """REM-176: Units must survive JSON round-trip."""
-        from fields.units_v2 import UnitSpec, CURRENCY_CNY
+        from factor_engine.fields.units_v2 import UnitSpec, CURRENCY_CNY
 
         # Create a price unit
         original = UnitSpec.price(CURRENCY_CNY)
@@ -116,7 +116,7 @@ class TestUnitSystem:
 
     def test_dimensional_analysis_multiply_divide(self):
         """REM-177: Dimensional analysis for binary ops."""
-        from fields.units_v2 import (
+        from factor_engine.fields.units_v2 import (
             UnitSpec, UnitExpr, CURRENCY_CNY, CURRENCY_USD,
             unit_algebra_kind
         )
@@ -135,7 +135,7 @@ class TestUnitSystem:
 
     def test_cross_currency_addition_rejected(self):
         """REM-177: Adding CNY + USD must fail."""
-        from fields.units_v2 import UnitSpec, CURRENCY_CNY, CURRENCY_USD
+        from factor_engine.fields.units_v2 import UnitSpec, CURRENCY_CNY, CURRENCY_USD
 
         cny = UnitSpec.money(CURRENCY_CNY)
         usd = UnitSpec.money(CURRENCY_USD)
@@ -149,7 +149,7 @@ class TestUnitSystem:
 
     def test_rank_produces_dimensionless(self):
         """REM-177: rank should produce dimensionless output."""
-        from fields.units_v2 import assert_rank_produces_dimensionless
+        from factor_engine.fields.units_v2 import assert_rank_produces_dimensionless
 
         result = assert_rank_produces_dimensionless()
         assert result.is_dimensionless
@@ -160,7 +160,7 @@ class TestExecutionPolicyFloor:
 
     def test_production_mode_exists(self):
         """Basic check that production mode is defined."""
-        from service.models import RunMode
+        from factor_engine.service.models import RunMode
 
         assert hasattr(RunMode, "production")
         assert hasattr(RunMode, "research")
@@ -170,7 +170,7 @@ class TestExecutionPolicyFloor:
 
         This is a smoke test - full enforcement is in runtime/endpoint_policy.
         """
-        from runtime.endpoint_policy import EndpointExecutionPolicy
+        from factor_engine.runtime.endpoint_policy import EndpointExecutionPolicy
 
         # EndpointExecutionPolicy is an Enum, not a dataclass
         # Just verify it exists and has expected members
@@ -184,7 +184,7 @@ class TestStartupGateRealChecks:
 
     def test_fake_gates_identified(self):
         """REM-105: Identify gates that always return PASS without checking."""
-        from service.release_blockers import _default_checks, _check_done
+        from factor_engine.service.release_blockers import _default_checks, _check_done
 
         checks = _default_checks()
 

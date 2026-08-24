@@ -4,9 +4,9 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from backend.operator_errors import OperatorParameterError
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.operator_errors import OperatorParameterError
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module", autouse=True)

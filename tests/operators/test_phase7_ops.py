@@ -8,14 +8,14 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from runtime.metrics_export import (
+from factor_engine.runtime.metrics_export import (
     enrich_pipeline_summary,
     export_factor_runs_jsonl,
     summarize_pipeline_results,
     write_pipeline_metrics_file,
 )
-from storage.catalog import FactorCatalog
-from storage.materializer import ParquetMaterializer
+from factor_engine.storage.catalog import FactorCatalog
+from factor_engine.storage.materializer import ParquetMaterializer
 
 
 def test_summarize_pipeline_results_counts_rows():

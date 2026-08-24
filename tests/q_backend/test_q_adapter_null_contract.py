@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.q_backend.q_adapter import QType, QTypeAdapter, QZeroCopyUnavailable
+from factor_engine.backend.q_backend.q_adapter import QType, QTypeAdapter, QZeroCopyUnavailable
 
 
 class FakeQ:

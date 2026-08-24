@@ -134,7 +134,7 @@ def _load_evidence(path: Path) -> dict[str, list[str]]:
 
 
 def _write_primitive_evidence(canon: str, stage: CertStage) -> None:
-    from backend.operator_evidence_schema import compute_implementation_hash
+    from factor_engine.backend.operator_evidence_schema import compute_implementation_hash
 
     data = _load_evidence(EVIDENCE_JSON)
     key = stage.value
@@ -168,8 +168,8 @@ def run_certification(
     refresh_manifest: bool = True,
 ) -> CertificationReport:
     """运行单算子认证流水线。"""
-    from backend.phase1_scope import is_phase1_in_scope
-    from planner.composite_lowering import has_composite_lowering
+    from factor_engine.backend.phase1_scope import is_phase1_in_scope
+    from factor_engine.planner.composite_lowering import has_composite_lowering
 
     canon = canonical.strip()
     report = CertificationReport(canonical=canon)

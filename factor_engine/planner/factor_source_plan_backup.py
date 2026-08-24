@@ -82,7 +82,7 @@ def _build_manifest(expression_plan: Any) -> tuple[str, ...] | None:
     并发 session 可能改签名——任何失败都返回 None，绝不抛。
     """
     try:
-        from planner.source_dependencies import build_source_dependency_manifest
+        from factor_engine.planner.source_dependencies import build_source_dependency_manifest
     except Exception:  # pragma: no cover - import 环境缺失时降级
         return None
     try:

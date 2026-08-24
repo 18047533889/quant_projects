@@ -7,8 +7,8 @@ Tests:
 """
 import pytest
 
-from planner.backend_region import Representation
-from runtime.native_buffer_store import NativeBufferStore
+from factor_engine.planner.backend_region import Representation
+from factor_engine.runtime.native_buffer_store import NativeBufferStore
 
 
 class TestNativeBufferStoreMemoryAccounting:
@@ -151,7 +151,7 @@ class TestPolarsThreadingModel:
 
     def test_polars_thread_budget_is_noop(self):
         """polars_thread_budget should be a no-op (doesn't change threads)."""
-        from backend.polars_thread_config import polars_thread_budget
+        from factor_engine.backend.polars_thread_config import polars_thread_budget
 
         # Should not raise, but also should not actually change thread count
         with polars_thread_budget(4):
@@ -159,7 +159,7 @@ class TestPolarsThreadingModel:
 
     def test_configure_polars_returns_current_threads(self):
         """configure_polars_for_execution should return current thread count."""
-        from backend.polars_thread_config import configure_polars_for_execution
+        from factor_engine.backend.polars_thread_config import configure_polars_for_execution
 
         # Should not crash and should return read-only config
         config = configure_polars_for_execution(max_workers=999)

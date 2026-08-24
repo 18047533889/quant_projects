@@ -58,7 +58,7 @@ def _resolve_strict(strict: bool | None) -> bool:
     """
     if strict is not None:
         return bool(strict)
-    from runtime.production_policy import is_production_mode
+    from factor_engine.runtime.production_policy import is_production_mode
 
     return is_production_mode()
 
@@ -1087,7 +1087,7 @@ class FactorCatalog:
         effective_production = production
         if effective_production is None:
             try:
-                from runtime.production_policy import is_production_mode
+                from factor_engine.runtime.production_policy import is_production_mode
 
                 effective_production = is_production_mode()
             except Exception as exc:  # R32-P0-014

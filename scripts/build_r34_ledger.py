@@ -22,15 +22,15 @@ from pathlib import Path
 sys.path.insert(0, ".")
 sys.path.insert(0, "..")
 
-from backend.cleaned_bridge import ensure_cleaned_loaded  # noqa: E402
-from cleaned_operators.production_hardening import factor_production_targets  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded  # noqa: E402
+from factor_engine.cleaned_operators.production_hardening import factor_production_targets  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 E = Path("docs/evidence/r34")
 
 
 def _typed_signature_status(canonical: str) -> tuple[str, str]:
-    from backend.production_signature import signature_for
+    from factor_engine.backend.production_signature import signature_for
 
     sig = signature_for(canonical)
     if sig is None:
@@ -41,7 +41,7 @@ def _typed_signature_status(canonical: str) -> tuple[str, str]:
 
 
 def _edge_status(canonical: str) -> tuple[str, str]:
-    from cleaned_operators.edge_requirements import (
+    from factor_engine.cleaned_operators.edge_requirements import (
         edge_contract,
         production_edge_evidence_complete,
     )
@@ -65,7 +65,7 @@ def _param_domain_status(canonical: str, coverage: dict) -> tuple[str, str]:
 
 
 def _stateful_class(canonical: str) -> str:
-    from cleaned_operators.production_hardening import (
+    from factor_engine.cleaned_operators.production_hardening import (
         FULL_HISTORY_REPLAY_CANONICALS,
         SEGMENTED_EXECUTION_CANONICALS,
     )
@@ -153,7 +153,7 @@ def main() -> int:
 
 
 def _surface(canonical: str) -> str:
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     try:
         return classify_canonical(canonical)
@@ -162,7 +162,7 @@ def _surface(canonical: str) -> str:
 
 
 def _role(canonical: str) -> str:
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     try:
         return classify_canonical(canonical)

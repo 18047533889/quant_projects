@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from backend.q_backend.q_compiler import QCompiler, get_q_compiler
-from backend.q_backend.q_physical_implementation_registry import (
+from factor_engine.backend.q_backend.q_compiler import QCompiler, get_q_compiler
+from factor_engine.backend.q_backend.q_physical_implementation_registry import (
     QEvidenceArtifact,
     QEvidenceValidationContext,
     QPhysicalImplementation,
@@ -115,7 +115,7 @@ def production_certified_compiler() -> QCompiler:
             )
         )
     return QCompiler(capability=__import__(
-        "backend.q_backend.q_capability", fromlist=["QBackendCapability"]
+        "factor_engine.backend.q_backend.q_capability", fromlist=["QBackendCapability"]
     ).QBackendCapability(registry))
 
 

@@ -17,7 +17,7 @@ from pathlib import Path
 sys.path.insert(0, ".")
 sys.path.insert(0, "..")
 
-from runtime.r34_evidence import (  # noqa: E402
+from factor_engine.runtime.r34_evidence import (  # noqa: E402
     GateResult,
     current_commit_sha,
     evidence_store_path,
@@ -47,17 +47,17 @@ def _load_param_coverage() -> dict:
 
 
 def _production_canonicals():
-    from cleaned_operators.production_hardening import factor_production_targets
+    from factor_engine.cleaned_operators.production_hardening import factor_production_targets
 
     return set(factor_production_targets())
 
 
 def _typed_signature_coverage():
     """每个 production canonical 是否具备完整 typed ParamSpec（无 name heuristic）。"""
-    from backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
     ensure_cleaned_loaded()
-    from backend.production_signature import signature_for
+    from factor_engine.backend.production_signature import signature_for
 
     missing = []
     for c in sorted(_production_canonicals()):
@@ -72,10 +72,10 @@ def _typed_signature_coverage():
 
 
 def _edge_declared_coverage():
-    from backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
     ensure_cleaned_loaded()
-    from cleaned_operators.edge_requirements import edge_contract
+    from factor_engine.cleaned_operators.edge_requirements import edge_contract
 
     undeclared = []
     for c in sorted(_production_canonicals()):
@@ -85,10 +85,10 @@ def _edge_declared_coverage():
 
 
 def _edge_verified_coverage():
-    from backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
     ensure_cleaned_loaded()
-    from cleaned_operators.edge_requirements import production_edge_evidence_complete
+    from factor_engine.cleaned_operators.edge_requirements import production_edge_evidence_complete
 
     incomplete = []
     for c in sorted(_production_canonicals()):
@@ -101,17 +101,17 @@ def _edge_verified_coverage():
 
 
 def _model_timing_errors():
-    from backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
     ensure_cleaned_loaded()
-    from cleaned_operators.model_timing import model_timing_production_errors
+    from factor_engine.cleaned_operators.model_timing import model_timing_production_errors
 
     return model_timing_production_errors(_production_canonicals())
 
 
 def _stateful_behavior_scan():
     """用行为检测复核手工 stateful 集合（P0-029）——抽查代表性算子。"""
-    from backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
     ensure_cleaned_loaded()
     from stateful_contract import detect_stateful_behavior
@@ -119,7 +119,7 @@ def _stateful_behavior_scan():
     import numpy as np
     import pandas as pd
 
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     probes = [
         ("ts_mean", {"window": 5}, False),   # rolling: bounded
@@ -146,10 +146,10 @@ def _stateful_behavior_scan():
 
 def _batch_order_invariance():
     """同一批因子换序 -> per-factor 结果一致（P1-049 轻量探针）。"""
-    from backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
     ensure_cleaned_loaded()
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     import numpy as np
     import pandas as pd
@@ -178,10 +178,10 @@ def _batch_order_invariance():
 
 def _run_many_equals_run_one():
     """run_many 与逐因子 run 等价（轻量：三个独立算子 batch 结果一致）。"""
-    from backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
     ensure_cleaned_loaded()
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     import numpy as np
     import pandas as pd
@@ -201,7 +201,7 @@ def _run_many_equals_run_one():
 
 def _dataevent_atomic_policy():
     """P0-039：production 下 env bypass 不存在，恒原子两阶段；research 保留 env。"""
-    from runtime.production_policy import (
+    from factor_engine.runtime.production_policy import (
         is_production_mode,
         production_data_event_auto_publish_enabled,
     )

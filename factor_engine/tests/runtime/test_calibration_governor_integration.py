@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from runtime.resource_governor import MemoryGovernor
-from runtime.runtime_calibration import (
+from factor_engine.runtime.resource_governor import MemoryGovernor
+from factor_engine.runtime.runtime_calibration import (
     calibrated_peak_bytes,
     record_task_actual,
     reset_calibration,
@@ -32,7 +32,7 @@ def test_governor_admission_with_calibrated_peak():
         predicted_peak_bytes=100 * 1024 * 1024,
     )
 
-    from runtime.runtime_calibration import calibration_key
+    from factor_engine.runtime.runtime_calibration import calibration_key
     key = calibration_key(
         operator="heavy_op",
         backend="pandas_numpy",
@@ -78,7 +78,7 @@ def test_zero_static_peak_never_blocks_production():
     """
     reset_calibration()
 
-    from runtime.runtime_calibration import calibration_key
+    from factor_engine.runtime.runtime_calibration import calibration_key
     key = calibration_key(
         operator="unknown_memory",
         backend="pandas_numpy",
@@ -136,7 +136,7 @@ def test_calibration_memory_vs_elapsed_independence():
         predicted_peak_bytes=100 * 1024 * 1024,
     )
 
-    from runtime.runtime_calibration import calibration_key, calibrated_factors
+    from factor_engine.runtime.runtime_calibration import calibration_key, calibrated_factors
 
     key1 = calibration_key(
         operator="fast_heavy",

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import math
 from typing import Any, Literal
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 SignatureStatus = Literal["production", "pending", "forbidden"]
 
@@ -63,7 +63,7 @@ _NO_PARAM_DAILY = frozenset({
 
 
 def _daily_signatures() -> dict[str, OperatorProductionSignature]:
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
 
     signatures = {
         name: OperatorProductionSignature(name, (), default_status="production")
@@ -184,7 +184,7 @@ _COMPATIBILITY_SIGNATURES: dict[str, OperatorProductionSignature] = {
 
 
 def signature_for(canon: str) -> OperatorProductionSignature | None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     sig = PRODUCTION_SIGNATURES.get(name) or _COMPATIBILITY_SIGNATURES.get(name)
@@ -193,7 +193,7 @@ def signature_for(canon: str) -> OperatorProductionSignature | None:
     # R38 typed-signature coverage: 第三层 fallback —— 为缺签名的 production
     # canonical 保守自动生成（见 backend.typed_signature_generator）。惰性加载，
     # 只有静态表查不到时才触发；不影响 _daily_signatures / _COMPATIBILITY_SIGNATURES。
-    from backend.typed_signature_generator import generated_signature_for
+    from factor_engine.backend.typed_signature_generator import generated_signature_for
 
     return generated_signature_for(name)
 
@@ -355,7 +355,7 @@ def verify_production_signature(canon: str, node: PlanNode | None, *, production
 
 def operational_production_allowed(canon: str, node: PlanNode | None = None) -> bool:
     """算子级 operational production（不含 backend-specific 检查）。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     try:
         canonical = OperatorRegistry.resolve_canonical_strict(canon)

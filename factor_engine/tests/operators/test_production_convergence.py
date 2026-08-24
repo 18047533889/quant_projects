@@ -3,8 +3,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 STRICT_PERIOD_CASES = [
     (name, lambda: None)
@@ -21,7 +21,7 @@ def _loaded() -> None:
 
 
 def test_surfaces_are_disjoint_and_daily_contains_no_inactive_names() -> None:
-    from cleaned_operators import operator_surface as surface
+    from factor_engine.cleaned_operators import operator_surface as surface
 
     sets = {
         "daily": set(surface.DAILY_CANONICALS),
@@ -49,7 +49,7 @@ def test_surfaces_are_disjoint_and_daily_contains_no_inactive_names() -> None:
 
 
 def test_strict_fiscal_period_operators_are_not_production_denied() -> None:
-    from cleaned_operators.operator_spec import PRODUCTION_DENIED_CANONICALS
+    from factor_engine.cleaned_operators.operator_spec import PRODUCTION_DENIED_CANONICALS
 
     strict = {
         "period_lag", "period_average", "period_change", "period_cagr",
@@ -61,7 +61,7 @@ def test_strict_fiscal_period_operators_are_not_production_denied() -> None:
 
 
 def test_pit_and_scope_metadata_do_not_confuse_domain_risk_with_lookahead() -> None:
-    from cleaned_operators.operator_policy import infer_operator_policy
+    from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
 
     pit_safe = {
         "cs_count", "cs_mean", "cs_std", "cs_sum", "group_count", "group_max",
@@ -121,8 +121,8 @@ def test_explicit_backend_preference_cannot_bypass_production_evidence() -> None
     # test cannot yet distinguish an uncertified physical backend from a missing
     # semantic artifact.  The permanent production suite runs it again after
     # factor_operator_verified.json has been generated.
-    from backend.factor_operator_evidence import factor_operator_evidence_valid
-    from backend.operator_capability import UnsupportedOperatorBackendError
+    from factor_engine.backend.factor_operator_evidence import factor_operator_evidence_valid
+    from factor_engine.backend.operator_capability import UnsupportedOperatorBackendError
 
     if not factor_operator_evidence_valid():
         pytest.skip("factor-operator semantic evidence is not bootstrapped yet")
@@ -145,8 +145,8 @@ def test_explicit_backend_preference_cannot_bypass_production_evidence() -> None
 
 
 def test_clickhouse_does_not_inherit_duckdb_parity() -> None:
-    from backend.operator_capability import capability_for
-    from backend.sql_tiers import CLICKHOUSE_SQL_PARITY_VERIFIED
+    from factor_engine.backend.operator_capability import capability_for
+    from factor_engine.backend.sql_tiers import CLICKHOUSE_SQL_PARITY_VERIFIED
 
     assert CLICKHOUSE_SQL_PARITY_VERIFIED == frozenset()
     assert capability_for("ts_mean", "clickhouse_sql").status != "parity_verified"
@@ -207,8 +207,8 @@ def test_strict_period_polars_matches_pandas_without_future_leakage(canonical, a
 )
 def test_strict_period_duckdb_executes_real_sql(canonical, input_names, attrs) -> None:
     duckdb = pytest.importorskip("duckdb")
-    from backend.sql_pushdown.emitter import compile_plan_to_sql
-    from planner.logical_plan import PlanNode
+    from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql
+    from factor_engine.planner.logical_plan import PlanNode
 
     panel = pd.DataFrame({
         "ts": range(6), "inst": ["A"] * 6,

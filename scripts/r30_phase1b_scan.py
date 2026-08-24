@@ -13,11 +13,11 @@ import time
 sys.path.insert(0, ".")
 
 t0 = time.time()
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 load_all()
-from cleaned_operators.registry import OperatorRegistry as R
-from cleaned_operators.operator_surface import classify_canonical
-from cleaned_operators.operator_policy import infer_operator_policy
+from factor_engine.cleaned_operators.registry import OperatorRegistry as R
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
+from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
 
 # --- risky names across the FULL registry (executable = has runtime backend) ---
 RISKY = ("rand_", "shuffle", "sample", "lead", "next", "bfill", "interpolate")

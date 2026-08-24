@@ -137,7 +137,7 @@ def _save_lock_for(key: str) -> _RefCountedSaveLock:
 
 def _governor():
     """惰性导入全局 MemoryGovernor，避免 storage → runtime → storage 循环导入。"""
-    from runtime.resource_governor import global_memory_governor
+    from factor_engine.runtime.resource_governor import global_memory_governor
 
     return global_memory_governor()
 
@@ -226,7 +226,7 @@ class CacheManager:
         if self._budget_bytes is not None and self._budget_bytes > 0:
             return self._budget_bytes
         try:
-            from runtime.resource_governor import global_memory_governor
+            from factor_engine.runtime.resource_governor import global_memory_governor
 
             return int(global_memory_governor().process_budget_bytes * 0.05)
         except Exception:
@@ -282,7 +282,7 @@ class CacheManager:
         返回:
             无
         """
-        from runtime.resource_governor import estimate_object_bytes
+        from factor_engine.runtime.resource_governor import estimate_object_bytes
 
         gov = _governor()
         scoped = self._scoped_key(key)
@@ -309,7 +309,7 @@ class CacheManager:
                     gov.release_accounting(self.layer_name, freed)
 
     def _evict_to(self, target: int) -> int:
-        from runtime.resource_governor import estimate_object_bytes
+        from factor_engine.runtime.resource_governor import estimate_object_bytes
 
         freed = 0
         while self._cache and self._bytes > target:
@@ -395,8 +395,8 @@ def _operator_namespace() -> str:
     namespace 的 production 缓存读写是语义污染的来源，绝不静默当 cache miss。
     """
     try:
-        from cleaned_operators.operator_policy import compute_operator_catalog_hash
-        from fields import compute_field_catalog_hash
+        from factor_engine.cleaned_operators.operator_policy import compute_operator_catalog_hash
+        from factor_engine.fields import compute_field_catalog_hash
 
         return (
             f"{compute_operator_catalog_hash()[:16]}-"
@@ -424,7 +424,7 @@ def _compiler_semantic_hash() -> str:
         "optimizer_compiler_semantic_version": _OPTIMIZER_COMPILER_SEMANTIC_VERSION,
     }
     try:
-        from backend.numeric_semantics import numeric_semantics_hash
+        from factor_engine.backend.numeric_semantics import numeric_semantics_hash
 
         parts["numeric_semantics"] = numeric_semantics_hash()
     except Exception:
@@ -699,7 +699,7 @@ def _logger_cache_mismatch(path: Path, expected: str) -> None:
     try:
         import logging
 
-        logging.getLogger("storage.cache").warning(
+        logging.getLogger("factor_engine.storage.cache").warning(
             "persistent cache schema mismatch for %s (expected %s); cache miss",
             path,
             expected,
@@ -796,7 +796,7 @@ class PersistentPlanCache(CacheManager):
         """
         ns = _operator_namespace()
         if ns == UNKNOWN_CACHE_NAMESPACE:
-            from runtime.production_policy import is_production_mode
+            from factor_engine.runtime.production_policy import is_production_mode
 
             if is_production_mode():
                 raise RuntimeError(
@@ -851,7 +851,7 @@ class PersistentPlanCache(CacheManager):
         # be subject to eviction, or repeated L3 hits bypass the entire in-memory
         # limit (resource P0).  Same accounting as ``set``: size the value, drop
         # it if it cannot fit alone, else account + evict to budget.
-        from runtime.resource_governor import estimate_object_bytes
+        from factor_engine.runtime.resource_governor import estimate_object_bytes
 
         gov = _governor()
         size = estimate_object_bytes(value)
@@ -885,7 +885,7 @@ class PersistentPlanCache(CacheManager):
         """
         if not isinstance(value, (pd.Series, pd.DataFrame)):
             return
-        from runtime.resource_governor import estimate_object_bytes
+        from factor_engine.runtime.resource_governor import estimate_object_bytes
 
         gov = _governor()
         scoped = self._scoped_key(key)

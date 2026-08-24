@@ -28,7 +28,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.advanced_information import (
+from factor_engine.cleaned_operators.advanced_information import (
     TsEffectiveTransferEntropy,
     _effective_transfer_entropy_window,
 )
@@ -166,7 +166,7 @@ def test_surrogate_preserves_source_gap_topology():
     shifted the compressed series, so the gap vanished from the null entirely.
     Here every surrogate still carries the full 40-row gap after the rotation —
     the null shares the real estimate's missing topology."""
-    from cleaned_operators.advanced_information import _SURROGATE_OFFSETS
+    from factor_engine.cleaned_operators.advanced_information import _SURROGATE_OFFSETS
 
     rng = np.random.default_rng(3)
     n = 160

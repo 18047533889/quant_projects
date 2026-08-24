@@ -14,13 +14,13 @@ import numpy as np
 
 
 def _governor():
-    from runtime.resource_governor import global_memory_governor
+    from factor_engine.runtime.resource_governor import global_memory_governor
 
     return global_memory_governor()
 
 
 def _estimate(value: Any) -> int:
-    from runtime.resource_governor import estimate_object_bytes
+    from factor_engine.runtime.resource_governor import estimate_object_bytes
 
     return estimate_object_bytes(value)
 

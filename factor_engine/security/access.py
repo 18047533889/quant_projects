@@ -30,7 +30,7 @@ _ACCESS_TAG_LEVELS: dict[str, int] = {
     "internal.restricted": 50,
     "alt.premium": 40,
     "fundamental": 30,
-    "market.basic": 20,
+    "factor_engine.market.basic": 20,
     "public": 10,
 }
 _UNKNOWN_TAG_LEVEL = 60  # 未登记 tag 按最高敏感处理（fail-closed：宁可拒不可放）
@@ -76,7 +76,7 @@ def derive_derived_access_tags(
         # FE production 管线中 factor_engine 根在 sys.path 前部，取到 FE runtime；
         # 被遮蔽时保守取 research（DA 侧 caller 显式传 production= 决定严格度）。
         try:
-            from runtime.production_policy import is_production_mode
+            from factor_engine.runtime.production_policy import is_production_mode
 
             production = is_production_mode()
         except (ImportError, ModuleNotFoundError):

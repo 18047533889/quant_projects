@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.fundamental.fiscal_batch2 import (
+from factor_engine.cleaned_operators.fundamental.fiscal_batch2 import (
     pd_fiscal_asymmetric_elasticity,
     pd_fiscal_logit_score,
     pd_fiscal_pair_direction_agreement,

@@ -30,16 +30,16 @@ from unittest.mock import patch
 
 from data_access.core.exceptions import ValidationError as DAValidationError
 
-from storage.data_scope import compute_data_scope
-from storage.materializer import ParquetMaterializer
-from storage.materialize.lake_publish import publish_factor_lake
-from storage.sources.composite_source import CompositeDataSource
-from storage.sources.data_access_source import (
+from factor_engine.storage.data_scope import compute_data_scope
+from factor_engine.storage.materializer import ParquetMaterializer
+from factor_engine.storage.materialize.lake_publish import publish_factor_lake
+from factor_engine.storage.sources.composite_source import CompositeDataSource
+from factor_engine.storage.sources.data_access_source import (
     DataAccessSource,
     FourLayerPITError,
 )
-from storage.sources.field_plan import NormalizedFieldPlan
-from storage.sources.lqtp_logical_source import LQTPLogicalDataSource
+from factor_engine.storage.sources.field_plan import NormalizedFieldPlan
+from factor_engine.storage.sources.lqtp_logical_source import LQTPLogicalDataSource
 
 pytest.importorskip("pandas")
 
@@ -525,7 +525,7 @@ def test_production_materialize_local_and_both_rejected(tmp_path):
 def test_production_local_write_target_rejects(tmp_path, monkeypatch):
     """LocalParquetWriteTarget 的 production guard 也生效（不因 materialize 主路径
     存在而放松）。"""
-    from storage.materialize.write_targets import LocalParquetWriteTarget
+    from factor_engine.storage.materialize.write_targets import LocalParquetWriteTarget
 
     monkeypatch.setenv("FACTOR_ENGINE_RUN_MODE", "production")
     target = LocalParquetWriteTarget(lake_root=tmp_path)
@@ -607,7 +607,7 @@ ds:
 def test_polars_long_native_uses_governed_scan(tmp_path):
     """native-long helper 与 governed-lazy 同源：走 store.scan()（ScanHandle），
     不再优先 store.scan_polars() 拿裸 LazyFrame。"""
-    from backend.polars_lazy import build_scan_polars_long
+    from factor_engine.backend.polars_lazy import build_scan_polars_long
 
     store = _spy_store(tmp_path)
     lf = build_scan_polars_long(

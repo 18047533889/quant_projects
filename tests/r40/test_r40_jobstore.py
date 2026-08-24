@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from service.jobstore import MANIFEST_SCHEMA_VERSION, JobRecord, JobStore
+from factor_engine.service.jobstore import MANIFEST_SCHEMA_VERSION, JobRecord, JobStore
 
 
 # ---------------------------------------------------------------------------

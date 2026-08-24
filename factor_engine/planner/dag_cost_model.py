@@ -20,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from planner.physical_factor_dag import (
+from factor_engine.planner.physical_factor_dag import (
     TASK_CSE_SHARED,
     TASK_ROLLING_SHARED,
     TASK_SOURCE_SCAN,

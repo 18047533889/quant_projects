@@ -33,7 +33,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any
 
-from backend.production_signature import (
+from factor_engine.backend.production_signature import (
     OperatorProductionSignature,
     ParamConstraint,
 )
@@ -91,7 +91,7 @@ def _build_signature(canonical: str) -> OperatorProductionSignature | None:
     读取 pandas_numpy 实例的 ``metadata``（``param_names`` / ``param_specs`` /
     ``panel_params``）。``panel_params`` 显式声明优先于 ``_PANEL_INPUT_NAMES``。
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     operator = OperatorRegistry._operators.get(canonical, {}).get("pandas_numpy")
     if operator is None:
@@ -129,13 +129,13 @@ def _build_signature(canonical: str) -> OperatorProductionSignature | None:
 @lru_cache(maxsize=1)
 def _generated_signatures() -> dict[str, OperatorProductionSignature]:
     """惰性构建 canonical -> signature 的 dict（模块级缓存，只建一次）。"""
-    from backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
     # 生成器 import 时安全：只有在这里才确保 registry 已 load_all 完成。
     ensure_cleaned_loaded()
 
-    from backend import production_signature as ps
-    from cleaned_operators.production_hardening import factor_production_targets
+    from factor_engine.backend import production_signature as ps
+    from factor_engine.cleaned_operators.production_hardening import factor_production_targets
 
     covered = set(ps.PRODUCTION_SIGNATURES) | set(ps._COMPATIBILITY_SIGNATURES)
     out: dict[str, OperatorProductionSignature] = {}

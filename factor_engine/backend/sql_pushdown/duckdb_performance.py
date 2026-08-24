@@ -19,7 +19,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
 
-from backend.pandas_compat import pd
+from factor_engine.backend.pandas_compat import pd
 
 
 # ============================================================================
@@ -285,7 +285,7 @@ def duckdb_result_to_series_arrow(
         )
 
     # R47 P1-05: Use polars_long_to_multiindex_series for consistent boundary conversion
-    from backend.long_frame import polars_long_to_multiindex_series
+    from factor_engine.backend.long_frame import polars_long_to_multiindex_series
 
     return polars_long_to_multiindex_series(
         df,
@@ -448,7 +448,7 @@ class OptimizedDuckDBExecutor:
     ) -> dict[str, pd.Series]:
         """执行 UNION ALL 合并查询。"""
         import hashlib
-        from backend.long_frame import polars_long_to_multiindex_series
+        from factor_engine.backend.long_frame import polars_long_to_multiindex_series
 
         # Optimization 2: 查询计划缓存
         query_hash = hashlib.sha256(union_query.encode()).hexdigest()[:16]

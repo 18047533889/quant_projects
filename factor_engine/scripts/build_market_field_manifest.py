@@ -20,10 +20,10 @@ if str(ROOT) not in sys.path:
 
 
 def build_manifest() -> dict[str, Any]:
-    from fields.concepts import list_concepts
-    from fields.providers import PROVIDER_REGISTRY
-    from fields.units_v2 import legacy_unit_string
-    from market.capabilities import MarketStatus
+    from factor_engine.fields.concepts import list_concepts
+    from factor_engine.fields.providers import PROVIDER_REGISTRY
+    from factor_engine.fields.units_v2 import legacy_unit_string
+    from factor_engine.market.capabilities import MarketStatus
 
     rows: dict[str, Any] = {}
     for concept in list_concepts():

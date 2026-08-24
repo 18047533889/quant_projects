@@ -4,14 +4,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend.q_backend.q_backend import QBackend
-from backend.q_backend.q_compiler import QCompiler
-from backend.q_backend.q_errors import QPhysicalRegionNotImplemented
-from ir.analyzer import Analyzer
-from api import ts_mean
-from api.columns import col
-from planner.logical_plan import PlanNode
-from planner.lowerer import Lowerer
+from factor_engine.backend.q_backend.q_backend import QBackend
+from factor_engine.backend.q_backend.q_compiler import QCompiler
+from factor_engine.backend.q_backend.q_errors import QPhysicalRegionNotImplemented
+from factor_engine.ir.analyzer import Analyzer
+from factor_engine.api import ts_mean
+from factor_engine.api.columns import col
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.lowerer import Lowerer
 
 
 def _backend_with_compiler(compiler: object) -> QBackend:

@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from runtime.incremental_contract import (
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.runtime.incremental_contract import (
     IncrementalCertificationLevel,
     IncrementalMode,
     build_incremental_certification_ledger,
@@ -72,7 +72,7 @@ def test_ledger_distribution_partitions_every_row() -> None:
 # ---------------------------------------------------------------------------
 def test_parity_proven_stateful_canonicals_are_true_incremental() -> None:
     """parity 证明的 9 个状态算子全部为 TRUE_INCREMENTAL（不是 FULL_REPLAY_ONLY）。"""
-    from runtime.incremental_parity import SEGMENTED_CANONICALS
+    from factor_engine.runtime.incremental_parity import SEGMENTED_CANONICALS
 
     ledger = build_incremental_certification_ledger()
     true_set = set(ledger.true_incremental_canonicals)

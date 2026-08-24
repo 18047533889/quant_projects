@@ -10,7 +10,7 @@ def _panel(values):
 
 
 def test_fundamental_lag_uses_report_period_not_trading_rows():
-    from cleaned_operators.fundamental.transforms_v2 import fin_lag
+    from factor_engine.cleaned_operators.fundamental.transforms_v2 import fin_lag
 
     values = _panel([10, 10, 11, 11, 20, 20, 20, 30, 30])
     period = pd.DataFrame(
@@ -24,7 +24,7 @@ def test_fundamental_lag_uses_report_period_not_trading_rows():
 
 
 def test_revision_event_is_same_period_only():
-    from cleaned_operators.fundamental.transforms_repairs_v2 import (
+    from factor_engine.cleaned_operators.fundamental.transforms_repairs_v2 import (
         fin_revision_delta,
     )
 
@@ -37,7 +37,7 @@ def test_revision_event_is_same_period_only():
 
 
 def test_bounded_fundamental_streak():
-    from cleaned_operators.fundamental.transforms_repairs_v2 import (
+    from factor_engine.cleaned_operators.fundamental.transforms_repairs_v2 import (
         fin_positive_streak,
     )
 
@@ -50,7 +50,7 @@ def test_bounded_fundamental_streak():
 
 
 def test_structure_pattern_is_prefix_invariant():
-    from cleaned_operators.price_volume.structure_patterns_v2 import (
+    from factor_engine.cleaned_operators.price_volume.structure_patterns_v2 import (
         pattern_sym_triangle,
     )
 
@@ -69,7 +69,7 @@ def test_structure_pattern_is_prefix_invariant():
 
 
 def test_kama_is_prefix_invariant():
-    from cleaned_operators.technical.indicators_v2 import KAMA
+    from factor_engine.cleaned_operators.technical.indicators_v2 import KAMA
 
     values = _panel(
         np.linspace(10, 20, 100) + np.sin(np.arange(100, dtype=float) / 3)
@@ -86,7 +86,7 @@ def test_kama_is_prefix_invariant():
 
 
 def test_candle_geometry_window_is_prior_based():
-    from cleaned_operators.price_volume.candle_geometry_v2 import (
+    from factor_engine.cleaned_operators.price_volume.candle_geometry_v2 import (
         candle_body_zscore,
     )
 
@@ -116,7 +116,7 @@ def _minute_frame(timestamps: pd.Series) -> pd.DataFrame:
 
 
 def test_intraday_bar_end_clock_does_not_merge_lunch_boundaries():
-    from storage.sources.intraday_feature_runtime_v2 import _clock_bars, _ordinal
+    from factor_engine.storage.sources.intraday_feature_runtime_v2 import _clock_bars, _ordinal
 
     timestamps = pd.Series(
         pd.to_datetime(
@@ -152,7 +152,7 @@ def test_intraday_bar_end_clock_does_not_merge_lunch_boundaries():
 
 
 def test_intraday_bar_start_clock_does_not_merge_lunch_boundaries():
-    from storage.sources.intraday_feature_runtime_v2 import _ordinal
+    from factor_engine.storage.sources.intraday_feature_runtime_v2 import _ordinal
 
     timestamps = pd.Series(
         pd.to_datetime(
@@ -178,7 +178,7 @@ def test_intraday_bar_start_clock_does_not_merge_lunch_boundaries():
 
 
 def test_complete_us_session_has_exactly_78_five_minute_bars():
-    from storage.sources.intraday_feature_runtime_v2 import _clock_bars
+    from factor_engine.storage.sources.intraday_feature_runtime_v2 import _clock_bars
 
     timestamps = pd.Series(
         pd.date_range("2024-01-02 09:31", "2024-01-02 16:00", freq="min")
@@ -196,7 +196,7 @@ def test_complete_us_session_has_exactly_78_five_minute_bars():
 
 
 def test_cutoff_expected_minutes_excludes_future_session():
-    from storage.sources.intraday_feature_runtime_v2 import _effective_minutes
+    from factor_engine.storage.sources.intraday_feature_runtime_v2 import _effective_minutes
 
     assert _effective_minutes(
         "us_stock_minute", "09:30", "16:00", "15:50"
@@ -207,7 +207,7 @@ def test_cutoff_expected_minutes_excludes_future_session():
 
 
 def test_liquidity_operator_is_prefix_invariant():
-    from cleaned_operators.price_volume.liquidity_v2 import amihud_illiquidity
+    from factor_engine.cleaned_operators.price_volume.liquidity_v2 import amihud_illiquidity
 
     close = _panel(np.linspace(10, 12, 80))
     volume = _panel(np.linspace(1e6, 2e6, 80))

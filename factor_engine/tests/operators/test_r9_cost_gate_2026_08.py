@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from cleaned_operators.operator_cost_model import (
+from factor_engine.cleaned_operators.operator_cost_model import (
     default_mining_allowed,
     has_declared_cost_contract,
     memory_cost,

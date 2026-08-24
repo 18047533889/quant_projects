@@ -12,11 +12,11 @@ sys.path.insert(0, str(FE_ROOT))
 
 
 def build() -> dict:
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
-    from cleaned_operators.operator_surface import classify_canonical, surface_summary
-    from backend.operator_capability import capability_for
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical, surface_summary
+    from factor_engine.backend.operator_capability import capability_for
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()

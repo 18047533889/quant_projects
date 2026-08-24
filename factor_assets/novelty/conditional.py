@@ -44,7 +44,11 @@ class ResultIdentity:
     Identity based on factor outputs, not formula.
 
     Two factors with different formulas but identical outputs have
-    the same result identity.
+    the same result identity.  The identity is only meaningful within a
+    fully-specified evaluation context: the data snapshot, universe, period,
+    factor version, coordinate space and calculation spec all participate in
+    the identity so that two results computed on different data or with
+    different factor versions are never conflated.
     """
     result_hash: str  # Hash of factor values
     factor_id: str
@@ -52,6 +56,10 @@ class ResultIdentity:
     period_start: str
     period_end: str
     num_observations: int
+    data_snapshot_ref: Optional[str] = None  # data snapshot the values were computed on
+    factor_version: Optional[str] = None    # version of the factor definition
+    coordinate_hash: Optional[str] = None    # hash of the coordinate space (e.g. asset universe)
+    calculation_spec_hash: Optional[str] = None  # hash of the calculation spec
 
     @classmethod
     def from_values(
@@ -62,6 +70,10 @@ class ResultIdentity:
         period_start: str,
         period_end: str,
         num_observations: int,
+        data_snapshot_ref: Optional[str] = None,
+        factor_version: Optional[str] = None,
+        coordinate_hash: Optional[str] = None,
+        calculation_spec_hash: Optional[str] = None,
     ) -> "ResultIdentity":
         """
         Create result identity from factor values.
@@ -73,6 +85,10 @@ class ResultIdentity:
             period_start: Period start date
             period_end: Period end date
             num_observations: Number of observations
+            data_snapshot_ref: Data snapshot the values were computed on
+            factor_version: Version of the factor definition
+            coordinate_hash: Hash of the coordinate space
+            calculation_spec_hash: Hash of the calculation spec
 
         Returns:
             ResultIdentity
@@ -85,6 +101,10 @@ class ResultIdentity:
             period_start=period_start,
             period_end=period_end,
             num_observations=num_observations,
+            data_snapshot_ref=data_snapshot_ref,
+            factor_version=factor_version,
+            coordinate_hash=coordinate_hash,
+            calculation_spec_hash=calculation_spec_hash,
         )
 
 
@@ -93,21 +113,30 @@ class ResultIdentityCache:
     Reverse cache from result identity to factor IDs.
 
     Enables efficient lookup: "Do we already have a factor with these outputs?"
+
+    The cache key includes EVERY result-comparability-relevant identity field
+    (result hash, universe, data snapshot, period, observation count, factor
+    version, coordinate hash, calculation spec hash) so that two factors are
+    only considered equivalent when their full evaluation context matches.
     """
 
     def __init__(self):
-        self._cache: dict[tuple[str, str, str, str, int], list[str]] = {}
+        self._cache: dict[tuple, list[str]] = {}
 
     @staticmethod
     def _identity_key(
         result_identity: ResultIdentity,
-    ) -> tuple[str, str, str, str, int]:
+    ) -> tuple:
         return (
             result_identity.result_hash,
             result_identity.universe_ref,
+            result_identity.data_snapshot_ref or "",
             result_identity.period_start,
             result_identity.period_end,
             result_identity.num_observations,
+            result_identity.factor_version or "",
+            result_identity.coordinate_hash or "",
+            result_identity.calculation_spec_hash or "",
         )
 
     def add(self, result_identity: ResultIdentity) -> None:
@@ -170,11 +199,16 @@ class ConditionalNoveltyProvider(Protocol):
         ...
 
 
-class SimpleConditionalNoveltyAssessor:
+class ResultIdentityNoveltyAssessor:
     """
-    Simple conditional novelty assessor using result identity cache.
+    Exact result-identity novelty assessor using the result identity cache.
 
-    Checks if a factor's outputs are identical to any existing factor.
+    This is EXACT result-identity novelty: a factor is novel iff no pool
+    factor shares its full result identity (same outputs on the same data
+    snapshot, universe, period, factor version, coordinate and calculation
+    spec).  It is NOT conditional residual novelty — residual/conditional
+    novelty (incremental signal on top of a similar admitted factor) is the
+    separate :class:`factor_assets.adapters.residual_novelty.ResidualICNoveltyProducer`.
     """
 
     def __init__(self, result_cache: ResultIdentityCache):
@@ -240,5 +274,5 @@ __all__ = [
     "ResultIdentity",
     "ResultIdentityCache",
     "ConditionalNoveltyProvider",
-    "SimpleConditionalNoveltyAssessor",
+    "ResultIdentityNoveltyAssessor",
 ]

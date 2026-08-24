@@ -25,8 +25,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from cleaned_operators import load_all  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators import load_all  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 _REPO = Path(__file__).resolve().parent.parent.parent
 _TIMING_FILE = _REPO / "cleaned_operators" / "model_timing.py"
@@ -57,7 +57,7 @@ def test_p0_m13_no_duplicate_model_timing_keys():
                     found = True
     assert found, "MODEL_TIMING_CONTRACTS dict literal not found"
     # runtime reflection agrees
-    from cleaned_operators.model_timing import MODEL_TIMING_CONTRACTS
+    from factor_engine.cleaned_operators.model_timing import MODEL_TIMING_CONTRACTS
     assert len(MODEL_TIMING_CONTRACTS) == len(set(MODEL_TIMING_CONTRACTS))
 
 
@@ -76,7 +76,7 @@ def test_p0_m01_garch_forecast_params_fit_t_minus_1():
     assertion: persistence (pure parameter sum a+b) must be invariant to the
     current return, because params come from t-1.
     """
-    from cleaned_operators.ts_model.volatility import _garch_path
+    from factor_engine.cleaned_operators.ts_model.volatility import _garch_path
 
     rng = np.random.default_rng(7)
     rets = rng.standard_normal(150)
@@ -96,7 +96,7 @@ def test_p0_m01_garch_forecast_params_fit_t_minus_1():
 def test_p0_m01_garch_forecast_contract_matches_kernel():
     """R35-P0-M01/M02/M03: every GARCH/GJR timing contract is explicit and
     says fit_cutoff=1, and the kernel fits strictly t-1."""
-    from cleaned_operators.model_timing import MODEL_TIMING_CONTRACTS, get_model_timing_contract
+    from factor_engine.cleaned_operators.model_timing import MODEL_TIMING_CONTRACTS, get_model_timing_contract
 
     _load()
     garch_canons = [
@@ -116,7 +116,7 @@ def test_p0_m01_garch_forecast_contract_matches_kernel():
 # --------------------------------------------------------------------------
 
 def test_p0_m04_har_feature_label_timing():
-    from cleaned_operators.model_contract import feature_label_timing_of
+    from factor_engine.cleaned_operators.model_contract import feature_label_timing_of
 
     flt = feature_label_timing_of("ts_har_rv_next_vol_forecast")
     assert flt is not None
@@ -138,7 +138,7 @@ def test_p0_m04_har_next_forecast_prefix_invariance():
     no wrong-history leakage.  The rolling window is ``rv[-window:]``; prepending
     extra history (or perturbing the very first row, which falls out of the
     window for a long-enough series) must not move the current forecast."""
-    from cleaned_operators.ts_model.volatility import _har_rv
+    from factor_engine.cleaned_operators.ts_model.volatility import _har_rv
 
     rng = np.random.default_rng(8)
     rv = np.abs(rng.standard_normal(300)) + 1.0
@@ -160,7 +160,7 @@ def test_p0_m04_har_next_forecast_prefix_invariance():
 # --------------------------------------------------------------------------
 
 def test_p0_m05_panel_zero_feature_rejected():
-    from cleaned_operators.cross_section.panel_model import _forecast_generic
+    from factor_engine.cleaned_operators.cross_section.panel_model import _forecast_generic
 
     rng = np.random.default_rng(11)
     n = 40
@@ -170,7 +170,7 @@ def test_p0_m05_panel_zero_feature_rejected():
 
 
 def test_p0_m06_market_state_required():
-    from cleaned_operators.cross_section.panel_model import _regime_forecast, _moe_forecast
+    from factor_engine.cleaned_operators.cross_section.panel_model import _regime_forecast, _moe_forecast
 
     rng = np.random.default_rng(12)
     n = 40
@@ -187,7 +187,7 @@ def test_p0_m06_market_state_required():
 # --------------------------------------------------------------------------
 
 def test_p0_m07_pca_min_history_explicit():
-    import cleaned_operators.cross_section.panel_model as pm
+    import factor_engine.cleaned_operators.cross_section.panel_model as pm
 
     assert hasattr(pm, "PCA_MIN_HISTORY")
     assert hasattr(pm, "PCA_MIN_COVERAGE")
@@ -205,7 +205,7 @@ def test_p0_m07_pca_min_history_explicit():
 def test_p0_m08_pca_sign_tie_stable_under_reorder():
     """Two active loadings with exactly equal |value| must flip the eigenvector
     deterministically by instrument identity, not column position."""
-    from cleaned_operators.cross_section.panel_model import _pca_svd, _pca_loading
+    from factor_engine.cleaned_operators.cross_section.panel_model import _pca_svd, _pca_loading
 
     # Construct a window whose SVD produces a symmetric eigenvector (tie).
     # Use a symmetric X so loadings come out |equal| for two components.
@@ -230,7 +230,7 @@ def test_p0_m08_pca_sign_tie_stable_under_reorder():
 # --------------------------------------------------------------------------
 
 def test_p0_m11_polars_variance_ratio_trailing_nan():
-    from cleaned_operators.ts_model.polars_regression import _variance_ratio_slope as _pl
+    from factor_engine.cleaned_operators.ts_model.polars_regression import _variance_ratio_slope as _pl
 
     arr = np.array([1.0, 2.0, 3.0, 4.0, np.nan])
     assert np.isnan(_pl(arr, 3)), "Polars VR must be NaN when last row is non-finite"
@@ -238,8 +238,8 @@ def test_p0_m11_polars_variance_ratio_trailing_nan():
 
 def test_p0_m12_polars_pairwise_finite_parity():
     import polars as pl
-    from cleaned_operators.cross_section.peer_ops import _rolling_regression
-    from cleaned_operators.ts_model.polars_regression import _pairwise_rolling
+    from factor_engine.cleaned_operators.cross_section.peer_ops import _rolling_regression
+    from factor_engine.cleaned_operators.ts_model.polars_regression import _pairwise_rolling
 
     rng = np.random.default_rng(3)
     n = 60

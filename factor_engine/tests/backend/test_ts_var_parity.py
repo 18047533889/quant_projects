@@ -9,12 +9,12 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from api import ts_var
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from cleaned_operators import load_all
-from runtime.engine import FactorEngine
+from factor_engine.api import ts_var
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.cleaned_operators import load_all
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 

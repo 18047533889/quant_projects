@@ -24,8 +24,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.semantic_audit import (
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.semantic_audit import (
     AuditReport,
     RULES,
     _run_rule_sweep,
@@ -33,7 +33,7 @@ from cleaned_operators.semantic_audit import (
     contract_fixture,
     run_audit,
 )
-from cleaned_operators.base import OperatorMetadata, SeriesOperator
+from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator
 
 load_all()
 
@@ -190,7 +190,7 @@ def test_native_cohort_passes_for_native_semantics():
 # ---------------------------------------------------------------------------
 
 def test_psd_geometry_fails_on_non_psd_bundle(monkeypatch):
-    import cleaned_operators.feature_geometry as fg
+    import factor_engine.cleaned_operators.feature_geometry as fg
 
     bad = (
         np.array([[1.0, 0.9], [0.9, 1.0]]),  # raw (fine)

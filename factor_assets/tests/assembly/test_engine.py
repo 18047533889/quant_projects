@@ -33,8 +33,16 @@ def make_asset(factor_id, *, frequency="daily", domains=("price",), state=Lifecy
     )
 
 
+def make_spec(set_id, name, policy, **kwargs):
+    """Build a FactorSetSpec with the now-required provenance refs."""
+    kwargs.setdefault("data_snapshot_ref", "snapshot:default")
+    kwargs.setdefault("universe_ref", "universe:default")
+    kwargs.setdefault("split_ref", "split:default")
+    return FactorSetSpec(set_id, name, policy, **kwargs)
+
+
 def test_empty_candidates_fail_closed():
-    spec = FactorSetSpec("set-1", "Empty", "manual")
+    spec = make_spec("set-1", "Empty", "manual")
     try:
         FactorSetAssembler().assemble(spec, [])
     except ValueError as exc:
@@ -61,7 +69,7 @@ def make_decision(factor_id, *, approved=True, timestamp="2024-01-01T00:00:00Z")
 
 
 def test_non_manual_assembly_rejects_unproven_approval():
-    spec = FactorSetSpec("set-1", "Automated", "family_robust")
+    spec = make_spec("set-1", "Automated", "family_robust")
     forged = SelectionDecision(
         decision_id="forged",
         factor_id="F1",
@@ -81,7 +89,7 @@ def test_non_manual_assembly_rejects_unproven_approval():
 
 
 def test_non_manual_assembly_rejects_evidence_free_approved_asset():
-    spec = FactorSetSpec("set-1", "Automated", "family_robust")
+    spec = make_spec("set-1", "Automated", "family_robust")
     asset = make_asset("F1")
     asset = FactorAsset(
         metadata=asset.metadata,
@@ -99,7 +107,7 @@ def test_non_manual_assembly_rejects_evidence_free_approved_asset():
 
 
 def test_non_manual_selection_requires_decisions():
-    spec = FactorSetSpec("set-1", "Automated", "family_robust")
+    spec = make_spec("set-1", "Automated", "family_robust")
     try:
         FactorSetAssembler().assemble(spec, [make_asset("F1")])
     except ValueError as exc:
@@ -109,7 +117,7 @@ def test_non_manual_selection_requires_decisions():
 
 
 def test_non_manual_selection_admits_only_latest_approved_decisions():
-    spec = FactorSetSpec("set-1", "Automated", "family_robust")
+    spec = make_spec("set-1", "Automated", "family_robust")
     result = FactorSetAssembler().assemble(
         spec,
         [make_asset("approved"), make_asset("rejected"), make_asset("missing")],
@@ -125,7 +133,7 @@ def test_non_manual_selection_admits_only_latest_approved_decisions():
 
 
 def test_non_manual_selection_is_order_invariant_for_decision_history():
-    spec = FactorSetSpec("set-1", "Automated", "family_robust")
+    spec = make_spec("set-1", "Automated", "family_robust")
     early_rejection = make_decision(
         "F1", approved=False, timestamp="2024-01-01T00:00:00Z"
     )
@@ -151,7 +159,7 @@ def test_non_manual_selection_is_order_invariant_for_decision_history():
 
 
 def test_equal_timestamp_conflicting_selection_decisions_fail_closed():
-    spec = FactorSetSpec("set-1", "Automated", "family_robust")
+    spec = make_spec("set-1", "Automated", "family_robust")
     first = make_decision("F1", approved=True)
     conflicting = make_decision("F1", approved=False)
 
@@ -168,13 +176,13 @@ def test_equal_timestamp_conflicting_selection_decisions_fail_closed():
 
 
 def test_manual_selection_remains_backward_compatible_without_decisions():
-    spec = FactorSetSpec("set-1", "Manual", "manual")
+    spec = make_spec("set-1", "Manual", "manual")
     result = FactorSetAssembler().assemble(spec, [make_asset("F1")])
     assert result.factor_ids == ("F1",)
 
 
 def test_max_factors_and_deterministic_ordering():
-    spec = FactorSetSpec("set-1", "Capped", "manual", max_factors=2)
+    spec = make_spec("set-1", "Capped", "manual", max_factors=2)
     result = FactorSetAssembler().assemble(
         spec, [make_asset("F3"), make_asset("F1"), make_asset("F2")],
         created_at="2024-02-01T00:00:00Z",
@@ -185,7 +193,7 @@ def test_max_factors_and_deterministic_ordering():
 
 
 def test_duplicate_factor_id_candidates_are_deduplicated_before_cap():
-    spec = FactorSetSpec("set-1", "Capped", "manual", max_factors=2)
+    spec = make_spec("set-1", "Capped", "manual", max_factors=2)
     duplicate = make_asset("F1")
     result = FactorSetAssembler().assemble(
         spec, [make_asset("F2"), duplicate, duplicate, make_asset("F3")]
@@ -195,7 +203,7 @@ def test_duplicate_factor_id_candidates_are_deduplicated_before_cap():
 
 
 def test_conflicting_duplicate_factor_id_candidates_fail_closed():
-    spec = FactorSetSpec("set-1", "Conflicting", "manual")
+    spec = make_spec("set-1", "Conflicting", "manual")
     first = make_asset("F1")
     conflicting = FactorAsset(
         metadata=AssetMetadata(
@@ -221,7 +229,7 @@ def test_conflicting_duplicate_factor_id_candidates_fail_closed():
 
 
 def test_basic_spec_filters():
-    spec = FactorSetSpec(
+    spec = make_spec(
         "set-1", "Filtered", "manual", frequency="daily",
         required_domains=("price",), excluded_domains=("fundamental",),
         min_lifecycle_state="APPROVED",
@@ -236,7 +244,7 @@ def test_basic_spec_filters():
 
 
 def test_family_constraint_limits_each_family():
-    spec = FactorSetSpec("set-1", "Families", "manual", max_factors=3, family_constraints="max_per_family=1")
+    spec = make_spec("set-1", "Families", "manual", max_factors=3, family_constraints="max_per_family=1")
     result = FactorSetAssembler().assemble(
         spec, [make_asset("F2"), make_asset("F3"), make_asset("F1")],
     )
@@ -244,7 +252,7 @@ def test_family_constraint_limits_each_family():
 
 
 def test_unknown_family_constraint_syntax_fails_closed():
-    spec = FactorSetSpec("set-1", "Families", "manual", family_constraints="one_per_family")
+    spec = make_spec("set-1", "Families", "manual", family_constraints="one_per_family")
     try:
         FactorSetAssembler().assemble(spec, [make_asset("F1")])
     except ValueError as exc:
@@ -258,7 +266,7 @@ def test_ranking_is_evidence_based_not_lexicographic():
     # F1 admitted most recently (2024-03) so it ranks ahead of F2 (2024-01)
     # despite the lexicographic order F1 < F2 being coincidentally aligned;
     # use F2 recent / F1 old so the two orderings genuinely disagree.
-    spec = FactorSetSpec("set-1", "Ranked", "pareto_front", max_factors=1)
+    spec = make_spec("set-1", "Ranked", "pareto_front", max_factors=1)
     result = FactorSetAssembler().assemble(
         spec,
         [make_asset("F1"), make_asset("F2")],
@@ -271,7 +279,7 @@ def test_ranking_is_evidence_based_not_lexicographic():
 
 
 def test_manual_ranking_remains_lexicographic():
-    spec = FactorSetSpec("set-1", "Manual", "manual", max_factors=1)
+    spec = make_spec("set-1", "Manual", "manual", max_factors=1)
     result = FactorSetAssembler().assemble(
         spec, [make_asset("F2"), make_asset("F1")]
     )
@@ -279,7 +287,7 @@ def test_manual_ranking_remains_lexicographic():
 
 
 def test_unknown_selection_policy_fails_closed():
-    spec = FactorSetSpec("set-1", "Bogus", "aggressive_growth")
+    spec = make_spec("set-1", "Bogus", "aggressive_growth")
     try:
         FactorSetAssembler().assemble(spec, [make_asset("F1")])
     except ValueError as exc:
@@ -289,7 +297,7 @@ def test_unknown_selection_policy_fails_closed():
 
 
 def test_memberships_carry_decision_and_evidence_refs():
-    spec = FactorSetSpec("set-1", "Provenance", "pareto_front")
+    spec = make_spec("set-1", "Provenance", "pareto_front")
     result = FactorSetAssembler().assemble(
         spec,
         [make_asset("F1")],
@@ -305,7 +313,7 @@ def test_memberships_carry_decision_and_evidence_refs():
 
 
 def test_manual_memberships_have_null_decision_refs():
-    spec = FactorSetSpec("set-1", "Manual", "manual")
+    spec = make_spec("set-1", "Manual", "manual")
     result = FactorSetAssembler().assemble(spec, [make_asset("F1")])
     (membership,) = result.memberships
     assert membership.factor_id == "F1"
@@ -315,7 +323,7 @@ def test_manual_memberships_have_null_decision_refs():
 
 
 def test_assembly_hash_deterministic_and_content_sensitive():
-    spec = FactorSetSpec("set-1", "Hashed", "pareto_front")
+    spec = make_spec("set-1", "Hashed", "pareto_front")
     decisions = [make_decision("F1"), make_decision("F2")]
     first = FactorSetAssembler().assemble(
         spec, [make_asset("F2"), make_asset("F1")],
@@ -339,7 +347,7 @@ def test_assembly_hash_deterministic_and_content_sensitive():
     assert changed.assembly_hash != first.assembly_hash
 
     # Changing the policy semantics changes the policy hash only.
-    other_spec = FactorSetSpec("set-2", "Hashed", "family_robust")
+    other_spec = make_spec("set-2", "Hashed", "family_robust")
     other = FactorSetAssembler().assemble(
         other_spec, [make_asset("F1"), make_asset("F2")],
         selection_decisions=decisions, created_at="2024-02-01T00:00:00Z",
@@ -348,20 +356,22 @@ def test_assembly_hash_deterministic_and_content_sensitive():
 
 
 def test_factor_set_split_and_snapshot_refs_flow_from_spec():
-    spec = FactorSetSpec(
+    spec = make_spec(
         "set-1", "Refs", "manual",
         universe_ref="universe:ashare-v3", split_ref="split:oos-2024h1",
     )
     result = FactorSetAssembler().assemble(spec, [make_asset("F1")])
-    assert result.snapshot_ref == "universe:ashare-v3"
+    # snapshot_ref is the explicit data_snapshot_ref (defaulted by make_spec),
+    # NOT the universe — the universe must not impersonate the snapshot.
+    assert result.snapshot_ref == "snapshot:default"
     assert result.split_ref == "split:oos-2024h1"
     assert result.universe_ref == "universe:ashare-v3"
 
 
-def test_explicit_data_snapshot_ref_overrides_universe_fallback():
-    # data_snapshot_ref is explicit provenance: when set, it must not be
-    # aliased to universe_ref.
-    spec = FactorSetSpec(
+def test_explicit_data_snapshot_ref_is_authoritative():
+    # data_snapshot_ref is explicit provenance: it must not be aliased to
+    # universe_ref, and a spec without it fails closed (no universe fallback).
+    spec = make_spec(
         "set-1", "Snapshot", "manual",
         universe_ref="universe:ashare-v3",
         data_snapshot_ref="snapshot:2024-08-01T00:00:00Z",
@@ -369,9 +379,93 @@ def test_explicit_data_snapshot_ref_overrides_universe_fallback():
     result = FactorSetAssembler().assemble(spec, [make_asset("F1")])
     assert result.snapshot_ref == "snapshot:2024-08-01T00:00:00Z"
     assert result.universe_ref == "universe:ashare-v3"
-    # Legacy spec (no data_snapshot_ref) keeps the universe_ref fallback.
-    legacy = FactorSetSpec("set-2", "Legacy", "manual", universe_ref="universe:ashare-v3")
-    assert FactorSetAssembler().assemble(legacy, [make_asset("F1")]).snapshot_ref == "universe:ashare-v3"
+
+
+def test_spec_without_data_snapshot_ref_fails_closed():
+    # The universe must NOT impersonate the snapshot: a spec with no
+    # data_snapshot_ref is rejected at construction.
+    try:
+        FactorSetSpec("set-2", "Legacy", "manual", universe_ref="universe:ashare-v3")
+    except ValueError as exc:
+        assert "data_snapshot_ref is required" in str(exc)
+    else:
+        raise AssertionError("spec without data_snapshot_ref must fail closed")
+
+
+def test_diverse_requires_similarity_provider():
+    """diverse (MMR) fails closed without a similarity provider."""
+    spec = make_spec("set-1", "Diverse", "diverse")
+    try:
+        FactorSetAssembler().assemble(
+            spec, [make_asset("F1")], selection_decisions=[make_decision("F1")]
+        )
+    except ValueError as exc:
+        assert "similarity_provider" in str(exc)
+    else:
+        raise AssertionError("diverse without similarity_provider must fail closed")
+
+
+def test_diverse_mmr_selects_diverse_factors():
+    """diverse uses real MMR: quality minus max similarity to selected."""
+    spec = make_spec("set-1", "Diverse", "diverse", max_factors=2)
+
+    def decided(factor_id, quality, timestamp):
+        d = make_decision(factor_id, timestamp=timestamp)
+        object.__setattr__(d, "metadata", MappingProxyType({"quality": quality}))
+        return d
+
+    # F1 and F2 are near-duplicates (high similarity); F3 is distinct.
+    def similarity(a, b):
+        if {a, b} == {"F1", "F2"}:
+            return 0.95
+        return 0.1
+
+    result = FactorSetAssembler().assemble(
+        spec,
+        [make_asset("F1"), make_asset("F2"), make_asset("F3")],
+        selection_decisions=[
+            decided("F1", 1.0, "2024-01-01T00:00:00Z"),
+            decided("F2", 0.9, "2024-01-01T00:00:00Z"),
+            decided("F3", 0.8, "2024-01-01T00:00:00Z"),
+        ],
+        similarity_provider=similarity,
+    )
+    # MMR picks F1 (highest quality) then F3 (diverse), not F2 (redundant).
+    assert result.factor_ids == ("F1", "F3")
+
+
+def test_family_robust_uses_composite_score():
+    """family_robust ranks by composite robustness score, not just recency."""
+    spec = make_spec("set-1", "Robust", "family_robust", max_factors=1)
+
+    def decided(factor_id, score, timestamp):
+        d = make_decision(factor_id, timestamp=timestamp)
+        object.__setattr__(d, "metadata", MappingProxyType({"family_robust": score}))
+        return d
+
+    # F1 has a higher composite robustness score but is LESS recent.
+    result = FactorSetAssembler().assemble(
+        spec,
+        [make_asset("F1"), make_asset("F2")],
+        selection_decisions=[
+            decided("F1", 0.9, "2024-01-01T00:00:00Z"),
+            decided("F2", 0.5, "2024-06-01T00:00:00Z"),
+        ],
+    )
+    assert result.factor_ids == ("F1",)
+
+
+def test_artifact_to_legacy_view():
+    """FactorSetArtifact.to_legacy_view() produces the deprecated FactorSet."""
+    from factor_assets.contracts.factor_set import FactorSet
+
+    spec = make_spec("set-1", "LegacyView", "manual")
+    artifact = FactorSetAssembler().assemble(spec, [make_asset("F1")])
+    legacy = artifact.to_legacy_view()
+    assert isinstance(legacy, FactorSet)
+    assert legacy.factor_ids == ("F1",)
+    assert legacy.snapshot_ref == "snapshot:default"
+    assert legacy.memberships == artifact.members
 
 
 def test_pareto_front_ranking_uses_dominance_not_recency():
@@ -383,7 +477,7 @@ def test_pareto_front_ranking_uses_dominance_not_recency():
         object.__setattr__(d, "metadata", MappingProxyType({"objectives": dict(objectives)}))
         return d
 
-    spec = FactorSetSpec("set-1", "Pareto", "pareto_front", max_factors=1)
+    spec = make_spec("set-1", "Pareto", "pareto_front", max_factors=1)
     result = FactorSetAssembler().assemble(
         spec,
         [make_asset("F1"), make_asset("F2")],
@@ -404,7 +498,7 @@ def test_pareto_front_ranking_ignores_partial_objectives():
         object.__setattr__(d, "metadata", MappingProxyType({"objectives": dict(objectives)}))
         return d
 
-    spec = FactorSetSpec("set-1", "Partial", "pareto_front", max_factors=1)
+    spec = make_spec("set-1", "Partial", "pareto_front", max_factors=1)
     result = FactorSetAssembler().assemble(
         spec,
         [make_asset("F1"), make_asset("F2")],
@@ -419,7 +513,7 @@ def test_pareto_front_ranking_ignores_partial_objectives():
 def test_pareto_front_ranking_without_objectives_keeps_recency():
     # Metadata-only decisions (no objectives anywhere): all points are
     # mutually non-dominated; ordering preserves the previous behaviour.
-    spec = FactorSetSpec("set-1", "NoObj", "pareto_front", max_factors=1)
+    spec = make_spec("set-1", "NoObj", "pareto_front", max_factors=1)
     result = FactorSetAssembler().assemble(
         spec,
         [make_asset("F1"), make_asset("F2")],
@@ -434,7 +528,7 @@ def test_pareto_front_ranking_without_objectives_keeps_recency():
 def test_factor_set_artifact_round_trip_from_assembly():
     from factor_assets.contracts.factor_set import FactorSetArtifact
 
-    spec = FactorSetSpec(
+    spec = make_spec(
         "set-1", "Artifact", "pareto_front",
         universe_ref="universe:ashare-v3", split_ref="split:oos-2024h1",
     )
@@ -469,6 +563,8 @@ def test_factor_set_artifact_rejects_duplicate_members():
             set_id="set-1", name="Bad", members=(member, member),
             created_at="2024-02-01T00:00:00Z",
             policy_hash="ph", assembly_hash="ah",
+            snapshot_ref="snapshot:default", universe_ref="universe:default",
+            split_ref="split:default",
         )
     except ValueError as exc:
         assert "duplicate factor_id" in str(exc)
@@ -477,8 +573,8 @@ def test_factor_set_artifact_rejects_duplicate_members():
 
 
 def test_validation_status_orthogonal_to_lifecycle():
-    from factor_assets.contracts.asset import AssetMetadata, FactorAsset
     from factor_assets.contracts.lifecycle import (
+       
         HealthState, LifecycleState, ValidationStatus,
     )
 

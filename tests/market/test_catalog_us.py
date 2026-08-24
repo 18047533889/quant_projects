@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from fields import US_FIELD_REGISTRY
-from fields.catalog_us import US_FIELD_SPECS, US_TABLE_SPECS
-from fields.registry import FieldRegistry
+from factor_engine.fields import US_FIELD_REGISTRY
+from factor_engine.fields.catalog_us import US_FIELD_SPECS, US_TABLE_SPECS
+from factor_engine.fields.registry import FieldRegistry
 
 
 @pytest.fixture(scope="module", autouse=True)

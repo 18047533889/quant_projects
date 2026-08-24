@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.panel_batch1 import (
+from factor_engine.cleaned_operators.panel_batch1 import (
     pd_panel_day_night_beta_gap,
     pd_pastor_stambaugh_beta,
     pd_price_delay_score,

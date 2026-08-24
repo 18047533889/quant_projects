@@ -52,7 +52,7 @@ def series_to_polars_long_lazy(
     """MultiIndex Series → long-table LazyFrame（``ts, inst, _v``）。"""
     import polars as pl
 
-    from storage.factor_format import series_to_long_table
+    from factor_engine.storage.factor_format import series_to_long_table
 
     if not isinstance(series.index, pd.MultiIndex) or series.index.nlevels < 2:
         raise TypeError("series_to_polars_long_lazy expects MultiIndex (timestamp, instrument) Series")
@@ -148,7 +148,7 @@ def polars_long_to_multiindex_series(
     API compatibility. The .to_pandas() call here is the single point of
     conversion for all native execution paths.
     """
-    from storage.factor_format import long_table_to_series
+    from factor_engine.storage.factor_format import long_table_to_series
 
     pdf = frame.to_pandas() if hasattr(frame, "to_pandas") else frame
     rename = {}

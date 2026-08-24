@@ -65,7 +65,7 @@ def _check_syspath() -> str:
     import inspect
 
     try:
-        from backend.sql_pushdown import executor
+        from factor_engine.backend.sql_pushdown import executor
 
         src = inspect.getsource(executor._ensure_data_access)
     except Exception:
@@ -77,7 +77,7 @@ def _check_syspath() -> str:
 
 def _check_runmode() -> str:
     # S19: invalid ambient run mode must raise (fail closed).
-    from service.policies import resolve_ambient_run_mode
+    from factor_engine.service.policies import resolve_ambient_run_mode
 
     try:
         resolve_ambient_run_mode()
@@ -89,13 +89,13 @@ def _check_runmode() -> str:
 
 
 def _check_dq_role() -> str:
-    from runtime.quality.dq_gates import DQRole, role_domain_checks
+    from factor_engine.runtime.quality.dq_gates import DQRole, role_domain_checks
 
     return BlockerStatus.PASS if DQRole.ALPHA and callable(role_domain_checks) else BlockerStatus.FAIL
 
 
 def _check_idempotency() -> str:
-    from service.jobstore import JobRecord, JobStore
+    from factor_engine.service.jobstore import JobRecord, JobStore
 
     rec = JobRecord(run_id="x", idempotency_key="k")
     return BlockerStatus.PASS if rec.idempotency_key is not None and JobStore else BlockerStatus.FAIL
@@ -115,7 +115,7 @@ def _check_lock() -> str:
 
 
 def _check_sqlite_store() -> str:
-    from service.jobstore import JobStore
+    from factor_engine.service.jobstore import JobStore
     import inspect
 
     return BlockerStatus.PASS if "sqlite3" in inspect.getsource(JobStore) else BlockerStatus.FAIL

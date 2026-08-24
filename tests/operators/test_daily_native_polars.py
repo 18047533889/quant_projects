@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -32,7 +32,7 @@ _DAILY_NATIVE = (
 
 @pytest.mark.parametrize("name", _DAILY_NATIVE)
 def test_daily_native_polars_backend_registered(name: str) -> None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     backends = OperatorRegistry.backends_for(name)
     assert "polars" in backends, (name, backends)
@@ -54,7 +54,7 @@ def test_daily_native_polars_backend_registered(name: str) -> None:
 
 def test_signed_sqrt_polars_matches_pandas() -> None:
     pl = pytest.importorskip("polars")
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     pdf = pd.DataFrame({"a": [1.0, 4.0, 9.0], "b": [-1.0, -4.0, 0.0]})
     expected = OperatorRegistry.get("signed_sqrt").calculate(pdf)
@@ -68,7 +68,7 @@ def test_signed_sqrt_polars_matches_pandas() -> None:
 
 def test_normalize_polars_matches_pandas() -> None:
     pl = pytest.importorskip("polars")
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     pdf = pd.DataFrame({"a": [1.0, 2.0], "b": [3.0, 4.0], "c": [5.0, 6.0]})
     expected = OperatorRegistry.get("normalize").calculate(pdf)
@@ -81,8 +81,8 @@ def test_normalize_polars_matches_pandas() -> None:
 
 
 def test_daily_dsl_does_not_leak_research_ops() -> None:
-    from backend.cleaned_bridge import build_cleaned_dsl_allowlist
-    from cleaned_operators.operator_surface import RESEARCH_ONLY_CANONICALS
+    from factor_engine.backend.cleaned_bridge import build_cleaned_dsl_allowlist
+    from factor_engine.cleaned_operators.operator_surface import RESEARCH_ONLY_CANONICALS
 
     daily = set(build_cleaned_dsl_allowlist(set(), surface="daily"))
     assert not (daily & RESEARCH_ONLY_CANONICALS)

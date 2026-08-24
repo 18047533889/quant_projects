@@ -15,8 +15,8 @@ def _bootstrap() -> None:
     for p in (str(root), str(project)):
         if p not in sys.path:
             sys.path.insert(0, p)
-    from cleaned_operators import load_all
-    from runtime.env_bootstrap import bootstrap_runtime_env
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.runtime.env_bootstrap import bootstrap_runtime_env
 
     bootstrap_runtime_env()
     load_all()
@@ -24,15 +24,15 @@ def _bootstrap() -> None:
 
 def check_operator_contracts(*, strict_tier1_cost: bool = True) -> list[str]:
     """验收算子 metadata / policy / alias / stub / cost 等契约，返回错误列表。"""
-    from backend.operator_cost import tier1_has_explicit_cost
-    from cleaned_operators.operator_policy import (
+    from factor_engine.backend.operator_cost import tier1_has_explicit_cost
+    from factor_engine.cleaned_operators.operator_policy import (
         _EXPLICIT_POLICIES,
         infer_operator_policy,
         policy_required_canonicals,
         resolve_tier1_canonical,
         tier1_policy_keys,
     )
-    from cleaned_operators.operator_spec import (
+    from factor_engine.cleaned_operators.operator_spec import (
         check_capm_param_contracts,
         check_fundamental_param_contracts,
         check_intraday_param_contracts,
@@ -42,7 +42,7 @@ def check_operator_contracts(*, strict_tier1_cost: bool = True) -> list[str]:
         check_polars_production_backend_explicit,
         iter_operator_specs,
     )
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     errors: list[str] = []
 
@@ -93,10 +93,10 @@ def check_operator_contracts(*, strict_tier1_cost: bool = True) -> list[str]:
     errors.extend(check_fundamental_param_contracts())
     errors.extend(check_capm_param_contracts())
     errors.extend(check_intraday_param_contracts())
-    from cleaned_operators.fundamental.field_contract import check_fundamental_ratio_field_contracts
+    from factor_engine.cleaned_operators.fundamental.field_contract import check_fundamental_ratio_field_contracts
 
     errors.extend(check_fundamental_ratio_field_contracts())
-    from cleaned_operators.operator_policy import check_polars_production_gate
+    from factor_engine.cleaned_operators.operator_policy import check_polars_production_gate
 
     errors.extend(check_polars_production_gate())
 

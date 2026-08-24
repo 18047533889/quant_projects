@@ -11,7 +11,7 @@ def _ops(node):
 
 
 def test_extended_surface_includes_daily_primitives_before_macro_expansion():
-    from api.operator_registry import build_dsl_allowlist
+    from factor_engine.api.operator_registry import build_dsl_allowlist
 
     allow = build_dsl_allowlist(surface="extended")
     for name in ("add", "subtract", "multiply", "divide", "ts_mean", "NATR"):
@@ -19,8 +19,8 @@ def test_extended_surface_includes_daily_primitives_before_macro_expansion():
 
 
 def test_composite_technical_names_lower_to_primitive_dag():
-    from api.dsl_parser import parse_factor
-    from ir.analyzer import Analyzer
+    from factor_engine.api.dsl_parser import parse_factor
+    from factor_engine.ir.analyzer import Analyzer
 
     cases = {
         "NATR(high,low,close,14)": "NATR",
@@ -41,10 +41,10 @@ def test_composite_technical_names_lower_to_primitive_dag():
 
 
 def test_intraday_daily_dsl_builds_auditable_source_ref():
-    from api.dsl_parser import parse_factor
-    from api.source_ref import decode_source_ref
-    from ir.analyzer import Analyzer
-    from runtime.quality.pit_audit import audit_ir
+    from factor_engine.api.dsl_parser import parse_factor
+    from factor_engine.api.source_ref import decode_source_ref
+    from factor_engine.ir.analyzer import Analyzer
+    from factor_engine.runtime.quality.pit_audit import audit_ir
 
     factor = parse_factor(
         "intraday_realized_vol(bar_minutes=5, cutoff_time='15:50', min_coverage=0.9)",
@@ -70,9 +70,9 @@ def test_intraday_daily_dsl_builds_auditable_source_ref():
 
 
 def test_intraday_profile_requires_bounded_history():
-    from api.dsl_parser import parse_factor
-    from ir.analyzer import Analyzer
-    from runtime.quality.pit_audit import audit_ir
+    from factor_engine.api.dsl_parser import parse_factor
+    from factor_engine.ir.analyzer import Analyzer
+    from factor_engine.runtime.quality.pit_audit import audit_ir
 
     factor = parse_factor(
         "intraday_profile_zscore(bar_minutes=5, history_days=20, cutoff_time='session_close', min_coverage=0.9)",
@@ -84,7 +84,7 @@ def test_intraday_profile_requires_bounded_history():
 
 
 def test_intraday_authoring_rejects_invalid_static_contracts():
-    from api.intraday_daily import intraday_realized_vol
+    from factor_engine.api.intraday_daily import intraday_realized_vol
 
     with pytest.raises(ValueError, match="timestamp_convention"):
         intraday_realized_vol(timestamp_convention="ambiguous")

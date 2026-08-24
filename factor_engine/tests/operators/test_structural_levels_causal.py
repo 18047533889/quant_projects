@@ -1,12 +1,12 @@
 import numpy as np
 import pandas as pd
 import pytest
-from cleaned_operators.structural_levels import (
+from factor_engine.cleaned_operators.structural_levels import (
     TsStructuralLevelDensity,
     TsNearestStructuralLevelDistance,
     TsStructuralLevelStrength,
 )
-from cleaned_operators.common._pivot_ledger import (
+from factor_engine.cleaned_operators.common._pivot_ledger import (
     StreamingConfirmedPivotLedger,
     confirmed_pivot_events,
 )

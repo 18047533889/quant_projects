@@ -9,12 +9,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from api import rank, ts_mean
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from runtime.engine import FactorEngine
-from storage.cache import CacheManager
+from factor_engine.api import rank, ts_mean
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.storage.cache import CacheManager
 from tests.helpers import InMemorySeriesSource
 
 _MAX_COMPILE_MANY_SEC = 5.0

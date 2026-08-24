@@ -37,7 +37,7 @@ def _panel(n_day: int = 120, n_stk: int = 30, seed: int = 42, nan_frac: float = 
 
 def test_rank_permutation_equivariance():
     """rank 对横截面重排应等价（同一时刻不同股票顺序）。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     a = _panel(n_stk=20, nan_frac=0.0)
     op = OperatorRegistry.get("rank", "pandas_numpy")
@@ -50,7 +50,7 @@ def test_rank_permutation_equivariance():
 
 def test_rank_bounded_0_1():
     a = _panel(nan_frac=0.0)
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get("rank", "pandas_numpy")
     r = op.calculate(a).to_numpy(dtype=float)
@@ -60,7 +60,7 @@ def test_rank_bounded_0_1():
 
 def test_rank_monotonic_transform():
     """rank 对单调递增变换应不变。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     a = _panel(nan_frac=0.0)
     op = OperatorRegistry.get("rank", "pandas_numpy")
@@ -76,7 +76,7 @@ def test_rank_monotonic_transform():
 
 def test_zscore_affine_invariant():
     """zscore 对 (a*x+b) 应不变（除常量列）。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     a = _panel(nan_frac=0.0)
     a.loc[:, "const"] = 5.0  # 常量列会 NaN（sd=0），不影响其他列
@@ -92,7 +92,7 @@ def test_zscore_constant_window_zero():
 
     见 tests/operators/test_polars_parity_tier5.py::test_ts_zscore_constant_window_zero_std。
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     a = pd.DataFrame(np.ones((60, 3)), columns=["s0", "s1", "s2"])
     op = OperatorRegistry.get("ts_zscore", "pandas_numpy")
@@ -107,7 +107,7 @@ def test_zscore_constant_window_zero():
 
 
 def test_corr_symmetry_and_diagonal():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     a = pd.DataFrame(np.random.default_rng(1).normal(size=(120, 3)),
                      columns=["s0", "s1", "s2"])
@@ -134,7 +134,7 @@ def test_corr_symmetry_and_diagonal():
 
 def test_rolling_max_containment():
     """窗口内 max >= 窗口内每个值。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     a = _panel(nan_frac=0.0)
     op = OperatorRegistry.get("ts_max", "pandas_numpy")
@@ -150,7 +150,7 @@ def test_rolling_max_containment():
 
 def test_ema_full_vs_chunk_equivalent():
     """EMA 全量 vs 分块续算应等价（无状态泄漏）。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     a = _panel(n_day=100, n_stk=5, nan_frac=0.0)
     op = OperatorRegistry.get("ts_ema", "pandas_numpy")
@@ -167,7 +167,7 @@ def test_ema_full_vs_chunk_equivalent():
 
 def test_neutralize_residual_orthogonal_to_group():
     """去均值 neutralize 后残差应与分组均值正交。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     a = _panel(nan_frac=0.0)
     op = OperatorRegistry.get("cs_demean", "pandas_numpy")
@@ -184,8 +184,8 @@ def test_neutralize_residual_orthogonal_to_group():
 
 def test_regression_recovers_known_beta():
     """synthetic y = 2*x + 1 应恢复 beta=2, intercept=1。"""
-    from backend.cleaned_bridge import ensure_cleaned_loaded
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     ensure_cleaned_loaded()
     rng = np.random.default_rng(3)
@@ -248,7 +248,7 @@ def test_mutation_ts_mean_to_sum_killed():
 
 def test_mutation_shift_direction_pit():
     """PIT shift 方向 mutation（前视）必须被 availability clock 拒绝。"""
-    from cleaned_operators.availability_clock import default_available_at
+    from factor_engine.cleaned_operators.availability_clock import default_available_at
 
     # close 前视（session_open 可知）=> 拒绝
     assert default_available_at(("close",)) != "session_open"
@@ -258,7 +258,7 @@ def test_mutation_shift_direction_pit():
 
 def test_mutation_rank_tie_breaks():
     """rank tie-break mutation（去平均 tie）必须被检测。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     a = pd.DataFrame([[1.0, 1.0, 2.0], [3.0, 3.0, 3.0]], columns=["s0", "s1", "s2"])
     op = OperatorRegistry.get("cs_pct_rank", "pandas_numpy")

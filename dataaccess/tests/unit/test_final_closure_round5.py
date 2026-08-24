@@ -23,6 +23,7 @@ import sys
 import time
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -599,19 +600,27 @@ class _AsofStore:
 def test_cos_events_asof_column_conflict_two_level():
     from data_access.cos_runtime import _read_cos_events_asof
 
-    events = pd.DataFrame({
-        "ticker": ["A"], "filing_date": ["2024-05-01"], "period_end": ["2024-03-31"],
-        "timeframe": ["quarterly"], "value": [10.0], "x": [99.0],
-    })
-    decisions = pd.DataFrame({
-        "instrument": ["A"], "decision_timestamp": ["2024-06-01"],
-        "x": ["keep"], "x_event": ["keep2"],
-    })
-    result = _read_cos_events_asof(
-        _AsofStore({"us_stock_balance": events}),
-        "us_stock_balance", decisions,
-        columns=["value"], event_filters={"timeframe": "quarterly"},
-    )
+    # 本测试只聚焦输出列冲突改名，与 availability/calendar 语义无关。us_stock_balance
+    # 的 semantic catalog 现在声明 next_trading_day 这类日历依赖 availability，
+    # 而测试假 store 无日历 → strict fail-closed CalendarUnavailableError。把它隔离
+    # 为 same_day，排除日历判定干扰列冲突逻辑。
+    with patch(
+        "data_access.cos_event_runtime._resolve_event_availability",
+        return_value=("same_day", None),
+    ):
+        events = pd.DataFrame({
+            "ticker": ["A"], "filing_date": ["2024-05-01"], "period_end": ["2024-03-31"],
+            "timeframe": ["quarterly"], "value": [10.0], "x": [99.0],
+        })
+        decisions = pd.DataFrame({
+            "instrument": ["A"], "decision_timestamp": ["2024-06-01"],
+            "x": ["keep"], "x_event": ["keep2"],
+        })
+        result = _read_cos_events_asof(
+            _AsofStore({"us_stock_balance": events}),
+            "us_stock_balance", decisions,
+            columns=["value"], event_filters={"timeframe": "quarterly"},
+        )
     assert result.loc[0, "x"] == "keep", "decisions 原 x 列不能被覆盖"
     assert result.loc[0, "x_event"] == "keep2", "decisions 原 x_event 列不能被覆盖"
     assert "x_event_2" in result.columns and result.loc[0, "x_event_2"] == 99.0

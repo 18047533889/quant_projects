@@ -298,7 +298,7 @@ class PandasResultStore:
         返回:
             pd.DataFrame
         """
-        from storage.materialize.factor_matrix_materializer import FactorMatrixMaterializer
+        from factor_engine.storage.materialize.factor_matrix_materializer import FactorMatrixMaterializer
 
         root = matrix_root
         if root is None:

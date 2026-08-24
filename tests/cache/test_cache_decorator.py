@@ -9,7 +9,7 @@ R43 缓存装饰器测试：
     - cache_info/cache_clear
 """
 import time
-from cache.cache_decorator import cached, cached_property, memoize
+from factor_engine.cache.cache_decorator import cached, cached_property, memoize
 
 
 def test_cached_decorator_basic():

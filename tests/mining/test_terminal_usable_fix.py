@@ -1,7 +1,7 @@
 import pytest
-from mining.direct_use import build_direct_use_operator, DirectUseOperator
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators import load_all
+from factor_engine.mining.direct_use import build_direct_use_operator, DirectUseOperator
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
 
 @pytest.fixture(scope="module", autouse=True)
 def load_ops():

@@ -21,9 +21,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import OperatorRegistry, load_all
-from cleaned_operators.operator_surface import classify_canonical
-from runtime.session_calendar import SessionCalendar
+from factor_engine.cleaned_operators import OperatorRegistry, load_all
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
+from factor_engine.runtime.session_calendar import SessionCalendar
 
 # P0-10: intraday session operators require an explicit calendar (the official
 # session grid is never inferred from observed bars).  The synthetic minute
@@ -265,7 +265,7 @@ def test_all_new_canonicals_classify_daily():
 
 
 def test_all_new_canonicals_in_daily_dsl_allowlist():
-    from api.mining_integration import list_dsl_allowlist
+    from factor_engine.api.mining_integration import list_dsl_allowlist
 
     allow = set(list_dsl_allowlist(surface="daily"))
     missing = sorted(n for n in NEW_CANONICALS if n not in allow)

@@ -26,10 +26,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-import cleaned_operators.direction_concentration  # noqa: F401  (registers on import)
-import cleaned_operators.alpha_language_shape  # noqa: F401  (registers on import)
-from cleaned_operators.operator_surface import classify_canonical
-from cleaned_operators.registry import OperatorRegistry
+import factor_engine.cleaned_operators.direction_concentration  # noqa: F401  (registers on import)
+import factor_engine.cleaned_operators.alpha_language_shape  # noqa: F401  (registers on import)
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _panel(values) -> pd.DataFrame:

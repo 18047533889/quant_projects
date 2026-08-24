@@ -51,7 +51,7 @@ class FactorRecipeRegistry:
         *,
         allowed_statuses: Iterable[str] = ("production",),
     ) -> str:
-        from factor_recipes.compiler import RecipeCompiler
+        from factor_engine.factor_recipes.compiler import RecipeCompiler
 
         return RecipeCompiler(allowed_statuses=allowed_statuses).expand(name, bindings)
 
@@ -62,6 +62,6 @@ class FactorRecipeRegistry:
         *,
         allowed_statuses: Iterable[str] = ("production",),
     ):
-        from factor_recipes.compiler import RecipeCompiler
+        from factor_engine.factor_recipes.compiler import RecipeCompiler
 
         return RecipeCompiler(allowed_statuses=allowed_statuses).compile_batch(requests)

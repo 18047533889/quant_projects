@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from storage.materialize.factor_matrix_materializer import (
+from factor_engine.storage.materialize.factor_matrix_materializer import (
     DuplicateMatrixKeyError,
     FactorMatrixConcurrentWriteError,
     FactorMatrixMaterializer,

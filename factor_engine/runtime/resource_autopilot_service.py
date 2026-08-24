@@ -235,11 +235,11 @@ def start_resource_autopilot(
             return _AUTOPILOT
         if broker is None:
             try:
-                from runtime.host_resource_coordinator import get_host_coordinator
+                from factor_engine.runtime.host_resource_coordinator import get_host_coordinator
 
                 broker = get_host_coordinator().broker
             except Exception:
-                from runtime.resource_broker import ResourceBroker
+                from factor_engine.runtime.resource_broker import ResourceBroker
 
                 broker = ResourceBroker()
         _AUTOPILOT = ResourceAutopilotService(broker, interval_s=interval_s)

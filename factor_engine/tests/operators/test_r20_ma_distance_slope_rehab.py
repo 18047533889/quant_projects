@@ -24,16 +24,16 @@ import pytest
 
 
 def _ensure_technical_chain() -> None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if OperatorRegistry.lifecycle() == "frozen":
         return
     if OperatorRegistry.get("KAMA", "pandas_numpy") is not None:
         return
-    from cleaned_operators.technical import signal  # noqa: F401
-    from cleaned_operators.technical import polars_signal  # noqa: F401
-    from cleaned_operators import composite_fastpath  # noqa: F401
-    from cleaned_operators.technical import indicators_v2  # noqa: F401
+    from factor_engine.cleaned_operators.technical import signal  # noqa: F401
+    from factor_engine.cleaned_operators.technical import polars_signal  # noqa: F401
+    from factor_engine.cleaned_operators import composite_fastpath  # noqa: F401
+    from factor_engine.cleaned_operators.technical import indicators_v2  # noqa: F401
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -42,7 +42,7 @@ def _bootstrap():
 
 
 def _op(name: str):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get(name, "pandas_numpy") or OperatorRegistry.get(name)
     assert op is not None, f"{name} not registered"
@@ -94,7 +94,7 @@ def test_dema_and_tema_distance_manual_oracles():
     out_t = _op("tema_distance_pct").calculate(close, window=6)
     pd.testing.assert_frame_equal(out_t, (pos - tema) / pos)
     # Cross-check against the registered DEMA/TEMA canonicals themselves.
-    from cleaned_operators.technical.indicators_v2 import DEMA as _DEMA, TEMA as _TEMA
+    from factor_engine.cleaned_operators.technical.indicators_v2 import DEMA as _DEMA, TEMA as _TEMA
 
     pd.testing.assert_frame_equal(
         out_d, (pos - _DEMA(close, 6)) / pos
@@ -108,7 +108,7 @@ def test_kama_distance_reuses_registered_kama():
     vals = [10.0 + 1.2 * np.sin(i * 0.5) for i in range(60)]
     close = _close(vals)
     out = _op("kama_distance_pct").calculate(close, er_window=8, fast_window=2, slow_window=30)
-    from cleaned_operators.technical.indicators_v2 import KAMA
+    from factor_engine.cleaned_operators.technical.indicators_v2 import KAMA
 
     pos = close.where(close > 0.0)
     expected = (pos - KAMA(close, 8, 2, 30)) / pos
@@ -210,7 +210,7 @@ def test_distance_ops_mask_non_positive_close():
 
 
 def test_ma_family_param_specs_and_recursive_governance():
-    from cleaned_operators.technical.indicators_v2 import _RECURSIVE_EWM
+    from factor_engine.cleaned_operators.technical.indicators_v2 import _RECURSIVE_EWM
 
     expected_specs = {
         "ema_distance_pct": {"window"},
@@ -248,7 +248,7 @@ def test_ma_family_param_specs_and_recursive_governance():
 
 
 def test_relative_alpha_membership_and_raw_ma_exclusion():
-    from mining.direct_use import _RELATIVE_ALPHA_OPS
+    from factor_engine.mining.direct_use import _RELATIVE_ALPHA_OPS
 
     promoted = {
         "ema_distance_pct", "sma_distance_pct", "dema_distance_pct",

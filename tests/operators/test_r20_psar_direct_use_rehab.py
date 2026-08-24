@@ -21,16 +21,16 @@ import pytest
 
 
 def _ensure_technical_chain() -> None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if OperatorRegistry.lifecycle() == "frozen":
         return
     if OperatorRegistry.get("psar_direction", mode="any") is not None:
         return
-    from cleaned_operators.technical import signal  # noqa: F401
-    from cleaned_operators.technical import polars_signal  # noqa: F401
-    from cleaned_operators import composite_fastpath  # noqa: F401
-    from cleaned_operators.technical import indicators_v2  # noqa: F401
+    from factor_engine.cleaned_operators.technical import signal  # noqa: F401
+    from factor_engine.cleaned_operators.technical import polars_signal  # noqa: F401
+    from factor_engine.cleaned_operators import composite_fastpath  # noqa: F401
+    from factor_engine.cleaned_operators.technical import indicators_v2  # noqa: F401
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -39,7 +39,7 @@ def _bootstrap():
 
 
 def _op(name: str):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get(name, mode="any")
     assert op is not None, f"{name} not registered"
@@ -55,7 +55,7 @@ def _panel(seed=7, n=200):
 
 def test_psar_direction_matches_close_minus_sar_sign():
     high, low, close = _panel()
-    from cleaned_operators.technical.indicators_v2 import PSAR
+    from factor_engine.cleaned_operators.technical.indicators_v2 import PSAR
 
     sar = PSAR(high, low, 0.02, 0.2)
     out = _op("psar_direction").calculate(high, low, close, acceleration=0.02, maximum=0.2)
@@ -71,7 +71,7 @@ def test_psar_direction_matches_close_minus_sar_sign():
 
 def test_psar_distance_pct_formula_and_positive_close_masking():
     high, low, close = _panel()
-    from cleaned_operators.technical.indicators_v2 import PSAR
+    from factor_engine.cleaned_operators.technical.indicators_v2 import PSAR
 
     sar = PSAR(high, low, 0.02, 0.2)
     out = _op("psar_distance_pct").calculate(high, low, close, acceleration=0.02, maximum=0.2)
@@ -188,7 +188,7 @@ def test_psar_full_history_determinism():
 
 
 def test_psar_relative_alpha_classification():
-    from mining.direct_use import _RELATIVE_ALPHA_OPS
+    from factor_engine.mining.direct_use import _RELATIVE_ALPHA_OPS
 
     promoted = {"psar_direction", "psar_distance_pct", "psar_flip", "psar_days_since_flip"}
     assert promoted <= _RELATIVE_ALPHA_OPS

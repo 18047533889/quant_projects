@@ -21,14 +21,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from runtime.incremental_scheduler import (
+from factor_engine.runtime.incremental_scheduler import (
     DataEvent,
     DataEventLeaseLostError,
     DataEventLedger,
     _ledger_now_iso,
     execute_incremental_updates_from_event,
 )
-from storage.materializer import ParquetMaterializer
+from factor_engine.storage.materializer import ParquetMaterializer
 
 
 def _ev(
@@ -187,7 +187,7 @@ def test_r14_renew_heartbeat_refreshes_lease(tmp_path):
     _, tok = ledger.begin(_ev("e1", owner="A", attempt_id="a1"))
     ledger.renew(tok)  # 不抛
     rec = ledger._records["e1"]
-    from runtime.incremental_scheduler import _ledger_pending_is_stale
+    from factor_engine.runtime.incremental_scheduler import _ledger_pending_is_stale
 
     assert _ledger_pending_is_stale(rec) is False
 
@@ -199,7 +199,7 @@ def test_r14_renew_heartbeat_refreshes_lease(tmp_path):
 
 def test_r14_dict_roundtrip_preserves_fencing_fields():
     """dict → normalize → to_dict 保留 owner/attempt_id/fencing_epoch（旧代码丢失）。"""
-    from runtime.incremental_scheduler import normalize_data_event
+    from factor_engine.runtime.incremental_scheduler import normalize_data_event
 
     raw = {
         "dataset": "d",
@@ -224,7 +224,7 @@ def test_r14_dict_roundtrip_preserves_fencing_fields():
     # token 序列化 round-trip
     ledger = DataEventLedger(lake_root=None)
     _st, token = ledger.begin(ev2)
-    from runtime.incremental_scheduler import ReservationToken
+    from factor_engine.runtime.incremental_scheduler import ReservationToken
 
     d = token.to_dict()
     token2 = ReservationToken(**d)
@@ -239,10 +239,10 @@ def test_r14_dict_roundtrip_preserves_fencing_fields():
 def test_r14_execute_flow_stale_worker_publish_gate(tmp_path, monkeypatch):
     """A 的 lease 被接管后，调度器在 stage 后 renew（publish 门）抛
     DataEventLeaseLostError → **零 publish**（A 发布被拒，读者看不到新因子）。"""
-    from api.dsl_parser import parse_factor
-    from ir.analyzer import Analyzer
-    from runtime.dependency_catalog import DependencyCatalog, FactorDependencyEdge
-    from storage.catalog import compute_ir_hash
+    from factor_engine.api.dsl_parser import parse_factor
+    from factor_engine.ir.analyzer import Analyzer
+    from factor_engine.runtime.dependency_catalog import DependencyCatalog, FactorDependencyEdge
+    from factor_engine.storage.catalog import compute_ir_hash
 
     _force_production(monkeypatch)
     monkeypatch.setenv("DATA_EVENT_PRODUCTION_AUTO_PUBLISH", "1")
@@ -307,7 +307,7 @@ def test_r14_execute_flow_stale_worker_publish_gate(tmp_path, monkeypatch):
 
 def _force_production(monkeypatch) -> None:
     monkeypatch.setattr(
-        "runtime.production_policy.is_production_mode", lambda: True
+        "factor_engine.runtime.production_policy.is_production_mode", lambda: True
     )
 
 

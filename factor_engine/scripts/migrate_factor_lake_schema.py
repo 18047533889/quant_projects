@@ -15,7 +15,7 @@ if str(_ROOT) not in sys.path:
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from storage.schema_migration import migrate_factor_lake_tree
+from factor_engine.storage.schema_migration import migrate_factor_lake_tree
 from workspace_paths import default_factor_lake_root
 
 

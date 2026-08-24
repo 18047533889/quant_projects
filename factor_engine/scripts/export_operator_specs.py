@@ -15,8 +15,8 @@ def _bootstrap() -> None:
     for p in (str(root), str(project)):
         if p not in sys.path:
             sys.path.insert(0, p)
-    from cleaned_operators import load_all
-    from runtime.env_bootstrap import bootstrap_runtime_env
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.runtime.env_bootstrap import bootstrap_runtime_env
 
     bootstrap_runtime_env()
     load_all()
@@ -42,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     _bootstrap()
-    from cleaned_operators.operator_spec import export_operator_manifest
+    from factor_engine.cleaned_operators.operator_spec import export_operator_manifest
 
     entries = export_operator_manifest(
         production_only=args.production_only,

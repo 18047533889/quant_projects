@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.fundamental.transforms_v2 import fin_lag, fin_pct_change, fin_ttm
+from factor_engine.cleaned_operators.fundamental.transforms_v2 import fin_lag, fin_pct_change, fin_ttm
 
 
 def test_same_day_two_periods_both_enter_fiscal_state():

@@ -2,7 +2,7 @@
 """Plan 参数解析与校验（跨 PolarsLong / DuckDB 统一语义）。"""
 from __future__ import annotations
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 
 class PlanParamError(ValueError):
@@ -65,14 +65,14 @@ def parse_unit_interval(raw: object, *, label: str = "p") -> float:
 
 def window_from_plan_node(node: PlanNode, *, default: int = 3) -> int:
     """从 attrs 或 positional literal 解析滚动窗口（Polars/DuckDB 共用）。"""
-    from backend.window_spec import WindowSpec
+    from factor_engine.backend.window_spec import WindowSpec
 
     return WindowSpec.from_plan_node(node, default_size=default).size
 
 
 def window_spec_from_plan_node(node: PlanNode, *, default: int = 3):
     """返回完整 ``WindowSpec``（含 min_periods / ddof / null_policy）。"""
-    from backend.window_spec import WindowSpec
+    from factor_engine.backend.window_spec import WindowSpec
 
     return WindowSpec.from_plan_node(node, default_size=default)
 

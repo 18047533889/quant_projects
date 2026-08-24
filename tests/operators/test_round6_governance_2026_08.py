@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -29,7 +29,7 @@ def _loaded():
 # RelationalParamSpec
 # ---------------------------------------------------------------------------
 def test_relational_spec_rejects_infeasible_pickands():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get("ts_pickands_tail_index", "pandas_numpy")
     idx = pd.date_range("2024-01-01", periods=80, freq="D")
@@ -40,7 +40,7 @@ def test_relational_spec_rejects_infeasible_pickands():
 
 
 def test_relational_spec_accepts_feasible_pickands():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get("ts_pickands_tail_index", "pandas_numpy")
     idx = pd.date_range("2024-01-01", periods=80, freq="D")
@@ -51,7 +51,7 @@ def test_relational_spec_accepts_feasible_pickands():
 
 
 def test_relational_spec_rqa_min_line_against_embedding_count():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get("ts_recurrence_determinism", "pandas_numpy")
     idx = pd.date_range("2024-01-01", periods=80, freq="D")
@@ -62,7 +62,7 @@ def test_relational_spec_rqa_min_line_against_embedding_count():
 
 
 def test_relational_spec_glr_min_segment():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get("ts_glr_mean_shift_score", "pandas_numpy")
     idx = pd.date_range("2024-01-01", periods=80, freq="D")
@@ -73,7 +73,7 @@ def test_relational_spec_glr_min_segment():
 
 
 def test_relational_spec_ps_min_periods_window_minus_one():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get("ts_pastor_stambaugh_liquidity_gamma", "pandas_numpy")
     idx = pd.date_range("2024-01-01", periods=80, freq="D")
@@ -86,7 +86,7 @@ def test_relational_spec_ps_min_periods_window_minus_one():
 
 
 def test_relational_spec_dmd_top_k_rank():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get("ts_dmd_mode_concentration", "pandas_numpy")
     idx = pd.date_range("2024-01-01", periods=80, freq="D")
@@ -100,7 +100,7 @@ def test_relational_spec_dmd_top_k_rank():
 # operator_cost_model
 # ---------------------------------------------------------------------------
 def test_cost_model_orders_by_family():
-    from cleaned_operators.operator_cost_model import runtime_cost
+    from factor_engine.cleaned_operators.operator_cost_model import runtime_cost
 
     hvg252 = runtime_cost("ts_hvg_motif_entropy", {"window": 252})
     hvg64 = runtime_cost("ts_hvg_motif_entropy", {"window": 64})
@@ -110,7 +110,7 @@ def test_cost_model_orders_by_family():
 
 
 def test_cost_model_respects_window_scale():
-    from cleaned_operators.operator_cost_model import runtime_cost
+    from factor_engine.cleaned_operators.operator_cost_model import runtime_cost
 
     qn20 = runtime_cost("ts_qn_scale", {"window": 20})
     qn500 = runtime_cost("ts_qn_scale", {"window": 500})
@@ -121,8 +121,8 @@ def test_cost_model_respects_window_scale():
 # operator_audits
 # ---------------------------------------------------------------------------
 def test_audit_equivalent_parameters_runs():
-    from cleaned_operators.operator_audits import audit_equivalent_parameters
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_audits import audit_equivalent_parameters
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get("ts_interval_union_coverage", "pandas_numpy")
     idx = pd.date_range("2024-01-01", periods=80, freq="D")
@@ -134,8 +134,8 @@ def test_audit_equivalent_parameters_runs():
 
 
 def test_audit_column_permutation_runs():
-    from cleaned_operators.operator_audits import audit_column_permutation
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_audits import audit_column_permutation
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get("cs_isotonic_residual", "pandas_numpy")
     idx = pd.date_range("2024-01-01", periods=80, freq="D")
@@ -150,8 +150,8 @@ def test_audit_column_permutation_runs():
 
 
 def test_audit_self_contamination_runs():
-    from cleaned_operators.operator_audits import audit_self_contamination
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_audits import audit_self_contamination
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get("ts_vector_state_mahalanobis", "pandas_numpy")
     idx = pd.date_range("2024-01-01", periods=80, freq="D")

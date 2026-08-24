@@ -23,21 +23,21 @@ def setup_module():
     import operator classes trigger registration at import time. This hook ensures
     the registry is writable before the imports happen.
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     if OperatorRegistry._lifecycle != OperatorRegistry.Lifecycle.BUILDING:
         # Safe to reset for test isolation
         OperatorRegistry._lifecycle = OperatorRegistry.Lifecycle.BUILDING
 
     # Bypass layer governance check
     try:
-        import cleaned_operators.layer_governance as gov
+        import factor_engine.cleaned_operators.layer_governance as gov
         gov._FINALIZED = False
     except (ImportError, AttributeError):
         pass
 
     # Bypass static surface check which fails due to test-only registration
     try:
-        import cleaned_operators.layer_governance as gov
+        import factor_engine.cleaned_operators.layer_governance as gov
         gov._FINALIZED = False
     except (ImportError, AttributeError):
         pass

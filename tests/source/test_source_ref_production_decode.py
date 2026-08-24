@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from api.source_ref import (
+from factor_engine.api.source_ref import (
     decode_source_ref_production,
     encode_source_ref,
     make_source_ref,

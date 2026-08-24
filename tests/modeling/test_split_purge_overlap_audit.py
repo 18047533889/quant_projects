@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from market.exchange_session_calendar import ExchangeSessionCalendar
+from factor_engine.market.exchange_session_calendar import ExchangeSessionCalendar
 from modeling.contracts import LabelContract
 from modeling.dataset import PanelDataset
 from modeling.split import date_bounded_split, assert_date_authoritative

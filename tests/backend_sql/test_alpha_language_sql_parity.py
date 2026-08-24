@@ -15,11 +15,11 @@ pytest.importorskip("duckdb")
 
 import duckdb
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from backend.sql_pushdown.emitter import compile_plan_to_sql, plan_is_sql_capable
-from backend.sql_pushdown.plan_fixtures import column, literal
-from cleaned_operators.registry import OperatorRegistry
-from planner.logical_plan import PlanNode
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql, plan_is_sql_capable
+from factor_engine.backend.sql_pushdown.plan_fixtures import column, literal
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.planner.logical_plan import PlanNode
 
 ensure_cleaned_loaded()
 
@@ -86,7 +86,7 @@ def test_alpha_language_sql_matches_pandas(op, col, vals, lits, pkw):
 
 
 def test_alpha_language_sql_capable_listed_in_sql_implemented():
-    from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
+    from factor_engine.backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
 
     missing = [op for op, *_ in SQL_CASES if op not in SQL_IMPLEMENTED_CANONICALS]
     assert not missing, f"SQL ops missing from SQL_IMPLEMENTED_CANONICALS: {missing}"

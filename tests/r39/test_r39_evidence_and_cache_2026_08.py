@@ -20,8 +20,8 @@ import json
 
 import pytest
 
-import backend.factor_operator_evidence as foe
-import backend.evidence_provenance as ep
+import factor_engine.backend.factor_operator_evidence as foe
+import factor_engine.backend.evidence_provenance as ep
 import evidence.scm_manifest as sm
 
 
@@ -131,7 +131,7 @@ def test_autopilot_cache_consumer_applies_budget(tmp_path, monkeypatch):
         get_query_cache,
         reset_query_cache,
     )
-    from runtime.resource_autopilot_service import ResourceAutopilotService
+    from factor_engine.runtime.resource_autopilot_service import ResourceAutopilotService
 
     reset_query_cache()
     try:

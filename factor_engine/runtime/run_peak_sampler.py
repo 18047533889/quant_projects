@@ -21,7 +21,7 @@ from typing import Any
 def _family_memory() -> tuple[int, int]:
     """当前 process family (pss, rss)；优先 PSS（smaps_rollup）。"""
     try:
-        from runtime.resource_governor import process_family_rss_bytes
+        from factor_engine.runtime.resource_governor import process_family_rss_bytes
 
         rss = process_family_rss_bytes(prefer_pss=False) or 0
         pss = process_family_rss_bytes(prefer_pss=True) or rss

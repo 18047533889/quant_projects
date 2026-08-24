@@ -23,8 +23,8 @@ class Optimizer:
         REM-011: 实际执行通过 CompilerPassManager，确保 PassContract、
         invariant 检查与 NumericPolicy 在生产环境真实生效。
         """
-        from planner.compiler_pass import NumericPolicy, PassContext
-        from planner.optimizer_passes import build_optimizer_pass_manager
+        from factor_engine.planner.compiler_pass import NumericPolicy, PassContext
+        from factor_engine.planner.optimizer_passes import build_optimizer_pass_manager
 
         numeric_policy = (
             NumericPolicy.production_default()
@@ -38,8 +38,8 @@ class Optimizer:
         return build_optimizer_pass_manager(self).run(plan, context=ctx).plan
 
     def lower_only(self, plan: PlanNode) -> PlanNode:
-        from planner.composite_lowering import lower_composite_operators
-        from planner.canonicalize_params import (
+        from factor_engine.planner.composite_lowering import lower_composite_operators
+        from factor_engine.planner.canonicalize_params import (
             canonicalize_plan_parameters,
             validate_plan_params,
         )
@@ -56,9 +56,9 @@ class Optimizer:
 
         REM-011: 内部通过 pass manager 执行，但对外保持原有返回格式。
         """
-        from planner.compiler_pass import NumericPolicy, PassContext
-        from planner.composite_lowering import build_lowering_trace
-        from planner.optimizer_passes import build_optimizer_pass_manager
+        from factor_engine.planner.compiler_pass import NumericPolicy, PassContext
+        from factor_engine.planner.composite_lowering import build_lowering_trace
+        from factor_engine.planner.optimizer_passes import build_optimizer_pass_manager
 
         folded = self._fold_literals(plan)
         # 通过 pass manager 执行完整流程
@@ -75,8 +75,8 @@ class Optimizer:
         # traces[0] = literal_fold, traces[1] = parameter_validation, traces[2] = composite_lowering
         # 我们需要 lowering 前（fold+validate后）与 lowering 后（post_lowering_fold前）
         # 由于 pass manager 只记录 hash，我们需要重新执行 lowering 的 trace 构建
-        from planner.canonicalize_params import validate_plan_params
-        from planner.composite_lowering import lower_composite_operators
+        from factor_engine.planner.canonicalize_params import validate_plan_params
+        from factor_engine.planner.composite_lowering import lower_composite_operators
 
         validate_plan_params(folded, production=production)
         lowered = lower_composite_operators(folded)
@@ -92,8 +92,8 @@ class Optimizer:
 
         REM-011: 新式 API，返回 CompilerPassManager 产生的结构化 trace。
         """
-        from planner.compiler_pass import NumericPolicy, PassContext
-        from planner.optimizer_passes import build_optimizer_pass_manager
+        from factor_engine.planner.compiler_pass import NumericPolicy, PassContext
+        from factor_engine.planner.optimizer_passes import build_optimizer_pass_manager
 
         numeric_policy = (
             NumericPolicy.production_default()
@@ -110,12 +110,12 @@ class Optimizer:
         此方法是语义参考实现，用于证明新 pass-manager 路由与旧手链输出完全一致。
         生产代码不得调用此方法。
         """
-        from planner.canonicalize_params import (
+        from factor_engine.planner.canonicalize_params import (
             canonicalize_plan_parameters,
             validate_plan_params,
         )
-        from planner.composite_lowering import lower_composite_operators
-        from planner.rewrite_fastpath import rewrite_plan_for_fastpath
+        from factor_engine.planner.composite_lowering import lower_composite_operators
+        from factor_engine.planner.rewrite_fastpath import rewrite_plan_for_fastpath
 
         folded = self._fold_literals(plan)
         # R6 P0-04: parameters must be validated BEFORE composite lowering so a

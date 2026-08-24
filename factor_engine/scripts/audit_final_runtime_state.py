@@ -47,7 +47,7 @@ if _REPO_ROOT not in sys.path:
 
 
 def _load() -> None:
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     # A concurrent session may be mid-edit, which can break load_all transiently.
     # Retry once before giving up (mirrors the workflow's retry-once rule).
@@ -72,7 +72,7 @@ def _kernel_module(op: Any) -> str:
 
 
 def _fn_payload_or_none(fn: Any) -> str | None:
-    from cleaned_operators.registry import _fn_payload
+    from factor_engine.cleaned_operators.registry import _fn_payload
 
     func = getattr(fn, "__func__", fn)
     try:
@@ -89,13 +89,13 @@ def _fn_hash(fn: Any) -> str | None:
 
 
 def _impl_hash(op: Any) -> str:
-    from cleaned_operators.registry import _impl_source_hash
+    from factor_engine.cleaned_operators.registry import _impl_source_hash
 
     return _impl_source_hash(op)
 
 
 def _contract_hash(op: Any) -> str:
-    from cleaned_operators.registry import _contract_hash
+    from factor_engine.cleaned_operators.registry import _contract_hash
 
     return _contract_hash(op)
 
@@ -146,44 +146,44 @@ _LOGICAL_FIELDS: tuple[tuple[str, Any], ...] = (
 # in source but stale in the real runtime".
 AUDITED_FIXED_MODULES: dict[str, dict[str, str]] = {
     "ts_count_if": {
-        "pandas_numpy": "cleaned_operators.overhaul.daily",
-        "polars": "cleaned_operators.overhaul.daily",
+        "pandas_numpy": "factor_engine.cleaned_operators.overhaul.daily",
+        "polars": "factor_engine.cleaned_operators.overhaul.daily",
     },
     "ts_sum_if": {
-        "pandas_numpy": "cleaned_operators.overhaul.daily",
-        "polars": "cleaned_operators.overhaul.daily",
+        "pandas_numpy": "factor_engine.cleaned_operators.overhaul.daily",
+        "polars": "factor_engine.cleaned_operators.overhaul.daily",
     },
     "ts_mean_if": {
-        "pandas_numpy": "cleaned_operators.overhaul.daily",
-        "polars": "cleaned_operators.overhaul.daily",
+        "pandas_numpy": "factor_engine.cleaned_operators.overhaul.daily",
+        "polars": "factor_engine.cleaned_operators.overhaul.daily",
     },
     "ts_std_if": {
-        "pandas_numpy": "cleaned_operators.overhaul.daily",
-        "polars": "cleaned_operators.overhaul.daily",
+        "pandas_numpy": "factor_engine.cleaned_operators.overhaul.daily",
+        "polars": "factor_engine.cleaned_operators.overhaul.daily",
     },
     "ts_last_if": {
-        "pandas_numpy": "cleaned_operators.overhaul.daily",
-        "polars": "cleaned_operators.overhaul.daily",
+        "pandas_numpy": "factor_engine.cleaned_operators.overhaul.daily",
+        "polars": "factor_engine.cleaned_operators.overhaul.daily",
     },
     "ts_days_since": {
-        "pandas_numpy": "cleaned_operators.layer_composite_fixes",
-        "polars": "cleaned_operators.layer_composite_fixes",
+        "pandas_numpy": "factor_engine.cleaned_operators.layer_composite_fixes",
+        "polars": "factor_engine.cleaned_operators.layer_composite_fixes",
     },
     "ts_true_streak": {
-        "pandas_numpy": "cleaned_operators.overhaul.daily",
-        "polars": "cleaned_operators.overhaul.daily",
+        "pandas_numpy": "factor_engine.cleaned_operators.overhaul.daily",
+        "polars": "factor_engine.cleaned_operators.overhaul.daily",
     },
     "overnight_return": {
-        "pandas_numpy": "cleaned_operators.return_decomp",
+        "pandas_numpy": "factor_engine.cleaned_operators.return_decomp",
     },
     "open_close_return": {
-        "pandas_numpy": "cleaned_operators.return_decomp",
+        "pandas_numpy": "factor_engine.cleaned_operators.return_decomp",
     },
     "open_to_vwap_return": {
-        "pandas_numpy": "cleaned_operators.return_decomp",
+        "pandas_numpy": "factor_engine.cleaned_operators.return_decomp",
     },
     "vwap_to_close_return": {
-        "pandas_numpy": "cleaned_operators.return_decomp",
+        "pandas_numpy": "factor_engine.cleaned_operators.return_decomp",
     },
 }
 
@@ -224,8 +224,8 @@ def _impl_kind(op: Any, backend: str, backend_meta: dict[str, Any], canonical: s
 
 
 def build_records() -> tuple[dict[str, Record], list[str]]:
-    from cleaned_operators.operator_surface import classify_canonical
-    from cleaned_operators.registry import OperatorRegistry as R
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.registry import OperatorRegistry as R
 
     records: dict[str, Record] = {}
     errors: list[str] = []
@@ -294,7 +294,7 @@ def build_records() -> tuple[dict[str, Record], list[str]]:
 
 def detect_conflicts(records: dict[str, Record]) -> list[str]:
     """Return a list of hard conflicts; empty = clean."""
-    from cleaned_operators.registry import OperatorRegistry as R
+    from factor_engine.cleaned_operators.registry import OperatorRegistry as R
 
     conflicts: list[str] = []
 
@@ -409,7 +409,7 @@ def detect_conflicts(records: dict[str, Record]) -> list[str]:
     # single authority: CERTIFIED -> fine; DENIED -> never a production claim;
     # PENDING -> registered as a production target but evidence not yet bound —
     # if it ALSO carries status="production" that status is unaudited.
-    from cleaned_operators.operator_surface import (
+    from factor_engine.cleaned_operators.operator_surface import (
         ProductionCertification,
         production_certification,
     )
@@ -443,7 +443,7 @@ def detect_semantic_attrs_loss() -> list[str]:
     the full ``Optimizer.optimize`` pipeline.  Any rewrite that drops the
     attrs is a real semantic loss (R13 NEW-P1-70), not a static-text artifact.
     """
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     def col(name: str) -> PlanNode:
         return PlanNode(
@@ -482,7 +482,7 @@ def detect_semantic_attrs_loss() -> list[str]:
             {"d": 5, "window": 5},
         ),
     }
-    from planner.optimizer import Optimizer
+    from factor_engine.planner.optimizer import Optimizer
 
     losses: list[str] = []
     optimizer = Optimizer(allow_semantic_rewrites=True)
@@ -530,7 +530,7 @@ def _format_table(records: dict[str, Record]) -> str:
 
 def main(argv: list[str]) -> int:
     _load()
-    from cleaned_operators.registry import OperatorRegistry as R
+    from factor_engine.cleaned_operators.registry import OperatorRegistry as R
 
     print(f"registry lifecycle={R.lifecycle()} version={R.version()} "
           f"canonicals={len(R.list_canonical())}")

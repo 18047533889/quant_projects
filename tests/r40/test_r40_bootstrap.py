@@ -7,12 +7,12 @@ import pytest
 
 class TestBackendReplacementAuditTrail:
     def test_replace_backend_records_audit_trail(self, writable_global_registry):
-        from cleaned_operators import (
+        from factor_engine.cleaned_operators import (
             _BACKEND_REPLACEMENT_AUDIT,
             backend_replacement_audit,
             replace_backend,
         )
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         # replace_backend 会从 runtime 移除该 backend——保留原实现用于 finally
         # 恢复（避免在全局 registry 留下 runtime/catalog 分裂状态）。
@@ -41,7 +41,7 @@ class TestBackendReplacementAuditTrail:
                 backends["pandas_numpy"] = impl
 
     def test_backend_replacement_audit_readonly(self):
-        from cleaned_operators import (
+        from factor_engine.cleaned_operators import (
             _BACKEND_REPLACEMENT_AUDIT,
             backend_replacement_audit,
         )
@@ -55,10 +55,10 @@ class TestBackendReplacementAuditTrail:
 
 class TestSignatureAuthority:
     def test_signature_authority_import_failure_fails_production(self, monkeypatch):
-        from cleaned_operators import check_signature_authority
+        from factor_engine.cleaned_operators import check_signature_authority
 
         # Simulate a missing signature authority.
-        monkeypatch.setattr("cleaned_operators._SIGNATURE_AUTHORITY_AVAILABLE", False)
+        monkeypatch.setattr("factor_engine.cleaned_operators._SIGNATURE_AUTHORITY_AVAILABLE", False)
         with pytest.raises(RuntimeError):
             check_signature_authority(production=True)
         # research degrades

@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import pytest
 
-from cleaned_operators.common.data_cleaning import (
+from factor_engine.cleaned_operators.common.data_cleaning import (
     CarryForwardPolicy,
     check_carry_forward_policy,
 )
-from cleaned_operators.common.time_series import (
+from factor_engine.cleaned_operators.common.time_series import (
     SupportPolicy,
     check_support_policy,
     support_policy_for,
 )
-from ir.types import (
+from factor_engine.ir.types import (
     HistoryContract,
     HistoryKind,
     check_history_contract_declared,

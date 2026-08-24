@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import pytest
 
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 from operator_usage_expanded import build_usage_report, expand_formula_recipes, extract_call_names
 
 

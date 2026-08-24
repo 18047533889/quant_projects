@@ -429,12 +429,13 @@ def _module_source_digest(module_ref: str) -> str:
 
     The catalog ``module`` field already carries the ``cleaned_operators.``
     package prefix (e.g. ``cleaned_operators.overhaul.base``), so the module
-    is resolved as ``<repo_root>/cleaned_operators/<rest>.py`` (with a
+    is resolved as
+    ``<repo_root>/factor_engine/cleaned_operators/<rest>.py`` (with a
     ``__init__.py`` package fallback).  The canonical source authority is
-    ``_REPO_ROOT / "cleaned_operators"`` (the repo-ROOT operator library —
-    the SAME copy the factor-engine wheel runtime packages); the former
-    ``factor_engine/cleaned_operators/`` duplicate is archived and never
-    resolved here.  Filesystem-only — the operator is never imported
+    ``_REPO_ROOT / "factor_engine" / "cleaned_operators"`` (R45 namespace
+    consolidation: factor_engine/* is the single source authority; the
+    historical repo-root ``cleaned_operators/`` copy was deleted).
+    Filesystem-only — the operator is never imported
     (importing registers it and mutates the global OperatorRegistry).
     Fail-closed: raises if the canonical package directory is missing rather
     than silently hashing some non-canonical copy.
@@ -447,18 +448,25 @@ def _module_source_digest(module_ref: str) -> str:
     if not module_ref or module_ref == "builtins":
         return "builtins:no-module"
     rel_parts = module_ref.split(".")
+    # R45: catalog module refs may be written as either
+    # ``cleaned_operators.<sub>`` (historical) or
+    # ``factor_engine.cleaned_operators.<sub>`` (post-consolidation); both
+    # resolve under the single canonical package
+    # ``factor_engine/cleaned_operators/``.
+    if rel_parts and rel_parts[0] == "factor_engine":
+        rel_parts = rel_parts[1:]
     if rel_parts and rel_parts[0] == "cleaned_operators":
         rel_parts = rel_parts[1:]
     if not rel_parts:
         return "MISSING:" + _sha256_bytes(module_ref.encode("utf-8"))
-    # SOURCE AUTHORITY (P0-7): the ONLY canonical operator runtime is
-    # ``<repo_root>/cleaned_operators/``.  The former duplicate at
-    # ``factor_engine/cleaned_operators/`` was archived (moved to
-    # ``factor_engine/cleaned_operators_archived/``) and is NOT hashed.
-    # Resolving anywhere else (a shadowed package, an alternate copy) would
-    # silently certify the wrong source, so fail CLOSED if the canonical
-    # directory is missing or is not a directory.
-    pkg_root = _REPO_ROOT / "cleaned_operators"
+    # SOURCE AUTHORITY (P0-7, updated R45): the ONLY canonical operator runtime is
+    # ``<repo_root>/factor_engine/cleaned_operators/`` — the R45 namespace
+    # consolidation made factor_engine/* the single source authority and the
+    # historical repo-root ``cleaned_operators/`` tree was deleted.  Resolving
+    # anywhere else (a shadowed package, an alternate copy) would silently
+    # certify the wrong source, so fail CLOSED if the canonical directory is
+    # missing or is not a directory.
+    pkg_root = _REPO_ROOT / "factor_engine" / "cleaned_operators"
     if not pkg_root.is_dir():
         raise RuntimeError(
             "P0-7 SOURCE AUTHORITY: canonical operator package missing at "

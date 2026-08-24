@@ -12,7 +12,7 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 # 静态 bootstrap 基集：registry 尚未加载时（bootstrap / compiler 工具链）作为
 # 快速路径与兜底；registry 加载后 ``refresh_rolling_ops()`` 会用派生集合替换
@@ -129,7 +129,7 @@ def _first_col_ref(node: PlanNode) -> str | None:
 def _resolve_canonical(op: str) -> str:
     """将 DSL 名 / 别名解析为 canonical 名；registry 未加载时原样返回。"""
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         return OperatorRegistry.resolve_canonical(str(op))
     except Exception:  # pragma: no cover - bootstrap/compiler tooling
@@ -139,7 +139,7 @@ def _resolve_canonical(op: str) -> str:
 def _metadata_for(canonical: str) -> Any:
     """按 canonical 获取 ``OperatorMetadata``（注册算子）或 catalog 字典。"""
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         op = OperatorRegistry.get(canonical, backend="pandas_numpy")
         if op is not None:
@@ -209,7 +209,7 @@ def _derive_rolling_ops() -> frozenset[str]:
         （调用方保留 bootstrap 基集）。
     """
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         canonicals = OperatorRegistry.list_canonical()
     except Exception:  # pragma: no cover - bootstrap/compiler tooling
@@ -244,7 +244,7 @@ def _registry_size() -> int:
     O(1) ``len()``。
     """
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         return len(OperatorRegistry._operators) + len(OperatorRegistry._catalog)
     except Exception:  # pragma: no cover - bootstrap/compiler tooling

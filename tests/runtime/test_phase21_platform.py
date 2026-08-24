@@ -9,18 +9,18 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from api.columns import col
-from api.factor import Factor
-from api import rank, ts_mean, zscore
-from api.cleaned_ops import make_cleaned_call_factory
-from backend.pandas_backend import PandasBackend
-from runtime.engine import FactorEngine
-from runtime.production_policy import (
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.api import rank, ts_mean, zscore
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.runtime.production_policy import (
     ProductionPolicyViolation,
     assert_columns_explicit,
     assert_production_run_flags,
 )
-from storage.read_session import DataSourceReadSession
+from factor_engine.storage.read_session import DataSourceReadSession
 from tests.helpers import InMemorySeriesSource
 
 ts_delta = make_cleaned_call_factory("ts_delta")
@@ -119,7 +119,7 @@ def test_factor_matrix_materializer_roundtrip(tmp_path):
     assert summary["rows_written"] == 6
     assert set(summary["factor_ids"]) == {"alpha_001", "alpha_002"}
 
-    from storage.factor_matrix_materializer import FactorMatrixMaterializer
+    from factor_engine.storage.factor_matrix_materializer import FactorMatrixMaterializer
 
     loaded = FactorMatrixMaterializer.load_matrix(
         tmp_path / "matrix",
@@ -157,7 +157,7 @@ def test_materialize_sharded_selects_subset(tmp_path, monkeypatch):
         }
 
     monkeypatch.setattr(
-        "runtime.materialize_batch.execute_materialize_batch",
+        "factor_engine.runtime.materialize_batch.execute_materialize_batch",
         _fake_batch,
     )
     out = eng.materialize_sharded(

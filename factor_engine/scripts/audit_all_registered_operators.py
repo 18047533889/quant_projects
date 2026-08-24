@@ -71,7 +71,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from mining.operator_catalog import MiningRole, RoleSource, assign_mining_role, assign_mining_role_ex, mining_eligible
+from factor_engine.mining.operator_catalog import MiningRole, RoleSource, assign_mining_role, assign_mining_role_ex, mining_eligible
 
 # R19-012: ``MISSING`` is the "no declared default" sentinel — DISTINCT from
 # ``None`` which is a legitimate declared default.  The old probe checked
@@ -80,7 +80,7 @@ from mining.operator_catalog import MiningRole, RoleSource, assign_mining_role, 
 # the detector degrades to the old ``is not None`` check if the sentinel is
 # ever unavailable.
 try:
-    from cleaned_operators.base import MISSING as _MISSING_SENTINEL
+    from factor_engine.cleaned_operators.base import MISSING as _MISSING_SENTINEL
 except Exception:  # pragma: no cover - defensive fallback
     _MISSING_SENTINEL = None
 
@@ -131,8 +131,8 @@ class Verdict:
 
 
 def _case_and_bucket(canonical: str, role: MiningRole, catalog: dict[str, Any]) -> tuple[int, str]:
-    from cleaned_operators.operator_spec import PERMANENTLY_FORBIDDEN_CANONICALS
-    from cleaned_operators.production_hardening import (
+    from factor_engine.cleaned_operators.operator_spec import PERMANENTLY_FORBIDDEN_CANONICALS
+    from factor_engine.cleaned_operators.production_hardening import (
         NON_FACTOR_PRODUCTION_CANONICALS,
         SOURCE_BLOCKED_CANONICALS,
     )
@@ -194,7 +194,7 @@ def _case_and_bucket(canonical: str, role: MiningRole, catalog: dict[str, Any]) 
 
 def _alias_edges(catalog: dict[str, Any]) -> list[tuple[str, str]]:
     """(alias, canonical) edges from the registry."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     edges: list[tuple[str, str]] = []
     aliases = getattr(OperatorRegistry, "_aliases", {}) or {}
@@ -262,10 +262,10 @@ def detect_semantic_duplicate_candidates(
     release.
     """
     candidates: list[dict[str, Any]] = []
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     try:
-        from mining.direct_use import MONOTONIC_TRANSFORM_CLASS
+        from factor_engine.mining.direct_use import MONOTONIC_TRANSFORM_CLASS
     except Exception:  # pragma: no cover - read-only optional import
         MONOTONIC_TRANSFORM_CLASS = {}
 
@@ -575,8 +575,8 @@ def detect_dead_searchable_params_detail(catalog: dict[str, Any]) -> dict[str, A
     probe_error_params = 0
     untested_params = 0
     try:
-        from cleaned_operators.base import searchable_param_names
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.base import searchable_param_names
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
     except Exception as exc:
         audit_errors.append({"canonical": "<import>", "param": "*", "error": str(exc)})
         return {
@@ -697,7 +697,7 @@ def detect_manifest_gap(catalog: dict[str, Any]) -> list[str]:
        :func:`detect_manifest_gap_contextual` instead.
     """
     try:
-        from mining.operator_catalog import get_mining_operators
+        from factor_engine.mining.operator_catalog import get_mining_operators
     except Exception as exc:
         # A detector that cannot run must not claim PASS with [] — the caller
         # records this as AUDIT_ERROR coverage.
@@ -724,7 +724,7 @@ _KNOWN_SOURCES_FALLBACK = frozenset({
 
 def _known_source_universe() -> tuple[str, ...]:
     try:
-        from mining.operator_catalog import _KNOWN_SOURCES
+        from factor_engine.mining.operator_catalog import _KNOWN_SOURCES
         if _KNOWN_SOURCES:
             return tuple(sorted(_KNOWN_SOURCES))
     except Exception:
@@ -754,7 +754,7 @@ def detect_manifest_gap_intrinsic(catalog: dict[str, Any]) -> list[str]:
     produced false ``CERTIFIED_FACTOR_NOT_IN_MINING_MANIFEST`` reports.
     """
     try:
-        from mining.operator_catalog import get_mining_operators
+        from factor_engine.mining.operator_catalog import get_mining_operators
     except Exception as exc:
         raise RuntimeError(
             f"detect_manifest_gap_intrinsic: mining catalog unavailable: {exc}"
@@ -776,7 +776,7 @@ def detect_manifest_gap_contextual(catalog: dict[str, Any]) -> dict[str, list[st
     The runtime environment is never approximated by a context-free query.
     """
     try:
-        from mining.operator_catalog import get_mining_operators, market_support
+        from factor_engine.mining.operator_catalog import get_mining_operators, market_support
     except Exception as exc:
         raise RuntimeError(
             f"detect_manifest_gap_contextual: mining catalog unavailable: {exc}"
@@ -813,11 +813,11 @@ _ALIAS_LOOKUP: dict[str, str] = {}
 
 
 def audit_all_registered_operators() -> dict[str, Any]:
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
-    from cleaned_operators.operator_surface import classify_canonical, unclassified_canonicals
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical, unclassified_canonicals
     from research_tools.registry import ResearchToolRegistry
 
     catalog = OperatorRegistry._catalog

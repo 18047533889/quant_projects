@@ -121,7 +121,7 @@ class OperatorUpgradeRow:
 
 
 def _evidence_sets() -> dict[str, frozenset[str]]:
-    from backend.primitive_evidence import (
+    from factor_engine.backend.primitive_evidence import (
         DUCKDB_EDGE_VERIFIED,
         DUCKDB_REAL_SQL_VERIFIED,
         DUCKDB_REFERENCE_PARITY_VERIFIED,
@@ -169,7 +169,7 @@ def infer_upgrade_batch(canon: str) -> BatchId | None:
 
 
 def infer_block_reason(canon: str, *, batch: BatchId | None, gaps: tuple[str, ...]) -> str | None:
-    from backend.primitive_evidence import primitive_dual_backend_production_safe
+    from factor_engine.backend.primitive_evidence import primitive_dual_backend_production_safe
 
     if primitive_dual_backend_production_safe(canon):
         return None
@@ -187,7 +187,7 @@ def infer_block_reason(canon: str, *, batch: BatchId | None, gaps: tuple[str, ..
         if gaps:
             return "evidence_incomplete:" + ",".join(gaps)
         return "evidence_incomplete"
-    from backend.production_fastpath_tiers import FORBIDDEN_PRODUCTION_FASTPATH
+    from factor_engine.backend.production_fastpath_tiers import FORBIDDEN_PRODUCTION_FASTPATH
 
     if canon in FORBIDDEN_PRODUCTION_FASTPATH:
         return "forbidden_fastpath"
@@ -195,8 +195,8 @@ def infer_block_reason(canon: str, *, batch: BatchId | None, gaps: tuple[str, ..
 
 
 def _parameter_domain_complete(canon: str) -> bool:
-    from backend.operator_evidence_schema import operator_evidence_record
-    from backend.production_signature import operational_production_allowed, signature_for
+    from factor_engine.backend.operator_evidence_schema import operator_evidence_record
+    from factor_engine.backend.production_signature import operational_production_allowed, signature_for
 
     if not operational_production_allowed(canon):
         return False
@@ -210,41 +210,41 @@ def _parameter_domain_complete(canon: str) -> bool:
 
 
 def _type_signature_complete(canon: str) -> bool:
-    from backend.operator_types import OPERATOR_SIGNATURES
+    from factor_engine.backend.operator_types import OPERATOR_SIGNATURES
 
     return canon in OPERATOR_SIGNATURES
 
 
 def _alignment_verified() -> bool:
-    from backend.ordering_spec import duplicate_ts_inst_keys_forbidden
+    from factor_engine.backend.ordering_spec import duplicate_ts_inst_keys_forbidden
 
     return duplicate_ts_inst_keys_forbidden()
 
 
 def build_operator_upgrade_row(canon: str) -> OperatorUpgradeRow:
-    from backend.operator_capability import polars_long_tier
-    from backend.polars_long_policy import (
+    from factor_engine.backend.operator_capability import polars_long_tier
+    from factor_engine.backend.polars_long_policy import (
         POLARS_LONG_NATIVE,
         POLARS_LONG_PYTHON_ROLLING,
         POLARS_LONG_STATEFUL,
         classify_plan_op,
     )
-    from backend.production_fastpath_tiers import (
+    from factor_engine.backend.production_fastpath_tiers import (
         FASTPATH_DEFERRED_CANONICALS,
         FORBIDDEN_PRODUCTION_FASTPATH,
         dual_backend_structural_candidates,
     )
-    from backend.primitive_evidence import (
+    from factor_engine.backend.primitive_evidence import (
         primitive_dual_backend_production_safe,
         primitive_operational_production_certified,
     )
-    from backend.sql_tiers import is_sql_implemented
-    from cleaned_operators.operator_spec import infer_production_policy
+    from factor_engine.backend.sql_tiers import is_sql_implemented
+    from factor_engine.cleaned_operators.operator_spec import infer_production_policy
 
     gaps = certification_gaps(canon)
     batch = infer_upgrade_batch(canon)
     tier = classify_plan_op(canon)
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     polars_meta = dict(
         ((OperatorRegistry.catalog().get(canon, {}).get("backend_meta") or {}).get("polars") or {})
@@ -341,13 +341,13 @@ def build_operator_upgrade_row(canon: str) -> OperatorUpgradeRow:
 
 
 def build_upgrade_matrix(*, primitives: list[str] | None = None) -> dict[str, Any]:
-    from cleaned_operators.operator_spec import (
+    from factor_engine.cleaned_operators.operator_spec import (
         PRODUCTION_ALLOWED_DEFERRED_CANONICALS,
         PRODUCTION_DUAL_BACKEND_CORE_CANONICALS,
     )
 
     if primitives is None:
-        from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+        from factor_engine.backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
 
         primitives = sorted(
             PRODUCTION_DUAL_BACKEND_CORE_CANONICALS

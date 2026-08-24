@@ -13,7 +13,7 @@ _APPLIED = False
 
 
 def _install_evidence_overlay_hash() -> None:
-    from backend import evidence_provenance as ep
+    from factor_engine.backend import evidence_provenance as ep
 
     if getattr(ep, "_fiscal_v2_overlay_hash_installed", False):
         return
@@ -38,7 +38,7 @@ def apply_production_signature_v2() -> None:
     if _APPLIED:
         return
 
-    from backend import production_signature as ps
+    from factor_engine.backend import production_signature as ps
 
     c = ps._c
     signature = ps.OperatorProductionSignature

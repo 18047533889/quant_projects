@@ -15,13 +15,13 @@ import pytest
 pytest.importorskip("duckdb")
 pytest.importorskip("polars")
 
-from backend.sql_pushdown.emitter import (
+from factor_engine.backend.sql_pushdown.emitter import (
     SqlDialect,
     compile_plan_to_sql,
 )
-from cleaned_operators import load_all
-from cleaned_operators.relation.ops import IndexWeight
-from planner.logical_plan import PlanNode
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.relation.ops import IndexWeight
+from factor_engine.planner.logical_plan import PlanNode
 
 load_all()
 
@@ -39,7 +39,7 @@ def _pandas_reference(panel: pd.DataFrame) -> pd.DataFrame:
 
 
 def _index_weight_plan():
-    from backend.sql_pushdown.plan_fixtures import column
+    from factor_engine.backend.sql_pushdown.plan_fixtures import column
 
     return PlanNode(op="index_weight", inputs=[column("weight")], attrs={"normalize": True})
 
@@ -126,8 +126,8 @@ def test_index_weight_sql_parity_handles_nan_and_zero_total():
 
 
 def test_index_weight_sql_emitter_registered():
-    from backend.operator_capability import _sql_emitter_ok
-    from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
+    from factor_engine.backend.operator_capability import _sql_emitter_ok
+    from factor_engine.backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
 
     assert "index_weight" in SQL_IMPLEMENTED_CANONICALS
     assert _sql_emitter_ok("index_weight")

@@ -6,14 +6,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators._rolling_fast import (
+from factor_engine.cleaned_operators._rolling_fast import (
     WMA_PARTIAL_POLICY,
     check_wma_partial_policy,
     wma_partial_policy_digest,
 )
-from cleaned_operators.common.cross_sectional import _finite_stats_input, check_rank_method
-from cleaned_operators.common.data_cleaning import _nan_only_to_num, _nonfinite_to_num
-from cleaned_operators.common.time_series import (
+from factor_engine.cleaned_operators.common.cross_sectional import _finite_stats_input, check_rank_method
+from factor_engine.cleaned_operators.common.data_cleaning import _nan_only_to_num, _nonfinite_to_num
+from factor_engine.cleaned_operators.common.time_series import (
     EWMContract,
     StatisticalSamplePolicy,
     TopKContract,

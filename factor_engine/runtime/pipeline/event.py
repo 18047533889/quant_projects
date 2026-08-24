@@ -8,9 +8,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from runtime.config_runtime import build_data_source_config, resolve_materialize_kwargs
-from runtime.engine import FactorEngine
-from runtime.incremental_scheduler import DataEvent
+from factor_engine.runtime.config_runtime import build_data_source_config, resolve_materialize_kwargs
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.runtime.incremental_scheduler import DataEvent
 from workspace_paths import default_factor_lake_root
 
 
@@ -77,7 +77,7 @@ def run_data_event(
             )
 
     if engine is None:
-        from backend.factory import build_backend
+        from factor_engine.backend.factory import build_backend
 
         engine = FactorEngine(
             backend=build_backend("pandas"),

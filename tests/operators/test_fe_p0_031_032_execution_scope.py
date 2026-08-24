@@ -10,9 +10,9 @@ would cause under-read in warmup/history.
 """
 import pytest
 
-from planner.dag import FactorExecutionScope
-from runtime.engine import _scope_from_factor, assert_execution_scope_contract
-from runtime.production_policy import ProductionPolicyViolation
+from factor_engine.planner.dag import FactorExecutionScope
+from factor_engine.runtime.engine import _scope_from_factor, assert_execution_scope_contract
+from factor_engine.runtime.production_policy import ProductionPolicyViolation
 
 
 class Expr:
@@ -31,7 +31,7 @@ def _set_research_mode(monkeypatch):
 
 def _rank_plan():
     """Minimal plan with cross-sectional operator (rank)."""
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     return PlanNode(
         op="rank",
@@ -42,7 +42,7 @@ def _rank_plan():
 
 def _ts_plan():
     """Minimal plan with time-series operator (ts_mean)."""
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     return PlanNode(
         op="ts_mean",

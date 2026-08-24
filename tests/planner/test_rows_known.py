@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from planner.data_shape import (
+from factor_engine.planner.data_shape import (
     DataShapeEstimate,
     estimate_shape_from_context,
     _conservative_default_shape,

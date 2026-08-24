@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 
 @dataclass(frozen=True)
@@ -95,7 +95,7 @@ _STREAMING_SAFE = frozenset({
 
 def _resolve_op(op: str) -> str:
     """解析算子别名至 canonical 名称。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     return OperatorRegistry._aliases.get(op, op)
 
 

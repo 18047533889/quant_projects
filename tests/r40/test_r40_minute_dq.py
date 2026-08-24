@@ -7,13 +7,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.microstructure.intraday_agg import (
+from factor_engine.cleaned_operators.microstructure.intraday_agg import (
     MarketRequiredError,
     _daily_agg,
     _declared_calendar,
 )
-from runtime.session_calendar import SessionCalendar
-from runtime.session_panel import (
+from factor_engine.runtime.session_calendar import SessionCalendar
+from factor_engine.runtime.session_panel import (
     DuplicateSlotError,
     MultipleSessionDatesError,
     build_session_panel,

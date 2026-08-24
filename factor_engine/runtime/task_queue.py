@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from runtime.shard_materialize import shard_by_hash
+from factor_engine.runtime.shard_materialize import shard_by_hash
 
 JOB_TYPE_CONFIG = "config"
 JOB_TYPE_DATA_EVENT = "data_event"

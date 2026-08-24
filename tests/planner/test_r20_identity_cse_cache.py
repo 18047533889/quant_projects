@@ -36,9 +36,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from planner.dag import FactorExecutionScope
-from planner.logical_plan import PlanNode, canonical_target_index
-from planner.physical_plan import (
+from factor_engine.planner.dag import FactorExecutionScope
+from factor_engine.planner.logical_plan import PlanNode, canonical_target_index
+from factor_engine.planner.physical_plan import (
     DownsampleContractError,
     ExecKind,
     MaterializedSeriesContract,
@@ -48,7 +48,7 @@ from planner.physical_plan import (
     materialized_series_contract,
     validate_downsample_contract,
 )
-from planner.cse import (
+from factor_engine.planner.cse import (
     PlanScopeCategory,
     UnresolvedScopeError,
     apply_cse,
@@ -57,7 +57,7 @@ from planner.cse import (
     classify_plan_scope,
     cse_scope_key,
 )
-from planner.plan_hash import (
+from factor_engine.planner.plan_hash import (
     PlanHashKind,
     PlanSemanticAttrTypeError,
     POST_OPTIMIZATION_TEMPORAL_PROOF_PASS,
@@ -75,11 +75,11 @@ from planner.plan_hash import (
     typed_ir_semantic_hash,
     typed_ir_structural_hash,
 )
-from planner.source_dependencies import (
+from factor_engine.planner.source_dependencies import (
     is_whole_market_label,
     universe_membership_hash,
 )
-from runtime.factor_identity import (
+from factor_engine.runtime.factor_identity import (
     ExecutionSemanticIdentityV2,
     FactorSemanticIdentity,
     IdentityHashTypeError,
@@ -87,7 +87,7 @@ from runtime.factor_identity import (
     assert_projection_chain_distinct,
     projection_chain,
 )
-from storage.data_scope import (
+from factor_engine.storage.data_scope import (
     ExecutionConfigTypeError,
     canonicalize_execution_config,
     compute_execution_cache_scope,
@@ -209,11 +209,11 @@ def test_r20_038_differential_detects_semantic_attr_change():
     )
     result = audit.audit(ref, executor=lambda p: data["close"])
     assert not result.passed
-    assert any("semantic.available_at" in m.attribute for m in result.mismatches)
+    assert any("factor_engine.semantic.available_at" in m.attribute for m in result.mismatches)
 
 
 def test_r20_039_differential_detects_new_source_dependency():
-    from api.source_ref import make_source_ref, encode_source_ref
+    from factor_engine.api.source_ref import make_source_ref, encode_source_ref
 
     ref_name = encode_source_ref(make_source_ref("StockIncome", "NetProfit"))
     ref = _col(name=ref_name)
@@ -264,7 +264,7 @@ def test_r20_041_temporal_proof_rejects_availability_shift():
 
 
 def test_r20_042_temporal_proof_rejects_non_causal_new_dependency():
-    from api.source_ref import make_source_ref, encode_source_ref
+    from factor_engine.api.source_ref import make_source_ref, encode_source_ref
 
     ref = _col(name=encode_source_ref(make_source_ref("StockIncome", "NetProfit")))
     new_dep = _col(name=encode_source_ref(make_source_ref("StockBalance", "TotalAssets")))
@@ -314,7 +314,7 @@ def test_r20_046_unknown_scope_fails_closed_in_production(monkeypatch):
     import sys
     import types
 
-    fake_registry = types.ModuleType("cleaned_operators.registry")
+    fake_registry = types.ModuleType("factor_engine.cleaned_operators.registry")
 
     class _BrokenRegistry:
         @staticmethod
@@ -328,7 +328,7 @@ def test_r20_046_unknown_scope_fails_closed_in_production(monkeypatch):
     fake_registry.OperatorRegistry = _BrokenRegistry
     fake_pkg = types.ModuleType("cleaned_operators")
     fake_pkg.registry = fake_registry
-    monkeypatch.setitem(sys.modules, "cleaned_operators.registry", fake_registry)
+    monkeypatch.setitem(sys.modules, "factor_engine.cleaned_operators.registry", fake_registry)
     monkeypatch.setitem(sys.modules, "cleaned_operators", fake_pkg)
 
     plan = PlanNode(op="mystery_op", inputs=[_col()])
@@ -467,7 +467,7 @@ def test_r20_057_factor_execution_scope_default_does_not_reintroduce_a():
 # R20-058..061: CSE scope 绑定真实二级 SourceRef 依赖
 # ---------------------------------------------------------------------------
 def _source_ref_column(table: str, field: str) -> PlanNode:
-    from api.source_ref import encode_source_ref, make_source_ref
+    from factor_engine.api.source_ref import encode_source_ref, make_source_ref
 
     name = encode_source_ref(make_source_ref(table, field))
     return _col(name=name)
@@ -475,7 +475,7 @@ def _source_ref_column(table: str, field: str) -> PlanNode:
 
 def test_r20_470_secondary_source_ref_different_factors_do_not_share_cse_scope():
     """R20-470：secondary SourceRef 不同的 factor 不得跨 dependency CSE 共享。"""
-    from planner.source_dependencies import source_dependency_hash
+    from factor_engine.planner.source_dependencies import source_dependency_hash
 
     f1 = _source_ref_column("StockIncome", "NetProfit")
     f2 = _source_ref_column("StockBalance", "TotalAssets")
@@ -495,7 +495,7 @@ def test_r20_470_secondary_source_ref_different_factors_do_not_share_cse_scope()
 
 
 def test_r20_059_same_source_dependency_same_cse_scope():
-    from planner.source_dependencies import source_dependency_hash
+    from factor_engine.planner.source_dependencies import source_dependency_hash
 
     f1 = _source_ref_column("StockIncome", "NetProfit")
     f2 = _source_ref_column("StockIncome", "NetProfit")
@@ -573,7 +573,7 @@ def test_r20_066_universe_membership_hash_deterministic_whole_market():
 # R20-067..072: production contract-resolution gate
 # ---------------------------------------------------------------------------
 def test_r20_067_unresolved_operator_contract_production_fails(monkeypatch):
-    from planner import plan_hash as ph
+    from factor_engine.planner import plan_hash as ph
 
     plan = PlanNode(op="some_op", inputs=[_col()])
     # 模拟 registry lookup 失败 → semantic_version="unregistered"
@@ -587,7 +587,7 @@ def test_r20_067_unresolved_operator_contract_production_fails(monkeypatch):
 
 
 def test_r20_068_field_catalog_unavailable_production_fails(monkeypatch):
-    from planner import plan_hash as ph
+    from factor_engine.planner import plan_hash as ph
 
     plan = PlanNode(op="ts_mean", inputs=[_col()])
     # 只有 operator contract resolved，但 field catalog hash 失败
@@ -595,14 +595,14 @@ def test_r20_068_field_catalog_unavailable_production_fails(monkeypatch):
         ph, "_operator_semantic_contract", lambda op: {"semantic_version": "1.0"}
     )
     monkeypatch.setattr(
-        "fields.compute_field_catalog_hash", lambda: (_ for _ in ()).throw(RuntimeError("boom"))
+        "factor_engine.fields.compute_field_catalog_hash", lambda: (_ for _ in ()).throw(RuntimeError("boom"))
     )
     with pytest.raises(UnresolvedContractError):
         assert_plan_contracts_resolved(plan, production=True)
 
 
 def test_r20_069_resolved_contract_production_passes(monkeypatch):
-    from planner import plan_hash as ph
+    from factor_engine.planner import plan_hash as ph
 
     plan = PlanNode(op="ts_mean", inputs=[_col()])
     monkeypatch.setattr(
@@ -612,7 +612,7 @@ def test_r20_069_resolved_contract_production_passes(monkeypatch):
 
 
 def test_r20_070_cse_contract_gate_fails_closed(monkeypatch):
-    from planner import plan_hash as ph
+    from factor_engine.planner import plan_hash as ph
 
     plan = PlanNode(op="some_op", inputs=[_col()])
     monkeypatch.setattr(
@@ -624,7 +624,7 @@ def test_r20_070_cse_contract_gate_fails_closed(monkeypatch):
 
 
 def test_r20_071_structural_key_still_works_for_resolved_plans(monkeypatch):
-    from planner import plan_hash as ph
+    from factor_engine.planner import plan_hash as ph
 
     plan = PlanNode(op="ts_mean", inputs=[_col()])
     monkeypatch.setattr(
@@ -635,7 +635,7 @@ def test_r20_071_structural_key_still_works_for_resolved_plans(monkeypatch):
 
 
 def test_r20_072_optimized_plan_hash_production_gate(monkeypatch):
-    from planner import plan_hash as ph
+    from factor_engine.planner import plan_hash as ph
 
     plan = PlanNode(op="some_op", inputs=[_col()])
     monkeypatch.setattr(
@@ -652,16 +652,16 @@ def test_r20_072_optimized_plan_hash_production_gate(monkeypatch):
 # ---------------------------------------------------------------------------
 def test_r20_073_semantic_attr_unsupported_object_raises():
     bad = PlanNode(op="column", attrs={"name": "x"}, semantic_attrs={"obj": object()})
-    from planner.plan_hash import _semantic_digest
+    from factor_engine.planner.plan_hash import _semantic_digest
 
     with pytest.raises(PlanSemanticAttrTypeError):
         _semantic_digest(bad)
 
 
 def test_r20_074_semantic_attr_session_close_label_normalized():
-    from planner.plan_hash import _semantic_digest
+    from factor_engine.planner.plan_hash import _semantic_digest
 
-    from ir.types import SessionClose
+    from factor_engine.ir.types import SessionClose
     n = PlanNode(
         op="column", attrs={"name": "close"},
         semantic_attrs={"available_at": SessionClose()},
@@ -676,21 +676,21 @@ def test_r20_074_semantic_attr_session_close_label_normalized():
 
 
 def test_r20_075_identity_payload_unsupported_object_raises():
-    import runtime.factor_identity as fi
+    import factor_engine.runtime.factor_identity as fi
 
     with pytest.raises(IdentityHashTypeError):
         fi._stable_hash({"x": object()})
 
 
 def test_r20_076_identity_scalar_unsupported_object_raises():
-    import runtime.factor_identity as fi
+    import factor_engine.runtime.factor_identity as fi
 
     with pytest.raises(IdentityHashTypeError):
         fi._scalar(object())
 
 
 def test_r20_077_semantic_attr_known_types_ok():
-    from planner.plan_hash import _semantic_digest
+    from factor_engine.planner.plan_hash import _semantic_digest
 
     n = PlanNode(
         op="column", attrs={"name": "x"},
@@ -705,7 +705,7 @@ def test_r20_077_semantic_attr_known_types_ok():
 
 
 def test_r20_078_typed_semantic_value_nested_unsupported_raises():
-    from planner.plan_hash import _typed_semantic_value
+    from factor_engine.planner.plan_hash import _typed_semantic_value
 
     with pytest.raises(PlanSemanticAttrTypeError):
         _typed_semantic_value({"inner": {"deep": object()}})
@@ -732,7 +732,7 @@ def test_r20_080_typed_ir_semantic_hash_differs_on_semantic_attrs():
 
 
 def test_r20_081_physical_plan_hash_distinct():
-    from planner.physical_plan import PhysicalPlan
+    from factor_engine.planner.physical_plan import PhysicalPlan
 
     plan = PlanNode(op="add", inputs=[_col(), _lit(1)])
     pp1 = PhysicalPlan(root=plan, sql_subtrees={}, fully_sql=False)
@@ -762,7 +762,7 @@ def test_r20_083_lineage_plan_hashes_are_layered():
 
 
 def test_r20_084_lineage_backend_route_summary():
-    from planner.physical_plan import PhysicalPlan
+    from factor_engine.planner.physical_plan import PhysicalPlan
 
     sql_node = PlanNode(op="ts_mean", inputs=[_col()])
     py_node = PlanNode(op="log", inputs=[_col()])
@@ -778,7 +778,7 @@ def test_r20_084_lineage_backend_route_summary():
 
 
 def test_r20_085_lineage_physical_hash_from_physical_plan():
-    from planner.physical_plan import PhysicalPlan
+    from factor_engine.planner.physical_plan import PhysicalPlan
 
     plan = PlanNode(op="add", inputs=[_col(), _lit(1)])
     pp = PhysicalPlan(root=plan, sql_subtrees={}, fully_sql=True)
@@ -823,13 +823,13 @@ def test_r20_090_contract_to_dict_serializable():
 # R20-091..093: SQL SourceRef 三态
 # ---------------------------------------------------------------------------
 def _valid_source_ref_name(table: str, field: str) -> str:
-    from api.source_ref import encode_source_ref, make_source_ref
+    from factor_engine.api.source_ref import encode_source_ref, make_source_ref
 
     return encode_source_ref(make_source_ref(table, field))
 
 
 def test_r20_091_source_ref_three_states():
-    from planner.sql_lowerer import SourceRefStatus, classify_source_ref
+    from factor_engine.planner.sql_lowerer import SourceRefStatus, classify_source_ref
 
     valid = _col(name=_valid_source_ref_name("StockIncome", "NetProfit"))
     assert classify_source_ref(valid) is SourceRefStatus.VALID_SOURCE_REF
@@ -842,7 +842,7 @@ def test_r20_091_source_ref_three_states():
 
 
 def test_r20_092_malformed_source_ref_production_hard_fails():
-    from planner.sql_lowerer import _contains_source_ref
+    from factor_engine.planner.sql_lowerer import _contains_source_ref
 
     malformed = _col(name="__fe_source_ref_v1__%%%bad%%%")
     # research: 按 opaque 处理（非 SQL-capable）
@@ -853,7 +853,7 @@ def test_r20_092_malformed_source_ref_production_hard_fails():
 
 
 def test_r20_093_valid_and_plain_source_refs_sql_detection():
-    from planner.sql_lowerer import _contains_source_ref
+    from factor_engine.planner.sql_lowerer import _contains_source_ref
 
     valid = _col(name=_valid_source_ref_name("StockIncome", "NetProfit"))
     assert _contains_source_ref(valid, production=True) is True

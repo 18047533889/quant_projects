@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from backend.cleaned_bridge import _call_cleaned_operator
-from backend.parameter_aliases import (
+from factor_engine.backend.cleaned_bridge import _call_cleaned_operator
+from factor_engine.backend.parameter_aliases import (
     ParameterAliasError,
     normalize_parameter_aliases,
 )

@@ -15,9 +15,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from cleaned_operators import load_all  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
-from cleaned_operators.model_lane import (  # noqa: E402
+from factor_engine.cleaned_operators import load_all  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators.model_lane import (  # noqa: E402
     MODEL_LANES,
     assign_model_lane,
     model_lane_errors,
@@ -47,8 +47,8 @@ def test_all_lanes_are_valid_labels():
 def test_inventory_covers_all_model_like():
     """The lane inventory must cover exactly the model-like canonicals (282,
     matching the R28 model causality audit count)."""
-    from cleaned_operators.model_timing import is_model_like_name
-    from cleaned_operators.model_lane import _category_of
+    from factor_engine.cleaned_operators.model_timing import is_model_like_name
+    from factor_engine.cleaned_operators.model_lane import _category_of
 
     _load()
     canonicals = sorted(OperatorRegistry.list_canonical())

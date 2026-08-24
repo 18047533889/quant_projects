@@ -6,14 +6,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from api import rank, ts_mean
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from cache.layers import CacheLayer
-from cache.session import ExecutionCacheSession
-from runtime.engine import FactorEngine
-from storage.cache import CacheManager
+from factor_engine.api import rank, ts_mean
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.cache.layers import CacheLayer
+from factor_engine.cache.session import ExecutionCacheSession
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.storage.cache import CacheManager
 from tests.helpers import InMemorySeriesSource
 
 
@@ -40,7 +40,7 @@ def test_execution_cache_session_tracks_subplan_hits():
 
 def test_polars_backend_prefers_auto():
     pytest.importorskip("polars")
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
     backend = build_backend("polars")
@@ -52,7 +52,7 @@ def test_polars_backend_prefers_auto():
 
 def test_polars_backend_run_many_with_cache():
     pytest.importorskip("polars")
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
     backend = build_backend("polars")
@@ -67,7 +67,7 @@ def test_polars_backend_run_many_with_cache():
 
 def test_polars_backend_records_runtime_stats():
     pytest.importorskip("polars")
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
     eng = FactorEngine(

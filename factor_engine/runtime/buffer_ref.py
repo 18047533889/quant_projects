@@ -2,13 +2,8 @@
 """R33 §7/§8/§9：BufferRef + SourceWaveExecutor —— task 之间传引用，不传大对象。
 
 - :class:`BufferRef`：统一数据引用（representation / schema / rows / bytes /
-  source_snapshot / ordering / refcount / **ownership**）。task 之间传 ref，
-  materialize 由 consumer 要求；同一 buffer 可被多个 root 消费。
-- **Ownership policy（R21-FE-ZEROCOPY-OWNERSHIP）**：caller 的 buffer 默认
-  ``READ_ONLY``，除非 ownership 被**显式转移**；对 caller buffer 的零拷贝共享
-  **必须**是 ``READ_ONLY``。``BufferRef.ownership`` 是
-  :class:`~runtime.ownership.BufferOwnership` 枚举（``str`` 枚举，序列化兼容：
-  ``READ_ONLY`` 的 ``.value`` 就是 ``"shared"``，与旧自由字符串默认完全一致）。
+  source_snapshot / ordering / refcount）。task 之间传 ref，materialize 由
+  consumer 要求；同一 buffer 可被多个 root 消费。
 - :class:`SourceWaveExecutor`：R33-P0-016 —— 把 read wave 真正接进 scheduler
   主路径。``execute_wave`` 一次 scan 该 wave 的 union 物理列（经
   ``source.prefetch_columns`` 填入共享 column cache，scan once → consumers
@@ -23,8 +18,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable
 
-from runtime.ownership import BufferOwnership
-
 
 @dataclass(frozen=True)
 class BufferRef:
@@ -33,11 +26,6 @@ class BufferRef:
     ``representation`` 描述值表示（arrow_batches / polars_lazy / pandas_column /
     numpy_block / spill_file）；``location`` 是取值句柄（cache key / object
     reference）。task 之间只传本 ref。
-
-    ``ownership``（R21-FE-ZEROCOPY-OWNERSHIP）：:class:`BufferOwnership` 枚举。
-    默认 ``READ_ONLY`` —— caller 的 buffer 只读，除非显式转移所有权；零拷贝
-    共享的 caller buffer 必须是 ``READ_ONLY``（共享视图上意外的原地写会因
-    numpy ``ValueError`` 大声失败，而不是悄悄污染 caller 的 frame）。
     """
 
     representation: str
@@ -48,7 +36,7 @@ class BufferRef:
     source_snapshot: str = ""
     ordering: str = ""         # "instrument,time:asc" | ""
     location: Any = None       # 取值句柄（cache key / duckdb relation）
-    ownership: BufferOwnership = BufferOwnership.READ_ONLY
+    ownership: str = "shared"
     refcount: int = 0
     meta: dict[str, Any] = field(default_factory=dict)
 
@@ -61,7 +49,7 @@ class BufferRef:
             "bytes": self.bytes,
             "source_snapshot": self.source_snapshot,
             "ordering": self.ordering,
-            "ownership": self.ownership.value,
+            "ownership": self.ownership,
             "refcount": self.refcount,
         }
 
@@ -174,7 +162,7 @@ class SourceWaveExecutor:
                 source_snapshot=str(getattr(source, "snapshot_token", "") or ""),
                 ordering="",
                 location=location,
-                ownership=BufferOwnership.READ_ONLY,
+                ownership="shared",
                 refcount=len(set(consumer_ids)),
                 column_cache_keys=tuple(columns),
                 wave_id=wave_id,

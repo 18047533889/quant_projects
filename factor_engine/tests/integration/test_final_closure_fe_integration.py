@@ -75,7 +75,7 @@ ds:
 
 
 def test_fe_empty_instrument_filter_zero_rows(tmp_path):
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     store = _synthetic_store(tmp_path)
     src = DataAccessSource(
@@ -85,7 +85,7 @@ def test_fe_empty_instrument_filter_zero_rows(tmp_path):
         end_date="2024-01-03",
         instrument_filter=[],
     )
-    with patch("storage.sources.data_access_source._get_store", return_value=store):
+    with patch("factor_engine.storage.sources.data_access_source._get_store", return_value=store):
         # eager load_columns → 0 行
         out = src.load_columns(["v"])
         assert len(out["v"]) == 0
@@ -104,13 +104,13 @@ def test_fe_empty_instrument_filter_zero_rows(tmp_path):
         start_date="2024-01-02",
         end_date="2024-01-03",
     )
-    with patch("storage.sources.data_access_source._get_store", return_value=store):
+    with patch("factor_engine.storage.sources.data_access_source._get_store", return_value=store):
         assert len(src2.load_columns(["v"])["v"]) == 3
 
 
 def test_fe_empty_instrument_filter_keeps_distinct_from_none(tmp_path):
     """构造层：instrument_filter=[] 保持 []，None 保持 None。"""
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     a = DataAccessSource(dataset="ds", instrument_filter=[])
     b = DataAccessSource(dataset="ds", instrument_filter=None)
@@ -141,7 +141,7 @@ class _SpyStore:
 
 
 def test_fe_read_mode_pit_reaches_store_mode(tmp_path):
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     store = _synthetic_store(tmp_path)
     src = DataAccessSource(
@@ -150,7 +150,7 @@ def test_fe_read_mode_pit_reaches_store_mode(tmp_path):
         read_mode="pit",
     )
     spy = _SpyStore(store)
-    with patch("storage.sources.data_access_source._get_store", return_value=spy):
+    with patch("factor_engine.storage.sources.data_access_source._get_store", return_value=spy):
         src.load_columns(["v"])
     assert spy.read_kwargs, "store.read 未被调用"
     assert spy.read_kwargs[0][1].get("mode") == "pit", (
@@ -164,7 +164,7 @@ def test_fe_read_mode_pit_reaches_store_mode(tmp_path):
 
 
 def test_fe_semantic_filters_reach_filters_kwarg(tmp_path):
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     store = _synthetic_store(tmp_path)
     src = DataAccessSource(
@@ -173,7 +173,7 @@ def test_fe_semantic_filters_reach_filters_kwarg(tmp_path):
         semantic_filters={"s": "AAA"},
     )
     spy = _SpyStore(store)
-    with patch("storage.sources.data_access_source._get_store", return_value=spy):
+    with patch("factor_engine.storage.sources.data_access_source._get_store", return_value=spy):
         out = src.load_columns(["v"])
     ds, kwargs = spy.read_kwargs[0]
     assert kwargs.get("filters") == {"s": "AAA"}, kwargs
@@ -184,7 +184,7 @@ def test_fe_semantic_filters_reach_filters_kwarg(tmp_path):
 
 
 def test_fe_semantic_filters_conflict_with_params_rejected(tmp_path):
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     with pytest.raises(ValueError, match="conflicting semantic filter"):
         DataAccessSource(
@@ -201,7 +201,7 @@ def test_fe_semantic_filters_conflict_with_params_rejected(tmp_path):
 
 def test_fe_pit_read_requires_cos_contract_production(tmp_path):
     """read_mode=pit 而无 COS 契约 → production 构造即拒绝（无法证明时钟）。"""
-    from storage.sources.data_access_source import (
+    from factor_engine.storage.sources.data_access_source import (
         DataAccessSource,
         FourLayerPITError,
     )
@@ -218,11 +218,11 @@ def test_fe_pit_read_requires_cos_contract_production(tmp_path):
 
 def test_fe_cleaned_fundamentals_pit_unknown_production_rejects(tmp_path):
     """fundamentals_*（period_end 无知识时钟）production PIT 拒绝。"""
-    from storage.sources.data_access_source import (
+    from factor_engine.storage.sources.data_access_source import (
         DataAccessSource,
         FourLayerPITError,
     )
-    from storage.sources.field_plan import NormalizedFieldPlan
+    from factor_engine.storage.sources.field_plan import NormalizedFieldPlan
 
     src = DataAccessSource(dataset="fundamentals_balance_sheet", production=True)
     plan = NormalizedFieldPlan(logical_concept="total_assets")
@@ -235,11 +235,11 @@ def test_fe_cleaned_fundamentals_pit_unknown_production_rejects(tmp_path):
 
 def test_fe_unknown_table_spec_production_rejects(tmp_path):
     """TableSpec 缺失（无法证明）production PIT 拒绝。"""
-    from storage.sources.data_access_source import (
+    from factor_engine.storage.sources.data_access_source import (
         DataAccessSource,
         FourLayerPITError,
     )
-    from storage.sources.field_plan import NormalizedFieldPlan
+    from factor_engine.storage.sources.field_plan import NormalizedFieldPlan
 
     # physical_dataset 存在但 FIELD_REGISTRY 无该表 → table 层 UNKNOWN
     src = DataAccessSource(dataset="ashare_stock_daily", production=True)
@@ -258,8 +258,8 @@ def test_fe_unknown_table_spec_production_rejects(tmp_path):
 def test_fe_catalog_field_never_double_scaled(tmp_path):
     """catalog 覆盖的字段（source=catalog）标记为 normalized，
     COS compatibility fallback 不再对 A股 Return 二次乘 return_scale。"""
-    from storage.sources.data_access_source import DataAccessSource
-    from storage.sources.field_plan import NormalizedFieldPlan
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.field_plan import NormalizedFieldPlan
 
     src = DataAccessSource(dataset="ashare_stock_daily")
     # fetched 值已是 DataAccess 归一化后的 decimal（vendor BP × 0.0001）
@@ -291,8 +291,8 @@ def test_fe_catalog_field_never_double_scaled(tmp_path):
 
 def test_fe_lazy_catalog_scale_applied_once(tmp_path):
     """lazy 路径 catalog scale 恰好应用一次（且不再被 COS fallback 重复乘）。"""
-    from storage.sources.data_access_source import DataAccessSource
-    from storage.sources.field_plan import NormalizedFieldPlan
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.field_plan import NormalizedFieldPlan
 
     src = DataAccessSource(dataset="ashare_stock_daily")
     src._lazy_scan = True
@@ -318,7 +318,7 @@ def test_fe_lazy_catalog_scale_applied_once(tmp_path):
 
 
 def test_fe_long_collect_revalidates_changed_source_production(tmp_path):
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     store = _synthetic_store(tmp_path)
     src = DataAccessSource(
@@ -328,7 +328,7 @@ def test_fe_long_collect_revalidates_changed_source_production(tmp_path):
         end_date="2024-01-03",
         production=True,
     )
-    with patch("storage.sources.data_access_source._get_store", return_value=store):
+    with patch("factor_engine.storage.sources.data_access_source._get_store", return_value=store):
         src.refresh_snapshot(force=True)  # 记录 snapshot（T0）
         lf = src.scan_polars_long(["v"])
         assert lf.collect().height == 3
@@ -350,7 +350,7 @@ def test_fe_long_collect_revalidates_changed_source_production(tmp_path):
 def test_a_share_return_eager_lazy_raw_parity(tmp_path):
     import pandas as pd
 
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     store = DataAccessStore(registry=load_registry(), engine=DuckDBEngine(threads=2))
     tr = ("2019-01-02", "2019-01-04")
@@ -372,7 +372,7 @@ def test_a_share_return_eager_lazy_raw_parity(tmp_path):
         end_date="2019-01-04",
         instrument_filter=inst,
     )
-    with patch("storage.sources.data_access_source._get_store", return_value=store):
+    with patch("factor_engine.storage.sources.data_access_source._get_store", return_value=store):
         eager = src.load_column("ret")
         src2 = DataAccessSource(
             dataset="ashare_stock_daily",

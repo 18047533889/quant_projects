@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -45,7 +45,7 @@ def _assert_polars_equal(name: str, args: tuple, *operator_args) -> None:
 
 
 def test_obsolete_fiscal_override_is_not_imported() -> None:
-    assert "cleaned_operators.overhaul.fundamental" not in sys.modules
+    assert "factor_engine.cleaned_operators.overhaul.fundamental" not in sys.modules
 
 
 def test_fiscal_backend_signatures_are_identical_and_complete() -> None:
@@ -151,7 +151,7 @@ def test_yoy_denominator_policy_has_cross_backend_parity(denominator, expected) 
 
 
 def test_bool_window_is_rejected_by_both_runtime_bases() -> None:
-    from backend.operator_errors import OperatorParameterError
+    from factor_engine.backend.operator_errors import OperatorParameterError
     values = pd.DataFrame({"A": [1.0, 2.0, 3.0]})
     with pytest.raises(OperatorParameterError, match="bool"):
         _pd("ts_mean").calculate(values, True)

@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.fundamental.period_helpers import (
+from factor_engine.cleaned_operators.fundamental.period_helpers import (
     compute_quarter,
     compute_yoy,
     quarter_from_cumulative,
@@ -15,7 +15,7 @@ from cleaned_operators.fundamental.period_helpers import (
     ttm_from_quarterly,
     yoy_by_period,
 )
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 from tests.operator_golden.conftest import assert_panel_shape_unchanged
 
 
@@ -57,7 +57,7 @@ def test_yoy_by_period_matches_compute_yoy(loaded):
 
 def test_ttm_from_cumulative_differs_from_naive_ttm_on_cumulative(loaded):
     """累计值直接 ttm 与 ttm_from_cumulative 语义不同（后者先 quarterify）。"""
-    from cleaned_operators.fundamental.period_helpers import compute_ttm
+    from factor_engine.cleaned_operators.fundamental.period_helpers import compute_ttm
 
     cum, fq = _fiscal_panel()
     naive = compute_ttm(cum, fq)

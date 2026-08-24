@@ -19,7 +19,7 @@ def _unsorted_df():
 
 
 def test_enforce_source_ordering_daily_default():
-    from backend.polars_lazy import enforce_source_ordering
+    from factor_engine.backend.polars_lazy import enforce_source_ordering
 
     out = enforce_source_ordering(_unsorted_df(), instrument_col="inst", time_col="ts")
     rows = out.select(["inst", "ts"]).to_numpy().tolist()
@@ -34,7 +34,7 @@ def test_enforce_source_ordering_daily_default():
 def test_enforce_source_ordering_minute_session():
     import polars as pl
 
-    from backend.polars_lazy import enforce_source_ordering
+    from factor_engine.backend.polars_lazy import enforce_source_ordering
 
     df = pl.DataFrame(
         {
@@ -60,7 +60,7 @@ def test_enforce_source_ordering_minute_session():
 
 
 def test_enforce_source_ordering_lazyframe():
-    from backend.polars_lazy import enforce_source_ordering
+    from factor_engine.backend.polars_lazy import enforce_source_ordering
 
     out = enforce_source_ordering(
         _unsorted_df().lazy(), instrument_col="inst", time_col="ts"
@@ -73,7 +73,7 @@ def test_enforce_source_ordering_lazyframe():
 
 
 def test_clickhouse_scan_sql_carries_order_by():
-    from backend.polars_lazy import build_clickhouse_scan_sql
+    from factor_engine.backend.polars_lazy import build_clickhouse_scan_sql
 
     sql = build_clickhouse_scan_sql(
         "panel_daily",

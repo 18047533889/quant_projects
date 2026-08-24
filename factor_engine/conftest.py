@@ -4,7 +4,7 @@
 Ensures the operator registry is writable before any test module imports
 that trigger operator registration.
 """
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def setup_module(module):

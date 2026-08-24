@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import pytest
 
-import cleaned_operators  # noqa: F401  (registers _LOAD_MODULES)
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.tombstones import (
+import factor_engine.cleaned_operators  # noqa: F401  (registers _LOAD_MODULES)
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.tombstones import (
     RemovedOperatorError,
     RANDOM_TOMBSTONED_NAMES,
     FUTURE_TOMBSTONED_NAMES,
@@ -73,11 +73,11 @@ def test_tombstone_names_are_all_tombstoned():
 
 
 def test_governance_sets_disjoint_from_tombstones():
-    from cleaned_operators import operator_policy as op
-    from cleaned_operators import operator_spec as osp
-    from cleaned_operators import production_hardening as ph
-    from backend import production_fastpath_tiers as pft
-    from backend import polars_long_policy as plp
+    from factor_engine.cleaned_operators import operator_policy as op
+    from factor_engine.cleaned_operators import operator_spec as osp
+    from factor_engine.cleaned_operators import production_hardening as ph
+    from factor_engine.backend import production_fastpath_tiers as pft
+    from factor_engine.backend import polars_long_policy as plp
 
     sets = {
         "PIT_UNSAFE": op.PIT_UNSAFE_CANONICALS,

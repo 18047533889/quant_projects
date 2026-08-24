@@ -7,10 +7,10 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 from uuid import uuid4
 
-from cache.expression_cache import ExpressionCache
-from cache.layers import CacheHitStats, CacheLayer
-from cache.panel_cache import PanelCache
-from storage.cache import CacheManager, PersistentPlanCache
+from factor_engine.cache.expression_cache import ExpressionCache
+from factor_engine.cache.layers import CacheHitStats, CacheLayer
+from factor_engine.cache.panel_cache import PanelCache
+from factor_engine.storage.cache import CacheManager, PersistentPlanCache
 
 
 @dataclass
@@ -48,7 +48,7 @@ class ExecutionCacheSession:
         if self.stats is None:
             self.stats = CacheHitStats()
         if self.strict is None:
-            from runtime.production_policy import is_production_mode
+            from factor_engine.runtime.production_policy import is_production_mode
 
             self.strict = bool(
                 is_production_mode(self.run_mode)
@@ -61,8 +61,8 @@ class ExecutionCacheSession:
         # R36 P0-021（§104/105）：CSE 共享缓冲的 governed 写入通道——取代 raw
         # ``shared_result_cache[sid]=value`` 作为唯一权威写入路径。
         # R38 P0-032（§13）：挂真实 SpillStore，spill() 是真 spill 不是 drop。
-        from runtime.buffer_store import GovernedBufferStore
-        from runtime.spill_store import SpillStore
+        from factor_engine.runtime.buffer_store import GovernedBufferStore
+        from factor_engine.runtime.spill_store import SpillStore
 
         self._buffer_store = GovernedBufferStore(
             self.shared_result_cache,
@@ -89,7 +89,7 @@ class ExecutionCacheSession:
         # R36 P0-022（§107）：注册失败不能 ``except: pass``——生产下「以为有内存
         # 治理、实际没有」比没有治理更危险，必须 fail-closed。
         try:
-            from runtime.resource_governor import global_memory_governor
+            from factor_engine.runtime.resource_governor import global_memory_governor
 
             gov = global_memory_governor()
             # R38 P0-038：L0 高压逐出直接指向 GovernedBufferStore（唯一 owner，
@@ -131,7 +131,7 @@ class ExecutionCacheSession:
 
         log = logging.getLogger(__name__)
         try:
-            from runtime.resource_governor import global_memory_governor
+            from factor_engine.runtime.resource_governor import global_memory_governor
 
             gov = global_memory_governor()
             gov.unregister_layer(self._l0_layer)
@@ -169,7 +169,7 @@ class ExecutionCacheSession:
     @staticmethod
     def _estimate_dict_bytes(d: dict[Any, Any]) -> int:
         try:
-            from runtime.resource_governor import estimate_object_bytes
+            from factor_engine.runtime.resource_governor import estimate_object_bytes
 
             return max(0, int(estimate_object_bytes(d)))
         except Exception:
@@ -187,7 +187,7 @@ class ExecutionCacheSession:
 
     def wrap_context(self, ctx: Any) -> Any:
         """把分层缓存挂到 ``ExecutionContext``。"""
-        from backend.context import ExecutionContext
+        from factor_engine.backend.context import ExecutionContext
 
         if not isinstance(ctx, ExecutionContext):
             raise TypeError(f"expected ExecutionContext, got {type(ctx)!r}")

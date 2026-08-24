@@ -9,8 +9,8 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="microstructure operators are outside the active primitive registry")
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -58,7 +58,7 @@ def test_micro_bipower_var_polars():
 
 
 def test_effective_lookback_intraday_scaling():
-    from cleaned_operators.operator_policy import effective_lookback
+    from factor_engine.cleaned_operators.operator_policy import effective_lookback
 
     daily = effective_lookback(20, factor_freq="1d", source_bar_freq="1d")
     intraday = effective_lookback(20, factor_freq="1d", source_bar_freq="5m")

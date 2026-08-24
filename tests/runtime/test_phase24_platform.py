@@ -13,14 +13,14 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-from api import rank, ts_mean
-from api.columns import col
-from api.factor import Factor
-from backend.pandas_backend import PandasBackend
+from factor_engine.api import rank, ts_mean
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.pandas_backend import PandasBackend
 from pipeline_event import run_data_event
-from runtime.engine import FactorEngine
-from storage.data_access_source import DataAccessSource
-from storage.materializer import ParquetMaterializer
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.storage.data_access_source import DataAccessSource
+from factor_engine.storage.materializer import ParquetMaterializer
 from tests.helpers import InMemorySeriesSource
 
 
@@ -101,7 +101,7 @@ def test_data_access_source_read_auto_flag():
     )
     expected = pd.Series([1.0, 2.0], index=idx, name="close")
 
-    with patch("storage.data_access_source._get_store", return_value=mock_store):
+    with patch("factor_engine.storage.data_access_source._get_store", return_value=mock_store):
         with patch(
             "data_access.store.adapter_options_for_dataset",
             return_value={"normalize_timestamp": False},
@@ -118,10 +118,10 @@ def test_data_access_source_read_auto_flag():
 
 
 def test_polars_backend_enables_read_auto_on_data_access_source():
-    from backend.polars_backend import PolarsBackend
-    from backend.context import ExecutionContext
-    from backend.pandas_backend import PandasBackend as PB
-    from planner.logical_plan import PlanNode
+    from factor_engine.backend.polars_backend import PolarsBackend
+    from factor_engine.backend.context import ExecutionContext
+    from factor_engine.backend.pandas_backend import PandasBackend as PB
+    from factor_engine.planner.logical_plan import PlanNode
 
     src = DataAccessSource(dataset="ds", read_auto=False)
     backend = PolarsBackend(use_lazy=True)
@@ -137,7 +137,7 @@ def test_polars_backend_enables_read_auto_on_data_access_source():
 
 @pytest.mark.parametrize("use_numba", [False, True])
 def test_ts_rank_numba_optional(use_numba, monkeypatch):
-    from cleaned_operators.common.time_series import TSRank
+    from factor_engine.cleaned_operators.common.time_series import TSRank
 
     if use_numba:
         monkeypatch.setenv("FACTOR_ENGINE_USE_NUMBA", "1")

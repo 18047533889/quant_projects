@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import pytest
 
-from backend.fastpath_coverage import build_fastpath_coverage_matrix, summarize_fastpath_coverage
-from backend.operator_capability import resolve_canonical
-from backend.sql_tiers import SQL_PRODUCTION_SAFE_CANONICALS
-from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
+from factor_engine.backend.fastpath_coverage import build_fastpath_coverage_matrix, summarize_fastpath_coverage
+from factor_engine.backend.operator_capability import resolve_canonical
+from factor_engine.backend.sql_tiers import SQL_PRODUCTION_SAFE_CANONICALS
+from factor_engine.cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
 
 
 @pytest.fixture(scope="module")
 def coverage_rows():
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()

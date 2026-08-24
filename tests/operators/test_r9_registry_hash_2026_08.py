@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.registry import (
+from factor_engine.cleaned_operators.registry import (
     _contract_hash,
     _freeze_const,
     _freeze_value,
@@ -174,7 +174,7 @@ def _fake_operator(name: str, relational_specs=None):
 
 
 def test_contract_hash_changes_with_relational_spec():
-    from cleaned_operators.base import RelationalParamSpec
+    from factor_engine.cleaned_operators.base import RelationalParamSpec
 
     base = _fake_operator("test_op")
     with_rel = _fake_operator(

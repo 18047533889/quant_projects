@@ -7,13 +7,13 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="legacy removed-operator shape contracts are no longer runtime contracts")
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.operator_policy import (
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.operator_policy import (
     NON_SHAPE_PRESERVING_CANONICALS,
     RESEARCH_CORE_CANONICALS,
     policy_required_canonicals,
 )
-from cleaned_operators.operator_spec import (
+from factor_engine.cleaned_operators.operator_spec import (
     PRODUCTION_CORE_CANONICALS,
     build_operator_spec,
     check_production_shape_contracts,
@@ -48,7 +48,7 @@ def test_dropna_not_shape_preserving(_loaded):
 
 
 def test_removed_fill_operators_have_no_runtime(_loaded):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     for canon in ("bfill", "causal_bfill", "fillna_interpolate"):
         assert OperatorRegistry.get(canon) is None

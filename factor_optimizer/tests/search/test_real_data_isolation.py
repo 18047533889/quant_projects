@@ -12,7 +12,8 @@ from factor_optimizer.contracts.search_budget import SearchBudget
 from factor_optimizer.contracts.splits import EvaluationProtocol, SplitPlan
 from factor_optimizer.contracts.trial import Trial, TrialStatus
 from factor_optimizer.data_capabilities import (
-    DataCapability,
+   
+        DataCapability,
     DataScope,
     TestDataCapability,
     TrainDataCapability,
@@ -20,7 +21,8 @@ from factor_optimizer.data_capabilities import (
     build_data_capabilities,
 )
 from factor_optimizer.search.runner import (
-    SearchConfig,
+   
+        SearchConfig,
     SearchRunner,
     SealedTestExecutor,
     TrainEvaluationContext,
@@ -159,7 +161,11 @@ def test_sealed_test_executor_requires_non_empty_test_mask():
     )
     executor = runner.create_sealed_test_executor()
     assert isinstance(executor, SealedTestExecutor)
-    with pytest.raises(ValueError, match="no test data"):
+    # R46 P0-S: a search-runner executor has no test authority broker, so it
+    # cannot evaluate a sealed test at all — the physical test-data path is
+    # absent from the search process.
+    assert executor.has_test_authority is False
+    with pytest.raises(ValueError, match="no test authority broker"):
         executor.evaluate_sealed_test(
             None, None, _plan(test=[False, False, False])
         )

@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.fundamental.fiscal_logit_score_op import pd_fiscal_logit_score
+from factor_engine.cleaned_operators.fundamental.fiscal_logit_score_op import pd_fiscal_logit_score
 
 
 def _panel(data, index=None, columns=None):

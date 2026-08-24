@@ -23,12 +23,12 @@ gates: dict[str, bool] = {}
 # 时间体系
 # ---------------------------------------------------------------------------
 def _calendar_gates() -> None:
-    from storage.trading_calendar import (
+    from factor_engine.storage.trading_calendar import (
         TradingCalendar,
         CalendarUnavailableError,
         CalendarCoverageError,
     )
-    from storage.time_window import resolve_incremental_window_for_bar_freq
+    from factor_engine.storage.time_window import resolve_incremental_window_for_bar_freq
     import inspect
 
     days = ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05"]
@@ -40,12 +40,12 @@ def _calendar_gates() -> None:
     except CalendarCoverageError:
         gates["R32_CALENDAR_OUT_OF_COVERAGE_FAILS"] = True
     # production fallback zero：trading_day_offset production 下 calendar=None 抛错
-    from storage.trading_calendar import trading_day_offset
+    from factor_engine.storage.trading_calendar import trading_day_offset
 
     _prev_prod = os.environ.get("QUANT_PRODUCTION_MODE")
     os.environ["QUANT_PRODUCTION_MODE"] = "1"
     try:
-        from runtime.production_policy import is_production_mode
+        from factor_engine.runtime.production_policy import is_production_mode
 
         try:
             trading_day_offset("2024-01-01", 2)
@@ -66,7 +66,7 @@ def _calendar_gates() -> None:
     )
     # tz naive strip zero：time_window._normalize_bound_for_index 对 aware bound
     # 用 tz_convert("UTC").tz_localize(None)，不是裸 tz_localize(None)。
-    from storage import time_window as tw
+    from factor_engine.storage import time_window as tw
 
     src = inspect.getsource(tw._normalize_bound_for_index)
     gates["R32_TIMEZONE_NAIVE_STRIP_ZERO"] = (
@@ -78,14 +78,14 @@ def _calendar_gates() -> None:
 # CSE / DAG
 # ---------------------------------------------------------------------------
 def _cse_gates() -> None:
-    from planner.logical_plan import PlanNode
-    from planner.cse import (
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.planner.cse import (
         apply_cse,
         verify_cse_dag,
         assert_plan_depth_bounded,
         PlanDepthLimitError,
     )
-    from planner import rolling_cse
+    from factor_engine.planner import rolling_cse
     import inspect
 
     def lit(v):
@@ -122,14 +122,14 @@ def _cse_gates() -> None:
         gates["R32_MAX_PLAN_DEPTH_ENFORCED"] = True
 
     # graph traversal stack safe：postorder 迭代实现
-    from planner import cse as cse_mod
+    from factor_engine.planner import cse as cse_mod
 
     gates["R32_GRAPH_TRAVERSAL_STACK_SAFE"] = "def visit" not in inspect.getsource(
         cse_mod._postorder
     )
 
     # critical path linear：memoized（reverse-topo DP，无递归）
-    from planner.physical_factor_dag import PhysicalFactorDAG, PhysicalFactorTask
+    from factor_engine.planner.physical_factor_dag import PhysicalFactorDAG, PhysicalFactorTask
 
     dag = PhysicalFactorDAG()
     for tid, inputs, consumers in [
@@ -154,7 +154,7 @@ def _cse_gates() -> None:
 def _catalog_gates() -> None:
     import tempfile
 
-    from storage.catalog import FactorCatalog
+    from factor_engine.storage.catalog import FactorCatalog
 
     tmp = tempfile.mkdtemp()
     cat = FactorCatalog(os.path.join(tmp, "c.sqlite"))
@@ -182,17 +182,17 @@ def _catalog_gates() -> None:
     }
     gates["R32_PARTITION_KEY_NULL_ZERO"] = bool(nn.get("partition_key"))
     # production mode fail-open zero：register() 解析失败抛 ProductionModeResolutionError
-    from storage.catalog import FactorCatalog as FC
-    from storage.exceptions import ProductionModeResolutionError
-    import storage.catalog as catalog_mod
+    from factor_engine.storage.catalog import FactorCatalog as FC
+    from factor_engine.storage.exceptions import ProductionModeResolutionError
+    import factor_engine.storage.catalog as catalog_mod
 
     _orig = catalog_mod.is_production_mode if hasattr(catalog_mod, "is_production_mode") else None
     try:
-        import storage.catalog as sc
+        import factor_engine.storage.catalog as sc
 
         orig_import = sc._resolve_strict
         # monkeypatch runtime.production_policy.is_production_mode to raise
-        import runtime.production_policy as pp
+        import factor_engine.runtime.production_policy as pp
 
         orig_pp = pp.is_production_mode
         pp.is_production_mode = lambda *a, **k: (_ for _ in ()).throw(
@@ -218,9 +218,9 @@ def _catalog_gates() -> None:
 def _job_queue_gates() -> None:
     import tempfile
 
-    from service.jobstore import JobStore, JobRecord, JobStatus
-    from service.errors import ServiceError
-    from service.queue import BoundedJobQueue
+    from factor_engine.service.jobstore import JobStore, JobRecord, JobStatus
+    from factor_engine.service.errors import ServiceError
+    from factor_engine.service.queue import BoundedJobQueue
 
     tmp = tempfile.mkdtemp()
     s = JobStore(tmp)
@@ -262,7 +262,7 @@ def _job_queue_gates() -> None:
     late = JobRecord(**vars(jt)); late.status = JobStatus.SUCCEEDED
     gates["R32_TERMINAL_STATE_OVERWRITE_ZERO"] = s.update(late) is False
     # global concurrency policy explicit
-    from service.jobstore import (
+    from factor_engine.service.jobstore import (
         resolve_service_concurrency_policy,
         SERVICE_CONCURRENCY_POLICY_SINGLE_PROCESS,
     )
@@ -317,11 +317,11 @@ def _job_queue_gates() -> None:
 def _materializer_gates() -> None:
     import inspect
 
-    from storage.materialize.materializer import (
+    from factor_engine.storage.materialize.materializer import (
         ParquetMaterializer,
         compare_live_vs_materialized,
     )
-    from storage import factor_schema
+    from factor_engine.storage import factor_schema
 
     # float64 history downcast zero
     upsert_src = inspect.getsource(ParquetMaterializer._upsert_partition)
@@ -333,7 +333,7 @@ def _materializer_gates() -> None:
     norm_src = inspect.getsource(ParquetMaterializer._normalize_to_long_table)
     gates["R32_OUTPUT_GRAIN_SILENT_DROP_ZERO"] = "OUTPUT_GRAIN_MAX_NLEVELS" in norm_src
     # write mode typo zero：WRITE_MODES 是模块级常量，检查模块源码。
-    import storage.materialize.materializer as _mat_mod
+    import factor_engine.storage.materialize.materializer as _mat_mod
 
     gates["R32_WRITE_MODE_TYPO_ACCEPTANCE_ZERO"] = (
         "WRITE_MODES" in inspect.getsource(_mat_mod)
@@ -368,7 +368,7 @@ def _materializer_gates() -> None:
 def _identity_gates() -> None:
     import inspect
 
-    from security.factor_id import (
+    from factor_engine.security.factor_id import (
         validate_factor_id,
         confine_path,
         FactorIdError,
@@ -403,7 +403,7 @@ def _identity_gates() -> None:
         pass
 
     # source DSN identity collision zero
-    from runtime.lineage import (
+    from factor_engine.runtime.lineage import (
         hash_data_source_config,
         _sanitize_uri_value,
         build_engine_version,
@@ -424,8 +424,8 @@ def _identity_gates() -> None:
     )
 
     # dependency-scoped digest：不同计划（无关算子）digest 不同，但同一算子集稳定
-    from planner.logical_plan import PlanNode
-    from runtime.factor_identity import (
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.runtime.factor_identity import (
         scoped_operator_contract_hash,
         scoped_field_contract_hash,
         _plan_operator_canonicals,
@@ -469,12 +469,12 @@ def _identity_gates() -> None:
 def _cache_gates() -> None:
     import inspect
 
-    from storage import cache
+    from factor_engine.storage import cache
 
     src = inspect.getsource(cache)
     gates["R32_PERSISTENT_CACHE_LOCK_TABLE_BOUNDED"] = "_SAVE_LOCK_MAX" in src
     # production unknown namespace zero
-    from storage.cache import UNKNOWN_CACHE_NAMESPACE
+    from factor_engine.storage.cache import UNKNOWN_CACHE_NAMESPACE
 
     pc = cache.PersistentPlanCache(root="/tmp/r32_cachetest")
     _orig_ns = cache._operator_namespace
@@ -482,7 +482,7 @@ def _cache_gates() -> None:
     _prev = os.environ.get("QUANT_PRODUCTION_MODE")
     os.environ["QUANT_PRODUCTION_MODE"] = "1"
     try:
-        from runtime.production_policy import is_production_mode
+        from factor_engine.runtime.production_policy import is_production_mode
 
         try:
             pc._namespace_root()
@@ -501,7 +501,7 @@ def _cache_gates() -> None:
 # Lake schema / release / sync / DR
 # ---------------------------------------------------------------------------
 def _release_dr_gates() -> None:
-    from storage import factor_schema
+    from factor_engine.storage import factor_schema
 
     gates["R32_FACTOR_LAKE_SCHEMA_VERSIONED"] = (
         hasattr(factor_schema, "FACTOR_LAKE_SCHEMA_VERSION")
@@ -511,7 +511,7 @@ def _release_dr_gates() -> None:
         hasattr(factor_schema, "FACTOR_LAKE_MIN_READABLE_SCHEMA_VERSION")
     )
     # generation rollback：lake_version 模块提供 rollback_factor_publish（发布回滚）。
-    from storage import lake_version
+    from factor_engine.storage import lake_version
 
     gates["R32_GENERATION_ROLLBACK_PASS"] = hasattr(
         lake_version, "rollback_factor_publish"
@@ -531,7 +531,7 @@ def _release_dr_gates() -> None:
     # cold-start / recipe removed operator ref zero。
     # 只匹配算子引用形式（``name(`` 调用 或 ``"name"`` 引号算子名）—— 英文散文
     # "effective-sample"/"in-sample" 不是对已删除 ``sample`` 算子的引用。
-    from cleaned_operators.tombstones import ALL_TOMBSTONED_NAMES
+    from factor_engine.cleaned_operators.tombstones import ALL_TOMBSTONED_NAMES
     import re as _re
 
     def _is_operator_ref(text: str, name: str) -> bool:
@@ -582,7 +582,7 @@ def _release_dr_gates() -> None:
     # DR restore pass：catalog backup + 重建 + quick_check
     import tempfile
 
-    from storage.catalog import FactorCatalog
+    from factor_engine.storage.catalog import FactorCatalog
 
     tmp = tempfile.mkdtemp()
     db = os.path.join(tmp, "dr.sqlite")

@@ -16,9 +16,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.intraday_session import IntradaySessionShapeNovelty
-from cleaned_operators.intraday_activity_duration import IntradayActivityDurationCurvature
-from runtime.session_calendar import SessionCalendar
+from factor_engine.cleaned_operators.intraday_session import IntradaySessionShapeNovelty
+from factor_engine.cleaned_operators.intraday_activity_duration import IntradayActivityDurationCurvature
+from factor_engine.runtime.session_calendar import SessionCalendar
 
 # A-share regular session, bar_start minute labels: 09:30..11:29 + 13:00..14:59.
 _ASHARE_CAL = SessionCalendar(

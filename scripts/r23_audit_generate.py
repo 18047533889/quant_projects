@@ -127,8 +127,8 @@ def _severity(issue_dict, status):
 
 def main() -> None:
     os.makedirs(DOCS, exist_ok=True)
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     registry = OperatorRegistry
@@ -210,8 +210,8 @@ def main() -> None:
             fh.write(f"| {r['canonical']} | {r['final_status']} | {r['accepted_flow_semantics']} | {r['blockers']} |\n")
 
     # Temporal source certificates from the field catalogs.
-    from fields.catalog import ASHARE_FIELD_SPECS, ASHARE_TABLE_SPECS
-    from fields.catalog_us import US_FIELD_SPECS, US_TABLE_SPECS
+    from factor_engine.fields.catalog import ASHARE_FIELD_SPECS, ASHARE_TABLE_SPECS
+    from factor_engine.fields.catalog_us import US_FIELD_SPECS, US_TABLE_SPECS
 
     # R25-064..066: the source-certificate key is ``market::dataset::table`` so
     # A/US same-name tables (StockIncome, StockDailyBar, …) never collide.

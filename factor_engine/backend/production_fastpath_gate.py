@@ -39,14 +39,14 @@ class FastpathGateResult:
 
 def check_original_operator_policy(plan: Any) -> list[str]:
     """阶段 A：原始 plan（lowering 前）production policy 门禁。"""
-    from backend.composite_evidence import composite_production_safe
-    from cleaned_operators.operator_spec import (
+    from factor_engine.backend.composite_evidence import composite_production_safe
+    from factor_engine.cleaned_operators.operator_spec import (
         build_operator_spec,
         infer_production_policy,
         is_production_denied,
         is_production_permanently_forbidden,
     )
-    from planner.composite_lowering import has_composite_lowering
+    from factor_engine.planner.composite_lowering import has_composite_lowering
 
     violations: list[str] = []
     for canon in _iter_plan_ops(plan):
@@ -124,7 +124,7 @@ def _resolve_require_mode(
 
 def _iter_plan_ops(plan: Any) -> list[str]:
     """深度优先遍历 plan，收集去重后的 canonical 算子列表。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     seen: set[str] = set()
     ops: list[str] = []
@@ -147,15 +147,15 @@ def _iter_plan_ops(plan: Any) -> list[str]:
 
 def _duckdb_fastpath_ok(canon: str) -> bool:
     """判断 canonical 是否满足 DuckDB production-safe 且 emitter 可编译。"""
-    from backend.operator_capability import _sql_emitter_ok
-    from backend.sql_tiers import effective_sql_production_safe
+    from factor_engine.backend.operator_capability import _sql_emitter_ok
+    from factor_engine.backend.sql_tiers import effective_sql_production_safe
 
     return effective_sql_production_safe(canon) and _sql_emitter_ok(canon)
 
 
 def _polars_native_fastpath_ok(canon: str) -> bool:
     """判断 canonical 是否满足 PolarsLong native production-safe。"""
-    from backend.polars_long_production import is_polars_long_native_production_safe
+    from factor_engine.backend.polars_long_production import is_polars_long_native_production_safe
 
     return is_polars_long_native_production_safe(canon)
 
@@ -165,8 +165,8 @@ def _composite_production_fastpath_sources(
     lowering_trace: Sequence[tuple[str, tuple[str, ...]]] | None,
 ) -> frozenset[str]:
     """原始 plan 中已通过 composite 证据链的算子。"""
-    from backend.composite_evidence import composite_production_safe
-    from planner.composite_lowering import has_composite_lowering
+    from factor_engine.backend.composite_evidence import composite_production_safe
+    from factor_engine.planner.composite_lowering import has_composite_lowering
 
     sources: set[str] = set()
     for canon in _iter_plan_ops(original_plan):
@@ -183,7 +183,7 @@ def _uses_composite_production_fastpath_only(
     lowering_trace: Sequence[tuple[str, tuple[str, ...]]] | None,
 ) -> bool:
     """原始 plan 仅含 composite_production_safe 算子（走 composite fastpath 路径）。"""
-    from planner.composite_lowering import has_composite_lowering
+    from factor_engine.planner.composite_lowering import has_composite_lowering
 
     original_ops = _iter_plan_ops(original_plan)
     if not original_ops:
@@ -199,14 +199,14 @@ def _check_full_plan_compilation(plan: Any, *, require: frozenset[FastpathBacken
     violations: list[str] = []
     if "duckdb_sql" in require:
         try:
-            from backend.fastpath_plan_probe import probe_duckdb_full_plan
+            from factor_engine.backend.fastpath_plan_probe import probe_duckdb_full_plan
 
             probe_duckdb_full_plan(plan)
         except Exception as exc:
             violations.append(f"full_plan: duckdb execute failed: {exc}")
     if "polars_long_native" in require:
         try:
-            from backend.fastpath_plan_probe import probe_polars_full_plan
+            from factor_engine.backend.fastpath_plan_probe import probe_polars_full_plan
 
             probe_polars_full_plan(plan)
         except Exception as exc:
@@ -224,11 +224,11 @@ def check_lowered_backend_fastpath(
     check_full_plan: bool | None = None,
 ) -> FastpathGateResult:
     """阶段 B：lowering 后 plan 的 backend fastpath 门禁。"""
-    from backend.polars_long_policy import infer_polars_long_tier
-    from backend.polars_long_production import POLARS_LONG_FASTPATH_DEFERRED
-    from backend.sql_tiers import SQL_PRODUCTION_DEFERRED_CANONICALS
-    from cleaned_operators.operator_spec import build_operator_spec
-    from planner.composite_lowering import has_composite_lowering
+    from factor_engine.backend.polars_long_policy import infer_polars_long_tier
+    from factor_engine.backend.polars_long_production import POLARS_LONG_FASTPATH_DEFERRED
+    from factor_engine.backend.sql_tiers import SQL_PRODUCTION_DEFERRED_CANONICALS
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec
+    from factor_engine.planner.composite_lowering import has_composite_lowering
 
     is_strict = fastpath_gate_strict(strict=strict)
     mode = _resolve_require_mode(require_mode, require_dual=require_dual)
@@ -262,7 +262,7 @@ def check_lowered_backend_fastpath(
         polars_ok = _polars_native_fastpath_ok(canon)
 
         if not is_strict:
-            from backend.polars_long_production import APPROVED_POLARS_LONG_MAP_GROUPS_PRODUCTION
+            from factor_engine.backend.polars_long_production import APPROVED_POLARS_LONG_MAP_GROUPS_PRODUCTION
 
             if tier == "map_groups" and not duck_ok and canon not in APPROVED_POLARS_LONG_MAP_GROUPS_PRODUCTION:
                 violations.append(f"{canon}: map_groups 未批准 production fast path")
@@ -314,7 +314,7 @@ def resolve_fastpath_gate_kwargs(
     check_full_plan: bool | None = None,
 ) -> dict[str, Any]:
     """production 模式默认双后端 ``all`` + strict + full-plan 执行探测。"""
-    from runtime.production_policy import is_production_mode
+    from factor_engine.runtime.production_policy import is_production_mode
 
     prod = is_production_mode(mode)
     require_dual_on = prod or dual_backend_gate_required(require_dual=require_dual)
@@ -343,8 +343,8 @@ def check_production_fastpath_plan_ops(
     mode: str | None = None,
 ) -> FastpathGateResult:
     """两阶段 production gate：原始 policy + lowered backend fastpath。"""
-    from backend.operator_call_policy import check_plan_operator_calls
-    from runtime.production_policy import is_production_mode
+    from factor_engine.backend.operator_call_policy import check_plan_operator_calls
+    from factor_engine.runtime.production_policy import is_production_mode
     gate_kw = resolve_fastpath_gate_kwargs(
         mode=mode,
         strict=strict,
@@ -405,10 +405,10 @@ def check_production_fastpath_formula_ops(
     """解析公式并检查 fast path（两阶段：原始 policy + lowered backend）。"""
     if use_real_plan:
         try:
-            from api.dsl_parser import parse_expr
-            from ir.analyzer import Analyzer
-            from planner.lowerer import Lowerer
-            from planner.optimizer import Optimizer
+            from factor_engine.api.dsl_parser import parse_expr
+            from factor_engine.ir.analyzer import Analyzer
+            from factor_engine.planner.lowerer import Lowerer
+            from factor_engine.planner.optimizer import Optimizer
 
             expr = parse_expr(str(formula or ""))
             analysis = Analyzer().lower(expr)
@@ -429,8 +429,8 @@ def check_production_fastpath_formula_ops(
 
     import ast
 
-    from cleaned_operators.registry import OperatorRegistry
-    from planner.logical_plan import PlanNode
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.planner.logical_plan import PlanNode
 
     try:
         tree = ast.parse(str(formula or ""), mode="eval")
@@ -450,7 +450,7 @@ def check_production_fastpath_formula_ops(
     if not ops:
         return FastpathGateResult(ok=True, violations=(), ops_checked=())
 
-    from backend.sql_pushdown.plan_fixtures import column, minimal_plan
+    from factor_engine.backend.sql_pushdown.plan_fixtures import column, minimal_plan
 
     violations: list[str] = []
     for op in sorted(set(ops)):

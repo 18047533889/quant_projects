@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from storage.catalog import FactorCatalog
+from factor_engine.storage.catalog import FactorCatalog
 
 
 def test_schema_v3_indexes_created(tmp_path):

@@ -18,9 +18,9 @@ import pandas as pd
 import polars as pl
 import pytest
 
-from backend.panel_polars import panel_to_polars, polars_to_panel
-from cleaned_operators.base_polars import OperatorMetadata, TwoVarOperator
-from cleaned_operators.common._polars_bridge import (
+from factor_engine.backend.panel_polars import panel_to_polars, polars_to_panel
+from factor_engine.cleaned_operators.base_polars import OperatorMetadata, TwoVarOperator
+from factor_engine.cleaned_operators.common._polars_bridge import (
     PanelIdentity,
     align_cols,
     missing_numeric_pandas,
@@ -203,7 +203,7 @@ def test_align_cols_shifted_date_fails():
 
 def test_composite_fastpath_pl_align_strict():
     try:
-        from cleaned_operators.composite_fastpath import _pl_align
+        from factor_engine.cleaned_operators.composite_fastpath import _pl_align
     except Exception as exc:  # registry may be mid-edit by WS-A
         pytest.skip(f"composite_fastpath import unavailable (concurrent registry): {exc}")
     a = _panel(seed=1)
@@ -267,15 +267,15 @@ def test_normalize_missing_numeric_polars():
 # #247 — optional-polars ImportError swallow policy
 # ---------------------------------------------------------------------------
 def test_should_skip_optional_import_error_only_swallows_missing_polars():
-    mod = "cleaned_operators.common.polars_ops"
+    mod = "factor_engine.cleaned_operators.common.polars_ops"
     # Missing optional dependency polars -> safe to skip.
     assert should_skip_optional_import_error(
         ModuleNotFoundError("No module named 'polars'", name="polars"), mod
     ) is True
     # Missing module itself / parent package (planned surface) -> safe to skip.
     assert should_skip_optional_import_error(
-        ModuleNotFoundError("No module named 'cleaned_operators.ts_model'", name="cleaned_operators.ts_model"),
-        "cleaned_operators.ts_model.dynamic_regression",
+        ModuleNotFoundError("No module named 'factor_engine.cleaned_operators.ts_model'", name="factor_engine.cleaned_operators.ts_model"),
+        "factor_engine.cleaned_operators.ts_model.dynamic_regression",
     ) is True
     # A genuine code error during import -> fatal.
     assert should_skip_optional_import_error(ImportError("boom"), mod) is False
@@ -292,7 +292,7 @@ def test_should_skip_optional_import_error_only_swallows_missing_polars():
 # ---------------------------------------------------------------------------
 def test_strict_polars_long_fallback_reads_ctx_run_mode():
     from types import SimpleNamespace
-    from backend.polars_long_policy import strict_polars_long_fallback
+    from factor_engine.backend.polars_long_policy import strict_polars_long_fallback
     import os
 
     saved = os.environ.get("FACTOR_ENGINE_STRICT_POLARS_LONG")

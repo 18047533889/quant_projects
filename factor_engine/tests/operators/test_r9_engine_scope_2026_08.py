@@ -29,14 +29,14 @@ import inspect
 
 import pytest
 
-from planner.dag import FactorExecutionScope, FactorPlan
-from planner.logical_plan import PlanNode
-from runtime.engine import (
+from factor_engine.planner.dag import FactorExecutionScope, FactorPlan
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.runtime.engine import (
     _plan_has_cross_sectional_ops,
     _scope_from_factor,
     assert_execution_scope_contract,
 )
-from runtime.production_policy import ProductionPolicyViolation
+from factor_engine.runtime.production_policy import ProductionPolicyViolation
 
 
 def _column(name: str = "close") -> PlanNode:
@@ -191,7 +191,7 @@ def test_factor_plan_default_execution_scope_is_all():
 
 def test_gate_wired_into_dag_and_run_paths():
     """The fail-closed gate is wired into the batch and single-factor paths."""
-    from runtime import engine as engine_mod
+    from factor_engine.runtime import engine as engine_mod
 
     src_dag = inspect.getsource(engine_mod.FactorEngine._dag_from_factors)
     src_run = inspect.getsource(engine_mod.FactorEngine.run)
@@ -204,8 +204,8 @@ def test_gate_wired_into_dag_and_run_paths():
 
 
 def test_scope_from_factor_minimal_factor_no_attribute_error():
-    from api.factor import Factor
-    from expr.base import Expr
+    from factor_engine.api.factor import Factor
+    from factor_engine.expr.base import Expr
 
     factor = Factor(name="min", expr=Expr(), freq="1d", universe="CSI300")
     scope = _scope_from_factor(factor)
@@ -219,8 +219,8 @@ def test_scope_from_factor_minimal_factor_no_attribute_error():
 
 
 def test_scope_from_factor_none_universe_is_all():
-    from api.factor import Factor
-    from expr.base import Expr
+    from factor_engine.api.factor import Factor
+    from factor_engine.expr.base import Expr
 
     factor = Factor(name="plain", expr=Expr())
     scope = _scope_from_factor(factor)
@@ -237,7 +237,7 @@ def test_scope_from_factor_none_universe_is_all():
 
 
 def _registry_loaded() -> bool:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     try:
         return OperatorRegistry.lifecycle() == "frozen"
@@ -249,8 +249,8 @@ def _build_research_engine():
     import numpy as np
     import pandas as pd
 
-    from backend.pandas_backend import PandasBackend
-    from runtime.engine import FactorEngine
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
     from tests.helpers import InMemorySeriesSource
 
     idx = pd.MultiIndex.from_product(
@@ -268,8 +268,8 @@ def _build_research_engine():
 def test_engine_run_many_scoped_rank_fails_closed():
     if not _registry_loaded():
         pytest.skip("operator registry not loaded; cannot build a FactorEngine")
-    from api.dsl_parser import parse_expr
-    from api.factor import Factor
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.api.factor import Factor
 
     eng = _build_research_engine()
     factor = Factor(name="cs300_rank", expr=parse_expr("rank(close)"), universe="CSI300")
@@ -280,8 +280,8 @@ def test_engine_run_many_scoped_rank_fails_closed():
 def test_engine_run_scoped_rank_fails_closed():
     if not _registry_loaded():
         pytest.skip("operator registry not loaded; cannot build a FactorEngine")
-    from api.dsl_parser import parse_expr
-    from api.factor import Factor
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.api.factor import Factor
 
     eng = _build_research_engine()
     factor = Factor(name="cs300_rank", expr=parse_expr("rank(close)"), universe="CSI300")
@@ -292,8 +292,8 @@ def test_engine_run_scoped_rank_fails_closed():
 def test_engine_compile_many_carries_execution_scope():
     if not _registry_loaded():
         pytest.skip("operator registry not loaded; cannot build a FactorEngine")
-    from api.dsl_parser import parse_expr
-    from api.factor import Factor
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.api.factor import Factor
 
     eng = _build_research_engine()
     # Non-cross-sectional factor on a scoped universe: compile_many must succeed

@@ -4,8 +4,8 @@ from __future__ import annotations
 import numpy as np
 import polars as pl
 
-from cleaned_operators.common.time_series import TSKurtosisPolars
-from cleaned_operators.research_polars import TSMomentNativePolars
+from factor_engine.cleaned_operators.common.time_series import TSKurtosisPolars
+from factor_engine.cleaned_operators.research_polars import TSMomentNativePolars
 
 
 def _rolling(values: list[float], window: int) -> list[np.ndarray]:

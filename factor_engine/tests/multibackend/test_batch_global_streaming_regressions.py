@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from runtime.multibackend.batch_global_optimizer import (
+from factor_engine.runtime.multibackend.batch_global_optimizer import (
     BatchGlobalOptimizer,
     OptimizationOpportunity,
 )
-from runtime.multibackend.streaming_executor import StreamingExecutionPlanner
+from factor_engine.runtime.multibackend.streaming_executor import StreamingExecutionPlanner
 
 
 class _OpportunityOptimizer(BatchGlobalOptimizer):

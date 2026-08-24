@@ -65,14 +65,14 @@ class _FakeStore:
 
 
 def _plan(threads: int = 4):
-    from runtime.resource_governor import ExecutionResourcePlan
+    from factor_engine.runtime.resource_governor import ExecutionResourcePlan
 
     plan = ExecutionResourcePlan.auto()
     return replace(plan, duckdb_threads=threads, polars_threads=threads)
 
 
 def test_perf071_applied_config_fingerprint_skips_noop_reapply(monkeypatch):
-    from runtime.resource_governor import (
+    from factor_engine.runtime.resource_governor import (
         ExecutionResourceScope,
         reset_conn_fingerprints,
     )
@@ -103,7 +103,7 @@ def test_perf071_applied_config_fingerprint_skips_noop_reapply(monkeypatch):
 
 def test_perf071_config_change_reapplies(monkeypatch):
     """config 变化（threads 4→8）必须重新应用，不能被 fingerprint 误跳过。"""
-    from runtime.resource_governor import (
+    from factor_engine.runtime.resource_governor import (
         ExecutionResourceScope,
         reset_conn_fingerprints,
     )
@@ -134,7 +134,7 @@ def test_perf071_config_change_reapplies(monkeypatch):
 
 
 def test_perf072_deadline_manager_single_thread_and_timeout():
-    from runtime.deadline_manager import DeadlineManager
+    from factor_engine.runtime.deadline_manager import DeadlineManager
 
     m = DeadlineManager()
     try:
@@ -163,7 +163,7 @@ def test_perf072_deadline_manager_single_thread_and_timeout():
 
 
 def test_perf072_deadline_manager_cancel_removes_pending():
-    from runtime.deadline_manager import DeadlineManager
+    from factor_engine.runtime.deadline_manager import DeadlineManager
 
     m = DeadlineManager()
     try:
@@ -180,7 +180,7 @@ def test_perf072_deadline_manager_cancel_removes_pending():
 
 
 def test_perf072_guard_deadline_context_registers_and_cancels():
-    from runtime.deadline_manager import DeadlineManager, guard_deadline
+    from factor_engine.runtime.deadline_manager import DeadlineManager, guard_deadline
 
     m = DeadlineManager()
     try:
@@ -211,7 +211,7 @@ def test_perf072_guard_deadline_context_registers_and_cancels():
 
 
 def test_perf074_cohort_selection_profiles(monkeypatch):
-    from runtime.query_class_cohort import CohortQueryShape, QueryClassCohort
+    from factor_engine.runtime.query_class_cohort import CohortQueryShape, QueryClassCohort
 
     cohort = QueryClassCohort()
     # 重 scan + 空闲机器 → 8-thread。
@@ -233,7 +233,7 @@ def test_perf074_cohort_selection_profiles(monkeypatch):
 
 
 def test_perf074_plan_wiring_cohort_env_optin(monkeypatch):
-    from runtime.resource_governor import ExecutionResourcePlan
+    from factor_engine.runtime.resource_governor import ExecutionResourcePlan
 
     plan = _plan(threads=3)
     # 默认 OFF → legacy 静态值。
@@ -247,7 +247,7 @@ def test_perf074_plan_wiring_cohort_env_optin(monkeypatch):
 
 
 def test_perf074_hybrid_executor_cohort(monkeypatch):
-    from runtime.hybrid_executor import HybridExecutor
+    from factor_engine.runtime.hybrid_executor import HybridExecutor
 
     ex = HybridExecutor(worker_threads=2)
     # 默认 OFF → legacy worker_threads。
@@ -263,7 +263,7 @@ def test_perf074_hybrid_executor_cohort(monkeypatch):
 
 
 def test_perf075_scan_shape_buckets_and_p50p95():
-    from runtime.scan_shape import (
+    from factor_engine.runtime.scan_shape import (
         ScanShapeCalibrator,
         ScanShapeKey,
         file_count_bucket,
@@ -301,8 +301,8 @@ def test_perf075_scan_shape_buckets_and_p50p95():
 def test_perf075_scan_shape_key_from_scan_cost_and_calibration_module():
     from types import SimpleNamespace
 
-    from runtime.scan_shape import ScanShapeKey
-    from runtime.runtime_calibration import (
+    from factor_engine.runtime.scan_shape import ScanShapeKey
+    from factor_engine.runtime.runtime_calibration import (
         record_scan_shape_actual,
         reset_scan_shape_calibration,
         scan_shape_summary,
@@ -343,7 +343,7 @@ def test_perf075_scan_shape_key_from_scan_cost_and_calibration_module():
 
 @pytest.fixture(scope="module")
 def loaded_registry():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
     yield
@@ -365,7 +365,7 @@ def _route_shape():
 
 
 def test_perf076_predict_ttdc_per_backend_estimates():
-    from backend.plan_cost_router import predict_ttdc
+    from factor_engine.backend.plan_cost_router import predict_ttdc
 
     shape = _route_shape()
     duck = predict_ttdc(shape, "duckdb_sql")
@@ -388,8 +388,8 @@ def test_perf076_predict_ttdc_per_backend_estimates():
 def test_perf076_choose_plan_route_prefers_duckdb_for_fused_downstream(loaded_registry):
     from types import SimpleNamespace
 
-    from backend.plan_cost_router import choose_plan_route
-    from planner.logical_plan import PlanNode
+    from factor_engine.backend.plan_cost_router import choose_plan_route
+    from factor_engine.planner.logical_plan import PlanNode
 
     class _Caps:
         engine_kind = "duckdb"
@@ -418,8 +418,8 @@ def test_perf076_without_shape_falls_back_to_cost_model(loaded_registry):
     """无 shape 数据时 choose_plan_route 行为与既有 cost model 一致（不加惩罚）。"""
     from types import SimpleNamespace
 
-    from backend.plan_cost_router import choose_plan_route
-    from planner.logical_plan import PlanNode
+    from factor_engine.backend.plan_cost_router import choose_plan_route
+    from factor_engine.planner.logical_plan import PlanNode
 
     class _Caps:
         engine_kind = "duckdb"
@@ -451,7 +451,7 @@ def test_perf077_column_footprint_roundtrip(tmp_path):
     import pyarrow as pa
     import pyarrow.parquet as pq
 
-    from runtime.column_footprint import (
+    from factor_engine.runtime.column_footprint import (
         attach_column_footprints,
         produce_column_footprint_stats,
         read_column_footprint_stats,

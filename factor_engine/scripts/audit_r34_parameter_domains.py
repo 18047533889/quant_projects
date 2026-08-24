@@ -29,8 +29,8 @@ import pandas as pd
 sys.path.insert(0, ".")
 sys.path.insert(0, "..")
 
-from backend.cleaned_bridge import ensure_cleaned_loaded  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 E = Path("docs/evidence/r34")
 WINDOWS = (1, 2, 5, 20, 60, 120, 252)

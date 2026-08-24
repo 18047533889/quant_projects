@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
@@ -41,7 +41,7 @@ def _panel(n: int = 160, seed: int = 0, cols: int = 2) -> pd.DataFrame:
 
 @pytest.mark.parametrize("name", sorted(set(REGRESSION_CANONICALS + ADVANCED_CANONICALS)))
 def test_registered_and_classified(name: str) -> None:
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     assert OperatorRegistry.get(name) is not None, name
     # 2026-08 daily migration promoted many experimental model operators to the daily

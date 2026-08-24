@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from storage.exceptions import FactorNotFoundError
+from factor_engine.storage.exceptions import FactorNotFoundError
 
 
 class PublishNotApprovedError(PermissionError):
@@ -238,8 +238,8 @@ def publish_factor_lake(
     """
     require_publish_approval(approve=approve)
 
-    from runtime.snapshot_reconcile import reconcile_data_snapshot
-    from storage.catalog import FactorCatalog
+    from factor_engine.runtime.snapshot_reconcile import reconcile_data_snapshot
+    from factor_engine.storage.catalog import FactorCatalog
     from workspace_paths import default_factor_lake_root
 
     root = Path(lake_root or default_factor_lake_root())

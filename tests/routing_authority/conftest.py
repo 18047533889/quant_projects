@@ -11,9 +11,9 @@ import pytest
 
 @pytest.fixture(scope="session", autouse=True)
 def r21_routing_load_all() -> None:
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     register_sql_backends()

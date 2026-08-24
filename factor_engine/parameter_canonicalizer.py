@@ -175,7 +175,7 @@ def _is_missing_default(value: Any) -> bool:
     if value is None:
         return False
     try:
-        from cleaned_operators.base import MISSING
+        from factor_engine.cleaned_operators.base import MISSING
     except Exception:  # pragma: no cover - import fallback
         return False
     return value is MISSING
@@ -229,7 +229,7 @@ class ParameterCanonicalizer:
         # controller is missing or undecidable; research mode preserves legacy
         # fail-open behavior for backward compatibility. Derive from
         # resolve_run_mode() rather than requiring callers to pass a boolean.
-        from runtime.production_policy import resolve_run_mode
+        from factor_engine.runtime.production_policy import resolve_run_mode
         self.run_mode = resolve_run_mode(run_mode)
 
     def _sequence_dtype_is_bool(self, name: str) -> bool:

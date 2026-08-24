@@ -64,7 +64,7 @@ def _run(name: str, fn: Callable[[], GateResult], out: list[tuple[str, GateResul
 def gate_n1_registry_bootstrap() -> GateResult:
     """bootstrap module-spec 角色合法（INTERNAL_KERNEL/RESEARCH_EXTENSION 永不
     进 production surface）；RegistryBootstrap 状态机存在。"""
-    from cleaned_operators import (
+    from factor_engine.cleaned_operators import (
         BOOTSTRAP_MODULE_SPECS,
         REGISTRY_BOOTSTRAP,
         check_bootstrap_module_specs,
@@ -91,7 +91,7 @@ def gate_n1_registry_bootstrap() -> GateResult:
 def gate_n2_parameter_certification() -> GateResult:
     """参数域认证 fail-closed：store 缺失/旧 SHA 必须抛 ParameterDomainError，
     绝不 fail-open。报告当前真实证据状态。"""
-    from runtime.parameter_domain_store import (
+    from factor_engine.runtime.parameter_domain_store import (
         ParameterDomainCertificationStore,
         assert_parameter_domain_ready,
         get_parameter_domain_store,
@@ -134,7 +134,7 @@ def gate_n3_axis_truth() -> GateResult:
     重复日期必须被检测为违规（fail-closed）。"""
     import pandas as pd
 
-    from backend.cleaned_bridge import GrainTransformCertificate, validate_grain_transform
+    from factor_engine.backend.cleaned_bridge import GrainTransformCertificate, validate_grain_transform
 
     cert = GrainTransformCertificate(
         input_grain="daily", output_grain="weekly",
@@ -171,7 +171,7 @@ def gate_n3_axis_truth() -> GateResult:
 def gate_n4_market_time_truth() -> GateResult:
     """SessionCalendar 必须能证明交换所认证性（holiday set 缺失时 production
     hard-fail）。"""
-    from runtime.session_calendar import SessionCalendar
+    from factor_engine.runtime.session_calendar import SessionCalendar
 
     cal = SessionCalendar("US")
     try:
@@ -197,7 +197,7 @@ def gate_n4_market_time_truth() -> GateResult:
 def gate_n5_universe_truth() -> GateResult:
     """Universe membership 双时点区间校验 + production 缺 temporal 契约
     fail-closed（#221/#222）。"""
-    from market.universe import (
+    from factor_engine.market.universe import (
         OPEN_ENDED,
         UniverseKnowledgeUnknownError,
         UniverseMembership,
@@ -231,8 +231,8 @@ def gate_n5_universe_truth() -> GateResult:
 
 def gate_n6_price_basis_truth() -> GateResult:
     """limit-ops 价格基准契约 + PIT 调整政策：production 拒绝 retrospective。"""
-    from market.adjustment_policy import AdjustmentPolicy, validate_adjustment_policy_for_production
-    from market.price_basis import PriceBasis, validate_limit_ops_price_basis
+    from factor_engine.market.adjustment_policy import AdjustmentPolicy, validate_adjustment_policy_for_production
+    from factor_engine.market.price_basis import PriceBasis, validate_limit_ops_price_basis
 
     errs = validate_limit_ops_price_basis({"__all__": PriceBasis.RAW})
     if errs:
@@ -252,7 +252,7 @@ def gate_n6_price_basis_truth() -> GateResult:
 
 def gate_n7_minute_dq() -> GateResult:
     """分钟聚合 DQ：重复 slot 在 production 必须 hard-fail。"""
-    from runtime.session_panel import SessionPanel
+    from factor_engine.runtime.session_panel import SessionPanel
 
     panel = SessionPanel.__new__(SessionPanel)
     try:
@@ -272,7 +272,7 @@ def gate_n7_minute_dq() -> GateResult:
 
 def gate_n8_stateful() -> GateResult:
     """segmented 算子 chunk-invariance universal hard gate（#250）。"""
-    from cleaned_operators.math_certificate import (
+    from factor_engine.cleaned_operators.math_certificate import (
         check_chunk_invariance_all_segmented_canonicals,
     )
 
@@ -295,7 +295,7 @@ def gate_n8_stateful() -> GateResult:
 def gate_n9_numerics() -> GateResult:
     """tie-sensitive 置换等变 + causal-TS prefix 不变 + 流式 chunk-boundary
     不变（#257/#258/#259）。"""
-    from cleaned_operators.math_certificate import (
+    from factor_engine.cleaned_operators.math_certificate import (
         check_chunk_boundary_invariance_all_streamable,
         check_permutation_equivariance_all_tie_sensitive_operators,
         check_prefix_invariance_all_causal_ts,

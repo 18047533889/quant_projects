@@ -183,7 +183,7 @@ CLAIMS: dict[str, dict[str, str]] = {
     "R35 fast linear": {
         "claim": "FastLinearWindowEngine is true sliding sufficient-statistics O(T p^2)",
         "report": "R35 acceptance",
-        "entrypoint": "backend.fast_linear_window._roll_grams",
+        "entrypoint": "factor_engine.backend.fast_linear_window._roll_grams",
         "probe": "Xs.T @ Xs",
         "wire_note": "pre-fix: per-row rescan O(T*window*p^2)",
     },

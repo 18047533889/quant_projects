@@ -6,14 +6,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.operator_policy import (
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.operator_policy import (
     compute_operator_catalog_hash,
     effective_lookback,
     infer_operator_policy,
 )
-from cleaned_operators.registry import OperatorRegistry
-from runtime.dq_gates import (
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.runtime.dq_gates import (
     DQThresholds,
     FactorDQError,
     assert_factor_dq,

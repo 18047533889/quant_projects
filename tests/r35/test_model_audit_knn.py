@@ -22,9 +22,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from cleaned_operators import load_all  # noqa: E402
-from cleaned_operators.base import OperatorParameterError, ParamRole, searchable_param_names  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators import load_all  # noqa: E402
+from factor_engine.cleaned_operators.base import OperatorParameterError, ParamRole, searchable_param_names  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 
 def _load():
@@ -59,7 +59,7 @@ ALL_KNN_OPS = DYNAMIC_KNN_OPS + LOCAL_OPS
 
 def _local_neighbors():
     """Import the private tie-inclusive neighbour kernel (read-only)."""
-    from cleaned_operators.cross_section_local import _neighbors
+    from factor_engine.cleaned_operators.cross_section_local import _neighbors
 
     return _neighbors
 
@@ -77,13 +77,13 @@ def test_m110_local_linear_residual_documented_sametime():
     assert "peer_target_available=0" in desc, desc
     assert "fit-through-t-1" in desc or "NOT fit-through-t-1" in desc, desc
     # module docstring carries the same SameTimeCrossSection block
-    import cleaned_operators.cross_section_local as csl
+    import factor_engine.cleaned_operators.cross_section_local as csl
 
     assert "SameTimeCrossSection" in csl.__doc__
     assert "self_excluded=True" in csl.__doc__
     assert "peer_target_available=0" in csl.__doc__
     # the reconciler contract (read-only assertion) is fit_cutoff_offset=0
-    from cleaned_operators.model_timing import MODEL_TIMING_CONTRACTS
+    from factor_engine.cleaned_operators.model_timing import MODEL_TIMING_CONTRACTS
 
     c = MODEL_TIMING_CONTRACTS["cs_knn_local_linear_residual"]
     assert c.fit_cutoff_offset == 0
@@ -154,7 +154,7 @@ def test_m111_missing_target_peer_excluded_from_fit():
     """End-to-end: a NaN-target peer cannot enter the local ridge fit; the
     kernel output for a query equals a manual fit computed on the same
     peer_mask-excluded neighbourhood."""
-    from cleaned_operators.cross_section_local import _local_linear_series, _neighbors, _rank_features
+    from factor_engine.cleaned_operators.cross_section_local import _local_linear_series, _neighbors, _rank_features
 
     rng = np.random.default_rng(9)
     rows, n, d = 1, 30, 3
@@ -198,7 +198,7 @@ def test_m112_docs_exactly_three_features():
     for name in ALL_KNN_OPS:
         desc = _get(name).metadata.description
         assert "2..4" not in desc, f"{name} still claims 2..4 features"
-    import cleaned_operators.dynamic_knn as dk
+    import factor_engine.cleaned_operators.dynamic_knn as dk
 
     assert "2..4" not in dk.__doc__
     assert "exactly 3" in dk.__doc__ or "exactly 3:" in dk.__doc__, dk.__doc__[:400]
@@ -271,7 +271,7 @@ def test_m113_local_ops_k_rejected_below_floor_and_invalid(name, has_target):
 def test_m113_peer_count_cap_documented():
     """The internal ``peer_count-1`` breadth cap is legitimate but must be
     documented and exposed, not silent (M-113)."""
-    from cleaned_operators.cross_section_local import _neighbors
+    from factor_engine.cleaned_operators.cross_section_local import _neighbors
 
     assert "peer_count - 1" in (_neighbors.__doc__ or "")
     desc = _get("cs_knn_local_linear_residual").metadata.description
@@ -326,7 +326,7 @@ def test_m115_dynamic_knn_estimator_params_excluded_from_search():
 # ---------------------------------------------------------------------------
 
 def test_m116_universe_note_documented():
-    import cleaned_operators.dynamic_knn as dk
+    import factor_engine.cleaned_operators.dynamic_knn as dk
 
     assert "universe" in dk.__doc__ and "tradable" in dk.__doc__, dk.__doc__[:500]
     desc = _get("cs_knn_local_linear_residual").metadata.description

@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import pytest
 
-from fields.providers import PROVIDER_REGISTRY
-from market.capabilities import ProviderQuality
+from factor_engine.fields.providers import PROVIDER_REGISTRY
+from factor_engine.market.capabilities import ProviderQuality
 
 
 def _binding(concept: str, market: str):

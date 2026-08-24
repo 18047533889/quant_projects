@@ -47,8 +47,7 @@ from typing import Any, Iterable, Sequence
 import numpy as np
 import pandas as pd
 
-from runtime.buffer_ref import BufferRef
-from runtime.ownership import BufferOwnership, make_readonly_shared_view
+from factor_engine.runtime.buffer_ref import BufferRef
 
 # ---- R39-PERF-030 计数器（模块级） ------------------------------------------
 factor_block_ref_built = 0            # build_factor_block 构造次数
@@ -217,13 +216,8 @@ def build_factor_block(
             f"build_factor_block: index 行数 {len(index)} != values 行数 {values.shape[0]}"
         )
     values = np.ascontiguousarray(values, dtype=np_dtype)
-    # R21-FE-ZEROCOPY-OWNERSHIP: 零拷贝共享的 caller buffer 必须 READ_ONLY。
-    # ``values`` 共享 caller 的内存（dtype 相同时 ``ascontiguousarray`` 原样返回），
-    # 因此包成 WRITEABLE=False 的只读共享视图 —— 意外的原地写大声失败，而不是
-    # 悄悄污染 caller 的 frame（GAP-3）。
-    shared_values = make_readonly_shared_view(values)
     row_count = int(values.shape[0])
-    finite = np.isfinite(shared_values)
+    finite = np.isfinite(values)
     if finite.all():
         validity_ref: BufferRef | None = None
     else:
@@ -234,15 +228,15 @@ def build_factor_block(
             rows=row_count,
             bytes=int(invalid.nbytes),
             location=invalid,
-            ownership=BufferOwnership.OWNED_MUTABLE,
+            ownership="shared",
         )
     values_ref = BufferRef(
         representation="numpy_block",
         schema=tuple(fids),
         rows=row_count,
         bytes=int(values.nbytes),
-        location=shared_values,
-        ownership=BufferOwnership.BORROWED_READ_ONLY,
+        location=values,
+        ownership="shared",
     )
     axis_ref = AxisBufferRef(
         axis_key=axis_key_of(index), row_count=row_count, index=index

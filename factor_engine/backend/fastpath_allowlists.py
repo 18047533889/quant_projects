@@ -2,19 +2,19 @@
 """Production fast path 三层 allowlist（research / production / fastpath）。"""
 from __future__ import annotations
 
-from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS, build_operator_spec
+from factor_engine.cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS, build_operator_spec
 
 
 def _resolve(canon: str) -> str:
     """将别名解析为 canonical 名称。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     return OperatorRegistry._aliases.get(canon, canon)
 
 
 def research_allowlist() -> frozenset[str]:
     """研究挖因子：有 runtime 实现的 canonical。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     out: set[str] = set()
     for canon in OperatorRegistry.list_canonical():
@@ -25,14 +25,14 @@ def research_allowlist() -> frozenset[str]:
 
 def production_allowlist() -> frozenset[str]:
     """production 可运行：``allow_in_production``。"""
-    from cleaned_operators.operator_spec import iter_operator_specs
+    from factor_engine.cleaned_operators.operator_spec import iter_operator_specs
 
     return frozenset(s.canonical for s in iter_operator_specs() if s.allow_in_production)
 
 
 def production_fastpath_allowlist(*, strict: bool = True) -> frozenset[str]:
     """production 高性能：duckdb effective production_safe 或 polars_long native production_safe。"""
-    from backend.fastpath_coverage import build_fastpath_coverage_row
+    from factor_engine.backend.fastpath_coverage import build_fastpath_coverage_row
 
     base = production_allowlist() if not strict else production_allowlist()
     out: set[str] = set()
@@ -53,15 +53,15 @@ def production_fastpath_allowlist(*, strict: bool = True) -> frozenset[str]:
 
 def research_fastpath_allowlist() -> frozenset[str]:
     """research 挖因子：SQL 已实现且 PolarsLong/SQL emitter 可走 fast path 的 canonical。"""
-    from backend.fastpath_coverage import build_fastpath_coverage_row
-    from backend.production_fastpath_tiers import resolve_polars_native_canonical
-    from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
+    from factor_engine.backend.fastpath_coverage import build_fastpath_coverage_row
+    from factor_engine.backend.production_fastpath_tiers import resolve_polars_native_canonical
+    from factor_engine.backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
 
     out: set[str] = set()
     for canon in SQL_IMPLEMENTED_CANONICALS:
         if canon in {"column", "literal"}:
             continue
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         candidates = {
             canon,
@@ -120,8 +120,8 @@ def is_production_fastpath_allowed(canon: str, *, strict: bool = True) -> bool:
     返回:
         对最小 plan 执行 fastpath 门禁后是否通过。
     """
-    from backend.production_fastpath_gate import check_production_fastpath_plan_ops
-    from backend.sql_pushdown.plan_fixtures import minimal_plan
+    from factor_engine.backend.production_fastpath_gate import check_production_fastpath_plan_ops
+    from factor_engine.backend.sql_pushdown.plan_fixtures import minimal_plan
 
     name = _resolve(canon)
     if name in {"column", "literal"}:
@@ -129,9 +129,9 @@ def is_production_fastpath_allowed(canon: str, *, strict: bool = True) -> bool:
     try:
         plan = minimal_plan(name)
     except Exception:
-        from planner.logical_plan import PlanNode
+        from factor_engine.planner.logical_plan import PlanNode
 
-        from backend.sql_pushdown.plan_fixtures import column
+        from factor_engine.backend.sql_pushdown.plan_fixtures import column
 
         plan = PlanNode(op=name, inputs=[column("close")], attrs={"d": 3})
     result = check_production_fastpath_plan_ops(plan, strict=strict)

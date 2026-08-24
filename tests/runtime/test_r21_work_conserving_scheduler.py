@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from runtime.multibackend.parallel_region_scheduler import (
+from factor_engine.runtime.multibackend.parallel_region_scheduler import (
     ExecutionRegion,
     ParallelRegionScheduler,
     ParallelSchedulerMetrics,

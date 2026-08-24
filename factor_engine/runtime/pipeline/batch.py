@@ -13,22 +13,22 @@ from typing import Any
 
 import yaml
 
-from runtime.config import FactorEngineConfig, load_config
-from runtime.config_runtime import (
+from factor_engine.runtime.config import FactorEngineConfig, load_config
+from factor_engine.runtime.config_runtime import (
     PipelineConfigOverrides,
     resolve_materialize_kwargs,
     resolve_run_kwargs,
 )
-from runtime.engine import FactorEngine
-from runtime.metrics_export import (
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.runtime.metrics_export import (
     enrich_pipeline_summary,
     push_otlp_http,
     write_otlp_metrics_file,
     write_pipeline_metrics_file,
     write_prometheus_metrics_file,
 )
-from runtime.slo_rules import evaluate_slo_rules
-from runtime.task_queue import shard_config_paths
+from factor_engine.runtime.slo_rules import evaluate_slo_rules
+from factor_engine.runtime.task_queue import shard_config_paths
 from logging_utils import get_logger
 from workspace_paths import workspace_data_root
 

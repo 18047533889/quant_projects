@@ -47,9 +47,9 @@ def _load_registry():
 
     if str(FE_ROOT) not in sys.path:
         sys.path.insert(0, str(FE_ROOT))
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
-    from api.operator_registry import build_dsl_allowlist
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.api.operator_registry import build_dsl_allowlist
 
     load_all()
     allowlist = build_dsl_allowlist()
@@ -119,7 +119,7 @@ _PLACEHOLDER_DESCRIPTIONS = frozenset({
 
 def _render(entries: dict[str, dict], allowlist_count: int) -> str:
     """将 canonical 条目按分类渲染为算子全览 Markdown。"""
-    from cleaned_operators.docs.operator_doc_semantics import get_operator_doc
+    from factor_engine.cleaned_operators.docs.operator_doc_semantics import get_operator_doc
 
     by_cat: dict[str, list[dict]] = defaultdict(list)
     for e in entries.values():

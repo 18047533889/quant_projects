@@ -15,10 +15,10 @@ import ast
 import math
 from dataclasses import dataclass
 from typing import Any
-from api.columns import field
-from api.factor import Factor
-from api.operator_registry import build_dsl_allowlist
-from expr.base import Expr
+from factor_engine.api.columns import field
+from factor_engine.api.factor import Factor
+from factor_engine.api.operator_registry import build_dsl_allowlist
+from factor_engine.expr.base import Expr
 
 class DSLParseError(ValueError): pass
 
@@ -87,8 +87,8 @@ class _ExprBuilder:
                 f"ComplexityBudget.max_formula_chars={self._budget.max_formula_chars}"
             )
         if self._dialect=="lqtp" or self._surface=="lqtp":
-            from api.lqtp_compat import normalize_lqtp_formula
-            from api.derived_field_compat import normalize_lqtp_derived_fields
+            from factor_engine.api.lqtp_compat import normalize_lqtp_formula
+            from factor_engine.api.derived_field_compat import normalize_lqtp_derived_fields
             normalized=normalize_lqtp_derived_fields(normalize_lqtp_formula(normalized))
             if len(normalized.encode("utf-8")) >self._budget.max_formula_bytes:
                 raise DSLParseError(
@@ -118,10 +118,10 @@ class _ExprBuilder:
         if isinstance(node,ast.UnaryOp) and isinstance(node.op,ast.USub):return -self._visit(node.operand)
         if isinstance(node,ast.UnaryOp) and isinstance(node.op,ast.UAdd):return self._visit(node.operand)
         if isinstance(node,ast.UnaryOp) and isinstance(node.op,ast.Invert):
-            from api.cleaned_ops import make_cleaned_call_factory
+            from factor_engine.api.cleaned_ops import make_cleaned_call_factory
             return make_cleaned_call_factory("not_")(self._visit(node.operand))
         if isinstance(node,ast.UnaryOp) and isinstance(node.op,ast.Not):
-            from api.cleaned_ops import make_cleaned_call_factory
+            from factor_engine.api.cleaned_ops import make_cleaned_call_factory
             return make_cleaned_call_factory("not_")(self._visit(node.operand))
         if isinstance(node,ast.Constant):
             if node.value is None or isinstance(node.value,bool):
@@ -203,7 +203,7 @@ class _ExprBuilder:
     def _visit_compare(self,node:ast.Compare)->Expr:
         if len(node.ops)!=1 or len(node.comparators)!=1:raise DSLParseError("Chained comparisons are not supported; use one comparison only.")
         left,right,op=self._visit(node.left),self._visit(node.comparators[0]),node.ops[0]
-        from api.cleaned_ops import make_cleaned_call_factory
+        from factor_engine.api.cleaned_ops import make_cleaned_call_factory
         mapping={ast.Lt:"lt",ast.LtE:"le",ast.Eq:"eq",ast.Gt:"gt",ast.GtE:"ge",ast.NotEq:"ne"}
         for kind,canonical in mapping.items():
             if isinstance(op,kind):return make_cleaned_call_factory(canonical)(left,right)
@@ -215,15 +215,15 @@ class _ExprBuilder:
         if isinstance(node.op,ast.Mult):return left*right
         if isinstance(node.op,ast.Div):return left/right
         if isinstance(node.op,ast.Pow):
-            from api.cleaned_ops import make_cleaned_call_factory
+            from factor_engine.api.cleaned_ops import make_cleaned_call_factory
             return make_cleaned_call_factory("power")(left,right)
         # CogAlpha pandas code uses bitwise & | ~ for elementwise boolean logic;
         # map onto the daily logical operators and_/or_/not_.
         if isinstance(node.op,ast.BitAnd):
-            from api.cleaned_ops import make_cleaned_call_factory
+            from factor_engine.api.cleaned_ops import make_cleaned_call_factory
             return make_cleaned_call_factory("and_")(left,right)
         if isinstance(node.op,ast.BitOr):
-            from api.cleaned_ops import make_cleaned_call_factory
+            from factor_engine.api.cleaned_ops import make_cleaned_call_factory
             return make_cleaned_call_factory("or_")(left,right)
         raise DSLParseError(f"Unsupported binary operator: {type(node.op).__name__}")
 
@@ -242,8 +242,8 @@ def _coerce_call_literals(name:str,args:tuple,kwargs:dict):
     if not any(str_args) and not any(str_kwargs.values()):
         return args,kwargs
     try:
-        from cleaned_operators.base import _coerce_declared_numeric_string
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.base import _coerce_declared_numeric_string
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
     except Exception:
         return args,kwargs
     op=None

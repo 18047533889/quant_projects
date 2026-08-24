@@ -36,20 +36,20 @@ for _p in (str(_FE_ROOT), str(_FE_ROOT.parent)):
 import pandas as pd
 import psutil
 
-from api import rank, ts_max, ts_mean, ts_std, ts_sum, zscore
-from api.columns import col
-from api.factor import Factor
-from backend.pandas_backend import PandasBackend
-from planner.cost_model_v2 import (
+from factor_engine.api import rank, ts_max, ts_mean, ts_std, ts_sum, zscore
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.planner.cost_model_v2 import (
     CostComponentsV2,
     estimate_operator_cost_v2,
     estimate_source_cost_v2,
     estimate_total_cost_v2,
     estimate_transfer_cost_v2,
 )
-from planner.data_shape_estimate import DataShapeEstimate, estimate_shape_from_metadata
-from runtime.engine import FactorEngine
-from runtime.perf_counters import get_global_counters, reset_global_counters
+from factor_engine.planner.data_shape_estimate import DataShapeEstimate, estimate_shape_from_metadata
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.runtime.perf_counters import get_global_counters, reset_global_counters
 from tests.helpers import InMemorySeriesSource
 
 _LOGGER = logging.getLogger(__name__)

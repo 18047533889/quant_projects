@@ -34,7 +34,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-from mining.direct_use import (  # noqa: E402
+from factor_engine.mining.direct_use import (  # noqa: E402
     DirectUseOperator,
     DirectUseStatus,
     build_direct_use_operator,
@@ -261,8 +261,8 @@ def write_json(path: Path, payload: object) -> None:
 
 def build_all(*, out_dir: Path, docs_dir: Path) -> dict[str, int]:
     """Build every R18 artifact.  Returns a summary dict."""
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     rows = direct_use_matrix_rows()
@@ -470,7 +470,7 @@ def build_all(*, out_dir: Path, docs_dir: Path) -> dict[str, int]:
     # ---- docs/operator_migration_map.json -----------------------------------
     aliases: dict[str, str] = {}
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         aliases = dict(OperatorRegistry._aliases)
     except Exception:

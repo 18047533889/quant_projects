@@ -119,13 +119,13 @@ def load_registry() -> tuple[Any, bool, str]:
     error = ""
     load_ok = True
     try:
-        from cleaned_operators import load_all
+        from factor_engine.cleaned_operators import load_all
         load_all()
     except Exception as exc:  # noqa: BLE001
         load_ok = False
         error = f"{type(exc).__name__}: {exc}"
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
         return OperatorRegistry, load_ok, error
     except Exception as exc:  # noqa: BLE001
         return None, False, f"{error}; registry_unavailable:{type(exc).__name__}: {exc}"
@@ -226,7 +226,7 @@ def audit_one(canonical: str, reg, fixtures: dict[str, dict[str, Any]]) -> dict[
     fallback_used = (not native_used) and (ref_op is not None)
     duckdb_available = False
     try:
-        from backend.sql_pushdown.available import sql_lowering_available  # noqa: F401
+        from factor_engine.backend.sql_pushdown.available import sql_lowering_available  # noqa: F401
         duckdb_available = False  # 仅当 lowering 真实可路由
     except Exception:  # noqa: BLE001
         duckdb_available = False

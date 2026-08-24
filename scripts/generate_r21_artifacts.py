@@ -77,8 +77,8 @@ def _service_security_audit() -> dict[str, Any]:
 
 
 def _job_lifecycle_audit() -> dict[str, Any]:
-    from service.jobstore import JobRecord, JobStatus, JobStore, MANIFEST_SCHEMA_VERSION
-    from service.queue import BoundedJobQueue
+    from factor_engine.service.jobstore import JobRecord, JobStatus, JobStore, MANIFEST_SCHEMA_VERSION
+    from factor_engine.service.queue import BoundedJobQueue
 
     lifecycle_fields = [
         "deadline_at", "deadline_monotonic", "cancel_requested_at", "attempt",
@@ -90,29 +90,29 @@ def _job_lifecycle_audit() -> dict[str, Any]:
         "job_statuses": [s for s in dir(JobStatus) if s.isupper()],
         "lifecycle_fields_present": present,
         "lifecycle_fields_total": len(lifecycle_fields),
-        "bounded_queue": _has("service.queue", "BoundedJobQueue"),
+        "bounded_queue": _has("factor_engine.service.queue", "BoundedJobQueue"),
         "sqlite_store": "sqlite3" in inspect.getsource(JobStore),
-        "manifest_atomic_write": _fn_mentions("service.jobstore", "JobStore._write_manifest", ["os.replace", "os.fsync"]),
-        "manifest_checksum": _fn_mentions("service.jobstore", "JobStore._write_manifest", ["_checksum"]),
-        "startup_reconcile": _fn_mentions("service.jobstore", "JobStore._reconcile_stale_running", ["INTERRUPTED"]),
+        "manifest_atomic_write": _fn_mentions("factor_engine.service.jobstore", "JobStore._write_manifest", ["os.replace", "os.fsync"]),
+        "manifest_checksum": _fn_mentions("factor_engine.service.jobstore", "JobStore._write_manifest", ["_checksum"]),
+        "startup_reconcile": _fn_mentions("factor_engine.service.jobstore", "JobStore._reconcile_stale_running", ["INTERRUPTED"]),
     }
 
 
 def _dq_contract_audit() -> dict[str, Any]:
-    from runtime.quality.dq_gates import DQRole, role_domain_checks
-    from runtime.quality.input_dq import (
+    from factor_engine.runtime.quality.dq_gates import DQRole, role_domain_checks
+    from factor_engine.runtime.quality.input_dq import (
         InputDQThresholds,
         adjust_input_dq_thresholds_from_stats,
         source_freshness_report,
     )
 
     return {
-        "single_day_duplicate_check": _fn_mentions("runtime.quality.dq_gates", "evaluate_factor_dq", ["unique_keys", "index.duplicated"]),
-        "finite_policy_unified": _fn_mentions("runtime.quality.dq_gates", "evaluate_factor_dq", ["is_finite_series", "min_instruments_per_day"]),
-        "preserve_invalid_excludes_inf": _fn_mentions("runtime.quality.dq_gates", "evaluate_factor_dq", ["preserve_invalid_rows", "finite"]),
+        "single_day_duplicate_check": _fn_mentions("factor_engine.runtime.quality.dq_gates", "evaluate_factor_dq", ["unique_keys", "index.duplicated"]),
+        "finite_policy_unified": _fn_mentions("factor_engine.runtime.quality.dq_gates", "evaluate_factor_dq", ["is_finite_series", "min_instruments_per_day"]),
+        "preserve_invalid_excludes_inf": _fn_mentions("factor_engine.runtime.quality.dq_gates", "evaluate_factor_dq", ["preserve_invalid_rows", "finite"]),
         "role_aware": bool(DQRole.ALPHA) and callable(role_domain_checks),
-        "time_distribution": _has("runtime.quality.dq_gates", "build_daily_coverage_profile"),
-        "input_null_ratio_fix": _fn_mentions("runtime.quality.input_dq", "adjust_input_dq_thresholds_from_stats", ["1.0 - float(null_map", "column_non_null_ratio"]),
+        "time_distribution": _has("factor_engine.runtime.quality.dq_gates", "build_daily_coverage_profile"),
+        "input_null_ratio_fix": _fn_mentions("factor_engine.runtime.quality.input_dq", "adjust_input_dq_thresholds_from_stats", ["1.0 - float(null_map", "column_non_null_ratio"]),
         "expected_coverage_per_column": hasattr(InputDQThresholds, "expected_coverage"),
         "source_freshness": callable(source_freshness_report),
         "dq_error_taxonomy": {
@@ -127,26 +127,26 @@ def _reproducible_build_audit() -> dict[str, Any]:
     return {
         "lock_exists": lock.is_file(),
         "lock_digest": lock.read_text().splitlines()[1] if lock.is_file() else None,
-        "single_version_authority": _fn_mentions("service.app", "_resolve_version", ["importlib.metadata", "pyproject"]),
-        "no_syspath_injection": _fn_mentions("storage.data_access_loader", "ensure_data_access_importable", ["sys.path"]) is False
-        and not _fn_mentions("backend.sql_pushdown.executor", "_ensure_data_access", ["sys.path"]),
-        "data_access_pinned": _has("storage.data_access_loader", "data_access_identity"),
+        "single_version_authority": _fn_mentions("factor_engine.service.app", "_resolve_version", ["importlib.metadata", "pyproject"]),
+        "no_syspath_injection": _fn_mentions("factor_engine.storage.data_access_loader", "ensure_data_access_importable", ["sys.path"]) is False
+        and not _fn_mentions("factor_engine.backend.sql_pushdown.executor", "_ensure_data_access", ["sys.path"]),
+        "data_access_pinned": _has("factor_engine.storage.data_access_loader", "data_access_identity"),
         "wheel_smoke_script": Path(__file__).resolve().parents[1].joinpath("scripts", "wheel_clean_install_smoke.py").is_file(),
     }
 
 
 def _observability_slo_audit() -> dict[str, Any]:
-    from service.observability import METRICS
-    from service.errors import NAMED_ERROR_CODES, HTTP_MAP
+    from factor_engine.service.observability import METRICS
+    from factor_engine.service.errors import NAMED_ERROR_CODES, HTTP_MAP
 
     return {
-        "structured_json_logging": _has("service.observability", "json_log"),
-        "metrics_registry": _has("service.observability", "METRICS"),
+        "structured_json_logging": _has("factor_engine.service.observability", "json_log"),
+        "metrics_registry": _has("factor_engine.service.observability", "METRICS"),
         "core_metrics": ["job_queue_depth", "run_latency", "source_read_latency", "fallback_count", "dq_failures"],
-        "trace_spans": _has("service.observability", "trace_span"),
+        "trace_spans": _has("factor_engine.service.observability", "trace_span"),
         "error_taxonomy": len(NAMED_ERROR_CODES),
         "http_mapping": len(HTTP_MAP),
-        "retry_policy": _has("service.app", "job_retry"),
+        "retry_policy": _has("factor_engine.service.app", "job_retry"),
     }
 
 
@@ -165,7 +165,7 @@ def _ci_test_matrix() -> dict[str, Any]:
 
 
 def _release_readiness() -> dict[str, Any]:
-    from service.release_blockers import evaluate_blockers, critical_blocker_count, unknown_critical_count
+    from factor_engine.service.release_blockers import evaluate_blockers, critical_blocker_count, unknown_critical_count
 
     blockers = evaluate_blockers()
     return {
@@ -194,7 +194,7 @@ def _failure_injection_report() -> dict[str, Any]:
 
 
 def _closure_scorecard() -> dict[str, Any]:
-    from service.release_blockers import evaluate_blockers, critical_blocker_count, unknown_critical_count
+    from factor_engine.service.release_blockers import evaluate_blockers, critical_blocker_count, unknown_critical_count
 
     blockers = evaluate_blockers()
     blockers_fail = critical_blocker_count(blockers)

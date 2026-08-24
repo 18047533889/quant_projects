@@ -28,10 +28,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.spectral  # noqa: F401  (shared _periodogram kernel)
-import cleaned_operators.spectral_ext  # noqa: F401  (registration is import-triggered)
+import factor_engine.cleaned_operators.spectral  # noqa: F401  (shared _periodogram kernel)
+import factor_engine.cleaned_operators.spectral_ext  # noqa: F401  (registration is import-triggered)
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 _WINDOW = 60
 
@@ -166,6 +166,6 @@ def test_per_direction_input_units_contract():
     assert ret_op.metadata.input_units == {"x": "return_decimal"}
     assert lvl_op.metadata.input_units == {"x": "continuous_price"}
     # the input mode participates in the operator contract hash -> factor identity
-    from cleaned_operators.registry import _contract_hash
+    from factor_engine.cleaned_operators.registry import _contract_hash
 
     assert _contract_hash(ret_op) != _contract_hash(lvl_op)

@@ -11,18 +11,18 @@ import pytest
 
 pytest.importorskip("polars")
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from backend.numeric_semantics import (
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.backend.numeric_semantics import (
     normalize_constant_cross_section_fill,
     normalize_single_valid_is_null,
     nan_to_num_replaces_infinite,
 )
-from cleaned_operators import load_all
-from runtime.engine import FactorEngine
-from storage.factory import build_data_source
+from factor_engine.cleaned_operators import load_all
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.storage.factory import build_data_source
 from tests.helpers import InMemorySeriesSource
 
 
@@ -260,7 +260,7 @@ def test_is_nan_is_finite_nan_to_num(edge_source, duckdb_edge_source):
         lambda: F("is_finite")(col("close")),
         lambda: F("is_finite")(_col("close")),
     )
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
     if "nan_to_num" in DAILY_CANONICALS:
         _assert_triple_backends(
             edge_source,
@@ -271,7 +271,7 @@ def test_is_nan_is_finite_nan_to_num(edge_source, duckdb_edge_source):
 
 
 def test_nan_to_num_replaces_infinite(edge_source, duckdb_edge_source):
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
     if "nan_to_num" not in DAILY_CANONICALS:
         pytest.skip("nan_to_num is not a production primitive")
     assert nan_to_num_replaces_infinite()
@@ -374,14 +374,14 @@ test_single:
 
 
 def test_truthy_null_semantics_contract():
-    from backend.numeric_semantics import truthy_null_is_false, log_zero_returns_negative_infinity
+    from factor_engine.backend.numeric_semantics import truthy_null_is_false, log_zero_returns_negative_infinity
 
     assert truthy_null_is_false()
     assert log_zero_returns_negative_infinity()
 
 
 def test_bfill_polars_long_raises(edge_source):
-    from backend.polars_long_policy import UnsupportedCausalOperatorError
+    from factor_engine.backend.polars_long_policy import UnsupportedCausalOperatorError
 
     expr = F("bfill")(col("close"))
     with pytest.raises(UnsupportedCausalOperatorError):
@@ -391,7 +391,7 @@ def test_bfill_polars_long_raises(edge_source):
 
 
 def test_bfill_duckdb_raises(edge_source):
-    from backend.polars_long_policy import UnsupportedCausalOperatorError
+    from factor_engine.backend.polars_long_policy import UnsupportedCausalOperatorError
 
     expr = F("bfill")(col("close"))
     with pytest.raises(UnsupportedCausalOperatorError):

@@ -9,8 +9,8 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="legacy P1 semantics reference removed and deferred canonicals")
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module")
@@ -20,7 +20,7 @@ def _loaded():
 
 
 def test_rolling_beta_production_allowed(_loaded):
-    from cleaned_operators.operator_spec import build_operator_spec
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec
 
     spec = build_operator_spec("rolling_beta")
     assert spec is not None
@@ -120,7 +120,7 @@ def test_quarter_fiscal_rollover_q1(_loaded):
 
 
 def test_production_core_includes_wilder_and_protected(_loaded):
-    from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
+    from factor_engine.cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
 
     for canon in ("RSI_WILDER", "ATR_WILDER", "protected_div", "rolling_beta"):
         assert canon in PRODUCTION_CORE_CANONICALS

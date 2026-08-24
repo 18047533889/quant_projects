@@ -30,7 +30,7 @@ FUTURE_LAG_ALIASES: dict[str, LagKind] = {
 
 
 def lag_spec_for(canon: str) -> LagSpec:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     return PHASE1_LAG_SPECS.get(name, LagSpec(kind="row_delay"))

@@ -46,7 +46,7 @@ From stress testing, two critical breaking points were discovered:
 
    Example:
    ```python
-   from planner import compile_many_chunked
+   from factor_engine.planner import compile_many_chunked
 
    # Compile 10,000 factors safely
    dags = compile_many_chunked(factor_plans, chunk_size=500)
@@ -63,7 +63,7 @@ From stress testing, two critical breaking points were discovered:
 
    Example:
    ```python
-   from planner import validate_expression_depth
+   from factor_engine.planner import validate_expression_depth
 
    # Validate before compilation
    depth = validate_expression_depth(factor.expr)
@@ -161,11 +161,11 @@ From stress testing, two critical breaking points were discovered:
    dag = lower_batch_dag(dag_over_1000_factors)   # Raises clear error
 
    # Option 2: Manual chunking for large batches
-   from planner import compile_many_chunked
+   from factor_engine.planner import compile_many_chunked
    dags = compile_many_chunked(10000_factor_plans, chunk_size=500)
 
 ### Expression Validation:
-   from planner import validate_expression_depth
+   from factor_engine.planner import validate_expression_depth
 
    depth = validate_expression_depth(my_factor.expr)
    print(f"Expression depth: {depth}/100")

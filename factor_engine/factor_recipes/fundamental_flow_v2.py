@@ -15,7 +15,7 @@ remain outside the production admission gate until their source dataset exists.
 """
 from __future__ import annotations
 
-from factor_recipes.registry import FactorRecipe, FactorRecipeRegistry
+from factor_engine.factor_recipes.registry import FactorRecipe, FactorRecipeRegistry
 
 
 def _recipe(

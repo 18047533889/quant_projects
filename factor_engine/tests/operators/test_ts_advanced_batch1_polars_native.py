@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 
-from cleaned_operators.polars_native.ts_advanced_batch1 import (
+from factor_engine.cleaned_operators.polars_native.ts_advanced_batch1 import (
     TSAbsConcentrationPolarsNative,
     TSConfirmedPivotHighPolarsNative,
     TSConfirmedPivotLowPolarsNative,

@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from cleaned_operators import (
+from factor_engine.cleaned_operators import (
     BOOTSTRAP_MODULE_SPECS,
     BootstrapModuleRole,
     RegistryBootstrap,
@@ -158,8 +158,8 @@ class TestBootstrapModuleSpec:
 
     def test_research_extension_not_in_production_surface(self):
         research_modules = {
-            "cleaned_operators.ts_model.dynamic_regression",
-            "cleaned_operators.research_polars",
+            "factor_engine.cleaned_operators.ts_model.dynamic_regression",
+            "factor_engine.cleaned_operators.research_polars",
         }
         for spec in BOOTSTRAP_MODULE_SPECS:
             if spec.module in research_modules:
@@ -172,24 +172,24 @@ class TestBootstrapModuleSpec:
 
 class TestEnsureOperatorRegistry:
     def test_ensure_registry_respects_surface(self, monkeypatch):
-        from backend import cleaned_bridge as cb
+        from factor_engine.backend import cleaned_bridge as cb
 
         calls = []
         probe = _mk_bootstrap()
 
-        monkeypatch.setattr("cleaned_operators.REGISTRY_BOOTSTRAP", probe)
+        monkeypatch.setattr("factor_engine.cleaned_operators.REGISTRY_BOOTSTRAP", probe)
         monkeypatch.setattr(
-            "cleaned_operators.check_signature_authority",
+            "factor_engine.cleaned_operators.check_signature_authority",
             lambda production=True: calls.append(("sig", production)),
         )
         cb.ensure_operator_registry(surface="production")
         assert calls == [("sig", True)]
 
     def test_ensure_cleaned_loaded_no_unlocked_global(self, monkeypatch):
-        from backend import cleaned_bridge as cb
+        from factor_engine.backend import cleaned_bridge as cb
 
         probe = _mk_bootstrap()
-        monkeypatch.setattr("cleaned_operators.REGISTRY_BOOTSTRAP", probe)
+        monkeypatch.setattr("factor_engine.cleaned_operators.REGISTRY_BOOTSTRAP", probe)
         cb.ensure_cleaned_loaded()
         assert probe.state == "ready"
         assert not hasattr(cb, "_CLEANED_LOADED")

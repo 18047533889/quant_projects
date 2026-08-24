@@ -41,33 +41,33 @@ except ImportError:  # pragma: no cover
     HTTPException = None  # type: ignore[assignment]
     Request = None  # type: ignore[assignment]
 
-from runtime.endpoint_policy import (
+from factor_engine.runtime.endpoint_policy import (
     EndpointExecutionPolicy,
     ProductionPolicyConflictError,
 )
 
 # R21 service modules
-from service.errors import (
+from factor_engine.service.errors import (
     ServiceError,
     classify_exception,
     redact_config,
     sanitize_message,
 )
-from service.jobstore import (
+from factor_engine.service.jobstore import (
     JobPhase,
     JobRecord,
     JobStatus,
     JobStore,
     check_single_process_workers,
 )
-from service.models import (
+from factor_engine.service.models import (
     ComputeRequest,
     MaterializeRequest,
     ValidatedFactorRequest,
     estimate_factor_cost,
     size_budget,
 )
-from service.observability import (
+from factor_engine.service.observability import (
     METRICS,
     bind_log_context,
     info,
@@ -75,15 +75,15 @@ from service.observability import (
     trace_span,
     warning,
 )
-from service.policies import RuntimeFeaturePolicy, resolve_ambient_run_mode
-from service.queue import (
+from factor_engine.service.policies import RuntimeFeaturePolicy, resolve_ambient_run_mode
+from factor_engine.service.queue import (
     BoundedJobQueue,
     JobCancelledError,
     JobDeadlineExceeded,
     check_job_alive,
     set_phase,
 )
-from service.security import (
+from factor_engine.service.security import (
     ANONYMOUS_PRINCIPAL,
     ApprovedSourcePolicy,
     Principal,
@@ -277,7 +277,7 @@ def _require_service_api_key(request) -> Dict[str, Any]:
     Matches the legacy contract: when a service API key is configured, a valid
     key is required unless ``FACTOR_ENGINE_SERVICE_ALLOW_OPEN`` is set.
     """
-    from service.security import get_principal_registry
+    from factor_engine.service.security import get_principal_registry
 
     service_key = os.environ.get("FACTOR_ENGINE_SERVICE_API_KEY", "").strip() or None
     allow_open = os.environ.get("FACTOR_ENGINE_SERVICE_ALLOW_OPEN", "").lower() in {
@@ -311,7 +311,7 @@ def _authenticate(
     Production routes are *always* authenticated regardless of
     ``QUANT_PRODUCTION_MODE``/``FACTOR_ENGINE_SERVICE_ALLOW_OPEN``.
     """
-    from service.security import get_principal_registry
+    from factor_engine.service.security import get_principal_registry
 
     service_key = os.environ.get("FACTOR_ENGINE_SERVICE_API_KEY", "").strip() or None
     allow_open = os.environ.get("FACTOR_ENGINE_SERVICE_ALLOW_OPEN", "").lower() in {
@@ -384,8 +384,8 @@ def validate_spec(payload: Dict[str, Any]) -> Dict[str, Any]:
     R21-006..010: validation is surface/dialect/dialect_version aware and, for
     production, applies pre-parse size + cost budgets.
     """
-    from api.dsl_parser import DSLParseError, parse_expr
-    from api.mining_integration import validate_factor_engine_dsl, validate_production_dsl
+    from factor_engine.api.dsl_parser import DSLParseError, parse_expr
+    from factor_engine.api.mining_integration import validate_factor_engine_dsl, validate_production_dsl
 
     if not isinstance(payload, dict):
         return {"ok": False, "errors": ["payload must be an object"], "warnings": [], "checked": {}}
@@ -473,12 +473,12 @@ def _catalog_generations(model: ComputeRequest, source_binding: dict[str, str | 
     backend_evidence_gen / compiler_build_gen``。任一维度变化都会改变
     ``ValidatedFactorRequest.digest()``，从而失效 idempotency / cache / checkpoint。
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op_gen = str(OperatorRegistry.version())
     field_gen = "unavailable"
     try:
-        from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+        from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
         registry = MULTI_MARKET_FIELD_REGISTRY.registry_for(str(model.market or "ashare"))
         field_gen = str(registry.catalog_hash())
@@ -549,7 +549,7 @@ def _build_execution_semantic_identity(
     市场/日历/decision_time/run_mode/PIT/source_scope 全字段 —— 与 FE 内部
     ``ExecutionSemanticIdentityV2`` 同一类型，供下游投影链消费（不可变 frozen）。
     """
-    from runtime.factor_identity import ExecutionSemanticIdentityV2
+    from factor_engine.runtime.factor_identity import ExecutionSemanticIdentityV2
 
     return ExecutionSemanticIdentityV2(
         ir_hash=_stable_hex("ir", formula),
@@ -599,7 +599,7 @@ def _validate_and_build_request(
 
     # Canonical formula: surface/dialect aware parse must already have succeeded
     # in validate_spec for the production route; here we compute the digest.
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     generation = OperatorRegistry.version()
     universe = tuple(model.universe or [])
@@ -684,7 +684,7 @@ def _validate_and_build_request(
     # R40 #88: DataSourceBuildContext（run_mode/market/calendar/PIT/snapshot_policy）
     # 以 dict 形式流入 execution（JSON 可序列化），_execute_inline 再还原并传给
     # build_data_source(..., build_context=ctx)。
-    from storage.factory import DataSourceBuildContext
+    from factor_engine.storage.factory import DataSourceBuildContext
 
     build_context = DataSourceBuildContext(
         run_mode=run_mode,
@@ -719,7 +719,7 @@ def _validate_and_build_request(
 
 def _production_source_config(model: ComputeRequest) -> dict[str, Any]:
     """R21-020..026: resolve a production inline source from an approved profile."""
-    from service.security import resolve_source_profile
+    from factor_engine.service.security import resolve_source_profile
 
     return resolve_source_profile({"approved_source_profile_id": model.approved_source_profile_id}, policy=SOURCE_POLICY)
 
@@ -733,7 +733,7 @@ def _validate_config_path_sources(config_path: str, *, production: bool) -> None
     if not production:
         return
     try:
-        from runtime.config_runtime import load_config
+        from factor_engine.runtime.config_runtime import load_config
     except ImportError as exc:
         raise ServiceError(
             "INTERNAL_ERROR",
@@ -750,7 +750,7 @@ def _validate_config_path_sources(config_path: str, *, production: bool) -> None
 
 
 def _execute_config_path(job: JobRecord, config_path: str) -> dict[str, Any]:
-    from runtime.engine import FactorEngine
+    from factor_engine.runtime.engine import FactorEngine
 
     # R40 #96: engine 入口边界检查 request-scoped cancellation token。
     token = _get_job_cancellation_token(job.run_id)
@@ -765,10 +765,10 @@ def _execute_config_path(job: JobRecord, config_path: str) -> dict[str, Any]:
 
 
 def _execute_inline(job: JobRecord, execution: dict[str, Any]) -> dict[str, Any]:
-    from api.dsl_parser import parse_factor
-    from backend.factory import build_backend
-    from runtime.engine import FactorEngine
-    from storage.factory import build_data_source
+    from factor_engine.api.dsl_parser import parse_factor
+    from factor_engine.backend.factory import build_backend
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.storage.factory import build_data_source
 
     validated = execution["validated"]
     vr = ValidatedFactorRequest(
@@ -812,7 +812,7 @@ def _execute_inline(job: JobRecord, execution: dict[str, Any]) -> dict[str, Any]
         token.raise_if_cancelled()
     # R40 #88: 把验证期构造的 DataSourceBuildContext 传给 build_data_source
     #（run_mode/market/calendar/timezone/PIT/snapshot_policy/coverage_policy 流入源）。
-    from storage.factory import DataSourceBuildContext
+    from factor_engine.storage.factory import DataSourceBuildContext
 
     build_ctx_raw = execution.get("build_context")
     build_context = (
@@ -860,8 +860,8 @@ def _job_wrapper(job: JobRecord, *, phase_target: str) -> None:
     R40 #96: 阶段边界额外查 request-scoped CancellationToken —— cancel/deadline
     在 engine 入口与阶段边界都能立即停止，而不是等 worker 自然结束。
     """
-    from service.errors import json_dumps_redacted
-    from runtime.exceptions import (
+    from factor_engine.service.errors import json_dumps_redacted
+    from factor_engine.runtime.exceptions import (
         Cancellation,
         DeadlineExceeded,
         reset_active_cancellation_token,
@@ -949,7 +949,7 @@ def _dispatch_execution(job: JobRecord, execution: dict[str, Any] | None) -> dic
 
 
 def _execute_materialize(job: JobRecord) -> dict[str, Any]:
-    from runtime.engine import FactorEngine
+    from factor_engine.runtime.engine import FactorEngine
 
     execution = job.request.get("execution") if isinstance(job.request, dict) else {}
     config_path = execution.get("config_path") or job.request.get("config_path")
@@ -1018,7 +1018,7 @@ def _redact_preview_for_access(source_cfg: Any, job: JobRecord) -> str | None:
     if not isinstance(source_cfg, dict):
         return None
     try:
-        from security.access import derive_derived_access_tags, max_sensitivity
+        from factor_engine.security.access import derive_derived_access_tags, max_sensitivity
 
         tags = derive_derived_access_tags(_collect_source_access_tags(source_cfg))
         sensitivity = max_sensitivity(tags)
@@ -1175,7 +1175,7 @@ def _submit_job(
     job.deadline_monotonic = _time.monotonic() + timeout  # R21-277
     # R40 #96: request-scoped CancellationToken（cancel event + monotonic deadline），
     # _job_wrapper / _execute_inline / _execute_config_path 阶段边界查询。
-    from runtime.exceptions import CancellationToken
+    from factor_engine.runtime.exceptions import CancellationToken
 
     _set_job_cancellation_token(run_id, CancellationToken(deadline_monotonic=_time.monotonic() + timeout))
     job = STORE.create(job)
@@ -1238,7 +1238,7 @@ def submit_job(job_type: JobType, payload: dict[str, Any], *, sync: bool = False
 
 
 def _readiness_check() -> dict[str, Any]:
-    from service.release_blockers import evaluate_blockers
+    from factor_engine.service.release_blockers import evaluate_blockers
 
     blockers = evaluate_blockers()
     fail = sum(1 for b in blockers.values() if b["status"] == "FAIL")
@@ -1275,7 +1275,7 @@ def create_app():
         raise ImportError("HTTP service requires fastapi. Install with: pip install 'factor-engine[service]'")
     check_single_process_workers()
 
-    from service.preflight import production_preflight
+    from factor_engine.service.preflight import production_preflight
 
     PREFLIGHT: dict[str, Any] = {"ok": True, "checks": {}}
 
@@ -1294,15 +1294,15 @@ def create_app():
             "FACTOR_ENGINE_PREFLIGHT_HARD_FAIL", "0"
         ).lower() in {"1", "true", "yes"}
         if not PREFLIGHT["ok"] and is_production_deploy:
-            info("service.preflight.blocked")
+            info("factor_engine.service.preflight.blocked")
             raise RuntimeError("production preflight failed; refusing to serve")
         yield
         # R21-080..082: graceful shutdown — drain queued, cancel running, close.
-        info("service.shutdown.start")
+        info("factor_engine.service.shutdown.start")
         QUEUE.drain(timeout=float(os.environ.get("FACTOR_ENGINE_SERVICE_DRAIN_TIMEOUT", "30")))
         EXECUTOR.shutdown(wait=True)
         STORE.close()
-        info("service.shutdown.done")
+        info("factor_engine.service.shutdown.done")
 
     app = FastAPI(
         title="Factor Engine Service",
@@ -1507,7 +1507,7 @@ def create_app():
 
 
 def list_operators() -> Dict[str, Any]:
-    from api.operator_registry import build_dsl_allowlist
+    from factor_engine.api.operator_registry import build_dsl_allowlist
 
     names = sorted(build_dsl_allowlist().keys())
     return {"count": len(names), "operators": names}

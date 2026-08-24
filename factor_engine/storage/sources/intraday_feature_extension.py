@@ -17,7 +17,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from runtime.ashare_intraday import (
+from factor_engine.runtime.ashare_intraday import (
     ashare_limit_prices,
     limit_touch_fraction,
     return_path_features,

@@ -28,13 +28,13 @@ import hashlib
 import numpy as np
 import pytest
 
-from cleaned_operators.base import (
+from factor_engine.cleaned_operators.base import (
     MISSING,
     OperatorMetadata,
     ParamSpec,
     SeriesOperator,
 )
-from cleaned_operators.registry import (
+from factor_engine.cleaned_operators.registry import (
     OperatorRegistry,
     _BOOTSTRAP_TOKEN,
     _code_payload,

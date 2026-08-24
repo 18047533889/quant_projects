@@ -118,7 +118,7 @@ def validate_factor_id(
     # R40 #145: production 字符集白名单（homoglyph 防御）。
     if not _PRODUCTION_FACTOR_ID_RE.match(text):
         if production is None:
-            from runtime.production_policy import is_production_mode
+            from factor_engine.runtime.production_policy import is_production_mode
 
             production = is_production_mode()
         if production:

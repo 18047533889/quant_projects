@@ -8,9 +8,9 @@ import pytest
 
 os.environ.setdefault("FACTOR_ENGINE_SERVICE_ROOT", "/tmp/r40_http_semantic_root")
 
-from runtime.endpoint_policy import EndpointExecutionPolicy  # noqa: E402
-from service.app import _validate_and_build_request  # noqa: E402
-from service.security import ANONYMOUS_PRINCIPAL  # noqa: E402
+from factor_engine.runtime.endpoint_policy import EndpointExecutionPolicy  # noqa: E402
+from factor_engine.service.app import _validate_and_build_request  # noqa: E402
+from factor_engine.service.security import ANONYMOUS_PRINCIPAL  # noqa: E402
 
 
 def _build(payload):
@@ -34,7 +34,7 @@ def test_http_execution_identity_frozen_and_complete():
         }
     )
     identity_payload = execution["identity"]
-    from runtime.factor_identity import ExecutionSemanticIdentityV2
+    from factor_engine.runtime.factor_identity import ExecutionSemanticIdentityV2
 
     identity = ExecutionSemanticIdentityV2(**identity_payload)
     # immutable (frozen dataclass)
@@ -62,7 +62,7 @@ def test_http_identity_changes_with_context():
     execution_b, _ = _build(
         {"formula": "close", "market": "us", "calendar": "NYSE", "data_source": {"type": "data_access", "dataset": "d"}}
     )
-    from runtime.factor_identity import ExecutionSemanticIdentityV2
+    from factor_engine.runtime.factor_identity import ExecutionSemanticIdentityV2
 
     dig_a = ExecutionSemanticIdentityV2(**execution_a["identity"]).identity_digest()
     dig_b = ExecutionSemanticIdentityV2(**execution_b["identity"]).identity_digest()

@@ -18,9 +18,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.production_hardening import SOURCE_BLOCKED_CANONICALS
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.production_hardening import SOURCE_BLOCKED_CANONICALS
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 load_all()
 
@@ -67,7 +67,7 @@ def test_intraday_return_alias_resolves():
 # ---------------------------------------------------------------------------
 
 def test_intraday_realized_variance_matches_manual():
-    from cleaned_operators.microstructure.intraday_agg import IntraRealizedVariance
+    from factor_engine.cleaned_operators.microstructure.intraday_agg import IntraRealizedVariance
 
     # R11 P0-43: intraday aggregators require OFFICIAL-session coverage (>=90%
     # of the 240-bar A-share grid), so the fixture must be a FULL day — morning
@@ -85,7 +85,7 @@ def test_intraday_realized_variance_matches_manual():
 
 
 def test_intraday_segment_return_morning():
-    from cleaned_operators.microstructure.intraday_agg import IntraSegmentReturn
+    from factor_engine.cleaned_operators.microstructure.intraday_agg import IntraSegmentReturn
 
     # 09:31 open close 10.0, 10:00 10.5, 14:00 11.0
     idx = pd.DatetimeIndex([
@@ -104,7 +104,7 @@ def test_intraday_segment_return_morning():
 
 def test_intraday_segment_handles_utc_index():
     """A-share COS minute data is UTC; segments are defined in Asia/Shanghai wall-clock."""
-    from cleaned_operators.microstructure.intraday_agg import IntraSegmentReturn, IntraLunchGapReturn
+    from factor_engine.cleaned_operators.microstructure.intraday_agg import IntraSegmentReturn, IntraLunchGapReturn
 
     # 01:31 UTC = 09:31 Beijing (morning), 03:00 UTC = 11:00 Beijing (morning),
     # 05:01 UTC = 13:01 Beijing (afternoon first bar, 240-bar session), 06:00 UTC = 14:00.
@@ -132,7 +132,7 @@ def test_intraday_segment_handles_utc_index():
 
 
 def test_intraday_path_efficiency_single_direction_is_one():
-    from cleaned_operators.microstructure.intraday_agg import IntraPathEfficiency
+    from factor_engine.cleaned_operators.microstructure.intraday_agg import IntraPathEfficiency
 
     close = np.array([10.0, 11.0, 12.0, 13.0])
     panel = _minute_panel(["A"], ["2024-01-02"], [close])
@@ -141,7 +141,7 @@ def test_intraday_path_efficiency_single_direction_is_one():
 
 
 def test_intraday_concentration_all_volume_one_bar():
-    from cleaned_operators.microstructure.intraday_agg import IntraConcentration
+    from factor_engine.cleaned_operators.microstructure.intraday_agg import IntraConcentration
 
     volume = np.array([0.0, 0.0, 100.0, 0.0])
     panel = _minute_panel(["A"], ["2024-01-02"], [volume])
@@ -150,7 +150,7 @@ def test_intraday_concentration_all_volume_one_bar():
 
 
 def test_intraday_vwap_cross_count():
-    from cleaned_operators.microstructure.intraday_agg import IntraVwapCrossCount
+    from factor_engine.cleaned_operators.microstructure.intraday_agg import IntraVwapCrossCount
 
     # cum_vwap stays at 10 while close oscillates 10/12 -> sign flips 3 times.
     close = np.array([10.0, 12.0, 10.0, 12.0, 10.0])
@@ -164,7 +164,7 @@ def test_intraday_vwap_cross_count():
 
 
 def test_intraday_limit_duration_up():
-    from cleaned_operators.microstructure.intraday_agg import IntraLimitDuration
+    from factor_engine.cleaned_operators.microstructure.intraday_agg import IntraLimitDuration
 
     close = np.array([10.0, 11.0, 11.0, 10.5, 11.0])
     cp = _minute_panel(["A"], ["2024-01-02"], [close])
@@ -175,7 +175,7 @@ def test_intraday_limit_duration_up():
 
 
 def test_intraday_empty_day_is_nan_not_zero():
-    from cleaned_operators.microstructure.intraday_agg import IntraRealizedVariance
+    from factor_engine.cleaned_operators.microstructure.intraday_agg import IntraRealizedVariance
 
     panel = _minute_panel(["A"], ["2024-01-02"], [[np.nan, np.nan, np.nan]])
     out = IntraRealizedVariance()._calculate_series(panel)
@@ -190,7 +190,7 @@ def test_intraday_source_blocked_operators_are_not_production_targets():
     close-to-open rolling volatility and is a production target.  The
     ``intra_*`` minute→daily family and relation/index panel operators are
     eligible production targets."""
-    from cleaned_operators.production_hardening import factor_production_targets
+    from factor_engine.cleaned_operators.production_hardening import factor_production_targets
 
     assert "intraday_volatility" not in SOURCE_BLOCKED_CANONICALS
     # R22-070..071: the global ban set is intentionally empty of factor-shaped
@@ -209,7 +209,7 @@ def test_intraday_source_blocked_operators_are_not_production_targets():
 # ---------------------------------------------------------------------------
 
 def test_relation_distinct_count():
-    from cleaned_operators.relation.ops import RelationDistinctCount
+    from factor_engine.cleaned_operators.relation.ops import RelationDistinctCount
 
     dates = pd.DatetimeIndex(["2024-01-02", "2024-01-03"])
     panel = pd.DataFrame(
@@ -223,7 +223,7 @@ def test_relation_distinct_count():
 
 
 def test_relation_overlap_jaccard():
-    from cleaned_operators.relation.ops import RelationOverlapRatio
+    from factor_engine.cleaned_operators.relation.ops import RelationOverlapRatio
 
     dates = pd.DatetimeIndex(["2024-01-02"])
     cur = pd.DataFrame({"p1": ["a"], "p2": ["b"], "p3": ["c"]}, index=dates, dtype=object)
@@ -233,7 +233,7 @@ def test_relation_overlap_jaccard():
 
 
 def test_index_weight_normalized():
-    from cleaned_operators.relation.ops import IndexWeight
+    from factor_engine.cleaned_operators.relation.ops import IndexWeight
 
     panel = _daily_panel(["2024-01-02"], ["A", "B", "C"], {"A": [10.0], "B": [30.0], "C": [60.0]})
     out = IndexWeight()._calculate_series(panel)
@@ -245,7 +245,7 @@ def test_index_weight_normalized():
 # ---------------------------------------------------------------------------
 
 def test_event_decay_asof_is_causal_and_decaying():
-    from cleaned_operators.state_event import EventDecayAsOf
+    from factor_engine.cleaned_operators.state_event import EventDecayAsOf
 
     dates = pd.date_range("2024-01-02", periods=4)
     event = _daily_panel(dates, ["A"], [1.0, 0.0, 0.0, 0.0])
@@ -258,7 +258,7 @@ def test_event_decay_asof_is_causal_and_decaying():
 
 
 def test_event_decay_asof_future_does_not_affect_past():
-    from cleaned_operators.state_event import EventDecayAsOf
+    from factor_engine.cleaned_operators.state_event import EventDecayAsOf
 
     dates = pd.date_range("2024-01-02", periods=4)
     a = _daily_panel(dates, ["A"], [1.0, 0.0, 0.0, 0.0])
@@ -270,7 +270,7 @@ def test_event_decay_asof_future_does_not_affect_past():
 
 
 def test_fin_component_score_sums_directions():
-    from cleaned_operators.fundamental.component_score import FinComponentScore
+    from factor_engine.cleaned_operators.fundamental.component_score import FinComponentScore
 
     dates = pd.DatetimeIndex(["2024-01-02", "2024-01-03"])
     # R25-184: each component is its OWN date x instrument panel; the score is

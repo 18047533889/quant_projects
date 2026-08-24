@@ -23,8 +23,8 @@ from concurrent.futures import FIRST_COMPLETED, Future, wait
 from dataclasses import dataclass, field
 from typing import Any, Callable, Sequence
 
-from planner.dag_cost_model import task_priority
-from planner.physical_factor_dag import (
+from factor_engine.planner.dag_cost_model import task_priority
+from factor_engine.planner.physical_factor_dag import (
     TASK_CSE_SHARED,
     TASK_MERGE,
     TASK_ROOT,
@@ -35,16 +35,16 @@ from planner.physical_factor_dag import (
     rebase_task,
     task_is_executable,
 )
-from planner.read_wave_planner import ReadWavePlan, build_waves_from_dag
-from runtime.buffer_ref import SourceWaveExecutor
-from runtime.hybrid_executor import HybridExecutor, classify_backend_execution
-from runtime.micro_batch_task import MicroBatchTask, dispatch_micro_batch
-from runtime.plan_execution_certificate import (
+from factor_engine.planner.read_wave_planner import ReadWavePlan, build_waves_from_dag
+from factor_engine.runtime.buffer_ref import SourceWaveExecutor
+from factor_engine.runtime.hybrid_executor import HybridExecutor, classify_backend_execution
+from factor_engine.runtime.micro_batch_task import MicroBatchTask, dispatch_micro_batch
+from factor_engine.runtime.plan_execution_certificate import (
     PlanExecutionCertificate,
     build_plan_execution_certificate,
 )
-from runtime.resource_broker import ReservationLease, ResourceBroker
-from runtime.streaming_result_sink import ResultItem, StreamingResultSink
+from factor_engine.runtime.resource_broker import ReservationLease, ResourceBroker
+from factor_engine.runtime.streaming_result_sink import ResultItem, StreamingResultSink
 
 _logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ class SchedulerPlan:
 
 def _plan_cost_bytes(plan: Any) -> dict[str, Any]:
     try:
-        from backend.operator_cost import estimate_plan_cost
+        from factor_engine.backend.operator_cost import estimate_plan_cost
 
         return estimate_plan_cost(plan)
     except Exception:
@@ -119,7 +119,7 @@ def _dispatch(
                     budget = int(bt)
         except Exception:
             budget = 1
-        from runtime.execution_traits import thread_budget
+        from factor_engine.runtime.execution_traits import thread_budget
 
         with thread_budget(budget):
             result = execute_root(task)
@@ -192,7 +192,7 @@ def classify_error(exc: BaseException) -> str:
 
 def _is_oom(exc: BaseException) -> bool:
     try:
-        from runtime.resource_errors import is_oom_error
+        from factor_engine.runtime.resource_errors import is_oom_error
 
         return is_oom_error(exc)
     except Exception as import_err:
@@ -227,7 +227,7 @@ def _dispatch_fusion(
     R31-P0-022：fusion group 真正执行（backend 支持 ``execute_multi_roots`` 则
     一次 native query；否则诚实 per-root fallback 并计数）。
     """
-    from planner.native_fusion import execute_fusion_group
+    from factor_engine.planner.native_fusion import execute_fusion_group
 
     group_key = f"fusion:{group.group_id}"
     results = execute_fusion_group(
@@ -253,7 +253,7 @@ def _release_lease(lease: Any) -> None:
 
 
 def _default_contract_for(task_type: str, plan_cost: dict[str, Any]) -> Any:
-    from runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
     peak = int(plan_cost.get("peak_live_memory_bytes", 0))
     out_bytes = peak  # 保守：输出 ≈ 峰值面板
@@ -291,14 +291,14 @@ class AdaptiveBatchScheduler:
             # HostResourceCoordinator 的 broker——不再各自 new 独立 ResourceBroker
             #（§52 one host resource authority）。
             try:
-                from service.queue import _get_service_broker
+                from factor_engine.service.queue import _get_service_broker
 
                 broker = _get_service_broker()
             except Exception:
                 broker = None
         if broker is None:
             try:
-                from runtime.host_resource_coordinator import get_host_coordinator
+                from factor_engine.runtime.host_resource_coordinator import get_host_coordinator
 
                 broker = get_host_coordinator().broker
             except Exception:
@@ -408,15 +408,15 @@ class AdaptiveBatchScheduler:
         context（来自 ``choose_plan_route``）与 calibrated 资源契约——不再固定
         Pandas / 1 token / 0 bytes。
         """
-        from planner.cse import collect_consumed_sids
-        from planner.physical_lowerer import contract_for_plan, lower_batch_dag
+        from factor_engine.planner.cse import collect_consumed_sids
+        from factor_engine.planner.physical_lowerer import contract_for_plan, lower_batch_dag
 
         # 尝试经 ctx 拿真实行数/仪器数（SourceScanStage 用真实 ScanCost 估计）。
         rows: int | None = None
         instruments = 0
         if ctx is not None:
             try:
-                from backend.plan_cost_router import estimate_plan_rows
+                from factor_engine.backend.plan_cost_router import estimate_plan_rows
 
                 rows = estimate_plan_rows(ctx)
             except Exception:
@@ -478,7 +478,7 @@ class AdaptiveBatchScheduler:
         # ``can_fuse_roots(all_roots)`` 一票否决——按 (backend, source_scope,
         # execution_scope) 分组后每组独立 can_fuse/block）。
         root_tasks = [physical.tasks[t] for t in physical.roots if t in physical.tasks]
-        from planner.native_fusion import native_fusion_capability_map, plan_native_fusion_groups
+        from factor_engine.planner.native_fusion import native_fusion_capability_map, plan_native_fusion_groups
 
         fusion_groups = []
         if enable_cse and root_tasks:
@@ -537,7 +537,7 @@ class AdaptiveBatchScheduler:
         if not roots:
             return None
         try:
-            from runtime.task_resource_contract import TaskResourceContract
+            from factor_engine.runtime.task_resource_contract import TaskResourceContract
         except Exception:
             return None
         peak = 0
@@ -667,7 +667,7 @@ class AdaptiveBatchScheduler:
         # R40 #96: request-scoped CancellationToken（HTTP service → FE）——cancel
         # 事件 / deadline 一到就停止新 admission（在跑 task 自然完成）。
         try:
-            from runtime.exceptions import get_active_cancellation_token
+            from factor_engine.runtime.exceptions import get_active_cancellation_token
 
             _token = get_active_cancellation_token()
             if _token is not None and (_token.is_cancelled or _token.expired):
@@ -736,7 +736,7 @@ class AdaptiveBatchScheduler:
         if self._shard_executor is None:
             import tempfile
 
-            from runtime.shard_executor import ShardExecutor
+            from factor_engine.runtime.shard_executor import ShardExecutor
 
             self._shard_executor = ShardExecutor(
                 spool_dir=tempfile.mkdtemp(prefix="fe_r38_spool_")
@@ -899,8 +899,8 @@ class AdaptiveBatchScheduler:
             # buffer + DQ stats，不另扫一遍）。
             if input_dq_check and ref is not None and wave.columns:
                 try:
-                    from runtime.input_dq import assert_input_dq
-                    from runtime.input_dq import (
+                    from factor_engine.runtime.input_dq import assert_input_dq
+                    from factor_engine.runtime.input_dq import (
                         adjust_input_dq_thresholds_from_stats,
                         load_dataset_stats_for_source,
                     )
@@ -966,7 +966,7 @@ class AdaptiveBatchScheduler:
             return
         from types import SimpleNamespace
 
-        from planner.read_wave_planner import build_waves_from_dag
+        from factor_engine.planner.read_wave_planner import build_waves_from_dag
 
         sub = SimpleNamespace(tasks={t.task_id: t for t in unexecuted})
         new_waves = build_waves_from_dag(sub, wave_memory_budget=budget)
@@ -1043,7 +1043,7 @@ class AdaptiveBatchScheduler:
         """
         # 本次 run 的 ctx（shard 时间窗 / 真实交易日历推导用，P0-009）。
         self._run_ctx = ctx
-        from runtime.batch_service import _execute_root_with_path, _materialize_shared_subplan
+        from factor_engine.runtime.batch_service import _execute_root_with_path, _materialize_shared_subplan
 
         def _default_execute_root(task: PhysicalFactorTask) -> Any:
             # R31-P0-002：lowerer 生成的 ROOT task 的 node_ref 是裸 plan；
@@ -1114,7 +1114,7 @@ class AdaptiveBatchScheduler:
             # R40 #96: request-scoped CancellationToken —— cancel/deadline 一到，
             # 若无在跑 future 则提前结束（有在跑 future 时 _admit_and_run 拒新 admission）。
             try:
-                from runtime.exceptions import get_active_cancellation_token
+                from factor_engine.runtime.exceptions import get_active_cancellation_token
 
                 _req_token = get_active_cancellation_token()
                 if (
@@ -1551,7 +1551,7 @@ class AdaptiveBatchScheduler:
                     # 余量 / 盘吞吐 / merge 邻近）。全部信号缺失时 policy 安全回退
                     # 固定 512MiB（与原行为一致），绝不比旧行为更激进地 spool。
                     try:
-                        from runtime.spool_policy import default_spool_policy_factory
+                        from factor_engine.runtime.spool_policy import default_spool_policy_factory
 
                         policy = default_spool_policy_factory(
                             broker=self.broker, sink=self.sink
@@ -1672,7 +1672,7 @@ class AdaptiveBatchScheduler:
         resource lease、不走 priority queue。仍先执行 read waves（真实 scan 一次）
         再串行物化 shared + 执行 roots（拓扑序）。结果与 ``run`` 完全一致。
         """
-        from runtime.batch_service import _execute_root_with_path, _materialize_shared_subplan
+        from factor_engine.runtime.batch_service import _execute_root_with_path, _materialize_shared_subplan
 
         def _default_execute_root(task: PhysicalFactorTask) -> Any:
             node = getattr(task, "node_ref", None)
@@ -1842,7 +1842,7 @@ class AdaptiveBatchScheduler:
         if node is None or ctx is None:
             return
         try:
-            from planner.cse import collect_consumed_sids
+            from factor_engine.planner.cse import collect_consumed_sids
 
             store = getattr(ctx, "shared_buffers", None)
             if store is None or getattr(store, "pin", None) is None:
@@ -1859,7 +1859,7 @@ class AdaptiveBatchScheduler:
         fail-safe cleanup），不再 ``except: pass`` 吞掉内存回收失败。
         """
         try:
-            from runtime.batch_service import _release_consumed_sids
+            from factor_engine.runtime.batch_service import _release_consumed_sids
 
             task = dag.tasks[tid]
             if task.node_ref is not None:
@@ -1902,7 +1902,7 @@ class AdaptiveBatchScheduler:
         if not getattr(self, "_shard_replanned", None):
             self._shard_replanned: set[str] = set()
         try:
-            from runtime.auto_shard_planner import AutoShardPlanner
+            from factor_engine.runtime.auto_shard_planner import AutoShardPlanner
 
             env = self.broker.resource_envelope()
             safe = max(1, int(env.safe_memory_bytes))
@@ -1941,7 +1941,7 @@ class AdaptiveBatchScheduler:
     def _lookback_bars(self, task: PhysicalFactorTask) -> int:
         """估算 time-shard warmup 需要的 lookback 交易日（rolling 覆盖窗口）。"""
         try:
-            from runtime.resource_shape import ResourceShapeKey
+            from factor_engine.runtime.resource_shape import ResourceShapeKey
 
             shape = ResourceShapeKey.from_task(task)
             # window_bucket 中点近似（保守 ×2 覆盖 lookback）。
@@ -1975,7 +1975,7 @@ class AdaptiveBatchScheduler:
             ds = getattr(ctx, "data_source", None)
             dataset = str(getattr(ds, "dataset", "") or "")
             universe = str(getattr(ctx, "universe", "") or "")
-            from storage.trading_calendar import get_trading_calendar, infer_market
+            from factor_engine.storage.trading_calendar import get_trading_calendar, infer_market
 
             market = infer_market(universe=universe, dataset=dataset)
             if not market:
@@ -1996,7 +1996,7 @@ class AdaptiveBatchScheduler:
         """
         from dataclasses import replace as _replace
 
-        from runtime.shard_execution_plan import shape_signature
+        from factor_engine.runtime.shard_execution_plan import shape_signature
 
         # 已被替换过（OOM 后第二次 replan）时，原 ROOT 从 preserved dict 取。
         orig = self._shard_original_task.get(original_task_id) or dag.tasks.get(original_task_id)
@@ -2016,7 +2016,7 @@ class AdaptiveBatchScheduler:
         # Merge 任务用**独立内存模型**（P0-003）：不再退回 original_peak（那正是
         # 超 SafeEnvelope 被拆的原因——merge 会把自己卡死；auto-shard 不拆 MERGE）。
         # merge 峰值 ≈ 一片输入 + 累计输出（大 shard 已 spool，逐片 reload）。
-        from runtime.shard_execution_plan import merge_resource_model
+        from factor_engine.runtime.shard_execution_plan import merge_resource_model
 
         merge_peak = merge_resource_model(
             original_peak_bytes=plan.original_peak_bytes,
@@ -2123,7 +2123,7 @@ class AdaptiveBatchScheduler:
         if not getattr(self, "_shard_replanned", None):
             self._shard_replanned: set[str] = set()
         try:
-            from runtime.auto_shard_planner import AutoShardPlanner
+            from factor_engine.runtime.auto_shard_planner import AutoShardPlanner
 
             env = self.broker.resource_envelope()
             safe = max(1, int(env.safe_memory_bytes))
@@ -2182,9 +2182,9 @@ class AdaptiveBatchScheduler:
         DAG → 重新调度 shard。返回是否已 replan（False → 上层如实 raise）。
         """
         try:
-            from runtime.resource_calibration_store import global_calibration_store
-            from runtime.resource_shape import ResourceShapeKey
-            from runtime.shard_execution_plan import shape_signature
+            from factor_engine.runtime.resource_calibration_store import global_calibration_store
+            from factor_engine.runtime.resource_shape import ResourceShapeKey
+            from factor_engine.runtime.shard_execution_plan import shape_signature
 
             # 1) 定位 original root task 与失败 shape。
             orig_tid = key
@@ -2231,7 +2231,7 @@ class AdaptiveBatchScheduler:
                 pass
             # 5) replan smaller（更多 shard → 更小 per-shard）。SafeEnvelope 用
             #    失败计划自己的 envelope（OOM 时点的资源约束，不随 live 波动）。
-            from runtime.auto_shard_planner import AutoShardPlanner
+            from factor_engine.runtime.auto_shard_planner import AutoShardPlanner
 
             min_shards = 4 if plan is None else len(plan.shards) + 2
             planner = AutoShardPlanner(min_shards=min_shards)
@@ -2308,9 +2308,9 @@ class AdaptiveBatchScheduler:
           预测当真实」的污染闭环）；predicted 值仅作诊断。
         """
         try:
-            from runtime.resource_calibration_store import global_calibration_store
-            from runtime.resource_shape import ResourceShapeKey
-            from runtime.task_run_observation import estimate_output_bytes
+            from factor_engine.runtime.resource_calibration_store import global_calibration_store
+            from factor_engine.runtime.resource_shape import ResourceShapeKey
+            from factor_engine.runtime.task_run_observation import estimate_output_bytes
 
             contract = getattr(task, "resource_contract", None)
             predicted_peak = int(contract.peak_memory_bytes) if contract is not None else 0

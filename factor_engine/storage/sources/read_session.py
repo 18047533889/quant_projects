@@ -2,7 +2,7 @@
 from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
-from cache.column_cache import column_cache_scope
+from factor_engine.cache.column_cache import column_cache_scope
 
 class DataSourceReadSession:
     def __init__(self, data_source: Any) -> None:
@@ -44,7 +44,7 @@ class DataSourceReadSession:
         scope=column_cache_scope(self._source,names,data_snapshot_id=snap); self._last_scope_key=scope.key
         report=None
         if input_dq_check:
-            from runtime.input_dq import adjust_input_dq_thresholds_from_stats, load_dataset_stats_for_source
+            from factor_engine.runtime.input_dq import adjust_input_dq_thresholds_from_stats, load_dataset_stats_for_source
             stats=load_dataset_stats_for_source(self._source)
             thresholds=adjust_input_dq_thresholds_from_stats(input_dq_thresholds,stats,names)
             report=self.assert_input_dq(names,raise_on_fail=input_dq_strict,thresholds=thresholds)
@@ -67,7 +67,7 @@ class DataSourceReadSession:
             scope=column_cache_scope(self._source,names,data_snapshot_id=snap); self._last_scope_key=scope.key
             report=None
             if input_dq_check:
-                from runtime.input_dq import adjust_input_dq_thresholds_from_stats, load_dataset_stats_for_source
+                from factor_engine.runtime.input_dq import adjust_input_dq_thresholds_from_stats, load_dataset_stats_for_source
                 stats=load_dataset_stats_for_source(self._source)
                 thresholds=adjust_input_dq_thresholds_from_stats(input_dq_thresholds,stats,names)
                 report=self.assert_input_dq(names,raise_on_fail=input_dq_strict,thresholds=thresholds)
@@ -75,7 +75,7 @@ class DataSourceReadSession:
             reports.append(report)
         return reports
     def assert_input_dq(self, columns: Iterable[str], *, raise_on_fail: bool=True, thresholds=None):
-        from runtime.input_dq import assert_input_dq
+        from factor_engine.runtime.input_dq import assert_input_dq
         return assert_input_dq(self._source,columns,raise_on_fail=raise_on_fail,thresholds=thresholds)
     def cached_columns(self) -> frozenset[str]:
         cache=getattr(self._source,"_column_cache",None)

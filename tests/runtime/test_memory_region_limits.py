@@ -8,7 +8,7 @@ Covers:
 """
 from __future__ import annotations
 
-from runtime.multibackend.concurrent_region_isolation import (
+from factor_engine.runtime.multibackend.concurrent_region_isolation import (
     ConcurrentRegionIsolationManager,
 )
 

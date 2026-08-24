@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.fundamental.research_quality import pd_accounting_comparability_score
+from factor_engine.cleaned_operators.fundamental.research_quality import pd_accounting_comparability_score
 
 
 @pytest.fixture
@@ -292,7 +292,7 @@ def test_type_validation():
 
 def test_operator_registration():
     """Test that the operator is properly registered."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     assert "accounting_comparability_score" in OperatorRegistry._operators
 
@@ -308,6 +308,6 @@ def test_operator_registration():
 
 def test_surface_registration():
     """Test that the operator is on the extended surface."""
-    from cleaned_operators.operator_surface import EXTENDED_ONLY_CANONICALS
+    from factor_engine.cleaned_operators.operator_surface import EXTENDED_ONLY_CANONICALS
 
     assert "accounting_comparability_score" in EXTENDED_ONLY_CANONICALS

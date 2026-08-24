@@ -7,18 +7,18 @@ import pytest
 
 pytest.importorskip("polars")
 
-from api.columns import col
-from api.factor import Factor
-from api import ts_mean
-from backend.factory import build_backend
-from runtime.engine import FactorEngine
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.api import ts_mean
+from factor_engine.backend.factory import build_backend
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 
 @pytest.fixture(scope="module")
 def _loaded():
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
@@ -43,7 +43,7 @@ def test_run_many_calls_fastpath_runtime_audit(_loaded, source, monkeypatch):
 
     monkeypatch.setenv("FACTOR_ENGINE_PRODUCTION_REQUIRE_FASTPATH", "1")
     monkeypatch.setattr(
-        "runtime.batch_service.assert_production_fastpath_runtime",
+        "factor_engine.runtime.batch_service.assert_production_fastpath_runtime",
         _audit,
     )
     engine = FactorEngine(backend=build_backend("polars_long"), data_source=source)

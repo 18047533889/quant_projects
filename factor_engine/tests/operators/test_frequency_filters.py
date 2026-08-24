@@ -10,10 +10,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.technical.frequency_filters  # noqa: F401
+import factor_engine.cleaned_operators.technical.frequency_filters  # noqa: F401
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
@@ -54,7 +54,7 @@ def _assert_shape_match(result: pd.DataFrame, expected: pd.DataFrame) -> None:
 @pytest.mark.parametrize("name", FREQUENCY_FILTER_CANONICALS)
 def test_registered_and_classified(name: str) -> None:
     """All operators must be registered and classified as extended."""
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     assert OperatorRegistry.get(name) is not None, f"{name} not registered"
     surface = classify_canonical(name)
@@ -334,7 +334,7 @@ def test_savgol_polyorder_clamp() -> None:
 @pytest.mark.parametrize("name", FREQUENCY_FILTER_CANONICALS)
 def test_explicit_policy_present(name: str) -> None:
     """All operators have explicit pit_safe=True policy."""
-    from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
+    from factor_engine.cleaned_operators.operator_policy import _EXPLICIT_POLICIES
 
     assert name in _EXPLICIT_POLICIES, f"{name} missing explicit policy"
     policy = _EXPLICIT_POLICIES[name]

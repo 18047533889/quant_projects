@@ -12,19 +12,19 @@ ROOT = Path(__file__).resolve().parents[2]  # factor_engine
 
 @pytest.fixture(scope="module", autouse=True)
 def _load():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
 
 
 def _build_manifest():
-    from market.capability_resolver import build_market_operator_manifest
+    from factor_engine.market.capability_resolver import build_market_operator_manifest
 
     return build_market_operator_manifest()
 
 
 def test_every_registered_canonical_has_a_market_row() -> None:
-    from cleaned_operators import OperatorRegistry
+    from factor_engine.cleaned_operators import OperatorRegistry
 
     manifest = _build_manifest()
     manifest_ops = set(manifest["operators"])
@@ -52,7 +52,7 @@ def test_zero_unknown_and_not_reviewed() -> None:
 
 def test_every_row_has_ashare_and_us_status() -> None:
     manifest = _build_manifest()
-    from market import MarketStatus
+    from factor_engine.market import MarketStatus
 
     allowed = {s.value for s in MarketStatus}
     for name, row in manifest["operators"].items():
@@ -87,7 +87,7 @@ def test_generated_manifest_file_is_committed_and_in_sync() -> None:
     doc = json.loads(path.read_text(encoding="utf-8"))
     assert doc["counts"]["unknown"] == 0
     assert doc["counts"]["not_reviewed"] == 0
-    from cleaned_operators import OperatorRegistry
+    from factor_engine.cleaned_operators import OperatorRegistry
 
     assert set(doc["operators"]) == set(OperatorRegistry.list_canonical())
 

@@ -22,7 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from planner.physical_factor_dag import SourceScopeId
+from factor_engine.planner.physical_factor_dag import SourceScopeId
 
 
 @dataclass(frozen=True)
@@ -131,7 +131,7 @@ def discover_column_source_bindings(plans: Iterable[Any]) -> SourceBindingResult
       ``dict[str, str]`` 多语义映射。
     """
     try:
-        from api.source_ref import decode_source_ref, looks_like_source_ref
+        from factor_engine.api.source_ref import decode_source_ref, looks_like_source_ref
     except Exception:  # pragma: no cover - import 环境缺 api 时降级为无 binding
         return SourceBindingResult(bindings={})
 

@@ -7,10 +7,10 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-from backend.polars_lazy import LazyColumnBundle, build_lazy_column_bundle
-from planner.scheduling_hints import derive_scheduling_hints
-from runtime.incremental_event_service import normalize_data_event, plan_incremental_from_event
-from runtime.incremental_scheduler import DataEvent
+from factor_engine.backend.polars_lazy import LazyColumnBundle, build_lazy_column_bundle
+from factor_engine.planner.scheduling_hints import derive_scheduling_hints
+from factor_engine.runtime.incremental_event_service import normalize_data_event, plan_incremental_from_event
+from factor_engine.runtime.incremental_scheduler import DataEvent
 
 
 def test_derive_scheduling_hints_high_memory():

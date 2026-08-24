@@ -8,9 +8,9 @@ from typing import Any, Literal
 
 import pandas as pd
 
-from storage.catalog import FactorCatalog, _parse_json_field
-from storage.exceptions import FactorNotFoundError
-from storage.result_store import PandasResultStore
+from factor_engine.storage.catalog import FactorCatalog, _parse_json_field
+from factor_engine.storage.exceptions import FactorNotFoundError
+from factor_engine.storage.result_store import PandasResultStore
 
 LoadSource = Literal["local", "staging"]
 
@@ -48,7 +48,7 @@ def _load_series_for_repair(
             if source == "local":
                 store = PandasResultStore(lake_root, catalog=cat)
                 return store.load_factor_series(factor_id), "local"
-            from storage.staging_loader import load_factor_series_from_staging
+            from factor_engine.storage.staging_loader import load_factor_series_from_staging
 
             return load_factor_series_from_staging(factor_id), "staging"
         except Exception as exc:
@@ -196,7 +196,7 @@ def repair_dual_write_clickhouse(
 
     staging_compensation: dict[str, Any] | None = None
     if compensate_staging:
-        from storage.staging_loader import delete_staging_rows
+        from factor_engine.storage.staging_loader import delete_staging_rows
 
         watermark = cat.get_watermark(factor_id)
         after = compensate_after
@@ -228,7 +228,7 @@ def repair_dual_write_clickhouse(
     if series is None or len(series) == 0:
         return {"ok": False, "factor_id": factor_id, "reason": "empty_series"}
 
-    from storage.clickhouse_materializer import ClickHouseMaterializer
+    from factor_engine.storage.clickhouse_materializer import ClickHouseMaterializer
 
     ast_hash = str(info.get("ast_hash") or "")
     ch_mat = ClickHouseMaterializer(
@@ -258,7 +258,7 @@ def repair_dual_write_clickhouse(
         )
         watermark = cat.get_watermark(factor_id)
 
-    from runtime.lineage import new_run_id
+    from factor_engine.runtime.lineage import new_run_id
 
     cat.record_run(
         {

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from enum import Enum
 
-from planner.logical_plan import PlanNode
-from planner.plan_hash import plan_cache_key
-from planner.physical_plan import ExecKind, PhysicalNode, PhysicalPlan
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.plan_hash import plan_cache_key
+from factor_engine.planner.physical_plan import ExecKind, PhysicalNode, PhysicalPlan
 
 _SQL_LEAF_OPS = frozenset({"column", "literal"})
 
@@ -35,10 +35,10 @@ def classify_source_ref(plan: PlanNode) -> SourceRefStatus:
     if plan.op == "column":
         name = (plan.attrs or {}).get("name")
         if isinstance(name, str):
-            from api.source_ref import looks_like_source_ref
+            from factor_engine.api.source_ref import looks_like_source_ref
 
             if looks_like_source_ref(name):
-                from api.source_ref import decode_source_ref_strict
+                from factor_engine.api.source_ref import decode_source_ref_strict
 
                 try:
                     decode_source_ref_strict(name)
@@ -80,7 +80,7 @@ def _is_sql_capable(plan: PlanNode, *, mode: str = "production") -> bool:
     #（fail-closed）；research 下按 opaque 处理。
     if _contains_source_ref(plan, production=(mode == "production")):
         return False
-    from backend.sql_pushdown.sql_registry import is_sql_capable, is_sql_parity_verified, is_sql_production_safe
+    from factor_engine.backend.sql_pushdown.sql_registry import is_sql_capable, is_sql_parity_verified, is_sql_production_safe
     if mode == "production": return is_sql_production_safe(plan)
     if mode == "validation": return is_sql_parity_verified(plan)
     return is_sql_capable(plan)

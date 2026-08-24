@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from planner.backend_region import (
+from factor_engine.planner.backend_region import (
     BackendRegion,
     PhysicalBackend,
     Representation,
@@ -22,7 +22,7 @@ from planner.backend_region import (
     PhysicalRegionPlan,
     TransferEdge,
 )
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 
 class TestSingleRegionPlanning:

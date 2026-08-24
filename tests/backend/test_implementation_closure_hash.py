@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.contracts import ExecutionKind, PhysicalImplementationSpec
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
 _VALID_HASH = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 _INVALID_HASH = "ts_mean:v2"

@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import pytest
 
-from ir.analyzer import Analyzer, UnknownRawColumnError
-from planner.lowerer import Lowerer
-from planner.optimizer import Optimizer
+from factor_engine.ir.analyzer import Analyzer, UnknownRawColumnError
+from factor_engine.planner.lowerer import Lowerer
+from factor_engine.planner.optimizer import Optimizer
 
 
 def _semantic_snapshot(node: object) -> dict:
@@ -30,8 +30,8 @@ def test_semantic_roundtrip_ir_to_plan_preserves_semantic_attrs():
     """Expr → IR → Plan → optimized Plan must all carry the same semantic
     identity (unit / frequency / domain / available_at / source_vintage /
     semantic_kind)."""
-    from api.columns import col
-    from expr.cleaned_call import CleanedCall
+    from factor_engine.api.columns import col
+    from factor_engine.expr.cleaned_call import CleanedCall
 
     expr = CleanedCall(op="ts_ema", args=(col("close"),), kwargs=(("window", 20),))
     analysis = Analyzer().lower(expr)
@@ -58,7 +58,7 @@ def test_semantic_roundtrip_ir_to_plan_preserves_semantic_attrs():
 
 def test_semantic_roundtrip_leaf_columns_keep_availability_and_unit():
     """A leaf raw column's available_at / price_basis must survive lowering."""
-    from api.columns import col
+    from factor_engine.api.columns import col
 
     analysis = Analyzer().lower(col("close"))
     ir_leaf = analysis.ir
@@ -78,9 +78,9 @@ def test_engine_production_compile_rejects_unknown_raw_column():
     column at ``FactorEngine.compile()`` — NOT just ``Analyzer(production=True)``.
     This guards the fix where ``self.analyzer = Analyzer()`` silently disabled
     the production typed-field gate."""
-    from api.columns import col
-    from api.factor import Factor
-    from runtime.engine import FactorEngine
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.runtime.engine import FactorEngine
 
     engine = FactorEngine(_FakeBackend(), _FakeSource(), run_mode="production")
     factor = Factor(name="f", expr=col("custom_alpha_input"))
@@ -91,9 +91,9 @@ def test_engine_production_compile_rejects_unknown_raw_column():
 def test_engine_research_compile_allows_raw_column():
     """A run_mode='research' engine still compiles an unknown raw column
     (research policy), proving the gate is mode-driven, not a blanket ban."""
-    from api.columns import col
-    from api.factor import Factor
-    from runtime.engine import FactorEngine
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.runtime.engine import FactorEngine
 
     engine = FactorEngine(_FakeBackend(), _FakeSource(), run_mode="research")
     factor = Factor(name="f", expr=col("custom_alpha_input"))

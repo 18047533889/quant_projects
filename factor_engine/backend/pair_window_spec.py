@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from backend.plan_params import window_spec_from_plan_node
-from backend.window_spec import WindowSpec
-from planner.logical_plan import PlanNode
+from factor_engine.backend.plan_params import window_spec_from_plan_node
+from factor_engine.backend.window_spec import WindowSpec
+from factor_engine.planner.logical_plan import PlanNode
 
 
 @dataclass(frozen=True)

@@ -101,8 +101,8 @@ def main() -> None:
         dirty = "unknown"
     dirty_bytes = len(dirty.encode())
 
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     registry = OperatorRegistry
@@ -133,7 +133,7 @@ def main() -> None:
         injectivity = False
         searchable = list(entry.get("scalar_params", []) or [])
         if searchable:
-            from mining.direct_use import _probe_parameter_injectivity
+            from factor_engine.mining.direct_use import _probe_parameter_injectivity
 
             op = registry._operators.get(name, {}).get("pandas_numpy")
             injectivity = _probe_parameter_injectivity(name, op, tuple(searchable))
@@ -219,7 +219,7 @@ def main() -> None:
     # Recipe audit (R25-029..036): which canonicals resolve a real recipe.
     recipe_rows = []
     try:
-        from mining.direct_use import default_input_recipe
+        from factor_engine.mining.direct_use import default_input_recipe
         for name in canonicals:
             recipe = default_input_recipe(name)
             recipe_rows.append({"canonical": name, "recipe_slots": len(recipe),
@@ -232,7 +232,7 @@ def main() -> None:
 
     # Output domain matrix (R25-175).
     try:
-        from mining.direct_use import _output_value_domain, resolve_direct_use
+        from factor_engine.mining.direct_use import _output_value_domain, resolve_direct_use
         domains = {}
         for name in canonicals:
             try:
@@ -248,7 +248,7 @@ def main() -> None:
     # Input slot semantic matrix.
     slot_rows = {}
     try:
-        from mining.direct_use import input_slot_specs, _authoritative_param_split
+        from factor_engine.mining.direct_use import input_slot_specs, _authoritative_param_split
         for name in canonicals:
             cat = registry._catalog[name]
             try:
@@ -277,8 +277,8 @@ def main() -> None:
 
     # Market source recipe matrix (from R23 flow/field catalogs).
     try:
-        from fields.catalog import ASHARE_TABLE_SPECS
-        from fields.catalog_us import US_TABLE_SPECS
+        from factor_engine.fields.catalog import ASHARE_TABLE_SPECS
+        from factor_engine.fields.catalog_us import US_TABLE_SPECS
         market_sources = {}
         for m, specs in (("ashare", ASHARE_TABLE_SPECS), ("us", US_TABLE_SPECS)):
             market_sources[m] = [{"table": t.name, "dataset": t.dataset,

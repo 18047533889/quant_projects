@@ -2,8 +2,8 @@
 """Fastpath rewrite rules。"""
 from __future__ import annotations
 
-from planner.logical_plan import PlanNode
-from planner.rewrite_fastpath import rewrite_plan_for_fastpath
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.rewrite_fastpath import rewrite_plan_for_fastpath
 
 
 def test_divide_preserves_semantics_by_default():

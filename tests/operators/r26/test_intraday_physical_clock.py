@@ -14,8 +14,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from runtime.session_calendar import SessionCalendar
-from runtime.session_panel import build_session_panel
+from factor_engine.runtime.session_calendar import SessionCalendar
+from factor_engine.runtime.session_panel import build_session_panel
 
 
 @pytest.fixture(scope="module")

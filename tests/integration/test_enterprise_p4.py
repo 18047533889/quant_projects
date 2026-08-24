@@ -8,8 +8,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from runtime.config_runtime import config_run_batch_key
-from runtime.engine import FactorEngine
+from factor_engine.runtime.config_runtime import config_run_batch_key
+from factor_engine.runtime.engine import FactorEngine
 
 
 def _write_factor_yaml(
@@ -105,7 +105,7 @@ def test_run_many_from_config_subgroups_by_run_flags(tmp_path, monkeypatch):
 
 
 def test_clickhouse_write_target_write_factor_series(monkeypatch):
-    from storage.write_targets import ClickHouseWriteTarget
+    from factor_engine.storage.write_targets import ClickHouseWriteTarget
 
     captured: dict = {}
 
@@ -125,7 +125,7 @@ def test_clickhouse_write_target_write_factor_series(monkeypatch):
             return FakeSummary()
 
     monkeypatch.setattr(
-        "storage.clickhouse_materializer.ClickHouseMaterializer",
+        "factor_engine.storage.clickhouse_materializer.ClickHouseMaterializer",
         FakeCHMat,
     )
     target = ClickHouseWriteTarget(table="fv", host="localhost")
@@ -145,7 +145,7 @@ def test_clickhouse_write_target_write_factor_series(monkeypatch):
 
 
 def test_storage_exports_write_targets():
-    from storage import (
+    from factor_engine.storage import (
         ClickHouseWriteTarget,
         LocalParquetWriteTarget,
         StagingWriteTarget,

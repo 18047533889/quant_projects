@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from storage.factory import DataSourceBuildContext, build_data_source
+from factor_engine.storage.factory import DataSourceBuildContext, build_data_source
 
 
 def _ctx(**kw) -> DataSourceBuildContext:

@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.microstructure import intraday_agg as ia
+from factor_engine.cleaned_operators.microstructure import intraday_agg as ia
 
 
 def _full_session_minutes() -> list[int]:

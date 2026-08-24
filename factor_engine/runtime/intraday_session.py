@@ -13,7 +13,7 @@ from collections.abc import Callable
 import numpy as np
 import pandas as pd
 
-from runtime.session_calendar import SessionCalendar
+from factor_engine.runtime.session_calendar import SessionCalendar
 
 
 def _calendar(calendar: SessionCalendar | None) -> SessionCalendar:

@@ -13,21 +13,21 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.q_backend.q_adapter import QResidentTableHandle
-from backend.q_backend.q_compiler import QRegionPlan
-from backend.q_backend.q_executor import (
+from factor_engine.backend.q_backend.q_adapter import QResidentTableHandle
+from factor_engine.backend.q_backend.q_compiler import QRegionPlan
+from factor_engine.backend.q_backend.q_executor import (
     QExecutionFallbackPolicy,
     QExecutor,
     get_q_executor_telemetry,
     reset_q_executor_telemetry,
 )
-from backend.q_backend.q_process_manager import QAvailabilityStatus
+from factor_engine.backend.q_backend.q_process_manager import QAvailabilityStatus
 
 
 @pytest.fixture(autouse=True)
 def reset_q_executor_singleton():
     """Keep the global executor bound to each test's patched dependencies."""
-    import backend.q_backend.q_executor as q_executor_module
+    import factor_engine.backend.q_backend.q_executor as q_executor_module
 
     q_executor_module._EXECUTOR = None
     yield
@@ -37,8 +37,8 @@ def reset_q_executor_singleton():
 @pytest.fixture
 def mock_q_process():
     """Mock Q process manager and connection."""
-    with patch("backend.q_backend.q_executor.get_q_process_manager") as mock_mgr:
-        from backend.q_backend.q_process_manager import QAvailabilityStatus
+    with patch("factor_engine.backend.q_backend.q_executor.get_q_process_manager") as mock_mgr:
+        from factor_engine.backend.q_backend.q_process_manager import QAvailabilityStatus
 
         mock_conn = MagicMock()
         mock_q_result = MagicMock(name="q_result")
@@ -63,7 +63,7 @@ def mock_q_process():
 @pytest.fixture
 def mock_type_adapter():
     """Mock Q type adapter."""
-    with patch("backend.q_backend.q_executor.get_q_type_adapter") as mock_adapter:
+    with patch("factor_engine.backend.q_backend.q_executor.get_q_type_adapter") as mock_adapter:
         adapter = MagicMock()
 
         # pandas_to_q returns mock Q table
@@ -148,7 +148,7 @@ def test_resident_handle_release_is_idempotent_and_context_manager(
     delete_calls = [call for call in mock_q_process.call_args_list if "delete" in str(call)]
     assert len(delete_calls) >= 3
     assert handle.workspace_id not in __import__(
-        "backend.q_backend.q_executor", fromlist=["_ACTIVE_LEASES"]
+        "factor_engine.backend.q_backend.q_executor", fromlist=["_ACTIVE_LEASES"]
     )._ACTIVE_LEASES
 
     with pytest.raises(RuntimeError, match="already been released"):
@@ -188,7 +188,7 @@ def test_resident_handle_release_retries_connection_acquisition_failure(
 def test_resident_handle_release_retries_delete_failure(
     mock_q_process, mock_type_adapter, sample_input_data, sample_region_plan
 ):
-    import backend.q_backend.q_executor as q_executor_module
+    import factor_engine.backend.q_backend.q_executor as q_executor_module
 
     executor = QExecutor(type_adapter=mock_type_adapter)
     result = executor.execute_region(
@@ -242,7 +242,7 @@ def test_intermediate_residency_skips_q_to_pandas_materialization(
 ):
     """Resident intermediates stay in q until the final boundary."""
     reset_q_executor_telemetry()
-    from backend.q_backend.q_executor import get_q_executor
+    from factor_engine.backend.q_backend.q_executor import get_q_executor
     executor = get_q_executor()
     plan = QRegionPlan(
         region_id="region_intermediate",
@@ -327,7 +327,7 @@ def test_resident_handle_reuse_eliminates_upload(mock_q_process, mock_type_adapt
 def test_batch_regions_automatic_residency(mock_q_process, mock_type_adapter, sample_input_data):
     """Test that execute_batch_regions automatically passes resident handles between consecutive regions."""
     reset_q_executor_telemetry()
-    from backend.q_backend.q_executor import get_q_executor
+    from factor_engine.backend.q_backend.q_executor import get_q_executor
     executor = get_q_executor()
 
     # Create three consecutive regions: A → B → C
@@ -382,7 +382,7 @@ def test_batch_sibling_handles_release_independently(
     mock_q_process, mock_type_adapter, sample_input_data
 ):
     """Releasing one published handle preserves sibling residency."""
-    import backend.q_backend.q_executor as q_executor_module
+    import factor_engine.backend.q_backend.q_executor as q_executor_module
 
     executor = QExecutor(type_adapter=mock_type_adapter)
     plans = [
@@ -418,7 +418,7 @@ def test_direct_handle_on_shared_batch_workspace_releases_only_its_symbol(
     mock_q_process, mock_type_adapter, sample_input_data
 ):
     """A direct result sharing a batch workspace cannot delete batch siblings."""
-    import backend.q_backend.q_executor as q_executor_module
+    import factor_engine.backend.q_backend.q_executor as q_executor_module
 
     executor = QExecutor(type_adapter=mock_type_adapter)
     batch_plans = [
@@ -463,7 +463,7 @@ def test_direct_materialized_call_preserves_batch_symbols(
     mock_q_process, mock_type_adapter, sample_input_data
 ):
     """Direct materialization on a batch lease only removes direct symbols."""
-    import backend.q_backend.q_executor as q_executor_module
+    import factor_engine.backend.q_backend.q_executor as q_executor_module
 
     executor = QExecutor(type_adapter=mock_type_adapter)
     results = executor.execute_batch_regions(
@@ -525,7 +525,7 @@ def test_concurrent_direct_handles_do_not_claim_each_others_symbols(
     mock_q_process, mock_type_adapter, sample_input_data
 ):
     """Concurrent direct calls bind cleanup to their serialized workspace delta."""
-    import backend.q_backend.q_executor as q_executor_module
+    import factor_engine.backend.q_backend.q_executor as q_executor_module
 
     executor = QExecutor(type_adapter=mock_type_adapter)
     batch = executor.execute_batch_regions(
@@ -614,7 +614,7 @@ def test_shared_direct_handle_partial_release_retries_remaining_symbols(
     mock_q_process, mock_type_adapter, sample_input_data
 ):
     """Partial shared-handle cleanup removes successes and retries failures only."""
-    import backend.q_backend.q_executor as q_executor_module
+    import factor_engine.backend.q_backend.q_executor as q_executor_module
 
     executor = QExecutor(type_adapter=mock_type_adapter)
     results = executor.execute_batch_regions(
@@ -694,7 +694,7 @@ def test_batch_published_handle_lives_until_explicit_release(
     mock_q_process, mock_type_adapter, sample_input_data
 ):
     """A successful batch transfers its non-final symbol lease to the handle."""
-    import backend.q_backend.q_executor as q_executor_module
+    import factor_engine.backend.q_backend.q_executor as q_executor_module
 
     executor = QExecutor(type_adapter=mock_type_adapter)
     plans = [
@@ -741,7 +741,7 @@ def test_failed_resident_batch_cleans_published_intermediate(
     mock_q_process, mock_type_adapter, sample_input_data
 ):
     """A batch that fails before return keeps ownership and cleans its workspace."""
-    import backend.q_backend.q_executor as q_executor_module
+    import factor_engine.backend.q_backend.q_executor as q_executor_module
 
     executor = QExecutor(type_adapter=mock_type_adapter)
     leases_before = set(q_executor_module._ACTIVE_LEASES)
@@ -774,7 +774,7 @@ def test_failed_resident_batch_cleans_published_intermediate(
 def test_batch_regions_without_residency(mock_q_process, mock_type_adapter, sample_input_data):
     """Test that disabling residency forces re-uploads (baseline comparison)."""
     reset_q_executor_telemetry()
-    from backend.q_backend.q_executor import get_q_executor
+    from factor_engine.backend.q_backend.q_executor import get_q_executor
     executor = get_q_executor()
 
     plan_a = QRegionPlan(
@@ -816,7 +816,7 @@ def test_failed_batch_connection_cleanup_is_retained_and_retried(
     mock_q_process, mock_type_adapter, sample_input_data
 ):
     """A failed final connection lookup keeps cleanup ownership for retry."""
-    import backend.q_backend.q_executor as q_executor_module
+    import factor_engine.backend.q_backend.q_executor as q_executor_module
 
     executor = QExecutor(type_adapter=mock_type_adapter)
     plans = [
@@ -862,7 +862,7 @@ def test_pending_cleanup_rejects_replacement_connection(
     mock_q_process, mock_type_adapter
 ):
     """Pending ownership never deletes old-connection symbols through a new q."""
-    import backend.q_backend.q_executor as q_executor_module
+    import factor_engine.backend.q_backend.q_executor as q_executor_module
 
     executor = QExecutor(type_adapter=mock_type_adapter)
     workspace_id, generation_id = "old_workspace", "old_generation"
@@ -886,7 +886,7 @@ def test_pending_cleanup_rejects_replacement_connection(
 def test_resident_handle_with_different_table_names(mock_q_process, mock_type_adapter):
     """Test aliasing when resident handle table name differs from expected input name."""
     reset_q_executor_telemetry()
-    from backend.q_backend.q_executor import get_q_executor
+    from factor_engine.backend.q_backend.q_executor import get_q_executor
     executor = get_q_executor()
 
     # Create a resident handle with table name "old_name"
@@ -927,7 +927,7 @@ def test_resident_handle_with_different_table_names(mock_q_process, mock_type_ad
 def test_telemetry_counters_accuracy(mock_q_process, mock_type_adapter, sample_input_data):
     """Test that telemetry counters accurately track data movement."""
     reset_q_executor_telemetry()
-    from backend.q_backend.q_executor import get_q_executor
+    from factor_engine.backend.q_backend.q_executor import get_q_executor
     executor = get_q_executor()
 
     # Calculate expected upload size
@@ -982,7 +982,7 @@ def test_stale_resident_handle_fails_before_q_execution(
         connection_id=id(mock_q_process) + 1,
     )
 
-    from backend.q_backend.q_errors import QExecutionError
+    from factor_engine.backend.q_backend.q_errors import QExecutionError
 
     with pytest.raises(QExecutionError, match="Stale Q-resident handle"):
         executor.execute_region(
@@ -998,8 +998,8 @@ def test_stale_resident_handle_fails_for_generation_mismatch(
     mock_q_process, mock_type_adapter, sample_region_plan
 ):
     """A handle from another workspace generation fails closed before q execution."""
-    import backend.q_backend.q_executor as q_executor_module
-    from backend.q_backend.q_errors import QExecutionError
+    import factor_engine.backend.q_backend.q_executor as q_executor_module
+    from factor_engine.backend.q_backend.q_errors import QExecutionError
 
     workspace_id = "shared-workspace"
     connection_id = id(mock_q_process)
@@ -1059,7 +1059,7 @@ def test_missing_input_raises_typed_error_before_connection(
     mock_q_process, mock_type_adapter, sample_region_plan
 ):
     """Missing plan inputs fail closed without touching q."""
-    from backend.q_backend.q_errors import QDataUnavailableError
+    from factor_engine.backend.q_backend.q_errors import QDataUnavailableError
 
     executor = QExecutor(type_adapter=mock_type_adapter)
     with pytest.raises(QDataUnavailableError, match="Missing input tables"):
@@ -1070,7 +1070,7 @@ def test_missing_input_raises_typed_error_before_connection(
 
 def test_unavailable_runtime_raises_typed_error(mock_type_adapter, sample_region_plan):
     """Unavailable q is a typed production failure, never a fallback."""
-    from backend.q_backend.q_errors import QProcessUnavailableError
+    from factor_engine.backend.q_backend.q_errors import QProcessUnavailableError
 
     manager = MagicMock()
     manager.check_availability.return_value = MagicMock(
@@ -1088,7 +1088,7 @@ def test_runtime_failure_raises_typed_error(
     mock_q_process, mock_type_adapter, sample_input_data, sample_region_plan
 ):
     """q execution failures remain fail-closed and typed."""
-    from backend.q_backend.q_errors import QExecutionError
+    from factor_engine.backend.q_backend.q_errors import QExecutionError
 
     mock_q_process.side_effect = RuntimeError("q boom")
     executor = QExecutor(type_adapter=mock_type_adapter)

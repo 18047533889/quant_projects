@@ -7,11 +7,11 @@ import os
 import pandas as pd
 import pytest
 
-from api import ts_mean
-from api.columns import col
-from api.factor import Factor
-from backend.pandas_backend import PandasBackend
-from runtime.engine import FactorEngine
+from factor_engine.api import ts_mean
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 
@@ -59,7 +59,7 @@ def test_time_shard_equivalent_full():
 
 def test_asset_shard_unsafe_for_cross_section():
     # R27-084/245：含截面算子（rank）的计划禁止 asset shard。
-    from runtime.adaptive_sharding import classify_shard_legality
+    from factor_engine.runtime.adaptive_sharding import classify_shard_legality
 
     class RankNode:
         op = "rank"

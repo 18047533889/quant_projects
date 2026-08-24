@@ -4,12 +4,12 @@ import pytest
 
 pd = pytest.importorskip("pandas")
 
-from api import rank, ts_mean
-from api.columns import col
-from api.dsl_parser import parse_expr
-from api.factor import Factor
-from backend.pandas_backend import PandasBackend
-from runtime.engine import FactorEngine
+from factor_engine.api import rank, ts_mean
+from factor_engine.api.columns import col
+from factor_engine.api.dsl_parser import parse_expr
+from factor_engine.api.factor import Factor
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 
@@ -51,7 +51,7 @@ def test_cleaned_only_op_sma():
 
 
 def test_cleaned_dsl_allowlist_includes_sma():
-    from api.operator_registry import build_dsl_allowlist
+    from factor_engine.api.operator_registry import build_dsl_allowlist
 
     allow = build_dsl_allowlist()
     assert "SMA" in allow

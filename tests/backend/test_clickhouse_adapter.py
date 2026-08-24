@@ -8,13 +8,13 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-from backend.context import ExecutionContext
-from backend.factory import build_backend, build_backend_execution_certificate
-from backend.sql_backend import SqlBackend
-from backend.sql_pushdown.executor import extract_pushdown_context
-from backend.sql_pushdown.source_resolver import resolve_pushdown_source
-from runtime.production_execution_certificate import ProductionExecutionCertificate
-from storage.factory import build_data_source
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.backend.factory import build_backend, build_backend_execution_certificate
+from factor_engine.backend.sql_backend import SqlBackend
+from factor_engine.backend.sql_pushdown.executor import extract_pushdown_context
+from factor_engine.backend.sql_pushdown.source_resolver import resolve_pushdown_source
+from factor_engine.runtime.production_execution_certificate import ProductionExecutionCertificate
+from factor_engine.storage.factory import build_data_source
 
 
 def _ch_source():
@@ -29,7 +29,7 @@ def _ch_source():
 
 
 def _col(name: str):
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     return PlanNode(op="column", attrs={"name": name})
 

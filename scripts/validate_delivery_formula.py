@@ -12,7 +12,7 @@ ROOT = FE.parent
 if str(FE) not in sys.path:
     sys.path.insert(0, str(FE))
 
-from api.mining_integration import validate_manifest_for_execution  # noqa: E402
+from factor_engine.api.mining_integration import validate_manifest_for_execution  # noqa: E402
 
 
 def main() -> int:

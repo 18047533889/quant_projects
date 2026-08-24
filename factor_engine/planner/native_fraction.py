@@ -57,7 +57,7 @@ def plan_native_subgraph_fraction(
         Backend-specific native fraction report with separate counts for
         native, delegate, and unsupported nodes.
     """
-    from backend.operator_capability import (
+    from factor_engine.backend.operator_capability import (
         supports_pandas,
         supports_polars,
         supports_sql,
@@ -90,7 +90,7 @@ def plan_native_subgraph_fraction(
     delegate_check = None
     if is_polars:
         try:
-            from backend.polars_backend_kind import canonical_polars_is_delegate
+            from factor_engine.backend.polars_backend_kind import canonical_polars_is_delegate
 
             delegate_check = canonical_polars_is_delegate
         except ImportError:
@@ -111,7 +111,7 @@ def plan_native_subgraph_fraction(
         # Get canonical name
         canonical = op
         try:
-            from cleaned_operators.registry import OperatorRegistry
+            from factor_engine.cleaned_operators.registry import OperatorRegistry
 
             canonical = OperatorRegistry._aliases.get(op, op)
         except Exception:

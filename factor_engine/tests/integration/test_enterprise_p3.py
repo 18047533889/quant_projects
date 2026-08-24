@@ -8,8 +8,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from runtime.engine import FactorEngine
-from storage.write_targets import LocalParquetWriteTarget, resolve_write_target
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.storage.write_targets import LocalParquetWriteTarget, resolve_write_target
 
 
 def _write_factor_yaml(tmp_path: Path, name: str, expr: str, root: Path) -> Path:
@@ -101,7 +101,7 @@ def test_materialize_many_from_config_invokes_each(tmp_path, monkeypatch):
 
 
 def test_clickhouse_write_target_delegates_to_materializer(monkeypatch):
-    from storage.write_targets import ClickHouseWriteTarget
+    from factor_engine.storage.write_targets import ClickHouseWriteTarget
 
     captured: dict = {}
 
@@ -120,7 +120,7 @@ def test_clickhouse_write_target_delegates_to_materializer(monkeypatch):
             return FakeSummary()
 
     monkeypatch.setattr(
-        "storage.clickhouse_materializer.ClickHouseMaterializer",
+        "factor_engine.storage.clickhouse_materializer.ClickHouseMaterializer",
         FakeCHMat,
     )
     target = ClickHouseWriteTarget(table="fv", host="h1")

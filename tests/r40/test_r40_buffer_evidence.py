@@ -11,7 +11,7 @@ import pytest
 
 
 def test_l0_pinned_entry_survives_eviction():
-    from runtime.buffer_store import BufferEntryState, GovernedBufferStore
+    from factor_engine.runtime.buffer_store import BufferEntryState, GovernedBufferStore
 
     store = GovernedBufferStore(budget_bytes=2000)
     store.put("big_expensive", list(range(100)), bytes_=800, recompute_cost_ms=500.0)
@@ -31,7 +31,7 @@ def test_l0_pinned_entry_survives_eviction():
 
 
 def test_l0_in_use_acquire_ref_survives_eviction():
-    from runtime.buffer_store import GovernedBufferStore
+    from factor_engine.runtime.buffer_store import GovernedBufferStore
 
     store = GovernedBufferStore(budget_bytes=2000)
     store.put("in_use", [1, 2, 3], bytes_=150, recompute_cost_ms=200.0)
@@ -45,7 +45,7 @@ def test_l0_in_use_acquire_ref_survives_eviction():
 
 
 def test_buffer_entry_state_machine():
-    from runtime.buffer_store import BufferEntryState, GovernedBufferStore
+    from factor_engine.runtime.buffer_store import BufferEntryState, GovernedBufferStore
 
     store = GovernedBufferStore(budget_bytes=2000)
     store.put("k", [1], bytes_=10)
@@ -65,7 +65,7 @@ def test_buffer_entry_state_machine():
 
 
 def test_spill_eviction_ranks_by_recompute_cost():
-    from runtime.buffer_store import _Entry, SpillDecisionEngine
+    from factor_engine.runtime.buffer_store import _Entry, SpillDecisionEngine
 
     engine = SpillDecisionEngine()
     entries = {
@@ -81,8 +81,8 @@ def test_spill_eviction_ranks_by_recompute_cost():
 
 
 def test_spill_decision_engine_skips_in_use():
-    from runtime.buffer_store import _Entry, SpillDecisionEngine
-    from runtime.buffer_store import BufferEntryState
+    from factor_engine.runtime.buffer_store import _Entry, SpillDecisionEngine
+    from factor_engine.runtime.buffer_store import BufferEntryState
 
     engine = SpillDecisionEngine()
     entries = [
@@ -97,7 +97,7 @@ def test_spill_decision_engine_skips_in_use():
 
 
 def test_spill_eviction_wired_into_store():
-    from runtime.buffer_store import GovernedBufferStore
+    from factor_engine.runtime.buffer_store import GovernedBufferStore
 
     store = GovernedBufferStore(budget_bytes=2000)
     store.put("cheap", [1], bytes_=100, recompute_cost_ms=1.0)
@@ -173,7 +173,7 @@ def test_evidence_cross_product_completeness():
 
 
 def test_evidence_validity_cache_version_key_invalidation():
-    import runtime.evidence_truth as et
+    import factor_engine.runtime.evidence_truth as et
 
     et.invalidate_evidence_validity_cache()
     calls = {"n": 0}
@@ -201,7 +201,7 @@ def test_evidence_validity_cache_version_key_invalidation():
 
 
 def test_evidence_validity_version_key_changes_with_components():
-    import runtime.evidence_truth as et
+    import factor_engine.runtime.evidence_truth as et
 
     k_a = et.evidence_validity_version_key(
         head_sha="h1", build_manifest_digest_val="b1", tcb_hash="t1", artifact_hash="a1"

@@ -35,13 +35,13 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 
 def _operator_contract(canonical: str):
     """Lazily resolve ``(operator, metadata, param_specs, param_types)`` for a canonical."""
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         operator = OperatorRegistry.get(canonical, "pandas_numpy")
     except Exception:
@@ -76,16 +76,16 @@ def validate_plan_params(plan: PlanNode, *, production: bool = True) -> PlanNode
     enforced here with the SAME helpers ``validate_operator_call`` uses, so a
     logically-illegal parameter combination can never survive past planning.
     """
-    from backend.parameter_aliases import normalize_parameter_aliases
-    from cleaned_operators.base import (
+    from factor_engine.backend.parameter_aliases import normalize_parameter_aliases
+    from factor_engine.cleaned_operators.base import (
         _enforce_active_when,
         _kernel_param_defaults,
         _validate_common_integer_relations,
         _validate_relational_specs,
     )
-    from cleaned_operators.common.strict_params import normalize_and_validate_scalar_param
-    from cleaned_operators.registry import OperatorRegistry
-    from backend.operator_errors import OperatorParameterError
+    from factor_engine.cleaned_operators.common.strict_params import normalize_and_validate_scalar_param
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.operator_errors import OperatorParameterError
 
     def _validate_op(node: PlanNode) -> None:
         op = str(node.op or "")
@@ -225,7 +225,7 @@ def canonicalize_parameter_values(
                     isinstance(v, (int, float)) and not isinstance(v, bool)
                     for v in seq
                 ):
-                    from backend.operator_errors import OperatorParameterError
+                    from factor_engine.backend.operator_errors import OperatorParameterError
 
                     raise OperatorParameterError(
                         f"{key}: a scale-equivalent weight vector must contain "
@@ -313,8 +313,8 @@ def canonicalize_plan_parameters(plan: PlanNode) -> PlanNode:
     layer's unit / grain / availability / price-basis / source identity must
     survive every optimizer rewrite.
     """
-    from backend.parameter_aliases import normalize_parameter_aliases
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.parameter_aliases import normalize_parameter_aliases
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     inputs = [canonicalize_plan_parameters(child) for child in plan.inputs]
     op = str(plan.op)

@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from ir.nodes import IRNode
-from runtime.change_impact import (
+from factor_engine.ir.nodes import IRNode
+from factor_engine.runtime.change_impact import (
     AssetScope,
     AffectedDomain,
     AffectedWindow,
@@ -19,7 +19,7 @@ from runtime.change_impact import (
     compute_affected_domains,
     compute_change_impact,
 )
-from runtime.incremental_scheduler import DataEvent, normalize_data_event
+from factor_engine.runtime.incremental_scheduler import DataEvent, normalize_data_event
 
 
 def _col(name="close"):

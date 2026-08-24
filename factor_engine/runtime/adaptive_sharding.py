@@ -21,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from planner.physical_factor_dag import (
+from factor_engine.planner.physical_factor_dag import (
     SHARD_ASSET_SAFE,
     SHARD_FACTOR_SAFE,
     SHARD_GROUP_SAFE,

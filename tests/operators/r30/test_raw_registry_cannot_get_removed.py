@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import pytest
 
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.tombstones import RemovedOperatorError
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.tombstones import RemovedOperatorError
 
 
 def test_production_mode_excludes_research_surface():

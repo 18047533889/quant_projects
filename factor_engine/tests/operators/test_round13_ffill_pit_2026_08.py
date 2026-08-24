@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.common.data_cleaning import FillForward, FillNA
+from factor_engine.cleaned_operators.common.data_cleaning import FillForward, FillNA
 
 
 # ---------------------------------------------------------------------------
@@ -60,8 +60,8 @@ def test_p12_fillna_ffill_respects_forward_fill_gate():
 def test_p12_audit_flags_fillna_ffill_as_forward_fill():
     """PIT audit with ``forbid_forward_fill=True`` must reject
     ``fillna(..., method="ffill")`` exactly like ``ffill``."""
-    from ir.nodes import IRNode
-    from runtime.quality.pit_audit import audit_ir
+    from factor_engine.ir.nodes import IRNode
+    from factor_engine.runtime.quality.pit_audit import audit_ir
 
     # ``fillna(x, "ffill")`` lowers to a fillna node whose method literal is an
     # input child at index 1.
@@ -79,8 +79,8 @@ def test_p12_audit_flags_fillna_ffill_as_forward_fill():
 
 def test_p12_audit_does_not_flag_fillna_constant():
     """``fillna(x, "mean")`` is not a forward fill and must pass the gate."""
-    from ir.nodes import IRNode
-    from runtime.quality.pit_audit import audit_ir
+    from factor_engine.ir.nodes import IRNode
+    from factor_engine.runtime.quality.pit_audit import audit_ir
 
     node = IRNode(
         op="fillna",
@@ -97,7 +97,7 @@ def test_p12_audit_does_not_flag_fillna_constant():
 # P1-13  PIT authority single-sourced from the DataAccess contract registry
 # ---------------------------------------------------------------------------
 def _source_ref_name(table: str, field: str, *, transform: str | None = None) -> str:
-    from api.source_ref import encode_source_ref, make_source_ref
+    from factor_engine.api.source_ref import encode_source_ref, make_source_ref
 
     spec = make_source_ref(table, field, transform=transform)
     return encode_source_ref(spec)
@@ -106,8 +106,8 @@ def _source_ref_name(table: str, field: str, *, transform: str | None = None) ->
 def test_p13_unknown_table_fails_closed():
     """A table absent from the contract registry is fail-closed in production:
     ``fail_on_missing=True`` yields a violation, never a silent hardcoded pass."""
-    from ir.nodes import IRNode
-    from runtime.quality.pit_audit import audit_ir
+    from factor_engine.ir.nodes import IRNode
+    from factor_engine.runtime.quality.pit_audit import audit_ir
 
     name = _source_ref_name("MysteryTableNotInRegistry", "Close")
     report = audit_ir(IRNode(op="column", attrs={"name": name}), fail_on_missing=True)
@@ -120,7 +120,7 @@ def test_p13_contract_layer_not_hardcoded_branch():
     that IS in the registry is validated by the contract's join policy, so an
     invalid transform produces the contract message (``unsupported_transform``),
     not the hardcoded one (``unexpected_transform``)."""
-    from runtime.quality.pit_audit import _audit_source_ref
+    from factor_engine.runtime.quality.pit_audit import _audit_source_ref
 
     name = _source_ref_name("DailyBar", "Close", transform="asof_backward")
     violations: list[str] = []
@@ -141,7 +141,7 @@ def test_p13_contract_layer_not_hardcoded_branch():
 def test_p13_valid_contract_table_passes():
     """A well-formed contract SourceRef (anchor daily, no transform) passes
     without a violation."""
-    from runtime.quality.pit_audit import _audit_source_ref
+    from factor_engine.runtime.quality.pit_audit import _audit_source_ref
 
     name = _source_ref_name("DailyBar", "Close")
     violations: list[str] = []
@@ -160,15 +160,15 @@ def test_p13_valid_contract_table_passes():
 def test_p13_required_parameter_conflict_from_contract():
     """The contract's ``required_parameter`` (IndexSymbol) is enforced by the
     audit: a conflicting canonical/legacy spelling is rejected."""
-    from api.source_ref import make_source_ref
-    from runtime.quality.pit_audit import _audit_source_ref
+    from factor_engine.api.source_ref import make_source_ref
+    from factor_engine.runtime.quality.pit_audit import _audit_source_ref
 
     spec = make_source_ref(
         "BenchmarkIndexDailyBar",
         "Close",
         params={"IndexSymbol": "000985.SH", "index": "000300.SH"},
     )
-    from api.source_ref import encode_source_ref
+    from factor_engine.api.source_ref import encode_source_ref
 
     violations: list[str] = []
     checked: list[str] = []

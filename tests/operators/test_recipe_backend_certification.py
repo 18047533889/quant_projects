@@ -6,11 +6,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.context import ExecutionContext
-from backend.factory import build_backend
-from backend.sql_pushdown.emitter import compile_plan_to_sql
-from cleaned_operators import load_all
-from factor_recipes.planner_bridge import compile_recipe_plans
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.backend.factory import build_backend
+from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql
+from factor_engine.cleaned_operators import load_all
+from factor_engine.factor_recipes.planner_bridge import compile_recipe_plans
 from tests.helpers import InMemorySeriesSource
 
 

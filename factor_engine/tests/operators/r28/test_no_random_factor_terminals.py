@@ -13,7 +13,7 @@ import tokenize
 
 import pytest
 
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -64,8 +64,8 @@ def _code_lines(path):
 
 
 def test_no_random_named_terminals():
-    from cleaned_operators.registry import OperatorRegistry
-    import cleaned_operators.operator_surface as surf
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    import factor_engine.cleaned_operators.operator_surface as surf
 
     names = set(OperatorRegistry.list_canonical())
     bad = sorted(n for n in names if n.startswith(RANDOM_TERMINAL_PREFIXES))
@@ -100,8 +100,8 @@ def test_no_unseeded_rng_in_operator_implementation():
     import sys
     from pathlib import Path
 
-    from cleaned_operators.operator_surface import production_certification
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_surface import production_certification
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     reg = OperatorRegistry
     files = _impl_files(reg)

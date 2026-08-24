@@ -9,14 +9,14 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="legacy SQL rollout tier superseded by canonical evidence certification")
 
-from api.dsl_parser import parse_expr
-from api.factor import Factor
-from backend.factory import build_backend
-from backend.sql_pushdown.emitter import compile_plan_to_sql, plan_is_sql_capable
-from backend.sql_pushdown.sql_registry import SQL_CAPABLE_CANONICALS
-from planner.logical_plan import PlanNode
-from runtime.engine import FactorEngine
-from storage.factory import build_data_source
+from factor_engine.api.dsl_parser import parse_expr
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql, plan_is_sql_capable
+from factor_engine.backend.sql_pushdown.sql_registry import SQL_CAPABLE_CANONICALS
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.storage.factory import build_data_source
 
 
 def _col(name: str) -> PlanNode:

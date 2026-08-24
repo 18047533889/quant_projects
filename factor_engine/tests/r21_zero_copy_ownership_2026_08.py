@@ -42,8 +42,8 @@ def _panel(n_day: int = 40, n_stk: int = 6, seed: int = 42, nan_frac: float = 0.
 
 
 def test_buffer_ownership_enum_typed_members():
-    from runtime.buffer_ref import BufferRef
-    from runtime.ownership import BufferOwnership
+    from factor_engine.runtime.buffer_ref import BufferRef
+    from factor_engine.runtime.ownership import BufferOwnership
 
     # 三个 typed 成员，且是 str 枚举（JSON 可序列化）。
     assert {m.name for m in BufferOwnership} == {
@@ -59,8 +59,8 @@ def test_buffer_ownership_enum_typed_members():
 
 
 def test_buffer_ref_typed_ownership_roundtrip_to_dict():
-    from runtime.buffer_ref import BufferRef
-    from runtime.ownership import BufferOwnership
+    from factor_engine.runtime.buffer_ref import BufferRef
+    from factor_engine.runtime.ownership import BufferOwnership
 
     owned = BufferRef(
         representation="numpy_block",
@@ -76,8 +76,8 @@ def test_buffer_ref_typed_ownership_roundtrip_to_dict():
 
 
 def test_factor_block_ref_uses_typed_ownership():
-    from runtime import factor_block_ref as fbr
-    from runtime.ownership import BufferOwnership
+    from factor_engine.runtime import factor_block_ref as fbr
+    from factor_engine.runtime.ownership import BufferOwnership
 
     idx = pd.date_range("2024-01-01", periods=4)
     vals = np.arange(8.0).reshape(4, 2)
@@ -99,7 +99,7 @@ def test_factor_block_ref_uses_typed_ownership():
 
 def test_standardize_kernel_does_not_mutate_caller_buffer():
     """快照 float ndarray → 跑 ``_standardize`` → 输入逐字节不变。"""
-    from cleaned_operators.vector_path import _standardize
+    from factor_engine.cleaned_operators.vector_path import _standardize
 
     rng = np.random.default_rng(123)
     f1 = rng.normal(size=2000)
@@ -117,7 +117,7 @@ def test_standardize_kernel_does_not_mutate_caller_buffer():
 def test_panel_operator_does_not_mutate_caller_frame():
     """单 dtype float frame 经 ``to_numpy(dtype=float)`` 是 VIEW —— 快照后跑
     算子，断言 caller frame 逐位不变（视图写会直接污染 caller）。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     df = _panel(n_day=60, n_stk=5, nan_frac=0.0)
     arr = df.to_numpy(dtype=float)
@@ -137,7 +137,7 @@ def test_panel_operator_does_not_mutate_caller_frame():
 
 def test_shared_vs_copied_buffer_identical_results():
     """同一算子：共享 buffer（零拷贝视图）vs 显式拷贝 → 逐位一致。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     rng = np.random.default_rng(7)
     idx = pd.date_range("2024-01-01", periods=120)
@@ -167,10 +167,10 @@ def test_shared_vs_copied_buffer_identical_results():
 
 
 def _engine(dates: int = 30):
-    from api import col, rank, ts_mean, ts_std
-    from api.factor import Factor
-    from backend.pandas_backend import PandasBackend
-    from runtime.engine import FactorEngine
+    from factor_engine.api import col, rank, ts_mean, ts_std
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
     from tests.helpers import InMemorySeriesSource
 
     dts = pd.bdate_range("2024-01-02", periods=dates)
@@ -189,8 +189,8 @@ def _engine(dates: int = 30):
 def test_reordered_operators_share_one_input_buffer_identical_and_input_unchanged():
     """GAP-4：两个算子共享同一输入 buffer（run_many CSE 共享 'close' 列），
     交换因子顺序 → 每个因子输出逐位一致，且 source 'close' 输入逐字节不变。"""
-    from api import col, rank, ts_mean, ts_std
-    from api.factor import Factor
+    from factor_engine.api import col, rank, ts_mean, ts_std
+    from factor_engine.api.factor import Factor
 
     engine, close = _engine(dates=30)
     f1 = Factor(name="f1", expr=rank(ts_mean(col("close"), 5)))
@@ -215,13 +215,13 @@ def test_stage_by_stage_parity_same_shared_buffer():
     """GAP-2c：复用 r38 stage-by-stage 思路 —— barrier 子树逐 stage 执行并物化
     到 shared buffer 后，与整 root 一次性执行数值等价（同一输入 buffer 被多
     stage 共享，顺序不改变结果）。"""
-    from planner.physical_lowerer import extract_stage_subplans
+    from factor_engine.planner.physical_lowerer import extract_stage_subplans
 
-    from backend.context import ExecutionContext
-    from runtime.buffer_store import GovernedBufferStore
+    from factor_engine.backend.context import ExecutionContext
+    from factor_engine.runtime.buffer_store import GovernedBufferStore
 
-    from api import col, cs_rank, ts_mean
-    from api.factor import Factor
+    from factor_engine.api import col, cs_rank, ts_mean
+    from factor_engine.api.factor import Factor
 
     engine, _close = _engine(dates=40)
     f = Factor(name="nested", expr=cs_rank(ts_mean(col("close"), 10)))
@@ -256,7 +256,7 @@ def test_stage_by_stage_parity_same_shared_buffer():
 def test_shared_readonly_view_rejects_inplace_write():
     """make_readonly_shared_view 返回零拷贝 WRITEABLE=False 视图：原地写抛
     ValueError，caller 数据完好。"""
-    from runtime.ownership import make_readonly_shared_view
+    from factor_engine.runtime.ownership import make_readonly_shared_view
 
     a = np.arange(12.0).reshape(3, 4)
     view = make_readonly_shared_view(a)
@@ -271,7 +271,7 @@ def test_shared_readonly_view_rejects_inplace_write():
 def test_factor_block_ref_shared_values_view_writeable_false():
     """build_factor_block 的 values_ref.location 是共享只读视图：意外原地写
     大声失败，caller 数组完好；to_arrow_table / to_parquet 仍正常工作。"""
-    from runtime import factor_block_ref as fbr
+    from factor_engine.runtime import factor_block_ref as fbr
 
     idx = pd.date_range("2024-01-01", periods=4)
     vals = np.arange(8.0).reshape(4, 2)
@@ -292,7 +292,7 @@ def test_factor_block_ref_shared_values_view_writeable_false():
 def test_readonly_guard_fails_loudly_on_single_dtype_frame_view():
     """单 dtype float frame 的 to_numpy(dtype=float) 是 VIEW；把共享视图置为
     WRITEABLE=False 后，意外原地写必须大声失败，而不是静默污染 caller frame。"""
-    from runtime.ownership import make_readonly_shared_view
+    from factor_engine.runtime.ownership import make_readonly_shared_view
 
     df = _panel(n_day=10, n_stk=3, nan_frac=0.0)
     arr = df.to_numpy(dtype=float)

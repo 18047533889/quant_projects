@@ -30,13 +30,13 @@ import pandas as pd
 import numpy as np
 import psutil
 
-from planner.cost_model_v2 import (
+from factor_engine.planner.cost_model_v2 import (
     CostComponentsV2,
     estimate_operator_cost_v2,
     estimate_source_cost_v2,
     estimate_total_cost_v2,
 )
-from planner.data_shape_estimate import DataShapeEstimate
+from factor_engine.planner.data_shape_estimate import DataShapeEstimate
 
 _LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")

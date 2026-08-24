@@ -22,9 +22,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.registry import _fn_payload, _impl_source_hash
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import _fn_payload, _impl_source_hash
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -37,48 +37,48 @@ def _loaded() -> None:
 # canonical -> per-backend (expected kernel module, expected kernel name)
 AUDITED_FIXED: dict[str, dict[str, tuple[str, str]]] = {
     "ts_count_if": {
-        "pandas_numpy": ("cleaned_operators.overhaul.daily", "pd_count_if"),
-        "polars": ("cleaned_operators.overhaul.daily", "pl_count_if"),
+        "pandas_numpy": ("factor_engine.cleaned_operators.overhaul.daily", "pd_count_if"),
+        "polars": ("factor_engine.cleaned_operators.overhaul.daily", "pl_count_if"),
     },
     "ts_sum_if": {
-        "pandas_numpy": ("cleaned_operators.overhaul.daily", "pd_sum_if"),
-        "polars": ("cleaned_operators.overhaul.daily", "pl_sum_if"),
+        "pandas_numpy": ("factor_engine.cleaned_operators.overhaul.daily", "pd_sum_if"),
+        "polars": ("factor_engine.cleaned_operators.overhaul.daily", "pl_sum_if"),
     },
     "ts_mean_if": {
-        "pandas_numpy": ("cleaned_operators.overhaul.daily", "pd_mean_if"),
-        "polars": ("cleaned_operators.overhaul.daily", "pl_mean_if"),
+        "pandas_numpy": ("factor_engine.cleaned_operators.overhaul.daily", "pd_mean_if"),
+        "polars": ("factor_engine.cleaned_operators.overhaul.daily", "pl_mean_if"),
     },
     "ts_std_if": {
-        "pandas_numpy": ("cleaned_operators.overhaul.daily", "pd_std_if"),
-        "polars": ("cleaned_operators.overhaul.daily", "pl_std_if"),
+        "pandas_numpy": ("factor_engine.cleaned_operators.overhaul.daily", "pd_std_if"),
+        "polars": ("factor_engine.cleaned_operators.overhaul.daily", "pl_std_if"),
     },
     "ts_last_if": {
-        "pandas_numpy": ("cleaned_operators.overhaul.daily", "pd_last_if"),
-        "polars": ("cleaned_operators.overhaul.daily", "pl_last_if"),
+        "pandas_numpy": ("factor_engine.cleaned_operators.overhaul.daily", "pd_last_if"),
+        "polars": ("factor_engine.cleaned_operators.overhaul.daily", "pl_last_if"),
     },
     # ``ts_days_since`` is deliberately the ``layer_composite_fixes`` final layer
     # (inclusive max_lookback + NaN censor/reset semantics).
     "ts_days_since": {
-        "pandas_numpy": ("cleaned_operators.layer_composite_fixes", "pd_days_since_inclusive"),
-        "polars": ("cleaned_operators.layer_composite_fixes", "pl_days_since_inclusive"),
+        "pandas_numpy": ("factor_engine.cleaned_operators.layer_composite_fixes", "pd_days_since_inclusive"),
+        "polars": ("factor_engine.cleaned_operators.layer_composite_fixes", "pl_days_since_inclusive"),
     },
     "ts_true_streak": {
-        "pandas_numpy": ("cleaned_operators.overhaul.daily", "pd_true_streak"),
-        "polars": ("cleaned_operators.overhaul.daily", "pl_true_streak"),
+        "pandas_numpy": ("factor_engine.cleaned_operators.overhaul.daily", "pd_true_streak"),
+        "polars": ("factor_engine.cleaned_operators.overhaul.daily", "pl_true_streak"),
     },
     # Return-decomposition family: fixed price_basis / PositivePrice gates live
     # in ``cleaned_operators.return_decomp`` and must resolve there untouched.
     "overnight_return": {
-        "pandas_numpy": ("cleaned_operators.return_decomp", "OvernightReturn._calculate_series"),
+        "pandas_numpy": ("factor_engine.cleaned_operators.return_decomp", "OvernightReturn._calculate_series"),
     },
     "open_close_return": {
-        "pandas_numpy": ("cleaned_operators.return_decomp", "OpenCloseReturn._calculate_series"),
+        "pandas_numpy": ("factor_engine.cleaned_operators.return_decomp", "OpenCloseReturn._calculate_series"),
     },
     "open_to_vwap_return": {
-        "pandas_numpy": ("cleaned_operators.return_decomp", "OpenToVwapReturn._calculate_series"),
+        "pandas_numpy": ("factor_engine.cleaned_operators.return_decomp", "OpenToVwapReturn._calculate_series"),
     },
     "vwap_to_close_return": {
-        "pandas_numpy": ("cleaned_operators.return_decomp", "VwapToCloseReturn._calculate_series"),
+        "pandas_numpy": ("factor_engine.cleaned_operators.return_decomp", "VwapToCloseReturn._calculate_series"),
     },
 }
 
@@ -273,7 +273,7 @@ def test_true_streak_nan_censors_and_resets() -> None:
 # --- NEW-P0-04: overhaul replacements inherit the canonical logical contract ---
 
 def test_overhaul_replacements_inherit_canonical_logical_contract() -> None:
-    from cleaned_operators.overhaul.base import _CONTRACT_FIELDS
+    from factor_engine.cleaned_operators.overhaul.base import _CONTRACT_FIELDS
 
     for canonical in OperatorRegistry.list_canonical():
         backend_meta = (OperatorRegistry._catalog.get(canonical) or {}).get("backend_meta") or {}

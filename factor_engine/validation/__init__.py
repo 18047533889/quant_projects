@@ -49,7 +49,7 @@ See validation/README.md for comprehensive documentation.
 # Re-export all public APIs
 
 # Quality checks (core, no extra dependencies)
-from validation.checks import (
+from factor_engine.validation.checks import (
     DataQualityReport,
     OutlierStats,
     check_data_quality,
@@ -59,7 +59,7 @@ from validation.checks import (
 )
 
 # Input sanitization (core, no extra dependencies)
-from validation.sanitize import (
+from factor_engine.validation.sanitize import (
     SanitizationResult,
     sanitize_dataframe,
     sanitize_factor_inputs,
@@ -68,7 +68,7 @@ from validation.sanitize import (
 
 # Schema contracts (requires pydantic>=2.0)
 try:
-    from validation.contracts import (
+    from factor_engine.validation.contracts import (
         FactorBatchSchema,
         FeatureBundleSchema,
         LabelBundleSchema,

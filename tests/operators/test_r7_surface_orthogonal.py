@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -24,8 +24,8 @@ def _loaded():
 # #309
 # ---------------------------------------------------------------------------
 def test_pandas_first_production_canonicals_is_live_function():
-    import cleaned_operators.operator_surface as surface
-    from cleaned_operators.production_tiers import (
+    import factor_engine.cleaned_operators.operator_surface as surface
+    from factor_engine.cleaned_operators.production_tiers import (
         pandas_first_production_canonicals,
     )
 
@@ -45,8 +45,8 @@ def test_pandas_first_production_canonicals_is_live_function():
 
 
 def test_pandas_first_live_view_backward_compat():
-    import cleaned_operators.operator_surface as surface
-    from cleaned_operators.production_tiers import PANDAS_FIRST_PRODUCTION_CANONICALS
+    import factor_engine.cleaned_operators.operator_surface as surface
+    from factor_engine.cleaned_operators.production_tiers import PANDAS_FIRST_PRODUCTION_CANONICALS
 
     old_snapshot = frozenset(surface.extended_only_canonicals())
     dummy = "__ws_h_dummy_309b__"
@@ -64,7 +64,7 @@ def test_pandas_first_live_view_backward_compat():
 # #310
 # ---------------------------------------------------------------------------
 def test_authoring_tier_enum_matches_classify_canonical():
-    from cleaned_operators.operator_surface import (
+    from factor_engine.cleaned_operators.operator_surface import (
         AuthoringTier,
         authoring_tier,
         classify_canonical,
@@ -84,12 +84,12 @@ def test_authoring_tier_enum_matches_classify_canonical():
 def test_certification_is_orthogonal_to_authoring_tier():
     """An EXTENDED operator with production_certified=False must report
     tier=EXTENDED and cert=PENDING/DENIED — never conflated into 'certified'."""
-    from cleaned_operators.operator_surface import (
+    from factor_engine.cleaned_operators.operator_surface import (
         ProductionCertification,
         classify_canonical,
         production_certification,
     )
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     # An operator that is authored on the extended surface and registered.
     canonical = "cs_sliced_wasserstein_copula_shift"
@@ -108,11 +108,11 @@ def test_certification_is_orthogonal_to_authoring_tier():
 def test_certification_not_driven_by_surface_membership():
     """An operator can be DAILY-authored yet still not evidence-certified in an
     evidence-absent environment; certification must be read from the catalog."""
-    from cleaned_operators.operator_surface import (
+    from factor_engine.cleaned_operators.operator_surface import (
         classify_canonical,
         production_certification,
     )
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     for canonical in ("ts_mean", "abs"):
         assert classify_canonical(canonical) == "daily"
@@ -126,8 +126,8 @@ def test_certification_not_driven_by_surface_membership():
 
 
 def test_backend_capability_is_backend_granular():
-    from cleaned_operators.operator_surface import backend_capability
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_surface import backend_capability
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     cap = backend_capability("ts_mean", "polars")
     assert cap.backend == "polars"
@@ -140,7 +140,7 @@ def test_backend_capability_is_backend_granular():
 # #311
 # ---------------------------------------------------------------------------
 def test_reviewed_migration_manifest_structure_present():
-    from cleaned_operators.operator_surface import (
+    from factor_engine.cleaned_operators.operator_surface import (
         DAILY_FACTOR_MIGRATED,
         REVIEWED_MIGRATION_MANIFEST,
         daily_factor_migrated,
@@ -158,7 +158,7 @@ def test_reviewed_migration_manifest_structure_present():
     assert daily_factor_migrated() == frozenset(DAILY_FACTOR_MIGRATED)
 
     # Forward path: a new migration is recorded with a review_id.
-    from cleaned_operators import operator_surface as surface_mod
+    from factor_engine.cleaned_operators import operator_surface as surface_mod
 
     dummy = "__ws_h_dummy_311__"
     try:
@@ -183,7 +183,7 @@ def test_reviewed_migration_manifest_structure_present():
 
 
 def test_daily_classification_consults_reviewed_manifest():
-    from cleaned_operators.operator_surface import (
+    from factor_engine.cleaned_operators.operator_surface import (
         classify_canonical,
         daily_factor_migrated,
     )

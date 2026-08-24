@@ -150,7 +150,7 @@ class ParameterDomainCertificationStore:
         ``_meta`` 且 hash 不匹配（损坏/篡改）→ 抛 ``ParameterDomainError``（fail
         closed），绝不悄悄保留一份损坏证据。
         """
-        from runtime.exceptions import ParameterDomainError
+        from factor_engine.runtime.exceptions import ParameterDomainError
 
         try:
             p = Path(path)
@@ -313,7 +313,7 @@ def _ensure_loaded(
     path: str | Path | None = None,
 ) -> None:
     """装载默认 R37 证据（若已装载则跳过）并跑负控。失败 → fail closed。"""
-    from runtime.exceptions import ParameterDomainError
+    from factor_engine.runtime.exceptions import ParameterDomainError
 
     if getattr(store, "_loaded", False):
         return
@@ -332,7 +332,7 @@ def run_negative_controls(
     store: ParameterDomainCertificationStore,
 ) -> None:
     """#29：已知 invalid 点若被错误 certified → 证据损坏（fail closed）。"""
-    from runtime.exceptions import ParameterDomainError
+    from factor_engine.runtime.exceptions import ParameterDomainError
 
     bad = [
         f"{c}{{k}}".replace("{k}", ",".join(f"{kk}={vv!r}" for kk, vv in kwargs.items()))
@@ -378,7 +378,7 @@ def assert_parameter_domain_ready(
     - ``strict`` 且能确认证据由旧 commit 生成（generated_commit 已知、当前 git
       HEAD 可读、两者不一致）→ 抛（旧 SHA 证据禁止悄悄执行）。
     """
-    from runtime.exceptions import ParameterDomainError
+    from factor_engine.runtime.exceptions import ParameterDomainError
 
     store = get_parameter_domain_store(ensure_loaded=True)
     generated = getattr(store, "_generated_commit", "") or ""
@@ -393,7 +393,7 @@ def assert_parameter_domain_ready(
 
 def _is_production() -> bool:
     try:
-        from runtime.production_policy import is_production_mode
+        from factor_engine.runtime.production_policy import is_production_mode
 
         return is_production_mode()
     except Exception:
@@ -418,11 +418,11 @@ def assert_parameter_point_certified(
     - ``store`` 未显式传入且判定为 production 时强制装载证据（#29）——空 store
       不能悄悄放过。
     """
-    from runtime.exceptions import ParameterDomainError
+    from factor_engine.runtime.exceptions import ParameterDomainError
 
     if run_mode is not None and str(run_mode).strip():
         # #26：认证层不得重猜模式——显式 run_mode 即身份。
-        from runtime.production_policy import is_production_mode
+        from factor_engine.runtime.production_policy import is_production_mode
 
         production = is_production_mode(str(run_mode))
     else:

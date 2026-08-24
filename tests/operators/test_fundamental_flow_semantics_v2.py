@@ -10,7 +10,7 @@ def _panel(values):
 
 
 def test_quarterly_and_cumulative_ttm_are_not_conflated():
-    from cleaned_operators.fundamental.flow_semantics_v2 import (
+    from factor_engine.cleaned_operators.fundamental.flow_semantics_v2 import (
         fin_quarter_from_cumulative,
         fin_ttm_cumulative,
         fin_ttm_quarterly,
@@ -37,7 +37,7 @@ def test_quarterly_and_cumulative_ttm_are_not_conflated():
 
 
 def test_cumulative_quarter_conversion_fails_closed_on_missing_predecessor():
-    from cleaned_operators.fundamental.flow_semantics_v2 import (
+    from factor_engine.cleaned_operators.fundamental.flow_semantics_v2 import (
         fin_quarter_from_cumulative,
     )
 
@@ -50,7 +50,7 @@ def test_cumulative_quarter_conversion_fails_closed_on_missing_predecessor():
 
 
 def test_same_period_cumulative_revision_changes_results_only_when_visible():
-    from cleaned_operators.fundamental.flow_semantics_v2 import (
+    from factor_engine.cleaned_operators.fundamental.flow_semantics_v2 import (
         fin_quarter_from_cumulative,
     )
 
@@ -64,8 +64,8 @@ def test_same_period_cumulative_revision_changes_results_only_when_visible():
 
 
 def test_reviewed_fundamental_extensions_are_registered():
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     expected = {
@@ -92,8 +92,8 @@ def test_reviewed_fundamental_extensions_are_registered():
 
 
 def test_new_fundamental_recipes_do_not_use_ambiguous_fin_ttm():
-    import factor_recipes  # noqa: F401
-    from factor_recipes.registry import FactorRecipeRegistry
+    import factor_engine.factor_recipes  # noqa: F401
+    from factor_engine.factor_recipes.registry import FactorRecipeRegistry
 
     for name, row in FactorRecipeRegistry.catalog().items():
         if row["category"] != "fundamental":

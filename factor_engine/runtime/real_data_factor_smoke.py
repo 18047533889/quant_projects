@@ -10,12 +10,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from api.columns import col
-from api.factor import Factor
-from api import rank, ts_mean, zscore
-from backend.pandas_backend import PandasBackend
-from runtime.engine import FactorEngine
-from storage.datasource import DataSource
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.api import rank, ts_mean, zscore
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.storage.datasource import DataSource
 
 
 @dataclass(frozen=True)

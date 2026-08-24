@@ -18,9 +18,9 @@ from __future__ import annotations
 import json
 
 import pytest
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators import load_all
-from mining.direct_use import build_direct_use_operator
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.mining.direct_use import build_direct_use_operator
 
 # Honest: no in-scope canonical has six-way evidence -> empty certified set.
 R23_CERTIFIED_CANONICALS: frozenset[str] = frozenset()

@@ -12,8 +12,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.fundamental.transforms_repairs_v2 import fin_days_since_update
-from cleaned_operators.fundamental.expectation_v2 import fin_days_since_expectation_revision
+from factor_engine.cleaned_operators.fundamental.transforms_repairs_v2 import fin_days_since_update
+from factor_engine.cleaned_operators.fundamental.expectation_v2 import fin_days_since_expectation_revision
 
 
 def _panel(vals, periods):

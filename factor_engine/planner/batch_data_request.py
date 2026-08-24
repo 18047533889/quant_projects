@@ -34,8 +34,8 @@ import inspect
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-from planner.physical_factor_dag import SourceScopeId
-from planner.source_binding import TimeRange, discover_column_source_bindings
+from factor_engine.planner.physical_factor_dag import SourceScopeId
+from factor_engine.planner.source_binding import TimeRange, discover_column_source_bindings
 
 
 @dataclass(frozen=True)
@@ -263,7 +263,7 @@ def _walk_columns(plan: Any, out: set[str]) -> None:
 
 def _looks_like_source_ref(name: str) -> bool:
     try:
-        from api.source_ref import looks_like_source_ref
+        from factor_engine.api.source_ref import looks_like_source_ref
     except Exception:  # pragma: no cover
         return False
     return looks_like_source_ref(name)

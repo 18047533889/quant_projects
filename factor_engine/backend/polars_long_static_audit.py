@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Iterable
 
-from backend.polars_long_policy import POLARS_LONG_NATIVE, POLARS_LONG_PYTHON_ROLLING
+from factor_engine.backend.polars_long_policy import POLARS_LONG_NATIVE, POLARS_LONG_PYTHON_ROLLING
 
 _EMITTER = Path(__file__).resolve().parent / "polars_expr_emitter.py"
 

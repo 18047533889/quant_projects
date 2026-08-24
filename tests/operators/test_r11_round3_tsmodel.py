@@ -24,11 +24,11 @@ import pytest
 # Direct module imports register the operators under test without depending on
 # the full ``load_all`` closure (the shared tree is concurrently edited by other
 # audit fixers; these three modules are the owning, file-disjoint units).
-import cleaned_operators.ts_model.dynamic_regression  # noqa: F401
-import cleaned_operators.ts_model.state_space  # noqa: F401
-import cleaned_operators.ts_model.volatility  # noqa: F401
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.ts_model.state_space import _kalman_level
+import factor_engine.cleaned_operators.ts_model.dynamic_regression  # noqa: F401
+import factor_engine.cleaned_operators.ts_model.state_space  # noqa: F401
+import factor_engine.cleaned_operators.ts_model.volatility  # noqa: F401
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.ts_model.state_space import _kalman_level
 
 
 def _dates(n: int = 120) -> pd.DatetimeIndex:
@@ -119,7 +119,7 @@ def test_in_sample_coeff_metadata_is_explicitly_in_sample(name: str, replacement
 def test_legacy_coeff_canonicals_stamped_in_sample_and_hidden() -> None:
     """load-time catalog stamps (semantic_certification) mark the in-sample
     coefficient canonicals diagnostic and hidden from default mining."""
-    from cleaned_operators.semantic_certification import stamp_compatibility_metadata
+    from factor_engine.cleaned_operators.semantic_certification import stamp_compatibility_metadata
 
     stamp_compatibility_metadata()
     for canon in ("ts_multi_regression_coeff", "ts_huber_regression_coeff",
@@ -194,7 +194,7 @@ def test_kalman_nonfinite_noise_scale_fails_closed(q: float, r: float) -> None:
     front, never silently emitted as a misleading filtered value."""
     with pytest.raises(ValueError):
         _kalman_level(np.array([1.0, 2.0, 3.0]), q, r, "level")
-    from cleaned_operators.ts_model.state_space import _kalman_trend_slope, _kalman_beta
+    from factor_engine.cleaned_operators.ts_model.state_space import _kalman_trend_slope, _kalman_beta
 
     with pytest.raises(ValueError):
         _kalman_trend_slope(np.array([1.0, 2.0, 3.0]), q, q, r)
@@ -305,7 +305,7 @@ def test_legacy_har_rv_forecast_duplicate_describes_volatility() -> None:
 # ---------------------------------------------------------------------------
 
 def test_new_and_renamed_canonicals_registered_and_surface_consistent() -> None:
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     for name in ("ts_quantile_regression_coeff_prior",
                  "ts_har_rv_next_vol_forecast", "ts_har_rv_next_var_forecast"):

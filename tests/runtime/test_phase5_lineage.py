@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from runtime.lineage import resolve_git_commit_hash
-from storage.catalog import FactorCatalog
-from storage.data_access_source import DataAccessSource
+from factor_engine.runtime.lineage import resolve_git_commit_hash
+from factor_engine.storage.catalog import FactorCatalog
+from factor_engine.storage.data_access_source import DataAccessSource
 
 
 def test_resolve_git_commit_hash_in_quant_projects_repo():

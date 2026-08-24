@@ -17,9 +17,9 @@ from pathlib import Path
 
 import pytest
 
-from service.errors import ServiceError
-from service.jobstore import JobRecord, JobStatus, JobStore, _utc_now
-from service.queue import BoundedJobQueue
+from factor_engine.service.errors import ServiceError
+from factor_engine.service.jobstore import JobRecord, JobStatus, JobStore, _utc_now
+from factor_engine.service.queue import BoundedJobQueue
 
 
 # ---------------------------------------------------------------------------

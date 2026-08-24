@@ -31,20 +31,20 @@ from pathlib import Path
 sys.path.insert(0, ".")
 sys.path.insert(0, "..")
 
-from runtime.r34_evidence import GateResult  # noqa: E402
-from runtime.evidence_truth import EvidenceTruthEngine, evidence_store_path  # noqa: E402
+from factor_engine.runtime.r34_evidence import GateResult  # noqa: E402
+from factor_engine.runtime.evidence_truth import EvidenceTruthEngine, evidence_store_path  # noqa: E402
 
 E = evidence_store_path()
 
 
 def _head() -> str:
-    from backend.evidence_provenance import current_commit_sha
+    from factor_engine.backend.evidence_provenance import current_commit_sha
 
     return current_commit_sha()
 
 
 def _gate_evidence_truth() -> GateResult:
-    from runtime.r34_evidence import current_evidence_header
+    from factor_engine.runtime.r34_evidence import current_evidence_header
 
     head = _head()
     engine = EvidenceTruthEngine(commit_sha=head)
@@ -71,7 +71,7 @@ def _gate_evidence_truth() -> GateResult:
 
 
 def _gate_parameter_domain_certified() -> GateResult:
-    from runtime.parameter_domain_store import ParameterDomainCertificationStore
+    from factor_engine.runtime.parameter_domain_store import ParameterDomainCertificationStore
 
     head = _head()
     store = ParameterDomainCertificationStore()
@@ -141,8 +141,8 @@ def _gate_ledger_produced() -> GateResult:
 def _gate_all_production_in_ledger() -> GateResult:
     head = _head()
     try:
-        from backend.cleaned_bridge import ensure_cleaned_loaded
-        from cleaned_operators.production_hardening import factor_production_targets
+        from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+        from factor_engine.cleaned_operators.production_hardening import factor_production_targets
 
         ensure_cleaned_loaded()
         targets = set(factor_production_targets())
@@ -199,7 +199,7 @@ def _gate_property_mutation() -> GateResult:
 
 def _gate_data_knowledge_identity() -> GateResult:
     head = _head()
-    from semantic.data_knowledge_identity import DataKnowledgeIdentity
+    from factor_engine.semantic.data_knowledge_identity import DataKnowledgeIdentity
 
     a = DataKnowledgeIdentity(dataset_id="d", snapshot_id="s1", universe_snapshot_id="u")
     b = DataKnowledgeIdentity(dataset_id="d", snapshot_id="s1", universe_snapshot_id="u2")
@@ -212,7 +212,7 @@ def _gate_data_knowledge_identity() -> GateResult:
 
 def _gate_universe_pit() -> GateResult:
     head = _head()
-    from market.universe import UniverseMembership, universe_membership_identity
+    from factor_engine.market.universe import UniverseMembership, universe_membership_identity
 
     m = UniverseMembership(universe="CSI300", instrument="x",
                            valid_time="2024-01-01", knowledge_time="2024-01-05")
@@ -227,8 +227,8 @@ def _gate_universe_pit() -> GateResult:
 
 def _gate_price_basis_identity() -> GateResult:
     head = _head()
-    from fields.concepts import PriceBasis
-    from semantic.data_knowledge_identity import DataKnowledgeIdentity
+    from factor_engine.fields.concepts import PriceBasis
+    from factor_engine.semantic.data_knowledge_identity import DataKnowledgeIdentity
 
     pb1 = PriceBasis.canonical("RAW")
     pb2 = PriceBasis.canonical("CONTINUOUS")

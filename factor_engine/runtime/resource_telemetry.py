@@ -46,7 +46,7 @@ def _lifetime_peak_rss_bytes() -> int | None:
 
 def snapshot_resource_telemetry(perf: Any | None = None, plan: Any | None = None) -> dict[str, Any]:
     """采集当前资源快照（一次性）。"""
-    from runtime.resource_governor import (
+    from factor_engine.runtime.resource_governor import (
         ExecutionResourcePlan,
         effective_cpu_slots,
         effective_memory_limit_bytes,
@@ -81,7 +81,7 @@ def resource_telemetry_summary(perf: Any | None = None) -> dict[str, Any]:
     """快照 + 全局 governor 摘要（供 runtime_stats["resource"]）。"""
     out = snapshot_resource_telemetry(perf=perf)
     try:
-        from runtime.resource_governor import global_memory_governor
+        from factor_engine.runtime.resource_governor import global_memory_governor
 
         gov = global_memory_governor()
         out["governor"] = gov.summary()

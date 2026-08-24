@@ -16,7 +16,7 @@ from stateful_contract import StateCheckpoint, StatefulCheckpointRegistry, State
 
 
 def test_source_snapshot_scope_is_window_independent():
-    from runtime.stateful_incremental import _source_snapshot_scope
+    from factor_engine.runtime.stateful_incremental import _source_snapshot_scope
 
     class S:
         def __init__(self, dataset, start, end):

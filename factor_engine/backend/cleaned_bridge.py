@@ -13,10 +13,10 @@ from typing import Any, Callable
 import numpy as np
 
 from .pandas_compat import pd
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 from .context import ExecutionContext
 from .panel_native import panel_native_enabled, to_panel
-from cache.panel_cache import series_panel_cache_key
+from factor_engine.cache.panel_cache import series_panel_cache_key
 
 
 class NoCertifiedParameterRegionError(ValueError):
@@ -136,7 +136,7 @@ def ensure_cleaned_loaded() -> None:
     concurrent callers WAIT for a fully-loaded registry and never return a
     half-loaded one.
     """
-    from cleaned_operators import REGISTRY_BOOTSTRAP
+    from factor_engine.cleaned_operators import REGISTRY_BOOTSTRAP
 
     REGISTRY_BOOTSTRAP.ensure_ready(include_research=True)
 
@@ -151,7 +151,7 @@ def ensure_operator_registry(*, surface: str = "production") -> None:
     bridge helper never silently pre-loads a research surface for a production
     caller that uses this entry.
     """
-    from cleaned_operators import REGISTRY_BOOTSTRAP, check_signature_authority
+    from factor_engine.cleaned_operators import REGISTRY_BOOTSTRAP, check_signature_authority
 
     surface = str(surface or "production").lower()
     if surface == "production":
@@ -202,12 +202,12 @@ def panel_to_series(
 
 
 def _resolve_canonical(op: str) -> str:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     return OperatorRegistry.resolve_canonical_strict(op)
 
 
 def _call_cleaned_operator(canonical: str, operator: Any, call_args: list[Any], kw: dict[str, Any]) -> Any:
-    from backend.parameter_aliases import reject_runtime_parameter_aliases
+    from factor_engine.backend.parameter_aliases import reject_runtime_parameter_aliases
     reject_runtime_parameter_aliases(canonical, kw)
     # R5 P0-01 (defense-in-depth): the dispatch layer runs the central logical
     # call validator for every cleaned operator, so an operator that overrides
@@ -216,7 +216,7 @@ def _call_cleaned_operator(canonical: str, operator: Any, call_args: list[Any], 
     # SeriesOperator-derived operators re-validate inside ``calculate``; that
     # second pass is pure and cheap.  Polars panels are left untouched by the
     # pandas-axis validator (only ``pd.DataFrame`` frames are checked).
-    from cleaned_operators.base import validate_operator_call
+    from factor_engine.cleaned_operators.base import validate_operator_call
     metadata = getattr(operator, "metadata", None)
     if metadata is not None:
         validate_operator_call(operator, tuple(call_args), dict(kw))
@@ -257,7 +257,7 @@ def _bound_scalar_parameters(operator: Any, call_args: list[Any], kw: dict[str, 
     production/research 判定 hard-fail 或降级。``complete`` 为 ``True`` 仅当每个
     声明的 scalar 参数都在归一化 bound 中解析（默认/位置/alias 全含）。
     """
-    from cleaned_operators.base import bind_operator_call, _kernel_param_defaults
+    from factor_engine.cleaned_operators.base import bind_operator_call, _kernel_param_defaults
 
     meta = getattr(operator, "metadata", None)
     names = list(getattr(meta, "param_names", None) or [])
@@ -286,7 +286,7 @@ def _operator_semantic_version(canonical: str) -> str:
     不再是合法 sentinel——production 解析失败直接抛
     ``ParameterCertificationInfrastructureError``（不是 ``""`` 混进认证空间）。
     """
-    from backend.operator_semantic_version import versioned_name
+    from factor_engine.backend.operator_semantic_version import versioned_name
 
     try:
         return versioned_name(canonical)
@@ -362,7 +362,7 @@ def _estimate_row_count(evaluated: list[Any]) -> int | None:
 def _record_uncertified(canonical: str, reason: str) -> None:
     """Best-effort telemetry for a research-mode certification degradation."""
     try:
-        from runtime.resource_telemetry import record_resource_telemetry
+        from factor_engine.runtime.resource_telemetry import record_resource_telemetry
 
         record_resource_telemetry({
             "param_domain_membership_skipped": canonical,
@@ -410,8 +410,8 @@ def _resolve_operator(
     # whole plan, honor it and skip per-operator BackendRouter.select(auto).
     selected_backend = getattr(ctx, "selected_backend", None)
     if selected_backend is not None:
-        from backend.operator_capability import resolve_canonical as _rc
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.backend.operator_capability import resolve_canonical as _rc
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         name = _rc(canonical)
         try:
@@ -436,7 +436,7 @@ def _resolve_operator(
         )
         return operator, op_backend
 
-    from backend.backend_router import BackendRouter
+    from factor_engine.backend.backend_router import BackendRouter
 
     prefer = _operator_backend_preference(ctx)
     run_mode = str(getattr(ctx, "run_mode", "research") or "research").lower()
@@ -596,7 +596,7 @@ def validate_grain_transform(
     calendar: Any = None,
 ) -> list[str]:
     """Return the list of grain-transform validation violations (R40 #163)."""
-    from backend.operator_errors import OperatorShapeError
+    from factor_engine.backend.operator_errors import OperatorShapeError
 
     errors: list[str] = []
     # 1. output index is a DatetimeIndex
@@ -659,7 +659,7 @@ def _validate_downsampled_result(
     provider opt in); this entry keeps the original structural checks so the
     legacy minute->daily path is unchanged.
     """
-    from backend.operator_errors import OperatorShapeError
+    from factor_engine.backend.operator_errors import OperatorShapeError
 
     if not isinstance(result.index, (pd.DatetimeIndex,)):
         raise OperatorShapeError(
@@ -692,8 +692,8 @@ def _validate_no_extra_output_columns(result: Any, template_panel: pd.DataFrame)
     Multi-output operators are exempt via an explicit ``OutputColumnContract``
     (declared on the operator metadata as ``output_column_contract``).
     """
-    from backend.operator_errors import OperatorShapeError
-    from cleaned_operators.common._polars_bridge import FE_TIME_COL, SKIP
+    from factor_engine.backend.operator_errors import OperatorShapeError
+    from factor_engine.cleaned_operators.common._polars_bridge import FE_TIME_COL, SKIP
 
     try:
         value_cols = [str(c) for c in result.columns if str(c) not in SKIP and str(c) != FE_TIME_COL]
@@ -736,7 +736,7 @@ def _normalize_operator_result(
             _run_mode_strict = str(getattr(ctx, "run_mode", "research") or "research").lower() == "production"
             result = polars_to_panel(result, template=template_panel, strict=_run_mode_strict)
 
-    from backend.operator_errors import OperatorShapeError
+    from factor_engine.backend.operator_errors import OperatorShapeError
     # R11 P0-04: a shape-changing operator (declared input_grain != output_grain,
     # e.g. minute -> daily) legitimately returns a DIFFERENT-frequency panel, so
     # the exact-index-match check below does not apply.  ``output_grain`` /
@@ -851,11 +851,11 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
         _run_mode = str(getattr(ctx, "run_mode", "research") or "research").lower()
         _production = _run_mode == "production"
         try:
-            from runtime.parameter_domain_store import (
+            from factor_engine.runtime.parameter_domain_store import (
                 assert_parameter_point_certified,
                 get_parameter_domain_store,
             )
-            from runtime.exceptions import ParameterDomainError
+            from factor_engine.runtime.exceptions import ParameterDomainError
 
             # Phase 1: BindCall (R40 #158) — single bind, no broad except.  An
             # incomplete bind hard-fails production (defaults/positional/alias
@@ -946,7 +946,7 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
 
 def list_cleaned_ops_for_backend(skip: set[str]) -> list[str]:
     ensure_cleaned_loaded()
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     names: set[str] = set()
     for canon in OperatorRegistry.list_canonical():
         if canon not in skip and OperatorRegistry.get(canon) is not None:
@@ -959,9 +959,9 @@ def list_cleaned_ops_for_backend(skip: set[str]) -> list[str]:
 
 def build_cleaned_dsl_allowlist(skip: set[str] | None = None, *, surface: str = "daily") -> dict[str, Any]:
     ensure_cleaned_loaded()
-    from cleaned_operators.operator_surface import is_dsl_name_allowed
-    from cleaned_operators.registry import OperatorRegistry
-    from api.cleaned_ops import make_cleaned_call_factory
+    from factor_engine.cleaned_operators.operator_surface import is_dsl_name_allowed
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.api.cleaned_ops import make_cleaned_call_factory
 
     skip = skip or set()
     out: dict[str, Any] = {}
@@ -980,8 +980,8 @@ def build_cleaned_dsl_allowlist(skip: set[str] | None = None, *, surface: str = 
 
 def build_production_dsl_allowlist(skip: set[str] | None = None) -> dict[str, Any]:
     """Expose every production-admitted factor operator, not only daily core."""
-    from cleaned_operators.operator_spec import build_operator_spec
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     full = build_cleaned_dsl_allowlist(skip, surface="all")
     out: dict[str, Any] = {}

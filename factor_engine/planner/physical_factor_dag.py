@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from runtime.task_resource_contract import TaskResourceContract
+from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
 #: Task 类型（R27-005）
 TASK_SOURCE_SCAN = "SOURCE_SCAN"

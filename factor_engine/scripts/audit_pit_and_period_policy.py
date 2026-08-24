@@ -28,8 +28,8 @@ def _load() -> None:
 
 def main() -> int:
     _load()
-    from fields.catalog import ASHARE_TABLE_SPECS
-    from fields.catalog_us import US_TABLE_SPECS
+    from factor_engine.fields.catalog import ASHARE_TABLE_SPECS
+    from factor_engine.fields.catalog_us import US_TABLE_SPECS
 
     problems: list[str] = []
     for table in list(ASHARE_TABLE_SPECS) + list(US_TABLE_SPECS):

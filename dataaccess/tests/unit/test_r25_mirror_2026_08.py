@@ -117,7 +117,9 @@ def test_tmir004_cache_principal_mismatch(tmp_path, monkeypatch):
     r2 = cos_cache_root()
     assert s1 != s2
     assert r1 != r2
-    assert "server-high" in str(r2)
+    # principal 名不直接进路径（R24 P0-S3 §5.1 脱敏：SHA-256 digest scope），
+    # 但不同 principal 必须映射到不同 scope 目录。
+    assert r1.name != r2.name
 
 
 # ---------------------------------------------------------------------------

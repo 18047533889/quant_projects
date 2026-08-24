@@ -15,11 +15,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
-import cleaned_operators.distribution_break as _db
-import cleaned_operators.turnover_survival as _ts
-import cleaned_operators.weighted_tail as _wt
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+import factor_engine.cleaned_operators.distribution_break as _db
+import factor_engine.cleaned_operators.turnover_survival as _ts
+import factor_engine.cleaned_operators.weighted_tail as _wt
 
 ensure_cleaned_loaded()
 
@@ -69,15 +69,15 @@ def test_weighted_semivariance_split_and_alias():
     assert OperatorRegistry.resolve_canonical("ts_weighted_semivariance_sqrt") == "ts_weighted_downside_deviation"
     # the new canonical lives on the extended-only surface (a runtime mutator;
     # daily promotion is the coordinator's partition contract).
-    import cleaned_operators.operator_surface as _surface_mod
-    from cleaned_operators.operator_surface import classify_canonical
+    import factor_engine.cleaned_operators.operator_surface as _surface_mod
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     assert "ts_weighted_downside_deviation" in frozenset(_surface_mod.EXTENDED_ONLY_CANONICALS)
     assert classify_canonical("ts_weighted_downside_deviation") in ("daily", "extended")
 
 
 def test_new_canonicals_registered_on_extended_surface():
-    import cleaned_operators.operator_surface as _surface_mod
+    import factor_engine.cleaned_operators.operator_surface as _surface_mod
 
     live = frozenset(_surface_mod.EXTENDED_ONLY_CANONICALS)
     for c in ("ts_weighted_downside_deviation", "ts_turnover_old_mass",

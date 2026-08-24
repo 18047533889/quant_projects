@@ -11,8 +11,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.operator_surface import classify_canonical
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
 try:
     import polars as pl
@@ -47,7 +47,7 @@ _RESEARCH_OPS = [
 
 @pytest.fixture(scope="module")
 def _loaded():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
 

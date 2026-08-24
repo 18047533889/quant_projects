@@ -80,7 +80,7 @@ def execution_tcb_hash() -> str:
     system so an unstaged edit to the bridge / router / panel-conversion / any
     TCB source invalidates previously certified factor evidence.
     """
-    from backend.evidence_provenance import (
+    from factor_engine.backend.evidence_provenance import (
         _source_hash,
         _tree_hash,
         compute_implementation_hash,
@@ -116,7 +116,7 @@ def execution_tcb_hash() -> str:
 
 
 def _hashes() -> dict[str, str]:
-    from backend.evidence_provenance import _tree_hash, compute_implementation_hash
+    from factor_engine.backend.evidence_provenance import _tree_hash, compute_implementation_hash
 
     audit = FE_ROOT / "scripts" / "audit_all_factor_production.py"
     files = {
@@ -182,10 +182,10 @@ def load_factor_operator_evidence() -> dict[str, Any]:
 
 
 def _production_sets() -> tuple[set[str], set[str]]:
-    import cleaned_operators
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
-    from cleaned_operators.production_hardening import factor_production_targets
-    from cleaned_operators.registry import OperatorRegistry
+    import factor_engine.cleaned_operators
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.cleaned_operators.production_hardening import factor_production_targets
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if (
         OperatorRegistry.lifecycle() == "building"
@@ -343,7 +343,7 @@ def _inherited_validation_errors(payload: dict[str, Any]) -> list[str]:
     )
 
     try:
-        from backend.evidence_provenance import (
+        from factor_engine.backend.evidence_provenance import (
             evidence_artifact_valid,
             implementation_hashes_for,
         )

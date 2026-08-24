@@ -26,7 +26,7 @@ from typing import Any
 def _get_adaptive_bounds() -> dict[str, int]:
     """获取自适应内存边界（基于系统资源）。"""
     try:
-        from runtime.adaptive_config import get_global_adaptive_config
+        from factor_engine.runtime.adaptive_config import get_global_adaptive_config
         config = get_global_adaptive_config()
         # BLOCK_ABS_MAX 使用 block_abs_max_bytes
         # SINK_ABS_MAX/CACHE_ABS_MAX 使用其 4x（原比例：8GB vs 2GB）

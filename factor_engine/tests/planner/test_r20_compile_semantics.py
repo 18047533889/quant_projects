@@ -28,25 +28,25 @@ from __future__ import annotations
 # sufficient for the derivation tests, unlike the full (and currently
 # concurrent-session-broken) ``load_all()``.
 try:  # pragma: no cover - collection-time registry warm-up
-    import cleaned_operators.common.time_series  # noqa: E402,F401
-    import cleaned_operators.common.statistics  # noqa: E402,F401
+    import factor_engine.cleaned_operators.common.time_series  # noqa: E402,F401
+    import factor_engine.cleaned_operators.common.statistics  # noqa: E402,F401
 except Exception:  # pragma: no cover - concurrent session may break a module
     pass
 
 import pytest
 
-from planner.logical_plan import PlanNode
-from planner.plan_hash import structural_key
-from planner.cse import apply_cse
-from planner import rolling_cache as rolling_cache_mod
-from planner.rolling_cache import (
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.plan_hash import structural_key
+from factor_engine.planner.cse import apply_cse
+from factor_engine.planner import rolling_cache as rolling_cache_mod
+from factor_engine.planner.rolling_cache import (
     _BASE_ROLLING_OPS,
     _derive_rolling_ops,
     _window_from_attrs,
     is_rolling_operator,
     refresh_rolling_ops,
 )
-from planner.rolling_cse import (
+from factor_engine.planner.rolling_cse import (
     SEMANTIC_ATTRS_LOST_BY_ROLLING_CSE,
     apply_rolling_cse,
     assert_rolling_cse_semantics_preserved,
@@ -55,7 +55,7 @@ from planner.rolling_cse import (
     verify_plan_ref_semantics,
     verify_plan_refs_semantics,
 )
-from planner.composite_lowering import lower_composite_operators
+from factor_engine.planner.composite_lowering import lower_composite_operators
 
 
 # ---------------------------------------------------------------------------
@@ -337,7 +337,7 @@ def test_r20_009_shared_only_when_fully_equivalent():
 def test_r20_010_rolling_ops_derived_set_consistency():
     # registry is warmed up by the module-level time_series/statistics imports;
     # a full load_all is avoided (slow + concurrent-session-broken).
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     refreshed = refresh_rolling_ops()
     derived = _derive_rolling_ops()
@@ -369,7 +369,7 @@ def test_r20_010_is_rolling_operator_resolves_aliases():
 def test_r20_010_derived_set_extends_beyond_base():
     # The registry-derived set must cover ops that were never in the hand-written
     # bootstrap list (proves derivation, not just re-hashing the base set).
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     refresh_rolling_ops()
     derived = set(rolling_cache_mod.ROLLING_OPS)
@@ -396,7 +396,7 @@ def test_r20_011_window_parsing_uses_declared_history_param():
 # R20-459: SQL materialized_series / composite lowering 语义保留
 # ---------------------------------------------------------------------------
 def test_r20_459_sql_materialized_series_carries_semantic_attrs(monkeypatch):
-    from planner import sql_lowerer
+    from factor_engine.planner import sql_lowerer
 
     col = _col()
     mean = PlanNode(

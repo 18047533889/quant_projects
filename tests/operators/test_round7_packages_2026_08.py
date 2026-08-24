@@ -26,8 +26,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 load_all()
 
@@ -53,7 +53,7 @@ def _get(name):
 # ---------------------------------------------------------------------------
 
 def test_ols_gate_rejects_rank_deficient_design():
-    from cleaned_operators.ts_model._rolling_core import fit_linear_model_checked
+    from factor_engine.cleaned_operators.ts_model._rolling_core import fit_linear_model_checked
 
     # perfect collinearity: x2 = 2*x1  ->  rank deficient
     x1 = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
@@ -63,7 +63,7 @@ def test_ols_gate_rejects_rank_deficient_design():
 
 
 def test_ols_gate_accepts_well_conditioned_design():
-    from cleaned_operators.ts_model._rolling_core import fit_linear_model_checked
+    from factor_engine.cleaned_operators.ts_model._rolling_core import fit_linear_model_checked
 
     x1 = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
     x2 = np.array([2.0, 1.0, 4.0, 3.0, 5.0])

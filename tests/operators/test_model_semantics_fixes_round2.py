@@ -13,8 +13,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
@@ -33,7 +33,7 @@ def test_drawdown_running_peak_finds_hidden_drawdown() -> None:
     """[5, 10, 6, 11] has a real max drawdown 10 -> 6 (-0.4) whose peak is not
     the global high (the final 11).  The global-peak-then-min-after approach
     reports NaN; the running-peak approach must find -0.4."""
-    from cleaned_operators.intraday.vwap_path import _drawdown_depth, _drawdown_duration
+    from factor_engine.cleaned_operators.intraday.vwap_path import _drawdown_depth, _drawdown_duration
 
     price = np.array([5.0, 10.0, 6.0, 11.0])
     assert _drawdown_depth(price) == pytest.approx(-0.4, abs=1e-9)
@@ -42,7 +42,7 @@ def test_drawdown_running_peak_finds_hidden_drawdown() -> None:
 
 def test_drawdown_matches_pandas_intra_max_drawdown_depth() -> None:
     """intra_drawdown_depth must agree with intra_max_drawdown on random paths."""
-    from cleaned_operators.intraday.vwap_path import _drawdown_depth, _max_drawdown
+    from factor_engine.cleaned_operators.intraday.vwap_path import _drawdown_depth, _max_drawdown
 
     rng = np.random.default_rng(0)
     for _ in range(20):
@@ -110,7 +110,7 @@ def test_vwap_path_pct_is_scale_invariant() -> None:
     """Two stocks whose cum-VWAP paths are identical relative to their own
     first price but at very different absolute levels must have the same
     ``_pct`` slope."""
-    from cleaned_operators.intraday.vwap_path import _vwap_path_pct_common
+    from factor_engine.cleaned_operators.intraday.vwap_path import _vwap_path_pct_common
 
     # intraday minute series for two days so _cum_vwap has a real day
     amt = np.linspace(1, 2, 10)
@@ -187,7 +187,7 @@ def test_mad_mahalanobis_and_residual_percentile() -> None:
 
 def test_knn_distance_blockwise_matches_reference() -> None:
     """The blockwise KNN must agree with a direct full-distance computation."""
-    from cleaned_operators.cross_section.robust_cs import _knn_blockwise
+    from factor_engine.cleaned_operators.cross_section.robust_cs import _knn_blockwise
 
     rng = np.random.default_rng(5)
     Xn = rng.standard_normal((37, 4))

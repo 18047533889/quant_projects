@@ -28,7 +28,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 try:
     import polars as pl
@@ -38,7 +38,7 @@ except Exception:  # pragma: no cover - optional
 
 @pytest.fixture(scope="module")
 def _loaded():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
 
@@ -195,7 +195,7 @@ def test_price_below_one_edge_scale_invariant(_loaded):
 # P0-06: HVG ties vs the strict O(W²) reference
 # ---------------------------------------------------------------------------
 def test_hvg_equal_value_reference(_loaded):
-    from cleaned_operators.hvg_ext import _hvg_edges, _hvg_reference_O_W2
+    from factor_engine.cleaned_operators.hvg_ext import _hvg_edges, _hvg_reference_O_W2
 
     assert sorted(_hvg_edges(np.array([1.0, 1.0, 2.0]))) == [(0, 1), (1, 2)]
     rng = np.random.default_rng(42)
@@ -210,7 +210,7 @@ def test_hvg_equal_value_reference(_loaded):
 # P0-07: true Allan factor — Poisson / clustered / regular
 # ---------------------------------------------------------------------------
 def test_event_allan_poisson(_loaded):
-    from cleaned_operators.evt_allan import _allan_factor_single, _check_event_binary
+    from factor_engine.cleaned_operators.evt_allan import _allan_factor_single, _check_event_binary
 
     assert _check_event_binary(np.array([0.0, 1.0, 0.0]))
     assert not _check_event_binary(np.array([0.0, 2.0]))
@@ -231,7 +231,7 @@ def test_event_allan_poisson(_loaded):
 # P0-09: DMD on a known linear system
 # ---------------------------------------------------------------------------
 def test_dmd_known_linear_system(_loaded):
-    from cleaned_operators.dmd import _hankel_dmd
+    from factor_engine.cleaned_operators.dmd import _hankel_dmd
 
     # geometric decay x_t = 0.9^t is exactly the linear system x_{t+1}=0.9 x_t
     x = 0.9 ** np.arange(60, dtype=float)
@@ -252,7 +252,7 @@ def test_dmd_known_linear_system(_loaded):
 
 
 def test_dmd_rank_infeasible_rejected(_loaded):
-    from cleaned_operators.dmd import _hankel_dmd
+    from factor_engine.cleaned_operators.dmd import _hankel_dmd
 
     x = np.arange(20, dtype=float)
     # rank=50 > the SVD rank available -> fail closed, never silently clipped
@@ -263,7 +263,7 @@ def test_dmd_rank_infeasible_rejected(_loaded):
 # P0-10: SR vs the linear-space recursion reference
 # ---------------------------------------------------------------------------
 def test_sr_recursive_reference(_loaded):
-    from cleaned_operators.research_spectral import _sr_gaussian
+    from factor_engine.cleaned_operators.research_spectral import _sr_gaussian
 
     rng = np.random.default_rng(3)
     v = np.concatenate([rng.normal(0, 1, 40), rng.normal(1.0, 1, 40)])
@@ -289,7 +289,7 @@ def test_sr_recursive_reference(_loaded):
 def test_bds_vs_statsmodels(_loaded):
     pytest.importorskip("statsmodels")
     from statsmodels.tsa.stattools import bds as sm_bds
-    from cleaned_operators.research_spectral import _bds_statistic
+    from factor_engine.cleaned_operators.research_spectral import _bds_statistic
 
     rng = np.random.default_rng(9)
     x = rng.standard_normal(400)
@@ -300,7 +300,7 @@ def test_bds_vs_statsmodels(_loaded):
 
 
 def test_bds_iid_gaussian_small_stat(_loaded):
-    from cleaned_operators.research_spectral import _bds_statistic
+    from factor_engine.cleaned_operators.research_spectral import _bds_statistic
 
     rng = np.random.default_rng(12)
     stats = [_bds_statistic(rng.standard_normal(400), 2, 1.5) for _ in range(15)]
@@ -337,7 +337,7 @@ def _bicoherence_pair(x: np.ndarray, f1: int, f2: int, n_segments: int) -> float
 
 
 def test_bicoherence_bounds_and_coupling(_loaded):
-    from cleaned_operators.research_spectral import _bicoherence_max
+    from factor_engine.cleaned_operators.research_spectral import _bicoherence_max
 
     n_seg, seg, f1, f2 = 8, 64, 4, 6
     phi1, phi2 = 0.3, 1.1
@@ -391,7 +391,7 @@ def test_wasserstein_analytic_barycenter(_loaded):
 # P1-13: kernel-Granger scale normalisation (X ~ 1e7 must not dominate Y ~ 1e-2)
 # ---------------------------------------------------------------------------
 def test_kernel_granger_scale_normalised(_loaded):
-    from cleaned_operators.research_spectral import _kernel_granger_score
+    from factor_engine.cleaned_operators.research_spectral import _kernel_granger_score
 
     rng = np.random.default_rng(4)
     n = 160

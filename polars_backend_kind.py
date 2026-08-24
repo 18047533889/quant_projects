@@ -25,8 +25,8 @@ PANDAS_FALLBACK_SOURCES = frozenset({
 
 # Module-level bridges that round-trip through ``to_pandas()``.
 PANDAS_FALLBACK_MODULES = frozenset({
-    "cleaned_operators.rolling_pack",   # register_polars_udf
-    "cleaned_operators.common.polars_ops",  # panel_pandas_bridge paths
+    "factor_engine.cleaned_operators.rolling_pack",   # register_polars_udf
+    "factor_engine.cleaned_operators.common.polars_ops",  # panel_pandas_bridge paths
 })
 
 

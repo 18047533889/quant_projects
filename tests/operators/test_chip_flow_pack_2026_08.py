@@ -19,11 +19,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.operator_policy import infer_operator_policy
-from cleaned_operators.operator_surface import classify_canonical
-import cleaned_operators.operator_surface as _surface_mod
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
+import factor_engine.cleaned_operators.operator_surface as _surface_mod
 
 ensure_cleaned_loaded()
 
@@ -224,7 +224,7 @@ def _research_op_catalog(canonical):
 
 def test_bipower_var_matches_standard_formula():
     """micro_bipower_var must equal (pi/2)*(n/(n-1))*sum|r_t||r_{t-1}|."""
-    from cleaned_operators.microstructure.session import pct_change_by_session
+    from factor_engine.cleaned_operators.microstructure.session import pct_change_by_session
 
     prices = np.array([100.0, 101.0, 99.5, 100.2, 101.5, 100.8])
     s = pd.Series(prices, index=pd.date_range("2024-01-01", periods=6, freq="min"))

@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS, build_operator_spec
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS, build_operator_spec
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 from tests.operator_golden.conftest import assert_panel_shape_unchanged
 
 # 需多输入 / 特殊参数，smoke 中跳过

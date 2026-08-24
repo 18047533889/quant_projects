@@ -21,10 +21,10 @@ import dataclasses
 import pandas as pd
 import pytest
 
-from api import rank
-from api.columns import col
-from runtime.engine import _scope_from_factor
-from runtime.incremental_scheduler import (
+from factor_engine.api import rank
+from factor_engine.api.columns import col
+from factor_engine.runtime.engine import _scope_from_factor
+from factor_engine.runtime.incremental_scheduler import (
     FactorSemanticIdentityMismatch,
     _verify_factor_semantic_identity,
     factor_from_catalog_info,

@@ -33,21 +33,21 @@ def _series(n: int = 600, seed: int = 0) -> pd.DataFrame:
 def _probe(canonical: str, family: str) -> str:
     """Call the operator with its registered default params on synthetic data."""
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
         import importlib
         _MODULES = {
-            "state_geometry": "cleaned_operators.state_geometry",
-            "dmd": "cleaned_operators.dmd",
-            "spectral": "cleaned_operators.advanced_structure",
-            "quantile": "cleaned_operators.advanced_quantile_dynamics",
-            "tail": "cleaned_operators.extreme_tail",
-            "markov": "cleaned_operators.markov_dynamics",
-            "information": "cleaned_operators.advanced_information",
-            "event_interval": "cleaned_operators.event_interval",
-            "glr": "cleaned_operators.glr_change",
-            "dependence": "cleaned_operators.dependence_ext",
-            "intraday": "cleaned_operators.session_recovery",
-            "activity_clock": "cleaned_operators.activity_clock",
+            "state_geometry": "factor_engine.cleaned_operators.state_geometry",
+            "dmd": "factor_engine.cleaned_operators.dmd",
+            "spectral": "factor_engine.cleaned_operators.advanced_structure",
+            "quantile": "factor_engine.cleaned_operators.advanced_quantile_dynamics",
+            "tail": "factor_engine.cleaned_operators.extreme_tail",
+            "markov": "factor_engine.cleaned_operators.markov_dynamics",
+            "information": "factor_engine.cleaned_operators.advanced_information",
+            "event_interval": "factor_engine.cleaned_operators.event_interval",
+            "glr": "factor_engine.cleaned_operators.glr_change",
+            "dependence": "factor_engine.cleaned_operators.dependence_ext",
+            "intraday": "factor_engine.cleaned_operators.session_recovery",
+            "activity_clock": "factor_engine.cleaned_operators.activity_clock",
         }
         mod = _MODULES.get(family)
         if mod:
@@ -59,7 +59,7 @@ def _probe(canonical: str, family: str) -> str:
         return "NO_DEFAULT_REQUIRED"
     # Skip operators that need non-default inputs (multiple panels of special shape)
     try:
-        from cleaned_operators.base import _kernel_param_defaults
+        from factor_engine.cleaned_operators.base import _kernel_param_defaults
         defaults = _kernel_param_defaults(op)
     except Exception:
         defaults = {}

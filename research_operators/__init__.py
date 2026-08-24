@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.cleaned_bridge import build_cleaned_dsl_allowlist, ensure_cleaned_loaded
-from cleaned_operators.operator_surface import UNSAFE_CANONICALS
+from factor_engine.backend.cleaned_bridge import build_cleaned_dsl_allowlist, ensure_cleaned_loaded
+from factor_engine.cleaned_operators.operator_surface import UNSAFE_CANONICALS
 from research_tools.registry import ResearchToolRegistry
 
 
@@ -52,7 +52,7 @@ def get_research_operator(name: str, *, backend: str = "pandas_numpy"):
 def get_unsafe_operator(name: str, *, backend: str = "pandas_numpy"):
     """Return an unsafe operator only through explicit opt-in."""
     ensure_cleaned_loaded()
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     canonical = OperatorRegistry._aliases.get(name, name)
     if canonical not in UNSAFE_CANONICALS:

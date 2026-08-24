@@ -29,6 +29,7 @@ GATES_CONFIG_PATH = os.path.join(REPO_ROOT, "config", "gates.json")
 try:
     sys.path.insert(0, os.path.join(REPO_ROOT, "scripts"))
     from gate_evidence_verifier import (
+       
         GateEvidenceVerifier,
         NOT_APPLICABLE,
         NOT_RUN,
@@ -107,10 +108,17 @@ PACKAGE_GATES: dict[str, set[str]] = {
         "NUMERICAL_ORACLE", "PROPERTY", "SERIALIZATION",
         "1K_SCALE", "10K_SCALE", "100K_SCALE",
     },
-    "factor_optimizer": set(),
+    # R46 P0-Z: production packages must carry production core responsibilities —
+    # SERIALIZATION / DETERMINISM / FRESH_WHEEL resolve here so factor_optimizer
+    # and dataaccess cannot ride to PRODUCTION_CANDIDATE on CROSS_PACKAGE alone.
+    "factor_optimizer": {
+        "SERIALIZATION", "DETERMINISM", "FRESH_WHEEL",
+    },
     "factor_assets": {"SERIALIZATION"},
     "factor_preprocess": {"LEAKAGE"},
-    "dataaccess": set(),
+    "dataaccess": {
+        "SERIALIZATION", "DETERMINISM", "FRESH_WHEEL",
+    },
 }
 
 # Gates that are critical for BROKEN classification
@@ -229,12 +237,27 @@ def classify_package(
 ) -> str:
     """Classify a package based on its applicable gate statuses.
 
-    PRODUCTION_CANDIDATE: all applicable gates PASS
-    SAFE_BY_GATING: all applicable gates are at least NOT_RUN (no FAIL/BLOCKED)
-    RESEARCH_ONLY: some gates FAIL or are BLOCKED (but not critical gates)
+    R46 P0-Z: a package is PRODUCTION_CANDIDATE ONLY when ALL of the following
+    hold:
+      * every package-specific gate (PACKAGE_GATES[pkg] | CROSS_PACKAGE_GATES)
+        is PASS or a legitimate NOT_APPLICABLE,
+      * the platform structural gates (SOURCE_AUTHORITY, SUPPLY_CHAIN,
+        FRESH_WHEEL_MATRIX, EVIDENCE_CURRENT, SUBMODULE_REACHABILITY) are ALL
+        PASS or a legitimate NOT_APPLICABLE — a single FAIL/BLOCKED/STALE
+        floors the whole platform to PRE_PRODUCTION / SAFE_BY_GATING, never
+        PRODUCTION_CANDIDATE,
+      * the package carries its production core responsibility gates
+        (PLATFORM_CORE_GATES ∩ applicable), so an empty package-specific set
+        cannot ride to PRODUCTION_CANDIDATE on CROSS_PACKAGE alone.
+
+    PRODUCTION_CANDIDATE: fully green (all applicable + platform structural)
+    SAFE_BY_GATING / PRE_PRODUCTION: nothing FAIL/BLOCKED but something STALE/
+        NOT_RUN, or a structural gate is not green
+    RESEARCH_ONLY: some gate FAIL or BLOCKED (not a critical gate)
     OFFLINE_ONLY: no gate evidence at all for this package
     BROKEN: critical gates (UNIT, PROPERTY, NUMERICAL_ORACLE) are FAIL/BLOCKED
     """
+    acceptable = {"PASS", NOT_APPLICABLE}
     applicable = PACKAGE_GATES.get(package, set()) | CROSS_PACKAGE_GATES
 
     # OFFLINE_ONLY: no gates apply to this package at all
@@ -243,7 +266,7 @@ def classify_package(
 
     # Check if there's any evidence at all for this package's gates
     has_any_evidence = any(
-        gate_statuses.get(g) not in ("NOT_RUN", None)
+        gate_statuses.get(g) not in (NOT_RUN, None)
         for g in applicable
     )
     if not has_any_evidence:
@@ -256,7 +279,7 @@ def classify_package(
             if s in ("FAIL", "BLOCKED"):
                 return "BROKEN"
 
-    # Check for any FAIL or BLOCKED
+    # R46 P0-Z: any FAIL/BLOCKED on applicable package gates -> RESEARCH_ONLY.
     has_fail_or_blocked = any(
         gate_statuses.get(g) in ("FAIL", "BLOCKED")
         for g in applicable
@@ -264,15 +287,31 @@ def classify_package(
     if has_fail_or_blocked:
         return "RESEARCH_ONLY"
 
-    # Check if all applicable gates PASS
-    all_pass = all(
-        gate_statuses.get(g) == "PASS"
+    # R46 P0-Z: every platform structural gate must be PASS / legitimate N/A,
+    # otherwise the whole platform is only PRE_PRODUCTION / SAFE_BY_GATING.
+    for sg in PLATFORM_STRUCTURAL_GATES:
+        s = gate_statuses.get(sg)
+        if s not in acceptable:
+            return "SAFE_BY_GATING"
+
+    # R46 P0-Z: the package must carry its production core responsibility.
+    core = PLATFORM_CORE_GATES & applicable
+    if not core:
+        return "SAFE_BY_GATING"
+    for cg in core:
+        s = gate_statuses.get(cg)
+        if s not in acceptable:
+            return "SAFE_BY_GATING"
+
+    # All applicable + platform + core gates are PASS/legitimate-N/A.
+    all_ok = all(
+        gate_statuses.get(g) in acceptable
         for g in applicable
     )
-    if all_pass:
+    if all_ok:
         return "PRODUCTION_CANDIDATE"
 
-    # Otherwise: all gates at least NOT_RUN (no FAIL/BLOCKED)
+    # Otherwise: no FAIL/BLOCKED, but some NOT_RUN / STALE / missing -> SAFE.
     return "SAFE_BY_GATING"
 
 
@@ -336,9 +375,12 @@ def main() -> int:
         evidence_gates[name] = gate_entry.get("evidence", [])
         evidence_gate_objs[name] = gate_entry
 
-    # VER-P0-05: SUBMODULE_REACHABILITY — with no git submodules declared there
-    # is nothing pinned to prove, so the gate is NOT_RUN (never PASS).
-    submodule_declared = n_gitlinks > 0
+    # R46 P0-X: single authoritative verifier, bound to the live source identity.
+    verifier = GateEvidenceVerifier(
+        source_sha=evidence_sha,
+        current_sha=current_sha,
+        gitlinks_count=n_gitlinks,
+    )
 
     # Determine gate order: from gates.json, then any extras from evidence
     configured_gate_names = [g["name"] for g in gates_config]
@@ -347,42 +389,29 @@ def main() -> int:
         if g not in all_gate_names:
             all_gate_names.append(g)
 
-    # Compute status for each gate
+    # Compute status for each gate (verifier is the ONLY source of truth).
     gate_statuses: dict[str, str] = {}
     gate_tests: dict[str, int] = {}
     gate_timestamps: dict[str, str] = {}
     gate_notes: dict[str, str] = {}
 
     for gate_name in all_gate_names:
-        if gate_name == "SUBMODULE_REACHABILITY":
-            if submodule_declared:
-                # Submodules ARE declared: normal evidence evaluation.
-                status, tests, ts = compute_gate_status(
-                    gate_name, evidence_gates, evidence_sha, current_sha,
-                )
-            else:
-                status, tests, ts = ("NOT_RUN", 0, "—")
-                gate_notes[gate_name] = "no submodules declared; nothing pinned to prove"
-        elif gate_name in EVIDENCE_BACKED_GATES:
+        if gate_name in EVIDENCE_BACKED_GATES:
             # SOURCE_AUTHORITY / SUPPLY_CHAIN / FRESH_WHEEL_MATRIX /
-            # EVIDENCE_CURRENT: the runner now emits an authoritative per-gate
-            # ``status`` (PASS/FAIL/BLOCKED/NOT_RUN) derived from REAL verifier
-            # output.  Prefer that over recomputing from synthetic entries.
-            gate_status = evidence_gate_objs.get(gate_name, {}).get("status")
-            if gate_status is not None:
-                gate_notes[gate_name] = _first_entry_note(evidence_gate_objs.get(gate_name, {}))
-                status, tests, ts = gate_status, 0, evidence_timestamp
-            elif evidence_gates.get(gate_name):
-                status, tests, ts = compute_gate_status(
-                    gate_name, evidence_gates, evidence_sha, current_sha,
-                )
-            else:
-                status, tests, ts = ("NOT_RUN", 0, "—")
-                gate_notes[gate_name] = "no evidence recorded (runner not yet wired)"
-        else:
-            status, tests, ts = compute_gate_status(
-                gate_name, evidence_gates, evidence_sha, current_sha,
+            # EVIDENCE_CURRENT: prefer the verifier's authoritative verdict.
+            status, tests, ts, reason = compute_gate_status(
+                gate_name, evidence_gates, evidence_sha, current_sha, verifier,
             )
+            if reason:
+                gate_notes[gate_name] = reason
+        else:
+            # Verifier route for pytest gates + SUBMODULE_REACHABILITY (which
+            # becomes NOT_APPLICABLE when the monorepo has no gitlinks).
+            status, tests, ts, reason = compute_gate_status(
+                gate_name, evidence_gates, evidence_sha, current_sha, verifier,
+            )
+            if reason:
+                gate_notes[gate_name] = reason
         gate_statuses[gate_name] = status
         gate_tests[gate_name] = tests
         gate_timestamps[gate_name] = ts
@@ -410,6 +439,7 @@ def main() -> int:
     fail_count = sum(1 for s in gate_statuses.values() if s == "FAIL")
     blocked_count = sum(1 for s in gate_statuses.values() if s == "BLOCKED")
     not_run_count = sum(1 for s in gate_statuses.values() if s == "NOT_RUN")
+    not_applicable_count = sum(1 for s in gate_statuses.values() if s == NOT_APPLICABLE)
 
     print("## Summary")
     print(f"- PASS: {pass_count}")
@@ -417,15 +447,18 @@ def main() -> int:
     print(f"- FAIL: {fail_count}")
     print(f"- BLOCKED: {blocked_count}")
     print(f"- NOT_RUN: {not_run_count}")
+    print(f"- NOT_APPLICABLE: {not_applicable_count}")
     print(f"- Total gates: {len(gate_statuses)}")
     print()
 
-    # VER-P0-05: ALL GREEN requires every REQUIRED_GATES == PASS AND the
-    # evidence git SHA == current HEAD AND a clean working tree.
+    # VER-P0-05 / R46 P0-29: ALL GREEN requires every REQUIRED_GATES == PASS
+    # (or a legitimate NOT_APPLICABLE with reason/evidence) AND the evidence
+    # git SHA == current HEAD AND a clean working tree.
+    acceptable = {"PASS", NOT_APPLICABLE}
     reasons: list[str] = []
     for req in sorted(REQUIRED_GATES):
         status = gate_statuses.get(req)
-        if status != "PASS":
+        if status not in acceptable:
             note = gate_notes.get(req, "")
             suffix = f" ({note})" if note else ""
             reasons.append(f"{req}={status}{suffix}")

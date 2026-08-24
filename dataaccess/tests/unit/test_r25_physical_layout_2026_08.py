@@ -133,11 +133,11 @@ def test_tphy003_split_default_prefix():
 # ---------------------------------------------------------------------------
 # T-PHY-004 — event sparse EMPTY_OK
 # ---------------------------------------------------------------------------
-def test_tphy004_event_sparse_empty_ok():
+def test_tphy004_event_sparse_empty_ok(tmp_path):
     """某天无 event object → missing_semantics=empty_ok 静默跳过。"""
     import subprocess
 
-    dest = Path("/tmp/r25_evt") / "2024-01-02.parquet"
+    dest = tmp_path / "2024-01-02.parquet"
 
     def fake_run(cmd, **kwargs):
         raise subprocess.CalledProcessError(
@@ -156,13 +156,13 @@ def test_tphy004_event_sparse_empty_ok():
 # ---------------------------------------------------------------------------
 # T-PHY-005 — dense D1 missing ERROR
 # ---------------------------------------------------------------------------
-def test_tphy005_dense_missing_error():
+def test_tphy005_dense_missing_error(tmp_path):
     """交易日行情 object missing → MissingRequiredPartition（fail-closed）。"""
     import subprocess
 
     from data_access.core.exceptions import MissingRequiredPartition
 
-    dest = Path("/tmp/r25_dense") / "2024-01-02.parquet"
+    dest = tmp_path / "2024-01-02.parquet"
 
     def fake_run(cmd, **kwargs):
         raise subprocess.CalledProcessError(

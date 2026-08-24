@@ -31,7 +31,7 @@ AGG_SPECS: dict[str, AggregationSpec] = {
 
 
 def aggregation_spec_for(canon: str) -> AggregationSpec:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     return AGG_SPECS.get(name, AggregationSpec())

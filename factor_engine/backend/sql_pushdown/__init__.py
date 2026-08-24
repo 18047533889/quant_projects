@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """SQL pushdown: PlanNode compilation, execution and backend registration."""
 
-from backend.sql_pushdown.emitter import (
+from factor_engine.backend.sql_pushdown.emitter import (
     CompiledSql,
     InstrumentFilterKind,
     SqlDialect,
@@ -9,14 +9,14 @@ from backend.sql_pushdown.emitter import (
     compile_plan_to_sql,
     plan_is_sql_capable,
 )
-from backend.sql_pushdown.cos_semantic_fixes import install_sql_semantic_fixes
-from backend.sql_pushdown.executor import (
+from factor_engine.backend.sql_pushdown.cos_semantic_fixes import install_sql_semantic_fixes
+from factor_engine.backend.sql_pushdown.executor import (
     PushdownContext,
     execute_compiled_sql,
     extract_pushdown_context,
     try_execute_sql_pushdown,
 )
-from backend.sql_pushdown.sql_registry import (
+from factor_engine.backend.sql_pushdown.sql_registry import (
     SQL_CAPABLE_CANONICALS,
     is_sql_capable,
     register_sql_backends,

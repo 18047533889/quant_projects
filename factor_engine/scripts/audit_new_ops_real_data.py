@@ -18,7 +18,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 _N = 160          # stocks (>= 2*grid^2 = 128 for default grid=8 copula)
 _D = 260          # trading days
@@ -170,8 +170,8 @@ def _fetch(panel: dict, name: str, *, op: str | None = None) -> pd.DataFrame:
 
 
 def main() -> None:
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     panel = _build_panel()

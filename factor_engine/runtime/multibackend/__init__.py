@@ -97,13 +97,6 @@ from .arrow_zerocopy_boundary import (
     TransferStats,
     global_zerocopy_boundary,
 )
-from .parallel_region_scheduler import (
-    ExecutionRegion,
-    ParallelSchedulerMetrics,
-    ParallelRegionScheduler,
-    RegionOutputBundle,
-    get_global_parallel_scheduler,
-)
 
 __all__ = [
     # Memory optimizations - core classes
@@ -150,11 +143,4 @@ __all__ = [
     "TransferMetadata",
     "TransferStats",
     "global_zerocopy_boundary",
-
-    # Parallel region scheduling (MB-P1-023, R23 P0-5/P0-6)
-    "ExecutionRegion",
-    "ParallelRegionScheduler",
-    "ParallelSchedulerMetrics",
-    "RegionOutputBundle",
-    "get_global_parallel_scheduler",
 ]

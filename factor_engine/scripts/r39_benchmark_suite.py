@@ -29,13 +29,13 @@ for _p in (str(_FE_ROOT), str(_FE_ROOT.parent)):
 
 import pandas as pd
 
-from api import rank, ts_max, ts_mean, ts_std, ts_sum
-from api.columns import col
-from api.factor import Factor
-from backend.pandas_backend import PandasBackend
-from runtime.engine import FactorEngine
-from runtime.perf_counters import reset_global_counters, get_global_counters
-from runtime.performance_run_summary import (
+from factor_engine.api import rank, ts_max, ts_mean, ts_std, ts_sum
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.runtime.perf_counters import reset_global_counters, get_global_counters
+from factor_engine.runtime.performance_run_summary import (
     PerformanceRunSummary,
     capture_environment,
     render_r39_json,
@@ -333,7 +333,7 @@ def _b8_matrix(n_factors: int, add: int) -> dict:
     tmp = OUT.parent / "bench_lakes" / "b8"
     tmp.mkdir(parents=True, exist_ok=True)
 
-    from runtime.engine import FactorEngine
+    from factor_engine.runtime.engine import FactorEngine
 
     engine = FactorEngine(data_source=source, backend=PandasBackend())
     mkwargs = {
@@ -433,7 +433,7 @@ def main() -> int:
 
 def _from_dict(d: dict):
     """dict → PerformanceRunSummary kwargs（从 summary.to_dict 反解）。"""
-    from runtime.performance_run_summary import PerformanceRunSummary
+    from factor_engine.runtime.performance_run_summary import PerformanceRunSummary
 
     fields = {k: v for k, v in d.items() if k in PerformanceRunSummary.__dataclass_fields__}
     fields.pop("amplification", None)

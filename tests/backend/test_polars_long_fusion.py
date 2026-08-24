@@ -7,16 +7,16 @@ import pytest
 
 pytest.importorskip("polars")
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from backend.polars_long_policy import (
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.backend.polars_long_policy import (
     POLARS_LONG_MAP_GROUPS,
     POLARS_LONG_NATIVE,
     POLARS_LONG_PYTHON_ROLLING,
 )
-from runtime.engine import FactorEngine
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 
@@ -55,7 +55,7 @@ def _run(source, expr, backend_name: str):
     ],
 )
 def test_fused_base_column_ops_match_pandas(source, factory_name, expr_builder):
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
 
     if factory_name not in DAILY_CANONICALS:
         pytest.skip(f"{factory_name} is outside the production primitive surface")

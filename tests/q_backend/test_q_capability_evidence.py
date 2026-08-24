@@ -6,7 +6,7 @@ Q-P0-002: Verify Q_NATIVE_WITHOUT_LOWERING hard gate
 
 import pytest
 
-from backend.q_backend.q_capability_evidence import (
+from factor_engine.backend.q_backend.q_capability_evidence import (
     QCapabilityEvidence,
     QCapabilityGate,
     QEvidencePass,

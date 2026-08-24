@@ -9,9 +9,9 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-from backend.context import ExecutionContext
-from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
-from planner.logical_plan import PlanNode
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+from factor_engine.planner.logical_plan import PlanNode
 from tests.helpers import InMemorySeriesSource
 from workspace_paths import quant_projects_root
 
@@ -38,7 +38,7 @@ class _CHSource:
 
 
 def test_execute_clickhouse_delegates_to_execute_query():
-    from backend.sql_pushdown.executor import (
+    from factor_engine.backend.sql_pushdown.executor import (
         PushdownContext,
         execute_compiled_sql,
     )
@@ -85,7 +85,7 @@ def test_execute_clickhouse_delegates_to_execute_query():
     fake_ch = types.ModuleType("clickhouse_connect")
     fake_ch.get_client = MagicMock(return_value=mock_client)
     with patch.dict(sys.modules, {"clickhouse_connect": fake_ch}):
-        with patch("backend.sql_pushdown.executor._ensure_data_access", return_value=None):
+        with patch("factor_engine.backend.sql_pushdown.executor._ensure_data_access", return_value=None):
             with patch("data_access.clickhouse.panel.ClickHouseConfig.from_env", return_value=mock_cfg):
                 series = execute_compiled_sql(compiled, pctx, None)
 
@@ -100,7 +100,7 @@ def test_execute_clickhouse_delegates_to_execute_query():
 
 
 def test_try_execute_sql_pushdown_none_without_ch_source():
-    from backend.sql_pushdown.executor import try_execute_sql_pushdown
+    from factor_engine.backend.sql_pushdown.executor import try_execute_sql_pushdown
 
     idx = pd.MultiIndex.from_product(
         [pd.date_range("2024-01-01", periods=2), ["A"]],

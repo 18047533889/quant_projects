@@ -20,9 +20,9 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-import runtime.shard_executor as se
-import runtime.spool_policy as sp
-from runtime.shard_executor import ArrowSpoolRef, ShardExecutor, SpooledShard
+import factor_engine.runtime.shard_executor as se
+import factor_engine.runtime.spool_policy as sp
+from factor_engine.runtime.shard_executor import ArrowSpoolRef, ShardExecutor, SpooledShard
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +80,7 @@ class _FakeBroker:
 
 def _patch_no_signals(monkeypatch) -> None:
     """让所有 best-effort 探测都失败 → factory 走 fail-safe。"""
-    import runtime.resource_governor as rg
+    import factor_engine.runtime.resource_governor as rg
 
     monkeypatch.setattr(rg, "spill_disk_speed_class", lambda: "unknown")
     monkeypatch.setattr(rg, "live_memory_headroom_bytes", lambda: None)

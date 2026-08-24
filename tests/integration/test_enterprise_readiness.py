@@ -12,10 +12,10 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="legacy backend count thresholds superseded by evidence-backed production convergence")
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from backend.sql_pushdown.sql_registry import register_sql_backends, SQL_CAPABLE_CANONICALS
-from runtime.env_bootstrap import bootstrap_runtime_env
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends, SQL_CAPABLE_CANONICALS
+from factor_engine.runtime.env_bootstrap import bootstrap_runtime_env
 
 from tests.helpers import FE_ROOT
 
@@ -92,7 +92,7 @@ def test_no_polars_only_without_pandas_except_intentional():
 
 
 def test_all_load_modules_importable():
-    from cleaned_operators import _LOAD_MODULES
+    from factor_engine.cleaned_operators import _LOAD_MODULES
 
     for mod in _LOAD_MODULES:
         __import__(mod, fromlist=["*"])
@@ -127,7 +127,7 @@ def test_sql_arithmetic_ops_have_polars_backend():
 
 
 def test_tier1_operators_have_explicit_policy():
-    from cleaned_operators.operator_policy import (
+    from factor_engine.cleaned_operators.operator_policy import (
         _EXPLICIT_POLICIES,
         tier1_policy_keys,
     )
@@ -173,7 +173,7 @@ def test_examples_yaml_no_legacy_data_source_types():
 
 
 def test_storage_write_targets_public_api():
-    from storage import ClickHouseWriteTarget, resolve_write_target
+    from factor_engine.storage import ClickHouseWriteTarget, resolve_write_target
 
     assert resolve_write_target("local").name == "local"
     assert isinstance(resolve_write_target("clickhouse"), ClickHouseWriteTarget)

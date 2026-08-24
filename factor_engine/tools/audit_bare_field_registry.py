@@ -11,7 +11,7 @@ This scanner flags, in *production* source (everything under
 ``factor_engine/`` except ``tests/``, ``tools/``, ``scripts/``, ``build/`` and
 the two explicit legacy wrappers)::
 
-    from fields import resolve_field      -> bare import
+    from factor_engine.fields import resolve_field      -> bare import
     resolve_field(<name>)                  -> bare call
     FIELD_REGISTRY.resolve_...             -> bare registry method
 

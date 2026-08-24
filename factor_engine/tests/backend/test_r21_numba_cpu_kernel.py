@@ -17,15 +17,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.contracts import ExecutionKind
-from backend.numba_kernel_registry import (
+from factor_engine.backend.contracts import ExecutionKind
+from factor_engine.backend.numba_kernel_registry import (
     NUMBA_AVAILABLE,
     NumbaKernelRegistry,
     parity_check,
 )
 
 # Ensure ts_rolling kernels are registered
-import backend.numba_kernels.ts_rolling  # noqa: F401  (registers kernels)
+import factor_engine.backend.numba_kernels.ts_rolling  # noqa: F401  (registers kernels)
 
 
 # ---------------------------------------------------------------------------

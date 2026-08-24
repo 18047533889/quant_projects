@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from runtime.streaming_result_sink import (
+from factor_engine.runtime.streaming_result_sink import (
     BoundedResultQueue,
     ResultItem,
     StreamingResultSink,
@@ -108,8 +108,8 @@ def test_unknown_writer_error_is_permanent_without_retry():
 
 
 def test_cache_release_reconciles_before_clear_and_records_outcome(monkeypatch):
-    from cache.session import ExecutionCacheSession
-    from runtime.resource_governor import global_memory_governor
+    from factor_engine.cache.session import ExecutionCacheSession
+    from factor_engine.runtime.resource_governor import global_memory_governor
 
     session = ExecutionCacheSession(execution_id="r42-release", strict=False)
     session.buffer_store.put("l0", b"a" * 11, bytes_=11)

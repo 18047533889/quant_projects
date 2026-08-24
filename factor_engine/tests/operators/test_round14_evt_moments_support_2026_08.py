@@ -27,10 +27,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.evt_allan  # noqa: F401  (registers the EVT family)
-import cleaned_operators.moments_ext  # noqa: F401  (registers the L-moment/dip family)
-import cleaned_operators.local_lyapunov  # noqa: F401  (registers the Lyapunov op)
-from cleaned_operators.registry import OperatorRegistry
+import factor_engine.cleaned_operators.evt_allan  # noqa: F401  (registers the EVT family)
+import factor_engine.cleaned_operators.moments_ext  # noqa: F401  (registers the L-moment/dip family)
+import factor_engine.cleaned_operators.local_lyapunov  # noqa: F401  (registers the Lyapunov op)
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _frame(values: np.ndarray) -> pd.DataFrame:
@@ -54,7 +54,7 @@ def _op(canonical: str):
 # ITEM 1 — EVT threshold stability: declared feasibility == runtime guard
 # ---------------------------------------------------------------------------
 def test_evt_declared_relation_rejects_infeasible_region():
-    from cleaned_operators.evt_allan import _EVT_RELATIONAL_SPECS
+    from factor_engine.cleaned_operators.evt_allan import _EVT_RELATIONAL_SPECS
 
     # window=30 / k_max=20 was previously declared legal ("k_max <= window - 2")
     # but the runtime guard needs v.size >= 2*20+2 = 42, so every call was
@@ -74,7 +74,7 @@ def test_evt_contract_rejects_window30_kmax20():
 
 
 def test_evt_runtime_emits_nan_not_bogus_for_infeasible():
-    from cleaned_operators.evt_allan import _ts_evt_threshold_stability
+    from factor_engine.cleaned_operators.evt_allan import _ts_evt_threshold_stability
 
     df = _frame(np.random.default_rng(1).normal(size=(50, 1)))
     # Bypass the declared contract on purpose: the runtime guard itself must
@@ -195,9 +195,9 @@ def test_lyapunov_theiler_uses_physical_time():
 # smoke import / eval of the three modules
 # ---------------------------------------------------------------------------
 def test_smoke_import_and_kernel_eval():
-    from cleaned_operators.evt_allan import _ts_evt_threshold_stability
-    from cleaned_operators.moments_ext import _dip_series, _l_ratio_series
-    from cleaned_operators.local_lyapunov import _lyapunov_series
+    from factor_engine.cleaned_operators.evt_allan import _ts_evt_threshold_stability
+    from factor_engine.cleaned_operators.moments_ext import _dip_series, _l_ratio_series
+    from factor_engine.cleaned_operators.local_lyapunov import _lyapunov_series
 
     rng = np.random.default_rng(9)
     x = rng.normal(size=(60, 2))

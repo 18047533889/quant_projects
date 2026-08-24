@@ -78,7 +78,7 @@ def probe_duckdb_capabilities(con=None) -> DuckdbCapabilityReport:
 
 def downgrade_sql_canonicals(report: DuckdbCapabilityReport) -> frozenset[str]:
     """根据探测结果返回应从 SQL production_safe 临时降级的 canonical。"""
-    from backend.sql_tiers import SQL_PRODUCTION_SAFE_CANONICALS
+    from factor_engine.backend.sql_tiers import SQL_PRODUCTION_SAFE_CANONICALS
 
     downgrade: set[str] = set()
     if not report.is_supported("corr_window"):

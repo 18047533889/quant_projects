@@ -7,7 +7,7 @@
 import sys
 sys.path.insert(0, '.')
 
-from runtime.adaptive_config import auto_configure, get_adaptive_config
+from factor_engine.runtime.adaptive_config import auto_configure, get_adaptive_config
 
 
 def demo_auto_configure():
@@ -168,7 +168,7 @@ def demo_integration_example():
 ```python
 # factor_engine/__init__.py
 
-from runtime.adaptive_config import auto_configure
+from factor_engine.runtime.adaptive_config import auto_configure
 
 # 启动时自动配置
 _adaptive_config = auto_configure(apply_env=True)
@@ -187,12 +187,12 @@ import os
 batch_size = int(os.environ.get('FE_BATCH_SIZE', 100000))
 
 # 方式2：从全局配置读取
-from runtime.adaptive_config import get_global_adaptive_config
+from factor_engine.runtime.adaptive_config import get_global_adaptive_config
 config = get_global_adaptive_config()
 batch_size = config.batch_size
 
 # 方式3：使用便捷函数
-from runtime.adaptive_config import get_compile_chunk_size
+from factor_engine.runtime.adaptive_config import get_compile_chunk_size
 chunk_size = get_compile_chunk_size()
 ```
 

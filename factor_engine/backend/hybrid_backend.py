@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 from .base import Backend
 from .context import ExecutionContext
 from .pandas_backend import PandasBackend
@@ -44,7 +44,7 @@ class HybridBackend(Backend):
         return self._long
 
     def execute(self, plan: PlanNode, ctx: ExecutionContext) -> Any:
-        from backend.plan_cost_router import choose_plan_route, record_plan_route
+        from factor_engine.backend.plan_cost_router import choose_plan_route, record_plan_route
 
         route = choose_plan_route(plan, ctx)
         if route.backend == "pandas_numpy" and not route.ops and not _supports_load_column(ctx):

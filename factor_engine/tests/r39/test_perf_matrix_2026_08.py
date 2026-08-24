@@ -27,9 +27,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import storage.matrix_block_layout as mbl
-from storage.factor_format import series_to_long_table
-from storage.materialize.factor_matrix_materializer import (
+import factor_engine.storage.matrix_block_layout as mbl
+from factor_engine.storage.factor_format import series_to_long_table
+from factor_engine.storage.materialize.factor_matrix_materializer import (
     FactorMatrixMaterializer,
     _read_manifest,
 )
@@ -269,11 +269,11 @@ def test_r39_065_load_pushdown_columns_and_time(tmp_path):
 
 
 def _mini_engine():
-    from api import rank
-    from api.columns import col
-    from api.factor import Factor
-    from backend.pandas_backend import PandasBackend
-    from runtime.engine import FactorEngine
+    from factor_engine.api import rank
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
     from tests.helpers import InMemorySeriesSource
 
     idx = pd.MultiIndex.from_product(
@@ -289,8 +289,8 @@ def _mini_engine():
 
 
 def test_r39_067_identity_certificate_stable_and_writer_reuse(tmp_path, monkeypatch):
-    from runtime import matrix_service
-    from runtime.engine import _scope_from_factor
+    from factor_engine.runtime import matrix_service
+    from factor_engine.runtime.engine import _scope_from_factor
 
     eng, f, series = _mini_engine()
     scope = _scope_from_factor(f, data_source=eng.data_source)
@@ -331,7 +331,7 @@ def test_r39_067_identity_certificate_stable_and_writer_reuse(tmp_path, monkeypa
 
 
 def test_r39_066_streaming_adapter_block_result(tmp_path):
-    from runtime.matrix_service import _iter_matrix_results
+    from factor_engine.runtime.matrix_service import _iter_matrix_results
 
     d1, d2 = pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")
     results = {

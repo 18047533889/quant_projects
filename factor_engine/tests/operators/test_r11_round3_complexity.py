@@ -38,16 +38,16 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.base import ParamRole
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.base import ParamRole
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 # Owned modules in load_all order: ts_model.complexity registers first and
 # sequence_complexity is a DECLARED_OVERRIDE_SOURCES layer that re-registers the
 # research-surface names (ts_permutation_entropy / ts_sample_entropy).
-import cleaned_operators.ts_model.complexity as _ts_cplx  # noqa: E402,F401
-import cleaned_operators.sequence_complexity as _seq_cplx  # noqa: E402,F401
-import cleaned_operators.complexity_ext as _cplx_ext  # noqa: E402,F401
-import cleaned_operators.threshold_cycle as _thr  # noqa: E402,F401
+import factor_engine.cleaned_operators.ts_model.complexity as _ts_cplx  # noqa: E402,F401
+import factor_engine.cleaned_operators.sequence_complexity as _seq_cplx  # noqa: E402,F401
+import factor_engine.cleaned_operators.complexity_ext as _cplx_ext  # noqa: E402,F401
+import factor_engine.cleaned_operators.threshold_cycle as _thr  # noqa: E402,F401
 
 
 def _frame(values: np.ndarray) -> pd.DataFrame:

@@ -8,10 +8,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
 ensure_cleaned_loaded()
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 
 def _col(values):

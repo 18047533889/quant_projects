@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from runtime.config import load_config
-from runtime.config_runtime import resolve_run_kwargs
-from storage.factor_schema import FACTOR_LAKE_DATASET_SCHEMA, FACTOR_VALUE_COLUMNS
+from factor_engine.runtime.config import load_config
+from factor_engine.runtime.config_runtime import resolve_run_kwargs
+from factor_engine.storage.factor_schema import FACTOR_LAKE_DATASET_SCHEMA, FACTOR_VALUE_COLUMNS
 
 
 def test_production_auto_warmup_default_without_yaml_flag(tmp_path):
@@ -37,7 +37,7 @@ data_source:
 
 
 def test_factor_schema_matches_materializer_metadata():
-    from storage.materializer import METADATA_COLUMNS
+    from factor_engine.storage.materializer import METADATA_COLUMNS
 
     assert set(FACTOR_VALUE_COLUMNS) == {"datetime", "asset", "value", *METADATA_COLUMNS}
     assert set(FACTOR_LAKE_DATASET_SCHEMA) >= {"datetime", "asset", "value"}

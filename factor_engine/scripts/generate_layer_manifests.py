@@ -13,12 +13,12 @@ FACTOR_ENGINE = ROOT / "factor_engine"
 if str(FACTOR_ENGINE) not in sys.path:
     sys.path.insert(0, str(FACTOR_ENGINE))
 
-from cleaned_operators import load_all  # noqa: E402
-from cleaned_operators.layer_governance import formula_field_names  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
-from factor_recipes.compiler import RecipeCompiler  # noqa: E402
-from factor_recipes.registry import FactorRecipeRegistry  # noqa: E402
-from factor_recipes.planner_bridge import compile_recipe_plans  # noqa: E402
+from factor_engine.cleaned_operators import load_all  # noqa: E402
+from factor_engine.cleaned_operators.layer_governance import formula_field_names  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.factor_recipes.compiler import RecipeCompiler  # noqa: E402
+from factor_engine.factor_recipes.registry import FactorRecipeRegistry  # noqa: E402
+from factor_engine.factor_recipes.planner_bridge import compile_recipe_plans  # noqa: E402
 from research_tools.registry import ResearchToolRegistry  # noqa: E402
 from stateful_contract import StatefulCheckpointRegistry  # noqa: E402
 
@@ -76,7 +76,7 @@ def write_json(path: Path, payload: dict) -> None:
 
 def main() -> None:
     load_all()
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     register_sql_backends()
     docs = FACTOR_ENGINE / "docs"
@@ -93,7 +93,7 @@ def main() -> None:
     # six-gate ``production_certified`` field in the registry remains the sole
     # production-admission authority.  Aligning the two keeps
     # ``test_production_convergence`` green across evidence-staleness windows.
-    from cleaned_operators.operator_policy import infer_operator_policy
+    from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
 
     for _canonical, _entry in operators.items():
         _op = OperatorRegistry.get(_canonical, "pandas_numpy") or OperatorRegistry.get(_canonical)
@@ -137,8 +137,8 @@ def main() -> None:
                 visit(child)
 
         visit(logical)
-        from backend.operator_capability import capability_for
-        from backend.primitive_evidence import (
+        from factor_engine.backend.operator_capability import capability_for
+        from factor_engine.backend.primitive_evidence import (
             DUCKDB_EDGE_VERIFIED, DUCKDB_REAL_SQL_VERIFIED,
             POLARS_EDGE_VERIFIED, POLARS_NO_FALLBACK_VERIFIED,
         )
@@ -146,7 +146,7 @@ def main() -> None:
         polars_ok = all(capability_for(op, "polars").status == "production_safe" for op in operators_used)
         duckdb_ok = all(capability_for(op, "duckdb_sql").status == "production_safe" for op in operators_used)
         dependency_ready = pandas_ok and polars_ok and duckdb_ok
-        from backend.recipe_evidence import recipe_execution_verified
+        from factor_engine.backend.recipe_evidence import recipe_execution_verified
 
         execution_verified = recipe_execution_verified(name)
         recipe.update({

@@ -1,7 +1,7 @@
-from api.columns import col
-from api import rank, ts_mean
-from ir.analyzer import Analyzer
-from planner.lowerer import Lowerer
+from factor_engine.api.columns import col
+from factor_engine.api import rank, ts_mean
+from factor_engine.ir.analyzer import Analyzer
+from factor_engine.planner.lowerer import Lowerer
 
 
 def test_analyzer_and_lowerer():
@@ -18,7 +18,7 @@ def test_analyzer_and_lowerer():
 
 
 def test_analyzer_lookback_includes_operator_policy_lag():
-    from api import ts_delay
+    from factor_engine.api import ts_delay
 
     analysis = Analyzer().lower(ts_delay(col("close")))
     assert analysis.lookback >= 1

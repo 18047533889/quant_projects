@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from backend.operator_call_capability import CapabilityLevel, check_operator_call_capability
-from backend.operator_call_policy import (
+from factor_engine.backend.operator_call_capability import CapabilityLevel, check_operator_call_capability
+from factor_engine.backend.operator_call_policy import (
     check_plan_operator_calls,
     fillna_call_production_safe,
     is_operator_call_production_safe,
 )
-from backend.production_fastpath_gate import check_production_fastpath_formula_ops
-from cleaned_operators import load_all
-from planner.logical_plan import PlanNode
+from factor_engine.backend.production_fastpath_gate import check_production_fastpath_formula_ops
+from factor_engine.cleaned_operators import load_all
+from factor_engine.planner.logical_plan import PlanNode
 
 
 @pytest.fixture(scope="module")
@@ -51,8 +51,8 @@ def test_fillna_const_numeric_allowed(_loaded):
 
 
 def test_fillna_production_mode_requires_fillna_const(_loaded):
-    from backend.operator_call_capability import CapabilityLevel, check_operator_call_capability
-    from planner.logical_plan import PlanNode
+    from factor_engine.backend.operator_call_capability import CapabilityLevel, check_operator_call_capability
+    from factor_engine.planner.logical_plan import PlanNode
 
     plan = PlanNode(
         op="fillna",

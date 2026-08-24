@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from backend.sql_pushdown.emitter import compile_plan_to_sql, plan_is_sql_capable
-from backend.sql_pushdown.plan_fixtures import minimal_plan
-from backend.sql_pushdown.sql_registry import register_sql_backends
-from backend.sql_tiers import (
+from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql, plan_is_sql_capable
+from factor_engine.backend.sql_pushdown.plan_fixtures import minimal_plan
+from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
+from factor_engine.backend.sql_tiers import (
     SQL_IMPLEMENTED_CANONICALS,
     SQL_PRODUCTION_SAFE_CANONICALS,
 )

@@ -16,7 +16,7 @@ try:
 except ImportError:
     duckdb = None
 
-from backend.sql_pushdown.advanced_sql_operators import (
+from factor_engine.backend.sql_pushdown.advanced_sql_operators import (
     cs_zscore_sql,
     cs_winsorize_sql,
     cs_rank_normalize_sql,

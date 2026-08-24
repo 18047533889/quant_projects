@@ -10,7 +10,7 @@ from logging_utils import get_logger
 from .datasource import DataSource
 
 
-logger = get_logger("storage.kline_parquet_source")
+logger = get_logger("factor_engine.storage.kline_parquet_source")
 
 
 @dataclass

@@ -9,14 +9,14 @@ import pandas as pd
 import polars as pl
 import pytest
 
-from cleaned_operators.base import ParamRole
-from cleaned_operators.common.time_series import TSZScore, TSZScorePolars
-from backend.operator_errors import OperatorParameterError
+from factor_engine.cleaned_operators.base import ParamRole
+from factor_engine.cleaned_operators.common.time_series import TSZScore, TSZScorePolars
+from factor_engine.backend.operator_errors import OperatorParameterError
 
 
 def _load_module(monkeypatch):
-    import cleaned_operators.base as base
-    import cleaned_operators.base_polars as base_polars
+    import factor_engine.cleaned_operators.base as base
+    import factor_engine.cleaned_operators.base_polars as base_polars
 
     class _ImportProbeParamRole:
         pass
@@ -185,11 +185,11 @@ def test_legacy_ts_zscore_native_rejects_infinite_current_value(monkeypatch):
 
 def test_bootstrap_does_not_load_window_local_ts_zscore_native():
     code = """
-from cleaned_operators import _LOAD_MODULES, load_all
+from factor_engine.cleaned_operators import _LOAD_MODULES, load_all
 load_all()
-assert "cleaned_operators.common.polars_ts_stats" not in _LOAD_MODULES
+assert "factor_engine.cleaned_operators.common.polars_ts_stats" not in _LOAD_MODULES
 import sys
-assert "cleaned_operators.common.polars_ts_stats" not in sys.modules
+assert "factor_engine.cleaned_operators.common.polars_ts_stats" not in sys.modules
 """
     subprocess.run(
         [sys.executable, "-c", code],

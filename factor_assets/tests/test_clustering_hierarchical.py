@@ -8,6 +8,7 @@ try:
     import numpy as np
     from factor_assets.graph.sparse import SparseCorrelationGraph, CorrelationEdge
     from factor_assets.clustering.families import (
+       
         HierarchicalClustering,
         Dendrogram,
         ClusterResult,
@@ -31,7 +32,7 @@ class TestHierarchicalClustering:
         ]
 
         graph = SparseCorrelationGraph(edges)
-        clustering = HierarchicalClustering(graph, method='average')
+        clustering = HierarchicalClustering(graph, method='average', missing_distance_policy="treat_missing_as_max")
         dendrogram = clustering.build_dendrogram()
 
         assert dendrogram is not None
@@ -52,7 +53,7 @@ class TestHierarchicalClustering:
         ]
 
         graph = SparseCorrelationGraph(edges)
-        clustering = HierarchicalClustering(graph)
+        clustering = HierarchicalClustering(graph, missing_distance_policy="treat_missing_as_max")
         result = clustering.cluster(num_clusters=2)
 
         assert result.num_clusters == 2
@@ -74,7 +75,7 @@ class TestHierarchicalClustering:
         ]
 
         graph = SparseCorrelationGraph(edges)
-        clustering = HierarchicalClustering(graph)
+        clustering = HierarchicalClustering(graph, missing_distance_policy="treat_missing_as_max")
         result = clustering.cluster(distance_threshold=0.5)
 
         assert result.num_clusters >= 1
@@ -96,7 +97,7 @@ class TestHierarchicalClustering:
         ]
 
         graph = SparseCorrelationGraph(edges)
-        clustering = HierarchicalClustering(graph)
+        clustering = HierarchicalClustering(graph, missing_distance_policy="treat_missing_as_max")
         result = clustering.cluster(auto_optimize=True)
 
         # Should find 2 clusters
@@ -112,7 +113,7 @@ class TestHierarchicalClustering:
         edges = [CorrelationEdge("A", "B", 0.9)]
 
         graph = SparseCorrelationGraph(edges)
-        clustering = HierarchicalClustering(graph)
+        clustering = HierarchicalClustering(graph, missing_distance_policy="treat_missing_as_max")
         result = clustering.cluster(num_clusters=1)
 
         assert result.num_clusters == 1
@@ -121,7 +122,7 @@ class TestHierarchicalClustering:
     def test_empty_graph_raises(self):
         """Empty graph raises error."""
         graph = SparseCorrelationGraph([])
-        clustering = HierarchicalClustering(graph)
+        clustering = HierarchicalClustering(graph, missing_distance_policy="treat_missing_as_max")
 
         with pytest.raises(ValueError, match="Cannot cluster empty graph"):
             clustering.build_dendrogram()
@@ -137,7 +138,7 @@ class TestHierarchicalClustering:
         graph = SparseCorrelationGraph(edges)
 
         for method in ['single', 'complete', 'average']:
-            clustering = HierarchicalClustering(graph, method=method)
+            clustering = HierarchicalClustering(graph, method=method, missing_distance_policy="treat_missing_as_max")
             result = clustering.cluster(num_clusters=2)
             assert result.num_clusters == 2
 
@@ -155,7 +156,7 @@ class TestDendrogram:
         ]
 
         graph = SparseCorrelationGraph(edges)
-        clustering = HierarchicalClustering(graph)
+        clustering = HierarchicalClustering(graph, missing_distance_policy="treat_missing_as_max")
         dendrogram = clustering.build_dendrogram()
 
         result = dendrogram.cut_at_distance(0.5)
@@ -173,7 +174,7 @@ class TestDendrogram:
         ]
 
         graph = SparseCorrelationGraph(edges)
-        clustering = HierarchicalClustering(graph)
+        clustering = HierarchicalClustering(graph, missing_distance_policy="treat_missing_as_max")
         dendrogram = clustering.build_dendrogram()
 
         result = dendrogram.cut_at_num_clusters(3)
@@ -189,7 +190,7 @@ class TestDendrogram:
         ]
 
         graph = SparseCorrelationGraph(edges)
-        clustering = HierarchicalClustering(graph)
+        clustering = HierarchicalClustering(graph, missing_distance_policy="treat_missing_as_max")
         dendrogram = clustering.build_dendrogram()
 
         # Too few clusters
@@ -213,7 +214,7 @@ class TestDendrogram:
         ]
 
         graph = SparseCorrelationGraph(edges)
-        clustering = HierarchicalClustering(graph)
+        clustering = HierarchicalClustering(graph, missing_distance_policy="treat_missing_as_max")
         dendrogram = clustering.build_dendrogram()
 
         optimal_k = dendrogram.get_optimal_num_clusters(min_clusters=2, max_clusters=4)
@@ -235,7 +236,7 @@ class TestHierarchicalClusteringIntegration:
         ]
 
         graph = SparseCorrelationGraph(edges)
-        clustering = HierarchicalClustering(graph)
+        clustering = HierarchicalClustering(graph, missing_distance_policy="treat_missing_as_max")
         # Low threshold should separate disconnected components
         result = clustering.cluster(distance_threshold=0.7)
 
@@ -251,7 +252,7 @@ class TestHierarchicalClusteringIntegration:
         ]
 
         graph = SparseCorrelationGraph(edges)
-        clustering = HierarchicalClustering(graph)
+        clustering = HierarchicalClustering(graph, missing_distance_policy="treat_missing_as_max")
         dendrogram = clustering.build_dendrogram()
 
         # At very low distance threshold, should get many clusters
@@ -274,7 +275,7 @@ class TestHierarchicalClusteringIntegration:
         ]
 
         graph = SparseCorrelationGraph(edges)
-        clustering = HierarchicalClustering(graph)
+        clustering = HierarchicalClustering(graph, missing_distance_policy="treat_missing_as_max")
         dendrogram = clustering.build_dendrogram()
 
         # At low threshold: A-B together, C separate, D separate
@@ -301,7 +302,7 @@ class TestHierarchicalClusteringIntegration:
         edges.append(CorrelationEdge("A4", "B4", 0.2))
 
         graph = SparseCorrelationGraph(edges)
-        clustering = HierarchicalClustering(graph)
+        clustering = HierarchicalClustering(graph, missing_distance_policy="treat_missing_as_max")
 
         # Should complete reasonably fast
         result = clustering.cluster(num_clusters=2)

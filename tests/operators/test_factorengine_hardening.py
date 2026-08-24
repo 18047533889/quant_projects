@@ -4,11 +4,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.operator_policy import infer_operator_policy
-from cleaned_operators.operator_surface import classify_canonical
-from planner.logical_plan import PlanNode
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
+from factor_engine.planner.logical_plan import PlanNode
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -17,7 +17,7 @@ def _loaded() -> None:
 
 
 def test_backend_registration_preserves_governance_metadata() -> None:
-    from cleaned_operators.registry import _BOOTSTRAP_TOKEN
+    from factor_engine.cleaned_operators.registry import _BOOTSTRAP_TOKEN
 
     class Meta:
         name = "_catalog_merge_probe"
@@ -58,7 +58,7 @@ def test_tanh_native_polars_edges_and_pit() -> None:
 
 def test_inverse_polars_does_not_use_pandas_bridge(monkeypatch: pytest.MonkeyPatch) -> None:
     pl = pytest.importorskip("polars")
-    import cleaned_operators.common._polars_bridge as bridge
+    import factor_engine.cleaned_operators.common._polars_bridge as bridge
 
     monkeypatch.setattr(bridge, "to_pandas_panel", lambda *_: (_ for _ in ()).throw(AssertionError("bridge")))
     out = OperatorRegistry.get("inverse", "polars").calculate(
@@ -139,7 +139,7 @@ def test_surface_and_alias_hardening() -> None:
 
 
 def test_legacy_formula_compat_does_not_widen_daily_authoring() -> None:
-    from api.dsl_parser import DSLParseError, parse_expr
+    from factor_engine.api.dsl_parser import DSLParseError, parse_expr
 
     # flex_max / ts_transition_count / group_decay_linear were migrated to the
     # daily surface in the 2026-08 daily production passes; use a still-extended
@@ -178,7 +178,7 @@ def test_daily_numeric_contract_metadata_is_complete() -> None:
 
 
 def test_production_sql_lowering_is_fail_closed() -> None:
-    from planner.sql_lowerer import lower_to_physical_plan
+    from factor_engine.planner.sql_lowerer import lower_to_physical_plan
 
     plan = PlanNode(op="tanh", inputs=[PlanNode(op="column", attrs={"name": "x"})])
     # tanh is now backed by real SQL and certified production evidence.
@@ -188,7 +188,7 @@ def test_production_sql_lowering_is_fail_closed() -> None:
 
 def test_tanh_executes_in_real_duckdb() -> None:
     duckdb = pytest.importorskip("duckdb")
-    from backend.sql_pushdown.emitter import compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql
 
     plan = PlanNode(op="tanh", inputs=[PlanNode(op="column", attrs={"name": "x"})])
     compiled = compile_plan_to_sql(plan, dataset="panel", time_column="ts", instrument_column="inst")
@@ -202,7 +202,7 @@ def test_tanh_executes_in_real_duckdb() -> None:
 def test_cbrt_signed_edges_triple_parity() -> None:
     pl = pytest.importorskip("polars")
     duckdb = pytest.importorskip("duckdb")
-    from backend.sql_pushdown.emitter import compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql
 
     values = [None, np.nan, -np.inf, -8.0, -1.0, -0.0, 0.0, 1.0, 8.0, np.inf]
     expected = OperatorRegistry.get("cbrt").calculate(pd.DataFrame({"x": values}))["x"].to_numpy()
@@ -222,7 +222,7 @@ def test_cbrt_signed_edges_triple_parity() -> None:
 def test_truncate_decimals_triple_parity(decimals: int) -> None:
     pl = pytest.importorskip("polars")
     duckdb = pytest.importorskip("duckdb")
-    from backend.sql_pushdown.emitter import compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql
 
     values = [1.239, -1.239, 1.235, -1.235, None, np.nan, np.inf, -np.inf]
     expected = OperatorRegistry.get("truncate").calculate(

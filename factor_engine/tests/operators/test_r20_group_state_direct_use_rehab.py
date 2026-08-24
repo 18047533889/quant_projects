@@ -35,13 +35,13 @@ import pytest
 
 
 def _ensure_group_state_chain() -> None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if OperatorRegistry.lifecycle() == "frozen":
         return
     if OperatorRegistry.get("beta_residual_z", "pandas_numpy") is not None:
         return
-    from cleaned_operators.technical import group_state_v1  # noqa: F401
+    from factor_engine.cleaned_operators.technical import group_state_v1  # noqa: F401
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -50,7 +50,7 @@ def _bootstrap():
 
 
 def _op(name: str):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get(name, "pandas_numpy") or OperatorRegistry.get(name)
     assert op is not None, f"{name} not registered"
@@ -448,7 +448,7 @@ def test_param_specs_and_governance(name):
     assert spec.dtype is int, name
     assert spec.min == 5, name
     assert spec.param_role is not None, name
-    from cleaned_operators.base import ParamRole
+    from factor_engine.cleaned_operators.base import ParamRole
 
     assert spec.param_role is ParamRole.HORIZON, name
     tags = _op(name).metadata.tags
@@ -549,7 +549,7 @@ def test_skipped_duplicates_not_landed_here():
     """peer_residual_z / within_group_rank_pct are EXACT duplicates of the
     sibling exself_cs_v1 canonicals -> they must NOT exist under this
     module's registration (no shadow registration, no second canonical)."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     for skipped in ("peer_residual_z", "within_group_rank_pct"):
         op = (
@@ -568,7 +568,7 @@ def test_skipped_duplicates_not_landed_here():
 
 @pytest.mark.parametrize("name", ALL_NAMES)
 def test_neighbor_canonicals_untouched(name):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     for nb in _AUDITED_NEIGHBORS:
         found = (
@@ -595,7 +595,7 @@ def test_beta_level_neighbors_still_exist_as_levels():
     """rolling_beta_to_market / ts_regression_slope remain beta LEVEL
     estimators (contemporaneous windows) — this module landed residual
     SIGNALS, not beta levels; the distinction is pinned by registration."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     for lvl in ("rolling_beta_to_market", "ts_regression_slope"):
         op = (

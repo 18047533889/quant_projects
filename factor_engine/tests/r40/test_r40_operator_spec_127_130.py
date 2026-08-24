@@ -4,8 +4,8 @@ output_type, supports_panel, dual_backend_target)."""
 from __future__ import annotations
 
 import pytest
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(autouse=True)
@@ -18,7 +18,7 @@ def _no_load_all(monkeypatch, writable_global_registry):
     the slow/failing full bootstrap.  ``writable_global_registry`` 保证在全套件
     中（前序测试已把全局 registry 冻结时）这些 scratch 注册仍可写。
     """
-    import cleaned_operators as co
+    import factor_engine.cleaned_operators as co
 
     monkeypatch.setattr(co, "load_all", lambda *a, **k: None)
     yield
@@ -68,7 +68,7 @@ def _register(canonical, *, param_names, return_type="series", input_grain=None,
 
 class TestManifestFrequency:
     def test_manifest_frequency_from_real_contract(self):
-        from cleaned_operators.operator_spec import build_operator_spec, spec_to_manifest_entry
+        from factor_engine.cleaned_operators.operator_spec import build_operator_spec, spec_to_manifest_entry
 
         _register("r40_spec_grain", param_names=["x", "window"],
                   input_grain="minute", output_grain="daily")
@@ -82,7 +82,7 @@ class TestManifestFrequency:
 
 class TestManifestOutputType:
     def test_manifest_output_type_matches_contract(self):
-        from cleaned_operators.operator_spec import build_operator_spec, spec_to_manifest_entry
+        from factor_engine.cleaned_operators.operator_spec import build_operator_spec, spec_to_manifest_entry
 
         _register("r40_spec_scalar", param_names=["x"], return_type="scalar")
         spec = build_operator_spec("r40_spec_scalar")
@@ -93,7 +93,7 @@ class TestManifestOutputType:
 
 class TestSupportsPanel:
     def test_supports_panel_from_real_capability(self):
-        from cleaned_operators.operator_spec import build_operator_spec
+        from factor_engine.cleaned_operators.operator_spec import build_operator_spec
 
         # panel_params inference from kernel signature: x has no default -> panel.
         _register("r40_spec_panel", param_names=["x", "window"], panel_params=["x"])
@@ -102,7 +102,7 @@ class TestSupportsPanel:
         assert spec.supports_panel is True
 
     def test_supports_panel_false_for_scalar_only(self):
-        from cleaned_operators.operator_spec import build_operator_spec
+        from factor_engine.cleaned_operators.operator_spec import build_operator_spec
 
         _register("r40_spec_scalar_only", param_names=["window"], panel_params=[])
         spec = build_operator_spec("r40_spec_scalar_only")
@@ -116,8 +116,8 @@ class TestDualBackendTarget:
         # dual_backend_target must be derived from certified backend evidence, NOT
         # from execution_kind.  A research-status op with 2 eligible backends is
         # still NOT a dual-backend target because allow_in_production is False.
-        from cleaned_operators.operator_spec import build_operator_spec
-        import backend.operator_capability as oc
+        from factor_engine.cleaned_operators.operator_spec import build_operator_spec
+        import factor_engine.backend.operator_capability as oc
 
         _register("r40_spec_panel", param_names=["x", "window"])
 
@@ -131,8 +131,8 @@ class TestDualBackendTarget:
         assert spec.dual_backend_target is False
 
     def test_dual_backend_target_requires_two_eligible_backends(self, monkeypatch):
-        from cleaned_operators.operator_spec import build_operator_spec
-        import backend.operator_capability as oc
+        from factor_engine.cleaned_operators.operator_spec import build_operator_spec
+        import factor_engine.backend.operator_capability as oc
 
         _register("r40_spec_panel", param_names=["x", "window"])
         monkeypatch.setattr(
@@ -144,7 +144,7 @@ class TestDualBackendTarget:
 
 
 def _register_production(canonical):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     class _Op(SeriesOperator):
         metadata = OperatorMetadata(

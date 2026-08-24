@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.fiscal_event_ops import pd_relation_jaccard
+from factor_engine.cleaned_operators.fiscal_event_ops import pd_relation_jaccard
 
 
 def _panel(entity_ids, snapshot_ids):

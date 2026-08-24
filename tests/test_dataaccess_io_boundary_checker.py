@@ -124,7 +124,7 @@ class TestIOBoundaryChecker:
         """Authorized modules are correctly recognized."""
         # Test a known authorized module
         repo_root = Path(__file__).parent.parent
-        authorized_file = repo_root / "storage" / "cache.py"
+        authorized_file = repo_root / "storage" / "factor_engine.cache.py"
 
         assert is_authorized(authorized_file, repo_root)
 

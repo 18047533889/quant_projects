@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from api.label_pit import (
+from factor_engine.api.label_pit import (
     LabelIR,
     LabelOp,
     build_forward_return_series,

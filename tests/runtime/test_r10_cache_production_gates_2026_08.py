@@ -16,11 +16,11 @@ from __future__ import annotations
 
 import pytest
 
-from ir.nodes import IRNode
-from planner.logical_plan import PlanNode
-from runtime.engine import _assert_production_plan_gates
-from runtime.production_policy import ProductionPolicyViolation
-from storage.data_scope import (
+from factor_engine.ir.nodes import IRNode
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.runtime.engine import _assert_production_plan_gates
+from factor_engine.runtime.production_policy import ProductionPolicyViolation
+from factor_engine.storage.data_scope import (
     DataExecutionScope,
     compute_data_scope,
     compute_execution_cache_scope,

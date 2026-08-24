@@ -20,7 +20,7 @@ sys.path.insert(0, "/home/shw/quant_projects/factor_engine")
 
 
 def test_effective_cpu_slots_env_override(monkeypatch):
-    from runtime.resource_governor import effective_cpu_slots
+    from factor_engine.runtime.resource_governor import effective_cpu_slots
 
     monkeypatch.setenv("FACTOR_ENGINE_CPU_BUDGET", "3")
     assert effective_cpu_slots() == 3
@@ -28,7 +28,7 @@ def test_effective_cpu_slots_env_override(monkeypatch):
 
 
 def test_effective_memory_limit_env_override(monkeypatch):
-    from runtime.resource_governor import effective_memory_limit_bytes
+    from factor_engine.runtime.resource_governor import effective_memory_limit_bytes
 
     monkeypatch.setenv("FACTOR_ENGINE_MAX_MEMORY_BYTES", str(1024**3))
     assert effective_memory_limit_bytes() == 1024**3
@@ -38,7 +38,7 @@ def test_effective_memory_limit_env_override(monkeypatch):
 def test_execution_resource_plan_budgets_positive(monkeypatch):
     monkeypatch.setenv("FACTOR_ENGINE_MAX_MEMORY_BYTES", str(8 * 1024**3))
     monkeypatch.setenv("FACTOR_ENGINE_CPU_BUDGET", "4")
-    from runtime.resource_governor import ExecutionResourcePlan
+    from factor_engine.runtime.resource_governor import ExecutionResourcePlan
 
     plan = ExecutionResourcePlan.auto()
     assert plan.process_budget_bytes > 0
@@ -53,7 +53,7 @@ def test_execution_resource_plan_budgets_positive(monkeypatch):
 
 def test_resource_plan_from_dict_invalid_fraction_raises(monkeypatch):
     monkeypatch.setenv("FACTOR_ENGINE_MAX_MEMORY_BYTES", str(8 * 1024**3))
-    from runtime.resource_governor import ExecutionResourcePlan
+    from factor_engine.runtime.resource_governor import ExecutionResourcePlan
 
     with pytest.raises(ValueError):
         ExecutionResourcePlan.from_dict({"memory": {"process_fraction": 1.5}})
@@ -65,7 +65,7 @@ def test_resource_plan_from_dict_invalid_fraction_raises(monkeypatch):
 
 
 def test_memory_governor_reserve_evict_release(monkeypatch):
-    from runtime.resource_governor import MemoryGovernor
+    from factor_engine.runtime.resource_governor import MemoryGovernor
 
     gov = MemoryGovernor(process_budget_bytes=10_000, duckdb_budget_bytes=2_000)
     gov.register_layer("test", lambda target: 5_000)  # evict hook 释放 5000
@@ -78,7 +78,7 @@ def test_memory_governor_reserve_evict_release(monkeypatch):
 
 
 def test_memory_governor_reject_when_evict_insufficient(monkeypatch):
-    from runtime.resource_governor import MemoryGovernor
+    from factor_engine.runtime.resource_governor import MemoryGovernor
 
     gov = MemoryGovernor(process_budget_bytes=1_000, duckdb_budget_bytes=200)
     gov.register_layer("test", lambda target: 0)  # evict 不释放任何东西
@@ -92,7 +92,7 @@ def test_memory_governor_reject_when_evict_insufficient(monkeypatch):
 
 
 def test_exception_classification():
-    from runtime.resource_errors import (
+    from factor_engine.runtime.resource_errors import (
         CapabilityMiss,
         CompilationUnsupported,
         ResourceBudgetExceeded,
@@ -113,7 +113,7 @@ def test_exception_classification():
 
 
 def test_dataaccess_errors_fail_closed(monkeypatch):
-    from runtime.resource_errors import is_data_access_governance_failure
+    from factor_engine.runtime.resource_errors import is_data_access_governance_failure
 
     try:
         import data_access.core.exceptions as da
@@ -131,7 +131,7 @@ def test_dataaccess_errors_fail_closed(monkeypatch):
 
 
 def test_result_budget_no_explicit_passes():
-    from runtime.result_budget import enforce_result_budget
+    from factor_engine.runtime.result_budget import enforce_result_budget
 
     import pandas as pd
 
@@ -140,8 +140,8 @@ def test_result_budget_no_explicit_passes():
 
 
 def test_result_budget_production_raises(monkeypatch):
-    from runtime.result_budget import enforce_result_budget
-    from runtime.resource_errors import ResourceBudgetExceeded
+    from factor_engine.runtime.result_budget import enforce_result_budget
+    from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
 
     import pandas as pd
 
@@ -156,7 +156,7 @@ def test_result_budget_production_raises(monkeypatch):
 
 def test_result_budget_research_warn_only(monkeypatch):
     monkeypatch.setenv("FACTOR_ENGINE_RESULT_BUDGET_WARN_ONLY", "1")
-    from runtime.result_budget import enforce_result_budget
+    from factor_engine.runtime.result_budget import enforce_result_budget
 
     import pandas as pd
 
@@ -173,13 +173,13 @@ def test_result_budget_research_warn_only(monkeypatch):
 
 
 def _plan_node(op, attrs=None, inputs=()):
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     return PlanNode(op=op, attrs=dict(attrs or {}), inputs=list(inputs), node_id=0)
 
 
 def test_cse_consumer_counts_and_release():
-    from planner.cse import collect_consumed_sids, cse_consumer_counts
+    from factor_engine.planner.cse import collect_consumed_sids, cse_consumer_counts
 
     ref = lambda sid: _plan_node("plan_ref", {"sid": sid})
     root_a = _plan_node("add", inputs=[ref("s1"), ref("s2")])
@@ -190,7 +190,7 @@ def test_cse_consumer_counts_and_release():
 
 
 def test_release_consumed_sids_evicts_zero():
-    from runtime.batch_service import _release_consumed_sids
+    from factor_engine.runtime.batch_service import _release_consumed_sids
     from types import SimpleNamespace
 
     store = {"s1": 1, "s2": 2}
@@ -210,14 +210,14 @@ def test_release_consumed_sids_evicts_zero():
 
 
 def test_one_to_many_guard_requires_reduction(monkeypatch):
-    from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
-    from storage.sources.logical_tables import LogicalTableContract
-    from api.source_ref import SourceRefSpec
+    from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+    from factor_engine.storage.sources.logical_tables import LogicalTableContract
+    from factor_engine.api.source_ref import SourceRefSpec
 
     contract = LogicalTableContract("ashare_stock_topten_shareholder", "relation_pit", cardinality="one_to_many")
     spec = SourceRefSpec(table="StockTopTenShareholder", field="ShareRatio", params={})
     monkeypatch.setenv("QUANT_PRODUCTION_MODE", "1")
-    from runtime.resource_errors import SemanticContractError
+    from factor_engine.runtime.resource_errors import SemanticContractError
 
     try:
         with pytest.raises(SemanticContractError):

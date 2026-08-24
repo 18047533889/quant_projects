@@ -15,7 +15,7 @@ import pytest
 pytest.importorskip("polars")
 pytest.importorskip("duckdb")
 
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 
 load_all()
 
@@ -28,7 +28,7 @@ def _artifact() -> dict:
 
 
 def test_intraday_parity_artifact_covers_all_minute_ops():
-    from cleaned_operators.microstructure.intraday_agg import __all__ as minute_ops
+    from factor_engine.cleaned_operators.microstructure.intraday_agg import __all__ as minute_ops
 
     backends = _artifact()["backends"]
     assert set(backends) == set(minute_ops), (

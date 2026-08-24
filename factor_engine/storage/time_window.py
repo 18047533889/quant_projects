@@ -123,7 +123,7 @@ def resolve_incremental_window_for_bar_freq(
     early close / DST），不再是「交易日零点 + bar_duration × N」；
         ``use_tick_precise=False`` 时回退 ``intraday_calendar_approx``（+1 日缓冲）。
     """
-    from cleaned_operators.operator_policy import (
+    from factor_engine.cleaned_operators.operator_policy import (
         bar_freq_to_timedelta,
         bars_per_day,
         bars_to_calendar_trading_days,
@@ -157,7 +157,7 @@ def resolve_incremental_window_for_bar_freq(
     )
 
     if use_tick_precise:
-        from runtime.session_calendar import SessionCalendar
+        from factor_engine.runtime.session_calendar import SessionCalendar
 
         # R32-P0-004: 所有分钟 lookback/tail 必须在真实 session slot grid 上偏移
         # （认识 09:30 开盘 / 11:30–13:00 午休 / 集合竞价 / 半日市 / early close）。
@@ -220,7 +220,7 @@ def _bound_for_io(
     if value is None:
         return None
     ts = pd.Timestamp(value)
-    from cleaned_operators.operator_policy import bars_per_day
+    from factor_engine.cleaned_operators.operator_policy import bars_per_day
 
     if bars_per_day(bar_freq) > 1 or ts.hour or ts.minute or ts.second:
         return ts.isoformat()
@@ -255,7 +255,7 @@ def _merge_timestamp_bound_for_freq(
         chosen = max(ex, nv)
     else:
         chosen = min(ex, nv)
-    from cleaned_operators.operator_policy import bars_per_day
+    from factor_engine.cleaned_operators.operator_policy import bars_per_day
 
     if bars_per_day(bar_freq) <= 1 and not (
         chosen.hour or chosen.minute or chosen.second or chosen.microsecond
@@ -499,7 +499,7 @@ def narrow_data_source_for_window(
     返回:
         DataSource
     """
-    from cleaned_operators.operator_policy import bars_per_day
+    from factor_engine.cleaned_operators.operator_policy import bars_per_day
 
     resolved_bar_freq = bar_freq or getattr(source, "bar_freq", None)
     if resolved_bar_freq is None:

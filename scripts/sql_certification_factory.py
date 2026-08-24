@@ -25,7 +25,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from planner.logical_plan import PlanNode  # noqa: E402
+from factor_engine.planner.logical_plan import PlanNode  # noqa: E402
 
 EVIDENCE_DIR = Path(__file__).resolve().parents[1] / "docs" / "evidence" / "r31"
 
@@ -130,7 +130,7 @@ def _build_fixture(con: Any, *, name: str) -> None:
 
 
 def _run_sql(con: Any, plan: PlanNode, *, table: str) -> pd.Series | None:
-    from backend.sql_pushdown.emitter import compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql
 
     compiled = compile_plan_to_sql(
         plan, dataset=table, time_column="ts", instrument_column="inst"
@@ -148,8 +148,8 @@ def _run_sql(con: Any, plan: PlanNode, *, table: str) -> pd.Series | None:
 
 
 def _run_pandas(plan: PlanNode) -> pd.Series | None:
-    from backend.context import ExecutionContext
-    from backend.pandas_backend import PandasBackend
+    from factor_engine.backend.context import ExecutionContext
+    from factor_engine.backend.pandas_backend import PandasBackend
     from tests.helpers import InMemorySeriesSource
 
     dates = pd.bdate_range("2024-01-02", periods=6)
@@ -307,7 +307,7 @@ def write_backend_target_matrix() -> dict[str, Any]:
     不人工维护「哪些该三后端」名单：canonical 从认证结果 + operator registry
     派生，pandas_impl 一律 yes（reference），polars/duckdb 由认证/能力表填充。
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     rows = list(csv.DictReader(open(EVIDENCE_DIR / "R31_TRIPLE_BACKEND_PARITY.csv")))
     certified = {r["canonical"] for r in rows}

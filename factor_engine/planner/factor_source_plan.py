@@ -116,7 +116,7 @@ def _build_manifest(expression_plan: Any, *, allow_degraded: bool = False) -> tu
     fail_closed = runtime_mode in ("production", "automated_research")
     
     try:
-        from planner.source_dependencies import build_source_dependency_manifest
+        from factor_engine.planner.source_dependencies import build_source_dependency_manifest
     except Exception as exc:
         if fail_closed and not allow_degraded:
             raise DependencyExtractionError(
@@ -186,8 +186,8 @@ def _build_column_bindings(raw_bindings: list[Any], *, market: str = "") -> tupl
     防御性 import ColumnSourceBinding / SourceScopeId；不可得时返回空 tuple。
     """
     try:
-        from planner.source_binding import ColumnSourceBinding
-        from planner.physical_factor_dag import SourceScopeId
+        from factor_engine.planner.source_binding import ColumnSourceBinding
+        from factor_engine.planner.physical_factor_dag import SourceScopeId
     except Exception:  # pragma: no cover
         return ()
     

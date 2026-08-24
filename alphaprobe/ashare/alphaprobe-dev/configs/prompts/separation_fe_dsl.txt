@@ -1,0 +1,24 @@
+# 将因子表达式拆分为语义子块（仅 factor_engine DSL）
+
+主题: {topic}
+解释: {explanation}
+
+要求：
+1. 原式与每个子表达式都必须是合法 factor_engine DSL（禁止 $close / TsMean / Div 等旧语法）。
+2. 每个子表达式合法且无量纲。
+3. 子表达式是原式的连续片段，可调整括号顺序但不能改变语义。
+4. 子表达式两两无重叠；除常数外不可再拆。
+5. 子表达式 + separation_operators 可还原原式。
+6. 窗口为字面整数，禁止 %d；原式内可含多个不同窗口，拆分时原样保留。
+7. separation_operators 使用 factor_engine 算子名（如 add、subtract、multiply、divide、rank）。
+
+输出 JSON:
+{{
+  "original_expression": "原式",
+  "sub_expressions": ["按出现顺序的子表达式列表"],
+  "separation_operators": ["连接子式的算子，长度 = len(sub)-1"],
+  "sub_expressions_fixed": ["修正后的子表达式"],
+  "separation_operators_fixed": ["修正后的连接算子"]
+}}
+
+原式: {expression}

@@ -5,11 +5,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.layer_governance import formula_field_names
-from cleaned_operators.overhaul.base import PandasFunctionOperator
-from cleaned_operators.registry import OperatorRegistry
-from factor_recipes.registry import FactorRecipeRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.layer_governance import formula_field_names
+from factor_engine.cleaned_operators.overhaul.base import PandasFunctionOperator
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.factor_recipes.registry import FactorRecipeRegistry
 from pit_contract import pit_asof_join, validate_fundamental_events
 from research_tools.registry import ResearchToolRegistry
 
@@ -158,7 +158,7 @@ def test_pit_contract_uses_available_at_and_staleness() -> None:
 def test_registry_rejects_implicit_duplicate_after_bootstrap() -> None:
     name = "__layer_governance_test_operator__"
     op = PandasFunctionOperator(name, "internal", ["x"], "test", lambda x, **_: x)
-    from cleaned_operators.registry import _BOOTSTRAP_TOKEN
+    from factor_engine.cleaned_operators.registry import _BOOTSTRAP_TOKEN
 
     OperatorRegistry.thaw_for_bootstrap(_BOOTSTRAP_TOKEN)
     try:

@@ -10,8 +10,8 @@ def test_default_us_valuation_helper_constructs():
     """The default helper's config must be buildable (was previously rejected on
     two counts: 'current_only' join not in _ALLOWED_JOIN_METHODS and
     'snapshot_only'/'usage'/'notes' being unsupported options)."""
-    from api.mining_integration import default_us_pv_valuation_data_source_config
-    from storage.factory import build_data_source
+    from factor_engine.api.mining_integration import default_us_pv_valuation_data_source_config
+    from factor_engine.storage.factory import build_data_source
 
     cfg = default_us_pv_valuation_data_source_config()
     assert cfg["joins"]["valuation"] == "current_only"
@@ -24,8 +24,8 @@ def test_default_us_valuation_helper_constructs():
 def test_snapshot_source_asof_join_rejected_at_build():
     """A snapshot_only source joined asof/ffill would invent history — reject at
     build time."""
-    from api.mining_integration import default_us_pv_valuation_data_source_config
-    from storage.factory import build_data_source
+    from factor_engine.api.mining_integration import default_us_pv_valuation_data_source_config
+    from factor_engine.storage.factory import build_data_source
 
     cfg = default_us_pv_valuation_data_source_config()
     for bad_method in ("asof_backward", "forward_fill"):
@@ -38,7 +38,7 @@ def test_snapshot_source_asof_join_rejected_at_build():
 def test_snapshot_only_production_historical_mining_fails_closed():
     """A snapshot_only source must hard-fail production historical mining over a
     historical window; current-snapshot research with snapshot_now_only passes."""
-    from storage.sources.data_access_source import (
+    from factor_engine.storage.sources.data_access_source import (
         DataAccessSource,
         HistoricalSnapshotBackfillError,
     )
@@ -66,7 +66,7 @@ def test_snapshot_only_production_historical_mining_fails_closed():
 
 
 def _plan():
-    from storage.sources.field_plan import NormalizedFieldPlan
+    from factor_engine.storage.sources.field_plan import NormalizedFieldPlan
 
     return NormalizedFieldPlan(
         logical_concept="pe",

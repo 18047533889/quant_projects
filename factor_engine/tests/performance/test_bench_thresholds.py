@@ -11,11 +11,11 @@ import pandas as pd
 import pytest
 import yaml
 
-from api import rank, ts_mean
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from runtime.engine import FactorEngine
+from factor_engine.api import rank, ts_mean
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 _THRESHOLDS_PATH = Path(__file__).resolve().parent / "thresholds.yaml"

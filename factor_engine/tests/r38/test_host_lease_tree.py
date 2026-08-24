@@ -11,7 +11,7 @@
 """
 from __future__ import annotations
 
-from runtime.host_resource_coordinator import (
+from factor_engine.runtime.host_resource_coordinator import (
     KIND_COMPUTE,
     KIND_DA_SCAN,
     KIND_JOB,
@@ -19,7 +19,7 @@ from runtime.host_resource_coordinator import (
     JobLease,
     reset_host_coordinator,
 )
-from runtime.resource_broker import ResourceBroker
+from factor_engine.runtime.resource_broker import ResourceBroker
 
 
 def _coordinator(hard_memory=8 * 1024**3, cpu_slots=4) -> HostResourceCoordinator:
@@ -126,7 +126,7 @@ def test_terminal_ring_bounds_growth():
 
 
 def test_summary_is_pure_no_da_side_effect():
-    import runtime.host_resource_coordinator as hrc
+    import factor_engine.runtime.host_resource_coordinator as hrc
 
     c = _coordinator()
     calls = []

@@ -41,8 +41,8 @@ def _load_runtime_modules():
     fail-open path, which is exactly what these tests exercise.
     """
     try:
-        import runtime.semantic_policies as sp
-        import runtime.execution_contract as ec
+        import factor_engine.runtime.semantic_policies as sp
+        import factor_engine.runtime.execution_contract as ec
 
         return sp, ec
     except Exception:
@@ -55,17 +55,17 @@ def _load_runtime_modules():
         sys.modules["runtime"] = stub
 
     sp_spec = importlib.util.spec_from_file_location(
-        "runtime.semantic_policies", str(_RUNTIME_DIR / "semantic_policies.py")
+        "factor_engine.runtime.semantic_policies", str(_RUNTIME_DIR / "semantic_policies.py")
     )
     sp = importlib.util.module_from_spec(sp_spec)
-    sys.modules["runtime.semantic_policies"] = sp
+    sys.modules["factor_engine.runtime.semantic_policies"] = sp
     sp_spec.loader.exec_module(sp)
 
     ec_spec = importlib.util.spec_from_file_location(
-        "runtime.execution_contract", str(_RUNTIME_DIR / "execution_contract.py")
+        "factor_engine.runtime.execution_contract", str(_RUNTIME_DIR / "execution_contract.py")
     )
     ec = importlib.util.module_from_spec(ec_spec)
-    sys.modules["runtime.execution_contract"] = ec
+    sys.modules["factor_engine.runtime.execution_contract"] = ec
     ec_spec.loader.exec_module(ec)
     return sp, ec
 

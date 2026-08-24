@@ -9,8 +9,8 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="legacy audit inventory references operators removed from the active registry")
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module")
@@ -113,13 +113,13 @@ def test_cs_mad_zscore_robust(_loaded):
 
 
 def test_capm_param_contracts_complete(_loaded):
-    from cleaned_operators.operator_spec import check_capm_param_contracts
+    from factor_engine.cleaned_operators.operator_spec import check_capm_param_contracts
 
     assert not check_capm_param_contracts(), check_capm_param_contracts()
 
 
 def test_micro_realized_vol_respects_session(_loaded):
-    from cleaned_operators.microstructure.session import pct_change_by_session
+    from factor_engine.cleaned_operators.microstructure.session import pct_change_by_session
 
     idx = pd.DatetimeIndex(["2024-01-02 09:31", "2024-01-02 09:32", "2024-01-03 09:31"])
     s = pd.Series([100.0, 101.0, 200.0], index=idx)

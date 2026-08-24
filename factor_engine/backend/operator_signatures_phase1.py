@@ -2,7 +2,7 @@
 """Phase-1 六证算子类型签名批量登记（驱动 operational_production_certified）。"""
 from __future__ import annotations
 
-from backend.operator_types import (
+from factor_engine.backend.operator_types import (
     ArgSpec,
     OperatorSignature,
     TypeKind,

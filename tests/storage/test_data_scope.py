@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from storage.data_scope import compute_data_scope
+from factor_engine.storage.data_scope import compute_data_scope
 
 
 class _FakeSource:

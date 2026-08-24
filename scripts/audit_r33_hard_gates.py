@@ -24,18 +24,18 @@ def run() -> dict[str, bool]:
 
 def _probe(gates: dict[str, bool]) -> None:
     # ---- typed SourceScopeId（R33-P0-005/006/013）----
-    from planner.physical_factor_dag import SourceScopeId, source_scope_from_key
-    from planner.batch_data_request import ScanCostUnavailable, build_batch_data_request
-    from planner.read_wave_planner import ReadWavePlanner
-    from planner.physical_lowerer import lower_root_plan
-    from planner.logical_plan import PlanNode
-    from runtime.block_dq import (
+    from factor_engine.planner.physical_factor_dag import SourceScopeId, source_scope_from_key
+    from factor_engine.planner.batch_data_request import ScanCostUnavailable, build_batch_data_request
+    from factor_engine.planner.read_wave_planner import ReadWavePlanner
+    from factor_engine.planner.physical_lowerer import lower_root_plan
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.runtime.block_dq import (
         FactorBlock,
         compute_block_dq,
         cross_section_block,
         cross_section_block_parity,
     )
-    from runtime.streaming_result_sink import BoundedResultQueue, StreamingResultSink
+    from factor_engine.runtime.streaming_result_sink import BoundedResultQueue, StreamingResultSink
 
     sid = SourceScopeId(dataset="ashare_daily", snapshot_id="s1", market="ashare")
     gates["R33_SOURCE_SCOPE_TYPED_ZERO_STRING_PARSE"] = (
@@ -66,7 +66,7 @@ def _probe(gates: dict[str, bool]) -> None:
     )
 
     # ---- ReadWave columns 是物理列 + time_range 真实（P0-010/011/012）----
-    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
 
     scheduler = AdaptiveBatchScheduler(max_concurrency=2)
     import types
@@ -109,7 +109,7 @@ def _probe(gates: dict[str, bool]) -> None:
     gates["R33_READ_WAVE_TIME_RANGE_REAL"] = wave_has_time_range
 
     # ---- ReadWave 在主路径真实执行（P0-016）----
-    from runtime.buffer_ref import SourceWaveExecutor
+    from factor_engine.runtime.buffer_ref import SourceWaveExecutor
 
     source = types.SimpleNamespace(
         dataset="ashare_daily",
@@ -158,7 +158,7 @@ def _probe(gates: dict[str, bool]) -> None:
     )
 
     # ---- batch-global route（P0-061..067）----
-    from backend.plan_cost_router import (
+    from factor_engine.backend.plan_cost_router import (
         BatchPhysicalRoute,
         plan_batch_route,
         plan_native_subgraph_fraction,
@@ -198,7 +198,7 @@ def _probe(gates: dict[str, bool]) -> None:
     )
 
     # ---- fusion per-group + capability（P0-042/043/044）----
-    from planner.native_fusion import (
+    from factor_engine.planner.native_fusion import (
         native_fusion_capability_map,
         plan_native_fusion_groups,
     )
@@ -217,7 +217,7 @@ def _probe(gates: dict[str, bool]) -> None:
         gates["R33_NATIVE_FUSION_MIXED_SCOPE_PARTITIONS_CORRECT"] = False
 
     # ---- scheduler 2.0 ----
-    from runtime.adaptive_batch_scheduler import (
+    from factor_engine.runtime.adaptive_batch_scheduler import (
         AdaptiveBatchScheduler as _ABS,
     )
     gates["R33_MAX_CONCURRENCY_ENFORCED"] = (
@@ -303,7 +303,7 @@ def _probe(gates: dict[str, bool]) -> None:
     )
 
     # ---- representation cache global budget（P0-030）----
-    from storage.sources.data_access_source import DataAccessSource as _DAS
+    from factor_engine.storage.sources.data_access_source import DataAccessSource as _DAS
     gates["R33_COLUMN_PANEL_DUPLICATE_CACHE_ZERO"] = hasattr(
         _DAS, "_evict_global_lru"
     )
@@ -312,7 +312,7 @@ def _probe(gates: dict[str, bool]) -> None:
     )
 
     # ---- small-batch AUTO bypass（§39）----
-    from runtime.batch_service import choose_execution_mode
+    from factor_engine.runtime.batch_service import choose_execution_mode
 
     gates["R33_SMALL_BATCH_AUTO_OVERHEAD_GATE_PASS"] = (
         choose_execution_mode(

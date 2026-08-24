@@ -359,7 +359,7 @@ def _factor_dialect(factor_payload: dict[str,Any]) -> tuple[str,str,str|None]:
     if surface=="lqtp" and dialect=="native": dialect="lqtp"
     if dialect not in {"native","lqtp"}: raise ValueError(f"unsupported factor.dialect={dialect!r}")
     if dialect=="lqtp":
-        from api.lqtp_compat import DEFAULT_LQTP_DIALECT_VERSION
+        from factor_engine.api.lqtp_compat import DEFAULT_LQTP_DIALECT_VERSION
         version=str(version or DEFAULT_LQTP_DIALECT_VERSION)
         if version!=DEFAULT_LQTP_DIALECT_VERSION: raise ValueError(f"unsupported factor.dialect_version={version!r}; supported={DEFAULT_LQTP_DIALECT_VERSION!r}")
     elif version is not None: raise ValueError("factor.dialect_version is only valid when factor.dialect='lqtp'")

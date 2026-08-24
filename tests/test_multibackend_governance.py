@@ -2,7 +2,7 @@
 """Tests for MultiBackend P2 Governance (MB-P2-001 through MB-P2-016)."""
 import pytest
 import time
-from backend.multibackend_governance import (
+from factor_engine.backend.multibackend_governance import (
     # MB-P2-007: Cache
     CacheLayer,
     CachePolicy,

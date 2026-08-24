@@ -114,7 +114,7 @@ class LongTableDataSource(DataSource):
             return inner_scan(columns)
         import polars as pl
 
-        from storage.factor_format import series_to_long_table
+        from factor_engine.storage.factor_format import series_to_long_table
 
         ts, inst = self.dataset_axis_columns()
         merged: Any = None
@@ -134,8 +134,8 @@ class LongTableDataSource(DataSource):
         if merged is None:
             raise ValueError("scan_polars_long: no columns")
         renamed = merged.rename(columns={ts: "ts", inst: "inst"})
-        from backend.long_frame import long_table_to_polars_lazy
-        from backend.polars_lazy import enforce_source_ordering
+        from factor_engine.backend.long_frame import long_table_to_polars_lazy
+        from factor_engine.backend.polars_lazy import enforce_source_ordering
 
         lf = long_table_to_polars_lazy(renamed, float_cols=columns)
         frequency = getattr(self._inner, "frequency", None)
@@ -165,8 +165,8 @@ class LongTableDataSource(DataSource):
         if name in self._panel_cache:
             return self._panel_cache[name]
         series = self.load_column(name)
-        from backend.cleaned_bridge import series_to_panel
-        from backend.context import ExecutionContext
+        from factor_engine.backend.cleaned_bridge import series_to_panel
+        from factor_engine.backend.context import ExecutionContext
 
         ctx = ExecutionContext(
             data_source=self,

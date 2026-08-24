@@ -16,7 +16,7 @@ import pytest
 pytest.importorskip("polars")
 pytest.importorskip("duckdb")
 
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 
 from tests.backend_parity.intraday_minute_parity import (
     _POLARS_OPS,
@@ -104,7 +104,7 @@ def con(long_df):
 
 
 def _pandas_kernel(name, panels):
-    from cleaned_operators.microstructure import intraday_agg as m
+    from factor_engine.cleaned_operators.microstructure import intraday_agg as m
 
     cls = {
         "intra_realized_variance": m.IntraRealizedVariance,
@@ -229,7 +229,7 @@ def test_minute_parity_pandas_contract_nan_day(panels):
     """全 NaN 日 → 三后端都为 NaN（pandas 内核契约，参考实现）。"""
     close = panels["close"].copy()
     close.loc[close.index.normalize() == pd.Timestamp("2024-01-03")] = np.nan
-    from cleaned_operators.microstructure.intraday_agg import IntraRealizedVariance
+    from factor_engine.cleaned_operators.microstructure.intraday_agg import IntraRealizedVariance
 
     out = IntraRealizedVariance()._calculate_series(close)
     assert np.isnan(out.loc[pd.Timestamp("2024-01-03"), "A"])
@@ -246,7 +246,7 @@ def test_minute_parity_kyle_lambda_now_certified():
 
 def test_minute_parity_coverage_complete():
     """25 个分钟算子全部被覆盖：三后端 / polars+limit / 明确 reference-only。"""
-    from cleaned_operators.microstructure.intraday_agg import __all__ as minute_ops
+    from factor_engine.cleaned_operators.microstructure.intraday_agg import __all__ as minute_ops
 
     covered = set(_POLARS_OPS) | set(_SQL_OPS) | set(_POLARS_LIMIT_OPS) | _REFERENCE_ONLY
     assert set(minute_ops) <= covered, f"missing: {set(minute_ops) - covered}"

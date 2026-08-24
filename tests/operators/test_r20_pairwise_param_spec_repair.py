@@ -7,10 +7,10 @@ import pytest
 import polars as pl
 
 def _ensure_chain():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     if OperatorRegistry.lifecycle() == "frozen":
         return
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
     load_all()
 
 @pytest.fixture(scope="module", autouse=True)
@@ -18,14 +18,14 @@ def _bootstrap():
     _ensure_chain()
 
 def _op(name):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     # ts_ewm_corr/ts_ewm_cov only have polars/sql backends, no pandas_numpy.
     op = OperatorRegistry.get(name, "polars") or OperatorRegistry.get(name, "sql")
     assert op is not None, f"{name} not registered"
     return op
 
 def _to_polars(df):
-    from backend.panel_polars import panel_to_polars
+    from factor_engine.backend.panel_polars import panel_to_polars
     return panel_to_polars(df)
 
 def _span_key(op):
@@ -126,7 +126,7 @@ class TestSpanValidation:
         # Review P2: the focused module never exercised the pandas ewm_corr /
         # ewm_cov path — the same registration whose string param_specs crashed
         # strict validation (the P0).  Pin it directly.
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
         rng = np.random.default_rng(36)
         x = pd.DataFrame({"A": rng.normal(0, 1, 30)})
         y = pd.DataFrame({"A": rng.normal(0, 1, 30)})
@@ -136,7 +136,7 @@ class TestSpanValidation:
             specs = getattr(op.metadata, "param_specs", None) or {}
             # every declared spec must be a real ParamSpec — string placeholders
             # here were the P0 crash
-            from cleaned_operators.base import ParamSpec
+            from factor_engine.cleaned_operators.base import ParamSpec
             bad = {k: type(v).__name__ for k, v in specs.items() if not isinstance(v, ParamSpec)}
             assert not bad, f"{name} param_specs non-ParamSpec entries: {bad}"
             out = op.calculate(x, y, span=2)
@@ -170,17 +170,17 @@ class TestDegenerateAndEdgeCases:
 
 class TestRegistration:
     def test_ts_ewm_corr_registered(self):
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
         op = OperatorRegistry.get("ts_ewm_corr", "polars")
         assert op is not None
 
     def test_ts_ewm_cov_registered(self):
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
         op = OperatorRegistry.get("ts_ewm_cov", "polars")
         assert op is not None
 
     def test_operator_policy_alignment(self):
-        from cleaned_operators.operator_policy import infer_operator_policy
+        from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
         corr_policy = infer_operator_policy(None, canonical="ts_ewm_corr")
         cov_policy = infer_operator_policy(None, canonical="ts_ewm_cov")
         assert corr_policy.min_periods == 2

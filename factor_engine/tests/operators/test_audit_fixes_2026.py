@@ -19,12 +19,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 
 load_all()
 
-from backend.operator_errors import FutureReferenceError
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.operator_errors import FutureReferenceError
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 # --------------------------------------------------------------------------
@@ -32,8 +32,8 @@ from cleaned_operators.registry import OperatorRegistry
 # --------------------------------------------------------------------------
 
 def test_s2_experimental_registered_ops_not_promoted():
-    from cleaned_operators.production_hardening import factor_production_targets
-    from cleaned_operators.semantic_certification import should_fail_closed
+    from factor_engine.cleaned_operators.production_hardening import factor_production_targets
+    from factor_engine.cleaned_operators.semantic_certification import should_fail_closed
 
     targets = factor_production_targets()
     # Model-family / research operators must be fail-closed and non-production.
@@ -58,7 +58,7 @@ def test_s2_experimental_registered_ops_not_promoted():
 
 
 def test_s2_isolated_ops_not_promoted():
-    from cleaned_operators.semantic_certification import should_fail_closed
+    from factor_engine.cleaned_operators.semantic_certification import should_fail_closed
 
     # fin_ttm / nan_to_num remain isolated (legacy stub / NaN sink conflation).
     for name in ("fin_ttm", "nan_to_num"):
@@ -75,8 +75,8 @@ def test_s2_isolated_ops_not_promoted():
 def test_s2_reworked_isolated_ops_are_promoted():
     # 2026-08 第三轮:relation_weighted_change / holder_weighted_churn 完成
     # 语义重写(ID 匹配),已从隔离清单解除并升到 daily。
-    from cleaned_operators.semantic_certification import should_fail_closed
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.semantic_certification import should_fail_closed
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     for name in ("relation_weighted_change", "holder_weighted_churn",
                  "relation_entry_count", "multi_index_entry_intensity"):
@@ -87,8 +87,8 @@ def test_s2_reworked_isolated_ops_are_promoted():
 def test_s2_reworked_unknown_state_ops_are_promoted():
     # index_reconstitution_churn / listing_age / suspension_frequency completed the
     # unknown-state rework (S9) and are now on the daily surface, not fail-closed.
-    from cleaned_operators.semantic_certification import should_fail_closed
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.semantic_certification import should_fail_closed
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     for name in ("index_reconstitution_churn", "listing_age", "suspension_frequency"):
         assert not should_fail_closed(name), name
@@ -96,7 +96,7 @@ def test_s2_reworked_unknown_state_ops_are_promoted():
 
 
 def test_s2_legitimate_production_surface_kept():
-    from cleaned_operators.production_hardening import factor_production_targets
+    from factor_engine.cleaned_operators.production_hardening import factor_production_targets
 
     targets = factor_production_targets()
     for name in ("ts_mean", "ts_argmax", "ts_time_slope", "ts_regression_resid",
@@ -127,7 +127,7 @@ def test_s2_four_certificates_attached():
 # --------------------------------------------------------------------------
 
 def test_s4_5_negative_lag_raises():
-    from cleaned_operators.common.statistics import ACF, autocorr
+    from factor_engine.cleaned_operators.common.statistics import ACF, autocorr
 
     frame = pd.DataFrame({"A": [1.0, 2.0, 3.0, 4.0]})
     with pytest.raises(FutureReferenceError):
@@ -137,7 +137,7 @@ def test_s4_5_negative_lag_raises():
 
 
 def test_s4_5_causal_lag_raises():
-    from cleaned_operators._causal import causal_lag
+    from factor_engine.cleaned_operators._causal import causal_lag
 
     frame = pd.DataFrame({"A": [1.0, 2.0]})
     with pytest.raises(FutureReferenceError):
@@ -149,7 +149,7 @@ def test_s4_5_causal_lag_raises():
 # --------------------------------------------------------------------------
 
 def test_s5_3_fillna_unknown_method_raises():
-    from cleaned_operators.common.data_cleaning import FillNA
+    from factor_engine.cleaned_operators.common.data_cleaning import FillNA
 
     frame = pd.DataFrame({"A": [1.0, np.nan]})
     with pytest.raises(ValueError):
@@ -161,7 +161,7 @@ def test_s5_3_fillna_unknown_method_raises():
 # --------------------------------------------------------------------------
 
 def test_s6_1_conditional_resid_excludes_current_row():
-    from cleaned_operators.conditional_ext import TsRegressionResidIf
+    from factor_engine.cleaned_operators.conditional_ext import TsRegressionResidIf
 
     index = pd.date_range("2024-01-01", periods=5)
     y = pd.DataFrame({"A": [1.0, 2.0, 3.0, 4.0, 5.0]}, index=index)
@@ -213,7 +213,7 @@ def test_s9_reconstitution_churn_ignores_unknown_boundaries():
 # --------------------------------------------------------------------------
 
 def test_s10_zscore_history_zero_variance_is_nan():
-    from cleaned_operators.fundamental.transforms_v2 import fin_zscore_history
+    from factor_engine.cleaned_operators.fundamental.transforms_v2 import fin_zscore_history
 
     index = pd.date_range("2024-01-01", periods=4)
     x = pd.DataFrame({"A": [5.0, 5.0, 5.0, 5.0]}, index=index)
@@ -226,7 +226,7 @@ def test_s10_zscore_history_zero_variance_is_nan():
 
 
 def test_s10_trend_r2_constant_series_is_nan():
-    from cleaned_operators.fundamental.transforms_v2 import _trend_stat
+    from factor_engine.cleaned_operators.fundamental.transforms_v2 import _trend_stat
 
     index = pd.date_range("2024-01-01", periods=4)
     x = pd.DataFrame({"A": [5.0, 5.0, 5.0, 5.0]}, index=index)
@@ -239,7 +239,7 @@ def test_s10_trend_r2_constant_series_is_nan():
 
 
 def test_s10_quarter_from_cumulative_requires_same_fiscal_year():
-    from cleaned_operators.fundamental.flow_semantics_v2 import fin_quarter_from_cumulative
+    from factor_engine.cleaned_operators.fundamental.flow_semantics_v2 import fin_quarter_from_cumulative
 
     index = pd.date_range("2024-01-01", periods=2)
     cum = pd.DataFrame({"A": [100.0, 300.0]}, index=index)
@@ -258,7 +258,7 @@ def test_s10_quarter_from_cumulative_requires_same_fiscal_year():
 # --------------------------------------------------------------------------
 
 def test_s11_cashflow_disagreement_homogenises_scale():
-    from cleaned_operators.valuation.ops_v2 import _valuation_cashflow_disagreement
+    from factor_engine.cleaned_operators.valuation.ops_v2 import _valuation_cashflow_disagreement
 
     # P0-18: each row's cross-sectional z-score needs >= 5 finite stocks, so a
     # single-column panel fail-closes to NaN — use a real cross-section to
@@ -280,7 +280,7 @@ def test_s11_cashflow_disagreement_homogenises_scale():
 
 
 def test_s11_quality_mismatch_uses_wls():
-    from cleaned_operators.valuation.ops_v2 import _valuation_quality_mismatch
+    from factor_engine.cleaned_operators.valuation.ops_v2 import _valuation_quality_mismatch
 
     # A real cross-section needs several instruments per row.
     index = pd.date_range("2024-01-01", periods=3)
@@ -304,7 +304,7 @@ def test_s15_3_pct_change_explicit_no_fill():
     assert np.isnan(explicit["A"].iloc[1])
     assert np.isnan(explicit["A"].iloc[2])
     # volume_volatility must not forward-fill a missing prior volume either.
-    from cleaned_operators.price_volume.liquidity_v2 import volume_volatility
+    from factor_engine.cleaned_operators.price_volume.liquidity_v2 import volume_volatility
 
     out = volume_volatility(frame, 2)
     assert np.isnan(out["A"].iloc[1])
@@ -315,7 +315,7 @@ def test_s15_3_pct_change_explicit_no_fill():
 # --------------------------------------------------------------------------
 
 def test_s17_3_real_turnover_rate_policy_single():
-    from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
+    from factor_engine.cleaned_operators.operator_policy import _EXPLICIT_POLICIES
 
     policy = _EXPLICIT_POLICIES.get("real_turnover_rate")
     assert policy is not None

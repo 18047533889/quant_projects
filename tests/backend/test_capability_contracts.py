@@ -14,7 +14,7 @@ import pytest
 
 def test_unified_execution_kind_import():
     """FE-P0-003: ExecutionKind has single authority with all required members."""
-    from backend.contracts import ExecutionKind
+    from factor_engine.backend.contracts import ExecutionKind
 
     # Verify all required members exist (no AttributeError)
     required_members = [
@@ -40,7 +40,7 @@ def test_unified_execution_kind_import():
 
 def test_unified_backend_kind_import():
     """FE-P0-003: BackendKind has single authority."""
-    from backend.contracts import BackendKind
+    from factor_engine.backend.contracts import BackendKind
 
     required_members = [
         "PANDAS_NUMPY",
@@ -56,7 +56,7 @@ def test_unified_backend_kind_import():
 
 def test_physical_implementation_spec_authority():
     """FE-P0-004: PhysicalImplementationSpec single authority."""
-    from backend.contracts import ExecutionKind, PhysicalImplementationSpec
+    from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
     valid_hash = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
@@ -83,9 +83,9 @@ def test_physical_implementation_spec_authority():
 
 def test_polars_backend_kind_imports_from_contracts():
     """FE-P0-003/004: polars_backend_kind imports from unified authority."""
-    from backend.polars_backend_kind import ExecutionKind, PhysicalImplementationSpec
-    from backend.contracts import ExecutionKind as ContractsEK
-    from backend.contracts import PhysicalImplementationSpec as ContractsPIS
+    from factor_engine.backend.polars_backend_kind import ExecutionKind, PhysicalImplementationSpec
+    from factor_engine.backend.contracts import ExecutionKind as ContractsEK
+    from factor_engine.backend.contracts import PhysicalImplementationSpec as ContractsPIS
 
     # Same class (identity check, not just equality)
     assert ExecutionKind is ContractsEK
@@ -94,12 +94,12 @@ def test_polars_backend_kind_imports_from_contracts():
 
 def test_operator_capability_imports_from_contracts():
     """FE-P0-003/004: operator_capability imports from unified authority."""
-    from backend.operator_capability import (
+    from factor_engine.backend.operator_capability import (
         BackendKind,
         CapabilityLevel,
         ExecutionKind,
     )
-    from backend.contracts import (
+    from factor_engine.backend.contracts import (
         BackendKind as ContractsBK,
         CapabilityLevel as ContractsCL,
         ExecutionKind as ContractsEK,
@@ -113,8 +113,8 @@ def test_operator_capability_imports_from_contracts():
 
 def test_production_mode_defaults_to_fail_closed():
     """FE-P0-005: Production mode defaults to True (fail closed)."""
-    from backend.polars_backend_kind import polars_backend_kind, PolarsImplementationKind
-    from backend.contracts import ExecutionKind, PhysicalImplementationSpec
+    from factor_engine.backend.polars_backend_kind import polars_backend_kind, PolarsImplementationKind
+    from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
     valid_hash = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
@@ -135,7 +135,7 @@ def test_production_mode_defaults_to_fail_closed():
 
 def test_explicit_research_mode():
     """FE-P0-005: Explicit production_mode=False allows heuristic fallback."""
-    from backend.polars_backend_kind import polars_backend_kind, PolarsImplementationKind
+    from factor_engine.backend.polars_backend_kind import polars_backend_kind, PolarsImplementationKind
 
     valid_hash = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
@@ -156,8 +156,8 @@ def test_explicit_research_mode():
 
 def test_explicit_spec_works_in_production_mode():
     """FE-P0-005: Operators with explicit spec work in production mode."""
-    from backend.polars_backend_kind import polars_backend_kind, PolarsImplementationKind, get_physical_spec
-    from backend.contracts import ExecutionKind, PhysicalImplementationSpec
+    from factor_engine.backend.polars_backend_kind import polars_backend_kind, PolarsImplementationKind, get_physical_spec
+    from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
     valid_hash = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
@@ -189,8 +189,8 @@ def test_explicit_spec_works_in_production_mode():
 
 def test_backend_capability_record_native_execution():
     """FE-P0-003: BackendCapabilityRecord.is_native_execution uses updated enum."""
-    from backend.operator_capability import BackendCapabilityRecord
-    from backend.contracts import BackendKind, CapabilityLevel, ExecutionKind
+    from factor_engine.backend.operator_capability import BackendCapabilityRecord
+    from factor_engine.backend.contracts import BackendKind, CapabilityLevel, ExecutionKind
 
     # Native expr
     record = BackendCapabilityRecord(
@@ -213,11 +213,11 @@ def test_backend_capability_record_native_execution():
 
 def test_no_duplicate_enum_definitions():
     """FE-P0-003: Ensure no duplicate ExecutionKind definitions."""
-    from backend.contracts import ExecutionKind as ContractsEK
+    from factor_engine.backend.contracts import ExecutionKind as ContractsEK
 
     # Import after contracts to ensure they get the same one
-    from backend.polars_backend_kind import ExecutionKind as PolarsEK
-    from backend.operator_capability import ExecutionKind as CapabilityEK
+    from factor_engine.backend.polars_backend_kind import ExecutionKind as PolarsEK
+    from factor_engine.backend.operator_capability import ExecutionKind as CapabilityEK
 
     # All should be the exact same class
     assert PolarsEK is ContractsEK
@@ -230,8 +230,8 @@ def test_no_duplicate_backend_kind():
     PolarsImplementationKind is semantically distinct - it classifies
     implementation quality, not physical backend choice.
     """
-    from backend.contracts import BackendKind
-    from backend.polars_backend_kind import PolarsImplementationKind
+    from factor_engine.backend.contracts import BackendKind
+    from factor_engine.backend.polars_backend_kind import PolarsImplementationKind
 
     # BackendKind has physical engines
     assert hasattr(BackendKind, "PANDAS_NUMPY")

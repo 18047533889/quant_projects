@@ -22,8 +22,8 @@ MANIFEST = ROOT / "docs" / "operator_market_capabilities.json"
 
 
 def main() -> int:
-    from cleaned_operators import OperatorRegistry, load_all
-    from cleaned_operators.operator_market import contract_set
+    from factor_engine.cleaned_operators import OperatorRegistry, load_all
+    from factor_engine.cleaned_operators.operator_market import contract_set
 
     load_all()
     registered = set(OperatorRegistry.list_canonical())

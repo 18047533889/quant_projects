@@ -14,7 +14,7 @@ from typing import Any
 
 import pandas as pd
 
-from runtime.pit_audit import PitSafetyError, audit_ir
+from factor_engine.runtime.pit_audit import PitSafetyError, audit_ir
 
 
 # ---------------------------------------------------------------------------
@@ -364,9 +364,9 @@ def validate_label_formula_for_pit(formula: str, *, enforce: bool = True) -> dic
     dict[str, Any]
         含 ``ok``、``pit_safe``、``violations`` 等字段的审计报告。
     """
-    from api.dsl_parser import parse_expr
-    from ir.analyzer import Analyzer
-    from runtime.pit_audit import assert_pit_safe
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.ir.analyzer import Analyzer
+    from factor_engine.runtime.pit_audit import assert_pit_safe
 
     expr = parse_expr(str(formula or "").strip())
     analysis = Analyzer().lower(expr)

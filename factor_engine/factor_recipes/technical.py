@@ -5,7 +5,7 @@ Composite indicators are lowered into primitive DAGs before physical routing.
 This lets every leaf independently select an evidence-backed Pandas, Polars or
 DuckDB implementation without retaining duplicate composite kernels.
 """
-from factor_recipes.registry import FactorRecipe, FactorRecipeRegistry
+from factor_engine.factor_recipes.registry import FactorRecipe, FactorRecipeRegistry
 
 
 _RECIPES = (

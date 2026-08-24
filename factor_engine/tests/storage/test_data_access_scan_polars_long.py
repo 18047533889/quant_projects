@@ -11,7 +11,7 @@ def test_data_access_scan_polars_long_renames_axes():
     pytest.importorskip("polars")
     import polars as pl
 
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     src = DataAccessSource(
         dataset="test_ds",
@@ -47,7 +47,7 @@ def test_data_access_scan_polars_long_renames_axes():
 
     mock_store.scan.return_value = _FakeScanHandle(base)
 
-    with patch("storage.sources.data_access_source._get_store", return_value=mock_store):
+    with patch("factor_engine.storage.sources.data_access_source._get_store", return_value=mock_store):
         lf = src.scan_polars_long(["close", "volume"])
 
     cols = lf.collect_schema().names()

@@ -13,14 +13,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from storage.catalog import FactorCatalog, compute_ir_hash
-from storage.partition_policy import PartitionPolicy
-from storage.exceptions import (
+from factor_engine.storage.catalog import FactorCatalog, compute_ir_hash
+from factor_engine.storage.partition_policy import PartitionPolicy
+from factor_engine.storage.exceptions import (
     FactorHashMismatchError,
     FactorNotFoundError,
     MaterializePartitionError,
 )
-from storage.materializer import ParquetMaterializer
+from factor_engine.storage.materializer import ParquetMaterializer
 
 
 # ---------------------------------------------------------------------------
@@ -30,7 +30,7 @@ from storage.materializer import ParquetMaterializer
 
 def _make_ir_node(op: str, attrs: dict | None = None, inputs=()) -> object:
     """最小化 IRNode 模拟，用于测试 AST Hash。"""
-    from ir.nodes import IRNode
+    from factor_engine.ir.nodes import IRNode
 
     return IRNode(op=op, inputs=tuple(inputs), attrs=attrs or {})
 
@@ -543,7 +543,7 @@ class TestParquetMaterializer:
         推进了水位线，resume 逻辑会误以为该分区已落盘。新实现：先判定失败、再
         决定是否推进水位线。
         """
-        from storage.partition_policy import partition_key
+        from factor_engine.storage.partition_policy import partition_key
 
         mat = ParquetMaterializer(lake_root=tmp_path)
         mat.materialize(
@@ -766,7 +766,7 @@ class TestParquetMaterializer:
         import multiprocessing as mp
 
         def _worker(lake, factor_id, date, val):
-            from storage.materializer import ParquetMaterializer
+            from factor_engine.storage.materializer import ParquetMaterializer
 
             mat = ParquetMaterializer(lake_root=lake)
             mat.materialize(
@@ -817,7 +817,7 @@ class TestPandasResultStore:
     """Pandas 兜底后端测试。"""
 
     def test_load_single_factor(self, tmp_path):
-        from storage.result_store import PandasResultStore
+        from factor_engine.storage.result_store import PandasResultStore
 
         _setup_lake(
             tmp_path,
@@ -833,7 +833,7 @@ class TestPandasResultStore:
         assert {"datetime", "asset", "value"}.issubset(set(df.columns))
 
     def test_load_factor_not_found(self, tmp_path):
-        from storage.result_store import PandasResultStore
+        from factor_engine.storage.result_store import PandasResultStore
 
         cat = FactorCatalog(tmp_path / "_catalog.sqlite")
         store = PandasResultStore(tmp_path, cat)
@@ -841,7 +841,7 @@ class TestPandasResultStore:
             store.load_factor("nonexistent")
 
     def test_partition_pruning(self, tmp_path):
-        from storage.result_store import PandasResultStore
+        from factor_engine.storage.result_store import PandasResultStore
 
         _setup_lake(
             tmp_path,
@@ -858,7 +858,7 @@ class TestPandasResultStore:
         assert len(df) == 1
 
     def test_multi_factor_join(self, tmp_path):
-        from storage.result_store import PandasResultStore
+        from factor_engine.storage.result_store import PandasResultStore
 
         _setup_lake(
             tmp_path, "f1", ["2024-01-15"], ["A"], [1.0], ast_hash="h1"
@@ -874,7 +874,7 @@ class TestPandasResultStore:
         assert len(df) == 1
 
     def test_to_pandas(self, tmp_path):
-        from storage.result_store import PandasResultStore
+        from factor_engine.storage.result_store import PandasResultStore
 
         _setup_lake(
             tmp_path, "f1", ["2024-01-15"], ["A"], [1.0], ast_hash="h1"
@@ -894,7 +894,7 @@ class TestPolarsResultStore:
 
     def test_load_single_factor(self, tmp_path):
         import polars as pl
-        from storage.result_store import PolarsResultStore
+        from factor_engine.storage.result_store import PolarsResultStore
 
         _setup_lake(
             tmp_path,
@@ -911,7 +911,7 @@ class TestPolarsResultStore:
         assert len(df) == 4
 
     def test_partition_pruning(self, tmp_path):
-        from storage.result_store import PolarsResultStore
+        from factor_engine.storage.result_store import PolarsResultStore
 
         _setup_lake(
             tmp_path,
@@ -927,7 +927,7 @@ class TestPolarsResultStore:
         assert len(df) == 1
 
     def test_multi_factor_join(self, tmp_path):
-        from storage.result_store import PolarsResultStore
+        from factor_engine.storage.result_store import PolarsResultStore
 
         _setup_lake(
             tmp_path, "f1", ["2024-01-15"], ["A"], [1.0], ast_hash="h1"
@@ -944,7 +944,7 @@ class TestPolarsResultStore:
         assert len(df) == 1
 
     def test_to_pandas(self, tmp_path):
-        from storage.result_store import PolarsResultStore
+        from factor_engine.storage.result_store import PolarsResultStore
 
         _setup_lake(
             tmp_path, "f1", ["2024-01-15"], ["A"], [1.0], ast_hash="h1"
@@ -959,7 +959,7 @@ class TestBuildResultStore:
     """工厂函数自动选择后端。"""
 
     def test_auto_select(self, tmp_path):
-        from storage.result_store import build_result_store
+        from factor_engine.storage.result_store import build_result_store
 
         _setup_lake(tmp_path, "f1", ["2024-01-15"], ["A"], [1.0])
         store = build_result_store(tmp_path)

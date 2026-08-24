@@ -4,14 +4,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-from expr.base import Expr
-from expr.cleaned_call import CleanedCall
-from expr.column import ColumnRef
-from expr.field import FieldRef
-from expr.literal import Literal
-from ir.nodes import IRNode
-from ir.schema import DEFAULT_COLUMN_SCHEMA, Schema
-from ir.types import (
+from factor_engine.expr.base import Expr
+from factor_engine.expr.cleaned_call import CleanedCall
+from factor_engine.expr.column import ColumnRef
+from factor_engine.expr.field import FieldRef
+from factor_engine.expr.literal import Literal
+from factor_engine.ir.nodes import IRNode
+from factor_engine.ir.schema import DEFAULT_COLUMN_SCHEMA, Schema
+from factor_engine.ir.types import (
     MIXED,
     OPERATOR_INPUT_TYPE_CONTRACTS,
     SemanticLattice,
@@ -373,7 +373,7 @@ def _financial_lookback(
     """
     if canonical not in _FIN_REPORT_PERIOD_CANONICALS:
         return 0
-    from runtime.execution_contract import (
+    from factor_engine.runtime.execution_contract import (
         _financial_research_heuristic,
         history_requirement,
     )
@@ -590,7 +590,7 @@ def _price_basis_of_field(name: str, *, market: str | None = None) -> str | None
     """
     if market is not None:
         try:
-            from fields.resolver import resolve_market_field
+            from factor_engine.fields.resolver import resolve_market_field
 
             resolved = resolve_market_field(name, market)
             if resolved is not None:
@@ -600,7 +600,7 @@ def _price_basis_of_field(name: str, *, market: str | None = None) -> str | None
         except Exception:
             pass
     else:
-        from fields import resolve_field
+        from factor_engine.fields import resolve_field
 
         try:
             spec = resolve_field(name)
@@ -610,7 +610,7 @@ def _price_basis_of_field(name: str, *, market: str | None = None) -> str | None
         except Exception:
             pass
     try:
-        from fields.concepts import concept_alias_map, get_concept
+        from factor_engine.fields.concepts import concept_alias_map, get_concept
 
         concept_id = concept_alias_map().get(str(name).lower())
         if concept_id:
@@ -669,14 +669,14 @@ def _flow_semantics_of_field(name: str, *, market: str | None = None) -> str | N
     """
     if market is not None:
         try:
-            from fields.resolver import resolve_market_field
+            from factor_engine.fields.resolver import resolve_market_field
 
             resolved = resolve_market_field(name, market)
             if resolved is not None:
                 return getattr(resolved.spec, "flow_semantics", None)
         except Exception:
             return None
-    from fields import resolve_field
+    from factor_engine.fields import resolve_field
 
     try:
         spec = resolve_field(name)
@@ -968,8 +968,8 @@ def validate_fundamental_period_contracts(referenced_fields: dict[str, Any]) -> 
     formula reaching a fundamental statement column must carry a registered
     period-selection contract.
     """
-    from storage.sources.financial import FUNDAMENTAL_FIELD_CONTRACTS
-    from storage.sources.logical_tables import logical_table_contract
+    from factor_engine.storage.sources.financial import FUNDAMENTAL_FIELD_CONTRACTS
+    from factor_engine.storage.sources.logical_tables import logical_table_contract
 
     errors: list[str] = []
     for name, spec in referenced_fields.items():
@@ -1065,11 +1065,11 @@ class Analyzer:
         a market.
         """
         if self._market is not None:
-            from fields.resolver import resolve_market_field
+            from factor_engine.fields.resolver import resolve_market_field
 
             resolved = resolve_market_field(node, self._market, strict=False)
             return resolved.spec if resolved is not None else None
-        from fields import resolve_field
+        from factor_engine.fields import resolve_field
 
         return resolve_field(node)
 
@@ -1111,7 +1111,7 @@ class Analyzer:
                     referenced_fields[node.name] = spec
                 attrs = {"name": node.name}
                 if isinstance(node, FieldRef):
-                    from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+                    from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
                     # R17-037: the field-registry hash comes from the SAME market
                     # registry the field was resolved in (A/US catalogs differ).
@@ -1120,7 +1120,7 @@ class Analyzer:
                             MULTI_MARKET_FIELD_REGISTRY.registry_for(self._market).catalog_hash()
                         )
                     else:
-                        from fields import FIELD_REGISTRY
+                        from factor_engine.fields import FIELD_REGISTRY
 
                         current_hash = FIELD_REGISTRY.catalog_hash()
                     if not node.catalog_hash or node.catalog_hash != current_hash:
@@ -1147,13 +1147,13 @@ class Analyzer:
                         node.name, market=self._market
                     )
                     if self._market is not None:
-                        from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+                        from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
                         reg_hash = (
                             MULTI_MARKET_FIELD_REGISTRY.registry_for(self._market).catalog_hash()
                         )
                     else:
-                        from fields import FIELD_REGISTRY
+                        from factor_engine.fields import FIELD_REGISTRY
 
                         reg_hash = FIELD_REGISTRY.catalog_hash()
                     attrs.update({
@@ -1190,7 +1190,7 @@ class Analyzer:
                 # knowledge_time_column / role, then an EXACT-name EOD default
                 # (no "pe"/"pb"/"close" substring guessing).
                 if schema.available_at is None:
-                    from ir.schema import _available_at_of
+                    from factor_engine.ir.schema import _available_at_of
 
                     name_default = _available_at_of(type("_Spec", (), {"name": node.name})())
                     semantic["available_at"] = name_default
@@ -1205,7 +1205,7 @@ class Analyzer:
                 # (1) FieldSpec.semantic_kind (declared, authoritative),
                 # (2) the mapping helper (price-basis / flow-semantics / exact
                 # name for raw columns), (3) semantic_type_of as a final pass.
-                from fields.spec import semantic_kind_of_field
+                from factor_engine.fields.spec import semantic_kind_of_field
 
                 kind = semantic_kind_of_field(spec) if spec is not None else None
                 if kind is None:
@@ -1228,12 +1228,12 @@ class Analyzer:
             if not isinstance(node, CleanedCall):
                 raise NotImplementedError(f"Unsupported expr: {type(node).__name__}")
 
-            from backend.cleaned_bridge import ensure_cleaned_loaded
-            from cleaned_operators.registry import OperatorRegistry
+            from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+            from factor_engine.cleaned_operators.registry import OperatorRegistry
 
             ensure_cleaned_loaded()
             if node.op in {"bfill", "causal_bfill"}:
-                from backend.polars_long_policy import UnsupportedCausalOperatorError
+                from factor_engine.backend.polars_long_policy import UnsupportedCausalOperatorError
 
                 raise UnsupportedCausalOperatorError(
                     f"{node.op} is disabled: backward-looking fill is not point-in-time safe"
@@ -1293,7 +1293,7 @@ class Analyzer:
                     has_cs = True
 
             try:
-                from cleaned_operators.production_hardening import (
+                from factor_engine.cleaned_operators.production_hardening import (
                     FULL_HISTORY_REPLAY_CANONICALS,
                 )
 
@@ -1326,7 +1326,7 @@ class Analyzer:
                 else:
                     attrs[key] = value
 
-            from backend.parameter_aliases import normalize_parameter_aliases
+            from factor_engine.backend.parameter_aliases import normalize_parameter_aliases
 
             attrs = normalize_parameter_aliases(canonical, attrs)
             # P0-03: ONE history authority — ``runtime.execution_contract``.
@@ -1334,7 +1334,7 @@ class Analyzer:
             # per-node requirement (its own contribution, excluding children)
             # comes from ``own_history_requirement``, and the composed factor
             # requirement is re-derived at the end via ``factor_history_requirement``.
-            from runtime.execution_contract import own_history_requirement
+            from factor_engine.runtime.execution_contract import own_history_requirement
 
             params = _operator_param_values(node, implementation)
             if effective_production and canonical in _FIN_REPORT_PERIOD_CANONICALS:
@@ -1345,7 +1345,7 @@ class Analyzer:
             if own_req.is_full_history:
                 requires_full_history = True
             own_increment = max(0, int(own_req.rows))
-            from backend.operator_types import OPERATOR_SIGNATURES
+            from factor_engine.backend.operator_types import OPERATOR_SIGNATURES
 
             signature = OPERATOR_SIGNATURES.get(canonical)
             if signature is not None:
@@ -1430,7 +1430,7 @@ class Analyzer:
                 # factor cannot be used before its last-arriving input is knowable
                 # (audit §51).  Literal children carry no availability and are
                 # excluded.  An UNKNOWN input fails closed (result "unknown").
-                from ir.schema import propagate_available_at
+                from factor_engine.ir.schema import propagate_available_at
 
                 child_availabilities = tuple(
                     (child.semantic_attrs or {}).get("available_at")
@@ -1492,7 +1492,7 @@ class Analyzer:
         # (``factor_history_requirement``).  The per-node ``visit`` composition
         # stays for structural reasons but the authoritative rows / full-history
         # decision is re-derived here.
-        from runtime.execution_contract import factor_history_requirement
+        from factor_engine.runtime.execution_contract import factor_history_requirement
 
         history_req = factor_history_requirement(ir)
         if history_req.is_full_history:

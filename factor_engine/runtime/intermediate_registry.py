@@ -175,7 +175,7 @@ def ensure_intermediate_materialized(
         raise RuntimeError(f"cyclic intermediate dependency detected: {chain}")
     _ACTIVE.keys = set(active) | {key}
     try:
-        from runtime.engine import FactorEngine
+        from factor_engine.runtime.engine import FactorEngine
 
         engine, factor, config = FactorEngine.from_config(config_path)
         if config.materialization is None:
@@ -185,7 +185,7 @@ def ensure_intermediate_materialized(
         # An intermediate that can be consumed by production must itself be
         # generated under production gates, regardless of a stale YAML run mode.
         engine.run_mode = "production"
-        from runtime.config_runtime import resolve_materialize_kwargs
+        from factor_engine.runtime.config_runtime import resolve_materialize_kwargs
 
         opts = resolve_materialize_kwargs(config)
         kwargs = opts.to_engine_materialize_kwargs()

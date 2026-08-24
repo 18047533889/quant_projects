@@ -9,12 +9,12 @@ from logging_utils import get_logger
 from .datasource import DataSource
 from .field_plan import NormalizedFieldPlan, plan_from_field_spec
 
-logger = get_logger("storage.clickhouse_source")
+logger = get_logger("factor_engine.storage.clickhouse_source")
 
 
 def _ensure_data_access_importable() -> None:
     """R21-130..133: import the installed ``data_access`` (no sys.path injection)."""
-    from storage.data_access_loader import ensure_data_access_importable
+    from factor_engine.storage.data_access_loader import ensure_data_access_importable
 
     ensure_data_access_importable()
 
@@ -182,13 +182,13 @@ class ClickHouseSource(DataSource):
             spec = None
             try:
                 if clickhouse_market:
-                    from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+                    from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
                     spec = MULTI_MARKET_FIELD_REGISTRY.resolve_field(
                         clickhouse_market, name, table=self.table, strict=False
                     )
                 else:
-                    from fields import FIELD_REGISTRY
+                    from factor_engine.fields import FIELD_REGISTRY
 
                     spec = FIELD_REGISTRY.get(name, table=self.table)
             except Exception:
@@ -336,7 +336,7 @@ class ClickHouseSource(DataSource):
         physical, output_names = self._resolve_columns(columns)
         _ensure_data_access_importable()
         from data_access.clickhouse.panel import ClickHouseConfig
-        from backend.polars_lazy import scan_clickhouse_long
+        from factor_engine.backend.polars_lazy import scan_clickhouse_long
 
         config = ClickHouseConfig.from_env(**self._ch_overrides)
         lf = scan_clickhouse_long(

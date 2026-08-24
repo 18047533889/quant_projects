@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from api.columns import col, field
-from backend.cleaned_bridge import build_cleaned_dsl_allowlist
+from factor_engine.api.columns import col, field
+from factor_engine.backend.cleaned_bridge import build_cleaned_dsl_allowlist
 
 STUB_IR_OPS: frozenset[str] = frozenset()
 
@@ -44,9 +44,9 @@ def build_dsl_allowlist(
         allow.update(build_cleaned_dsl_allowlist(set(), surface=selected))
 
     if raw_surface in {"extended", "compat", "compat_research", "all"}:
-        from api.intraday_daily import INTRADAY_DAILY_DSL_FUNCTIONS
-        from api.technical_macros_v2 import augment_technical_macros
-        from storage.sources.intraday_clock_install import install_intraday_clock_runtime
+        from factor_engine.api.intraday_daily import INTRADAY_DAILY_DSL_FUNCTIONS
+        from factor_engine.api.technical_macros_v2 import augment_technical_macros
+        from factor_engine.storage.sources.intraday_clock_install import install_intraday_clock_runtime
 
         install_intraday_clock_runtime()
         allow.update(INTRADAY_DAILY_DSL_FUNCTIONS)
@@ -59,7 +59,7 @@ def build_dsl_allowlist(
     if raw_dialect != "lqtp":
         raise ValueError(f"unsupported factor dialect: {dialect!r}")
 
-    from api.lqtp_compat import DEFAULT_LQTP_DIALECT_VERSION, augment_dsl_allowlist
+    from factor_engine.api.lqtp_compat import DEFAULT_LQTP_DIALECT_VERSION, augment_dsl_allowlist
 
     version = str(dialect_version or DEFAULT_LQTP_DIALECT_VERSION)
     if version != DEFAULT_LQTP_DIALECT_VERSION:
@@ -67,13 +67,13 @@ def build_dsl_allowlist(
             f"unsupported LQTP dialect_version={version!r}; supported={DEFAULT_LQTP_DIALECT_VERSION!r}"
         )
     out = augment_dsl_allowlist(allow, surface=raw_surface)
-    from api.lqtp_neutralization import augment_neutralization
+    from factor_engine.api.lqtp_neutralization import augment_neutralization
 
     out = augment_neutralization(out)
-    from api.lqtp_market import augment_market
+    from factor_engine.api.lqtp_market import augment_market
 
     out = augment_market(out)
-    from api.lqtp_functions_loader import augment_from_functions_yaml
+    from factor_engine.api.lqtp_functions_loader import augment_from_functions_yaml
 
     return augment_from_functions_yaml(out)
 
@@ -101,7 +101,7 @@ def build_research_mining_allowlist() -> dict[str, Callable[..., Any]]:
     operators; the results are explicitly risk-labelled and never admitted to
     production mining without six-gate certification (review §2.6).
     """
-    from backend.cleaned_bridge import build_cleaned_dsl_allowlist
+    from factor_engine.backend.cleaned_bridge import build_cleaned_dsl_allowlist
 
     return build_cleaned_dsl_allowlist(set(), surface="all")
 
@@ -115,6 +115,6 @@ def build_production_mining_allowlist() -> dict[str, Callable[..., Any]]:
     compatibility/diagnostic/benchmark-only flag (review §2.6).  AlphaProbe /
     AlphaMiner / CogAlpha production tasks must call this entry point.
     """
-    from backend.cleaned_bridge import build_production_dsl_allowlist
+    from factor_engine.backend.cleaned_bridge import build_production_dsl_allowlist
 
     return build_production_dsl_allowlist()

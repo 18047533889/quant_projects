@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import re
 import pathlib
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from mining.operator_catalog import get_mining_operators
-import cleaned_operators.operator_surface as S
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.mining.operator_catalog import get_mining_operators
+import factor_engine.cleaned_operators.operator_surface as S
 
 
 _PLACEHOLDER_BODY_PATTERNS = [
@@ -88,9 +88,9 @@ def test_quarantined_modules_do_not_register_new_canonicals_into_registry() -> N
 
     import importlib
     for mod in (
-        "cleaned_operators.polars_native.ts_advanced_batch1",
-        "cleaned_operators.polars_native.ts_advanced_batch3",
-        "cleaned_operators.common.polars_ts_complex",
+        "factor_engine.cleaned_operators.polars_native.ts_advanced_batch1",
+        "factor_engine.cleaned_operators.polars_native.ts_advanced_batch3",
+        "factor_engine.cleaned_operators.common.polars_ts_complex",
     ):
         try:
             importlib.import_module(mod)

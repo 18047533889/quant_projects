@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from runtime.execution_resources import (
+from factor_engine.runtime.execution_resources import (
     physical_cores,
     reset_resource_cache,
     resource_plan,
@@ -59,7 +59,7 @@ def test_memory_genuinely_limits_workers(monkeypatch):
     monkeypatch.setenv("FACTOR_ENGINE_PER_WORKER_PEAK_BYTES", str(1024**3))
     reset_resource_cache()
     plan2 = resource_plan(n_jobs=32)
-    from runtime.resource_governor import effective_cpu_slots
+    from factor_engine.runtime.resource_governor import effective_cpu_slots
 
     assert plan2.n_jobs == effective_cpu_slots(), (
         f"CPU hard limit must dominate when memory is not binding, got {plan2.n_jobs}"

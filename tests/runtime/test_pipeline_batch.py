@@ -15,7 +15,7 @@ from pipeline import (
     _directory_incremental_batch_eligible,
     run_config_directory,
 )
-from runtime.engine import FactorEngine
+from factor_engine.runtime.engine import FactorEngine
 
 
 def _write_kline_config(config_dir: Path, data_root: Path, name: str, expr: str) -> Path:

@@ -27,7 +27,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from runtime.resource_broker import ResourceBroker
+from factor_engine.runtime.resource_broker import ResourceBroker
 
 #: lease kind（§42 资源树：Job → Compute/DA Scan/Cache/Writer）。
 KIND_JOB = "job"

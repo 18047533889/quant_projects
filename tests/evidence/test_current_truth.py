@@ -31,10 +31,13 @@ if str(_REPO_ROOT) not in sys.path:
 _CURRENT_JSON = _REPO_ROOT / "evidence" / "CURRENT.json"
 
 # Every entry CURRENT.json must bind (the spec's mandatory SHA set).
+# R46 P0-C: FactorEngineSubmoduleSHA / DataAccessSubmoduleSHA are DELETED —
+# factor_engine/dataaccess are regular monorepo dirs (no submodules).  They are
+# replaced by PlatformSourceTreeIdentity (stable Merkle root over the entire
+# platform source).
 REQUIRED_BINDINGS = (
     "RootRepoSHA",
-    "FactorEngineSubmoduleSHA",
-    "DataAccessSubmoduleSHA",
+    "PlatformSourceTreeIdentity",
     "OperatorCatalogSHA",
     "SemanticCatalogIdentity",
     "ImplementationClosureHashSet",
@@ -56,11 +59,9 @@ def _is_dirty_digest(value) -> bool:
     return all(k in d for k in ("HEAD", "diff_hash", "cached_diff_hash", "untracked_source_hash", "dirty"))
 
 # Exact SHA set the working tree must currently bind (bound to the pinned
-# submodule/HEAD snapshots at R22: root d05455c1, factor_engine 26ed6647,
+# snapshots at R22: root d05455c1, factor_engine 26ed6647,
 # dataaccess ba072d23).
 EXPECTED_BINDINGS = {
-    "FactorEngineSubmoduleSHA": "26ed66472dccc33b02f2919d2685199491fba035",
-    "DataAccessSubmoduleSHA": "ba072d23b7a48440d05977ef0a08fe1fce45d629",
     "DependencyLockHash": "b982526eea6469422787b2fe4031af472e1ceb49afaff11f2c0fe260bbc3ae1b",
     "TestEnvironmentIdentity": "dcab69f70cc819b6b2e2f93759faf1f5ebeab3872d0d98c68e3e7970aff7bd68",
 }
@@ -155,9 +156,9 @@ def test_stale_auto_detects_on_sha_change():
 
 
 def test_stale_detected_when_file_generated_at_old_sha():
-    """A CURRENT.json bound to an OLD root/factor_engine/dataaccess SHA set
-    must evaluate STALE with those exact fields named — the concrete failure
-    the previous R21 CURRENT.json exhibited."""
+    """A CURRENT.json bound to an OLD root/platform-source SHA set must evaluate
+    STALE with those exact fields named — the concrete failure the previous R21
+    CURRENT.json exhibited."""
     from evidence.current import check_stale
 
     fresh = _fresh_bindings()
@@ -166,8 +167,7 @@ def test_stale_detected_when_file_generated_at_old_sha():
 
     stale_file = {
         "RootRepoSHA": "0000000000000000000000000000000000000000 (working-tree-dirty)",
-        "FactorEngineSubmoduleSHA": "ffffffffffffffffffffffffffffffffffffffff",
-        "DataAccessSubmoduleSHA": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "PlatformSourceTreeIdentity": "f" * 64,
     }
     stale_file.update(
         {
@@ -181,8 +181,7 @@ def test_stale_detected_when_file_generated_at_old_sha():
     )
     assert not is_current
     assert "RootRepoSHA" in changed_names
-    assert "FactorEngineSubmoduleSHA" in changed_names
-    assert "DataAccessSubmoduleSHA" in changed_names
+    assert "PlatformSourceTreeIdentity" in changed_names
 
 
 def test_generator_dry_run_reproduces_file():

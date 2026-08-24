@@ -3,7 +3,7 @@ import math
 import polars as pl
 import pytest
 
-from cleaned_operators.common.polars_ts_rolling import (
+from factor_engine.cleaned_operators.common.polars_ts_rolling import (
     TSCorrNative,
     TSCovNative,
     TSRegressionInterceptNative,
@@ -67,7 +67,7 @@ def _values(frame):
 
 def test_trend_slope_uses_local_positions_for_prefix_and_missing_values():
     """Trend slope matches direct trailing-window OLS on finite observations."""
-    from cleaned_operators.common.polars_ts_rolling import TSTrendSlopeNative
+    from factor_engine.cleaned_operators.common.polars_ts_rolling import TSTrendSlopeNative
 
     values = [1.0, 3.0, None, 7.0, float("nan"), 11.0]
     window = 4
@@ -105,7 +105,7 @@ def test_trend_slope_uses_local_positions_for_prefix_and_missing_values():
 
 
 def test_trend_slope_avoids_row_index_column_collision():
-    from cleaned_operators.common.polars_ts_rolling import TSTrendSlopeNative
+    from factor_engine.cleaned_operators.common.polars_ts_rolling import TSTrendSlopeNative
 
     actual = TSTrendSlopeNative()._calculate_series(
         pl.DataFrame({"__ts_row": [10.0, 12.0, 15.0], "a": [1.0, 3.0, 6.0]}),
@@ -117,7 +117,7 @@ def test_trend_slope_avoids_row_index_column_collision():
 
 
 def test_trend_slope_excludes_positive_and_negative_infinity():
-    from cleaned_operators.common.polars_ts_rolling import TSTrendSlopeNative
+    from factor_engine.cleaned_operators.common.polars_ts_rolling import TSTrendSlopeNative
 
     actual = TSTrendSlopeNative()._calculate_series(
         pl.DataFrame({"a": [1.0, float("inf"), 3.0, float("-inf"), 5.0]}),
@@ -570,7 +570,7 @@ def test_ewm_pairwise_honors_span_alias():
 
 def test_ewm_pairwise_delegation_is_declared_not_polars_native():
     """The kernels delegate to pandas — the physical spec must say so."""
-    from backend.contracts import ExecutionKind
+    from factor_engine.backend.contracts import ExecutionKind
 
     for cls in (TSEwmCorrNative, TSEwmCovNative):
         spec = getattr(cls, "_physical_spec", None)
@@ -588,16 +588,16 @@ def test_pairwise_matching_columns_retain_aligned_arithmetic():
 
 
 def test_bootstrap_module_list_selects_repaired_ts_cov_as_exact_authority():
-    import cleaned_operators
-    from cleaned_operators import load_all
-    from cleaned_operators.common.polars_ts_rolling import TSCovNative as ExpectedTSCovNative
-    from cleaned_operators.registry import OperatorRegistry
+    import factor_engine.cleaned_operators
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.common.polars_ts_rolling import TSCovNative as ExpectedTSCovNative
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
-    assert "cleaned_operators.common.polars_ts_rolling" in cleaned_operators._LOAD_MODULES
+    assert "factor_engine.cleaned_operators.common.polars_ts_rolling" in cleaned_operators._LOAD_MODULES
     load_all()
     operator = OperatorRegistry.get("ts_cov", backend="polars")
     assert type(operator) is ExpectedTSCovNative
-    assert type(operator).__module__ == "cleaned_operators.common.polars_ts_rolling"
+    assert type(operator).__module__ == "factor_engine.cleaned_operators.common.polars_ts_rolling"
     assert type(operator).__name__ == "TSCovNative"
     assert not any(
         entry.get("canonical") == "ts_cov"
@@ -608,14 +608,14 @@ def test_bootstrap_module_list_selects_repaired_ts_cov_as_exact_authority():
 
 
 def test_bootstrap_module_list_activates_repaired_native_module():
-    import cleaned_operators
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    import factor_engine.cleaned_operators
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
-    assert "cleaned_operators.common.polars_ts_rolling" in cleaned_operators._LOAD_MODULES
+    assert "factor_engine.cleaned_operators.common.polars_ts_rolling" in cleaned_operators._LOAD_MODULES
     load_all()
     operator = OperatorRegistry.get("ts_regression_slope", backend="polars")
-    assert type(operator).__module__ == "cleaned_operators.common.polars_ts_rolling"
+    assert type(operator).__module__ == "factor_engine.cleaned_operators.common.polars_ts_rolling"
     assert type(operator).__name__ == "TSRegressionSlopeNative"
 
 

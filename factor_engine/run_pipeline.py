@@ -22,7 +22,7 @@ logger = get_logger("run_pipeline")
 def _run_reconcile(args: argparse.Namespace) -> dict:
     """执行 reconcile 子命令（dual-write 或 snapshot 对账）。"""
     if args.reconcile_command == "dual-write":
-        from runtime.dual_write_reconcile import (
+        from factor_engine.runtime.dual_write_reconcile import (
             list_open_dual_write_failures,
             reconcile_all_dual_write_states,
             reconcile_dual_write_state,
@@ -71,9 +71,9 @@ def _run_reconcile(args: argparse.Namespace) -> dict:
         return {"ok": True, "lake_root": str(lake), "factors_with_failures": 0, "reports": []}
 
     if args.reconcile_command == "snapshot":
-        from runtime.config import load_config
-        from runtime.config_runtime import build_data_source_config
-        from runtime.snapshot_reconcile import reconcile_data_snapshot
+        from factor_engine.runtime.config import load_config
+        from factor_engine.runtime.config_runtime import build_data_source_config
+        from factor_engine.runtime.snapshot_reconcile import reconcile_data_snapshot
 
         data_source_config = None
         if args.config is not None:
@@ -363,7 +363,7 @@ def parse_args() -> argparse.Namespace:
 
 def _build_queue_from_args(args: argparse.Namespace):
     """根据 CLI 参数构造 file / redis / object_store 任务队列实例。"""
-    from runtime.task_queue import build_task_queue
+    from factor_engine.runtime.task_queue import build_task_queue
 
     if args.backend == "redis":
         return build_task_queue(
@@ -383,7 +383,7 @@ def _build_queue_from_args(args: argparse.Namespace):
 
 def _run_queue_enqueue(args: argparse.Namespace) -> dict:
     """将配置目录下所有 YAML 批量入队。"""
-    from runtime.task_queue import enqueue_config_directory
+    from factor_engine.runtime.task_queue import enqueue_config_directory
 
     queue = _build_queue_from_args(args)
     jobs = enqueue_config_directory(queue, args.config_dir, pattern=args.pattern)
@@ -392,7 +392,7 @@ def _run_queue_enqueue(args: argparse.Namespace) -> dict:
 
 def _run_queue_enqueue_event(args: argparse.Namespace) -> dict:
     """将数据列更新事件入队，供 worker 增量物化。"""
-    from runtime.task_queue import enqueue_data_event
+    from factor_engine.runtime.task_queue import enqueue_data_event
 
     queue = _build_queue_from_args(args)
     payload: dict = {}
@@ -417,7 +417,7 @@ def _dispatch_queue_job(job, *, profile=None, strict_dq=False, dq_strict=True, i
     """根据 job 类型分发到 config 运行或 data_event 增量物化。"""
     from pathlib import Path
 
-    from runtime.task_queue import JOB_TYPE_DATA_EVENT
+    from factor_engine.runtime.task_queue import JOB_TYPE_DATA_EVENT
 
     job_type = job.payload.get("job_type", JOB_TYPE_CONFIG)
     if job_type == JOB_TYPE_DATA_EVENT:
@@ -533,7 +533,7 @@ def _run_data_event(args: argparse.Namespace) -> dict:
 
 def _run_deps(args: argparse.Namespace) -> dict:
     """查询因子依赖 catalog（按列、数据集或反向索引）。"""
-    from runtime.dependency_catalog import DependencyCatalog
+    from factor_engine.runtime.dependency_catalog import DependencyCatalog
 
     dep = DependencyCatalog.from_lake(args.lake_root)
     if args.reverse_index:

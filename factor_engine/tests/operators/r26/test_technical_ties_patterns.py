@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.price_volume.technical_extensions as te
+import factor_engine.cleaned_operators.price_volume.technical_extensions as te
 
 
 def _pd(vals):

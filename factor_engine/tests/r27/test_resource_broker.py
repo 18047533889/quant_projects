@@ -2,14 +2,14 @@
 """R27-022..044/236..238/241..243: ResourceBroker live headroom + token admission。"""
 from __future__ import annotations
 
-from runtime.resource_broker import (
+from factor_engine.runtime.resource_broker import (
     STAGE_CRITICAL,
     STAGE_NORMAL,
     STAGE_PRESSURE_3,
     ResourceBroker,
 )
-from runtime.resource_governor import ExecutionResourcePlan, live_memory_headroom_bytes
-from runtime.task_resource_contract import TaskResourceContract, panel_bytes
+from factor_engine.runtime.resource_governor import ExecutionResourcePlan, live_memory_headroom_bytes
+from factor_engine.runtime.task_resource_contract import TaskResourceContract, panel_bytes
 
 
 def _task(peak: int, *, cpu: int = 1, io: int = 0, spill: int = 0,
@@ -128,7 +128,7 @@ def test_recommended_concurrency_adapts():
 
 def test_process_family_rss_accounted():
     # R27-036/238：进程族 RSS 计入（sum parent + children）。
-    from runtime.resource_governor import process_family_rss_bytes
+    from factor_engine.runtime.resource_governor import process_family_rss_bytes
 
     rss = process_family_rss_bytes()
     assert isinstance(rss, int) and rss > 0

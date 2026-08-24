@@ -9,8 +9,8 @@ import pandas as pd
 import pyarrow.parquet as pq
 import pytest
 
-from storage.schema_migration import migrate_factor_lake_tree, migrate_factor_parquet_file
-from storage.write_targets import StagingWriteTarget, resolve_write_target
+from factor_engine.storage.schema_migration import migrate_factor_lake_tree, migrate_factor_parquet_file
+from factor_engine.storage.write_targets import StagingWriteTarget, resolve_write_target
 
 
 def test_migrate_factor_parquet_adds_metadata_columns(tmp_path):

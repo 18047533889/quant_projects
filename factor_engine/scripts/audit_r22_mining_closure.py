@@ -19,12 +19,12 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-import cleaned_operators as co
+import factor_engine.cleaned_operators as co
 
-from cleaned_operators.operator_surface import classify_canonical, surface_summary
-from cleaned_operators.operator_spec import PRODUCTION_DENIED_CANONICALS
-from cleaned_operators.registry import OperatorRegistry
-from mining.direct_use import (
+from factor_engine.cleaned_operators.operator_surface import classify_canonical, surface_summary
+from factor_engine.cleaned_operators.operator_spec import PRODUCTION_DENIED_CANONICALS
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.mining.direct_use import (
     DirectUseStatus,
     build_direct_use_operator,
     causal_replacement,

@@ -30,7 +30,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from runtime.perf_counters import PerfCounters
+from factor_engine.runtime.perf_counters import PerfCounters
 
 #: Timing / byte keys accepted by ``from_counters``.
 _TIMING_KEYS: tuple[str, ...] = (
@@ -239,7 +239,7 @@ def _module_version(name: str) -> str | None:
 
 def _git_sha() -> str | None:
     try:
-        from runtime.lineage import resolve_git_commit_hash
+        from factor_engine.runtime.lineage import resolve_git_commit_hash
 
         return resolve_git_commit_hash() or None
     except Exception:
@@ -302,7 +302,7 @@ def _memory_cgroup() -> dict[str, Any]:
         except (ValueError, AttributeError):
             out["ram_bytes"] = None
     try:
-        from runtime.resource_governor import effective_memory_limit_bytes
+        from factor_engine.runtime.resource_governor import effective_memory_limit_bytes
 
         out["effective_memory_limit_bytes"] = int(effective_memory_limit_bytes())
     except Exception:
@@ -312,7 +312,7 @@ def _memory_cgroup() -> dict[str, Any]:
 
 def _storage_class() -> str | None:
     try:
-        from runtime.resource_governor import spill_disk_speed_class
+        from factor_engine.runtime.resource_governor import spill_disk_speed_class
 
         return str(spill_disk_speed_class()) or None
     except Exception:

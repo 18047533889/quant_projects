@@ -25,7 +25,7 @@ import pytest
 
 pl = pytest.importorskip("polars")
 
-from cleaned_operators.price_volume.structure_patterns_v2 import (
+from factor_engine.cleaned_operators.price_volume.structure_patterns_v2 import (
     _fit_r2,
     _pivot_stream,
     ts_impulse_strength,
@@ -33,13 +33,13 @@ from cleaned_operators.price_volume.structure_patterns_v2 import (
     ts_swing_duration,
     ts_swing_velocity,
 )
-from cleaned_operators.price_volume.technical_extensions import _ts_days_since_extreme
-from cleaned_operators.price_volume.technical_structure_repairs import _bounded_line
-from cleaned_operators.technical.polars_misc_v2 import (
+from factor_engine.cleaned_operators.price_volume.technical_extensions import _ts_days_since_extreme
+from factor_engine.cleaned_operators.price_volume.technical_structure_repairs import _bounded_line
+from factor_engine.cleaned_operators.technical.polars_misc_v2 import (
     ts_days_since_high as pl_days_since_high,
     ts_days_since_low as pl_days_since_low,
 )
-from cleaned_operators.price_volume.polars_structure import (
+from factor_engine.cleaned_operators.price_volume.polars_structure import (
     ts_line_parallelism as pl_line_parallelism,
     ts_resistance_log_slope as pl_resistance_log_slope,
     ts_support_log_slope as pl_support_log_slope,
@@ -126,7 +126,7 @@ def test_log_slope_is_price_level_invariant():
     h010 = pd.DataFrame({"A": _log_linear_high(10.0)}, index=idx)
     kw = dict(left_window=2, right_window=2, history_window=40, points=3)
     # pandas registered canonical
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     log100 = OperatorRegistry.get("ts_resistance_log_slope", backend="pandas_numpy").calculate(h100, **kw)
     log010 = OperatorRegistry.get("ts_resistance_log_slope", backend="pandas_numpy").calculate(h010, **kw)
     # log slopes equal across price levels and match the injected log trend
@@ -146,7 +146,7 @@ def test_log_slope_polars_matches_pandas():
     high = pd.DataFrame({"A": _log_linear_high(100.0)}, index=idx)
     low = pd.DataFrame({"A": 90.0 + _log_linear_high(10.0, n=n, step=0.005)}, index=idx)
     kw = dict(left_window=2, right_window=2, history_window=40, points=3)
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     for name, pl_fn, frame in (
         ("ts_resistance_log_slope", pl_resistance_log_slope, high),
         ("ts_support_log_slope", pl_support_log_slope, low),
@@ -229,7 +229,7 @@ def test_swing_ops_polars_match_pandas(swing_panels):
         ("ts_swing_amplitude_pct", None, pl_swing_amplitude_pct, (high, low, close)),
     ):
         if pandas_fn is None:
-            from cleaned_operators.price_volume.structure_patterns_v2 import ts_swing_amplitude_pct
+            from factor_engine.cleaned_operators.price_volume.structure_patterns_v2 import ts_swing_amplitude_pct
             pandas_fn = ts_swing_amplitude_pct
         pandas_out = pandas_fn(*args, **kw)
         pl_args = tuple(_plframe(a["A"].to_numpy()) for a in args)
@@ -258,7 +258,7 @@ def test_fit_r2_rejects_two_points():
 
 
 def test_fit_r2_registered_operators_require_three_points():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     frame = _frame([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
     for name in ("ts_resistance_fit_r2", "ts_support_fit_r2"):
         op = OperatorRegistry.get(name, backend="pandas_numpy")
@@ -298,7 +298,7 @@ def test_line_parallelism_price_level_invariant():
 
 
 def ts_line_parallelism_pandas(high, low, **kw):
-    from cleaned_operators.price_volume.structure_patterns_v2 import ts_line_parallelism
+    from factor_engine.cleaned_operators.price_volume.structure_patterns_v2 import ts_line_parallelism
     return ts_line_parallelism(high, low, **kw)
 
 

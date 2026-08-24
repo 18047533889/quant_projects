@@ -30,7 +30,7 @@ from typing import Any, Mapping
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.production_hardening import SEGMENTED_EXECUTION_CANONICALS
+from factor_engine.cleaned_operators.production_hardening import SEGMENTED_EXECUTION_CANONICALS
 from stateful_contract import StatefulCheckpointRegistry
 from stateful_runtime import _implementation_hash, execute_stateful_segment
 
@@ -164,7 +164,7 @@ def _source_snapshot_scope(source: Any, *, mode: str = "research") -> str:
     try:
         import copy
 
-        from storage.data_scope import compute_data_scope
+        from factor_engine.storage.data_scope import compute_data_scope
 
         probe = copy.copy(source)
         probe.start_date = None
@@ -379,7 +379,7 @@ def _root_series_and_params(ir, canonical: str) -> tuple[list[str], dict[str, An
     keys = _INPUT_KEYS.get(canonical)
     if not keys:
         return None
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     implementation = OperatorRegistry.get(canonical)
     param_names = tuple(
@@ -908,7 +908,7 @@ def _node_params(node: Any) -> dict[str, Any]:
     if getattr(node, "attrs", None):
         params.update(dict(node.attrs))
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         meta = getattr(OperatorRegistry.get(getattr(node, "op", "")), "metadata", None)
     except Exception:
@@ -936,7 +936,7 @@ def _classify_node_mode(op: str, params: Mapping[str, Any]) -> NodeIncrementalMo
     if op in ("column", "literal"):
         return NodeIncrementalMode.LOAD_TODAY
     try:
-        from runtime.incremental_contract import resolve_incremental_contract
+        from factor_engine.runtime.incremental_contract import resolve_incremental_contract
 
         contract = resolve_incremental_contract(op, params)
         mode = getattr(contract, "incremental_mode", None)
@@ -964,7 +964,7 @@ def _classify_node_mode(op: str, params: Mapping[str, Any]) -> NodeIncrementalMo
         pass
     # 本地最小分类器。
     try:
-        from runtime.execution_contract import execution_contract, history_requirement
+        from factor_engine.runtime.execution_contract import execution_contract, history_requirement
 
         contract = execution_contract(op)
         if contract.requires_full_history or contract.state_model != "stateless":
@@ -993,7 +993,7 @@ def _classify_node_mode(op: str, params: Mapping[str, Any]) -> NodeIncrementalMo
 def _node_backward_history(op: str, params: Mapping[str, Any]) -> int:
     """R44：单节点 backward_history（有限窗口的 warm-up 行数；stateful 为 0）。"""
     try:
-        from runtime.execution_contract import history_requirement
+        from factor_engine.runtime.execution_contract import history_requirement
 
         req = history_requirement(op, params)
         if req.is_full_history or req.is_event_clock:
@@ -1006,7 +1006,7 @@ def _node_backward_history(op: str, params: Mapping[str, Any]) -> int:
 def _node_forward_impact(op: str, params: Mapping[str, Any]) -> int | None:
     """R44：单节点 forward_impact（``None`` = 无界）。"""
     try:
-        from runtime.execution_contract import forward_impact
+        from factor_engine.runtime.execution_contract import forward_impact
 
         return forward_impact(op, params)
     except Exception:

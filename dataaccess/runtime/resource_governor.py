@@ -251,7 +251,9 @@ class GlobalResourceGovernor:
                     reservation.estimated_scan_bytes,
                 )
             except Exception as exc:
-                # R32-P0-008：host 配置但失败 → production fail-closed。
+                # R32-P0-008：host 配置但失败 → strict/production fail-closed。
+                # research/interactive 允许 fallback 本地 governor（仍受本地
+                # 不变量约束，不会静默无限）。
                 from data_access.read.query_budget import is_strict_semantics
                 if is_strict_semantics():
                     raise ResourceAdmissionError(
@@ -329,10 +331,26 @@ class GlobalResourceGovernor:
 
     # ---- 远程并发 ----
 
-    def acquire_remote_slot(self) -> bool:
-        """限制远程请求并发（COS LIST/HEAD/httpfs）。"""
+    def acquire_remote_slot(
+        self, *, deadline: float | None = None, timeout_ms: float | None = None
+    ) -> bool:
+        """限制远程请求并发（COS LIST/HEAD/httpfs）。
+
+        R32-P0-010（remote）：支持 deadline / timeout_ms。未提供 deadline 时保持
+        既有语义：并发达到上限返回 False（调用方按「slot 暂不可用」处理）。提供
+        deadline 且已过、或 timeout_ms<=0 且不可立即获得 → 抛 ``DeadlineExceeded``
+        （fail-closed，不返回 False 让调用方误判）。当前实现不排队等待。
+        """
+        from data_access.core.exceptions import DeadlineExceeded
+        import time as _time
+        if deadline is not None and _time.monotonic() >= deadline:
+            raise DeadlineExceeded("remote slot：deadline 已过，拒绝 acquire（R32-P0-010）")
+        if timeout_ms is not None and timeout_ms <= 0:
+            raise DeadlineExceeded("remote slot：timeout_ms<=0 且不可立即获得（R32-P0-010）")
         with self._lock:
             if self._remote_inflight >= self._max_remote:
+                if deadline is not None or timeout_ms is not None:
+                    raise DeadlineExceeded("remote slot：并发达到上限，等待超时（R32-P0-010）")
                 return False
             self._remote_inflight += 1
             return True
@@ -368,21 +386,48 @@ class GlobalResourceGovernor:
 
     # ---- DuckDB 并发（R26-P1-016：声明的能力必须执行）----
 
-    def acquire_duckdb_slot(self, *, timeout: float | None = None) -> bool:
+    def acquire_duckdb_slot(
+        self,
+        *,
+        timeout: float | None = None,
+        deadline: float | None = None,
+        timeout_ms: float | None = None,
+    ) -> bool:
         """R26-P1-016：DuckDB 并发 slot（blocking semaphore acquire）。
 
         遵守 ``max_duckdb_concurrency`` 上限；并发任务排队而非误报 fail（避免
         把「并行读」误判成超限）。返回 True（acquire 后）。
 
-        R32-P0-010：支持 deadline/timeout（timeout=None → 无限等待；timeout<=0 → nonblocking）。
+        R32-P0-010：支持 deadline（monotonic 时间点）/ timeout（秒）/ timeout_ms
+        （毫秒）。deadline 已过或等待超时 → 抛 ``DeadlineExceeded``（fail-closed，
+        不返回 False 让调用方误判为「并发暂时不可用」）。``timeout<=0`` → 非阻塞
+        立即尝试（成功 True / 已满返回 False，保持 R26-P1-016 非阻塞语义）。
         """
+        import time as _time
+        # R32-P0-010：deadline 已过 → 立即失败。
+        if deadline is not None:
+            if _time.monotonic() >= deadline:
+                from data_access.core.exceptions import DeadlineExceeded
+                raise DeadlineExceeded("duckdb slot：deadline 已过，拒绝 acquire（R32-P0-010）")
+            remaining = deadline - _time.monotonic()
+            if timeout is None or remaining < timeout:
+                timeout = remaining
+        # timeout_ms 便捷参数 → 统一为秒；取更严格者。
+        if timeout_ms is not None:
+            ms = max(0.0, timeout_ms / 1000.0)
+            if timeout is None or ms < timeout:
+                timeout = ms
         if timeout is None:
             self._duckdb_sem.acquire()
             return True
         elif timeout <= 0:
             return self._duckdb_sem.acquire(blocking=False)
         else:
-            return self._duckdb_sem.acquire(blocking=True, timeout=timeout)
+            ok = self._duckdb_sem.acquire(blocking=True, timeout=timeout)
+            if ok:
+                return True
+            from data_access.core.exceptions import DeadlineExceeded
+            raise DeadlineExceeded("duckdb slot：等待超时，拒绝 acquire（R32-P0-010）")
 
     def release_duckdb_slot(self) -> None:
         self._duckdb_sem.release()

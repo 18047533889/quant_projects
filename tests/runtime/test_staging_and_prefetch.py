@@ -31,7 +31,7 @@ def test_delete_staging_rows_after_watermark(tmp_path, monkeypatch):
             return staging_root
 
         def delete_rows(self, dataset, **kwargs):
-            from storage.staging_loader import _delete_staging_rows_local
+            from factor_engine.storage.staging_loader import _delete_staging_rows_local
 
             return _delete_staging_rows_local(factor_id=kwargs.get("factor_id", "f1"), **{
                 k: v for k, v in kwargs.items() if k in ("start", "end", "after")
@@ -44,7 +44,7 @@ def test_delete_staging_rows_after_watermark(tmp_path, monkeypatch):
     fake_mod.get_store = lambda: FakeStore()  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "data_access", fake_mod)
 
-    from storage.staging_loader import delete_staging_rows
+    from factor_engine.storage.staging_loader import delete_staging_rows
 
     result = delete_staging_rows("f1", after="2024-01-02")
     assert result["rows_deleted"] == 2
@@ -67,7 +67,7 @@ def test_kline_prefetch_columns_batch(tmp_path):
             }
         ).to_parquet(root / f"{day}.parquet", index=False)
 
-    from storage.kline_parquet_source import KlineParquetSource
+    from factor_engine.storage.kline_parquet_source import KlineParquetSource
 
     src = KlineParquetSource(
         root=str(root),

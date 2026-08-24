@@ -32,7 +32,7 @@ class MockContext:
 
 def test_empty_universe_yields_zero_rows():
     """R21-P028: Empty instrument filter must yield rows=0, not rows=1."""
-    from backend.plan_cost_router import estimate_plan_rows
+    from factor_engine.backend.plan_cost_router import estimate_plan_rows
 
     # Empty list filter
     ds = MockDataSource(instrument_filter=[])
@@ -55,7 +55,7 @@ def test_empty_universe_yields_zero_rows():
 
 def test_unknown_instruments_yield_zero():
     """R21-P028: Unknown instruments must yield 0 (not fake 5500/3000)."""
-    from backend.plan_cost_router import estimate_plan_rows
+    from factor_engine.backend.plan_cost_router import estimate_plan_rows
 
     # None filter (unknown universe)
     ds = MockDataSource(instrument_filter=None)
@@ -77,7 +77,7 @@ def test_unknown_instruments_yield_zero():
 
 def test_empty_universe_data_shape():
     """R21-P028: DataShapeEstimate from empty filter must have 0 instruments."""
-    from planner.data_shape import _estimate_instruments_from_data_source
+    from factor_engine.planner.data_shape import _estimate_instruments_from_data_source
 
     # Empty list
     ds = MockDataSource(instrument_filter=[])
@@ -92,7 +92,7 @@ def test_empty_universe_data_shape():
 
 def test_unknown_instruments_data_shape():
     """R21-P028: Unknown filter must yield 0 instruments (not 5500/3000)."""
-    from planner.data_shape import _estimate_instruments_from_data_source
+    from factor_engine.planner.data_shape import _estimate_instruments_from_data_source
 
     # None filter
     ds = MockDataSource(instrument_filter=None)

@@ -16,7 +16,7 @@ import operator as py_operator
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
-from factor_recipes.registry import FactorRecipeRegistry
+from factor_engine.factor_recipes.registry import FactorRecipeRegistry
 
 
 class RecipeExpansionError(ValueError):
@@ -112,7 +112,7 @@ class RecipeCompiler:
             and os.getenv("FACTOR_ENGINE_CERTIFY_RECIPE_EVIDENCE") != "1"
             and os.getenv("FACTOR_ENGINE_EXPAND_RECIPE_USAGE") != "1"
         ):
-            from backend.recipe_evidence import recipe_execution_verified
+            from factor_engine.backend.recipe_evidence import recipe_execution_verified
 
             if not recipe_execution_verified(recipe_name):
                 raise RecipeExpansionError(
@@ -294,7 +294,7 @@ class CompiledRecipeBatch:
         resolver: Callable[[str, str], Any] | None = None,
     ) -> dict[str, Any]:
         if resolver is None:
-            from cleaned_operators.registry import OperatorRegistry
+            from factor_engine.cleaned_operators.registry import OperatorRegistry
 
             resolver = lambda name, selected_backend: OperatorRegistry.get(name, backend=selected_backend)
         memo: dict[str, Any] = {}

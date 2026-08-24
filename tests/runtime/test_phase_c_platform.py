@@ -9,14 +9,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from api import ts_mean, ts_std
-from api.columns import col
-from api.factor import Factor
-from backend.pandas_backend import PandasBackend
-from backend.polars_backend import PolarsBackend
-from backend.routing import numba_enabled_for_op
-from runtime.engine import FactorEngine
-from runtime.shard_materialize import (
+from factor_engine.api import ts_mean, ts_std
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.backend.polars_backend import PolarsBackend
+from factor_engine.backend.routing import numba_enabled_for_op
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.runtime.shard_materialize import (
     month_date_bounds,
     month_keys_between,
     shard_bucket_values,
@@ -44,7 +44,7 @@ def test_ts_mean_numba_matches_pandas(monkeypatch):
     monkeypatch.setenv("FACTOR_ENGINE_USE_NUMBA", "1")
     data = _panel(40)
     panel = data["close"].unstack(level="instrument")
-    from cleaned_operators.common.time_series import TSMean
+    from factor_engine.cleaned_operators.common.time_series import TSMean
 
     op = TSMean()
     expected = panel.rolling(window=5, min_periods=1).mean()
@@ -65,7 +65,7 @@ def test_ts_std_numba_matches_pandas(monkeypatch):
 
 
 def test_polars_backend_execute_lazy_sets_flag():
-    from backend.context import ExecutionContext
+    from factor_engine.backend.context import ExecutionContext
 
     backend = PolarsBackend(use_lazy=True)
     assert backend.use_lazy is True
@@ -78,7 +78,7 @@ def test_polars_backend_execute_lazy_sets_flag():
 
 
 def test_data_access_source_lazy_scan_path():
-    from storage.data_access_source import DataAccessSource
+    from factor_engine.storage.data_access_source import DataAccessSource
 
     src = DataAccessSource(dataset="ds", read_auto=True)
     src.enable_lazy_scan(True)
@@ -117,7 +117,7 @@ def test_materialize_sharded_time_month_scopes_dates(tmp_path, monkeypatch):
         return {"materialization": {"rows_written": 1}}
 
     monkeypatch.setattr(
-        "runtime.materialize_service.execute_materialize",
+        "factor_engine.runtime.materialize_service.execute_materialize",
         _fake_execute,
     )
     out = eng.materialize_sharded(
@@ -136,7 +136,7 @@ def test_materialize_sharded_time_month_scopes_dates(tmp_path, monkeypatch):
 
 
 def test_scan_dataset_columns_mock():
-    from backend.polars_lazy import scan_dataset_columns
+    from factor_engine.backend.polars_lazy import scan_dataset_columns
 
     import pyarrow as pa
 

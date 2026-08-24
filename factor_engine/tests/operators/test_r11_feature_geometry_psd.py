@@ -23,7 +23,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.feature_geometry import (
+from factor_engine.cleaned_operators.feature_geometry import (
     _canonical_corr,
     _corr_eigenvalues,
     _dominant_direction,

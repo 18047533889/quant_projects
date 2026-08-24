@@ -22,7 +22,7 @@ import pytest
 
 pl = pytest.importorskip("polars")
 
-from cleaned_operators.price_volume.candle_geometry_v2 import (  # noqa: E402
+from factor_engine.cleaned_operators.price_volume.candle_geometry_v2 import (  # noqa: E402
     _validate_ohlc,
     candle_body_position,
     candle_close_strength,
@@ -34,10 +34,10 @@ from cleaned_operators.price_volume.candle_geometry_v2 import (  # noqa: E402
     candle_rejection_upper,
     candle_upper_shadow_zscore,
 )
-from cleaned_operators.price_volume.candle_pattern_engine_v2 import (  # noqa: E402
+from factor_engine.cleaned_operators.price_volume.candle_pattern_engine_v2 import (  # noqa: E402
     _engine as cdl_engine,
 )
-from cleaned_operators.price_volume.candle_patterns_extended import (  # noqa: E402
+from factor_engine.cleaned_operators.price_volume.candle_patterns_extended import (  # noqa: E402
     dragonfly_doji,
     gravestone_doji,
     hammer,
@@ -46,7 +46,7 @@ from cleaned_operators.price_volume.candle_patterns_extended import (  # noqa: E
     three_white_soldiers,
     tweezer_top,
 )
-from cleaned_operators.price_volume import polars_candle as pc  # noqa: E402
+from factor_engine.cleaned_operators.price_volume import polars_candle as pc  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

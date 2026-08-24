@@ -12,33 +12,33 @@ pytestmark = pytest.mark.skip(reason="legacy parameter family contract contains 
 
 pytest.importorskip("polars")
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.factor import Factor
-from backend.cross_section_spec import (
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.cross_section_spec import (
     normalize_constant_cross_section_fill,
     normalize_single_valid_is_null,
     zscore_zero_std_fill,
 )
-from backend.cum_semantics import count_is_expanding_non_null, cum_delta_from_first_valid
-from backend.factory import build_backend
-from backend.fill_semantics import (
+from factor_engine.backend.cum_semantics import count_is_expanding_non_null, cum_delta_from_first_valid
+from factor_engine.backend.factory import build_backend
+from factor_engine.backend.fill_semantics import (
     coalesce_null_only,
     coalesce_phase1_pandas_nan_coalesce,
     nan_to_num_unified_fill,
 )
-from backend.financial_semantics import (
+from factor_engine.backend.financial_semantics import (
     log_returns_non_positive_is_null,
     vwap_is_rolling,
     volatility_annualization_factor,
 )
-from backend.math_domain_semantics import signed_log_formula_name
-from backend.output_dtype_semantics import logical_output_representation
-from backend.quantile_spec import group_percentile_is_indicator
-from backend.rank_spec import RANK_SPECS, rank_spec_for
-from backend.robust_spec import cs_mad_zscore_no_gaussian_scaling
-from cleaned_operators import load_all
-from runtime.engine import FactorEngine
+from factor_engine.backend.math_domain_semantics import signed_log_formula_name
+from factor_engine.backend.output_dtype_semantics import logical_output_representation
+from factor_engine.backend.quantile_spec import group_percentile_is_indicator
+from factor_engine.backend.rank_spec import RANK_SPECS, rank_spec_for
+from factor_engine.backend.robust_spec import cs_mad_zscore_no_gaussian_scaling
+from factor_engine.cleaned_operators import load_all
+from factor_engine.runtime.engine import FactorEngine
 from tests.backend_parity.test_p0_edge_cases_triple_parity import duckdb_source, edge_source
 from tests.helpers import InMemorySeriesSource
 

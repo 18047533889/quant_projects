@@ -17,11 +17,11 @@ def _run(test:str,env)->int:
 
 def main()->int:
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument("--check",action="store_true");args=parser.parse_args()
-    from backend.recipe_evidence import CASE_PATH,VERIFIED_PATH,current_hashes,recipe_evidence_valid
+    from factor_engine.backend.recipe_evidence import CASE_PATH,VERIFIED_PATH,current_hashes,recipe_evidence_valid
     if args.check:
         if not recipe_evidence_valid(require_commit_ancestor=False):print("recipe_verified.json invalid or stale",file=sys.stderr);return 1
         # Verify the recorded per-recipe execution fingerprints are reproducible.
-        from backend.recipe_execution_fingerprint import fingerprints_current
+        from factor_engine.backend.recipe_execution_fingerprint import fingerprints_current
         recorded=json.loads(VERIFIED_PATH.read_text(encoding="utf-8")).get("execution") or {}
         errors=fingerprints_current(recorded)
         if errors:
@@ -33,23 +33,23 @@ def main()->int:
     # validating primitive evidence.  Validation imports signatures lazily, and
     # checking it against a half-initialized module can produce false circular
     # import failures in a fresh subprocess.
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
     load_all()
-    from backend.evidence_provenance import evidence_artifact_valid
-    from backend.factor_operator_evidence import factor_operator_evidence_valid
+    from factor_engine.backend.evidence_provenance import evidence_artifact_valid
+    from factor_engine.backend.factor_operator_evidence import factor_operator_evidence_valid
     if not evidence_artifact_valid():print("primitive evidence must be valid before recipe certification",file=sys.stderr);return 1
     if not factor_operator_evidence_valid():print("factor-operator evidence must be valid before recipe certification",file=sys.stderr);return 1
     env=dict(os.environ);env["FACTOR_ENGINE_CERTIFY_RECIPE_EVIDENCE"]="1"
     if _run("tests/operators/test_recipe_backend_certification.py",env):return 1
     if _run("tests/operators/test_recipe_production_admission_v2.py",env):return 1
     cases=json.loads(CASE_PATH.read_text(encoding="utf-8"))
-    from factor_recipes import FactorRecipeRegistry
+    from factor_engine.factor_recipes import FactorRecipeRegistry
     recipes=sorted(FactorRecipeRegistry.list_names(status="production"));portable=sorted(cases.get("recipes") or [])
     commit=subprocess.check_output(["git","rev-parse","HEAD"],cwd=FE_ROOT).decode().strip()
     certified={name:["pandas_numpy"] for name in recipes}
     for name in portable:
         if name in certified:certified[name]=["pandas_numpy","polars_long_native","duckdb_real_sql"]
-    from backend.recipe_execution_fingerprint import record_recipe_execution_fingerprints
+    from factor_engine.backend.recipe_execution_fingerprint import record_recipe_execution_fingerprints
     execution = record_recipe_execution_fingerprints()
     if any("error" in fp for fp in execution.values()):
         failed = [name for name, fp in execution.items() if "error" in fp]

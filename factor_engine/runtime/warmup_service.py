@@ -7,18 +7,18 @@ from typing import Any
 
 import pandas as pd
 
-from cleaned_operators.operator_policy import effective_lookback, infer_source_bar_freq
+from factor_engine.cleaned_operators.operator_policy import effective_lookback, infer_source_bar_freq
 from logging_utils import get_logger
-from runtime.run_window import (
+from factor_engine.runtime.run_window import (
     RunWindow,
     build_full_history_run_window,
     build_full_run_window,
     extract_source_date_bounds,
 )
-from runtime.session_calendar import SessionBarCalendar
-from storage.cache import PersistentPlanCache
+from factor_engine.runtime.session_calendar import SessionBarCalendar
+from factor_engine.storage.cache import PersistentPlanCache
 
-logger = get_logger("runtime.warmup_service")
+logger = get_logger("factor_engine.runtime.warmup_service")
 
 
 @dataclass(frozen=True)
@@ -42,7 +42,7 @@ def _build_intraday_run_window(
     trim_output: bool,
     market: str | None = None,
 ) -> RunWindow:
-    from runtime.run_window import _to_date_str
+    from factor_engine.runtime.run_window import _to_date_str
 
     requested_start = _to_date_str(requested_start)
     requested_end = _to_date_str(requested_end)
@@ -56,7 +56,7 @@ def _build_intraday_run_window(
             warmup_bars=0,
             trim_output=trim_output,
         )
-    from cleaned_operators.operator_policy import normalize_bars_market
+    from factor_engine.cleaned_operators.operator_policy import normalize_bars_market
 
     calendar = SessionBarCalendar(
         market=normalize_bars_market(market), bar_freq=bar_freq
@@ -165,7 +165,7 @@ def _switch_engine_to_window(
         or run_window.actual_load_start == run_window.requested_start
     ):
         return engine
-    from storage.time_window import narrow_data_source_for_window
+    from factor_engine.storage.time_window import narrow_data_source_for_window
 
     narrowed = narrow_data_source_for_window(
         engine.data_source,
@@ -191,9 +191,9 @@ def prepare_run_warmup(
         engine.data_source,
         fallback=getattr(factor, "freq", None),
     )
-    from cleaned_operators.operator_policy import bars_per_day, normalize_bars_market
-    from runtime.production_policy import ProductionPolicyViolation, is_production_mode
-    from storage.trading_calendar import infer_market
+    from factor_engine.cleaned_operators.operator_policy import bars_per_day, normalize_bars_market
+    from factor_engine.runtime.production_policy import ProductionPolicyViolation, is_production_mode
+    from factor_engine.storage.trading_calendar import infer_market
 
     # WS-D #256/#257/#248: the full-history decision and the minimum warm-up
     # come from the execution-contract authority, not a 1e9 integer sentinel.
@@ -201,7 +201,7 @@ def prepare_run_warmup(
     # production-hardening set) and the legacy serialized sentinel are both
     # retained as compatibility inputs, but the authority's combined IR
     # requirement is what actually drives the replay decision.
-    from runtime.execution_contract import (
+    from factor_engine.runtime.execution_contract import (
         factor_history_requirement,
         is_full_history_lookback,
     )
@@ -291,7 +291,7 @@ def prepare_run_warmup(
                 full_history_start,
             )
     elif auto_warmup and history_buffer > 0:
-        from storage.trading_calendar import get_trading_calendar
+        from factor_engine.storage.trading_calendar import get_trading_calendar
 
         if source_bars_per_day > 1:
             run_window = _build_intraday_run_window(

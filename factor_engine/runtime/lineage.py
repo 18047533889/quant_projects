@@ -116,7 +116,7 @@ def build_run_lineage(
         # R32-P0-041: production lineage 的 field catalog hash 必须 fail-closed。
         # 写空字符串会让「field catalog 计算失败」伪装成「无字段依赖」，下游
         # identity/evidence 校验拿到假值。失败直接抛，绝不下写 ""。
-        from fields import compute_field_catalog_hash
+        from factor_engine.fields import compute_field_catalog_hash
 
         field_catalog_hash = compute_field_catalog_hash()
     return RunLineage(

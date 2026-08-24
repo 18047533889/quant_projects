@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _calculate(name: str, backend: str, *args: Any):

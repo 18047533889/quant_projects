@@ -130,7 +130,7 @@ def audit_mining_dataset_contract(*, registry=None) -> dict[str, Any]:
     dict[str, Any]
         含 ``ok``、``violations``、``datasets_checked``、``by_preset`` 等。
     """
-    from api.mining_integration import default_mining_data_source_presets
+    from factor_engine.api.mining_integration import default_mining_data_source_presets
 
     presets = default_mining_data_source_presets()
     all_bindings: dict[str, dict[str, str]] = {}
@@ -167,7 +167,7 @@ def audit_prod_profile_contract(*, profile_name: str = "prod") -> dict[str, Any]
     dict[str, Any]
         含 ``ok``、``materialization_target``、``violations`` 等。
     """
-    from runtime.config import load_profile
+    from factor_engine.runtime.config import load_profile
 
     profile = load_profile(profile_name)
     mat = profile.get("materialization") or {}

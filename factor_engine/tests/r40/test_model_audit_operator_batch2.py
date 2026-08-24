@@ -30,10 +30,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from cleaned_operators import load_all  # noqa: E402
-from backend.operator_errors import OperatorParameterError  # noqa: E402
-from cleaned_operators.base import ParamRole, bind_operator_call, searchable_param_names  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators import load_all  # noqa: E402
+from factor_engine.backend.operator_errors import OperatorParameterError  # noqa: E402
+from factor_engine.cleaned_operators.base import ParamRole, bind_operator_call, searchable_param_names  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -84,7 +84,7 @@ def test_knn_decision_clock_defaults_run():
 
 
 def test_knn_decision_clock_documented():
-    import cleaned_operators.dynamic_knn as dk
+    import factor_engine.cleaned_operators.dynamic_knn as dk
 
     assert "DecisionClock" in dk.__doc__
     assert "hard binding-time" in dk.__doc__ or "硬性" in dk.__doc__
@@ -146,13 +146,13 @@ def test_intrinsic_dim_fractional_rejected():
 # ===========================================================================
 
 def test_topology_sampling_policy_versioned():
-    from cleaned_operators.advanced_topology import _SAMPLING_POLICY
+    from factor_engine.cleaned_operators.advanced_topology import _SAMPLING_POLICY
 
     assert _SAMPLING_POLICY == "stable_unique_first_occurrence + time_decimation"
 
 
 def test_topology_stable_unique_first_occurrence():
-    from cleaned_operators.advanced_topology import _stable_unique_first
+    from factor_engine.cleaned_operators.advanced_topology import _stable_unique_first
 
     cloud = np.array([[1.0, 1.0], [0.0, 0.0], [1.0, 1.0], [2.0, 2.0], [0.0, 0.0], [3.0, 3.0]])
     su = _stable_unique_first(cloud)
@@ -161,7 +161,7 @@ def test_topology_stable_unique_first_occurrence():
 
 
 def test_topology_takens_points_deterministic():
-    from cleaned_operators.advanced_topology import _takens_points
+    from factor_engine.cleaned_operators.advanced_topology import _takens_points
 
     vals = np.sin(np.arange(300.0) / 5.0)
     pts1 = _takens_points(vals, 1, 3)
@@ -173,7 +173,7 @@ def test_topology_takens_points_deterministic():
 def test_topology_decimation_not_lexicographic():
     """The decimated cloud must follow first-occurrence (time) order, not the
     lexicographic order ``np.unique(axis=0)`` would impose."""
-    from cleaned_operators.advanced_topology import _decimate_time_order
+    from factor_engine.cleaned_operators.advanced_topology import _decimate_time_order
 
     cloud = np.zeros((30, 2))
     cloud[:, 0] = np.linspace(0, 1, 30)
@@ -191,8 +191,8 @@ def test_topology_decimation_not_lexicographic():
 # ===========================================================================
 
 def test_topology_missing_policy_classes_documented():
-    import cleaned_operators.advanced_topology as at
-    import cleaned_operators.topology_ext as te
+    import factor_engine.cleaned_operators.advanced_topology as at
+    import factor_engine.cleaned_operators.topology_ext as te
 
     assert "HISTORICAL_STATE_ALLOWED" in at.__doc__
     assert "CURRENT_ROW_REQUIRED" in te.__doc__
@@ -291,7 +291,7 @@ def test_joint_energy_shift_current_row_is_query_only():
 def test_distribution_break_timing_class_documented():
     desc = _get("ts_joint_energy_shift").metadata.description
     assert "PRIOR_REFERENCE_CURRENT_QUERY" in desc or "PRE_T_STATE" in desc or "asof_previous_observation" in desc
-    import cleaned_operators.distribution_break as db
+    import factor_engine.cleaned_operators.distribution_break as db
 
     assert "PRIOR_REFERENCE_CURRENT_QUERY" in db.__doc__
 
@@ -336,7 +336,7 @@ def test_group_spectrum_breadth_window_changes_output():
 
 
 def test_group_spectrum_breadth_history_documented():
-    import cleaned_operators.group_spectrum as gs
+    import factor_engine.cleaned_operators.group_spectrum as gs
 
     assert "breadth_window" in gs.__doc__
     assert "history_requirement" in gs.__doc__
@@ -377,7 +377,7 @@ def test_feature_geometry_eigen_gap_changes_semantics():
 # ===========================================================================
 
 def test_kernel_granger_blocked_semantics_documented():
-    import cleaned_operators.research_spectral as rs
+    import factor_engine.cleaned_operators.research_spectral as rs
 
     assert "BLOCKED_HISTORICAL_EVALUATION" in rs.__doc__
 
@@ -386,7 +386,7 @@ def test_kernel_granger_requires_blocked_split():
     """A window too short for a valid blocked train/test split fails closed
     (test_n < 6 -> NaN), proving the kernel is a blocked OOS diagnostic, not a
     same-window fit."""
-    from cleaned_operators.research_spectral import _kernel_granger_score
+    from factor_engine.cleaned_operators.research_spectral import _kernel_granger_score
 
     rng = np.random.default_rng(0)
     n_avail = 14  # train=int(0.7*14)=9, test=5 < 6 -> NaN
@@ -405,7 +405,7 @@ def test_kernel_granger_scaler_train_only():
     outlier in the TEST block must not alter the training statistics (verified
     by perturbing only the test block and checking the restricted-model fit is
     unchanged)."""
-    from cleaned_operators.research_spectral import _kernel_granger_score
+    from factor_engine.cleaned_operators.research_spectral import _kernel_granger_score
 
     rng = np.random.default_rng(11)
     y = rng.standard_normal(60)
@@ -424,7 +424,7 @@ def test_kernel_granger_scaler_train_only():
 def test_hsic_descriptive_not_prior_fit_documented():
     desc = _get("ts_hsic").metadata.description
     assert "trailing-window" in desc or "描述性" in desc or "非预测" in desc, desc
-    import cleaned_operators.dependence_ext as de
+    import factor_engine.cleaned_operators.dependence_ext as de
 
     assert "不是" in de.__doc__ or "BLOCKED_HISTORICAL_EVALUATION" in de.__doc__
 

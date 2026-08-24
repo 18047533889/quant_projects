@@ -10,9 +10,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from planner.backend_region import PhysicalBackend, Representation
-from planner.batch_global_optimizer import BatchGlobalOptimizer
-from planner.logical_plan import PlanNode
+from factor_engine.planner.backend_region import PhysicalBackend, Representation
+from factor_engine.planner.batch_global_optimizer import BatchGlobalOptimizer
+from factor_engine.planner.logical_plan import PlanNode
 
 
 def _ctx(rows: int, *, mode: str = "research", complete: bool = True):
@@ -29,10 +29,10 @@ def test_shared_benefit_uses_polars_cost_when_assigned_to_polars(monkeypatch):
     """When a shared node is assigned to Polars, the benefit should reflect
     Polars cost, not the Pandas baseline cost."""
     # Force Polars support, disable Pandas
-    monkeypatch.setattr("backend.operator_capability.supports_pandas", lambda *a, **k: False)
-    monkeypatch.setattr("backend.operator_capability.supports_polars", lambda *a, **k: True)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_pandas", lambda *a, **k: False)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_polars", lambda *a, **k: True)
     monkeypatch.setattr(
-        "backend.polars_backend_kind.canonical_polars_is_delegate",
+        "factor_engine.backend.polars_backend_kind.canonical_polars_is_delegate",
         lambda *a, **k: False,
     )
 
@@ -71,10 +71,10 @@ def test_shared_benefit_differs_between_pandas_and_polars_assignments(monkeypatc
     Uses 'rank' operator which has different costs for pandas vs polars.
     """
     # --- Run 1: Force Pandas only ---
-    monkeypatch.setattr("backend.operator_capability.supports_pandas", lambda *a, **k: True)
-    monkeypatch.setattr("backend.operator_capability.supports_polars", lambda *a, **k: False)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_pandas", lambda *a, **k: True)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_polars", lambda *a, **k: False)
     monkeypatch.setattr(
-        "backend.operator_capability.capability_for",
+        "factor_engine.backend.operator_capability.capability_for",
         lambda *a, **k: SimpleNamespace(
             execution_kind="pandas_reference",
             is_production_eligible=lambda: True,
@@ -99,10 +99,10 @@ def test_shared_benefit_differs_between_pandas_and_polars_assignments(monkeypatc
     pandas_compute = result_pandas.shared_benefits["shared"].compute_cost_ms
 
     # --- Run 2: Force Polars only ---
-    monkeypatch.setattr("backend.operator_capability.supports_pandas", lambda *a, **k: False)
-    monkeypatch.setattr("backend.operator_capability.supports_polars", lambda *a, **k: True)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_pandas", lambda *a, **k: False)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_polars", lambda *a, **k: True)
     monkeypatch.setattr(
-        "backend.polars_backend_kind.canonical_polars_is_delegate",
+        "factor_engine.backend.polars_backend_kind.canonical_polars_is_delegate",
         lambda *a, **k: False,
     )
 
@@ -145,10 +145,10 @@ def test_shared_benefit_differs_between_pandas_and_polars_assignments(monkeypatc
 def test_total_shared_benefit_reflects_selected_backend_costs(monkeypatch):
     """The total_shared_benefit_ms in BatchOptimizationResult should reflect
     the sum of recomputed per-node benefits using selected backend costs."""
-    monkeypatch.setattr("backend.operator_capability.supports_pandas", lambda *a, **k: False)
-    monkeypatch.setattr("backend.operator_capability.supports_polars", lambda *a, **k: True)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_pandas", lambda *a, **k: False)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_polars", lambda *a, **k: True)
     monkeypatch.setattr(
-        "backend.polars_backend_kind.canonical_polars_is_delegate",
+        "factor_engine.backend.polars_backend_kind.canonical_polars_is_delegate",
         lambda *a, **k: False,
     )
 

@@ -12,7 +12,7 @@ class TestPolarsPerformanceConfig:
 
     def test_config_from_env_defaults(self):
         """测试默认配置（无环境变量）。"""
-        from backend.polars_performance_config import PolarsPerformanceConfig
+        from factor_engine.backend.polars_performance_config import PolarsPerformanceConfig
 
         config = PolarsPerformanceConfig.from_env()
         assert config.enable_streaming is True
@@ -23,7 +23,7 @@ class TestPolarsPerformanceConfig:
 
     def test_config_from_env_custom(self, monkeypatch):
         """测试自定义环境变量配置。"""
-        from backend.polars_performance_config import PolarsPerformanceConfig
+        from factor_engine.backend.polars_performance_config import PolarsPerformanceConfig
 
         monkeypatch.setenv("POLARS_ENABLE_STREAMING", "0")
         monkeypatch.setenv("POLARS_MAX_THREADS", "4")
@@ -38,7 +38,7 @@ class TestPolarsPerformanceConfig:
 
     def test_get_optimal_thread_count(self):
         """测试最优线程数计算。"""
-        from backend.polars_performance_config import PolarsPerformanceConfig
+        from factor_engine.backend.polars_performance_config import PolarsPerformanceConfig
 
         # 测试自动检测
         config = PolarsPerformanceConfig()
@@ -58,7 +58,7 @@ class TestPolarsPerformanceConfig:
 
     def test_get_collect_kwargs_streaming_enabled(self):
         """测试 collect 参数生成（streaming 启用）。"""
-        from backend.polars_performance_config import PolarsPerformanceConfig
+        from factor_engine.backend.polars_performance_config import PolarsPerformanceConfig
 
         config = PolarsPerformanceConfig(enable_streaming=True)
 
@@ -76,7 +76,7 @@ class TestPolarsPerformanceConfig:
 
     def test_get_collect_kwargs_streaming_disabled(self):
         """测试 collect 参数生成（streaming 禁用）。"""
-        from backend.polars_performance_config import PolarsPerformanceConfig
+        from factor_engine.backend.polars_performance_config import PolarsPerformanceConfig
 
         config = PolarsPerformanceConfig(enable_streaming=False)
 
@@ -87,7 +87,7 @@ class TestPolarsPerformanceConfig:
     def test_configure_polars_global(self):
         """测试 Polars 全局配置（需要 polars 安装）。"""
         pytest.importorskip("polars")
-        from backend.polars_performance_config import PolarsPerformanceConfig
+        from factor_engine.backend.polars_performance_config import PolarsPerformanceConfig
 
         config = PolarsPerformanceConfig(max_threads=4)
         # 应该不抛出异常
@@ -99,7 +99,7 @@ class TestPolarsMemoryOptimizer:
 
     def test_estimate_dataframe_memory(self):
         """测试 DataFrame 内存估算。"""
-        from backend.polars_performance_config import estimate_dataframe_memory
+        from factor_engine.backend.polars_performance_config import estimate_dataframe_memory
 
         # 基本测试
         memory = estimate_dataframe_memory(rows=1000, cols=10, avg_col_size=8)
@@ -113,7 +113,7 @@ class TestPolarsMemoryOptimizer:
 
     def test_get_adaptive_batch_size(self):
         """测试自适应批大小计算。"""
-        from backend.polars_performance_config import get_adaptive_batch_size
+        from factor_engine.backend.polars_performance_config import get_adaptive_batch_size
 
         # 基本测试
         batch_size = get_adaptive_batch_size(
@@ -146,7 +146,7 @@ class TestPolarsMemoryOptimizer:
 
     def test_memory_estimate(self):
         """测试 MemoryEstimate 类。"""
-        from backend.polars_memory_optimizer import MemoryEstimate
+        from factor_engine.backend.polars_memory_optimizer import MemoryEstimate
 
         estimate = MemoryEstimate(
             rows=1000, cols=10, estimated_bytes=80000, overhead_bytes=16000
@@ -156,7 +156,7 @@ class TestPolarsMemoryOptimizer:
 
     def test_estimate_polars_dataframe_memory(self):
         """测试精确的 Polars DataFrame 内存估算。"""
-        from backend.polars_memory_optimizer import estimate_polars_dataframe_memory
+        from factor_engine.backend.polars_memory_optimizer import estimate_polars_dataframe_memory
 
         # 纯数值列
         estimate = estimate_polars_dataframe_memory(rows=1000, cols=10, dtype_size=8)
@@ -176,7 +176,7 @@ class TestPolarsMemoryOptimizer:
 
     def test_calculate_optimal_chunk_size(self):
         """测试最优分块大小计算。"""
-        from backend.polars_memory_optimizer import calculate_optimal_chunk_size
+        from factor_engine.backend.polars_memory_optimizer import calculate_optimal_chunk_size
 
         # 充足内存
         chunk_size = calculate_optimal_chunk_size(
@@ -204,7 +204,7 @@ class TestPolarsMemoryOptimizer:
 
     def test_should_use_streaming(self):
         """测试 streaming 模式判断。"""
-        from backend.polars_memory_optimizer import should_use_streaming
+        from factor_engine.backend.polars_memory_optimizer import should_use_streaming
 
         # 未知行数：使用 streaming
         assert should_use_streaming(None, 50, 1024 * 1024 * 1024) is True
@@ -230,7 +230,7 @@ class TestPolarsMemoryOptimizer:
 
     def test_polars_memory_monitor(self):
         """测试内存监控器。"""
-        from backend.polars_memory_optimizer import PolarsMemoryMonitor
+        from factor_engine.backend.polars_memory_optimizer import PolarsMemoryMonitor
 
         monitor = PolarsMemoryMonitor(budget_bytes=1024 * 1024 * 1024)  # 1GB
 
@@ -261,7 +261,7 @@ class TestPolarsBackendIntegration:
     def test_backend_initialization_with_performance_config(self):
         """测试后端初始化时配置性能参数。"""
         pytest.importorskip("polars")
-        from backend.polars_backend import PolarsBackend
+        from factor_engine.backend.polars_backend import PolarsBackend
 
         # 应该不抛出异常
         backend = PolarsBackend()
@@ -275,7 +275,7 @@ class TestPolarsBackendIntegration:
         monkeypatch.setenv("POLARS_ENABLE_STREAMING", "1")
 
         # 这个测试需要完整的执行上下文，这里只验证模块可导入
-        from backend import polars_expr_emitter
+        from factor_engine.backend import polars_expr_emitter
 
         assert hasattr(polars_expr_emitter, "execute_polars_long_plan")
 

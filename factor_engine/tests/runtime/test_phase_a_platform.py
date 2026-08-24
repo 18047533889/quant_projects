@@ -5,19 +5,19 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from api import rank, ts_mean, ts_std, ts_std_dev
-from api.columns import col
-from api.factor import Factor
-from backend.pandas_backend import PandasBackend
-from ir.analyzer import Analyzer
-from planner.cse import apply_cse
-from planner.logical_plan import PlanNode
-from planner.lowerer import Lowerer
-from planner.optimizer import Optimizer
-from planner.rolling_cse import apply_rolling_cse, rolling_semantic_key
-from runtime.config import PipelineConfig
-from runtime.engine import FactorEngine
-from runtime.production_policy import ProductionPolicyViolation, assert_columns_explicit
+from factor_engine.api import rank, ts_mean, ts_std, ts_std_dev
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.ir.analyzer import Analyzer
+from factor_engine.planner.cse import apply_cse
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.lowerer import Lowerer
+from factor_engine.planner.optimizer import Optimizer
+from factor_engine.planner.rolling_cse import apply_rolling_cse, rolling_semantic_key
+from factor_engine.runtime.config import PipelineConfig
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.runtime.production_policy import ProductionPolicyViolation, assert_columns_explicit
 from tests.helpers import InMemorySeriesSource
 
 
@@ -103,8 +103,8 @@ def test_assert_columns_explicit_production():
 
 
 def test_expression_and_panel_cache_modules():
-    from cache.expression_cache import ExpressionCache
-    from cache.panel_cache import PanelCache, series_panel_cache_key
+    from factor_engine.cache.expression_cache import ExpressionCache
+    from factor_engine.cache.panel_cache import PanelCache, series_panel_cache_key
 
     expr = ExpressionCache()
     expr.set("sid1", 42)

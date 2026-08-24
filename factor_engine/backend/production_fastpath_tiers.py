@@ -272,15 +272,15 @@ P1_DUCKDB_PRODUCTION_SAFE: frozenset[str] = (
 
 def dual_backend_production_safe() -> frozenset[str]:
     """PolarsLong + DuckDB 同时 production-safe（须 primitive evidence）。"""
-    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    from factor_engine.backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
 
     return frozenset(PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE)
 
 
 def dual_backend_structural_candidates() -> frozenset[str]:
     """双后端 static 候选（implemented，非 evidence 认证）。"""
-    from backend.polars_long_policy import POLARS_LONG_NATIVE
-    from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
+    from factor_engine.backend.polars_long_policy import POLARS_LONG_NATIVE
+    from factor_engine.backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
 
     return frozenset(POLARS_LONG_NATIVE & SQL_IMPLEMENTED_CANONICALS)
 
@@ -323,7 +323,7 @@ FASTPATH_DEFERRED_CANONICALS: frozenset[str] = (
 
 # The reviewed static daily surface supersedes historical tier batches.  A
 # canonical cannot be both production daily and deferred.
-from cleaned_operators.operator_surface import (
+from factor_engine.cleaned_operators.operator_surface import (
     DAILY_CANONICALS as _DAILY_CANONICALS,
     EXTENDED_ONLY_CANONICALS as _EXTENDED_CANONICALS,
     RESEARCH_ONLY_CANONICALS as _RESEARCH_CANONICALS,
@@ -395,7 +395,7 @@ def resolve_polars_native_canonical(canon: str) -> str:
     返回:
         解析别名后的 native canonical 名称。
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     return POLARS_NATIVE_ALIASES.get(name, name)
@@ -410,7 +410,7 @@ def is_p0_production_fastpath(canon: str) -> bool:
     返回:
         是否在 ``P0_PRODUCTION_FASTPATH_CANONICALS`` 白名单内。
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     return name in P0_PRODUCTION_FASTPATH_CANONICALS
@@ -425,7 +425,7 @@ def is_forbidden_production_fastpath(canon: str) -> bool:
     返回:
         是否为 ``micro_*`` 前缀或在显式禁止列表内。
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     if name.startswith("micro_"):

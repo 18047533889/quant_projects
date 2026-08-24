@@ -8,10 +8,10 @@ import json
 import pandas as pd
 import pytest
 
-from runtime.dual_write_reconcile import list_open_dual_write_failures, reconcile_dual_write_state
-from runtime.incremental import build_incremental_plan
-from storage.catalog import FactorCatalog
-from storage.time_window import resolve_incremental_window_for_bar_freq
+from factor_engine.runtime.dual_write_reconcile import list_open_dual_write_failures, reconcile_dual_write_state
+from factor_engine.runtime.incremental import build_incremental_plan
+from factor_engine.storage.catalog import FactorCatalog
+from factor_engine.storage.time_window import resolve_incremental_window_for_bar_freq
 
 
 def test_resolve_incremental_window_intraday_uses_tick_precise_mode():

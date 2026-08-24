@@ -19,21 +19,21 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.base import ParamRole
-from cleaned_operators.glr_change import (
+from factor_engine.cleaned_operators.base import ParamRole
+from factor_engine.cleaned_operators.glr_change import (
     _GLR_MAX_LLR,
     _mean_shift_score,
     _null_calibrate_llr,
     _ss_noise_floor,
     _variance_shift_score,
 )
-from cleaned_operators.ohlc_spread import _abdi_ranaldo_window, _edge_window
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.ohlc_spread import _abdi_ranaldo_window, _edge_window
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module")
 def loaded():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
 

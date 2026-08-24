@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from typing import Callable
 
-from backend.operator_upgrade_matrix import BATCH_A_CERTIFICATION_ONLY
+from factor_engine.backend.operator_upgrade_matrix import BATCH_A_CERTIFICATION_ONLY
 
 CaseList = list[tuple[str, Callable]]
 
 
 def batch_a_pending() -> list[str]:
     """Batch A 中尚未六证齐全的算子。"""
-    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    from factor_engine.backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
 
     return sorted(c for c in BATCH_A_CERTIFICATION_ONLY if c not in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE)
 

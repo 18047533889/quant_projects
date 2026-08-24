@@ -2,9 +2,9 @@
 """SQL emitter DAG-level CTE 去重。"""
 from __future__ import annotations
 
-from backend.sql_pushdown.emitter import compile_plan_to_sql, plan_is_sql_capable
-from backend.sql_pushdown.plan_fixtures import column, minimal_plan
-from planner.logical_plan import PlanNode
+from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql, plan_is_sql_capable
+from factor_engine.backend.sql_pushdown.plan_fixtures import column, minimal_plan
+from factor_engine.planner.logical_plan import PlanNode
 
 
 def test_sql_emitter_deduplicates_shared_subtree():

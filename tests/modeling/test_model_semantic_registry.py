@@ -23,8 +23,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from cleaned_operators.model_timing import TimingKind, is_model_like_name, timing_kind_for  # noqa: E402
-from cleaned_operators.model_lane import MODEL_LANES, _category_of, assign_model_lane  # noqa: E402
+from factor_engine.cleaned_operators.model_timing import TimingKind, is_model_like_name, timing_kind_for  # noqa: E402
+from factor_engine.cleaned_operators.model_lane import MODEL_LANES, _category_of, assign_model_lane  # noqa: E402
 from modeling.legacy import LEGACY_LOCAL_PREDICTIVE_CANONICALS  # noqa: E402
 from modeling.model_semantic_registry import (  # noqa: E402
     KNOWN_NOT_CLOSED_CANONICALS,
@@ -44,10 +44,10 @@ def registry_canonicals():
     so the audit must be suppressed BEFORE the first ``load_all``.  We only skip
     the R4-100 arity gate; every other audit check still runs.
     """
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
-    import cleaned_operators.registration_audit as _ra
+    import factor_engine.cleaned_operators.registration_audit as _ra
 
     _orig = _ra.finalize_registration_audit
 
@@ -135,7 +135,7 @@ def test_checker_detects_checkpoint_supported_without_registry_entry():
     errs = reg.consistency_check(c)
     assert any("checkpoint_supported" in e and "StatefulCheckpointRegistry" in e for e in errs), errs
     # the override does not leak into the underlying contract authority
-    from cleaned_operators.model_contract import get_model_operator_contract
+    from factor_engine.cleaned_operators.model_contract import get_model_operator_contract
     assert get_model_operator_contract(c).checkpoint_supported is False
 
 

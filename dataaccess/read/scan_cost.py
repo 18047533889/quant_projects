@@ -24,9 +24,13 @@ data_access.read.scan_cost —— 读路径成本估算与执行路由
 
 from __future__ import annotations
 
+import enum
+import json
 import logging
+import statistics
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
 
 from data_access.core.storage import is_remote_storage
@@ -448,7 +452,159 @@ def record_scan_actual(
 def reset_calibration() -> None:
     with _calibration_lock:
         _calibration.clear()
+    with _shape_calibration_lock:
+        _shape_calibration_samples.clear()
 
+
+# ---- R42 形状级校准（shape × cache-state 隔离的逐样本校准） ----
+
+class ScanCacheState(str, enum.Enum):
+    """scan 缓存状态维度：同一 dataset 的冷/暖/稳态读取成本不同。
+
+    COLD:  未缓存/首次读（读物理文件）
+    WARM:  部分缓存命中
+    STEADY_STATE: 充分缓存/稳定态
+
+    用于把校准样本按「shape × cache-state」分桶，避免把冷/暖读数混进
+    同一个样本集而扭曲分位数校准。
+    """
+    COLD = "cold"
+    WARM = "warm"
+    STEADY_STATE = "steady_state"
+
+
+@dataclass(frozen=True)
+class CalibrationStats:
+    """一次校准样本集的统计摘要（分位数 + MAD）。"""
+    sample_count: int
+    p50: float
+    p95: float
+    mad: float
+    mean: float
+
+
+def scan_shape_key(
+    cost: ScanCost,
+    *,
+    cache_state: ScanCacheState = ScanCacheState.STEADY_STATE,
+) -> tuple[str, ...]:
+    """构造形状校准 key（tuple）：dataset × cache-state × projection。
+
+    设计：把「同一 dataset 的冷/暖读数」与「不同 projection（宽/窄）」
+    分开，使在线 EMA（record_scan_actual）不会用不同形状的读数互相污染。
+    返回元组 key（兼容记录/分位数/落盘三方）。仅返回形状标识，不含校准值。
+    """
+    cache_state = ScanCacheState(cache_state)
+    return (cost.dataset, cache_state.value, f"proj={cost.projected_columns}")
+
+
+# R42：形状校准样本分桶（scan_shape_key -> list[elapsed_ms]）。
+# 与上面的轻量 EMA（_calibration, dataset 级）正交：EMA 给出稳定乘子，
+# 这里给出逐形状的分位数/MAD 诊断。生产读取只依赖保守估计（COST_*），
+# 分位数仅用于路由/监控，因此样本缺失时 fail-closed 返回 None。
+_shape_calibration_samples: dict[tuple[str, ...], list[float]] = {}
+_shape_calibration_lock = threading.Lock()
+
+
+def record_scan_actual(
+    dataset: str,
+    *,
+    estimated_score: float,
+    actual_elapsed_ms: float,
+    shape_key: tuple[str, ...] | None = None,
+) -> None:
+    """#27 + R42：记录一次实际读数。
+
+    兼容既有签名（不传 shape_key 时只更新轻量 EMA）。传入 shape_key 时
+    同时把 elapsed 加入对应形状样本桶（R42 形状分位数校准）。
+    """
+    if estimated_score <= 0 or actual_elapsed_ms <= 0:
+        return
+    ratio = actual_elapsed_ms / max(1.0, estimated_score / 1e6)
+    correction = max(0.1, min(10.0, ratio))
+    with _calibration_lock:
+        cur = _calibration.get(dataset, 1.0)
+        _calibration[dataset] = cur + _EMA_ALPHA * (correction - cur)
+    if shape_key is not None:
+        key = tuple(shape_key)
+        with _shape_calibration_lock:
+            _shape_calibration_samples.setdefault(key, []).append(actual_elapsed_ms)
+
+
+def calibration_quantiles(
+    shape_key: tuple[str, ...] | None,
+) -> CalibrationStats | None:
+    """按形状 key 返回分位数摘要；无样本 → None（fail-closed）。"""
+    if shape_key is None:
+        return None
+    key = tuple(shape_key)
+    with _shape_calibration_lock:
+        samples = list(_shape_calibration_samples.get(key, ()))
+    if not samples:
+        return None
+    samples = sorted(samples)
+    n = len(samples)
+    p50 = samples[n // 2] if n else 0.0
+    p95 = samples[min(n - 1, int(round(n * 0.95)))] if n else 0.0
+    mean = sum(samples) / n
+    mad = statistics.median(sorted(abs(x - mean) for x in samples))
+    return CalibrationStats(
+        sample_count=n, p50=p50, p95=p95, mad=mad, mean=mean,
+    )
+
+
+def save_calibration(
+    path: Path,
+    *,
+    host_class: str,
+    storage_class: str,
+    build_id: str,
+) -> None:
+    """把形状校准样本落盘，绑定 host/storage/build（R42 生成绑定）。"""
+    payload = {
+        "schema": "r42-scan-cost-shape-calibration-v1",
+        "host_class": host_class,
+        "storage_class": storage_class,
+        "build_id": build_id,
+        "samples": {
+            "::".join(str(part) for part in k): v for k, v in _shape_calibration_samples.items()
+        },
+    }
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def load_calibration(
+    path: Path,
+    *,
+    host_class: str,
+    storage_class: str,
+    build_id: str,
+) -> bool:
+    """加载与当前 (host, storage, build) 匹配的形状校准；不匹配 → 丢弃（返回 False）。
+
+    只有三把钥匙全对才载入样本（否则会用别的主机/存储/构建的读数污染）。
+    返回是否加载成功。
+    """
+    if not Path(path).exists():
+        return False
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if (
+        payload.get("host_class") != host_class
+        or payload.get("storage_class") != storage_class
+        or payload.get("build_id") != build_id
+    ):
+        return False
+    samples = payload.get("samples", {})
+    with _shape_calibration_lock:
+        for key, vals in samples.items():
+            _shape_calibration_samples[tuple(key.split("::"))] = list(vals)
+    return True
 
 def suggest_read_strategy(
     cost: ScanCost,
@@ -456,11 +612,15 @@ def suggest_read_strategy(
     prefer_polars: bool = False,
     engine: str = "auto",
     result: str = "auto",
+    downstream_backend: str | None = None,
 ) -> tuple[str, str]:
     """根据 ScanCost 建议 (engine, result_mode)。
 
     engine ∈ {duckdb, polars, pyarrow}；result_mode ∈ {arrow, pandas, polars, lazy, stream}。
     显式传入的 engine/result 直接返回（auto 才路由）。
+
+    ``downstream_backend``：消费方是 polars-native（``polars_native``）时，
+    即使行数不够大也建议 polars+lazy，避免中间 Arrow 物化（R42）。
     """
     if engine not in {"auto", "duckdb", "polars", "pyarrow"}:
         raise ValueError(f"engine 必须是 auto|duckdb|polars|pyarrow，收到 {engine!r}")
@@ -472,9 +632,9 @@ def suggest_read_strategy(
     if engine == "auto":
         fmt = str(cost.file_format or "parquet").lower()
         if fmt in {"arrow", "feather", "ipc", "feather-v2"}:
-            # #30 文档说 Arrow/Feather 自动选 PyArrow，但 router 从没实现——
-            # arrow/feather 没有 DuckDB/scan_parquet 原生 reader，硬走会报错。
             engine = "pyarrow"
+        elif downstream_backend == "polars_native":
+            engine = "polars"
         elif cost.file_count == 0 and cost.estimated_rows == 0:
             engine = "duckdb"
         elif prefer_polars and cost.estimated_rows >= _STREAM_MIN_ROWS:

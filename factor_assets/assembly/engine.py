@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
-from typing import Iterable, Mapping, Optional
+from typing import Callable, Iterable, Mapping, Optional
 
 from factor_assets.contracts.asset import FactorAsset
 from factor_assets.contracts.factor_set import (
-    FactorMembership,
-    FactorSet,
+   
+        FactorMembership,
+    FactorSetArtifact,
     FactorSetSpec,
 )
 from factor_assets.contracts.lifecycle import LifecycleState
@@ -18,13 +19,16 @@ from factor_assets.selection.policy import SelectionDecision
 
 
 class FactorSetAssembler:
-    """Build immutable :class:`FactorSet` values from factor asset metadata.
+    """Build immutable :class:`FactorSetArtifact` values from factor asset metadata.
 
     Assembly is deliberately metadata-only.  Candidates are filtered using the
     fields represented by ``FactorSetSpec`` and ordered by an evidence-based
     ranking (selection-decision metadata first, ``factor_id`` as deterministic
     tiebreak) before applying ``max_factors``.  No factor values or metric
     computations are performed here.
+
+    The canonical output is :class:`FactorSetArtifact`; the legacy
+    :class:`FactorSet` is available via ``FactorSetArtifact.to_legacy_view()``.
     """
 
     #: Selection policies with differentiated ranking semantics.  Anything
@@ -40,7 +44,8 @@ class FactorSetAssembler:
         selection_decisions: Optional[Iterable[SelectionDecision]] = None,
         selection_run_id: Optional[str] = None,
         created_at: Optional[str] = None,
-    ) -> FactorSet:
+        similarity_provider: Optional[Callable[[str, str], Optional[float]]] = None,
+    ) -> FactorSetArtifact:
         """Assemble a factor set from candidate assets.
 
         Args:
@@ -49,6 +54,9 @@ class FactorSetAssembler:
             selection_decisions: Admission decisions for non-manual policies.
             selection_run_id: Optional provenance identifier for this run.
             created_at: Optional explicit creation timestamp, useful for replay.
+            similarity_provider: Optional callable ``(factor_a, factor_b) ->
+                similarity in [0, 1]`` used by the ``diverse`` (MMR) policy.
+                Required for ``diverse``; the policy fails closed without it.
 
         Raises:
             TypeError: If ``spec`` or a candidate is not the expected contract.
@@ -62,6 +70,11 @@ class FactorSetAssembler:
             raise ValueError(
                 f"unknown selection_policy: {spec.selection_policy!r}; "
                 f"expected one of {sorted(self._KNOWN_POLICIES)}"
+            )
+        if spec.selection_policy == "diverse" and similarity_provider is None:
+            raise ValueError(
+                "diverse (MMR) selection requires a similarity_provider; "
+                "failing closed rather than silently degrading to non-MMR"
             )
 
         admitted_factor_ids: Optional[set[str]] = None
@@ -128,7 +141,7 @@ class FactorSetAssembler:
                 if self._matches(asset, spec):
                     matched.append(asset)
 
-        matched = self._rank(matched, spec, latest_decisions)
+        matched = self._rank(matched, spec, latest_decisions, similarity_provider)
         matched = self._apply_family_constraints(matched, spec.family_constraints)
         if spec.max_factors is not None:
             matched = matched[: spec.max_factors]
@@ -136,30 +149,32 @@ class FactorSetAssembler:
             raise ValueError("no factor assets match the FactorSetSpec")
 
         factor_ids = tuple(asset.factor_id for asset in matched)
-        families = tuple(sorted({asset.family for asset in matched if asset.family is not None}))
         timestamp = created_at or datetime.now(timezone.utc).isoformat()
         memberships = self._build_memberships(matched, latest_decisions, spec)
         assembly_hash = self._assembly_hash(factor_ids, spec, memberships)
         policy_hash = self._policy_hash(spec)
-        return FactorSet(
+        versions = tuple(
+            asset.metadata.fe_compiler_generation or asset.metadata.canonical_hash
+            for asset in matched
+        )
+        evidence_refs = tuple(
+            asset.latest_evidence_ref.bundle_id
+            for asset in matched
+            if asset.latest_evidence_ref is not None
+        )
+        return FactorSetArtifact(
             set_id=spec.set_id,
             name=spec.name,
-            factor_ids=factor_ids,
+            members=memberships,
             created_at=timestamp,
-            spec=spec,
-            universe_ref=spec.universe_ref,
-            frequency=spec.frequency,
-            selection_run_id=selection_run_id,
-            families=families,
-            memberships=memberships,
-            assembly_hash=assembly_hash,
             policy_hash=policy_hash,
-            # Snapshot provenance: an explicit data_snapshot_ref wins; the
-            # universe_ref fallback preserves legacy specs (documented in
-            # FactorSetSpec.data_snapshot_ref).
-            snapshot_ref=spec.data_snapshot_ref or spec.universe_ref,
+            assembly_hash=assembly_hash,
+            snapshot_ref=spec.data_snapshot_ref,
+            universe_ref=spec.universe_ref,
             split_ref=spec.split_ref,
-            description=spec.description,
+            versions=versions,
+            evidence_refs=evidence_refs,
+            spec=spec,
         )
 
     @staticmethod
@@ -167,6 +182,7 @@ class FactorSetAssembler:
         assets: list[FactorAsset],
         spec: FactorSetSpec,
         decisions: dict[str, SelectionDecision],
+        similarity_provider: Optional[Callable[[str, str], Optional[float]]] = None,
     ) -> list[FactorAsset]:
         """Order candidates by policy-appropriate, evidence-based ranking.
 
@@ -179,12 +195,23 @@ class FactorSetAssembler:
         carries objectives (metadata-only assembly), all points are
         mutually non-dominated and the ordering falls back to
         recency-then-id, preserving the previous behaviour.
-        ``family_robust``/``diverse`` rank by admission decision recency
-        (most recent evidence first) with ``factor_id`` as the deterministic
-        tiebreak and additionally round-robin across families so no family
-        monopolises the head of the ordering.  Ranking never *admits*
-        anyone — it only orders the set already admitted by the selection
-        decisions.
+
+        ``family_robust`` ranks by a composite robustness score read from the
+        admission decision's ``metadata`` (``quality``, ``stability``,
+        ``worst_slice``, ``recent_decay``, ``tradability``,
+        ``residual_novelty``, ``family_budget``), then recency, then
+        ``factor_id``.  When the composite scores are absent the ranking fails
+        safe to recency ordering — it never invents a score.
+
+        ``diverse`` ranks by greedy Maximal Marginal Relevance (MMR):
+        ``lambda*quality - (1-lambda)*max_similarity_to_selected``, where
+        quality comes from the decision metadata (fallback to recency rank)
+        and similarity comes from the caller-supplied ``similarity_provider``.
+        The policy fails closed (raises) when ``diverse`` is selected without
+        a similarity provider.
+
+        Ranking never *admits* anyone — it only orders the set already
+        admitted by the selection decisions.
         """
         if spec.selection_policy == "manual":
             return sorted(assets, key=lambda asset: asset.factor_id)
@@ -202,19 +229,10 @@ class FactorSetAssembler:
             objectives = _pareto_objectives(ranked, decisions)
             if objectives:
                 ranked = _pareto_rank(ranked, decisions, objectives)
-        elif spec.selection_policy in ("family_robust", "diverse"):
-            # Round-robin across families (missing family = own bucket) so no
-            # family monopolises the head of the ordering.
-            buckets: dict[Optional[str], list[FactorAsset]] = {}
-            for asset in ranked:
-                buckets.setdefault(asset.family, []).append(asset)
-            interleaved: list[FactorAsset] = []
-            while any(buckets.values()):
-                for family in sorted(buckets, key=lambda f: (f is None, f or "")):
-                    queue = buckets[family]
-                    if queue:
-                        interleaved.append(queue.pop(0))
-            return interleaved
+        elif spec.selection_policy == "family_robust":
+            ranked = _family_robust_rank(ranked, decisions)
+        elif spec.selection_policy == "diverse":
+            ranked = _diverse_mmr_rank(ranked, decisions, similarity_provider)
         return ranked
 
     @staticmethod
@@ -225,7 +243,7 @@ class FactorSetAssembler:
     ) -> tuple[FactorMembership, ...]:
         """Build per-member provenance from the admission decisions."""
         members: list[FactorMembership] = []
-        for asset in assets:
+        for rank, asset in enumerate(assets):
             decision = decisions.get(asset.factor_id)
             evidence_ref = (
                 asset.latest_evidence_ref.bundle_id
@@ -237,10 +255,26 @@ class FactorSetAssembler:
                     factor_id=asset.factor_id,
                     role="member",
                     family_id=asset.family,
+                    factor_version=(
+                        asset.metadata.fe_compiler_generation
+                        or asset.metadata.canonical_hash
+                    ),
                     selection_decision_ref=(
                         decision.decision_id if decision is not None else None
                     ),
                     evidence_ref=evidence_ref,
+                    novelty_ref=(
+                        decision.novelty_refs[0]
+                        if decision is not None and decision.novelty_refs
+                        else None
+                    ),
+                    similarity_ref=(
+                        decision.similarity_refs[0]
+                        if decision is not None and decision.similarity_refs
+                        else None
+                    ),
+                    assembly_score=_decision_score(decision),
+                    selection_rank=rank,
                     reason=decision.reason.value if decision is not None else None,
                 )
             )
@@ -454,5 +488,127 @@ def _pareto_rank(
         )
         (dominated if is_dominated else non_dominated).append(asset)
     return non_dominated + dominated
+
+def _decision_score(decision: Optional[SelectionDecision]) -> Optional[float]:
+    """Extract a finite composite score from a decision's metadata.
+
+    Reads the ``score`` key (a finite float) from the decision metadata.  Used
+    to populate ``FactorMembership.assembly_score``.  Returns None when absent
+    or malformed — a member is never scored on a fabricated value.
+    """
+    if decision is None or not decision.metadata:
+        return None
+    raw = decision.metadata.get("score")
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return None
+    value = float(raw)
+    if value != value or value in (float("inf"), float("-inf")):
+        return None
+    return value
+
+
+def _family_robust_rank(
+    assets: list[FactorAsset],
+    decisions: dict[str, SelectionDecision],
+) -> list[FactorAsset]:
+    """Rank by a composite family-robustness score, then recency, then id.
+
+    The composite score is read from the admission decision's ``metadata``
+    under the ``family_robust`` key (a finite float combining quality,
+    stability, worst_slice, recent_decay, tradability, residual_novelty and
+    family_budget — computed upstream by the policy).  When the composite is
+    absent the ranking fails safe to the recency ordering already established
+    by the caller; it never invents a score.
+    """
+    def score(asset: FactorAsset) -> Optional[float]:
+        decision = decisions.get(asset.factor_id)
+        if decision is None or not decision.metadata:
+            return None
+        raw = decision.metadata.get("family_robust")
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            return None
+        value = float(raw)
+        if value != value or value in (float("inf"), float("-inf")):
+            return None
+        return value
+
+    scored = [(asset, score(asset)) for asset in assets]
+    # Stable sort: composite desc first, then preserve the recency ordering
+    # (which the caller already established) for assets without a score.
+    scored.sort(key=lambda pair: pair[0].factor_id)
+    scored.sort(key=lambda pair: pair[1] if pair[1] is not None else float("-inf"), reverse=True)
+    return [asset for asset, _ in scored]
+
+
+def _diverse_mmr_rank(
+    assets: list[FactorAsset],
+    decisions: dict[str, SelectionDecision],
+    similarity_provider: Optional[Callable[[str, str], Optional[float]]],
+) -> list[FactorAsset]:
+    """Rank by greedy Maximal Marginal Relevance (MMR).
+
+    MMR score for candidate ``c`` given the already-selected set ``S`` is::
+
+        lambda * quality(c) - (1 - lambda) * max_{s in S} similarity(c, s)
+
+    Quality comes from the decision metadata ``quality`` key (finite float);
+    when absent it falls back to the recency rank (higher recency = higher
+    quality).  Similarity comes from the caller-supplied ``similarity_provider``.
+    The policy fails closed (raises) when ``diverse`` is selected without a
+    similarity provider, so this helper is only reached with a provider present.
+    """
+    if similarity_provider is None:
+        raise ValueError(
+            "diverse (MMR) selection requires a similarity_provider; "
+            "failing closed rather than silently degrading to non-MMR"
+        )
+
+    lambda_weight = 0.5  # balance quality vs. diversity
+
+    def quality(asset: FactorAsset, recency_rank: int) -> float:
+        decision = decisions.get(asset.factor_id)
+        if decision is not None and decision.metadata:
+            raw = decision.metadata.get("quality")
+            if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+                value = float(raw)
+                if value == value and value not in (float("inf"), float("-inf")):
+                    return value
+        # Fallback: higher recency (lower rank index) = higher quality.
+        return float(len(assets) - recency_rank)
+
+    # Precompute quality for each asset (recency rank = index in input order).
+    quality_by_id = {
+        asset.factor_id: quality(asset, idx)
+        for idx, asset in enumerate(assets)
+    }
+
+    remaining = list(assets)
+    selected: list[FactorAsset] = []
+    selected_ids: list[str] = []
+
+    while remaining:
+        best_asset = None
+        best_score = float("-inf")
+        for asset in remaining:
+            q = quality_by_id[asset.factor_id]
+            if selected_ids:
+                max_sim = max(
+                    abs(similarity_provider(asset.factor_id, s) or 0.0)
+                    for s in selected_ids
+                )
+            else:
+                max_sim = 0.0
+            mmr = lambda_weight * q - (1.0 - lambda_weight) * max_sim
+            if mmr > best_score:
+                best_score = mmr
+                best_asset = asset
+        if best_asset is None:
+            break
+        selected.append(best_asset)
+        selected_ids.append(best_asset.factor_id)
+        remaining.remove(best_asset)
+
+    return selected
+
 
 __all__ = ["FactorSetAssembler"]

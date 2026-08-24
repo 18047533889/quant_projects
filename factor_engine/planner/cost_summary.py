@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.operator_cost import estimate_plan_cost, get_operator_cost
-from planner.logical_plan import PlanNode
+from factor_engine.backend.operator_cost import estimate_plan_cost, get_operator_cost
+from factor_engine.planner.logical_plan import PlanNode
 
 
 def summarize_plan_cost(plan: PlanNode) -> dict[str, Any]:

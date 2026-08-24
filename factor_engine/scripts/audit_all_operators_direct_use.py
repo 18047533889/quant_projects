@@ -40,8 +40,8 @@ sys.path.insert(0, str(REPO))
 
 
 def _registry() -> dict[str, Any]:
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     return dict(OperatorRegistry._catalog)
@@ -57,7 +57,7 @@ def _surface_names() -> set[str]:
     """
     names: set[str] = set()
     try:
-        from cleaned_operators.operator_surface import (
+        from factor_engine.cleaned_operators.operator_surface import (
             DAILY_CANONICALS,
             EXTENDED_ONLY_CANONICALS,
             RESEARCH_ONLY_CANONICALS,
@@ -70,7 +70,7 @@ def _surface_names() -> set[str]:
 
 
 def run_audit(*, smoke: bool = False) -> dict[str, Any]:
-    from mining.direct_use import (
+    from factor_engine.mining.direct_use import (
         DirectUseStatus,
         build_direct_use_operator,
         direct_use_matrix_rows,
@@ -128,7 +128,7 @@ def run_audit(*, smoke: bool = False) -> dict[str, Any]:
     violations["GHOST_SURFACE_CANONICALS"].extend(ghost)
     # aliases pointing at deleted/moved canonicals
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         aliases = dict(OperatorRegistry._aliases)
         for alias, target in aliases.items():
@@ -178,7 +178,7 @@ def _smoke_execute(canonical: str, row: Any) -> tuple[bool, str]:
         import numpy as np
         import pandas as pd
 
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         op = OperatorRegistry.get(canonical, "pandas_numpy") or OperatorRegistry.get(canonical)
         if op is None:

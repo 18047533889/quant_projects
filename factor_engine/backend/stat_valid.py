@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import polars as pl
 
-    from backend.sql_pushdown.emitter import SqlDialect
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect
 
 
 def rank_excludes_nan(canon: str) -> bool:
     """rank 族是否将 NaN 视为无效（不参与分母/排名）。"""
-    from backend.rank_spec import rank_ignore_nan
+    from factor_engine.backend.rank_spec import rank_ignore_nan
 
     return rank_ignore_nan(canon)
 
@@ -47,7 +47,7 @@ def stat_valid_sql(col: str, *, dialect: "SqlDialect", exclude_nan: bool = True)
     Aligns with pandas ``CrossSectionSampleMask`` / ``np.isfinite`` and
     ``polars_rank_input``: ±Inf is never a legal statistical sample.
     """
-    from backend.sql_pushdown.emitter import SqlDialect
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect
 
     if not exclude_nan:
         return f"{col} IS NOT NULL"
@@ -63,7 +63,7 @@ def row_stat_invalid_sql(col: str, *, dialect: "SqlDialect", exclude_nan: bool =
 
     ±Inf is invalid exactly like NaN (R19-027..029 finite sample mask).
     """
-    from backend.sql_pushdown.emitter import SqlDialect
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect
 
     if not exclude_nan:
         return f"{col} IS NULL"

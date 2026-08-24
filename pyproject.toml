@@ -83,32 +83,15 @@ include = [
     "planning*",
     "modeling",
     "modeling.*",
-    # Top-level packages that factor_engine submodules import via absolute
-    # imports (from runtime import ..., from expr import ..., etc.). These are
-    # the canonical packages; factor_engine/ mirrors them. Required so that
-    # `import factor_engine.runtime` etc. resolve in the umbrella wheel.
-    "api*",
-    "backend*",
-    "cache*",
-    "cleaned_operators*",
+    # R45: source authority is factor_engine.* ONLY. The historical root
+    # packages (api/backend/cache/cleaned_operators/expr/factor_recipes/fields/
+    # ir/market/mining/planner/runtime/security/semantic/service/storage/util/
+    # validation) were consolidated into factor_engine/ and deleted from root.
     "evidence*",
     "export*",
-    "expr*",
-    "factor_recipes*",
-    "fields*",
-    "ir*",
-    "market*",
-    "mining*",
-    "planner*",
     "research_operators*",
     "research_tools*",
-    "runtime*",
-    "security*",
-    "service*",
-    "storage*",
     "telemetry*",
-    "util*",
-    "validation*",
     "factor_engine",
     "factor_engine.*",
     "factor_engine.api*",
@@ -199,6 +182,12 @@ exclude = [
 "evidence" = ["*.json", "*.yaml"]
 "docs" = ["*.json", "*.yaml", "*.md"]
 "cleaned_operators" = ["docs/*"]
+# R45: factor_engine.* is the source authority. Ship its data files too so the
+# engine's runtime data dependencies (canonical_data_fields.json, operator docs,
+# evidence) are present inside the wheel.
+"factor_engine.docs" = ["*.json", "*.yaml", "*.md"]
+"factor_engine.evidence" = ["*.json", "*.yaml"]
+"factor_engine.cleaned_operators" = ["docs/*"]
 dataaccess = ["config/*.yaml", "config/README.md", "docs/*.md"]
 vectorbt_qs = [
     "vectorbt/vectorbt/*.py",

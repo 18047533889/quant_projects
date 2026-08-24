@@ -22,16 +22,16 @@ def setup_module():
     import operator classes trigger registration at import time. This hook ensures
     the registry is writable before the imports happen.
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     if OperatorRegistry._lifecycle != OperatorRegistry.Lifecycle.BUILDING:
         # Safe to reset for test isolation
         OperatorRegistry._lifecycle = OperatorRegistry.Lifecycle.BUILDING
 
 
-import cleaned_operators.technical.adaptive_filters  # noqa: F401
+import factor_engine.cleaned_operators.technical.adaptive_filters  # noqa: F401
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
@@ -68,7 +68,7 @@ def _all_nan(template: pd.DataFrame) -> pd.DataFrame:
 @pytest.mark.parametrize("name", sorted(set(ADAPTIVE_FILTER_CANONICALS)))
 def test_registered_and_classified(name: str) -> None:
     """Every operator must be registered and classified as extended."""
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     assert OperatorRegistry.get(name) is not None, name
     assert classify_canonical(name) in ("daily", "extended", "research"), name
@@ -77,7 +77,7 @@ def test_registered_and_classified(name: str) -> None:
 @pytest.mark.parametrize("name", sorted(set(ADAPTIVE_FILTER_CANONICALS)))
 def test_has_explicit_policy(name: str) -> None:
     """Every operator must have explicit PIT policy."""
-    from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
+    from factor_engine.cleaned_operators.operator_policy import _EXPLICIT_POLICIES
 
     assert name in _EXPLICIT_POLICIES, f"{name} missing explicit policy"
     policy = _EXPLICIT_POLICIES[name]

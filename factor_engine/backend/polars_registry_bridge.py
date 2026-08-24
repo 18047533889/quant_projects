@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 try:
     import polars as pl
@@ -46,7 +46,7 @@ _REGISTRY_LONG_CACHE: frozenset[str] | None = None
 
 def _resolve(op: str) -> str:
     """Strictly resolve a DSL alias to its registered canonical name."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     return OperatorRegistry.resolve_canonical_strict(op)
 
@@ -69,8 +69,8 @@ def polars_registry_long_capable(*, exclude_native: frozenset[str] | None = None
     if _REGISTRY_LONG_CACHE is not None:
         reg_set = _REGISTRY_LONG_CACHE
     else:
-        from cleaned_operators import load_all
-        from cleaned_operators.operator_policy import INTENTIONALLY_PANDAS_ONLY, polars_implemented_canonicals
+        from factor_engine.cleaned_operators import load_all
+        from factor_engine.cleaned_operators.operator_policy import INTENTIONALLY_PANDAS_ONLY, polars_implemented_canonicals
 
         load_all()
         reg = polars_implemented_canonicals()
@@ -108,7 +108,7 @@ def plan_registry_long_capable(plan: PlanNode) -> bool:
 
 def _op_scope(canonical: str) -> str:
     """Read the reviewed execution scope; scope guessing is forbidden."""
-    from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
+    from factor_engine.cleaned_operators.operator_policy import _EXPLICIT_POLICIES
 
     policy = _EXPLICIT_POLICIES.get(canonical)
     if policy is None or not policy.get("scope"):
@@ -123,7 +123,7 @@ def _call_polars_operator(
     kw: dict[str, Any],
 ) -> pl.DataFrame:
     """Call a native Polars operator with Analyzer-normalized parameters."""
-    from backend.parameter_aliases import reject_runtime_parameter_aliases
+    from factor_engine.backend.parameter_aliases import reject_runtime_parameter_aliases
 
     reject_runtime_parameter_aliases(canonical, kw)
     return operator.calculate(*call_args, **kw)
@@ -290,7 +290,7 @@ def compile_registry_op(
     if parsed is None:
         return None
     arg_specs, series_frames, kw = parsed
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     try:
         operator = OperatorRegistry.get(canonical, backend="polars")

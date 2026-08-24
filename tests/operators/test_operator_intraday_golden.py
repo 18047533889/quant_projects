@@ -7,14 +7,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.microstructure.session import (
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.microstructure.session import (
     pct_change_by_session,
     session_cum_vwap,
     session_key_from_index,
     session_vwap_deviation,
 )
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module")
@@ -45,7 +45,7 @@ def test_ts_autocorr_perfect_for_monotonic_series(_loaded):
 
 
 def test_ts_autocorr_negative_lag_is_rejected(_loaded):
-    from backend.operator_errors import OperatorParameterError
+    from factor_engine.backend.operator_errors import OperatorParameterError
 
     op = OperatorRegistry.get("ts_autocorr")
     x = pd.DataFrame({"A": np.arange(10, dtype=float)})

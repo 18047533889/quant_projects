@@ -23,7 +23,7 @@ def example_integrated_memory_management(dag: Any, total_memory_bytes: int = 4 *
     Returns:
         Execution results with memory statistics
     """
-    from runtime.multibackend import (
+    from factor_engine.runtime.multibackend import (
         # Shape estimation
         DataShapeEstimator,
         # Memory modeling
@@ -166,7 +166,7 @@ def example_integrated_memory_management(dag: Any, total_memory_bytes: int = 4 *
 
 def example_memory_model_usage():
     """Example usage of fine-grained memory model."""
-    from runtime.multibackend import global_memory_model
+    from factor_engine.runtime.multibackend import global_memory_model
 
     memory_model = global_memory_model()
 
@@ -185,7 +185,7 @@ def example_memory_model_usage():
 
 def example_cse_usage():
     """Example usage of native CSE with representation tracking."""
-    from runtime.multibackend import global_cse_manager, NativeCSEKey
+    from factor_engine.runtime.multibackend import global_cse_manager, NativeCSEKey
 
     cse_mgr = global_cse_manager()
 

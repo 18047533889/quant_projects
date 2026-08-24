@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.operator_policy import POLARS_PRODUCTION_SAFE
-from cleaned_operators.registry import OperatorRegistry
-from backend.operator_capability import (
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.operator_policy import POLARS_PRODUCTION_SAFE
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.operator_capability import (
     ExecutionKind,
     build_capability_matrix,
     get_best_backend,
@@ -18,7 +18,7 @@ from backend.operator_capability import (
 
 
 def test_execution_kind_has_single_authority():
-    from backend.polars_backend_kind import (
+    from factor_engine.backend.polars_backend_kind import (
         PolarsImplementationKind,
         ExecutionKind as PolarsExecutionKind,
         PhysicalImplementationSpec,
@@ -43,7 +43,7 @@ def test_execution_kind_has_single_authority():
 @pytest.fixture(scope="module")
 def loaded():
     load_all()
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     register_sql_backends()
     yield
@@ -86,7 +86,7 @@ def test_capability_matrix_covers_implemented(loaded):
 
 
 def test_production_fast_path_whitelist(loaded):
-    from backend.production_fast_path import (
+    from factor_engine.backend.production_fast_path import (
         is_production_fast_path,
         summarize_production_fast_path,
     )

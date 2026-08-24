@@ -118,8 +118,8 @@ class TestOperatorRegistryConcurrency:
 
     def test_concurrent_registry_get(self):
         """并发读取 registry：多线程同时 get 同一算子"""
-        from cleaned_operators.registry import OperatorRegistry
-        from backend.cleaned_bridge import ensure_cleaned_loaded
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+        from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
         # 确保 registry 已加载
         try:
@@ -168,8 +168,8 @@ class TestOperatorRegistryConcurrency:
 
     def test_registry_frozen_after_load(self):
         """验证 registry 加载后不可变（freeze 机制）"""
-        from cleaned_operators.registry import OperatorRegistry
-        from backend.cleaned_bridge import ensure_cleaned_loaded
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+        from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
         try:
             ensure_cleaned_loaded()
@@ -200,7 +200,7 @@ class TestCacheConcurrency:
 
     def test_expression_cache_concurrent_set_get(self):
         """并发 set/get ExpressionCache"""
-        from cache.expression_cache import ExpressionCache
+        from factor_engine.cache.expression_cache import ExpressionCache
 
         cache = ExpressionCache()
         results = []
@@ -231,7 +231,7 @@ class TestCacheConcurrency:
 
     def test_panel_cache_concurrent_access(self):
         """并发访问 PanelCache"""
-        from cache.panel_cache import PanelCache, series_panel_cache_key
+        from factor_engine.cache.panel_cache import PanelCache, series_panel_cache_key
 
         cache = PanelCache()
         errors = []
@@ -266,7 +266,7 @@ class TestCacheConcurrency:
 
     def test_cache_eviction_under_pressure(self):
         """高并发下的 cache eviction 测试（LRU 逐出）"""
-        from cache.expression_cache import ExpressionCache
+        from factor_engine.cache.expression_cache import ExpressionCache
 
         # 设置小 budget 强制 evict
         cache = ExpressionCache(budget_bytes=10 * 1024**2)  # 10MB
@@ -300,7 +300,7 @@ class TestResourceGovernorConcurrency:
 
     def test_governor_concurrent_reserve_release(self):
         """并发 reserve/release 资源"""
-        from runtime.resource_governor import MemoryGovernor
+        from factor_engine.runtime.resource_governor import MemoryGovernor
 
         governor = MemoryGovernor(
             process_budget_bytes=1024**3,  # 1GB
@@ -338,8 +338,8 @@ class TestResourceGovernorConcurrency:
 
     def test_governor_no_deadlock_with_cache(self):
         """验证 Governor 与 Cache 的锁顺序不会死锁"""
-        from cache.expression_cache import ExpressionCache
-        from runtime.resource_governor import MemoryGovernor
+        from factor_engine.cache.expression_cache import ExpressionCache
+        from factor_engine.runtime.resource_governor import MemoryGovernor
 
         governor = MemoryGovernor(
             process_budget_bytes=512 * 1024**2,
@@ -593,7 +593,7 @@ class TestBackendConcurrency:
     def test_q_backend_process_manager_concurrent(self):
         """q backend ProcessManager 并发访问"""
         try:
-            from backend.q_backend.q_process_manager import get_q_process_manager
+            from factor_engine.backend.q_backend.q_process_manager import get_q_process_manager
         except ImportError:
             pytest.skip("q backend not available")
 
@@ -673,7 +673,7 @@ class TestConcurrencyStress:
 
     def test_resource_exhaustion_handling(self):
         """资源耗尽场景：验证优雅降级"""
-        from cache.expression_cache import ExpressionCache
+        from factor_engine.cache.expression_cache import ExpressionCache
 
         # 极小 budget 强制资源耗尽
         cache = ExpressionCache(budget_bytes=1024**2)  # 仅 1MB
@@ -740,9 +740,9 @@ class TestDeadlockDetection:
 
     def test_no_deadlock_cache_governor_mixed(self):
         """混合 cache 和 governor 操作，验证无死锁"""
-        from cache.expression_cache import ExpressionCache
-        from cache.panel_cache import PanelCache
-        from runtime.resource_governor import MemoryGovernor
+        from factor_engine.cache.expression_cache import ExpressionCache
+        from factor_engine.cache.panel_cache import PanelCache
+        from factor_engine.runtime.resource_governor import MemoryGovernor
 
         governor = MemoryGovernor(
             process_budget_bytes=512 * 1024**2,

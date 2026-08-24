@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import cleaned_operators.model_lane as model_lane
+import factor_engine.cleaned_operators.model_lane as model_lane
 
 
 def _authority(canonical, classification, *, path):

@@ -17,8 +17,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 # The shared production-audit fixture builder lives in scripts/; load it by file
 # path so collection works under every pytest import mode.

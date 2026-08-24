@@ -26,7 +26,7 @@ import pytest
 
 
 def test_admission_probe_no_ghost():
-    from runtime.resource_governor import MemoryGovernor
+    from factor_engine.runtime.resource_governor import MemoryGovernor
 
     gov = MemoryGovernor(process_budget_bytes=10_000, duckdb_budget_bytes=1_000)
     gov.register_layer("none", lambda target: 0)  # evict hook 不释放任何东西
@@ -48,7 +48,7 @@ def test_admission_probe_no_ghost():
 
 
 def test_check_admit_can_evict_real_layer():
-    from runtime.resource_governor import MemoryGovernor
+    from factor_engine.runtime.resource_governor import MemoryGovernor
 
     gov = MemoryGovernor(process_budget_bytes=10_000, duckdb_budget_bytes=1_000)
     gov.register_layer("lru", lambda target: 4_000)  # evict 释放 4000
@@ -65,7 +65,7 @@ def test_check_admit_can_evict_real_layer():
 
 
 def _gov_with_rss(budget: int):
-    from runtime.resource_governor import MemoryGovernor
+    from factor_engine.runtime.resource_governor import MemoryGovernor
 
     rss = {"v": 0}
     gov = MemoryGovernor(
@@ -81,7 +81,7 @@ def _set_frac(rss, budget, frac):
 
 
 def test_check_pre_warmup_only_normal():
-    from runtime.resource_governor import _STAGE_STOP_WARMUP
+    from factor_engine.runtime.resource_governor import _STAGE_STOP_WARMUP
 
     budget = 1_000_000
     gov, rss = _gov_with_rss(budget)
@@ -103,7 +103,7 @@ def test_check_pre_warmup_only_normal():
 
 
 def test_pressure_stage_all_threshold_boundaries():
-    from runtime.resource_governor import (
+    from factor_engine.runtime.resource_governor import (
         _STAGE_CRITICAL,
         _STAGE_EVICT_LRU,
         _STAGE_SPILL,
@@ -145,7 +145,7 @@ def test_pressure_stage_all_threshold_boundaries():
 
 
 def test_effective_cpu_slots_hard_clamp():
-    from runtime.resource_governor import effective_cpu_slots
+    from factor_engine.runtime.resource_governor import effective_cpu_slots
 
     # 容器 2 CPU / explicit 64 → 2（不能再 explicit 直接 return）
     assert effective_cpu_slots(explicit=64, hard_limit=2) == 2
@@ -154,7 +154,7 @@ def test_effective_cpu_slots_hard_clamp():
     assert effective_cpu_slots(explicit=1, hard_limit=2) == 1
     assert effective_cpu_slots(hard_limit=2) == 2
     # hard_limit 兜底探测
-    from runtime.resource_governor import _probe_hard_cpu_limit
+    from factor_engine.runtime.resource_governor import _probe_hard_cpu_limit
 
     assert effective_cpu_slots() == _probe_hard_cpu_limit()
 
@@ -165,7 +165,7 @@ def test_effective_cpu_slots_hard_clamp():
 
 
 def test_lazy_scan_thread_safety_final_state():
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     s = DataAccessSource(dataset="dummy", params={"lazy_scan": False, "read_auto": False})
     initial_lazy = s.lazy_scan
@@ -199,7 +199,7 @@ def test_lazy_scan_thread_safety_final_state():
 
 
 def test_lazy_scan_mixed_lazy_nonlazy_deterministic():
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     s = DataAccessSource(dataset="dummy", params={"lazy_scan": False, "read_auto": False})
     barrier = threading.Barrier(6)
@@ -237,7 +237,7 @@ def test_lazy_scan_mixed_lazy_nonlazy_deterministic():
 def test_persistent_cache_empty_multiindex_roundtrip(tmp_path):
     import pandas as pd
 
-    from storage.cache import PersistentPlanCache
+    from factor_engine.storage.cache import PersistentPlanCache
 
     idx = pd.MultiIndex.from_arrays([[], []], names=["timestamp", "instrument"])
     series = pd.Series(dtype="float64", index=idx)
@@ -256,7 +256,7 @@ def test_persistent_cache_empty_multiindex_roundtrip(tmp_path):
 def test_persistent_cache_empty_single_index_roundtrip(tmp_path):
     import pandas as pd
 
-    from storage.cache import PersistentPlanCache
+    from factor_engine.storage.cache import PersistentPlanCache
 
     series = pd.Series(
         dtype="float64",
@@ -279,8 +279,8 @@ def test_persistent_cache_empty_single_index_roundtrip(tmp_path):
 
 
 def test_lowering_semantic_hash_cache_invalidation(tmp_path):
-    import storage.cache as cache_mod
-    from storage.cache import PersistentPlanCache, _compiler_semantic_hash
+    import factor_engine.storage.cache as cache_mod
+    from factor_engine.storage.cache import PersistentPlanCache, _compiler_semantic_hash
 
     root = tmp_path / "plan_cache3"
     ns_before = PersistentPlanCache(root, data_scope="s1")._namespace_root()
@@ -298,8 +298,8 @@ def test_lowering_semantic_hash_cache_invalidation(tmp_path):
 
 
 def test_optimizer_semantic_version_cache_invalidation(tmp_path):
-    import storage.cache as cache_mod
-    from storage.cache import PersistentPlanCache, _compiler_semantic_hash
+    import factor_engine.storage.cache as cache_mod
+    from factor_engine.storage.cache import PersistentPlanCache, _compiler_semantic_hash
 
     root = tmp_path / "plan_cache4"
     ns_before = PersistentPlanCache(root, data_scope="s1")._namespace_root()
@@ -319,7 +319,7 @@ def test_optimizer_semantic_version_cache_invalidation(tmp_path):
 
 
 def test_cache_manager_overwrite_moves_to_mru():
-    from storage.cache import CacheManager
+    from factor_engine.storage.cache import CacheManager
 
     cache = CacheManager(budget_bytes=1024 * 1024)
     cache.set("a", [1.0])
@@ -333,7 +333,7 @@ def test_cache_manager_overwrite_moves_to_mru():
 def test_panel_cache_overwrite_moves_to_mru():
     import pandas as pd
 
-    from cache.panel_cache import PanelCache
+    from factor_engine.cache.panel_cache import PanelCache
 
     cache = PanelCache(budget_bytes=1024 * 1024)
     cache.set("a", pd.Series([1.0]))
@@ -345,7 +345,7 @@ def test_panel_cache_overwrite_moves_to_mru():
 def test_expression_cache_overwrite_moves_to_mru():
     import pandas as pd
 
-    from cache.expression_cache import ExpressionCache
+    from factor_engine.cache.expression_cache import ExpressionCache
 
     cache = ExpressionCache(budget_bytes=1024 * 1024)
     cache.set("s1", pd.Series([1.0]))
@@ -360,10 +360,10 @@ def test_expression_cache_overwrite_moves_to_mru():
 
 
 def test_cache_bytes_accounting_invariant():
-    import runtime.resource_governor as rrg
-    from runtime.resource_governor import estimate_object_bytes
+    import factor_engine.runtime.resource_governor as rrg
+    from factor_engine.runtime.resource_governor import estimate_object_bytes
 
-    from storage.cache import CacheManager
+    from factor_engine.storage.cache import CacheManager
 
     cache = CacheManager(budget_bytes=100_000, layer_name="invariant")
     cache.set("a", [0.0] * 10)
@@ -380,10 +380,10 @@ def test_cache_bytes_accounting_invariant():
 def test_memory_governor_cache_concurrent_stress():
     import random
 
-    import runtime.resource_governor as rrg
-    from runtime.resource_governor import MemoryGovernor, estimate_object_bytes
+    import factor_engine.runtime.resource_governor as rrg
+    from factor_engine.runtime.resource_governor import MemoryGovernor, estimate_object_bytes
 
-    from storage.cache import CacheManager
+    from factor_engine.storage.cache import CacheManager
 
     original = rrg._GLOBAL_GOVERNOR
     try:
@@ -437,8 +437,8 @@ def test_expression_cache_release_evict_lock_order():
 
     import pandas as pd
 
-    from cache.expression_cache import ExpressionCache
-    from runtime.resource_governor import MemoryGovernor
+    from factor_engine.cache.expression_cache import ExpressionCache
+    from factor_engine.runtime.resource_governor import MemoryGovernor
 
     gov = MemoryGovernor(process_budget_bytes=50_000, duckdb_budget_bytes=5_000)
     cache = ExpressionCache(budget_bytes=30_000, layer_name="expr_stress")
@@ -475,7 +475,7 @@ def test_expression_cache_release_evict_lock_order():
 
 
 def test_memory_governor_reserve_release_thread_safety():
-    from runtime.resource_governor import MemoryGovernor
+    from factor_engine.runtime.resource_governor import MemoryGovernor
 
     gov = MemoryGovernor(process_budget_bytes=1_000_000, duckdb_budget_bytes=100_000)
     barrier = threading.Barrier(8)
@@ -524,8 +524,8 @@ def test_memory_governor_reserve_release_thread_safety():
 
 
 def test_execution_context_wrapper_thread_isolation():
-    from backend.context import ExecutionContext
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.backend.context import ExecutionContext
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     inner = DataAccessSource(dataset="dummy", params={})
     barrier = threading.Barrier(4)
@@ -556,8 +556,8 @@ def test_execution_context_wrapper_thread_isolation():
 
 
 def test_lineage_wrapper_thread_isolation():
-    from backend.context import ExecutionContext
-    from storage.sources.data_access_source import (
+    from factor_engine.backend.context import ExecutionContext
+    from factor_engine.storage.sources.data_access_source import (
         DataAccessSource,
         _logical_wrapper_for,
     )
@@ -593,14 +593,14 @@ def test_lineage_wrapper_thread_isolation():
 
 
 def test_execution_resource_scope_strict_explicit():
-    from runtime.resource_governor import ExecutionResourceScope
+    from factor_engine.runtime.resource_governor import ExecutionResourceScope
 
     assert ExecutionResourceScope(strict=True).strict is True
     assert ExecutionResourceScope(strict=False).strict is False
 
 
 def test_execution_resource_scope_strict_env_fallback(monkeypatch):
-    from runtime.resource_governor import ExecutionResourceScope
+    from factor_engine.runtime.resource_governor import ExecutionResourceScope
 
     monkeypatch.setenv("FACTOR_ENGINE_RUN_MODE", "production")
     assert ExecutionResourceScope().strict is True
@@ -617,7 +617,7 @@ def test_execution_resource_scope_strict_env_fallback(monkeypatch):
 
 
 def test_corrupted_state_marker():
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     s = DataAccessSource(dataset="dummy", params={})
     assert s._corrupted_state is None
@@ -633,7 +633,7 @@ def test_corrupted_state_marker():
 
 
 def test_restore_on_closed_source_poisons():
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     s = DataAccessSource(dataset="dummy", params={"lazy_scan": True})
     s.close()

@@ -37,9 +37,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.base import ParamRole
-from cleaned_operators.closure import SameAxisError
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.base import ParamRole
+from factor_engine.cleaned_operators.closure import SameAxisError
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 _COMPOSITION_3PART = (
     "composition_clr_component",
@@ -59,10 +59,10 @@ _MISCLASSIFIED = ("eps", "market_cap", "turnover", "volume", "amount", "close")
 @pytest.fixture(scope="module")
 def _loaded():
     # Register the owned modules directly (see module docstring re: load_all).
-    import cleaned_operators.activity_clock  # noqa: F401
-    import cleaned_operators.composition  # noqa: F401
-    import cleaned_operators.update_clock  # noqa: F401
-    import cleaned_operators.volume_clock  # noqa: F401
+    import factor_engine.cleaned_operators.activity_clock  # noqa: F401
+    import factor_engine.cleaned_operators.composition  # noqa: F401
+    import factor_engine.cleaned_operators.update_clock  # noqa: F401
+    import factor_engine.cleaned_operators.volume_clock  # noqa: F401
 
 
 def _named_part(name: str, n: int = 8) -> pd.DataFrame:
@@ -163,7 +163,7 @@ def test_composition_schema_financial_statement_whole_is_finite(_loaded):
     listing it as a part double-counts).  The composition gate now REJECTS them
     as known non-composable parts — the old "financial_statement" auto-schema
     was an invalid part-whole and is removed."""
-    from cleaned_operators.composition import _same_composition
+    from factor_engine.cleaned_operators.composition import _same_composition
 
     with pytest.raises(ValueError, match="not a mutually-exclusive part|double-count"):
         _same_composition(
@@ -174,7 +174,7 @@ def test_composition_schema_financial_statement_whole_is_finite(_loaded):
 def test_composition_schema_unknown_part_fields_pass(_loaded):
     """Unknown (caller-supplied CompositionSchema) part fields pass the gate —
     e.g. volume-by-bucket shares / holder shares, which ARE composable."""
-    from cleaned_operators.composition import _same_composition
+    from factor_engine.cleaned_operators.composition import _same_composition
 
     parts = [
         _named_part("share_of_volume_bucket_1"),
@@ -195,7 +195,7 @@ def test_composition_family_mismatch_still_rejected(_loaded):
     error (tested at the gate level — composition_id is an internal keyword).
     R26-096..099: revenue/net_income/total_assets are now KNOWN non-composable
     parts, so they are rejected at the gate regardless of composition_id."""
-    from cleaned_operators.composition import _same_composition
+    from factor_engine.cleaned_operators.composition import _same_composition
 
     parts = [
         _named_part("revenue"),
@@ -210,7 +210,7 @@ def test_composition_family_mismatch_still_rejected(_loaded):
 # P0-O #78 — activity_clock._align fails closed
 # ---------------------------------------------------------------------------
 def test_activity_clock_align_raises_on_date_shift(_loaded):
-    from cleaned_operators.activity_clock import _align
+    from factor_engine.cleaned_operators.activity_clock import _align
 
     a = pd.DataFrame({"A": [1.0, 2.0]}, index=[0, 1])
     b = pd.DataFrame({"A": [1.0, 2.0]}, index=[0, 2])  # date shifted one slot
@@ -219,7 +219,7 @@ def test_activity_clock_align_raises_on_date_shift(_loaded):
 
 
 def test_activity_clock_align_raises_on_stock_column_change(_loaded):
-    from cleaned_operators.activity_clock import _align
+    from factor_engine.cleaned_operators.activity_clock import _align
 
     a = pd.DataFrame({"A": [1.0, 2.0]}, index=[0, 1])
     b = pd.DataFrame({"B": [1.0, 2.0]}, index=[0, 1])  # different stock column
@@ -238,7 +238,7 @@ def test_activity_clock_operator_rejects_misaligned_panels(_loaded):
 
 
 def test_activity_clock_align_passes_on_exact_match(_loaded):
-    from cleaned_operators.activity_clock import _align
+    from factor_engine.cleaned_operators.activity_clock import _align
 
     idx = pd.date_range("2024-01-01", periods=5, freq="D")
     a = pd.DataFrame(np.ones((5, 2)), index=idx, columns=["A", "B"])
@@ -358,7 +358,7 @@ def test_volume_clock_roughness_also_fails_zero_price_mismatch(_loaded):
 # P0-O #81 — volume clock: explicit session-open anchor at Q=0
 # ---------------------------------------------------------------------------
 def test_volume_clock_path_q0_uses_session_open(_loaded):
-    from cleaned_operators.volume_clock import _volume_clock_log_path
+    from factor_engine.cleaned_operators.volume_clock import _volume_clock_log_path
 
     price = np.linspace(10.0, 12.0, 30)
     activity = np.ones(30)
@@ -368,7 +368,7 @@ def test_volume_clock_path_q0_uses_session_open(_loaded):
 
 
 def test_volume_clock_path_q0_fallback_first_bar(_loaded):
-    from cleaned_operators.volume_clock import _volume_clock_log_path
+    from factor_engine.cleaned_operators.volume_clock import _volume_clock_log_path
 
     price = np.linspace(10.0, 12.0, 30)
     activity = np.ones(30)
@@ -426,7 +426,7 @@ def test_volume_clock_buckets_off_grid_rejected(_loaded):
 # Regression: owned-module canonical surfaces
 # ---------------------------------------------------------------------------
 def test_new_canonicals_on_extended_surface(_loaded):
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     cls = classify_canonical("ts_activity_clock_lagged_value_prior")
     assert cls in ("extended", "daily")

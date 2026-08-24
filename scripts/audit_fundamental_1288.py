@@ -16,10 +16,10 @@ from fundamental_cold_start import EXPECTED_FILENAME, load_cold_start
 
 
 def audit_row(row: dict[str, str]) -> dict[str, object]:
-    from api.dsl_parser import parse_expr
-    from ir.analyzer import Analyzer
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.ir.analyzer import Analyzer
     from fundamental_rewrites import rewrite_for
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     factor_id = row["factor_id"]
     rewrite = rewrite_for(factor_id)
@@ -40,8 +40,8 @@ def audit_row(row: dict[str, str]) -> dict[str, object]:
     try:
         expr = parse_expr(formula, surface="compat_research", dialect="lqtp", dialect_version="2026-07-19")
         analysis = Analyzer().lower(expr)
-        from cleaned_operators.registry import OperatorRegistry
-        from backend.sql_tiers import is_sql_implemented
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+        from factor_engine.backend.sql_tiers import is_sql_implemented
         operator_backends = {}
         for operator in sorted(set(str(value) for value in str(row.get("operators", "")).split("|") if value)):
             canonical = OperatorRegistry.resolve_canonical_optional(operator)
@@ -77,7 +77,7 @@ def audit_row(row: dict[str, str]) -> dict[str, object]:
 
 
 def main() -> int:
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
     load_all()
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=Path, default=FE_ROOT.parent / EXPECTED_FILENAME)

@@ -2,7 +2,7 @@
 """numeric_semantics 契约。"""
 from __future__ import annotations
 
-from backend.numeric_semantics import semantics_for, std_ddof_value
+from factor_engine.backend.numeric_semantics import semantics_for, std_ddof_value
 
 
 def test_protected_div_semantics():
@@ -19,7 +19,7 @@ def test_zscore_zero_std():
 
 
 def test_zscore_zero_std_fill():
-    from backend.numeric_semantics import zscore_zero_std_fill
+    from factor_engine.backend.numeric_semantics import zscore_zero_std_fill
 
     assert zscore_zero_std_fill("zscore") == 0.0
     assert zscore_zero_std_fill("group_zscore") == 0.0
@@ -30,6 +30,6 @@ def test_group_rank_semantics():
 
 
 def test_sql_stddev_fn_key_sample():
-    from backend.numeric_semantics import sql_stddev_fn_key
+    from factor_engine.backend.numeric_semantics import sql_stddev_fn_key
 
     assert sql_stddev_fn_key("group_zscore") == "stddev"

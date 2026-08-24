@@ -240,7 +240,7 @@ def test_generated_matrix_doc_covers_new_event_state_canonicals() -> None:
     import scripts.generate_physical_implementation_matrix as gen
 
     gen._bootstrap()
-    from cleaned_operators.registry import OperatorRegistry as _Reg
+    from factor_engine.cleaned_operators.registry import OperatorRegistry as _Reg
 
     assert _Reg._aliases.get("state_episode_duration") == "state_age"
 

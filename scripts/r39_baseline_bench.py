@@ -18,11 +18,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from api import rank, ts_mean, ts_std, ts_sum
-from api.columns import col
-from api.factor import Factor
-from backend.pandas_backend import PandasBackend
-from runtime.engine import FactorEngine
+from factor_engine.api import rank, ts_mean, ts_std, ts_sum
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 OUT = Path("build/r39_evidence")

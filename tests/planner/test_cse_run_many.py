@@ -5,17 +5,17 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from api.columns import col
-from api.factor import Factor
-from api import rank, ts_mean
-from backend.pandas_backend import PandasBackend
-from backend.context import ExecutionContext
-from planner.cse import apply_cse
-from planner.logical_plan import PlanNode
-from planner.lowerer import Lowerer
-from planner.optimizer import Optimizer
-from ir.analyzer import Analyzer
-from runtime.engine import FactorEngine
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.api import rank, ts_mean
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.planner.cse import apply_cse
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.lowerer import Lowerer
+from factor_engine.planner.optimizer import Optimizer
+from factor_engine.ir.analyzer import Analyzer
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 
@@ -61,8 +61,8 @@ def test_run_many_matches_separate_runs():
 
 
 def test_optimizer_folds_literal_add():
-    from api import add
-    from expr.literal import Literal
+    from factor_engine.api import add
+    from factor_engine.expr.literal import Literal
 
     e = add(Literal(2.0), Literal(3.0))
     analysis = Analyzer().lower(e)

@@ -14,10 +14,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from runtime.resource_errors import ResourceBudgetExceeded
-from runtime.resource_governor import estimate_object_bytes
+from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
+from factor_engine.runtime.resource_governor import estimate_object_bytes
 
-logger = logging.getLogger("runtime.result_budget")
+logger = logging.getLogger("factor_engine.runtime.result_budget")
 
 
 def effective_result_budget_bytes(perf: Any) -> int | None:

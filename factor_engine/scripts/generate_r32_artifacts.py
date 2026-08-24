@@ -92,7 +92,7 @@ def main() -> None:
     # R32_CATALOG_PRAGMA_AUDIT.json + integrity
     import tempfile
 
-    from storage.catalog import FactorCatalog
+    from factor_engine.storage.catalog import FactorCatalog
 
     with tempfile.TemporaryDirectory() as tmp:
         cat = FactorCatalog(os.path.join(tmp, "c.sqlite"))
@@ -111,7 +111,7 @@ def main() -> None:
         cat.close()
 
     # R32_FACTOR_ID_SAFETY_TESTS.json
-    from security.factor_id import (
+    from factor_engine.security.factor_id import (
         validate_factor_id,
         confine_path,
         FactorIdError,
@@ -174,8 +174,8 @@ def main() -> None:
     )
 
     # R32_CSE_REACHABILITY_AUDIT.json
-    from planner.logical_plan import PlanNode
-    from planner.cse import apply_cse, verify_cse_dag
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.planner.cse import apply_cse, verify_cse_dag
 
     def lit(v):
         return PlanNode(op="literal", attrs={"value": v}, inputs=[])
@@ -205,7 +205,7 @@ def main() -> None:
     )
 
     # R32_COLD_START_OPERATOR_SYNC.json + RECIPE
-    from cleaned_operators.tombstones import ALL_TOMBSTONED_NAMES
+    from factor_engine.cleaned_operators.tombstones import ALL_TOMBSTONED_NAMES
     import re
 
     def _refs(root_dir: str) -> list[str]:

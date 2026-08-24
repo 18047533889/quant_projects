@@ -107,10 +107,10 @@ def main() -> int:
     sha = git_sha()
     now = time.strftime("%Y-%m-%dT%H:%M:%S%z")
 
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
-    from cleaned_operators.operator_surface import classify_canonical
-    from cleaned_operators.operator_policy import infer_operator_policy
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
 
     load_all()
 

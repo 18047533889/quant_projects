@@ -73,10 +73,10 @@ def _sample() -> list[str]:
     gate focused on the operators THIS round changed + known-good rolling
     kernels so it stays green under heavy concurrent load.
     """
-    import cleaned_operators as co
+    import factor_engine.cleaned_operators as co
 
     co.load_all()
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     all_c = list(OperatorRegistry.list_canonical())
     wanted = list(_AUDIT_TARGETS) + list(_WELL_DECLARED)

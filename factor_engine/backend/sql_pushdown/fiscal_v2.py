@@ -53,7 +53,7 @@ def _revision_policy(node, input_index: int) -> str:
 
 
 def _compile_period_lag(node, dialect):
-    from backend.sql_pushdown import emitter
+    from factor_engine.backend.sql_pushdown import emitter
 
     if dialect != emitter.SqlDialect.DUCKDB or len(node.inputs) < 2:
         return None
@@ -83,7 +83,7 @@ def _compile_period_lag(node, dialect):
 
 
 def _lag_node(node, periods: int, policy: str):
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     return PlanNode(
         op="period_lag",
@@ -93,7 +93,7 @@ def _lag_node(node, periods: int, policy: str):
 
 
 def _compile_change_cagr_yoy(node, dialect):
-    from backend.sql_pushdown import emitter
+    from factor_engine.backend.sql_pushdown import emitter
 
     op = node.op
     if dialect != emitter.SqlDialect.DUCKDB or len(node.inputs) < 2:
@@ -156,7 +156,7 @@ def _compile_change_cagr_yoy(node, dialect):
 
 
 def _compile_average_ttm(node, dialect):
-    from backend.sql_pushdown import emitter
+    from factor_engine.backend.sql_pushdown import emitter
 
     op = node.op
     if dialect != emitter.SqlDialect.DUCKDB or len(node.inputs) < 2:
@@ -193,8 +193,8 @@ def _compile_average_ttm(node, dialect):
 
 
 def _compile_quarter(node, dialect):
-    from backend.sql_pushdown import emitter
-    from planner.logical_plan import PlanNode
+    from factor_engine.backend.sql_pushdown import emitter
+    from factor_engine.planner.logical_plan import PlanNode
 
     if dialect != emitter.SqlDialect.DUCKDB or len(node.inputs) < 3:
         return None
@@ -232,8 +232,8 @@ def _compile_quarter(node, dialect):
 
 
 def _compile_ttm_cumulative(node, dialect):
-    from backend.sql_pushdown import emitter
-    from planner.logical_plan import PlanNode
+    from factor_engine.backend.sql_pushdown import emitter
+    from factor_engine.planner.logical_plan import PlanNode
 
     if dialect != emitter.SqlDialect.DUCKDB or len(node.inputs) < 3:
         return None
@@ -275,7 +275,7 @@ def apply_fiscal_sql_v2() -> None:
     global _APPLIED, _ORIGINAL_COMPILE_LAYER
     if _APPLIED:
         return
-    from backend.sql_pushdown import emitter
+    from factor_engine.backend.sql_pushdown import emitter
 
     _ORIGINAL_COMPILE_LAYER = emitter._compile_layer
 

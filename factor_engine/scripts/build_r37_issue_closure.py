@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, ".")
 sys.path.insert(0, "..")
 
-from backend.evidence_provenance import current_commit_sha  # noqa: E402
+from factor_engine.backend.evidence_provenance import current_commit_sha  # noqa: E402
 
 E = Path("docs/evidence/r37")
 

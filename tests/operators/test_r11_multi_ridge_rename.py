@@ -33,9 +33,9 @@ pl = pytest.importorskip("polars")
 # Importing the module registers this module's operators (and the deprecated
 # alias) directly into the shared OperatorRegistry — fast, and independent of
 # the heavy session-wide load_all.
-import cleaned_operators.weighted_moment_ext as _wm_ext  # noqa: E402,F401
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
-from cleaned_operators.weighted_moment_ext import _RIDGE  # noqa: E402
+import factor_engine.cleaned_operators.weighted_moment_ext as _wm_ext  # noqa: E402,F401
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators.weighted_moment_ext import _RIDGE  # noqa: E402
 
 _NEW = "cs_multi_ridge_resid"
 _OLD = "cs_multi_robust_resid"

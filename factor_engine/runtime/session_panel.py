@@ -28,7 +28,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from runtime.session_calendar import SessionCalendar
+from factor_engine.runtime.session_calendar import SessionCalendar
 
 _EPS = 1e-12
 

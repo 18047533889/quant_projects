@@ -228,7 +228,7 @@ def _cpu_model() -> str:
 
 def _effective_cores() -> int:
     try:
-        from runtime.resource_governor import effective_cpu_slots
+        from factor_engine.runtime.resource_governor import effective_cpu_slots
 
         return max(1, effective_cpu_slots())
     except Exception:
@@ -285,7 +285,7 @@ def _build_identity() -> str:
     except Exception:
         pass
     try:
-        from runtime.lineage import resolve_git_commit_hash
+        from factor_engine.runtime.lineage import resolve_git_commit_hash
 
         git = resolve_git_commit_hash() or ""
     except Exception:
@@ -301,7 +301,7 @@ def _market_id() -> str:
     if raw:
         return raw
     try:
-        from storage.trading_calendar import infer_market
+        from factor_engine.storage.trading_calendar import infer_market
 
         return infer_market() or "unknown"
     except Exception:
@@ -311,8 +311,8 @@ def _market_id() -> str:
 def _resolve_pi_id(operator: str, backend: str) -> str:
     """解析算子/backend 的 PhysicalImplementationID（best-effort，失败 "unknown"）。"""
     try:
-        from cleaned_operators.registry import OperatorRegistry
-        from backend.operator_capability import _declared_physical_spec
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+        from factor_engine.backend.operator_capability import _declared_physical_spec
 
         impl = OperatorRegistry.get(str(operator), str(backend), mode="any")
         if impl is None:
@@ -396,7 +396,7 @@ def default_calibration_path() -> str:
     """
     run_mode = "research"
     try:
-        from runtime.production_policy import resolve_run_mode
+        from factor_engine.runtime.production_policy import resolve_run_mode
 
         run_mode = resolve_run_mode()
     except Exception:

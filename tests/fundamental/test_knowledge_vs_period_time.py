@@ -8,8 +8,8 @@ record that announcement PIT and revision-vintage PIT are distinct.
 """
 from __future__ import annotations
 
-from fields.catalog import ASHARE_TABLE_SPECS
-from fields.catalog_us import US_TABLE_SPECS
+from factor_engine.fields.catalog import ASHARE_TABLE_SPECS
+from factor_engine.fields.catalog_us import US_TABLE_SPECS
 
 _FIN_TABLES_A = {"StockIncome", "StockBalance", "StockCashFlow", "StockIndicator"}
 _FIN_TABLES_US = {"StockIncome", "StockBalance", "StockCashFlow"}

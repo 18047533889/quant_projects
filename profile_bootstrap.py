@@ -86,32 +86,32 @@ profiler = BootstrapProfiler()
 def profile_bootstrap():
     """Run instrumented bootstrap."""
     import importlib
-    from cleaned_operators import _load_all_impl, BOOTSTRAP_MODULE_SPECS, BootstrapModuleRole
+    from factor_engine.cleaned_operators import _load_all_impl, BOOTSTRAP_MODULE_SPECS, BootstrapModuleRole
 
     # Track overall phases
     phase_start = time.perf_counter()
 
     # Evidence delta
     start = time.perf_counter()
-    from backend.evidence_delta import install_evidence_delta
+    from factor_engine.backend.evidence_delta import install_evidence_delta
     install_evidence_delta()
     profiler.record("install_evidence_delta", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # Production signature
     start = time.perf_counter()
-    from backend.production_signature_v2 import apply_production_signature_v2
+    from factor_engine.backend.production_signature_v2 import apply_production_signature_v2
     apply_production_signature_v2()
     profiler.record("apply_production_signature_v2", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # Registration audit
     start = time.perf_counter()
-    from cleaned_operators.registration_audit import install_registration_audit
+    from factor_engine.cleaned_operators.registration_audit import install_registration_audit
     install_registration_audit()
     profiler.record("install_registration_audit", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # Bootstrap module spec check
     start = time.perf_counter()
-    from cleaned_operators import check_bootstrap_module_specs
+    from factor_engine.cleaned_operators import check_bootstrap_module_specs
     check_bootstrap_module_specs()
     profiler.record("check_bootstrap_module_specs", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
@@ -134,7 +134,7 @@ def profile_bootstrap():
             if duration > 100:  # Track modules taking > 100ms
                 slow_modules.append((spec.module, duration))
         except ImportError as exc:
-            from cleaned_operators.common._polars_bridge import should_skip_optional_import_error
+            from factor_engine.cleaned_operators.common._polars_bridge import should_skip_optional_import_error
             if not should_skip_optional_import_error(exc, spec.module):
                 raise
 
@@ -143,56 +143,56 @@ def profile_bootstrap():
 
     # Semantic certification
     start = time.perf_counter()
-    from cleaned_operators.semantic_certification import snapshot_registered_statuses, stamp_compatibility_metadata
+    from factor_engine.cleaned_operators.semantic_certification import snapshot_registered_statuses, stamp_compatibility_metadata
     snapshot_registered_statuses()
     stamp_compatibility_metadata()
     profiler.record("semantic_certification", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # Deduplication
     start = time.perf_counter()
-    from cleaned_operators._dedupe import apply_operator_deduplication
+    from factor_engine.cleaned_operators._dedupe import apply_operator_deduplication
     apply_operator_deduplication()
     profiler.record("apply_operator_deduplication", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # Operator overhaul
     start = time.perf_counter()
-    from cleaned_operators.operator_overhaul import finalize_operator_overhaul
+    from factor_engine.cleaned_operators.operator_overhaul import finalize_operator_overhaul
     finalize_operator_overhaul()
     profiler.record("finalize_operator_overhaul", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # LQTP policy
     start = time.perf_counter()
-    from cleaned_operators.lqtp_policy_patch import apply_lqtp_policy_patch
+    from factor_engine.cleaned_operators.lqtp_policy_patch import apply_lqtp_policy_patch
     apply_lqtp_policy_patch()
     profiler.record("apply_lqtp_policy_patch", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # Research factor enable
     start = time.perf_counter()
-    from cleaned_operators.research_factor_enable import enable_research_factor_runtime
+    from factor_engine.cleaned_operators.research_factor_enable import enable_research_factor_runtime
     enable_research_factor_runtime()
     profiler.record("enable_research_factor_runtime", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # Layer governance
     start = time.perf_counter()
-    from cleaned_operators.layer_governance import finalize_layer_governance
+    from factor_engine.cleaned_operators.layer_governance import finalize_layer_governance
     finalize_layer_governance()
     profiler.record("finalize_layer_governance", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # Post governance
     start = time.perf_counter()
-    from cleaned_operators.layer_governance_post import apply_post_governance
+    from factor_engine.cleaned_operators.layer_governance_post import apply_post_governance
     apply_post_governance()
     profiler.record("apply_post_governance", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # Production hardening
     start = time.perf_counter()
-    from cleaned_operators.production_hardening import apply_production_hardening
+    from factor_engine.cleaned_operators.production_hardening import apply_production_hardening
     apply_production_hardening()
     profiler.record("apply_production_hardening", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # Fiscal strict
     fiscal_start = time.perf_counter()
-    from cleaned_operators import fiscal_strict, fiscal_event_ops, replace_backend, record_backend_replacement_after
+    from factor_engine.cleaned_operators import fiscal_strict, fiscal_event_ops, replace_backend, record_backend_replacement_after
     for _canonical in (
         "period_lag", "period_change", "period_average", "period_cagr",
         "quarter_from_cumulative", "ttm_from_quarterly", "ttm_from_cumulative",
@@ -206,61 +206,61 @@ def profile_bootstrap():
 
     # Polars contracts
     start = time.perf_counter()
-    from cleaned_operators.overhaul.cleanup import _attach_explicit_polars_contracts
+    from factor_engine.cleaned_operators.overhaul.cleanup import _attach_explicit_polars_contracts
     _attach_explicit_polars_contracts()
     profiler.record("_attach_explicit_polars_contracts", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # Registration audit finalize
     start = time.perf_counter()
-    from cleaned_operators.registration_audit import finalize_registration_audit
+    from factor_engine.cleaned_operators.registration_audit import finalize_registration_audit
     finalize_registration_audit()
     profiler.record("finalize_registration_audit", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # SQL backends
     start = time.perf_counter()
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
     register_sql_backends()
     profiler.record("register_sql_backends", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # Polars gap coverage
     start = time.perf_counter()
-    from cleaned_operators.polars_gap_coverage import register_polars_gap_coverage
+    from factor_engine.cleaned_operators.polars_gap_coverage import register_polars_gap_coverage
     register_polars_gap_coverage()
     profiler.record("register_polars_gap_coverage", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # Fiscal SQL v2
     start = time.perf_counter()
-    from backend.sql_pushdown.fiscal_v2 import apply_fiscal_sql_v2
+    from factor_engine.backend.sql_pushdown.fiscal_v2 import apply_fiscal_sql_v2
     apply_fiscal_sql_v2()
     profiler.record("apply_fiscal_sql_v2", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # Evidence certification overlay
     start = time.perf_counter()
-    from cleaned_operators.production_certification_overlay import apply_evidence_certification_overlay
+    from factor_engine.cleaned_operators.production_certification_overlay import apply_evidence_certification_overlay
     apply_evidence_certification_overlay()
     profiler.record("apply_evidence_certification_overlay", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # Contract hardening
     start = time.perf_counter()
-    from cleaned_operators.contract_hardening import apply_final_contract_hardening
+    from factor_engine.cleaned_operators.contract_hardening import apply_final_contract_hardening
     apply_final_contract_hardening()
     profiler.record("apply_final_contract_hardening", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # Param role backfill
     start = time.perf_counter()
-    from cleaned_operators.param_role_contract import backfill_scalar_roles
+    from factor_engine.cleaned_operators.param_role_contract import backfill_scalar_roles
     backfill_scalar_roles()
     profiler.record("backfill_scalar_roles", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # Stateful migration
     start = time.perf_counter()
-    from cleaned_operators.stateful_contract_migration import apply_stateful_contract_migration
+    from factor_engine.cleaned_operators.stateful_contract_migration import apply_stateful_contract_migration
     apply_stateful_contract_migration()
     profiler.record("apply_stateful_contract_migration", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 
     # Axis effects
     start = time.perf_counter()
-    from ir.types import register_axis_effects_for_surface
+    from factor_engine.ir.types import register_axis_effects_for_surface
     register_axis_effects_for_surface()
     profiler.record("register_axis_effects_for_surface", (time.perf_counter() - start) * 1000, "bootstrap_phases")
 

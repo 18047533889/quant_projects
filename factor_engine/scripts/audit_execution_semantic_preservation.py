@@ -107,7 +107,7 @@ def _semantic_attrs(node: Any) -> dict[str, Any]:
 def _structural_hash(plan: Any) -> str:
     """结构哈希：尽力用 plan_hash.structural_key，否则回退 AST 序列化。"""
     try:
-        from planner.plan_hash import structural_key
+        from factor_engine.planner.plan_hash import structural_key
 
         return structural_key(plan)
     except Exception:
@@ -138,7 +138,7 @@ def _semantic_digest(plan: Any) -> str:
 
 def _source_dependency_hash(plan: Any) -> str:
     try:
-        from planner.source_dependencies import source_dependency_hash
+        from factor_engine.planner.source_dependencies import source_dependency_hash
 
         return source_dependency_hash(plan) or ""
     except Exception:
@@ -147,7 +147,7 @@ def _source_dependency_hash(plan: Any) -> str:
 
 def _history_hash(canonical: str, params: dict[str, Any]) -> str:
     try:
-        from runtime.execution_contract import history_requirement
+        from factor_engine.runtime.execution_contract import history_requirement
 
         req = history_requirement(canonical, params)
         return _stable_hash(
@@ -214,7 +214,7 @@ def _run_single_canonical(canonical: str) -> AuditRow:
     row = AuditRow(canonical=canonical, execution_kind="unknown", scope="unknown", statefulness="unknown")
     params: dict[str, Any] = {"window": 5}
     try:
-        from planner.composite_lowering import infer_execution_contract
+        from factor_engine.planner.composite_lowering import infer_execution_contract
 
         contract = infer_execution_contract(canonical)
         row.execution_kind = contract.execution
@@ -226,7 +226,7 @@ def _run_single_canonical(canonical: str) -> AuditRow:
     # 构造一个可求值的 probe IR/plan：ts_mean(close, 5) 风格的原始计划。
     plan = None
     try:
-        from planner.logical_plan import PlanNode
+        from factor_engine.planner.logical_plan import PlanNode
 
         col = PlanNode(op="column", attrs={"name": "close"}, inputs=[])
         plan = PlanNode(
@@ -236,7 +236,7 @@ def _run_single_canonical(canonical: str) -> AuditRow:
         )
         row.stages.append(_sample_stage("ir", plan, canonical, params))
         # logical / lowered / optimized
-        from planner.optimizer import Optimizer
+        from factor_engine.planner.optimizer import Optimizer
 
         logical = plan
         row.stages.append(_sample_stage("logical", logical, canonical, params))
@@ -302,7 +302,7 @@ def _sample_stage(stage: str, plan: Any, canonical: str, params: dict[str, Any])
 
 def _try_lower(plan: Any) -> Any:
     try:
-        from planner.composite_lowering import lower_composite_operators
+        from factor_engine.planner.composite_lowering import lower_composite_operators
 
         return lower_composite_operators(plan)
     except Exception:
@@ -311,7 +311,7 @@ def _try_lower(plan: Any) -> Any:
 
 def _try_optimize(plan: Any) -> Any:
     try:
-        from planner.optimizer import Optimizer
+        from factor_engine.planner.optimizer import Optimizer
 
         return Optimizer().optimize(plan)
     except Exception:
@@ -325,7 +325,7 @@ def _try_optimize(plan: Any) -> Any:
 def _retained_canonicals() -> list[str]:
     """retained canonical：优先全库，失败时用已知子集。"""
     try:
-        from planner.composite_lowering import list_composite_lowerings
+        from factor_engine.planner.composite_lowering import list_composite_lowerings
 
         names = sorted(list_composite_lowerings())
         if names:

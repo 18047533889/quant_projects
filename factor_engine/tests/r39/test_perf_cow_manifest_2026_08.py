@@ -23,12 +23,12 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from storage.materialize.factor_matrix_materializer import (
+from factor_engine.storage.materialize.factor_matrix_materializer import (
     FactorMatrixMaterializer,
     _read_manifest,
     _write_manifest_atomic,
 )
-from storage.partition_object_ref import (
+from factor_engine.storage.partition_object_ref import (
     PartitionObjectRef,
     build_partition_inventory,
     content_id_for,

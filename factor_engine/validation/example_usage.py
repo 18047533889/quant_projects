@@ -14,7 +14,7 @@ from datetime import datetime
 
 def compute_factor_with_validation():
     """Compute a factor with full validation pipeline."""
-    from validation import (
+    from factor_engine.validation import (
         check_data_quality,
         sanitize_factor_inputs,
         validate_factor_batch,
@@ -98,7 +98,7 @@ def compute_factor_with_validation():
 
 def example_feature_bundle_validation():
     """Example of feature bundle validation."""
-    from validation import validate_feature_bundle
+    from factor_engine.validation import validate_feature_bundle
 
     print("\n" + "=" * 80)
     print("FEATURE BUNDLE VALIDATION EXAMPLE")
@@ -126,7 +126,7 @@ def example_feature_bundle_validation():
 
 def example_prediction_validation():
     """Example of prediction batch validation."""
-    from validation import validate_prediction_batch
+    from factor_engine.validation import validate_prediction_batch
 
     print("\n" + "=" * 80)
     print("PREDICTION BATCH VALIDATION EXAMPLE")

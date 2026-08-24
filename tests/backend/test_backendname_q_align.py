@@ -18,8 +18,8 @@ import typing
 
 import pytest
 
-from backend.contracts import BackendFamily, BackendKind
-from backend.operator_capability import (
+from factor_engine.backend.contracts import BackendFamily, BackendKind
+from factor_engine.backend.operator_capability import (
     _REGISTRY_TO_CAPABILITY,
     OperatorCapabilitySummary,
     UnsupportedOperatorBackendError,
@@ -35,14 +35,14 @@ def test_registry_to_capability_maps_q_kdb_and_family_literals_agree():
     assert _REGISTRY_TO_CAPABILITY.get("q_kdb") == "q_kdb"
     # The mapped name must be a member of the BackendName Literal.
     assert "q_kdb" in typing.get_args(
-        __import__("backend.operator_capability", fromlist=["BackendName"]).BackendName
+        __import__("factor_engine.backend.operator_capability", fromlist=["BackendName"]).BackendName
     )
     # BackendFamily (contracts) and BackendKind (contracts) agree on the literal.
     assert BackendFamily.Q_KDB.value == "q_kdb"
     assert BackendKind.Q_KDB.value == "q_kdb"
     # planner.PhysicalBackend agrees too (no import cycle: planner imports backend).
-    from backend.operator_capability import _OperatorBackendRegistryStub
-    from planner.backend_region import PhysicalBackend, normalize_backend_name
+    from factor_engine.backend.operator_capability import _OperatorBackendRegistryStub
+    from factor_engine.planner.backend_region import PhysicalBackend, normalize_backend_name
 
     assert PhysicalBackend.Q_KDB.value == "q_kdb"
     for alias in ("q", "q_kdb", "kdb"):
@@ -76,8 +76,8 @@ def test_registry_to_capability_maps_q_kdb_and_family_literals_agree():
 
 def test_summary_and_status_expose_q_kdb_column_from_evidence_authority():
     """OperatorCapabilitySummary must carry a q_kdb column backed by evidence."""
-    from backend.contracts import BackendKind
-    from backend.operator_capability import BackendCapabilityRegistry
+    from factor_engine.backend.contracts import BackendKind
+    from factor_engine.backend.operator_capability import BackendCapabilityRegistry
 
     fields = OperatorCapabilitySummary.__dataclass_fields__
     assert "q_kdb" in fields, "OperatorCapabilitySummary missing q_kdb column"
@@ -107,7 +107,7 @@ def test_summary_and_status_expose_q_kdb_column_from_evidence_authority():
 
 def test_get_best_backend_routes_q_kdb_prefer_fail_closed(monkeypatch):
     """prefer='q_kdb' routes via the q evidence authority, fail-closed."""
-    import backend.operator_capability as oc
+    import factor_engine.backend.operator_capability as oc
 
     class _FakeRegistry:
         def backends_for(self, canonical):
@@ -119,21 +119,21 @@ def test_get_best_backend_routes_q_kdb_prefer_fail_closed(monkeypatch):
             return None
 
     monkeypatch.setattr(
-        "cleaned_operators.registry.OperatorRegistry.resolve_canonical",
+        "factor_engine.cleaned_operators.registry.OperatorRegistry.resolve_canonical",
         staticmethod(lambda name: name),
     )
     monkeypatch.setattr(
         oc, "resolve_canonical", lambda name: name, raising=False
     )
     monkeypatch.setattr(
-        "backend.operator_capability._pandas_status",
+        "factor_engine.backend.operator_capability._pandas_status",
         lambda canon: "unsupported",
         raising=False,
     )
 
     # 1) Eligible q status + registered q slot => routed to q_kdb.
     monkeypatch.setattr(
-        "backend.operator_capability._q_status",
+        "factor_engine.backend.operator_capability._q_status",
         lambda canon: "production_safe",
         raising=False,
     )
@@ -148,7 +148,7 @@ def test_get_best_backend_routes_q_kdb_prefer_fail_closed(monkeypatch):
 
     # 2) Ineligible q status (evidence denies) => explicit fail-closed error.
     monkeypatch.setattr(
-        "backend.operator_capability._q_status",
+        "factor_engine.backend.operator_capability._q_status",
         lambda canon: "implemented",
         raising=False,
     )
@@ -166,7 +166,7 @@ def test_get_best_backend_routes_q_kdb_prefer_fail_closed(monkeypatch):
             return None
 
     monkeypatch.setattr(
-        "backend.operator_capability._q_status",
+        "factor_engine.backend.operator_capability._q_status",
         lambda canon: "production_safe",
         raising=False,
     )

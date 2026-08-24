@@ -23,12 +23,12 @@ if str(_ROOT) not in sys.path:
 import numpy as np
 import pandas as pd
 
-from api.columns import col
-from api.factor import Factor
-from api import rank, ts_mean
-from backend.factory import build_backend
-from backend.pandas_compat import reset_pandas_module_cache_for_tests, resolve_pandas_module
-from runtime.engine import FactorEngine
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.api import rank, ts_mean
+from factor_engine.backend.factory import build_backend
+from factor_engine.backend.pandas_compat import reset_pandas_module_cache_for_tests, resolve_pandas_module
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 

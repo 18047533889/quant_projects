@@ -12,13 +12,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators as co
+import factor_engine.cleaned_operators as co
 
 co.load_all()
 
-from cleaned_operators.base import validate_operator_call
-from cleaned_operators.registry import OperatorRegistry
-from backend.operator_errors import OperatorParameterError
+from factor_engine.cleaned_operators.base import validate_operator_call
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.operator_errors import OperatorParameterError
 
 
 def _panels(n: int = 20, cols: tuple[str, ...] = ("A", "B")) -> pd.DataFrame:
@@ -54,8 +54,8 @@ def _sql_plan_rejects(canonical: str, kwargs: dict) -> bool:
     """The DuckDB/SQL backend is a marker operator validated at the emitter /
     planning layer, so a bad parameter must be rejected BEFORE lowering by the
     planner's pre-lowering ParamSpec validator (R6 P0-04)."""
-    from planner.logical_plan import PlanNode
-    from planner.optimizer import Optimizer
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.planner.optimizer import Optimizer
 
     probe = PlanNode(op=canonical, inputs=[PlanNode(op="column", attrs={"name": "close"}, inputs=[])], attrs=dict(kwargs))
     try:
@@ -72,8 +72,8 @@ def test_r6_a_valid_call_accepted_on_all_backends(canonical):
     verdicts = {b: _accept(op, (panel,), kwargs) for b, op in _ops(canonical).items()}
     assert all(verdicts.values()), f"{canonical}: valid call rejected on {[b for b, v in verdicts.items() if not v]}"
     # SQL/planning path accepts the same valid call.
-    from planner.optimizer import Optimizer
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.optimizer import Optimizer
+    from factor_engine.planner.logical_plan import PlanNode
     probe = PlanNode(op=canonical, inputs=[PlanNode(op="column", attrs={"name": "close"}, inputs=[])], attrs=dict(kwargs))
     Optimizer().optimize(probe, production=True)
 

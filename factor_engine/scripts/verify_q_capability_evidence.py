@@ -52,7 +52,7 @@ def main():
     )
     args = parser.parse_args()
 
-    from backend.q_backend.q_capability_evidence import (
+    from factor_engine.backend.q_backend.q_capability_evidence import (
         compute_q_capability_evidence,
         generate_capability_report,
         get_q_native_without_lowering,

@@ -2,8 +2,8 @@
 """DuckDB IEEE NaN/Inf edge case 注册（原生 fixture，不经 Pandas/Parquet）。"""
 from __future__ import annotations
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
 
 
 def _duck_col(name: str):

@@ -9,7 +9,7 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="legacy protected/price-volume primitives were removed from the active surface")
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 from tests.operator_golden.conftest import assert_panel_shape_unchanged
 
 

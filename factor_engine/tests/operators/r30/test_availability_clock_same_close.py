@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from cleaned_operators.availability_clock import (
+from factor_engine.cleaned_operators.availability_clock import (
     availability_clock_ok,
     default_available_at,
     default_same_session_usable,
@@ -60,7 +60,7 @@ def test_default_same_session_usable_for_session_end():
 def test_availability_invariant_order_documented():
     # The invariant is a constraint; the module documents it.  No execution path
     # in the availability clock violates it (pure inference helpers).
-    from cleaned_operators import availability_clock as ac
+    from factor_engine.cleaned_operators import availability_clock as ac
 
     doc = ac.__doc__ or ""
     assert "knowledge_time" in doc and "factor_available_time" in doc

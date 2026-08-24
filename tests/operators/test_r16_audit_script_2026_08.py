@@ -40,7 +40,7 @@ class _StubMetadata:
 
 
 def _spec(default, min=None, max=None, choices=None):
-    from cleaned_operators.base import ParamSpec
+    from factor_engine.cleaned_operators.base import ParamSpec
     kwargs = dict(dtype=float)
     if default is not None:
         kwargs["default"] = default
@@ -144,7 +144,7 @@ def test_manifest_gap_uses_eligible_admission():
         canonical = "ts_mean"
 
     import types
-    fake_mining = types.ModuleType("mining.operator_catalog")
+    fake_mining = types.ModuleType("factor_engine.mining.operator_catalog")
     fake_mining.get_mining_operators = _Fake()
     fake_mining.MiningRole = mod.MiningRole
     fake_mining.assign_mining_role = mod.assign_mining_role
@@ -152,7 +152,7 @@ def test_manifest_gap_uses_eligible_admission():
     fake_mining.mining_eligible = mod.mining_eligible
     # temporarily substitute in sys.modules under a fresh name via monkeypatch-lite
     import sys
-    key = "mining.operator_catalog"
+    key = "factor_engine.mining.operator_catalog"
     real = sys.modules.get(key)
     sys.modules[key] = fake_mining
     try:
@@ -298,7 +298,7 @@ def test_golden_null_runner_explicit_outcomes():
 
 def test_index_source_typed_not_relation():
     """R16-013: index_* operators require index_pit, never relation_pit."""
-    from mining.operator_catalog import _required_sources
+    from factor_engine.mining.operator_catalog import _required_sources
 
     assert _required_sources("index_member_ratio", {}) == ("index_pit",)
     assert _required_sources("index_relative_strength", {}) == ("index_pit",)
@@ -309,7 +309,7 @@ def test_index_source_typed_not_relation():
 
 def test_source_capability_concept_gap():
     """R16-014: source_id present but required concept missing -> concept gap."""
-    from mining.operator_catalog import (
+    from factor_engine.mining.operator_catalog import (
         SourceCapability, SourceRequirement, source_status,
     )
 
@@ -335,8 +335,8 @@ def test_source_capability_concept_gap():
 
 def test_target_frequency_strict_enum():
     """R16-018: unknown frequency strings raise."""
-    from mining.operator_catalog import TargetFrequency, bind_target_frequency
-    from backend.operator_errors import OperatorParameterError
+    from factor_engine.mining.operator_catalog import TargetFrequency, bind_target_frequency
+    from factor_engine.backend.operator_errors import OperatorParameterError
 
     assert bind_target_frequency("daily") is TargetFrequency.DAILY
     assert bind_target_frequency("minute") is TargetFrequency.MINUTE
@@ -346,7 +346,7 @@ def test_target_frequency_strict_enum():
 
 def test_market_support_fail_closed():
     """R16-019: specialized-but-undeclared market operators fail closed."""
-    from mining.operator_catalog import market_support
+    from factor_engine.mining.operator_catalog import market_support
 
     assert market_support("limit_up_close") == ("ashare",)
     assert market_support("suspension_gap_duration") == ()
@@ -356,7 +356,7 @@ def test_market_support_fail_closed():
 def test_mining_eligible_checks_market():
     """R16-017: direct mining_eligible with a market context rejects a
     market-mismatched operator (not only the outer get_mining_operators)."""
-    import mining.operator_catalog as M
+    import factor_engine.mining.operator_catalog as M
 
     orig = M.cost_contract_declared
     M.cost_contract_declared = lambda *a, **k: True

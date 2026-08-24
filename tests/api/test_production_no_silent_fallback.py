@@ -13,7 +13,7 @@ import pytest
 
 def test_top_docstring_no_longer_claims_silent_pandas_fallback():
     """api.mining_integration 顶层执行策略文档不得再声称 production 静默 pandas fallback。"""
-    import api.mining_integration as m
+    import factor_engine.api.mining_integration as m
 
     doc = m.__doc__ or ""
     # production 必须描述 planner 选择 certified plan，而不是 SQL→Polars→Pandas fallback。
@@ -32,8 +32,8 @@ def test_top_docstring_no_longer_claims_silent_pandas_fallback():
 
 def test_production_gate_rejects_unplanned_pandas_fallback():
     """production 模式下任何 unplanned pandas fallback 被 hard-gate（error 默认）。"""
-    from backend.context import ExecutionContext
-    from runtime.production_policy import (
+    from factor_engine.backend.context import ExecutionContext
+    from factor_engine.runtime.production_policy import (
         ProductionPolicyViolation,
         assert_no_production_pandas_fallbacks,
     )
@@ -53,8 +53,8 @@ def test_production_gate_rejects_unplanned_pandas_fallback():
 
 def test_production_gate_passes_when_no_fallback_or_warn_policy():
     """无 fallback 或 policy='warn' 时不抛错。"""
-    from backend.context import ExecutionContext
-    from runtime.production_policy import assert_no_production_pandas_fallbacks
+    from factor_engine.backend.context import ExecutionContext
+    from factor_engine.runtime.production_policy import assert_no_production_pandas_fallbacks
 
     clean = ExecutionContext(data_source=object(), run_mode="production")
     assert_no_production_pandas_fallbacks(clean)  # 无 fallback → 通过
@@ -74,8 +74,8 @@ def test_production_gate_passes_when_no_fallback_or_warn_policy():
 
 def test_research_mode_is_not_gated():
     """research 模式不触发 production pandas fallback hard-gate。"""
-    from backend.context import ExecutionContext
-    from runtime.production_policy import assert_no_production_pandas_fallbacks
+    from factor_engine.backend.context import ExecutionContext
+    from factor_engine.runtime.production_policy import assert_no_production_pandas_fallbacks
 
     research = ExecutionContext(
         data_source=object(),
@@ -92,7 +92,7 @@ def test_research_mode_is_not_gated():
 
 def test_failure_taxonomy_supports_explicit_replan_typed_semantics():
     """类型化失败含 retry/replan/shard/fallback/abort 语义；OOM 必须 replan 而非静默降级。"""
-    from runtime.exceptions import (
+    from factor_engine.runtime.exceptions import (
         OOMReplanRequired,
         ResourceAdmissionError,
         ResourceUnderpredictionError,

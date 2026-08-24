@@ -5,14 +5,14 @@ from __future__ import annotations
 
 
 def test_mining_datasets_contract_ok():
-    from api.mining_integration import audit_mining_datasets_contract
+    from factor_engine.api.mining_integration import audit_mining_datasets_contract
 
     report = audit_mining_datasets_contract()
     assert report["ok"], report.get("violations")
 
 
 def test_us_daily_market_summary_preset_registered():
-    from api.datasets_contract import audit_mining_dataset_contract
+    from factor_engine.api.datasets_contract import audit_mining_dataset_contract
 
     report = audit_mining_dataset_contract()
     assert "daily_market_summary" in report["datasets_checked"]
@@ -20,7 +20,7 @@ def test_us_daily_market_summary_preset_registered():
 
 
 def test_default_presets_follow_explicit_join_contracts():
-    from api.mining_integration import audit_default_data_source_configs
+    from factor_engine.api.mining_integration import audit_default_data_source_configs
 
     report = audit_default_data_source_configs()
     # A-share valuation follows its exact daily table contract; event/PIT
@@ -40,7 +40,7 @@ def test_default_presets_follow_explicit_join_contracts():
 
 
 def test_audit_flags_valuation_asof_join():
-    from api.mining_integration import audit_composite_join_policies
+    from factor_engine.api.mining_integration import audit_composite_join_policies
 
     cfg = {
         "type": "composite",

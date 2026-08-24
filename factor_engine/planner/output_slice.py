@@ -72,7 +72,7 @@ def compute_output_slice(
     try:
         import pandas as pd
 
-        from storage.time_window import _normalize_bound_for_index
+        from factor_engine.storage.time_window import _normalize_bound_for_index
     except Exception:  # noqa: BLE001
         return None
     index = result.index

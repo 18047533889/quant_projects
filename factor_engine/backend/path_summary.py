@@ -137,7 +137,7 @@ def _infer_fastpath_route(runtime: dict[str, Any]) -> str:
 
 def build_backend_path_summary(runtime: dict[str, Any] | None) -> dict[str, Any]:
     """Production 级 path summary JSON。"""
-    from backend.runtime_events import rebuild_runtime_from_events
+    from factor_engine.backend.runtime_events import rebuild_runtime_from_events
 
     r = rebuild_runtime_from_events(dict(runtime or {}))
     summary: dict[str, Any] = {
@@ -218,7 +218,7 @@ def summarize_lazy_caches(ctx: Any | None) -> dict[str, Any]:
 
 def snapshot_backend_path(runtime: dict[str, Any] | None) -> dict[str, Any]:
     """捕获单次 execute / run 的 backend path 摘要。"""
-    from backend.runtime_events import rebuild_runtime_from_events
+    from factor_engine.backend.runtime_events import rebuild_runtime_from_events
 
     r = rebuild_runtime_from_events(dict(runtime or {}))
     out: dict[str, Any] = {

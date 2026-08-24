@@ -29,7 +29,7 @@ PLAN_COST_TAGS: dict[str, PlanCostTags] = {
 
 
 def plan_cost_tags_for(canon: str) -> PlanCostTags:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     return PLAN_COST_TAGS.get(name, PlanCostTags("O(N)"))

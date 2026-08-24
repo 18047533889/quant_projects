@@ -11,8 +11,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.sql_pushdown.emitter import compile_plan_to_sql, plan_is_sql_capable
-from planner.logical_plan import PlanNode
+from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql, plan_is_sql_capable
+from factor_engine.planner.logical_plan import PlanNode
 
 _SQL_OPS: dict[str, tuple[tuple[str, ...], int]] = {
     "intraday_volatility_concentration": (("ret",), 240),
@@ -25,8 +25,8 @@ _SQL_OPS: dict[str, tuple[tuple[str, ...], int]] = {
 
 @pytest.fixture(scope="module", autouse=True)
 def _load():
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
@@ -41,7 +41,7 @@ def _plan(op: str, cols: tuple[str, ...], window: int) -> PlanNode:
 
 
 def test_sql_geometry_math_compiles():
-    from cleaned_operators import OperatorRegistry
+    from factor_engine.cleaned_operators import OperatorRegistry
 
     for op, (cols, w) in _SQL_OPS.items():
         plan = _plan(op, cols, w)
@@ -58,7 +58,7 @@ def test_sql_geometry_math_compiles():
 @pytest.mark.parametrize("op", sorted(_SQL_OPS))
 def test_sql_geometry_math_duckdb_parity(op):
     duckdb = pytest.importorskip("duckdb")
-    from cleaned_operators import OperatorRegistry
+    from factor_engine.cleaned_operators import OperatorRegistry
 
     rng = np.random.default_rng(11)
     mi = pd.date_range("2024-01-01", periods=240, freq="1min")

@@ -14,9 +14,9 @@ production certification.
 from __future__ import annotations
 
 import pytest
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from mining.direct_use import build_direct_use_operator
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.mining.direct_use import build_direct_use_operator
 
 # All 46 technical_signal canonicals from docs/R23_PER_CANONICAL_AUDIT.json
 TECHNICAL_SIGNAL_CANONICALS = frozenset({
@@ -109,7 +109,7 @@ class TestCertTechnicalSignalBaseline:
 
     def test_stale_evidence_artifact_is_blocker(self):
         """Confirm the evidence artifact is stale (root cause)."""
-        from backend.factor_operator_evidence import (
+        from factor_engine.backend.factor_operator_evidence import (
             factor_operator_evidence_valid,
             validation_errors,
         )

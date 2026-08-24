@@ -20,10 +20,10 @@ import datetime as _dt
 import pandas as pd
 import pytest
 
-import storage.catalog as _cat_module
-import storage.materialize.materializer as _mat_module
-from storage.materialize import ParquetMaterializer
-from storage.materialize.materializer import (
+import factor_engine.storage.catalog as _cat_module
+import factor_engine.storage.materialize.materializer as _mat_module
+from factor_engine.storage.materialize import ParquetMaterializer
+from factor_engine.storage.materialize.materializer import (
     get_post_write_watermark_readback_count,
     reset_post_write_watermark_readback_count,
 )

@@ -6,10 +6,10 @@ from unittest.mock import patch
 
 import pytest
 
-from backend.context import ExecutionContext
-from backend.sql_backend import SqlBackend
-from planner.logical_plan import PlanNode
-from planner.physical_plan import PhysicalPlan
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.backend.sql_backend import SqlBackend
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.physical_plan import PhysicalPlan
 
 
 def _physical(*, fully_sql: bool = False, subtrees: dict | None = None) -> PhysicalPlan:
@@ -26,9 +26,9 @@ def test_all_sql_fallback_does_not_mark_used_sql_pushdown():
     backend = SqlBackend(operator_backend="pandas_numpy")
     ctx = ExecutionContext(data_source=object())
 
-    with patch("backend.sql_backend.lower_to_physical_plan", return_value=_physical(subtrees={"s1": sub})):
-        with patch("backend.sql_backend.try_execute_sql_pushdown", return_value=None):
-            with patch("backend.sql_backend.try_execute_sql_pushdown_batch", return_value=None):
+    with patch("factor_engine.backend.sql_backend.lower_to_physical_plan", return_value=_physical(subtrees={"s1": sub})):
+        with patch("factor_engine.backend.sql_backend.try_execute_sql_pushdown", return_value=None):
+            with patch("factor_engine.backend.sql_backend.try_execute_sql_pushdown_batch", return_value=None):
                 with patch.object(backend, "_eval_python", return_value="py_result"):
                     with patch.object(backend, "_eval_hybrid", return_value="final"):
                         backend.execute(PlanNode(op="column", attrs={"name": "close"}), ctx)
@@ -45,8 +45,8 @@ def test_fully_sql_failure_records_execution_failed():
     ctx = ExecutionContext(data_source=object())
     phys = _physical(fully_sql=True)
 
-    with patch("backend.sql_backend.lower_to_physical_plan", return_value=phys):
-        with patch("backend.sql_backend.try_execute_sql_pushdown", return_value=None):
+    with patch("factor_engine.backend.sql_backend.lower_to_physical_plan", return_value=phys):
+        with patch("factor_engine.backend.sql_backend.try_execute_sql_pushdown", return_value=None):
             with patch.object(backend, "_eval_hybrid", return_value="final"):
                 backend.execute(phys.root, ctx)
 

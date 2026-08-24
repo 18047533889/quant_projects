@@ -17,20 +17,20 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from market.capabilities import (
+from factor_engine.market.capabilities import (
     MarketCapability,
     MarketStatus,
     MarketSupport,
     ProviderQuality,
     capabilities_for,
 )
-from market.context import ASHARE_CONTEXT, MarketContext, US_CONTEXT
+from factor_engine.market.context import ASHARE_CONTEXT, MarketContext, US_CONTEXT
 
 
 def _market_ctx(market: str) -> MarketContext:
     # Strict market_context (raises on unknown markets) — never a ternary that
     # silently defaults unknown markets to "us" (P1-1).
-    from market.context import market_context
+    from factor_engine.market.context import market_context
 
     return market_context(market)
 
@@ -73,7 +73,7 @@ class ProductionCertificationUnavailable(RuntimeError):
 
 def _production_allowlist() -> frozenset[str]:
     try:
-        from backend.fastpath_allowlists import production_allowlist
+        from factor_engine.backend.fastpath_allowlists import production_allowlist
 
         return frozenset(production_allowlist())
     except Exception as exc:  # pragma: no cover - defensive
@@ -96,15 +96,15 @@ def operator_support(
     become ``RESEARCH_ONLY``; sparse/proxy providers are rejected.  ``research``
     context can open the proxy/sparse gates explicitly.
     """
-    from cleaned_operators.operator_market import contract_for
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_market import contract_for
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     # R17-041: if both ``market`` and ``context`` are given they must agree —
     # a call asserting market='us' with an A-share context would silently gate
     # the wrong way.  (Best is to pass only the context; the string is kept for
     # back-compat.)
     if context is not None:
-        from market.capabilities import canonicalize_market_id
+        from factor_engine.market.capabilities import canonicalize_market_id
 
         if canonicalize_market_id(market) != canonicalize_market_id(context.market):
             raise ValueError(
@@ -276,9 +276,9 @@ def _suggested_providers(support: MarketSupport) -> list[str]:
 # ---------------------------------------------------------------------------
 def _walk(expr: Any, market: str, production: bool, failed: list[dict[str, Any]], warnings: list[str]) -> None:
     try:
-        from expr.cleaned_call import CleanedCall
-        from expr.column import ColumnRef
-        from expr.literal import Literal
+        from factor_engine.expr.cleaned_call import CleanedCall
+        from factor_engine.expr.column import ColumnRef
+        from factor_engine.expr.literal import Literal
     except ImportError:  # pragma: no cover - defensive
         return
 
@@ -317,7 +317,7 @@ def _walk(expr: Any, market: str, production: bool, failed: list[dict[str, Any]]
 def _decode_field_name(name: str) -> str:
     """Decode an encoded ``SourceRef`` back to its physical field spelling."""
     try:
-        from api.source_ref import decode_source_ref
+        from factor_engine.api.source_ref import decode_source_ref
 
         source = decode_source_ref(name)
         if source is not None:
@@ -336,7 +336,7 @@ def _concept_for_physical(table: str, physical: str) -> str | None:
     reference resolves to the concept, then the concept resolves in the target
     market.
     """
-    from fields.providers import PROVIDER_REGISTRY
+    from factor_engine.fields.providers import PROVIDER_REGISTRY
 
     qualified = f"{table}.{physical}"
     for binding in PROVIDER_REGISTRY.for_market("ashare"):
@@ -351,9 +351,9 @@ def _concept_for_physical(table: str, physical: str) -> str | None:
 def _check_column(name: Any, market: str, production: bool, failed: list[dict[str, Any]], warnings: list[str]) -> None:
     if not isinstance(name, str):
         return
-    from fields.concepts import concept_alias_map
-    from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
-    from fields.providers import binding
+    from factor_engine.fields.concepts import concept_alias_map
+    from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+    from factor_engine.fields.providers import binding
 
     plain = _decode_field_name(name)
     aliases = concept_alias_map()
@@ -475,8 +475,8 @@ def explain_expression_support(
     given) is threaded to the per-node walk so market/grain/session decisions
     share one authority.
     """
-    from api.dsl_parser import parse_expr
-    from expr.base import Expr
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.expr.base import Expr
 
     if isinstance(expr, str):
         try:
@@ -517,11 +517,11 @@ def build_search_grammar(market: str) -> dict[str, Any]:
     Unsupported market-mechanism operators and unavailable field concepts are
     excluded up front, shrinking the mining search space.
     """
-    from fields.concepts import list_concepts
-    from fields.providers import explain_field_support
+    from factor_engine.fields.concepts import list_concepts
+    from factor_engine.fields.providers import explain_field_support
 
     try:
-        from api.mining_integration import list_dsl_allowlist
+        from factor_engine.api.mining_integration import list_dsl_allowlist
 
         operators = set(list_dsl_allowlist(surface="daily"))
     except Exception:  # pragma: no cover - defensive
@@ -564,8 +564,8 @@ def build_market_operator_manifest(
     Every canonical gets an explicit A/US row.  ``UNKNOWN`` and
     ``NOT_REVIEWED`` count is returned so the CI gate can assert it is zero.
     """
-    from cleaned_operators.operator_market import contract_for
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_market import contract_for
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     names = (
         sorted(set(canonicals))
@@ -577,7 +577,7 @@ def build_market_operator_manifest(
         "total": 0, "unknown": 0, "not_reviewed": 0,
         "explicit_contract": 0, "fallback_default": 0,
     }
-    from cleaned_operators.operator_market import OPERATOR_MARKET_CONTRACTS
+    from factor_engine.cleaned_operators.operator_market import OPERATOR_MARKET_CONTRACTS
 
     for name in names:
         counts["total"] += 1

@@ -20,7 +20,7 @@ os.environ.setdefault("POLARS_MAX_THREADS", "1")
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from cleaned_operators import load_all  # noqa: E402
+from factor_engine.cleaned_operators import load_all  # noqa: E402
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -75,7 +75,7 @@ class TestCSNonDegeneracyRSIWilder:
     """RSI_WILDER on heterogeneous panel must pass cs non-degeneracy."""
 
     def test_pass_fraction_above_threshold(self):
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
         from scripts.audit_all_factor_production import _build_call
 
         close = _make_panels()
@@ -107,7 +107,7 @@ class TestCSNonDegeneracyGlobalState:
     """cs_count returns identical value per date across stocks -> GLOBAL_STATE."""
 
     def test_cs_count_is_global_state(self):
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
         from scripts.audit_all_factor_production import _build_call
 
         close = _make_panels()

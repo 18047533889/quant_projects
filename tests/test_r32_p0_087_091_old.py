@@ -5,21 +5,21 @@ import os
 import pytest
 from unittest.mock import Mock, patch
 
-from planner.factor_source_plan_r32 import (
+from factor_engine.planner.factor_source_plan_r32 import (
     FactorSourcePlan,
     DependencyExtractionError,
     stable_digest,
 )
-from planner.scan_evidence import (
+from factor_engine.planner.scan_evidence import (
     EstimatedScanCost,
     ActualScanEvidence,
     ScanEvidenceUnavailable,
     is_actual_evidence,
     classify_scan_evidence,
 )
-from planner.source_binding import ColumnSourceBinding
-from planner.physical_factor_dag import SourceScopeId
-from planner.batch_data_request import (
+from factor_engine.planner.source_binding import ColumnSourceBinding
+from factor_engine.planner.physical_factor_dag import SourceScopeId
+from factor_engine.planner.batch_data_request import (
     build_batch_data_request,
     SourceScanGroup,
 )
@@ -213,7 +213,7 @@ def test_r32_p0_089_production_fail_closed():
         # Mock expression_plan 会导致 build_source_dependency_manifest 失败
         mock_plan = Mock()
         
-        with patch("planner.factor_source_plan_r32.build_source_dependency_manifest") as mock_build:
+        with patch("factor_engine.planner.factor_source_plan_r32.build_source_dependency_manifest") as mock_build:
             mock_build.side_effect = ValueError("manifest build failed")
             
             # production 模式不允许降级
@@ -233,7 +233,7 @@ def test_r32_p0_089_automated_research_fail_closed():
     with patch.dict(os.environ, {"RUNTIME_MODE": "automated_research"}):
         mock_plan = Mock()
         
-        with patch("planner.factor_source_plan_r32.build_source_dependency_manifest") as mock_build:
+        with patch("factor_engine.planner.factor_source_plan_r32.build_source_dependency_manifest") as mock_build:
             mock_build.side_effect = ValueError("manifest build failed")
             
             with pytest.raises(DependencyExtractionError) as exc_info:
@@ -252,7 +252,7 @@ def test_r32_p0_089_interactive_explicit_degraded():
     with patch.dict(os.environ, {"RUNTIME_MODE": "interactive"}):
         mock_plan = Mock()
         
-        with patch("planner.factor_source_plan_r32.build_source_dependency_manifest") as mock_build:
+        with patch("factor_engine.planner.factor_source_plan_r32.build_source_dependency_manifest") as mock_build:
             mock_build.side_effect = ValueError("manifest build failed")
             
             # interactive + allow_degraded → 不抛异常
@@ -275,7 +275,7 @@ def test_r32_p0_089_interactive_without_allow_degraded_still_fails():
     with patch.dict(os.environ, {"RUNTIME_MODE": "interactive"}):
         mock_plan = Mock()
         
-        with patch("planner.factor_source_plan_r32.build_source_dependency_manifest") as mock_build:
+        with patch("factor_engine.planner.factor_source_plan_r32.build_source_dependency_manifest") as mock_build:
             mock_build.side_effect = ValueError("manifest build failed")
             
             # interactive 但 allow_degraded=False → 仍然 fail

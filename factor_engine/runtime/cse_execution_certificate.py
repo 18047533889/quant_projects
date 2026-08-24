@@ -102,7 +102,7 @@ def build_cse_certificate_store(
     """
     if estimate_cost_fn is None:
         try:
-            from backend.operator_cost import estimate_plan_cost
+            from factor_engine.backend.operator_cost import estimate_plan_cost
 
             estimate_cost_fn = estimate_plan_cost
         except ImportError:

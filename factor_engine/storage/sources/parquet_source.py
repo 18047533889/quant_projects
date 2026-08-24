@@ -8,7 +8,7 @@ from .datasource import DataSource
 from logging_utils import ProgressLogger, get_logger
 
 
-logger = get_logger("storage.parquet_source")
+logger = get_logger("factor_engine.storage.parquet_source")
 
 
 class ParquetSource(DataSource):

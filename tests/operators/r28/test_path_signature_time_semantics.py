@@ -13,9 +13,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.ts_model.path_signature import _trailing_contiguous_xy
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.ts_model.path_signature import _trailing_contiguous_xy
 
 
 def _load():

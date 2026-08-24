@@ -18,17 +18,17 @@ import sys
 import json
 
 sys.path.insert(0, ".")
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 load_all()
 
-from cleaned_operators.registry import OperatorRegistry as R
-from cleaned_operators.operator_surface import classify_canonical
-from cleaned_operators.availability_clock import (
+from factor_engine.cleaned_operators.registry import OperatorRegistry as R
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
+from factor_engine.cleaned_operators.availability_clock import (
     default_available_at,
     default_same_session_usable,
     availability_clock_ok,
 )
-from cleaned_operators.operator_spec import _infer_panel_params
+from factor_engine.cleaned_operators.operator_spec import _infer_panel_params
 
 violations = []      # hard blockers (same-close lookahead)
 needs_declaration = []  # session-end daily factors lacking available_at

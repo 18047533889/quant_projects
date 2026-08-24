@@ -5,13 +5,13 @@ from __future__ import annotations
 
 import pytest
 
-from security.access import (
+from factor_engine.security.access import (
     DeclassificationApproval,
     derive_derived_access_tags,
     max_sensitivity,
     require_declassification_approval,
 )
-from security.factor_id import FactorIdError, validate_factor_id
+from factor_engine.security.factor_id import FactorIdError, validate_factor_id
 
 
 class TestDeclassificationApproval:

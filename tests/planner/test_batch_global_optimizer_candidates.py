@@ -10,10 +10,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from planner.backend_region import PhysicalBackend, Representation
-from backend.contracts import ExecutionKind
-from planner.batch_global_optimizer import BatchGlobalOptimizer
-from planner.logical_plan import PlanNode
+from factor_engine.planner.backend_region import PhysicalBackend, Representation
+from factor_engine.backend.contracts import ExecutionKind
+from factor_engine.planner.batch_global_optimizer import BatchGlobalOptimizer
+from factor_engine.planner.logical_plan import PlanNode
 
 
 def _ctx(rows: int | None, *, mode: str = "research", complete: bool = False):

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from ir.schema import Schema, _available_at_of, propagate_available_at
+from factor_engine.ir.schema import Schema, _available_at_of, propagate_available_at
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -22,7 +22,7 @@ def strict_fiscal_parameter_domain_certification_guard():
     ir.schema / fields.spec directly and do not need the full operator load.
     """
     yield
-from ir.types import (
+from factor_engine.ir.types import (
     SourceVintageSpec,
     TimestampColumn,
     UNKNOWN,
@@ -72,7 +72,7 @@ def test_availability_expr_label_and_lateness():
 
 
 def test_unknown_sorts_latest():
-    from ir.schema import _rank_availability
+    from factor_engine.ir.schema import _rank_availability
 
     assert _rank_availability("unknown") > _rank_availability("session_close")
     assert _rank_availability("unknown") == float("inf")
@@ -147,7 +147,7 @@ def test_source_vintage_spec_structured():
 
 
 def test_source_vintage_from_field_spec():
-    from fields.spec import FieldSpec
+    from factor_engine.fields.spec import FieldSpec
 
     field = FieldSpec(
         name="net_profit", table="StockIncome", source_name="net_profit",
@@ -160,7 +160,7 @@ def test_source_vintage_from_field_spec():
 
 
 def test_schema_from_field_carries_structured_vintage():
-    from fields.spec import FieldSpec
+    from factor_engine.fields.spec import FieldSpec
 
     field = FieldSpec(
         name="net_profit", table="StockIncome", source_name="net_profit",
@@ -176,7 +176,7 @@ def test_schema_from_field_carries_structured_vintage():
 
 
 def test_schema_semantic_lattice_present():
-    from fields.spec import FieldSpec
+    from factor_engine.fields.spec import FieldSpec
 
     field = FieldSpec(
         name="volume", table="StockDailyBar", source_name="volume", domain="price_volume",

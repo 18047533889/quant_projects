@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.contracts import (
+from factor_engine.backend.contracts import (
     Accelerator,
     ExecutionKind,
     PhysicalImplementationSpec,

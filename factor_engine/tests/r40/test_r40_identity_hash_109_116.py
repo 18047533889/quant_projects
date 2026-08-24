@@ -10,8 +10,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from planner.logical_plan import PlanNode
-from runtime.factor_identity import (
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.runtime.factor_identity import (
     OperatorSemanticContractDigest,
     _typed_hash_value,
     partition_input_fingerprint,
@@ -118,7 +118,7 @@ class TestScopedContractBindsImplHash:
         def _fake_impl_hashes(canonical):
             return dict(hashes)
 
-        import backend.evidence_provenance as ep
+        import factor_engine.backend.evidence_provenance as ep
 
         monkeypatch.setattr(ep, "implementation_hashes_for", _fake_impl_hashes)
         h1 = scoped_operator_contract_hash(plan)
@@ -128,7 +128,7 @@ class TestScopedContractBindsImplHash:
 
     def test_scoped_contract_hash_stable_for_same_plan(self, monkeypatch):
         plan = _op("ts_mean", _col("close"), PlanNode(op="literal", attrs={"value": 20}, inputs=[]))
-        import backend.evidence_provenance as ep
+        import factor_engine.backend.evidence_provenance as ep
 
         monkeypatch.setattr(
             ep, "implementation_hashes_for", lambda c: {"implementation_hash_pandas": "x"}
@@ -144,7 +144,7 @@ class TestScopedContractBindsImplHash:
 # ---------------------------------------------------------------------------
 class TestOperatorContractDigestUnified:
     def test_digest_to_payload_is_typed_and_stable(self, monkeypatch):
-        import backend.evidence_provenance as ep
+        import factor_engine.backend.evidence_provenance as ep
 
         monkeypatch.setattr(
             ep, "implementation_hashes_for",
@@ -163,9 +163,9 @@ class TestOperatorContractDigestUnified:
         # Both _operator_semantic_contract (plan_hash) and
         # scoped_operator_contract_hash (factor_identity) project from the same
         # digest → changing the digest changes both paths.
-        from planner.plan_hash import _operator_semantic_contract
+        from factor_engine.planner.plan_hash import _operator_semantic_contract
 
-        import backend.evidence_provenance as ep
+        import factor_engine.backend.evidence_provenance as ep
 
         monkeypatch.setattr(
             ep, "implementation_hashes_for",

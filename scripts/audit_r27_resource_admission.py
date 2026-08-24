@@ -12,9 +12,9 @@ if ROOT not in sys.path:
 
 
 def main() -> None:
-    from runtime.resource_broker import ResourceBroker
-    from runtime.resource_governor import live_memory_headroom_bytes
-    from runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.resource_governor import live_memory_headroom_bytes
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
     broker = ResourceBroker()
     snap = broker.snapshot()

@@ -4,5 +4,5 @@
 实际实现位于 ``runtime/quality/dq_gates.py``（因子产出轻量 DQ 门禁）。
 """
 import sys
-import runtime.quality.dq_gates as _mod
+import factor_engine.runtime.quality.dq_gates as _mod
 sys.modules[__name__] = _mod

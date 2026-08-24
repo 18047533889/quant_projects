@@ -8,11 +8,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from cleaned_operators.registry import OperatorRegistry
-from planner.logical_plan import PlanNode
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.planner.logical_plan import PlanNode
 
-from backend.contracts import ExecutionKind, PhysicalImplementationSpec
-from backend.sql_tiers import (
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+from factor_engine.backend.sql_tiers import (
     SQL_IMPLEMENTED_CANONICALS,
     SQL_PARITY_VERIFIED_CANONICALS,
     SQL_PRODUCTION_SAFE_CANONICALS,
@@ -89,7 +89,7 @@ class SqlCapableOperator:
 
     @property
     def metadata(self):
-        from cleaned_operators.base import OperatorMetadata
+        from factor_engine.cleaned_operators.base import OperatorMetadata
 
         return OperatorMetadata(
             name=self.canonical,
@@ -133,7 +133,7 @@ def register_sql_backends() -> None:
             )
         # SQL capability is an explicit implementation contract.  Production
         # reports must not infer these flags from an operator name or defaults.
-        from cleaned_operators.operator_policy import infer_operator_policy
+        from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
 
         entry = OperatorRegistry._catalog[target]
         policy = infer_operator_policy(target, canonical=target)

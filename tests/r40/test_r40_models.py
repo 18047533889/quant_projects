@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from service.models import (
+from factor_engine.service.models import (
     ComputeRequest,
     MaterializeRequest,
     RequestBudgetSnapshot,

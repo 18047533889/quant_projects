@@ -10,7 +10,7 @@ import pytest
 
 os.environ.setdefault("FACTOR_ENGINE_SERVICE_ROOT", "/tmp/r40_cancel_root")
 
-from runtime.exceptions import (  # noqa: E402
+from factor_engine.runtime.exceptions import (  # noqa: E402
     Cancellation,
     CancellationToken,
     DeadlineExceeded,
@@ -18,8 +18,8 @@ from runtime.exceptions import (  # noqa: E402
     reset_active_cancellation_token,
     set_active_cancellation_token,
 )
-from service.app import _job_wrapper, _set_job_cancellation_token  # noqa: E402
-from service.jobstore import JobRecord, JobStore, JobStatus  # noqa: E402
+from factor_engine.service.app import _job_wrapper, _set_job_cancellation_token  # noqa: E402
+from factor_engine.service.jobstore import JobRecord, JobStore, JobStatus  # noqa: E402
 
 
 def test_token_raise_if_cancelled():
@@ -73,7 +73,7 @@ def test_active_token_context_propagates():
 
 
 def test_scheduler_stops_admission_when_token_cancelled():
-    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
 
     sched = AdaptiveBatchScheduler()
     token = CancellationToken(deadline_monotonic=None)

@@ -6,7 +6,7 @@ emitter 回归测试复用。
 """
 from __future__ import annotations
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 
 def column(name: str) -> PlanNode:
@@ -335,8 +335,8 @@ def _minimal_plan_raw(op: str) -> PlanNode:
 def minimal_plan(op: str) -> PlanNode:
     """Build a fixture whose production parameters use canonical spellings only."""
     plan = _minimal_plan_raw(op)
-    from backend.parameter_aliases import normalize_parameter_aliases
-    from backend.production_signature import PRODUCTION_SIGNATURES
+    from factor_engine.backend.parameter_aliases import normalize_parameter_aliases
+    from factor_engine.backend.production_signature import PRODUCTION_SIGNATURES
 
     signature = PRODUCTION_SIGNATURES.get(op)
     if signature is None:

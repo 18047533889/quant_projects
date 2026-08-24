@@ -45,7 +45,7 @@ from modeling.walk_forward import (
     purge_overlap,
     stitch_oos_windows,
 )
-from market.exchange_session_calendar import ExchangeSessionCalendar
+from factor_engine.market.exchange_session_calendar import ExchangeSessionCalendar
 
 
 # --------------------------------------------------------------------------- #
@@ -419,7 +419,7 @@ def test_preprocessing_stages_fit_sequential_train_state():
 
 
 def test_train_model_honors_cancel_token_before_fit():
-    from runtime.exceptions import Cancellation, CancellationToken
+    from factor_engine.runtime.exceptions import Cancellation, CancellationToken
 
     ds = make_panel(n_dates=8, n_stocks=200, seed=5)
     dates = sorted(ds.frame["date"].unique())

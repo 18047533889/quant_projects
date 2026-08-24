@@ -8,8 +8,8 @@ import pytest
 
 pytest.importorskip("polars")
 
-from backend.cross_section_spec import polars_scale_expr
-from cleaned_operators.common.cs_broadcast import broadcast_row_stat
+from factor_engine.backend.cross_section_spec import polars_scale_expr
+from factor_engine.cleaned_operators.common.cs_broadcast import broadcast_row_stat
 
 
 def test_polars_scale_expr_null_row_not_zero():

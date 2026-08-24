@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from runtime.shard_executor import SliceCache, SliceDataSource
+from factor_engine.runtime.shard_executor import SliceCache, SliceDataSource
 
 
 class _InnerSource:

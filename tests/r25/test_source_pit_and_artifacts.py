@@ -7,8 +7,8 @@ from __future__ import annotations
 import json
 import os
 
-from fields.catalog import ASHARE_TABLE_SPECS
-from fields.catalog_us import US_TABLE_SPECS
+from factor_engine.fields.catalog import ASHARE_TABLE_SPECS
+from factor_engine.fields.catalog_us import US_TABLE_SPECS
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -46,7 +46,7 @@ def test_revision_operators_blocked_without_vintage_source():
     # R25-069..072/154: revision family declares requires:RevisionEventSource +
     # revision_vintage_pit_certified=false (R23) — production admission must
     # not pass them.
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     for name in ("fin_revision_delta", "fin_revision_pct", "fin_restated_flag",
                  "fin_days_since_update", "fin_staleness"):
@@ -61,7 +61,7 @@ def test_revision_operators_blocked_without_vintage_source():
 def test_artifact_snapshot_digest_coherent():
     # R25-023/159: R25_CANONICAL_SNAPSHOT must exist and its count must match
     # the live registry count.
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     snapshot_path = os.path.join(ROOT, "docs", "R25_CANONICAL_SNAPSHOT.json")
     assert os.path.exists(snapshot_path), "run scripts/audit_r25_genuine_usability.py first"

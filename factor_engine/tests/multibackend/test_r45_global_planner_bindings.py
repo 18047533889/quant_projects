@@ -18,8 +18,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from planner.logical_plan import PlanNode
-from runtime.multibackend.batch_global_optimizer import (
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.runtime.multibackend.batch_global_optimizer import (
     NodeBackendChoice,
     PhysicalBatchGlobalOptimizer,
 )
@@ -85,8 +85,8 @@ def test_node_backend_choice_binds_exact_implementation() -> None:
 
 def test_node_backend_choice_keeps_existing_fields() -> None:
     """Additive fields must not break existing positional construction."""
-    from planner.backend_region import PhysicalBackend, Representation
-    from backend.contracts import ExecutionKind
+    from factor_engine.planner.backend_region import PhysicalBackend, Representation
+    from factor_engine.backend.contracts import ExecutionKind
 
     choice = NodeBackendChoice(
         node_id="n1",

@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.composition import _part_field_name, _same_composition
+from factor_engine.cleaned_operators.composition import _part_field_name, _same_composition
 
 
 def _part(name, n=5):

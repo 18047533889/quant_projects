@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("duckdb")
 
-from backend.sql_pushdown.duckdb_capabilities import probe_duckdb_capabilities
+from factor_engine.backend.sql_pushdown.duckdb_capabilities import probe_duckdb_capabilities
 
 
 def test_duckdb_capability_probe_runs():

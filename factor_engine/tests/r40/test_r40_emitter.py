@@ -8,19 +8,19 @@ import pytest
 
 
 def _col(name: str = "close"):
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     return PlanNode(op="column", attrs={"name": name})
 
 
 def _lit(value: float):
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     return PlanNode(op="literal", attrs={"value": value})
 
 
 def _plan(op: str, *inputs):
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     return PlanNode(op=op, inputs=tuple(inputs))
 
@@ -31,7 +31,7 @@ def _plan(op: str, *inputs):
 
 
 def test_emitter_caches_compiled_template_not_per_literal():
-    from backend.sql_pushdown.emitter import (
+    from factor_engine.backend.sql_pushdown.emitter import (
         _SQL_TEMPLATE_CACHE,
         compile_plan_to_sql,
         reset_sql_template_cache,
@@ -50,7 +50,7 @@ def test_emitter_caches_compiled_template_not_per_literal():
 
 
 def test_emitter_template_cache():
-    from backend.sql_pushdown.emitter import (
+    from factor_engine.backend.sql_pushdown.emitter import (
         compile_plan_to_sql_template,
         reset_sql_template_cache,
     )
@@ -78,7 +78,7 @@ def test_emitter_template_cache():
 
 
 def test_emitter_unknown_source_hash_fails_production(tmp_path):
-    from backend.sql_pushdown.emitter import (
+    from factor_engine.backend.sql_pushdown.emitter import (
         SqlCompileError,
         assert_emitter_identity_known,
         emitter_identity,
@@ -102,7 +102,7 @@ def test_emitter_unknown_source_hash_fails_production(tmp_path):
 
 def test_emitter_unknown_source_hash_fails_production_compile(monkeypatch, tmp_path):
     """production 下 compile_plan_to_sql 也经 emitter identity 门禁（unknown → hard fail）。"""
-    from backend.sql_pushdown.emitter import (
+    from factor_engine.backend.sql_pushdown.emitter import (
         SqlCompileError,
         compile_plan_to_sql,
         generate_emitter_identity_manifest,
@@ -127,7 +127,7 @@ def test_emitter_unknown_source_hash_fails_production_compile(monkeypatch, tmp_p
 
 
 def test_compile_error_distinguished_from_unsupported():
-    from backend.sql_pushdown.emitter import (
+    from factor_engine.backend.sql_pushdown.emitter import (
         CompileStatus,
         compile_plan_to_sql,
         last_compile_status,
@@ -160,7 +160,7 @@ def test_compile_error_distinguished_from_unsupported():
 
 def test_compile_error_hard_fails_production(monkeypatch, tmp_path):
     """production 下 COMPILER_ERROR → hard fail（不静默回退）。"""
-    from backend.sql_pushdown.emitter import (
+    from factor_engine.backend.sql_pushdown.emitter import (
         SqlCompileError,
         compile_plan_to_sql,
         generate_emitter_identity_manifest,
@@ -180,7 +180,7 @@ def test_compile_error_hard_fails_production(monkeypatch, tmp_path):
 
 def test_emitter_semantically_unsupported_not_hard_fail_in_production(monkeypatch, tmp_path):
     """production 下 SEMANTICALLY_UNSUPPORTED 不 hard fail（允许回退 pandas）。"""
-    from backend.sql_pushdown.emitter import (
+    from factor_engine.backend.sql_pushdown.emitter import (
         CompileStatus,
         SqlCompileError,
         compile_plan_to_sql,

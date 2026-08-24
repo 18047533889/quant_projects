@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from backend.operator_capability import UnsupportedOperatorBackendError, get_best_backend
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.operator_capability import UnsupportedOperatorBackendError, get_best_backend
 
 
 @pytest.fixture(scope="module", autouse=True)

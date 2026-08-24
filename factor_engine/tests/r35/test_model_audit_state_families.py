@@ -35,8 +35,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from cleaned_operators import load_all  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators import load_all  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 _load_done = False
 
@@ -77,7 +77,7 @@ def test_m150_physical_divergence_k_spans_physical_bars():
         forward positions, NOT compressed steps (which would have paired offsets
         1 and 2 at step 1).
     """
-    from cleaned_operators.local_lyapunov import _physical_divergence
+    from factor_engine.cleaned_operators.local_lyapunov import _physical_divergence
 
     chunk = np.array([1.0, 2.0, np.nan, 3.0, 4.0, 5.0, 6.0, 7.0])
     finite = np.isfinite(chunk)
@@ -106,7 +106,7 @@ def test_m150_compressed_and_physical_differ_on_gapped_series():
     """On a gapped series the compressed-ordinal path and the physical-clock path
     must NOT be bit-identical (the compressed k steps span a different physical
     span than the physical clock)."""
-    from cleaned_operators.local_lyapunov import _lyapunov_series
+    from factor_engine.cleaned_operators.local_lyapunov import _lyapunov_series
 
     rng = np.random.default_rng(7)
     x = rng.normal(size=50)
@@ -126,7 +126,7 @@ def test_m150_compressed_and_physical_differ_on_gapped_series():
 def test_m150_physical_path_default_is_compressed():
     """``physical_time`` defaults to False (compressed path preserved); the
     compressed path still emits on the physical-Theiler fixture (R14)."""
-    from cleaned_operators.local_lyapunov import _lyapunov_series
+    from factor_engine.cleaned_operators.local_lyapunov import _lyapunov_series
 
     x = np.array([1.0, np.nan, np.nan, 2.0, 3.0, 5.0])
     out = _lyapunov_series(x, 6, 1, 2, 1, 1, physical_time=False)
@@ -167,7 +167,7 @@ def test_m150_operator_accepts_physical_time_flag():
     ],
 )
 def test_m151_lyapunov_strict_params_reject_bad_values(bad):
-    from cleaned_operators.local_lyapunov import _lyapunov_series
+    from factor_engine.cleaned_operators.local_lyapunov import _lyapunov_series
 
     with pytest.raises((ValueError, TypeError)):
         _lyapunov_series(np.arange(30.0), **{"window": 40, "tau": 1, "dim": 2,
@@ -183,7 +183,7 @@ def test_m151_operator_strict_params_reject_bool_physical_time():
 
 
 def test_m151_valid_params_still_accepted():
-    from cleaned_operators.local_lyapunov import _lyapunov_series
+    from factor_engine.cleaned_operators.local_lyapunov import _lyapunov_series
 
     out = _lyapunov_series(np.arange(30.0), window=40, tau=1, dim=2, horizon=3, min_anchors=1)
     assert out.shape == (30,)
@@ -194,7 +194,7 @@ def test_m151_valid_params_still_accepted():
 # ---------------------------------------------------------------------------
 
 def test_m160_rqa_shared_constant_is_08():
-    from cleaned_operators.recurrence_analysis import _RQA_MIN_EFFECTIVE_FRACTION_DEFAULT, _recurrence_series
+    from factor_engine.cleaned_operators.recurrence_analysis import _RQA_MIN_EFFECTIVE_FRACTION_DEFAULT, _recurrence_series
 
     assert _RQA_MIN_EFFECTIVE_FRACTION_DEFAULT == 0.8
     # The kernel default is the same shared family policy.
@@ -230,7 +230,7 @@ def test_m160_recurrence_rate_now_family_policy_on_gap():
 # ---------------------------------------------------------------------------
 
 def test_m162_rqa_estimator_params_non_searchable():
-    from cleaned_operators.recurrence_analysis import _RQA_PARAM_SPECS
+    from factor_engine.cleaned_operators.recurrence_analysis import _RQA_PARAM_SPECS
 
     for name in ("dim", "delay", "eps_fraction", "min_periods"):
         assert name in _RQA_PARAM_SPECS, name
@@ -258,7 +258,7 @@ def test_m162_each_rqa_operator_declares_the_specs():
 # ---------------------------------------------------------------------------
 
 def test_m171_te_feasibility_telemetry_accessor():
-    from cleaned_operators.advanced_information import te_feasibility_failure_reason
+    from factor_engine.cleaned_operators.advanced_information import te_feasibility_failure_reason
 
     reason = te_feasibility_failure_reason(
         window=20, bins=3, lag=1, min_cells_ratio=1.0, min_transitions=None,
@@ -272,7 +272,7 @@ def test_m171_te_feasibility_telemetry_accessor():
 
 
 def test_m171_te_relational_spec_declared():
-    from cleaned_operators.advanced_information import _TE_FEASIBILITY_SPECS, _TE_PEAK_FEASIBILITY_SPECS
+    from factor_engine.cleaned_operators.advanced_information import _TE_FEASIBILITY_SPECS, _TE_PEAK_FEASIBILITY_SPECS
 
     assert any(s.expression == "window >= lag + 2" for s in _TE_FEASIBILITY_SPECS)
     assert any(s.expression == "window >= 12" for s in _TE_PEAK_FEASIBILITY_SPECS)
@@ -325,7 +325,7 @@ def test_m221_gap_does_not_pair_across():
       * A compressed re-pairing would add a transition from the last finite value
         before the gap to the first after it; the physical scheme must not.
     """
-    from cleaned_operators.markov_dynamics import _state_dynamics_series
+    from factor_engine.cleaned_operators.markov_dynamics import _state_dynamics_series
 
     series = np.array([1.0, 2.0, 3.0, np.nan, 100.0, 101.0, 102.0, 103.0, 104.0])
     res = _state_dynamics_series(series, window=8, bins=2, lag=1, min_count=1)
@@ -351,7 +351,7 @@ def test_m221_operator_gap_not_paired():
     if a false cross-gap pair had been created the historical (0,1) count would
     have been polluted.  We simply assert the operator runs and the kernel gate
     (total_trans) is unchanged by the gap's presence."""
-    from cleaned_operators.markov_dynamics import _state_dynamics_series
+    from factor_engine.cleaned_operators.markov_dynamics import _state_dynamics_series
 
     base = np.array([1.0, 2.0, 3.0, 100.0, 101.0, 102.0, 103.0, 104.0, 105.0])
     gapped = np.array([1.0, 2.0, 3.0, np.nan, 100.0, 101.0, 102.0, 103.0, 104.0])

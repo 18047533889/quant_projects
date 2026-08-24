@@ -226,7 +226,7 @@ class TestPITConsistency:
 
     def test_pit_time_travel_consistency(self, tmp_path):
         """Verify factor computed at t=5 gives same result when recomputed at t=10."""
-        from storage.catalog import FactorCatalog
+        from factor_engine.storage.catalog import FactorCatalog
 
         catalog_path = tmp_path / "catalog.db"
 
@@ -277,7 +277,7 @@ class TestPITConsistency:
 
     def test_pit_watermark_consistency(self, tmp_path):
         """Verify watermark updates don't affect historical computations."""
-        from storage.catalog import FactorCatalog
+        from factor_engine.storage.catalog import FactorCatalog
 
         catalog_path = tmp_path / "catalog.db"
 
@@ -316,7 +316,7 @@ class TestCacheConsistency:
 
     def test_cache_invalidation_on_data_change(self, tmp_path):
         """Verify cache invalidates when underlying data changes."""
-        from storage.cache import CacheManager
+        from factor_engine.storage.cache import CacheManager
 
         cache = CacheManager(data_scope="test")
         data_value = [1.0]  # Mutable reference
@@ -352,7 +352,7 @@ class TestCacheConsistency:
 
     def test_cache_scoped_isolation(self, tmp_path):
         """Verify cache scoping provides proper isolation."""
-        from storage.cache import CacheManager
+        from factor_engine.storage.cache import CacheManager
 
         def compute():
             cache1 = CacheManager(data_scope="scope1")
@@ -380,7 +380,7 @@ class TestCacheConsistency:
 
     def test_persistent_cache_checksum_validation(self, tmp_path):
         """Verify persistent cache validates checksums."""
-        from storage.cache import PersistentPlanCache
+        from factor_engine.storage.cache import PersistentPlanCache
 
         cache = PersistentPlanCache(tmp_path / "cache")
 
@@ -542,7 +542,7 @@ class TestTransactionConsistency:
 
     def test_catalog_transaction_rollback(self, tmp_path):
         """Verify catalog transaction rollback restores original state."""
-        from storage.catalog import FactorCatalog
+        from factor_engine.storage.catalog import FactorCatalog
 
         catalog_path = tmp_path / "catalog.db"
 
@@ -587,7 +587,7 @@ class TestTransactionConsistency:
 
     def test_batch_transaction_atomicity(self, tmp_path):
         """Verify batch transactions are atomic - successful commits, failed rolls back."""
-        from storage.catalog import FactorCatalog
+        from factor_engine.storage.catalog import FactorCatalog
 
         catalog_path = tmp_path / "catalog.db"
 

@@ -50,7 +50,8 @@ import numpy as np
 from quant_evaluator.contracts._hashutil import stable_content_hex, stable_hash
 from quant_evaluator.contracts._ndarray_codec import decode_value, encode_value
 from quant_evaluator.contracts.axis_refs import (
-    FactorAxisRef,
+   
+        FactorAxisRef,
     MatrixAxisRefs,
     QuantileAxisRef,
     TimeAxisRef,
@@ -240,7 +241,9 @@ def _buffer_sha256(array: np.ndarray) -> str:
     return hashlib.sha256(array.tobytes()).hexdigest()
 
 
-def _freeze_array(value: Any, name: str) -> np.ndarray:
+def _freeze_array(
+    value: Any, name: str, *, production: bool = False
+) -> np.ndarray:
     """Validate ``value`` and return a read-only ndarray the artifact owns.
 
     Default (QE-P0-02): the caller's buffer is COPIED (``copy=True``,
@@ -248,6 +251,14 @@ def _freeze_array(value: Any, name: str) -> np.ndarray:
     artifact.  A zero-copy escape is available only by passing an
     :class:`ImmutableBufferRef` (the caller asserts it will not mutate the
     buffer; it is still marked read-only).
+
+    R46 P1-U: in PRODUCTION mode the zero-copy escape is DISABLED.  A numpy
+    ndarray can have an original / a view / an artifact view aliasing the same
+    memory, and ``writeable=False`` on one alias does not stop a caller that
+    still holds another writable view from mutating the shared buffer.  A
+    production artifact must therefore COPY + freeze even when handed an
+    :class:`ImmutableBufferRef`; zero-copy adoption remains available only for
+    research (non-production) use.
     """
     if isinstance(value, ImmutableBufferRef):
         array = value.array
@@ -256,8 +267,17 @@ def _freeze_array(value: Any, name: str) -> np.ndarray:
                 f"MetricArtifact.{name} ImmutableBufferRef must wrap an ndarray, "
                 f"got {type(array).__name__}"
             )
+        if production:
+            # R1 P1-U: production MUST copy + freeze (never zero-copy adopt).
+            # A caller that hands an ImmutableBufferRef into a production
+            # artifact is asserting ownership, but another writable alias could
+            # still alias the same memory; copy to guarantee isolation.
+            copied = np.array(array, copy=True, order="C")
+            copied.flags.writeable = False
+            return copied
         try:
-            # Adopt the caller's buffer read-only (zero-copy, QE-P0-02).
+            # Research mode: adopt the caller's buffer read-only (zero-copy,
+            # QE-P0-02). Only allowed when not production (P1-U).
             array.flags.writeable = False
         except ValueError:
             array = array.copy()
@@ -299,6 +319,10 @@ class MetricArtifact:
     created_from: Tuple[str, ...] = ()
     factor_axis: Any = None
     production: bool = False
+    # R46 P0-T: schema + producer version ride the artifact so a serialized
+    # artifact self-describes which contract/schema/producer it was written by.
+    contract_schema_version: str = "1.0"
+    producer_version: str = "0"
 
     def __post_init__(self) -> None:
         _check_metadata_string("metric_id", self.metric_id)
@@ -379,6 +403,9 @@ class MetricArtifact:
             and dict(self.provenance) == dict(other.provenance)
             and tuple(self.created_from) == tuple(other.created_from)
             and self.factor_axis == other.factor_axis
+            and self.production == other.production
+            and self.contract_schema_version == other.contract_schema_version
+            and self.producer_version == other.producer_version
         )
 
     def __hash__(self) -> int:
@@ -394,6 +421,9 @@ class MetricArtifact:
             "factor_axis": (
                 None if self.factor_axis is None else self.factor_axis.to_dict()
             ),
+            "production": self.production,
+            "contract_schema_version": self.contract_schema_version,
+            "producer_version": self.producer_version,
         }
         for f in dataclass_fields(type(self)):
             if f.name in _base_field_names():
@@ -425,6 +455,9 @@ class MetricArtifact:
             "provenance": encode_value(dict(self.provenance)),
             "created_from": list(self.created_from),
             "factor_axis": self._axis_dict("factor_axis", self.factor_axis),
+            "production": self.production,
+            "contract_schema_version": self.contract_schema_version,
+            "producer_version": self.producer_version,
         }
         payload.update(self._payload_dict())
         return payload
@@ -467,6 +500,9 @@ class MetricArtifact:
             "provenance": decode_value(data.get("provenance", {})),
             "created_from": tuple(data.get("created_from", ())),
             "factor_axis": axis_ref_from_dict(data.get("factor_axis")),
+            "production": bool(data.get("production", False)),
+            "contract_schema_version": data.get("contract_schema_version", "1.0"),
+            "producer_version": data.get("producer_version", "0"),
         }
         kwargs.update(cls._payload_from_dict(data))
         return cls(**kwargs)
@@ -486,7 +522,7 @@ class ScalarMetricArtifact(MetricArtifact):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        values = _freeze_array(self.values, "values")
+        values = _freeze_array(self.values, "values", production=self.production)
         if values.ndim != 1:
             raise InvalidContractError(
                 f"ScalarMetricArtifact.values must be (F,), got shape {values.shape}"
@@ -519,7 +555,7 @@ class SeriesMetricArtifact(MetricArtifact):
                 "SeriesMetricArtifact.time_axis must be a TimeAxisRef or None, got "
                 f"{type(self.time_axis).__name__}"
             )
-        values = _freeze_array(self.values, "values")
+        values = _freeze_array(self.values, "values", production=self.production)
         if values.ndim != 2:
             raise InvalidContractError(
                 f"SeriesMetricArtifact.values must be (T, F), got shape {values.shape}"
@@ -570,7 +606,7 @@ class VectorMetricArtifact(MetricArtifact):
                 "VectorMetricArtifact.quantile_axis must be a QuantileAxisRef or None, got "
                 f"{type(self.quantile_axis).__name__}"
             )
-        values = _freeze_array(self.values, "values")
+        values = _freeze_array(self.values, "values", production=self.production)
         if values.ndim != 2:
             raise InvalidContractError(
                 f"VectorMetricArtifact.values must be (K, F), got shape {values.shape}"
@@ -613,7 +649,7 @@ class MatrixMetricArtifact(MetricArtifact):
                 "MatrixMetricArtifact.matrix_axis must be a MatrixAxisRefs or None, got "
                 f"{type(self.matrix_axis).__name__}"
             )
-        values = _freeze_array(self.values, "values")
+        values = _freeze_array(self.values, "values", production=self.production)
         if values.ndim != 3 or values.shape[0] != values.shape[1]:
             raise InvalidContractError(
                 f"MatrixMetricArtifact.values must be (K, K, F), got shape {values.shape}"
@@ -651,7 +687,7 @@ class DistributionMetricArtifact(MetricArtifact):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        samples = _freeze_array(self.samples, "samples")
+        samples = _freeze_array(self.samples, "samples", production=self.production)
         if samples.ndim != 2:
             raise InvalidContractError(
                 f"DistributionMetricArtifact.samples must be (B, F), "

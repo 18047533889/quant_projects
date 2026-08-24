@@ -23,15 +23,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.advanced_information as ai  # noqa: F401
-from cleaned_operators.advanced_information import (
+import factor_engine.cleaned_operators.advanced_information as ai  # noqa: F401
+from factor_engine.cleaned_operators.advanced_information import (
     _quantile_edges,
     _shared_bins,
     _te_from_transitions,
     _te_peak_window,
     _te_peak_window_excess,
 )
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _frame(v: np.ndarray, n: int) -> pd.DataFrame:

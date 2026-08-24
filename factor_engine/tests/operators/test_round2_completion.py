@@ -12,8 +12,8 @@ pd = pytest.importorskip("pandas")
 
 
 def test_windowed_datasource_preserves_intraday_timestamp():
-    from storage.time_window import WindowedDataSource
-    from storage.datasource import DataSource
+    from factor_engine.storage.time_window import WindowedDataSource
+    from factor_engine.storage.datasource import DataSource
 
     class _Inner(DataSource):
         def load_column(self, name: str):
@@ -42,8 +42,8 @@ def test_windowed_datasource_preserves_intraday_timestamp():
 
 
 def test_narrow_kline_keeps_intraday_start_string(tmp_path):
-    from storage.kline_parquet_source import KlineParquetSource
-    from storage.time_window import narrow_data_source_for_window
+    from factor_engine.storage.kline_parquet_source import KlineParquetSource
+    from factor_engine.storage.time_window import narrow_data_source_for_window
 
     root = tmp_path / "k"
     root.mkdir()
@@ -58,7 +58,7 @@ def test_narrow_kline_keeps_intraday_start_string(tmp_path):
 
 
 def test_mining_integration_label_config():
-    from api.mining_integration import default_mining_label_config, validate_mining_label_formula
+    from factor_engine.api.mining_integration import default_mining_label_config, validate_mining_label_formula
 
     cfg = default_mining_label_config()
     assert cfg["gap_bars"] >= 1

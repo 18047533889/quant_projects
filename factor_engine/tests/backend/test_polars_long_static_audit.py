@@ -2,12 +2,12 @@
 """PolarsLong NATIVE tier 静态审计 CI。"""
 from __future__ import annotations
 
-from backend.polars_long_policy import (
+from factor_engine.backend.polars_long_policy import (
     POLARS_LONG_NATIVE,
     POLARS_LONG_NONSTANDARD_ALG,
     POLARS_LONG_STATEFUL,
 )
-from backend.polars_long_static_audit import (
+from factor_engine.backend.polars_long_static_audit import (
     assert_polars_long_native_clean,
     audit_polars_long_native,
 )

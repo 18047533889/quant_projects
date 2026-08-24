@@ -97,7 +97,7 @@ def build_plan_execution_certificate(
     output_shape: tuple[int, int] | None = None
     if plan is not None:
         try:
-            from planner.plan_hash import typed_ir_structural_hash
+            from factor_engine.planner.plan_hash import typed_ir_structural_hash
 
             structural_hash = typed_ir_structural_hash(plan)
         except Exception:

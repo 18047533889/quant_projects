@@ -28,18 +28,70 @@ import logging
 import os
 import threading
 import time
+from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Iterator, Sequence
 
 import duckdb
 import pyarrow as pa
 
 from .duckdb_config import DuckDBConfig, apply_pragmas, resolve_duckdb_config
-from .exceptions import AccessDeniedError, EngineError
+from .exceptions import AccessDeniedError, EngineError, ValidationError
 from .retry import retry_io
 from data_access.read.telemetry import maybe_log_slow_query_plan, record_query
 
 
 logger = logging.getLogger("data_access.engine")
+
+
+class StorageKind(str, Enum):
+    """远程存储需求种类（R46：从 SQL 字符串 sniff 升级为 typed 需求）。
+
+    ``StorageRequirement`` 显式声明一次查询需要何种远程存储，而不是靠扫
+    SQL/params 里的 ``s3://`` 字符串推断（#P0-11 的短期方案的完整修复方向）。
+    """
+
+    LOCAL = "local"
+    REMOTE_S3 = "s3"
+    REMOTE_GCS = "gcs"
+    REMOTE_AZURE = "azure"
+
+
+# 已实现真实远程配置的存储种类；其余 fail-closed（不静默当 local 读）。
+_REMOTE_CONFIGURABLE = frozenset({StorageKind.REMOTE_S3})
+
+
+@dataclass(frozen=True)
+class StorageRequirement:
+    """一次查询的 typed 远程存储需求（R46）。
+
+    - ``kind``：存储种类，构造时 fail-closed——未知值直接抛 ``ValidationError``，
+      绝不静默 fallback 成 local（与 ``StorageSpec.__post_init__`` 同策略）。
+    - ``credential_scope``：凭证权限范围标识，绑定 cache scope / credential
+      chain 用（可空，缺省取当前 principal scope）。
+    """
+
+    kind: StorageKind
+    credential_scope: str | None = None
+
+    def __post_init__(self) -> None:
+        raw = self.kind
+        if isinstance(raw, StorageKind):
+            normalized = raw
+        else:
+            try:
+                normalized = StorageKind(str(raw).strip().lower())
+            except ValueError:
+                raise ValidationError(
+                    f"未知 storage kind={raw!r}。支持: "
+                    f"{[k.value for k in StorageKind]}"
+                ) from None
+        if normalized is not self.kind:
+            object.__setattr__(self, "kind", normalized)
+
+    @property
+    def is_remote(self) -> bool:
+        return self.kind is not StorageKind.LOCAL
 
 
 class _DeadlineConnectionPool:
@@ -520,12 +572,17 @@ class DuckDBEngine:
         params: Sequence[Any] | None = None,
         *,
         deadline_ms: float | None = None,
+        storage_requirement: StorageRequirement | None = None,
     ) -> pa.Table:
         """执行 SQL，返回 Arrow Table（零拷贝路径，性能最优）。
 
-        ``deadline_ms``：查询超时主动取消。使用独立连接 + watchdog 线程在
+        ``deadline_ms``：查询超时自动取消。使用独立连接 + watchdog 线程在
         截止后调用 ``interrupt()``（不打扰共享连接的并发查询）。超时抛
         ``DeadlineExceeded``。
+
+        ``storage_requirement``（R46）：typed 远程存储需求。显式声明优于
+        字符串 sniff（#P0-11 短期方案的完整修复方向）。未配置的远程种类
+        fail-closed（抛 ``ValidationError``），绝不静默当 local 读。
 
         R28-11：engine 内部统一 ``_exec_sem`` 并发门（不再要求调用方记得
         ``with duckdb_slot()``）。
@@ -541,6 +598,8 @@ class DuckDBEngine:
                     )
                 else:
                     table = self._execute_arrow_core(sql, params)
+                if storage_requirement is not None:
+                    self._configure_storage(self._conn, storage_requirement)
                 elapsed_ms = (time.perf_counter() - start) * 1000.0
                 return table
             except duckdb.Error as exc:
@@ -575,6 +634,28 @@ class DuckDBEngine:
                 ):
                     return True
         return False
+
+    def _configure_storage(
+        self, conn, requirement: StorageRequirement
+    ) -> None:
+        """R46：按 typed ``StorageRequirement`` 为连接配置远程存储。
+
+        fail-closed：未知/未实现 remote kind 抛 ``ValidationError``，绝不静默
+        当 local 读。LOCAL 无操作。
+        """
+        if requirement.kind is StorageKind.LOCAL:
+            return
+        if requirement.kind in _REMOTE_CONFIGURABLE:
+            from data_access.cos.s3_duckdb import ensure_duckdb_s3
+
+            with self._write_lock:
+                ensure_duckdb_s3(conn)
+            return
+        raise ValidationError(
+            f"storage kind={requirement.kind.value!r} 的远程配置尚未实现"
+            f"（已支持: {sorted(k.value for k in _REMOTE_CONFIGURABLE)}）。"
+            "请不要对未支持后端声明远程存储需求。"
+        )
 
     def _configure_isolated_s3_if_needed(self, conn, sql: str, params: Sequence[Any] | None) -> None:
         from data_access.cos.s3_duckdb import configure_fresh_duckdb_s3

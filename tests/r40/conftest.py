@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from cleaned_operators.registry import OperatorRegistry, _BOOTSTRAP_TOKEN
+from factor_engine.cleaned_operators.registry import OperatorRegistry, _BOOTSTRAP_TOKEN
 
 
 @pytest.fixture

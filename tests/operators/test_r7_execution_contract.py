@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from planner.composite_lowering import (
+from factor_engine.planner.composite_lowering import (
     LoweringContract,
     CompositeLoweringDuplicateError,
     _LOWERING_OLD_HASH,
@@ -23,14 +23,14 @@ from planner.composite_lowering import (
     declare_lowering_replacement,
     register_lowering,
 )
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 
 # ---------------------------------------------------------------------------
 # (a) ExecutionContract authority
 # ---------------------------------------------------------------------------
 def test_execution_contract_ts_ema_is_recursive_checkpoint():
-    from runtime.execution_contract import execution_contract
+    from factor_engine.runtime.execution_contract import execution_contract
 
     contract = execution_contract("ts_ema")
     assert contract.state_model == "recursive"
@@ -39,7 +39,7 @@ def test_execution_contract_ts_ema_is_recursive_checkpoint():
 
 
 def test_execution_contract_kama_requires_full_history():
-    from runtime.execution_contract import execution_contract
+    from factor_engine.runtime.execution_contract import execution_contract
 
     # KAMA has a checkpoint schema but no segmented restore -> full-history replay.
     contract = execution_contract("KAMA")
@@ -49,7 +49,7 @@ def test_execution_contract_kama_requires_full_history():
 
 
 def test_execution_contract_stateless_default():
-    from runtime.execution_contract import execution_contract
+    from factor_engine.runtime.execution_contract import execution_contract
 
     contract = execution_contract("ts_mean")
     assert contract.state_model == "stateless"
@@ -61,7 +61,7 @@ def test_execution_contract_stateless_default():
 # (b) HistoryRequirement — not the 1e9 sentinel
 # ---------------------------------------------------------------------------
 def test_history_requirement_returns_dataclass_not_sentinel():
-    from runtime.execution_contract import (
+    from factor_engine.runtime.execution_contract import (
         FULL_HISTORY_LOOKBACK_SENTINEL,
         HistoryRequirement,
         history_requirement,
@@ -76,7 +76,7 @@ def test_history_requirement_returns_dataclass_not_sentinel():
 
 
 def test_history_requirement_full_history_stateful_op():
-    from runtime.execution_contract import HistoryRequirement, history_requirement
+    from factor_engine.runtime.execution_contract import HistoryRequirement, history_requirement
 
     kama = history_requirement("KAMA", {"window": 10})
     assert isinstance(kama, HistoryRequirement)
@@ -84,7 +84,7 @@ def test_history_requirement_full_history_stateful_op():
 
 
 def test_history_requirement_finite_rows_match_analyzer():
-    from runtime.execution_contract import history_requirement
+    from factor_engine.runtime.execution_contract import history_requirement
 
     # ts_ema(span=20) warms up to span-1=19 rows (kernel warmup == analyzer).
     assert history_requirement("ts_ema", {"span": 20}).rows == 19
@@ -129,7 +129,7 @@ def _register_branch_composite(canonical: str, fast_values: tuple[float, ...]):
 @pytest.fixture
 def patch_dual_backend_safe(monkeypatch):
     """Point PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE at a known certified set."""
-    import backend.primitive_evidence as evidence
+    import factor_engine.backend.primitive_evidence as evidence
 
     monkeypatch.setattr(
         evidence,

@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from runtime.lineage import (
+from factor_engine.runtime.lineage import (
     build_run_lineage,
     hash_data_source_config,
     _canonicalize_config_value,

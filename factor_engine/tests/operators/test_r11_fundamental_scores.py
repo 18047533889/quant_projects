@@ -22,8 +22,8 @@ import pytest
 # operators under test via ``_mk(...)``, so this module does NOT need the full
 # ``ensure_cleaned_loaded()`` load_all() (which is currently blocked by the
 # concurrent session's in-flight R4-100 ``ts_extremal_index/polars`` edit).
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.fundamental.accruals_scores import (
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.fundamental.accruals_scores import (
     MIN_FUNDAMENTAL_COMPONENTS,
     _fin_altman_z_score,
     _fin_fundamental_strength_coverage,

@@ -14,14 +14,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from runtime.quality.dq_gates import (
+from factor_engine.runtime.quality.dq_gates import (
     DQThresholds,
     DQRole,
     build_daily_coverage_profile,
     evaluate_factor_dq,
     role_domain_checks,
 )
-from runtime.quality.input_dq import (
+from factor_engine.runtime.quality.input_dq import (
     InputDQThresholds,
     adjust_input_dq_thresholds_from_stats,
 )

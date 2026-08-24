@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 pd = pytest.importorskip("pandas")
 pl = pytest.importorskip("polars")
@@ -25,19 +25,19 @@ def _panel(values) -> pd.DataFrame:
 
 
 def test_normalize_has_certified_native_polars_evidence():
-    from backend.fastpath_evidence import polars_executed_parity_canonicals
+    from factor_engine.backend.fastpath_evidence import polars_executed_parity_canonicals
 
     assert "normalize" in polars_executed_parity_canonicals()
 
 
 def test_ambiguous_quantile_name_is_not_daily():
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
 
     assert "quantile" not in DAILY_CANONICALS
 
 
 def test_normalize_is_daily_but_quantile_is_not():
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
 
     assert "normalize" in DAILY_CANONICALS
     assert "quantile" not in DAILY_CANONICALS

@@ -8,8 +8,22 @@
 
 执行策略（A 股 / 美股统一）
 ----------------------------
-**A 股与美股均走 factor_engine runtime**（``cleaned_operators`` + 混合后端）；
-默认 ``backend.type=auto`` / hybrid：**SQL 子树下推 → Polars auto（``POLARS_PRODUCTION_SAFE``）→ Pandas fallback**。
+**A 股与美股均走 factor_engine runtime**（``cleaned_operators`` + 混合后端）。
+生产执行路由由 **Global Physical Planner**
+（``runtime.multibackend.batch_global_optimizer.PhysicalBatchGlobalOptimizer``）
+选择一份 **certified ``PhysicalRegionPlan``**（显式 region + ``TransferEdge``），
+``BackendRouter`` 仅提供 capability/cost 候选，**不 finalize 生产路由**。
+
+生产路径**无 executor 静默降级**：
+
+- 每个 region 带显式 ``ExecutionKind``，按 certified ``PhysicalRegionPlan`` 执行；
+- 运行时失败抛**类型化失败**（``runtime.exceptions`` 的 ``FailureTaxonomy``，
+  R37-P0-072，含 retry/replan/shard/fallback/abort 语义）；
+- 若策略允许（如 OOM → smaller-shape replan），由上层**显式 replan**，
+  绝不由 executor 悄悄降级到 pandas；
+- ``assert_no_production_pandas_fallbacks`` 在 production 模式下 hard-gate 任何
+  unplanned pandas fallback（除非 ``production_fallback_policy='warn'``）。
+
 仅数据源与 canonical 字段不同（A 股 parquet 常在 ``data/a_share/lqtp_data/``）。
 ``lqtp_dsl`` / ``platforms.lqtp`` 为历史 LQTP 平台路径，**新 campaign 不再依赖**。
 """
@@ -20,8 +34,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from api.dsl_parser import DSLParseError, parse_expr
-from api.operator_registry import build_dsl_allowlist
+from factor_engine.api.dsl_parser import DSLParseError, parse_expr
+from factor_engine.api.operator_registry import build_dsl_allowlist
 
 # composite 估值源：允许 DSL 使用 col("pe") 等无前缀简写
 _VALUATION_FIELD_ALIASES: dict[str, str] = {
@@ -65,17 +79,17 @@ def validate_production_dsl(formula: str, *, market: str) -> tuple[bool, str]:
     tuple[bool, str]
         ``(True, "OK")`` 或 ``(False, 错误说明)``。
     """
-    from cleaned_operators.operator_spec import check_production_formula_ops
-    from ir.analyzer import Analyzer
+    from factor_engine.cleaned_operators.operator_spec import check_production_formula_ops
+    from factor_engine.ir.analyzer import Analyzer
 
-    from backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
     import ast
     if market is None:
         raise ValueError("market is required for production validation (R21-P033)")
     market = str(market).strip().lower()
     # R24-160: per-market field registry — never the legacy A-only FIELD_REGISTRY.
-    from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+    from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
     registry = MULTI_MARKET_FIELD_REGISTRY.registry_for(market)
 
@@ -121,7 +135,7 @@ def validate_production_dsl(formula: str, *, market: str) -> tuple[bool, str]:
     violations = check_production_formula_ops(formula)
     if violations:
         return False, "; ".join(violations)
-    from cleaned_operators.operator_spec import check_financial_grain_contract
+    from factor_engine.cleaned_operators.operator_spec import check_financial_grain_contract
 
     # R34 P0-021: 把 production Analyzer 解析出的 market context 透传给 financial
     # validator——不再硬编码 ASHARE_CONTEXT（默认 A 股，US 显式传入 US_CONTEXT）。
@@ -132,9 +146,14 @@ def validate_production_dsl(formula: str, *, market: str) -> tuple[bool, str]:
 
 
 def validate_production_fastpath_dsl(
-    formula: str, *, strict: bool | None = None, market: str | None = None
+    formula: str, *, strict: bool | None = None, market: str
 ) -> tuple[bool, str]:
     """production fast path 公式校验：语法 + 高性能 backend 允许。
+
+    R21-FASTPATH-MARKET: ``market`` 现在是必填参数。与
+    ``validate_production_dsl`` 统一 —— 不再允许 ``None`` 缺省为 A 股，
+    显式传 ``None`` 或省略会直接失败。US 公式绝不能用默认 A-share
+    registry 校验。
 
     Parameters
     ----------
@@ -142,20 +161,24 @@ def validate_production_fastpath_dsl(
         DSL 公式字符串。
     strict : bool | None
         传给 ``check_production_fastpath_formula_ops``；``None`` 用模块默认。
-    market : str | None
-        R40 #86: 透传给 ``validate_production_dsl`` —— production 校验必须带
-        真实 market（US 公式绝不能用默认 A-share registry 校验）。``None``
-        时按 ``validate_production_dsl`` 的缺省（ashare）处理。
+    market : str
+        ``ashare`` / ``us``。必填（``Market.ASHARE`` / ``Market.US`` 或等价
+        字符串）。省略或传 ``None`` 会抛 ``TypeError`` / ``ValueError``。
 
     Returns
     -------
     tuple[bool, str]
         ``(True, "OK")`` 或 ``(False, 违规说明)``。
     """
+    if market is None:
+        raise ValueError(
+            "market is required for production fastpath validation (R21-FASTPATH-MARKET)"
+        )
+    market = str(market).strip().lower()
     ok, msg = validate_production_dsl(formula, market=market)
     if not ok:
         return False, msg
-    from backend.production_fastpath_gate import check_production_fastpath_formula_ops
+    from factor_engine.backend.production_fastpath_gate import check_production_fastpath_formula_ops
 
     result = check_production_fastpath_formula_ops(formula, strict=strict)
     if not result.ok:
@@ -165,7 +188,7 @@ def validate_production_fastpath_dsl(
 
 def list_production_fastpath_allowlist(*, strict: bool = True) -> list[str]:
     """返回 production fastpath 层算子白名单（排序后）。"""
-    from backend.fastpath_allowlists import production_fastpath_allowlist
+    from factor_engine.backend.fastpath_allowlists import production_fastpath_allowlist
 
     return sorted(production_fastpath_allowlist(strict=strict))
 
@@ -178,7 +201,7 @@ def export_fastpath_allowlists_json(*, strict: bool = True) -> dict[str, Any]:
     dict[str, Any]
         含 ``schema_version``、各层算子列表及 ``counts`` 的 JSON 可序列化 dict。
     """
-    from backend.fastpath_allowlists import (
+    from factor_engine.backend.fastpath_allowlists import (
         production_allowlist,
         production_fastpath_allowlist,
         research_allowlist,
@@ -1165,7 +1188,8 @@ def default_mining_operator_allowlist(*, tier: str = "production_fastpath") -> l
       ``direct_all_context`` / ``research_tools``；旧 ``research`` / ``production`` /
       ``production_fastpath`` 保留为别名。
     """
-    from mining.direct_use import (
+    from factor_engine.market.context import Market
+    from factor_engine.mining.direct_use import (
         DirectUseContext,
         DirectUseStatus,
         direct_use_matrix_rows,
@@ -1182,7 +1206,7 @@ def default_mining_operator_allowlist(*, tier: str = "production_fastpath") -> l
         )
     lane = _R22_MINING_TIER_LANES.get(tier_key, "all")
     rows = get_direct_use_mining_operators(
-        DirectUseContext(market="ashare"), admission="all"
+        DirectUseContext(market=Market.ASHARE), admission="all"
     )
     direct = [r for r in rows if lane == "all" or r.mining_lane == lane]
     return sorted(r.canonical for r in direct)
@@ -1238,16 +1262,28 @@ def get_mining_operators_from_manifest(
         ManifestValidationError: When manifest validation fails in
             production/cold-start mode
     """
-    from mining.direct_use import (
+    from factor_engine.market.context import Market
+    from factor_engine.mining.direct_use import (
         DirectUseContext,
         get_direct_use_mining_operators_from_manifest,
     )
 
     # Build context for filtering (performs real work, not a pass stub)
+    # Convert string market to Market enum if provided
+    market_enum: Market | None = None
+    if market is not None:
+        market_str = str(market).strip().lower()
+        if market_str in ("ashare", "cn", "china", "a_share"):
+            market_enum = Market.ASHARE
+        elif market_str in ("us", "usa"):
+            market_enum = Market.US
+        else:
+            raise ValueError(f"unknown market {market!r}; expected ashare|us")
+
     context = DirectUseContext(
         available_sources=tuple(available_sources) if available_sources else (),
         target_frequency=target_frequency,
-        market=market,
+        market=market_enum,
         max_cost=max_cost,
     )
 
@@ -1331,8 +1367,8 @@ def default_typed_mining_search_space_config(
     字段显式携带 frequency/domain/cardinality/unit/DQ policy；算子签名优先
     读取 metadata tags，基础层没有 signature/cost 字段时回退 catalog。
     """
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     domains_limit = int(max_domains)
@@ -1344,7 +1380,7 @@ def default_typed_mining_search_space_config(
 
     typed_fields: list[dict[str, Any]] = []
     if fields is None:
-        from fields import FIELD_REGISTRY
+        from factor_engine.fields import FIELD_REGISTRY
 
         raw_fields = [
             {
@@ -1390,7 +1426,7 @@ def default_typed_mining_search_space_config(
         # FIVE separate lists.  ``inputs`` (kept for backward compat) equals
         # exactly the data-input list — a window/lag/threshold scalar knob is
         # NEVER a data input.
-        from mining.direct_use import (
+        from factor_engine.mining.direct_use import (
             split_input_slots,
             terminal_allowed_for,
         )
@@ -1436,12 +1472,12 @@ def default_typed_mining_search_space_config(
         # R18-004 / R22-028: role / direct-use resolution failure is a HARD
         # ERROR for a mining search space — never emit an operator signature
         # with a missing role (no ``except Exception: pass`` here).
-        from mining.direct_use import (
+        from factor_engine.mining.direct_use import (
             build_direct_use_operator,
             resolve_direct_use_status,
             terminal_allowed_for,
         )
-        from mining.operator_catalog import assign_mining_role
+        from factor_engine.mining.operator_catalog import assign_mining_role
 
         role = assign_mining_role(canonical, entry)
         row = build_direct_use_operator(canonical, entry)
@@ -1460,10 +1496,11 @@ def default_typed_mining_search_space_config(
         signature_entry["lane"] = row.mining_lane
         signature_entry["mining_visible"] = row.mining_visible
         signature_entry["composition_usable"] = row.composition_usable
+        # R23: terminal_usable is the semantic gate; production_terminal_usable
+        # is the production gate (terminal_usable AND production_admitted).
+        # Mining consumers must use production_terminal_usable as the final
+        # flag for terminal placement in production.
         signature_entry["terminal_usable"] = row.terminal_usable
-        # R23: production_terminal_usable is the production gate
-        # (terminal_usable AND production_admitted). Mining consumers must use
-        # this as the final flag for terminal placement in production.
         signature_entry["production_terminal_usable"] = row.production_terminal_usable
         signature_entry["production_admitted"] = row.production_admitted
         signature_entry["context_admitted"] = row.context_admitted
@@ -1498,9 +1535,13 @@ def validate_formula_in_mining_allowlist(
     formula: str,
     *,
     tier: str | None = None,
+    market: str,
     max_domains: int = 2,
 ) -> tuple[bool, str]:
     """校验公式算子是否在指定 tier allowlist 内。
+
+    R21-FASTPATH-MARKET: ``market`` 为必填参数，生产层校验（fastpath /
+    production）会透传给 ``validate_production_dsl`` —— 无 A 股缺省。
 
     Parameters
     ----------
@@ -1509,6 +1550,8 @@ def validate_formula_in_mining_allowlist(
     tier : str | None
         ``research`` | ``production`` | ``production_fastpath``；
         默认读 ``FACTOR_ENGINE_MINING_ALLOWLIST_TIER``。
+    market : str
+        ``ashare`` / ``us``。必填（省略或 ``None`` 会抛错）。
 
     Returns
     -------
@@ -1517,7 +1560,7 @@ def validate_formula_in_mining_allowlist(
     """
     import ast
 
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     tier_key = resolve_mining_allowlist_tier(tier)
     allowed = frozenset(default_mining_operator_allowlist(tier=tier_key))
@@ -1542,7 +1585,7 @@ def validate_formula_in_mining_allowlist(
                 unknown.append(canon)
     if unknown:
         return False, f"operators not in {tier_key} allowlist: {sorted(set(unknown))}"
-    from ir.analyzer import Analyzer, validate_max_domains
+    from factor_engine.ir.analyzer import Analyzer, validate_max_domains
 
     try:
         analysis = Analyzer().lower(parse_expr(text, surface="daily"))
@@ -1552,9 +1595,9 @@ def validate_formula_in_mining_allowlist(
     if domain_errors:
         return False, "; ".join(domain_errors)
     if tier_key in _FASTPATH_VALIDATION_TIERS:
-        return validate_production_fastpath_dsl(text)
+        return validate_production_fastpath_dsl(text, market=market)
     if tier_key == "production":
-        return validate_production_dsl(text)
+        return validate_production_dsl(text, market=market)
     return True, "OK"
 
 
@@ -1604,7 +1647,7 @@ def default_mining_label_config(
     gap_bars: int = 1,
 ) -> dict[str, Any]:
     """挖掘/回测默认标签配置（PIT：标签与特征窗口隔离）。"""
-    from api.label_pit import default_mining_label_config as _label_cfg
+    from factor_engine.api.label_pit import default_mining_label_config as _label_cfg
 
     return _label_cfg(
         horizon_bars=horizon_bars,
@@ -1628,7 +1671,7 @@ def validate_mining_label_formula(formula: str, *, enforce: bool = True) -> tupl
     tuple[bool, str]
         ``(True, "OK")`` 或 ``(False, 违规说明)``。
     """
-    from api.label_pit import validate_label_formula_for_pit
+    from factor_engine.api.label_pit import validate_label_formula_for_pit
 
     try:
         report = validate_label_formula_for_pit(formula, enforce=enforce)
@@ -1734,6 +1777,6 @@ def default_mining_data_source_presets() -> dict[str, dict[str, Any]]:
 
 def audit_mining_datasets_contract() -> dict[str, Any]:
     """审计 mining preset 引用的 ``data_access`` 数据集是否在 ``datasets.yaml`` 登记。"""
-    from api.datasets_contract import audit_mining_dataset_contract
+    from factor_engine.api.datasets_contract import audit_mining_dataset_contract
 
     return audit_mining_dataset_contract()

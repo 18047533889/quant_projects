@@ -6,7 +6,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from runtime.intraday_aggregator import IntradayAggregator
+from factor_engine.runtime.intraday_aggregator import IntradayAggregator
 
 
 def _intraday_close_volume() -> tuple[pd.Series, pd.Series]:

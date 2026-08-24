@@ -138,7 +138,7 @@ class SpillStore:
 
         # 估算字节 + dtype/schema（写前记录，供 reload 校验）。
         try:
-            from runtime.resource_governor import estimate_object_bytes
+            from factor_engine.runtime.resource_governor import estimate_object_bytes
 
             n_bytes = max(0, int(estimate_object_bytes(value)))
         except Exception:

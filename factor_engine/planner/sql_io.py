@@ -2,14 +2,14 @@
 """Coordinate SQL/native scan decisions with logical SourceRef I/O."""
 from __future__ import annotations
 from typing import Any, Iterable
-from planner.logical_plan import PlanNode
-from planner.sql_lowerer import lower_to_physical_plan
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.sql_lowerer import lower_to_physical_plan
 
 
 def _contains_source_ref(plan: PlanNode) -> bool:
     if plan.op == "column":
         try:
-            from api.source_ref import decode_source_ref
+            from factor_engine.api.source_ref import decode_source_ref
             if decode_source_ref(str((plan.attrs or {}).get("name", ""))) is not None:
                 return True
         except Exception:

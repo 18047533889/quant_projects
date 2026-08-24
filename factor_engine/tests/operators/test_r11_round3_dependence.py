@@ -28,16 +28,16 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.conditional_dependence  # noqa: F401
-import cleaned_operators.dependence_ext  # noqa: F401
+import factor_engine.cleaned_operators.conditional_dependence  # noqa: F401
+import factor_engine.cleaned_operators.dependence_ext  # noqa: F401
 
-from cleaned_operators.conditional_dependence import (
+from factor_engine.cleaned_operators.conditional_dependence import (
     _break_ties_deterministic,
     _conditional_te_window,
     _quantile_edges,
 )
-from cleaned_operators.dependence_ext import _cmi, _partial_dcor_proxy, _rbf_kernel
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.dependence_ext import _cmi, _partial_dcor_proxy, _rbf_kernel
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _frame(values: np.ndarray, start: str = "2024-01-01") -> pd.DataFrame:
@@ -264,7 +264,7 @@ def test_hsic_bandwidth_source_uses_positive_distances():
 def _hand_cmi_denominator_check(x, y, z, bins):
     """Recompute the plug-in CMI numerator and effective-cell counts by hand."""
     n = x.size
-    from cleaned_operators.dependence_ext import _value_bins
+    from factor_engine.cleaned_operators.dependence_ext import _value_bins
 
     bx = _value_bins(x, bins)
     by = _value_bins(y, bins)

@@ -12,9 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from mining.operator_catalog import (
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.mining.operator_catalog import (
     MiningRole,
     RoleSource,
     _TERMINAL_ROLES,
@@ -191,7 +191,7 @@ def test_continuous_state_statistics_not_state_slot() -> None:
 def test_market_filter_fail_closed() -> None:
     """R15-INC-002/223: A-share-only operators must not appear in a US context,
     and an unknown market is rejected (not silently ignored)."""
-    from mining.operator_catalog import validate_market, market_support
+    from factor_engine.mining.operator_catalog import validate_market, market_support
 
     with pytest.raises(ValueError, match="unknown market"):
         get_mining_operators(market="cn", admission="all")
@@ -211,7 +211,7 @@ def test_market_filter_fail_closed() -> None:
 def test_target_frequency_matches_output_grain() -> None:
     """R15-INC-003/223: INTRADAY_EOD is minute input / DAILY output — it must be
     eligible for target=daily (with minute source), never for target=minute."""
-    from mining.operator_catalog import mining_eligible
+    from factor_engine.mining.operator_catalog import mining_eligible
 
     intraday = [
         op for op in get_mining_operators(
@@ -242,7 +242,7 @@ def test_target_frequency_matches_output_grain() -> None:
 def test_source_context_unknown_is_fail_closed() -> None:
     """R15-INC-004: an omitted source context is UNKNOWN capability, never
     "everything available".  Explicit empty set and explicit set differ."""
-    from mining.operator_catalog import source_status
+    from factor_engine.mining.operator_catalog import source_status
 
     catalog = OperatorRegistry._catalog["ts_mean"]
     unk = source_status("ts_mean", catalog, None)
@@ -256,7 +256,7 @@ def test_source_context_unknown_is_fail_closed() -> None:
 def test_unresolved_role_never_mines() -> None:
     """R15-INC-001: a registered canonical that matches no verified rule is
     UNRESOLVED and never eligible — it is never silently promoted to ALPHA."""
-    from mining.operator_catalog import MiningOperator
+    from factor_engine.mining.operator_catalog import MiningOperator
 
     # register a throwaway canonical with a bare surface (no family rule, no
     # daily/extended surface mapping can fire for 'zz_unresolved_probe_*')

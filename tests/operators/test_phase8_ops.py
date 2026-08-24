@@ -9,20 +9,20 @@ from textwrap import dedent
 import pandas as pd
 import pytest
 
-from runtime.metrics_export import (
+from factor_engine.runtime.metrics_export import (
     to_otlp_json,
     to_prometheus_text,
     write_otlp_metrics_file,
     write_prometheus_metrics_file,
 )
-from runtime.snapshot_reconcile import reconcile_data_snapshot
-from storage.catalog import FactorCatalog
-from storage.lake_publish import (
+from factor_engine.runtime.snapshot_reconcile import reconcile_data_snapshot
+from factor_engine.storage.catalog import FactorCatalog
+from factor_engine.storage.lake_publish import (
     PublishNotApprovedError,
     publish_factor_lake,
     sync_local_factor_to_staging,
 )
-from storage.materializer import ParquetMaterializer
+from factor_engine.storage.materializer import ParquetMaterializer
 
 
 def test_prometheus_text_contains_core_gauges():
@@ -80,7 +80,7 @@ def _make_series() -> pd.Series:
 
 
 def test_reconcile_data_snapshot_ok(tmp_path):
-    from runtime.lineage import hash_data_source_config
+    from factor_engine.runtime.lineage import hash_data_source_config
 
     lake = tmp_path / "lake"
     mat = ParquetMaterializer(lake_root=lake)
@@ -114,7 +114,7 @@ def test_reconcile_data_snapshot_ok(tmp_path):
 
 
 def test_reconcile_data_snapshot_uses_registry_without_config(tmp_path):
-    from runtime.lineage import hash_data_source_config
+    from factor_engine.runtime.lineage import hash_data_source_config
 
     lake = tmp_path / "lake"
     mat = ParquetMaterializer(lake_root=lake)

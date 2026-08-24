@@ -5,13 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from api.operator_registry import build_dsl_allowlist
-from backend.cleaned_bridge import build_cleaned_dsl_allowlist
-from backend.polars_long_policy import classify_plan_op
-from cleaned_operators import load_all
-from cleaned_operators.edge_requirements import missing_edge_dimensions
-from cleaned_operators.operator_surface import classify_canonical, unclassified_canonicals
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.api.operator_registry import build_dsl_allowlist
+from factor_engine.backend.cleaned_bridge import build_cleaned_dsl_allowlist
+from factor_engine.backend.polars_long_policy import classify_plan_op
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.edge_requirements import missing_edge_dimensions
+from factor_engine.cleaned_operators.operator_surface import classify_canonical, unclassified_canonicals
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 from research_operators import build_research_dsl_allowlist, build_unsafe_dsl_allowlist
 from research_tools.registry import ResearchToolRegistry
 
@@ -91,7 +91,7 @@ def test_duplicate_canonicals_are_merged_to_one_runtime() -> None:
 
 
 def test_api_dynamic_import_cannot_bypass_public_surface() -> None:
-    import api
+    import factor_engine.api
 
     for name in ("fft", "next", "causal_bfill", "constant", "fillna", "vwap"):
         with pytest.raises(AttributeError):

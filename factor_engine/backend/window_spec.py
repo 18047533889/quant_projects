@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from backend.plan_params import PlanParamError, parse_positive_int_literal
-from planner.logical_plan import PlanNode
+from factor_engine.backend.plan_params import PlanParamError, parse_positive_int_literal
+from factor_engine.planner.logical_plan import PlanNode
 
 
 class MissingWindowPolicy(Enum):

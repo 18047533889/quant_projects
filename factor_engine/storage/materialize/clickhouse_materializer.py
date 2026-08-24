@@ -7,12 +7,12 @@ from typing import Any
 
 from logging_utils import get_logger
 
-logger = get_logger("storage.clickhouse_materializer")
+logger = get_logger("factor_engine.storage.clickhouse_materializer")
 
 
 def _ensure_data_access() -> None:
     """R21-130..133: import the installed ``data_access`` (no sys.path injection)."""
-    from storage.data_access_loader import ensure_data_access_importable
+    from factor_engine.storage.data_access_loader import ensure_data_access_importable
 
     ensure_data_access_importable()
 
@@ -131,7 +131,7 @@ class ClickHouseMaterializer:
         _ensure_data_access()
         from data_access.clickhouse.panel import ClickHouseConfig
         from data_access.clickhouse.write import insert_factor_dataframe
-        from storage.factor_frame import prepare_factor_dataframe
+        from factor_engine.storage.factor_frame import prepare_factor_dataframe
 
         version_key = str(factor_version) if factor_version else None
         df, dq_dict, _ = prepare_factor_dataframe(

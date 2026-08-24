@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import pytest
 
-from api.mining_integration import export_dsl_allowlist_json, validate_production_dsl
-from mining.direct_use import DirectUseContext
+from factor_engine.api.mining_integration import export_dsl_allowlist_json, validate_production_dsl
+from factor_engine.mining.direct_use import DirectUseContext
 
 
 class TestValidateProductionDslRequiresMarket:

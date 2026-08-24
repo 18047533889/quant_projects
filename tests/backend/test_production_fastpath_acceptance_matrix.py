@@ -9,15 +9,15 @@ pytest.importorskip("polars")
 
 @pytest.fixture(scope="module")
 def _loaded():
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
 
 
 def _row(canon: str):
-    from backend.fastpath_coverage import build_fastpath_coverage_row
+    from factor_engine.backend.fastpath_coverage import build_fastpath_coverage_row
 
     return build_fastpath_coverage_row(canon)
 
@@ -60,10 +60,10 @@ ACCEPTANCE_P2 = [
 
 @pytest.mark.parametrize("canon", ACCEPTANCE_DUAL_BACKEND)
 def test_acceptance_dual_backend_evidence(_loaded, canon):
-    from backend.fastpath_evidence import polars_executed_parity_canonicals
-    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
-    from backend.production_fast_path import is_effective_dual_backend_fastpath
-    from backend.sql_tiers import effective_sql_production_safe
+    from factor_engine.backend.fastpath_evidence import polars_executed_parity_canonicals
+    from factor_engine.backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    from factor_engine.backend.production_fast_path import is_effective_dual_backend_fastpath
+    from factor_engine.backend.sql_tiers import effective_sql_production_safe
 
     assert canon in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
     assert canon in polars_executed_parity_canonicals()
@@ -76,7 +76,7 @@ def test_acceptance_dual_backend_evidence(_loaded, canon):
 
 @pytest.mark.parametrize("canon", ACCEPTANCE_POLARS_ONLY)
 def test_acceptance_polars_reference_without_dual(_loaded, canon):
-    from backend.primitive_evidence import (
+    from factor_engine.backend.primitive_evidence import (
         POLARS_REFERENCE_PARITY_VERIFIED,
         PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE,
     )
@@ -87,7 +87,7 @@ def test_acceptance_polars_reference_without_dual(_loaded, canon):
 
 @pytest.mark.parametrize("canon", ACCEPTANCE_P1_NOT_PRODUCTION)
 def test_acceptance_p1_not_dual_production(_loaded, canon):
-    from backend.production_fast_path import is_effective_dual_backend_fastpath
+    from factor_engine.backend.production_fast_path import is_effective_dual_backend_fastpath
 
     if canon == "ts_sharpe":
         assert is_effective_dual_backend_fastpath(canon)
@@ -97,6 +97,6 @@ def test_acceptance_p1_not_dual_production(_loaded, canon):
 
 @pytest.mark.parametrize("canon", ACCEPTANCE_P2)
 def test_acceptance_p2_not_production(_loaded, canon):
-    from backend.production_fast_path import is_effective_dual_backend_fastpath
+    from factor_engine.backend.production_fast_path import is_effective_dual_backend_fastpath
 
     assert not is_effective_dual_backend_fastpath(canon)

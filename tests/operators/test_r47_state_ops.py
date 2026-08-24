@@ -15,9 +15,9 @@ import pytest
 # NOTE: state_ops is not yet in _LOAD_MODULES (wired centrally later), so it
 # must be imported explicitly BEFORE ensure_cleaned_loaded() so the
 # @register_operator decorators run and the operators exist in the registry.
-import cleaned_operators.intraday.state_ops  # noqa: F401
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+import factor_engine.cleaned_operators.intraday.state_ops  # noqa: F401
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
@@ -154,14 +154,14 @@ def _call(name: str, panel: pd.DataFrame, state: pd.DataFrame, **overrides) -> p
 
 @pytest.mark.parametrize("name", sorted(set(ALL)))
 def test_registered_and_classified(name: str) -> None:
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     assert OperatorRegistry.get(name) is not None, name
     assert classify_canonical(name) in ("daily", "extended", "research"), name
 
 
 def test_canonical_count() -> None:
-    import cleaned_operators.intraday.state_ops as m
+    import factor_engine.cleaned_operators.intraday.state_ops as m
 
     assert len(m._CANONICALS) == 12
     assert set(m._CANONICALS) == set(ALL)

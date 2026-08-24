@@ -12,9 +12,9 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="legacy expanding and statistical aliases were removed from the runtime surface")
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators._causal import causal_lag
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators._causal import causal_lag
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 pd = pytest.importorskip("pandas")
 
@@ -272,10 +272,10 @@ class TestMiscCausalGuards:
 class TestEngineCausalIntegration:
     @pytest.fixture
     def engine(self):
-        from api.dsl_parser import parse_expr
-        from api.factor import Factor
-        from backend.pandas_backend import PandasBackend
-        from runtime.engine import FactorEngine
+        from factor_engine.api.dsl_parser import parse_expr
+        from factor_engine.api.factor import Factor
+        from factor_engine.backend.pandas_backend import PandasBackend
+        from factor_engine.runtime.engine import FactorEngine
         from tests.helpers import InMemorySeriesSource
 
         idx = pd.MultiIndex.from_product(
@@ -289,7 +289,7 @@ class TestEngineCausalIntegration:
 
     def test_engine_delay_prefix_invariant(self, engine):
         eng, parse_expr, Factor = engine
-        from runtime.engine import FactorEngine
+        from factor_engine.runtime.engine import FactorEngine
 
         full = eng.run(Factor(name="t", expr=parse_expr('delay(col("close"), 1)')))[
             "result"

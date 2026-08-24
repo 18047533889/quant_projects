@@ -33,7 +33,7 @@ def strict_fiscal_parameter_domain_certification_guard():
     yield
 
 
-from ir.types import (  # noqa: E402
+from factor_engine.ir.types import (  # noqa: E402
     AfterClose,
     DeclarationDate,
     EffectiveDate,
@@ -136,8 +136,8 @@ def test_lattice_semantic_kind_conflict_is_mixed():
 
 def _patch_operator_registry(monkeypatch):
     """Stub the operator registry so ``Analyzer.lower`` avoids ``load_all()``."""
-    from backend import cleaned_bridge
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend import cleaned_bridge
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     monkeypatch.setattr(
         cleaned_bridge, "ensure_cleaned_loaded", lambda: None
@@ -156,8 +156,8 @@ def _patch_operator_registry(monkeypatch):
 
 def _analyzer_semantic(monkeypatch, left, right, op: str) -> dict:
     _patch_operator_registry(monkeypatch)
-    from api.columns import field
-    from ir.analyzer import Analyzer
+    from factor_engine.api.columns import field
+    from factor_engine.ir.analyzer import Analyzer
 
     if op == "add":
         expr = field(left) + field(right)

@@ -10,8 +10,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from fields.catalog_us import US_TABLE_SPECS
-from cleaned_operators.fundamental.transforms_v2 import fin_ratio
+from factor_engine.fields.catalog_us import US_TABLE_SPECS
+from factor_engine.cleaned_operators.fundamental.transforms_v2 import fin_ratio
 
 
 def test_us_financial_tables_require_timeframe():

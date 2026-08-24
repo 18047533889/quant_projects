@@ -61,6 +61,56 @@ def _store(tmp_path=None):
     return DataAccessStore(registry=registry, engine=engine)
 
 
+def _local_daily_store(tmp_path: Path) -> DataAccessStore:
+    """用本地临时 registry 建一个 ``ashare_stock_daily`` 数据集。
+
+    避免真实 registry 把 root 解析到 /home/shw 下的 COS 镜像根，触发
+    ensure_local_mirror 试图在不可写的 /home/shw 建目录（PermissionError）。
+    本地临时数据集 root 不在已知镜像根下，不会触发 COS 拉取。
+    """
+    root = tmp_path / "stock_daily"
+    root.mkdir(parents=True, exist_ok=True)
+    import pyarrow.parquet as pq
+
+    dates = [f"2024-01-{d:02d}" for d in range(2, 12)]
+    import datetime as _d
+
+    for d in dates:
+        pq.write_table(
+            pa.table(
+                {
+                    "TradeDate": pa.array([_d.date.fromisoformat(d)], type=pa.date32()),
+                    "Symbol": pa.array(["000001"], type=pa.string()),
+                    "Close": pa.array([10.0], type=pa.float64()),
+                }
+            ),
+            root / f"{d}.parquet",
+        )
+    cfg = tmp_path / "r26_local.yaml"
+    cfg.write_text(
+        f"""
+ashare_stock_daily:
+  kind: static
+  access_mode: published
+  layout: plain
+  hive_partitioning: false
+  union_by_name: true
+  root: {root}
+  glob: "*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    Close: double
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    engine = DuckDBEngine(threads=2, enable_object_cache=False)
+    return DataAccessStore(registry=load_registry(cfg), engine=engine)
+
+
 # ---------------------------------------------------------------------------
 # §6.3 Security
 # ---------------------------------------------------------------------------
@@ -119,7 +169,7 @@ def test_tr26_sec005_factor_all_required(tmp_path):
     store = _store(tmp_path)
     policy = AccessPolicy(
         allowed_datasets=frozenset({"factor_lake"}),
-        allowed_factor_namespaces=frozenset({"market.basic"}),
+        allowed_factor_namespaces=frozenset({"factor_engine.market.basic"}),
         allowed_actions=frozenset({"factor:list", "factor:read"}),
     )
     principal = DataPrincipal(principal_id="basic", server_id="basic")
@@ -130,8 +180,8 @@ def test_tr26_sec005_factor_all_required(tmp_path):
 
     meta = FactorMeta(
         factor_id="alpha",
-        derived_access_tags=("market.basic", "alt.premium"),
-        source_access_tags=("market.basic",),
+        derived_access_tags=("factor_engine.market.basic", "alt.premium"),
+        source_access_tags=("factor_engine.market.basic",),
     )
     cat = MagicMock()
     cat.records = {"alpha": meta}
@@ -149,7 +199,7 @@ def test_tr26_sec006_catalog_unavailable_deny(tmp_path):
     store = _store(tmp_path)
     policy = AccessPolicy(
         allowed_datasets=frozenset({"factor_lake"}),
-        allowed_factor_namespaces=frozenset({"market.basic"}),
+        allowed_factor_namespaces=frozenset({"factor_engine.market.basic"}),
         allowed_actions=frozenset({"factor:list", "factor:read"}),
     )
     principal = DataPrincipal(principal_id="basic", server_id="basic")
@@ -172,7 +222,7 @@ def test_tr26_sec006_catalog_unavailable_deny(tmp_path):
 # ---------------------------------------------------------------------------
 def test_tr26_pipe001_public_paths_exactly_once(tmp_path):
     """R26-P0-004：每个 public path 的 pipeline 阶段 exactly once。"""
-    store = _store(tmp_path)
+    store = _local_daily_store(tmp_path)
     store._pipeline.reset_counters()
     store.read_arrow(
         "ashare_stock_daily",
@@ -184,7 +234,7 @@ def test_tr26_pipe001_public_paths_exactly_once(tmp_path):
 
 
 def test_tr26_pipe001b_scan_collect_release(tmp_path):
-    store = _store(tmp_path)
+    store = _local_daily_store(tmp_path)
     store._pipeline.reset_counters()
     h = store.scan(
         "ashare_stock_daily",
@@ -199,7 +249,7 @@ def test_tr26_pipe001b_scan_collect_release(tmp_path):
 
 def test_tr26_res003_stream_disconnect_no_leak(tmp_path):
     """R26-T-RES-003：stream 客户端中途断开 → active governor = 0。"""
-    store = _store(tmp_path)
+    store = _local_daily_store(tmp_path)
     store._pipeline.reset_counters()
     gen = store.read_arrow_stream(
         "ashare_stock_daily",
@@ -535,7 +585,7 @@ def test_tr26_clean004_no_ignored_source():
         if ln.strip()
         and not any(
             d in ln
-            for d in (".replace_backup_", ".venv", "/build/", "/dist/", "__pycache__", ".egg-info")
+            for d in (".replace_backup_", ".venv", "/build/", "build/lib", "/dist/", "__pycache__", ".egg-info")
         )
     ]
     assert ignored == [], f"production 源码被 gitignore: {ignored}"

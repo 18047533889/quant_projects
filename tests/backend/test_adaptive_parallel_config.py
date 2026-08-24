@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from backend.sql_pushdown.adaptive_parallel_config import (
+from factor_engine.backend.sql_pushdown.adaptive_parallel_config import (
     AdaptiveParallelConfig,
     QueryComplexity,
     WorkloadProfile,
     recommend_config,
 )
-from backend.sql_pushdown.duckdb_performance import DuckDBParallelConfig
+from factor_engine.backend.sql_pushdown.duckdb_performance import DuckDBParallelConfig
 
 
 class TestAdaptiveParallelConfig:

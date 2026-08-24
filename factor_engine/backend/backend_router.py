@@ -24,12 +24,12 @@ def _assert_semantic_production_evidence(canonical: str, run_mode: str) -> None:
     """Extended factor operators require the all-factor semantic audit artifact."""
     if str(run_mode or "research").lower() != "production":
         return
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
 
     if canonical in DAILY_CANONICALS:
         # Daily primitives are governed by primitive backend evidence.
         return
-    from backend.factor_operator_evidence import (
+    from factor_engine.backend.factor_operator_evidence import (
         factor_operator_evidence_valid,
         pandas_reference_production_safe,
         validation_errors,
@@ -43,7 +43,16 @@ def _assert_semantic_production_evidence(canonical: str, run_mode: str) -> None:
 
 
 class BackendRouter:
-    """Select only eligible backends; Registry remains a storage/index service."""
+    """Select only eligible backends; Registry remains a storage/index service.
+
+    R21-ROUTING-AUTHORITY: this router is a capability/cost CANDIDATE PROVIDER
+    only.  It may propose a backend but never finalizes the production route.
+    The Global Physical Planner
+    (``runtime.multibackend.batch_global_optimizer.PhysicalBatchGlobalOptimizer``)
+    is the sole production routing authority.  ``select`` returns a
+    ``BackendSelection`` that callers may use as a candidate; the production
+    path must route through the planner.
+    """
 
     @staticmethod
     def select(
@@ -56,7 +65,7 @@ class BackendRouter:
         row_count_estimate: int | None = None,
         allow_unverified_backend: bool = False,
     ) -> BackendSelection:
-        from backend.operator_capability import (
+        from factor_engine.backend.operator_capability import (
             UnsupportedOperatorBackendError,
             get_best_backend,
             resolve_canonical,

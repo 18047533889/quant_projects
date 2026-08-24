@@ -7,21 +7,21 @@ import pytest
 
 pytest.importorskip("polars")
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from backend.path_summary import infer_primary_route, snapshot_from_run_output
-from backend.sql_pushdown.strict import SqlLongPushdownError
-from cleaned_operators import load_all
-from runtime.engine import FactorEngine
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.backend.path_summary import infer_primary_route, snapshot_from_run_output
+from factor_engine.backend.sql_pushdown.strict import SqlLongPushdownError
+from factor_engine.cleaned_operators import load_all
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 
 @pytest.fixture(scope="module")
 def loaded():
     load_all()
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     register_sql_backends()
 
@@ -91,7 +91,7 @@ def test_execute_root_uses_isolated_runtime_stats(loaded, source):
     """parallel 路径：每个 root 使用独立 runtime_stats，避免互相覆盖。"""
     from dataclasses import replace
 
-    from runtime.batch_service import _execute_root_with_path
+    from factor_engine.runtime.batch_service import _execute_root_with_path
 
     eng = FactorEngine(backend=build_backend("polars_long"), data_source=source)
     ctx = eng._make_context()
@@ -103,8 +103,8 @@ def test_execute_root_uses_isolated_runtime_stats(loaded, source):
 
 
 def test_strict_sql_long_raises(monkeypatch):
-    from backend.context import ExecutionContext
-    from backend.sql_pushdown.strict import handle_sql_long_pushdown_failure
+    from factor_engine.backend.context import ExecutionContext
+    from factor_engine.backend.sql_pushdown.strict import handle_sql_long_pushdown_failure
 
     monkeypatch.setenv("FACTOR_ENGINE_STRICT_SQL_LONG", "1")
     ctx = ExecutionContext(data_source=object())
@@ -113,7 +113,7 @@ def test_strict_sql_long_raises(monkeypatch):
 
 
 def test_final_collect_not_sql_when_execution_failed():
-    from backend.path_summary import _final_collect
+    from factor_engine.backend.path_summary import _final_collect
 
     assert _final_collect({"fully_sql": True, "sql_full_execution_failed": True}) == (
         "fallback_to_pandas_or_polars"

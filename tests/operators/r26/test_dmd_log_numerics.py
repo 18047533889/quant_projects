@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from cleaned_operators.dmd import _log_finite_horizon_sum
+from factor_engine.cleaned_operators.dmd import _log_finite_horizon_sum
 
 
 def test_log_sum_huge_lambda_finite():

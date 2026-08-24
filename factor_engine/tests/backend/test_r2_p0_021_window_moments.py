@@ -6,13 +6,13 @@ import numpy as np
 import polars as pl
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 load_all()
 
-from cleaned_operators.common.time_series import TSKurtosisPolars, TSSkewnessPolars
-from cleaned_operators.research_polars import TSMomentNativePolars
+from factor_engine.cleaned_operators.common.time_series import TSKurtosisPolars, TSSkewnessPolars
+from factor_engine.cleaned_operators.research_polars import TSMomentNativePolars
 
 TSMomentNative = TSMomentNativePolars
 TSKurtNative = TSKurtosisPolars

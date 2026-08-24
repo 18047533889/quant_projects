@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from ir.nodes import IRNode
+from factor_engine.ir.nodes import IRNode
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -22,7 +22,7 @@ def strict_fiscal_parameter_domain_certification_guard():
     ir.analyzer / fields.spec directly and do not need the full operator load.
     """
     yield
-from ir.types import (
+from factor_engine.ir.types import (
     OPERATOR_INPUT_TYPE_CONTRACTS,
     SemanticLattice,
     lattice_join_semantic_attrs,
@@ -94,7 +94,7 @@ def test_input_types_contract_registered():
 
 
 def test_input_types_valid_close_volume_passes():
-    from ir.analyzer import validate_input_type_contracts
+    from factor_engine.ir.analyzer import validate_input_type_contracts
 
     node = IRNode(
         op="dollar_volume_zscore",
@@ -108,7 +108,7 @@ def test_input_types_valid_close_volume_passes():
 
 
 def test_input_types_volume_in_close_slot_rejects():
-    from ir.analyzer import validate_input_type_contracts
+    from factor_engine.ir.analyzer import validate_input_type_contracts
 
     # Swap: Volume goes into the close slot -> the close contract rejects it.
     node = IRNode(
@@ -124,7 +124,7 @@ def test_input_types_volume_in_close_slot_rejects():
 
 
 def test_input_types_return_in_volume_slot_rejects():
-    from ir.analyzer import validate_input_type_contracts
+    from factor_engine.ir.analyzer import validate_input_type_contracts
 
     # Return goes into the volume slot -> the volume contract rejects it.
     node = IRNode(
@@ -140,7 +140,7 @@ def test_input_types_return_in_volume_slot_rejects():
 
 
 def test_input_types_group_mean_group_contract():
-    from ir.analyzer import validate_input_type_contracts
+    from factor_engine.ir.analyzer import validate_input_type_contracts
 
     ok = IRNode(
         op="group_mean",
@@ -159,8 +159,8 @@ def test_input_types_group_mean_group_contract():
 # #273  production mode rejects unknown raw ColumnRef.
 # ---------------------------------------------------------------------------
 def test_production_rejects_unknown_raw_column():
-    from api.columns import col
-    from ir.analyzer import Analyzer, UnknownRawColumnError
+    from factor_engine.api.columns import col
+    from factor_engine.ir.analyzer import Analyzer, UnknownRawColumnError
 
     # R40 #174：production Analyzer 必须带显式 market（market=None 只在
     # research/compat 合法）——market 显式声明后，未知裸列仍被 production 拒绝。
@@ -170,16 +170,16 @@ def test_production_rejects_unknown_raw_column():
 
 def test_production_requires_explicit_market():
     """R40 #174：Analyzer(production=True, market=None) 必须 fail-closed。"""
-    from api.columns import col
-    from ir.analyzer import Analyzer, ProductionMarketContextRequiredError
+    from factor_engine.api.columns import col
+    from factor_engine.ir.analyzer import Analyzer, ProductionMarketContextRequiredError
 
     with pytest.raises(ProductionMarketContextRequiredError):
         Analyzer(production=True).lower(col("close"))
 
 
 def test_research_allows_raw_column_opt_in():
-    from api.columns import col
-    from ir.analyzer import Analyzer
+    from factor_engine.api.columns import col
+    from factor_engine.ir.analyzer import Analyzer
 
     analysis = Analyzer().lower(col("custom_alpha_input"))
     assert analysis.ir.op == "column"
@@ -189,7 +189,7 @@ def test_research_allows_raw_column_opt_in():
 # #269  FieldSpec.semantic_kind mapping helper (declared, not guessed).
 # ---------------------------------------------------------------------------
 def test_semantic_kind_mapping_volume():
-    from fields.spec import FieldSpec, semantic_kind_of_field
+    from factor_engine.fields.spec import FieldSpec, semantic_kind_of_field
 
     assert semantic_kind_of_field(
         FieldSpec(name="volume", table="StockDailyBar", source_name="volume")
@@ -200,19 +200,19 @@ def test_semantic_kind_mapping_volume():
 
 
 def test_semantic_kind_mapping_universe_mask():
-    from fields.spec import semantic_kind_of_field
+    from factor_engine.fields.spec import semantic_kind_of_field
 
     assert semantic_kind_of_field("universe_mask") == "MaskBool"
 
 
 def test_semantic_kind_mapping_group_id():
-    from fields.spec import semantic_kind_of_field
+    from factor_engine.fields.spec import semantic_kind_of_field
 
     assert semantic_kind_of_field("group_id") == "GroupKey"
 
 
 def test_semantic_kind_explicit_wins_over_name():
-    from fields.spec import FieldSpec, semantic_kind_of_field
+    from factor_engine.fields.spec import FieldSpec, semantic_kind_of_field
 
     # A declared semantic_kind is authoritative — never overridden by a name guess.
     spec = FieldSpec(

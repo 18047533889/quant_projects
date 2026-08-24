@@ -32,7 +32,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any
 
-from planner.physical_factor_dag import (
+from factor_engine.planner.physical_factor_dag import (
     TASK_CROSS_SECTION,
     TASK_CSE_SHARED,
     TASK_GROUP,
@@ -49,7 +49,7 @@ from planner.physical_factor_dag import (
     SourceScanSpec,
     rebase_task,
 )
-from runtime.task_resource_contract import TaskResourceContract
+from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
 #: 截面 / group / stateful barrier 算子（依赖整截面或全历史，不能拆进普通
 #: OPERATOR 组；也是 shard 不安全的来源）。
@@ -213,7 +213,7 @@ def extract_stage_subplans(
     """
     from dataclasses import replace as _replace
 
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     stages: list[tuple[str, Any]] = []
     cur = plan
@@ -338,7 +338,7 @@ def backend_context_for(
     backend_candidates: list[str] = []
     route_backend = preferred
     try:
-        from backend.plan_cost_router import choose_plan_route
+        from factor_engine.backend.plan_cost_router import choose_plan_route
 
         if ctx is not None:
             route = choose_plan_route(plan, ctx)
@@ -389,7 +389,7 @@ def contract_for_plan(
     从 backend 性质派。无法校准/计划不可分析时仍给出保守数值契约（estimate_basis
     如实标记）。
     """
-    from backend.operator_cost import calibrated_plan_peak_bytes, estimate_plan_cost
+    from factor_engine.backend.operator_cost import calibrated_plan_peak_bytes, estimate_plan_cost
 
     try:
         peak, uncertainty = calibrated_plan_peak_bytes(
@@ -501,7 +501,7 @@ def lower_root_plan(
     ``scan_cost``（来自 BatchDataRequest scope 的 DataAccess ScanCost）直接写进
     SOURCE_SCAN 的 resource_contract（R33-P0-034）。
     """
-    from backend.operator_cost import estimate_plan_cost
+    from factor_engine.backend.operator_cost import estimate_plan_cost
 
     bctx = backend_context_for(plan, ctx=ctx, preferred=preferred_backend)
     plan_cost = estimate_plan_cost(plan, rows=rows)
@@ -729,7 +729,7 @@ def lower_batch_dag(
     - 批量大小验证：``enable_dag_partitioning`` 参数控制优化开关；批量上限从
       ``adaptive_config.dag_chunk_size`` 自适应读取（30GB→1000，500GB→5000）。
     """
-    from runtime.adaptive_batch_scheduler import _plan_cost_bytes
+    from factor_engine.runtime.adaptive_batch_scheduler import _plan_cost_bytes
 
     # 批量大小验证（自适应上限，不是硬编码 1000）
     max_width = _get_adaptive_dag_width_limit()
@@ -806,7 +806,7 @@ def lower_batch_dag(
     # R33（嵌套 CSE）：CSE shared subplan 内部的 plan_ref（inner shared sid）必须
     # 成为 cse task 的 input 边——否则 outer shared 可能在 inner 物化前执行 →
     # plan_ref 查缓存 KeyError（调度顺序 race）。
-    from planner.cse import collect_consumed_sids as _collect_sids
+    from factor_engine.planner.cse import collect_consumed_sids as _collect_sids
 
     for sid, sub in (dag.shared_nodes or {}).items():
         cid = f"cse:{sid}"
@@ -856,7 +856,7 @@ def lower_batch_dag(
 def _get_host_memory_gb() -> float:
     """获取主机内存大小（GB），用于错误消息的可观测性。"""
     try:
-        from runtime.adaptive_config import get_global_adaptive_config
+        from factor_engine.runtime.adaptive_config import get_global_adaptive_config
         return get_global_adaptive_config().system_memory_gb
     except Exception:
         return 30.0  # 回退默认
@@ -887,7 +887,7 @@ def _get_adaptive_dag_width_limit() -> int:
         return int(env_override)
 
     try:
-        from runtime.adaptive_config import get_global_adaptive_config
+        from factor_engine.runtime.adaptive_config import get_global_adaptive_config
         config = get_global_adaptive_config()
         # dag_chunk_size 是已经根据内存缩放的值（30GB→1000, 500GB→5000）
         return config.dag_chunk_size
@@ -906,7 +906,7 @@ def _get_adaptive_chunk_size() -> int:
         return int(env_override)
 
     try:
-        from runtime.adaptive_config import get_global_adaptive_config
+        from factor_engine.runtime.adaptive_config import get_global_adaptive_config
         config = get_global_adaptive_config()
         # compile_chunk_size 已根据内存自适应（30GB→500, 500GB→2000）
         return config.compile_chunk_size
@@ -1074,7 +1074,7 @@ def _optimize_backend_partitioning(
         compute_costs = {}
         for backend in backend_candidates:
             try:
-                from backend.operator_cost import estimate_plan_cost
+                from factor_engine.backend.operator_cost import estimate_plan_cost
                 cost_dict = estimate_plan_cost(sub, rows=rows)
                 compute_costs[backend] = float(cost_dict.get("total_work", 10.0))
             except Exception:
@@ -1105,7 +1105,7 @@ def _optimize_backend_partitioning(
         compute_costs = {}
         for backend in backend_candidates:
             try:
-                from backend.operator_cost import estimate_plan_cost
+                from factor_engine.backend.operator_cost import estimate_plan_cost
                 cost_dict = estimate_plan_cost(fp.root, rows=rows)
                 compute_costs[backend] = float(cost_dict.get("total_work", 10.0))
             except Exception:
@@ -1129,7 +1129,7 @@ def _optimize_backend_partitioning(
         node_id = f"root:{fp.factor_name}"
         # 查找该 root 依赖的 shared nodes
         try:
-            from planner.cse import collect_consumed_sids
+            from factor_engine.planner.cse import collect_consumed_sids
             consumed = collect_consumed_sids(fp.root)
             for sid in consumed:
                 cse_id = f"cse:{sid}"

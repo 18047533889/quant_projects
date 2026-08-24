@@ -32,15 +32,15 @@ from __future__ import annotations
 
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators import stateful_contract_migration as _scm
-from cleaned_operators.stateful_contract_migration import (
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators import stateful_contract_migration as _scm
+from factor_engine.cleaned_operators.stateful_contract_migration import (
     _CHECKPOINT_RECURSIVE,
     _FULL_HISTORY_RECURSIVE,
     _R20_DERIVATIVE_RECURSIVE,
     apply_stateful_contract_migration,
 )
-from runtime.execution_contract import (
+from factor_engine.runtime.execution_contract import (
     ExecutionContractResolutionError,
     _STATEFUL_CANONICALS,
     declared_stateful_canonicals,
@@ -118,7 +118,7 @@ def test_migration_is_idempotent():
     assert _scm._APPLIED is True
     # a second apply is a no-op (the _APPLIED guard); a genuine re-declare of
     # any single name must raise — pinned directly against the API.
-    from runtime.execution_contract import declare_stateful
+    from factor_engine.runtime.execution_contract import declare_stateful
 
     with pytest.raises(ExecutionContractResolutionError):
         declare_stateful(

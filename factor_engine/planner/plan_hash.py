@@ -14,7 +14,7 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Any, Callable, Mapping
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 
 class NonFiniteLiteralError(ValueError):
@@ -98,7 +98,7 @@ def _operator_semantic_contract(op: str) -> dict[str, Any]:
     if op in {"column", "literal", "plan_ref"}:
         return {"semantic_version": 1}
     try:
-        from runtime.factor_identity import OperatorSemanticContractDigest
+        from factor_engine.runtime.factor_identity import OperatorSemanticContractDigest
 
         return OperatorSemanticContractDigest.for_canonical(op).to_payload()
     except (ImportError, AttributeError, KeyError, RuntimeError, ValueError, TypeError):
@@ -151,10 +151,10 @@ def _hash_canonical_attrs(node: PlanNode) -> dict[str, Any]:
     """
     if node.op in {"column", "literal", "plan_ref", "materialized_series"}:
         return dict(node.attrs)
-    from planner.canonicalize_params import canonicalize_parameter_values
+    from factor_engine.planner.canonicalize_params import canonicalize_parameter_values
 
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         canonical = OperatorRegistry._aliases.get(str(node.op), str(node.op))
     except Exception:  # pragma: no cover - bootstrap
@@ -268,7 +268,7 @@ def structural_key(node: PlanNode, memo: dict[int, str] | None = None) -> str:
     }
     if node.op == "column":
         try:
-            from fields import compute_field_catalog_hash
+            from factor_engine.fields import compute_field_catalog_hash
 
             payload["field_catalog_hash"] = compute_field_catalog_hash()
         except (ImportError, RuntimeError, ValueError):
@@ -327,7 +327,7 @@ def _field_catalog_hash_resolved() -> bool:
     fail（否则两个不同 field catalog 的因子共享一个稳定缓存 namespace）。
     """
     try:
-        from fields import compute_field_catalog_hash
+        from factor_engine.fields import compute_field_catalog_hash
 
         compute_field_catalog_hash()
         return True
@@ -396,7 +396,7 @@ def _typed_ir_semantic_payload(node: PlanNode) -> dict[str, Any]:
         payload["semantic"] = semantic
     if node.op == "column":
         try:
-            from fields import compute_field_catalog_hash
+            from factor_engine.fields import compute_field_catalog_hash
 
             payload["field_catalog_hash"] = compute_field_catalog_hash()
         except (ImportError, RuntimeError, ValueError):
@@ -406,7 +406,7 @@ def _typed_ir_semantic_payload(node: PlanNode) -> dict[str, Any]:
 
 def source_expression_hash(expr: Any) -> str:
     """SourceExpressionHash —— 原始 DSL ``Expr`` 树哈希（R20-079..082）。"""
-    from storage.catalog import compute_ir_hash
+    from factor_engine.storage.catalog import compute_ir_hash
 
     return _kind_digest(PlanHashKind.SOURCE_EXPRESSION, compute_ir_hash(expr))
 
@@ -575,7 +575,7 @@ def _compare_plan_semantics(
     reference: PlanNode, optimized: PlanNode
 ) -> list[DifferentialMismatch]:
     """比较 grain / availability / semantic attrs / history / source deps。"""
-    from planner.source_dependencies import build_source_dependency_manifest
+    from factor_engine.planner.source_dependencies import build_source_dependency_manifest
 
     out: list[DifferentialMismatch] = []
     for key in ("grain", "available_at", "price_basis", "semantic_kind", "frequency"):
@@ -614,7 +614,7 @@ class OptimizerDifferentialAudit:
         optimizer: Any | None = None,
         reference_optimizer: Any | None = None,
     ) -> None:
-        from planner.optimizer import Optimizer
+        from factor_engine.planner.optimizer import Optimizer
 
         self.optimizer = optimizer or Optimizer(allow_semantic_rewrites=True)
         self.reference_optimizer = reference_optimizer or Optimizer(
@@ -718,7 +718,7 @@ class RewriteTemporalProof:
         if ref_grain is not None and opt_grain is not None and ref_grain != opt_grain:
             violations.append(f"grain changed by rewrite: ref={ref_grain!r} opt={opt_grain!r}")
 
-        from planner.source_dependencies import build_source_dependency_manifest
+        from factor_engine.planner.source_dependencies import build_source_dependency_manifest
 
         ref_deps = set(build_source_dependency_manifest(reference))
         opt_deps = set(build_source_dependency_manifest(optimized))

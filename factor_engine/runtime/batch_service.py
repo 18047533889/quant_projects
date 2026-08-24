@@ -9,22 +9,22 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING, Any, Sequence
 
-from api.factor import Factor
-from ir.analyzer import AnalysisResult
+from factor_engine.api.factor import Factor
+from factor_engine.ir.analyzer import AnalysisResult
 from logging_utils import get_logger
-from runtime.perf_config import PerfConfig
-from runtime.production_policy import (
+from factor_engine.runtime.perf_config import PerfConfig
+from factor_engine.runtime.production_policy import (
     assert_production_fastpath_runtime,
     assert_production_factors,
     assert_production_run_flags,
     summarize_pandas_fallbacks,
 )
-from runtime.readonly_overlay_map import ReadOnlyOverlayMap
+from factor_engine.runtime.readonly_overlay_map import ReadOnlyOverlayMap
 
-logger = get_logger("runtime.batch_service")
+logger = get_logger("factor_engine.runtime.batch_service")
 
 if TYPE_CHECKING:
-    from runtime.engine import FactorEngine
+    from factor_engine.runtime.engine import FactorEngine
 
 #: R39 Gate-01：adaptive-scheduler 主路径不允许发生 legacy full-union batch
 #: prefetch（``engine._prepare_batch_data``）。该计数由 ``_maybe_prepare_batch_data``
@@ -155,7 +155,7 @@ def _materialize_shared_subplan(
             # Fallback: estimate_plan_cost（若 certificate 缺失）
             if recompute_ms <= 0.0:
                 try:
-                    from backend.operator_cost import estimate_plan_cost
+                    from factor_engine.backend.operator_cost import estimate_plan_cost
 
                     recompute_ms = float(
                         estimate_plan_cost(sub).get("total_work", 0.0) or 0.0
@@ -174,7 +174,7 @@ def _materialize_shared_subplan(
                 return True
             # REFUSED / RECOMPUTE：shared buffer 缺失会让 downstream plan_ref
             # KeyError —— production 必须 fail-closed，不能 return 成功。
-            from runtime.production_policy import is_production_mode
+            from factor_engine.runtime.production_policy import is_production_mode
 
             if is_production_mode(getattr(ctx, "run_mode", None)):
                 raise RuntimeError(
@@ -193,7 +193,7 @@ def _materialize_shared_subplan(
         # R37-P0-035：raw dict 写入只在 research 降级路径允许；production 下
         # store/ExpressionCache 都不可用 = 治理缺失，必须 fail-closed（§31.3：
         # 不允许 raw dict 绕过资源账本）。
-        from runtime.production_policy import is_production_mode
+        from factor_engine.runtime.production_policy import is_production_mode
 
         if is_production_mode(getattr(ctx, "run_mode", None)):
             raise RuntimeError(
@@ -215,8 +215,8 @@ def _release_consumed_sids(ctx: Any, root: Any) -> None:
     """
     if ctx.shared_result_cache is None:
         return
-    from cache.session import ExecutionCacheSession
-    from planner.cse import collect_consumed_sids
+    from factor_engine.cache.session import ExecutionCacheSession
+    from factor_engine.planner.cse import collect_consumed_sids
 
     consumed = collect_consumed_sids(root)
     if not consumed:
@@ -248,7 +248,7 @@ def _setup_cse_refcounts(ctx: Any, roots: list[Any]) -> None:
     shared panels would never be released and a large batch can drift into OOM.
     Failing loudly beats silently continuing with an unreleased shared panel.
     """
-    from planner.cse import cse_consumer_counts
+    from factor_engine.planner.cse import cse_consumer_counts
 
     roots_plans = [getattr(fp, "root", fp) for fp in roots]
     counts = cse_consumer_counts(roots_plans)
@@ -285,7 +285,7 @@ def validate_cse_refcount_integrity(dag: Any, ctx: Any) -> dict[str, Any]:
     返回 ``{"ok": bool, "issues": list[str]}``。生产模式下孤儿/悬空引用抛错
     （fail closed）。
     """
-    from planner.cse import collect_consumed_sids, cse_consumer_counts
+    from factor_engine.planner.cse import collect_consumed_sids, cse_consumer_counts
 
     issues: list[str] = []
     shared_nodes = getattr(dag, "shared_nodes", None) or {}
@@ -311,7 +311,7 @@ def validate_cse_refcount_integrity(dag: Any, ctx: Any) -> dict[str, Any]:
     report = {"ok": not issues, "issues": issues, "n_shared": len(shared_nodes), "n_consumed": len(consumed)}
     if issues:
         try:
-            from runtime.production_policy import is_production_mode
+            from factor_engine.runtime.production_policy import is_production_mode
 
             mode = getattr(ctx, "run_mode", None)
             if is_production_mode(mode):
@@ -373,7 +373,7 @@ def _assert_no_native_certified_fallback(
     if runtime.get("polars_long_fallback_reason") is None:
         return
     try:
-        from planner.composite_lowering import collect_plan_ops
+        from factor_engine.planner.composite_lowering import collect_plan_ops
 
         ops = set(collect_plan_ops(plan))
     except Exception:  # noqa: BLE001 - unanalyzable plan: skip invariant
@@ -381,13 +381,13 @@ def _assert_no_native_certified_fallback(
     if not ops:
         return
     try:
-        from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+        from factor_engine.backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
 
         native_safe = PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
     except Exception:  # noqa: BLE001
         return
     if ops.issubset(native_safe):
-        from runtime.production_policy import is_production_mode
+        from factor_engine.runtime.production_policy import is_production_mode
 
         if is_production_mode(run_mode):
             raise RuntimeError(
@@ -462,8 +462,8 @@ def _execute_root_with_path(
     """
     from dataclasses import replace
 
-    from backend.path_summary import snapshot_backend_path
-    from backend.polars_long_backend import _fresh_long_runtime
+    from factor_engine.backend.path_summary import snapshot_backend_path
+    from factor_engine.backend.polars_long_backend import _fresh_long_runtime
 
     parent_runtime = dict(getattr(ctx, "runtime_stats", None) or {})
     local_runtime = _fresh_long_runtime(parent_runtime)
@@ -498,7 +498,7 @@ def _execute_root_with_path(
         result = backend.execute(plan, local_ctx)
     else:
         # Local import avoids the engine -> batch_service execution-time cycle.
-        from runtime.engine import _execute_ready_single_region_plan
+        from factor_engine.runtime.engine import _execute_ready_single_region_plan
 
         result = _execute_ready_single_region_plan(
             physical_optimization,
@@ -549,7 +549,7 @@ def _cluster_factors_by_cost(
     落到末尾兜底组，等价老 short 桶。
     """
     if plan is None:
-        from runtime.batch_warmup_plan import compute_batch_warmup_plan
+        from factor_engine.runtime.batch_warmup_plan import compute_batch_warmup_plan
 
         plan = compute_batch_warmup_plan(
             analyses,
@@ -608,7 +608,7 @@ def _attach_batch_backend_paths(batch_out: dict[str, Any], paths: dict[str, dict
     """将各因子的 backend 路径写入批跑输出并生成汇总。"""
     if not paths:
         return
-    from backend.path_summary import summarize_batch_backend_paths
+    from factor_engine.backend.path_summary import summarize_batch_backend_paths
 
     batch_out["backend_paths"] = paths
     batch_out["backend_path_summary"] = summarize_batch_backend_paths(paths)
@@ -667,7 +667,7 @@ def _maybe_prepare_batch_data(
     for analysis in analyses.values():
         all_cols |= analysis.referenced_columns
     all_plans = [fp.root for fp in dag.roots] + list(dag.shared_nodes.values())
-    from planner.sql_io import should_skip_column_prefetch
+    from factor_engine.planner.sql_io import should_skip_column_prefetch
 
     if all_cols and not should_skip_column_prefetch(
         all_plans,
@@ -712,7 +712,7 @@ def resolve_batch_execution_control_plane(
 
 def _batch_source_bars_per_day(engine: Any) -> int:
     """批跑数据源的日内 bar 数（intraday trim 精度用）。"""
-    from cleaned_operators.operator_policy import bars_per_day, infer_source_bar_freq
+    from factor_engine.cleaned_operators.operator_policy import bars_per_day, infer_source_bar_freq
 
     try:
         return bars_per_day(infer_source_bar_freq(engine.data_source))
@@ -733,7 +733,7 @@ def _trim_batch_result(result: Any, run_window: Any, *, bars_per_day: int) -> An
         return result
     if not (run_window.trim_output and run_window.requested_start):
         return result
-    from planner.output_slice import (
+    from factor_engine.planner.output_slice import (
         apply_output_slice,
         carried_output_slice,
         compute_output_slice,
@@ -748,7 +748,7 @@ def _trim_batch_result(result: Any, run_window: Any, *, bars_per_day: int) -> An
         return apply_output_slice(result, out_slice)
     import pandas as pd
 
-    from storage.time_window import slice_series_time_window
+    from factor_engine.storage.time_window import slice_series_time_window
 
     trim_start = pd.Timestamp(run_window.requested_start)
     trim_end = (
@@ -790,7 +790,7 @@ def _maybe_prepare_batch_warmup(
     if not auto_warmup:
         return engine, {}
     if plan is None:
-        from runtime.batch_warmup_plan import compute_batch_warmup_plan
+        from factor_engine.runtime.batch_warmup_plan import compute_batch_warmup_plan
 
         plan = compute_batch_warmup_plan(
             analyses,
@@ -802,9 +802,9 @@ def _maybe_prepare_batch_warmup(
             market=market,
             strict=True,
         )
-    from cleaned_operators.operator_policy import bars_per_day, infer_source_bar_freq
-    from runtime.run_window import RunWindow, extract_source_date_bounds
-    from runtime.warmup_service import _switch_engine_to_window
+    from factor_engine.cleaned_operators.operator_policy import bars_per_day, infer_source_bar_freq
+    from factor_engine.runtime.run_window import RunWindow, extract_source_date_bounds
+    from factor_engine.runtime.warmup_service import _switch_engine_to_window
 
     per_windows: dict[str, Any] = dict(plan.per_factor)
     union_start: str | None = None
@@ -912,9 +912,9 @@ def _execute_run_many_scheduler(
     from concurrent.futures import Future
     import threading
 
-    from backend.routing_env import routing_execution_scope
-    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
-    from runtime.resource_telemetry import record_resource_telemetry
+    from factor_engine.backend.routing_env import routing_execution_scope
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    from factor_engine.runtime.resource_telemetry import record_resource_telemetry
 
     ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
     ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats)
@@ -925,7 +925,7 @@ def _execute_run_many_scheduler(
     # 应用到 DA governor（max_total_reserved_memory / scan inflight），DA 不再
     # 独立决定全局内存（no double admission）。
     try:
-        from runtime.host_resource_coordinator import get_host_coordinator
+        from factor_engine.runtime.host_resource_coordinator import get_host_coordinator
 
         da_env = get_host_coordinator().apply_da_envelope()
         runtime = dict(ctx.runtime_stats or {})
@@ -936,7 +936,7 @@ def _execute_run_many_scheduler(
     # R38 P0-011（§7）：进程级固定 cadence 控制循环（幂等）——scheduler 只读
     # last_decision，绝不自行 tick controller（stable/cooldown 与 loop 次数解耦）。
     try:
-        from runtime.resource_autopilot_service import start_resource_autopilot
+        from factor_engine.runtime.resource_autopilot_service import start_resource_autopilot
 
         autopilot = start_resource_autopilot()
         runtime = dict(ctx.runtime_stats or {})
@@ -947,7 +947,7 @@ def _execute_run_many_scheduler(
     # R33-P0-001..006：BatchDataRequest —— 从 analyses/plan 提取（multi-source）
     # → 每 source scope 一次 ScanCost（真实 time_range + instruments）→ 喂 read
     # wave / IO token / admission。估算失败记录 degraded planning（不静默）。
-    from planner.batch_data_request import build_batch_data_request
+    from factor_engine.planner.batch_data_request import build_batch_data_request
 
     batch_request = build_batch_data_request(
         engine_to_use, analyses=analyses, dag=dag, ctx=ctx
@@ -985,10 +985,10 @@ def _execute_run_many_scheduler(
     batch_request_meta = batch_request.to_dict()
     if run_mode == "production":
         try:
-            from planner.batch_global_optimizer import optimize_batch_global
+            from factor_engine.planner.batch_global_optimizer import optimize_batch_global
 
             root_plans = {fp.factor_name: fp.root for fp in dag.roots}
-            from runtime.engine import _admit_ready_single_region_batch
+            from factor_engine.runtime.engine import _admit_ready_single_region_batch
 
             physical_optimization = optimize_batch_global(
                 root_plans,
@@ -1003,7 +1003,7 @@ def _execute_run_many_scheduler(
             physical_by_factor = {
                 name: physical_optimization for name in root_plans
             }
-            from runtime.engine import (
+            from factor_engine.runtime.engine import (
                 _physical_backend_for_region,
                 _physical_plan_telemetry,
             )
@@ -1034,7 +1034,7 @@ def _execute_run_many_scheduler(
         batch_route_meta = {}
     else:
         try:
-            from backend.plan_cost_router import plan_batch_route, record_batch_route
+            from factor_engine.backend.plan_cost_router import plan_batch_route, record_batch_route
 
             root_plans = {
                 fp.factor_name: fp.root for fp in dag.roots
@@ -1094,7 +1094,7 @@ def _execute_run_many_scheduler(
 
     # R36 P0-029：run 级专用峰值采样器（start→stop 只统计本 run 窗口的
     # process family PSS/RSS，不混入 lifetime peak）。
-    from runtime.run_peak_sampler import RunPeakSampler
+    from factor_engine.runtime.run_peak_sampler import RunPeakSampler
 
     run_peak_sampler = RunPeakSampler(interval_s=0.5)
     run_peak_sampler.start()
@@ -1137,7 +1137,7 @@ def _execute_run_many_scheduler(
                 run_stats["scheduler_stats"] = {"auto_execution_mode": mode}
             run_stats["auto_execution_mode"] = mode
             if input_report is None and scheduler._input_dq_reports:
-                from runtime.input_dq import InputDQReport
+                from factor_engine.runtime.input_dq import InputDQReport
 
                 input_report = InputDQReport(
                     columns=[
@@ -1177,26 +1177,26 @@ def _execute_run_many_scheduler(
     if input_report is not None:
         batch_out["input_dq"] = input_report.to_dict()
     if len(factors) > 1:
-        from planner.dependency_graph import build_factor_batch_graph
+        from factor_engine.planner.dependency_graph import build_factor_batch_graph
 
         batch_graph = build_factor_batch_graph(factors, analyses)
         batch_out["batch_graph"] = batch_graph.to_dict()
     if dag.shared_nodes:
-        from planner.rolling_cache import summarize_rolling_cache
+        from factor_engine.planner.rolling_cache import summarize_rolling_cache
 
         batch_out["rolling_cache"] = summarize_rolling_cache(dag.shared_nodes)
     if dag.roots:
-        from backend.operator_cost import estimate_plan_cost
+        from factor_engine.backend.operator_cost import estimate_plan_cost
 
         batch_out["plan_costs"] = {
             fp.factor_name: estimate_plan_cost(fp.root) for fp in dag.roots
         }
-        from planner.cost_summary import summarize_plans
+        from factor_engine.planner.cost_summary import summarize_plans
 
         batch_out["cost_summary"] = summarize_plans(
             {fp.factor_name: fp.root for fp in dag.roots}
         )
-        from planner.scheduling_hints import derive_scheduling_hints
+        from factor_engine.planner.scheduling_hints import derive_scheduling_hints
 
         batch_out["scheduling_hints"] = derive_scheduling_hints(
             batch_out["cost_summary"]
@@ -1209,7 +1209,7 @@ def _execute_run_many_scheduler(
     fallbacks = summarize_pandas_fallbacks(ctx)
     if fallbacks:
         batch_out["production_pandas_fallbacks"] = fallbacks
-    from backend.path_summary import summarize_lazy_caches
+    from factor_engine.backend.path_summary import summarize_lazy_caches
 
     lazy_cache = summarize_lazy_caches(ctx)
     if lazy_cache:
@@ -1264,7 +1264,7 @@ def execute_run_many(
         含 ``results``、``dag``、``analyses`` 及可选 ``batch_graph``、
         ``input_dq``、``backend_paths`` 等的字典。
     """
-    from runtime.production_policy import is_production_mode
+    from factor_engine.runtime.production_policy import is_production_mode
 
     pit_enforce = bool(pit_enforce or is_production_mode(engine.run_mode))
     assert_production_run_flags(
@@ -1291,7 +1291,7 @@ def execute_run_many(
     # ``prepare_run_warmup``）。
     warmup_plan = None
     if auto_warmup:
-        from runtime.batch_warmup_plan import compute_batch_warmup_plan
+        from factor_engine.runtime.batch_warmup_plan import compute_batch_warmup_plan
 
         warmup_plan = compute_batch_warmup_plan(
             analyses,
@@ -1398,11 +1398,11 @@ def execute_run_many(
         return batch_out
 
     ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
-    from runtime.resource_telemetry import record_resource_telemetry
+    from factor_engine.runtime.resource_telemetry import record_resource_telemetry
 
     ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats)
-    from backend.routing_env import routing_execution_scope
-    from planner.dependency_graph import build_factor_batch_graph
+    from factor_engine.backend.routing_env import routing_execution_scope
+    from factor_engine.planner.dependency_graph import build_factor_batch_graph
 
     batch_graph = build_factor_batch_graph(factors, analyses)
     root_by_name = {fp.factor_name: fp for fp in dag.roots}
@@ -1454,21 +1454,21 @@ def execute_run_many(
     if len(factors) > 1:
         batch_out["batch_graph"] = batch_graph.to_dict()
     if dag.shared_nodes:
-        from planner.rolling_cache import summarize_rolling_cache
+        from factor_engine.planner.rolling_cache import summarize_rolling_cache
 
         batch_out["rolling_cache"] = summarize_rolling_cache(dag.shared_nodes)
     if dag.roots:
-        from backend.operator_cost import estimate_plan_cost
+        from factor_engine.backend.operator_cost import estimate_plan_cost
 
         batch_out["plan_costs"] = {
             fp.factor_name: estimate_plan_cost(fp.root) for fp in dag.roots
         }
-        from planner.cost_summary import summarize_plans
+        from factor_engine.planner.cost_summary import summarize_plans
 
         batch_out["cost_summary"] = summarize_plans(
             {fp.factor_name: fp.root for fp in dag.roots}
         )
-        from planner.scheduling_hints import derive_scheduling_hints
+        from factor_engine.planner.scheduling_hints import derive_scheduling_hints
 
         batch_out["scheduling_hints"] = derive_scheduling_hints(
             batch_out["cost_summary"]
@@ -1481,12 +1481,12 @@ def execute_run_many(
     fallbacks = summarize_pandas_fallbacks(ctx)
     if fallbacks:
         batch_out["production_pandas_fallbacks"] = fallbacks
-    from backend.path_summary import summarize_lazy_caches
+    from factor_engine.backend.path_summary import summarize_lazy_caches
 
     lazy_cache = summarize_lazy_caches(ctx)
     if lazy_cache:
         batch_out["lazy_cache_summary"] = lazy_cache
-    from runtime.resource_telemetry import record_resource_telemetry
+    from factor_engine.runtime.resource_telemetry import record_resource_telemetry
 
     ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats, finalize=True)
     batch_out["resource_telemetry"] = dict(ctx.runtime_stats.get("resource") or {})
@@ -1518,7 +1518,7 @@ def execute_run_many_iter(
     ``precompiled=(dag, analyses)`` 时跳过重复编译（供 materialize_many 预编译
     后流式物化使用）。
     """
-    from runtime.production_policy import is_production_mode
+    from factor_engine.runtime.production_policy import is_production_mode
 
     pit_enforce = bool(pit_enforce or is_production_mode(engine.run_mode))
     if precompiled is not None:
@@ -1535,7 +1535,7 @@ def execute_run_many_iter(
     # R39-P0-PERF-014：warmup 规划只算一次，供 batch warmup 消费。
     warmup_plan = None
     if auto_warmup:
-        from runtime.batch_warmup_plan import compute_batch_warmup_plan
+        from factor_engine.runtime.batch_warmup_plan import compute_batch_warmup_plan
 
         warmup_plan = compute_batch_warmup_plan(
             analyses,
@@ -1568,8 +1568,8 @@ def execute_run_many_iter(
         input_dq_thresholds=input_dq_thresholds,
     )
     ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
-    from backend.routing_env import routing_execution_scope
-    from planner.dependency_graph import build_factor_batch_graph
+    from factor_engine.backend.routing_env import routing_execution_scope
+    from factor_engine.planner.dependency_graph import build_factor_batch_graph
 
     batch_graph = build_factor_batch_graph(factors, analyses)
     root_by_name = {fp.factor_name: fp for fp in dag.roots}
@@ -1646,7 +1646,7 @@ def execute_run_many_parallel(
     Raises:
         ImportError: 未安装 joblib。
     """
-    from runtime.production_policy import is_production_mode
+    from factor_engine.runtime.production_policy import is_production_mode
 
     pit_enforce = bool(pit_enforce or is_production_mode(engine.run_mode))
     assert_production_run_flags(
@@ -1676,8 +1676,8 @@ def execute_run_many_parallel(
     # R20-132..137：production 下资源治理坏了绝不能「无约束继续跑」——plan 解析
     # 失败必须 hard fail；research 才回退 ``resource_scope=None`` 并告警。
     try:
-        from runtime.execution_resources import resource_plan
-        from runtime.resource_governor import ExecutionResourceScope
+        from factor_engine.runtime.execution_resources import resource_plan
+        from factor_engine.runtime.resource_governor import ExecutionResourceScope
 
         plan = resource_plan(n_jobs=workers)
         workers = plan.n_jobs
@@ -1704,7 +1704,7 @@ def execute_run_many_parallel(
     # R39-P0-PERF-014：warmup 规划（analysis → RunWindow → 扫描成本分组）只算一次。
     warmup_plan = None
     if auto_warmup:
-        from runtime.batch_warmup_plan import compute_batch_warmup_plan
+        from factor_engine.runtime.batch_warmup_plan import compute_batch_warmup_plan
 
         warmup_plan = compute_batch_warmup_plan(
             analyses,
@@ -1784,11 +1784,11 @@ def execute_run_many_parallel(
             _exit_scope()
 
     ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
-    from runtime.resource_telemetry import record_resource_telemetry
+    from factor_engine.runtime.resource_telemetry import record_resource_telemetry
 
     ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats)
-    from backend.routing_env import routing_execution_scope
-    from planner.dependency_graph import build_factor_batch_graph
+    from factor_engine.backend.routing_env import routing_execution_scope
+    from factor_engine.planner.dependency_graph import build_factor_batch_graph
 
     batch_graph = build_factor_batch_graph(factors, analyses)
     root_by_name = {fp.factor_name: fp for fp in dag.roots}
@@ -1884,12 +1884,12 @@ def execute_run_many_parallel(
     fallbacks = summarize_pandas_fallbacks(ctx)
     if fallbacks:
         parallel_out["production_pandas_fallbacks"] = fallbacks
-    from backend.path_summary import summarize_lazy_caches
+    from factor_engine.backend.path_summary import summarize_lazy_caches
 
     lazy_cache = summarize_lazy_caches(ctx)
     if lazy_cache:
         parallel_out["lazy_cache_summary"] = lazy_cache
-    from runtime.resource_telemetry import record_resource_telemetry
+    from factor_engine.runtime.resource_telemetry import record_resource_telemetry
 
     ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats, finalize=True)
     parallel_out["resource_telemetry"] = dict(ctx.runtime_stats.get("resource") or {})

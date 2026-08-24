@@ -30,24 +30,24 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any, Callable, Iterable, Mapping
 
-from planner.physical_factor_dag import (
+from factor_engine.planner.physical_factor_dag import (
     TASK_CSE_SHARED,
     TASK_ROOT,
     TASK_SOURCE_SCAN,
     source_scope_from_key,
 )
-from planner.projected_column_footprint import (
+from factor_engine.planner.projected_column_footprint import (
     ColumnFootprintProvider,
     ProjectedColumnFootprint,
     union_footprint_bytes,
     union_scan_bytes,
 )
-from planner.source_representation import (
+from factor_engine.planner.source_representation import (
     SourceRepresentation,
     consumer_backend_mask,
     preferred_representation_for_mask,
 )
-from planner.wave_recovery import (
+from factor_engine.planner.wave_recovery import (
     WaveRecoveryCategory,
     WaveRecoveryPlan,
     classify_wave_failure,

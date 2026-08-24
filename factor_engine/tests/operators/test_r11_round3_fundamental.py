@@ -21,19 +21,19 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 # Import the OWNED operator modules directly (round-3 file-disjoint rule).  This
 # keeps the suite green even while a concurrent session is mid-edit on the
 # shared layer-governance surface (the full ``load_all`` finalize can be
 # transiently blocked by another session's in-progress surface changes).
-import cleaned_operators.fundamental.transforms_v2  # noqa: F401  (fin_* + ledger)
-import cleaned_operators.fundamental.ledger  # noqa: F401  (fin_period_restated/…)
-import cleaned_operators.fundamental.quality_v2  # noqa: F401
-import cleaned_operators.fundamental.accruals_scores  # noqa: F401  (piotroski/altman/strength)
-import cleaned_operators.fundamental.ops  # noqa: F401  (operating_margin/current_ratio/…)
-import cleaned_operators.fundamental.polars_fundamental  # noqa: F401  (polars twins)
-import cleaned_operators.shareholder.churn_network  # noqa: F401  (holder coverage)
+import factor_engine.cleaned_operators.fundamental.transforms_v2  # noqa: F401  (fin_* + ledger)
+import factor_engine.cleaned_operators.fundamental.ledger  # noqa: F401  (fin_period_restated/…)
+import factor_engine.cleaned_operators.fundamental.quality_v2  # noqa: F401
+import factor_engine.cleaned_operators.fundamental.accruals_scores  # noqa: F401  (piotroski/altman/strength)
+import factor_engine.cleaned_operators.fundamental.ops  # noqa: F401  (operating_margin/current_ratio/…)
+import factor_engine.cleaned_operators.fundamental.polars_fundamental  # noqa: F401  (polars twins)
+import factor_engine.cleaned_operators.shareholder.churn_network  # noqa: F401  (holder coverage)
 
 
 def _op(canonical: str, backend: str = "pandas_numpy"):
@@ -61,7 +61,7 @@ def _restatement_panel():
 
 
 def test_period_ledger_records_release_and_revision_rows():
-    from cleaned_operators.fundamental.ledger import (
+    from factor_engine.cleaned_operators.fundamental.ledger import (
         PeriodLedgerEntry,
         _period_key,
         scan_period_ledger,
@@ -86,7 +86,7 @@ def test_period_ledger_records_release_and_revision_rows():
 
 
 def test_period_ledger_value_as_of_picks_revision_valid_on_decision_date():
-    from cleaned_operators.fundamental.ledger import _period_key, scan_period_ledger
+    from factor_engine.cleaned_operators.fundamental.ledger import _period_key, scan_period_ledger
 
     x, pid = _restatement_panel()
     entries = scan_period_ledger(x["S0"], pid["S0"])
@@ -147,7 +147,7 @@ def test_restatement_does_not_silently_blend_into_period_change():
 
 
 def test_revision_ledger_fails_closed_on_unparseable_period():
-    from cleaned_operators.fundamental.ledger import scan_period_ledger
+    from factor_engine.cleaned_operators.fundamental.ledger import scan_period_ledger
 
     x, pid = _panel(["UNPARSABLE", "UNPARSABLE"], [1.0, 2.0])
     entries = scan_period_ledger(x["S0"], pid["S0"], require_parseable=True)
@@ -314,7 +314,7 @@ def test_ratio_ops_declare_flow_stock_input_units():
     # fundamental ``ops.py`` but are NOT surfaced as extended-only canonicals,
     # so post-``load_all`` governance prunes them from the registry.  Assert the
     # metadata on the operator CLASS directly.
-    from cleaned_operators.fundamental.ops import (
+    from factor_engine.cleaned_operators.fundamental.ops import (
         CurrentRatioOp,
         DebtToEquityOp,
         OperatingMarginOp,
@@ -337,7 +337,7 @@ def test_ratio_ops_declare_flow_stock_input_units():
 
 
 def test_field_contract_semantic_type_declared():
-    from cleaned_operators.fundamental.field_contract import (
+    from factor_engine.cleaned_operators.fundamental.field_contract import (
         FUNDAMENTAL_RATIO_FIELD_CONTRACTS,
     )
 

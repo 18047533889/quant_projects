@@ -9,8 +9,8 @@ import pytest
 
 # Try to import from backend.operator_types
 try:
-    from backend.operator_types import OPERATOR_SIGNATURES
-    from backend.operator_signatures_phase2 import phase2_operator_signatures
+    from factor_engine.backend.operator_types import OPERATOR_SIGNATURES
+    from factor_engine.backend.operator_signatures_phase2 import phase2_operator_signatures
 except ImportError as e:
     pytest.skip(f"Cannot import operator signatures: {e}", allow_module_level=True)
 

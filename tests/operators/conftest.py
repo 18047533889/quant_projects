@@ -37,9 +37,9 @@ def strict_fiscal_parameter_domain_certification_guard() -> None:
     primitive certification stage that runs ``test_production_convergence.py``
     cannot certify only default fiscal parameters.
     """
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
-    from backend.production_signature import signature_for
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.production_signature import signature_for
 
     load_all()
 
@@ -82,8 +82,8 @@ def strict_fiscal_parameter_domain_certification_guard() -> None:
         )
 
     duckdb = pytest.importorskip("duckdb")
-    from backend.sql_pushdown import compile_plan_to_sql
-    from planner.logical_plan import PlanNode
+    from factor_engine.backend.sql_pushdown import compile_plan_to_sql
+    from factor_engine.planner.logical_plan import PlanNode
 
     panel = pd.DataFrame(
         {

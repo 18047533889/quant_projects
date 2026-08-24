@@ -56,7 +56,7 @@ def test_enumerate_all_available_operators():
     这个测试尝试加载算子注册表并列出所有可用的算子。
     """
     try:
-        from api.operator_registry import build_dsl_allowlist
+        from factor_engine.api.operator_registry import build_dsl_allowlist
 
         # Try to get all operators
         print("\n尝试加载算子白名单...")
@@ -106,7 +106,7 @@ def test_parse_simple_expressions():
 
     验证DSL解析器和基本算子的可用性。
     """
-    from api.dsl_parser import parse_expr
+    from factor_engine.api.dsl_parser import parse_expr
 
     test_cases = [
         # Basic column reference
@@ -177,7 +177,7 @@ def test_common_operator_patterns():
 
     测试100个最常用的alpha因子表达式模式。
     """
-    from api.dsl_parser import parse_expr
+    from factor_engine.api.dsl_parser import parse_expr
 
     # Generate common patterns
     patterns = []

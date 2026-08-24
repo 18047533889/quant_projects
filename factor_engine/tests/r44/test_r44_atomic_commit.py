@@ -8,7 +8,7 @@ import stat
 
 import pytest
 
-from runtime.atomic_commit import (
+from factor_engine.runtime.atomic_commit import (
     IncrementalCommitTransaction,
     IncrementalExecutionGeneration,
     WatermarkSet,
@@ -266,7 +266,7 @@ def test_finalize_watermark_advance_callable() -> None:
 
 
 def test_wire_in_generation_none_returns_old_style(tmp_path) -> None:
-    from runtime.materialize_service import execute_materialize_incremental_generation
+    from factor_engine.runtime.materialize_service import execute_materialize_incremental_generation
 
     items = [
         {
@@ -283,7 +283,7 @@ def test_wire_in_generation_none_returns_old_style(tmp_path) -> None:
 
 
 def test_wire_in_atomic_commit(tmp_path) -> None:
-    from runtime.materialize_service import execute_materialize_incremental_generation
+    from factor_engine.runtime.materialize_service import execute_materialize_incremental_generation
 
     items = [
         {
@@ -326,7 +326,7 @@ def _full_wm() -> WatermarkSet:
 
 
 def test_stage_rejects_same_name_factor_state_conflict(tmp_path) -> None:
-    from runtime.generation_store import NamespaceConflictError
+    from factor_engine.runtime.generation_store import NamespaceConflictError
 
     tx = IncrementalCommitTransaction(tmp_path / "gen")
     with pytest.raises(NamespaceConflictError):
@@ -387,7 +387,7 @@ def test_object_store_generation_commit_zero_local_path_writes(tmp_path) -> None
     命名空间 disjoint，无本地 Path 写。"""
     import importlib.util
 
-    from runtime.generation_store import ObjectGenerationStore
+    from factor_engine.runtime.generation_store import ObjectGenerationStore
 
     # dataaccess 包 __init__ 存在既有循环导入（会拉进 data_access），object_store
     # 本身仅用 stdlib，故按文件独立加载以隔离环境问题。

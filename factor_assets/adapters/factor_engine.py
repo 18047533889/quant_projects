@@ -12,8 +12,8 @@ import hashlib
 import json
 
 try:
-    from expr import canonical_expression, expression_payload, Expr
-    from expr.base import ensure_expr
+    from factor_engine.expr import canonical_expression, expression_payload, Expr
+    from factor_engine.expr.base import ensure_expr
     FE_AVAILABLE = True
 except ImportError:
     FE_AVAILABLE = False

@@ -4,16 +4,16 @@ import hashlib
 
 import pytest
 
-import backend.q_backend as q_backend
-from backend.q_backend.q_backend import get_q_backend
-from backend.q_backend.q_compiler import (
+import factor_engine.backend.q_backend as q_backend
+from factor_engine.backend.q_backend.q_backend import get_q_backend
+from factor_engine.backend.q_backend.q_compiler import (
     QCompiler,
     QLowering,
     QLoweringKind,
     get_q_compiler,
 )
-from backend.q_backend.q_capability import QBackendCapability, QCapabilityLevel
-from backend.q_backend.q_physical_implementation_registry import (
+from factor_engine.backend.q_backend.q_capability import QBackendCapability, QCapabilityLevel
+from factor_engine.backend.q_backend.q_physical_implementation_registry import (
     QEvidenceArtifact,
     QEvidenceValidationContext,
     QPhysicalImplementation,
@@ -216,9 +216,9 @@ def test_financial_row_order_lowerings_are_rejected() -> None:
 
 
 def test_explicit_registry_installed_before_compiler_bootstrap_is_shared(monkeypatch) -> None:
-    import backend.q_backend.q_capability as capability_module
-    import backend.q_backend.q_compiler as compiler_module
-    import backend.q_backend.q_physical_implementation_registry as registry_module
+    import factor_engine.backend.q_backend.q_capability as capability_module
+    import factor_engine.backend.q_backend.q_compiler as compiler_module
+    import factor_engine.backend.q_backend.q_physical_implementation_registry as registry_module
 
     monkeypatch.setattr(compiler_module, "_COMPILER", None)
     monkeypatch.setattr(capability_module, "_CAPABILITY_REGISTRY", None)
@@ -240,8 +240,8 @@ def test_explicit_registry_installed_before_compiler_bootstrap_is_shared(monkeyp
 
 
 def test_registry_replacement_after_compiler_bootstrap_is_rejected(monkeypatch) -> None:
-    import backend.q_backend.q_compiler as compiler_module
-    import backend.q_backend.q_physical_implementation_registry as registry_module
+    import factor_engine.backend.q_backend.q_compiler as compiler_module
+    import factor_engine.backend.q_backend.q_physical_implementation_registry as registry_module
 
     monkeypatch.setattr(compiler_module, "_COMPILER", None)
     monkeypatch.setattr(registry_module, "_REGISTRY", None)

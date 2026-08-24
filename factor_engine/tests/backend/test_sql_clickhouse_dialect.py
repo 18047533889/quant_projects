@@ -2,8 +2,8 @@
 """ClickHouse SQL 方言 emitter 测试。"""
 from __future__ import annotations
 
-from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
-from planner.logical_plan import PlanNode
+from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+from factor_engine.planner.logical_plan import PlanNode
 
 
 def _col(name: str) -> PlanNode:
@@ -117,7 +117,7 @@ def test_cs_resid_clickhouse_dialect():
 
 
 def test_tier6_clickhouse_dialect():
-    from backend.sql_pushdown.plan_fixtures import minimal_plan
+    from factor_engine.backend.sql_pushdown.plan_fixtures import minimal_plan
 
     for op in (
         "rank_pct",
@@ -139,7 +139,7 @@ def test_tier6_clickhouse_dialect():
 
 
 def test_tier7_clickhouse_dialect():
-    from backend.sql_pushdown.plan_fixtures import minimal_plan
+    from factor_engine.backend.sql_pushdown.plan_fixtures import minimal_plan
 
     for op in (
         "maximum",

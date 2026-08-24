@@ -80,12 +80,12 @@ def infer_field_type(value: Any, *, table: str | None = None, market: str | None
     """
 
     if market is not None:
-        from fields.resolver import resolve_market_field
+        from factor_engine.fields.resolver import resolve_market_field
 
         resolved = resolve_market_field(value, market, table=table, strict=False)
         return resolved.spec if resolved is not None else None
 
-    from fields import resolve_field
+    from factor_engine.fields import resolve_field
 
     return resolve_field(value, table=table, strict=False)
 
@@ -582,7 +582,7 @@ def register_axis_effects_for_surface(registry: Any = None) -> dict[str, AxisEff
 
     返回当前契约表（幂等：已声明的 canonical 保留，不覆盖显式手工注册）。
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     reg = registry if registry is not None else OperatorRegistry
     for canon in list(reg._operators):
@@ -1673,7 +1673,7 @@ def normalize_availability_descriptor(descriptor: Any) -> "AvailabilityExpr":
     policy label.  This splits the old single ``str`` slot that mixed policy
     labels with column names.
     """
-    from ir.types import _normalize_label as _norm
+    from factor_engine.ir.types import _normalize_label as _norm
 
     if descriptor is None or isinstance(descriptor, str) and not descriptor.strip():
         return UNKNOWN

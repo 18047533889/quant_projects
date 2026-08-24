@@ -23,8 +23,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from runtime.incremental_scheduler import DataEvent, FactorUpdatePlan, plan_updates_from_data_event
-from storage.catalog import FactorCatalog
+from factor_engine.runtime.incremental_scheduler import DataEvent, FactorUpdatePlan, plan_updates_from_data_event
+from factor_engine.storage.catalog import FactorCatalog
 
 
 _EDGE_TABLE_SQL = """
@@ -413,7 +413,7 @@ class DependencyCatalog:
 
     @classmethod
     def from_lake(cls, lake_root: str | Path) -> "DependencyCatalog":
-        from storage.materializer import ParquetMaterializer
+        from factor_engine.storage.materializer import ParquetMaterializer
 
         cat = ParquetMaterializer(lake_root=lake_root).catalog
         return cls(cat)
@@ -1068,7 +1068,7 @@ class DependencyCatalog:
         lookback_extra: int = 5,
         market: str | None = None,
     ) -> list[FactorUpdatePlan]:
-        from runtime.incremental_scheduler import normalize_data_event
+        from factor_engine.runtime.incremental_scheduler import normalize_data_event
 
         if not isinstance(event, DataEvent):
             event = normalize_data_event(event)

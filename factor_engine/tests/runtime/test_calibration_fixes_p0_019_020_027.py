@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from runtime.runtime_calibration import (
+from factor_engine.runtime.runtime_calibration import (
     CalibrationFactors,
     calibrated_factors,
     calibrated_peak_bytes,
@@ -31,7 +31,7 @@ def test_calibration_factors_typed_result():
         predicted_ms=50.0,
         predicted_peak_bytes=25 * 1024 * 1024,
     )
-    from runtime.runtime_calibration import calibration_key
+    from factor_engine.runtime.runtime_calibration import calibration_key
     key = calibration_key(
         operator="test_op",
         backend="pandas_numpy",
@@ -66,7 +66,7 @@ def test_calibration_factors_typed_result():
 def test_calibration_factors_no_samples():
     """FE-P0-019: No samples returns defaults (1.0, 1.0, 0)."""
     reset_calibration()
-    from runtime.runtime_calibration import calibration_key
+    from factor_engine.runtime.runtime_calibration import calibration_key
     key = calibration_key(
         operator="never_run",
         backend="pandas_numpy",
@@ -100,7 +100,7 @@ def test_calibrated_peak_uses_memory_factor_not_elapsed():
         predicted_peak_bytes=100 * 1024 * 1024,
     )
 
-    from runtime.runtime_calibration import calibration_key
+    from factor_engine.runtime.runtime_calibration import calibration_key
     key = calibration_key(
         operator="memory_hog",
         backend="pandas_numpy",
@@ -142,7 +142,7 @@ def test_calibrated_peak_uses_memory_factor_not_elapsed():
 def test_calibrated_peak_zero_static_returns_conservative_bound():
     """FE-P0-027: Zero/unknown static_peak_bytes returns conservative 8MB minimum."""
     reset_calibration()
-    from runtime.runtime_calibration import calibration_key
+    from factor_engine.runtime.runtime_calibration import calibration_key
 
     key = calibration_key(
         operator="unknown_op",
@@ -167,7 +167,7 @@ def test_calibrated_peak_zero_static_returns_conservative_bound():
 def test_calibrated_peak_nonzero_result_after_zero_calibration():
     """FE-P0-027: Even with zero calibration, result is nonzero if static > 0."""
     reset_calibration()
-    from runtime.runtime_calibration import calibration_key
+    from factor_engine.runtime.runtime_calibration import calibration_key
 
     # Record calibration with zero memory (pathological case)
     record_task_actual(
@@ -199,7 +199,7 @@ def test_calibrated_peak_nonzero_result_after_zero_calibration():
 def test_calibration_uncertainty_progression():
     """FE-P0-019/020/027: Uncertainty decreases as samples accumulate."""
     reset_calibration()
-    from runtime.runtime_calibration import calibration_key
+    from factor_engine.runtime.runtime_calibration import calibration_key
 
     key = calibration_key(
         operator="converge_op",
@@ -263,7 +263,7 @@ def test_calibration_ema_update_bounds():
         predicted_peak_bytes=10 * 1024 * 1024,
     )
 
-    from runtime.runtime_calibration import calibration_key
+    from factor_engine.runtime.runtime_calibration import calibration_key
     key = calibration_key(
         operator="pathological",
         backend="pandas_numpy",
@@ -286,7 +286,7 @@ def test_resource_governor_zero_estimate_admission():
 
     Zero/unknown estimates should not bypass admission control.
     """
-    from runtime.resource_governor import MemoryGovernor
+    from factor_engine.runtime.resource_governor import MemoryGovernor
 
     gov = MemoryGovernor(
         process_budget_bytes=100 * 1024 * 1024,  # 100MB

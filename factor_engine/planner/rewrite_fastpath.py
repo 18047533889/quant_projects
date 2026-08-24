@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 
 _COLUMN_SOURCE_KEYS = ("source_table", "field_id", "source_field", "field_registry_hash")

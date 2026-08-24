@@ -16,20 +16,20 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from runtime.factor_identity import FactorSemanticIdentity
-from runtime.reconcile.dual_write_service import (
+from factor_engine.runtime.factor_identity import FactorSemanticIdentity
+from factor_engine.runtime.reconcile.dual_write_service import (
     DualWriteRequest,
     MaterializationDelta,
     _series_with_tombstones,
     append_clickhouse_to_summary,
 )
-from storage.catalog import (
+from factor_engine.storage.catalog import (
     CatalogJsonField,
     FactorCatalog,
     _parse_json_field,
     catalog_strict_dumps,
 )
-from storage.exceptions import (
+from factor_engine.storage.exceptions import (
     CatalogCorruptionError,
     CatalogSerializationError,
     FactorRetiredError,
@@ -149,7 +149,7 @@ def test_read_corrupt_catalog_field_production_raises(tmp_path):
             cat.get_factor_info("f_corrupt")["data_source_json"], strict=True
         )
     # list_dual_write_failures 在生产下遇到坏 extra_json 也应 fail-closed
-    from runtime import production_policy
+    from factor_engine.runtime import production_policy
 
     cat._conn.execute(
         "INSERT INTO factor_run "
@@ -291,7 +291,7 @@ def test_delete_factor_tombstone_blocks_reuse(tmp_path):
 def test_deleted_factor_reuse_must_not_expose_old_partitions(tmp_path):
     """端到端：materialize → delete_factor → 再次 materialize 必须被墓碑拒绝，
     旧分区（year=2024）绝不可能与新数据混列。"""
-    from storage.materialize.materializer import ParquetMaterializer
+    from factor_engine.storage.materialize.materializer import ParquetMaterializer
 
     lake = tmp_path / "lake"
     mat = ParquetMaterializer(lake_root=lake, staging_dataset="stg")
@@ -326,7 +326,7 @@ def test_deleted_factor_reuse_must_not_expose_old_partitions(tmp_path):
 
 def _fake_ch_target(captured):
     """返回一个记录 (factor_id, series, factor_version) 的假 ClickHouseWriteTarget。"""
-    from storage.write_targets import ClickHouseWriteTarget as RealCH
+    from factor_engine.storage.write_targets import ClickHouseWriteTarget as RealCH
 
     class FakeCH:
         def __init__(self, *a, **k):
@@ -348,7 +348,7 @@ def _fake_ch_target(captured):
 
 def test_dual_write_version_unified_across_sinks(tmp_path, monkeypatch):
     """同一 AST、universe=CSI300 vs CSI500 → 两侧（Parquet/CH）版本一致且互不相同。"""
-    import storage.write_targets
+    import factor_engine.storage.write_targets
 
     captured = {}
     monkeypatch.setattr(
@@ -429,7 +429,7 @@ def test_dual_write_version_unified_across_sinks(tmp_path, monkeypatch):
 
 
 def test_dual_write_tombstones_reach_clickhouse(tmp_path, monkeypatch):
-    import storage.write_targets
+    import factor_engine.storage.write_targets
 
     captured = {}
     monkeypatch.setattr(

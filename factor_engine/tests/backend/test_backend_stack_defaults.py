@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from runtime.config import load_config, load_profile
+from factor_engine.runtime.config import load_config, load_profile
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -56,6 +56,6 @@ def test_data_access_template_uses_auto():
 
 
 def test_backend_config_dataclass_default_is_auto():
-    from runtime.config import BackendConfig
+    from factor_engine.runtime.config import BackendConfig
 
     assert BackendConfig().type == "auto"

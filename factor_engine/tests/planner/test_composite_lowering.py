@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from planner.composite_lowering import (
+from factor_engine.planner.composite_lowering import (
     collect_plan_ops,
     composite_dual_backend_capable,
     lower_composite_operators,
     lowered_primitives,
     register_lowering,
 )
-from planner.logical_plan import PlanNode
-from planner.optimizer import Optimizer
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.optimizer import Optimizer
 
 
 def _col(name: str = "close") -> PlanNode:
@@ -84,7 +84,7 @@ def test_lowered_primitives_for_mom():
 
 
 def test_composite_dual_backend_capable_mom():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
     assert composite_dual_backend_capable("MOM") is True
@@ -188,7 +188,7 @@ def test_micro_spread_lowers_to_protected_div():
 
 
 def test_list_composite_lowerings_batch_one_size():
-    from planner.composite_lowering import list_composite_lowerings
+    from factor_engine.planner.composite_lowering import list_composite_lowerings
 
     names = list_composite_lowerings()
     assert len(names) >= 16
@@ -206,7 +206,7 @@ def test_list_composite_lowerings_batch_one_size():
 
 
 def test_removed_obv_is_not_claimed_dual_backend_capable():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
     assert composite_dual_backend_capable("OBV") is False
@@ -238,7 +238,7 @@ def test_declared_parameter_defaults_drive_probe_not_fake_stub():
 
 
 def test_duplicate_lowering_rejected_with_both_sources():
-    from planner.composite_lowering import (
+    from factor_engine.planner.composite_lowering import (
         _LOWERING_SOURCES,
         CompositeLoweringDuplicateError,
     )
@@ -251,11 +251,11 @@ def test_duplicate_lowering_rejected_with_both_sources():
         def _dup_mom(node):
             return node
 
-    assert _LOWERING_SOURCES.get("MOM") == "planner.lowerings.technical"
+    assert _LOWERING_SOURCES.get("MOM") == "factor_engine.planner.lowerings.technical"
 
 
 def test_declared_replacement_authorises_reregister():
-    from planner.composite_lowering import declare_lowering_replacement
+    from factor_engine.planner.composite_lowering import declare_lowering_replacement
 
     declare_lowering_replacement("__r6_test_canonical__", "test override")
     register_lowering("__r6_test_canonical__")(lambda node: node)
@@ -266,7 +266,7 @@ def test_optimizer_rejects_fractional_window_before_lowering():
     # P0-04: Composite(window=5.9) must be rejected at planning, never lowered to
     # ts_mean(x, 5).  Use a pure PlanNode so no DSL/field plumbing is needed.
     plan = PlanNode(op="MOM", inputs=[_col()], attrs={"window": 5.9})
-    from planner.optimizer import Optimizer
+    from factor_engine.planner.optimizer import Optimizer
 
     with pytest.raises(Exception):
         Optimizer().optimize(plan, production=True)
@@ -279,7 +279,7 @@ def test_optimizer_accepts_integral_window_unchanged():
 
 
 def test_strict_float_rejects_bool_and_nan_params():
-    from planner.lowerings import _helpers as H
+    from factor_engine.planner.lowerings import _helpers as H
 
     with pytest.raises(ValueError):
         H.strict_float(True, "std_dev")
@@ -298,7 +298,7 @@ def test_canonicalize_parameter_values_normalises_proportional_weights():
     left verbatim; with the declaration, proportional vectors collapse to one
     unit-sum key.
     """
-    from planner.canonicalize_params import canonicalize_parameter_values
+    from factor_engine.planner.canonicalize_params import canonicalize_parameter_values
     from types import SimpleNamespace
 
     # No declared equivalence -> no name-based normalization (R13 NEW-P0-18).
@@ -308,7 +308,7 @@ def test_canonicalize_parameter_values_normalises_proportional_weights():
     assert a == {"weights": (1.0, 1.0, 1.0)}
 
     # Declared equivalence="positive_scale" -> unit-sum normalized hash key.
-    import planner.canonicalize_params as cmod
+    import factor_engine.planner.canonicalize_params as cmod
 
     def _fake_contract(canon):
         spec = SimpleNamespace(equivalence="positive_scale")
@@ -328,7 +328,7 @@ def test_canonicalize_parameter_values_normalises_proportional_weights():
     # R13 NEW-P0-19: a declared scale-equivalent vector with a non-numeric
     # element is REJECTED whole, never silently filtered to a shorter vector.
     import pytest
-    from backend.operator_errors import OperatorParameterError
+    from factor_engine.backend.operator_errors import OperatorParameterError
 
     cmod._operator_contract = _fake_contract
     try:

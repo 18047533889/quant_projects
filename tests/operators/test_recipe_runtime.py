@@ -5,12 +5,12 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from backend.sql_pushdown.sql_registry import is_sql_capable
-from cleaned_operators import load_all
-from factor_recipes.compiler import RecipeCompiler, RecipeExpansionError
-from factor_recipes.planner_bridge import compile_recipe_plans
-from factor_recipes.registry import FactorRecipe, FactorRecipeRegistry
-from planner.optimizer import Optimizer
+from factor_engine.backend.sql_pushdown.sql_registry import is_sql_capable
+from factor_engine.cleaned_operators import load_all
+from factor_engine.factor_recipes.compiler import RecipeCompiler, RecipeExpansionError
+from factor_engine.factor_recipes.planner_bridge import compile_recipe_plans
+from factor_engine.factor_recipes.registry import FactorRecipe, FactorRecipeRegistry
+from factor_engine.planner.optimizer import Optimizer
 
 
 @pytest.fixture(scope="module", autouse=True)

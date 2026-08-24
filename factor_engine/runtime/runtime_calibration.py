@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from runtime.task_resource_contract import (
+from factor_engine.runtime.task_resource_contract import (
     UNCERTAINTY_CALIBRATED,
     UNCERTAINTY_COLD,
     UNCERTAINTY_WARM,
@@ -291,7 +291,7 @@ def calibration_summary() -> dict[str, Any]:
 # P50/P95）。
 # ---------------------------------------------------------------------------
 
-from runtime.scan_shape import (  # noqa: E402
+from factor_engine.runtime.scan_shape import (  # noqa: E402
     ScanShapeCalibrator,
     ScanShapeKey,
     reconstruct_scan_shape_key,

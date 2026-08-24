@@ -5,7 +5,7 @@ Tests input sanitization including numeric arrays, DataFrames, and factor-specif
 import numpy as np
 import pytest
 
-from validation.sanitize import (
+from factor_engine.validation.sanitize import (
     SanitizationResult,
     sanitize_dataframe,
     sanitize_factor_inputs,

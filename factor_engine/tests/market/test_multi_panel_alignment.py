@@ -20,7 +20,7 @@ def _dates(n: int = 40) -> pd.DatetimeIndex:
 
 @pytest.fixture(scope="module", autouse=True)
 def _load():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
 
@@ -46,7 +46,7 @@ def _panels(n: int = 40):
     ],
 )
 def test_multi_input_column_reorder_rejected(canonical, args):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get(canonical, "pandas_numpy") or OperatorRegistry.get(canonical)
     if op is None:
@@ -83,7 +83,7 @@ def test_multi_input_column_reorder_rejected(canonical, args):
 
 
 def test_group_spectrum_alignment():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get("group_feature_mode_share", "pandas_numpy") or OperatorRegistry.get(
         "group_feature_mode_share"

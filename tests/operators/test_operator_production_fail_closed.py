@@ -7,10 +7,10 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="legacy research-default contract superseded by certified static production status")
 
-from api.mining_integration import validate_production_dsl
-from backend.cleaned_bridge import build_production_dsl_allowlist, ensure_cleaned_loaded
-from cleaned_operators.operator_policy import RESEARCH_CORE_CANONICALS
-from cleaned_operators.operator_spec import (
+from factor_engine.api.mining_integration import validate_production_dsl
+from factor_engine.backend.cleaned_bridge import build_production_dsl_allowlist, ensure_cleaned_loaded
+from factor_engine.cleaned_operators.operator_policy import RESEARCH_CORE_CANONICALS
+from factor_engine.cleaned_operators.operator_spec import (
     PRODUCTION_CORE_CANONICALS,
     build_operator_spec,
     production_allowed_canonicals,
@@ -48,7 +48,7 @@ def test_research_core_micro_not_production(_loaded):
 
 
 def test_production_allowed_subset_of_core(_loaded):
-    from cleaned_operators.operator_spec import production_allowed_composite_canonicals
+    from factor_engine.cleaned_operators.operator_spec import production_allowed_composite_canonicals
 
     allowed = production_allowed_canonicals()
     composites = production_allowed_composite_canonicals()
@@ -59,7 +59,7 @@ def test_production_allowed_subset_of_core(_loaded):
 
 
 def test_production_dsl_allowlist_is_core_only(_loaded):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     prod = build_production_dsl_allowlist()
     assert "ts_mean" in prod

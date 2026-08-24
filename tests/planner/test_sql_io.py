@@ -3,13 +3,13 @@
 
 from __future__ import annotations
 
-from api import rank, ts_mean, ts_sharpe
-from api.columns import col
-from api.factor import Factor
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from backend.factory import build_backend
-from planner.sql_io import plan_is_fully_sql, should_skip_column_prefetch
-from runtime.engine import FactorEngine
+from factor_engine.api import rank, ts_mean, ts_sharpe
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.backend.factory import build_backend
+from factor_engine.planner.sql_io import plan_is_fully_sql, should_skip_column_prefetch
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 

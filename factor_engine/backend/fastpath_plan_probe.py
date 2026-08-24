@@ -45,7 +45,7 @@ class ProbeSchemaBuilder:
     @classmethod
     def from_plan(cls, plan: Any, *, time_column: str = "ts", instrument_column: str = "inst") -> list[ProbeColumnSpec]:
         """收集 plan 引用列并推断类型。"""
-        from backend.polars_expr_emitter import collect_columns
+        from factor_engine.backend.polars_expr_emitter import collect_columns
 
         cols = sorted(collect_columns(plan))
         specs: list[ProbeColumnSpec] = []
@@ -158,7 +158,7 @@ def execute_duckdb_probe_sql(
 
 def probe_polars_full_plan(plan: Any) -> None:
     """PolarsLong full-plan typed compile + collect 探测。"""
-    from backend.polars_expr_emitter import compile_plan_to_polars, plan_is_polars_long_capable
+    from factor_engine.backend.polars_expr_emitter import compile_plan_to_polars, plan_is_polars_long_capable
 
     if not plan_is_polars_long_capable(plan):
         raise RuntimeError("polars_long plan not capable")
@@ -180,7 +180,7 @@ def probe_duckdb_full_plan(
     instrument_column: str = "inst",
 ) -> None:
     """DuckDB full-plan compile + 内存执行探测。"""
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql, plan_is_sql_capable
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql, plan_is_sql_capable
 
     if not plan_is_sql_capable(plan):
         raise RuntimeError("duckdb plan not sql capable")

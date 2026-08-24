@@ -32,7 +32,7 @@ def _install_storage_shim_if_needed() -> None:
     storage.parquet_batch_writer（独立基础设施），在真实包导入失败时安装
     轻量 shim 包，绕过 __init__，保证本测试不被并发编辑打断。"""
     try:
-        import storage  # noqa: F401
+        import factor_engine.storage  # noqa: F401
 
         return
     except Exception:
@@ -46,7 +46,7 @@ def _install_storage_shim_if_needed() -> None:
 
 _install_storage_shim_if_needed()
 
-from storage.block_lake import (  # noqa: E402
+from factor_engine.storage.block_lake import (  # noqa: E402
     FACTOR_BLOCK_LONG,
     FACTOR_BLOCK_WIDE,
     MATRIX_COLUMN_BLOCK,
@@ -56,7 +56,7 @@ from storage.block_lake import (  # noqa: E402
     FactorBlockLakeWriter,
     LakeWriteLayoutPolicy,
 )
-from storage.parquet_batch_writer import BatchParquetWriter
+from factor_engine.storage.parquet_batch_writer import BatchParquetWriter
 
 
 # ---------------------------------------------------------------------------

@@ -121,7 +121,7 @@ def main() -> int:
         help="可选：导出逐 canonical executed+passed 记录 JSON 的路径",
     )
     args = parser.parse_args()
-    from backend.factor_operator_evidence import VERIFIED_PATH, current_hashes, validation_errors
+    from factor_engine.backend.factor_operator_evidence import VERIFIED_PATH, current_hashes, validation_errors
     if args.check:
         errors = validation_errors()
         if errors:
@@ -139,10 +139,10 @@ def main() -> int:
     if proc.returncode:
         return proc.returncode
 
-    from cleaned_operators import load_all
-    from cleaned_operators.production_hardening import factor_production_targets
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
-    from backend.evidence_provenance import collect_runtime_versions, current_commit_sha
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.production_hardening import factor_production_targets
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.backend.evidence_provenance import collect_runtime_versions, current_commit_sha
     load_all()
     targets = sorted(set(factor_production_targets()).difference(DAILY_CANONICALS))
     executed_records = _executed_records_for_targets(targets)

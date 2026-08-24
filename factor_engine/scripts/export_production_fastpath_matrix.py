@@ -19,8 +19,8 @@ def _bootstrap() -> None:
     fe = str(FE_ROOT)
     if fe not in sys.path:
         sys.path.insert(0, fe)
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
@@ -28,7 +28,7 @@ def _bootstrap() -> None:
 
 def _matrix_rows(canonicals):
     """为给定 canonical 列表构建 fast path 覆盖行。"""
-    from backend.fastpath_coverage import build_fastpath_coverage_row
+    from factor_engine.backend.fastpath_coverage import build_fastpath_coverage_row
 
     return [build_fastpath_coverage_row(c) for c in sorted(canonicals)]
 
@@ -68,7 +68,7 @@ def main() -> int:
     args = parser.parse_args()
     _bootstrap()
 
-    from backend.production_fastpath_tiers import (
+    from factor_engine.backend.production_fastpath_tiers import (
         P0_PRODUCTION_FASTPATH_CANONICALS,
         P1_BINARY_TS_CANONICALS,
         P1_GROUP_CANONICALS,

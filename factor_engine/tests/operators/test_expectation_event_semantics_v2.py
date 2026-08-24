@@ -10,7 +10,7 @@ def _panel(values):
 
 
 def test_event_surprise_history_counts_each_report_period_once():
-    from cleaned_operators.fundamental.expectation_v2 import (
+    from factor_engine.cleaned_operators.fundamental.expectation_v2 import (
         fin_surprise_event_percentile,
         fin_surprise_event_zscore,
     )
@@ -33,7 +33,7 @@ def test_event_surprise_history_counts_each_report_period_once():
 
 
 def test_event_surprise_is_prefix_invariant():
-    from cleaned_operators.fundamental.expectation_v2 import (
+    from factor_engine.cleaned_operators.fundamental.expectation_v2 import (
         fin_surprise_event_zscore,
     )
 
@@ -52,7 +52,7 @@ def test_event_surprise_is_prefix_invariant():
 
 
 def test_expectation_revision_ignores_target_roll_and_counts_same_target_changes():
-    from cleaned_operators.fundamental.expectation_v2 import (
+    from factor_engine.cleaned_operators.fundamental.expectation_v2 import (
         fin_expectation_revision,
         fin_expectation_revision_count,
         fin_expectation_revision_magnitude,
@@ -72,7 +72,7 @@ def test_expectation_revision_ignores_target_roll_and_counts_same_target_changes
 
 
 def test_days_since_revision_is_bounded_and_resets_only_on_revision():
-    from cleaned_operators.fundamental.expectation_v2 import (
+    from factor_engine.cleaned_operators.fundamental.expectation_v2 import (
         fin_days_since_expectation_revision,
     )
 

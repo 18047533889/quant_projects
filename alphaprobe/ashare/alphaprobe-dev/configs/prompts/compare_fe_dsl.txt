@@ -1,0 +1,16 @@
+# 判断两条 factor_engine DSL 表达式是否语义等价
+
+仅比较 factor_engine DSL（不是 AlphaGen / qlib）。
+
+若等价，输出 {{"equivalent": true}}；否则 {{"equivalent": false}}。
+
+等价示例：
+- rank(rank(close)) 与 rank(close)
+- divide(ts_sum(close, 5), 5) 与 ts_mean(close, 5)
+
+不等价示例：
+- rank(ts_mean(close, 5)) 与 ts_mean(rank(close), 5)
+
+待比较：
+表达式 1: {expr1}
+表达式 2: {expr2}

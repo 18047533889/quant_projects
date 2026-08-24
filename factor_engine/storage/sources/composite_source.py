@@ -11,7 +11,7 @@ from logging_utils import get_logger
 from .datasource import DataSource
 
 
-logger = get_logger("storage.composite_source")
+logger = get_logger("factor_engine.storage.composite_source")
 
 # Round-11 §35 (plan A): ``current_only`` joins a snapshot source to the anchor
 # on EXACTLY matching rows only — the snapshot is never asof-ffilled into the
@@ -284,7 +284,7 @@ class CompositeDataSource(DataSource):
         """
         from .datasource import DataSource, clean_execution_spec
 
-        from storage.exceptions import UnreconstructableDataSource
+        from factor_engine.storage.exceptions import UnreconstructableDataSource
 
         child_specs: dict[str, Any] = {}
         for name, source in self.sources.items():

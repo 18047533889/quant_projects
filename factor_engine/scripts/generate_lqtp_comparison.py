@@ -5,9 +5,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from api.operator_registry import build_dsl_allowlist
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.api.operator_registry import build_dsl_allowlist
 
 ROOT = Path(__file__).resolve().parents[1]
 GUIDE = ROOT / "cleaned_operators" / "docs" / "算子全览.md"

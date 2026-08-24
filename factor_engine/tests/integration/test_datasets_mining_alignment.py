@@ -11,7 +11,7 @@ FE_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_mining_presets_reference_registered_datasets():
-    from api.datasets_contract import audit_mining_dataset_contract
+    from factor_engine.api.datasets_contract import audit_mining_dataset_contract
 
     report = audit_mining_dataset_contract()
     assert report["ok"], report["violations"]
@@ -24,7 +24,7 @@ def test_mining_presets_reference_registered_datasets():
 
 
 def test_prod_profile_staging_clickhouse_requires_lake_datasets():
-    from api.datasets_contract import audit_prod_profile_contract
+    from factor_engine.api.datasets_contract import audit_prod_profile_contract
 
     report = audit_prod_profile_contract(profile_name="prod")
     assert report["ok"], report["violations"]
@@ -32,7 +32,7 @@ def test_prod_profile_staging_clickhouse_requires_lake_datasets():
 
 
 def test_validate_dataset_field_bindings_catches_missing_column(tmp_path):
-    from api.datasets_contract import validate_dataset_field_bindings
+    from factor_engine.api.datasets_contract import validate_dataset_field_bindings
     from data_access.registry import load_registry
 
     cfg = tmp_path / "datasets.yaml"
@@ -68,7 +68,7 @@ FE_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_us_polygon_daily_profile_loads():
-    from runtime.config import load_config
+    from factor_engine.runtime.config import load_config
 
     cfg = FE_ROOT / "examples" / "profiles" / "us_polygon_daily.yaml"
     loaded = load_config(cfg)
@@ -77,7 +77,7 @@ def test_us_polygon_daily_profile_loads():
 
 
 def test_us_polygon_floats_profile_loads():
-    from runtime.config import load_config
+    from factor_engine.runtime.config import load_config
 
     loaded = load_config(FE_ROOT / "examples" / "profiles" / "us_polygon_floats.yaml")
     assert loaded.factor.name == "us_liquidity_mom"
@@ -86,7 +86,7 @@ def test_us_polygon_floats_profile_loads():
 
 
 def test_us_sip_day_aggs_profile_loads():
-    from runtime.config import load_config
+    from factor_engine.runtime.config import load_config
 
     loaded = load_config(FE_ROOT / "examples" / "profiles" / "us_sip_day_aggs.yaml")
     assert loaded.factor.name == "us_sip_momentum"
@@ -95,7 +95,7 @@ def test_us_sip_day_aggs_profile_loads():
 
 
 def test_pr5_datasets_have_schema():
-    from api.datasets_contract import audit_pr5_datasets_contract
+    from factor_engine.api.datasets_contract import audit_pr5_datasets_contract
 
     report = audit_pr5_datasets_contract()
     assert report["ok"], report["violations"]
@@ -104,7 +104,7 @@ def test_pr5_datasets_have_schema():
 
 
 def test_us_sip_fundamental_profile_loads():
-    from runtime.config import load_config
+    from factor_engine.runtime.config import load_config
 
     loaded = load_config(FE_ROOT / "examples" / "profiles" / "us_sip_fundamental.yaml")
     assert loaded.factor.name == "us_sip_pe_rank"
@@ -148,7 +148,7 @@ def test_full_contract_script_entrypoint():
 
 
 def test_explicit_operator_policies_cover_core_tier1():
-    from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
+    from factor_engine.cleaned_operators.operator_policy import _EXPLICIT_POLICIES
 
     core = {
         "ts_mean",

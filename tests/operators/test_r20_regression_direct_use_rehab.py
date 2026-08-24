@@ -40,16 +40,16 @@ import pytest
 
 
 def _ensure_technical_chain() -> None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if OperatorRegistry.lifecycle() == "frozen":
         return
     if OperatorRegistry.get("reg_forecast_error_pct", "pandas_numpy") is not None:
         return
-    from cleaned_operators.technical import signal  # noqa: F401
-    from cleaned_operators.technical import polars_signal  # noqa: F401
-    from cleaned_operators import composite_fastpath  # noqa: F401
-    from cleaned_operators.technical import indicators_v2  # noqa: F401
+    from factor_engine.cleaned_operators.technical import signal  # noqa: F401
+    from factor_engine.cleaned_operators.technical import polars_signal  # noqa: F401
+    from factor_engine.cleaned_operators import composite_fastpath  # noqa: F401
+    from factor_engine.cleaned_operators.technical import indicators_v2  # noqa: F401
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -58,7 +58,7 @@ def _bootstrap():
 
 
 def _op(name: str):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get(name, "pandas_numpy") or OperatorRegistry.get(name)
     assert op is not None, f"{name} not registered"
@@ -205,7 +205,7 @@ def test_white_noise_panel():
 # EXISTING canonical (duplicate-skip assertion), not a new operator
 # ---------------------------------------------------------------------------
 def test_ar1_half_life_duplicate_skip_and_estimator():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     # the skipped candidate name must NOT be registered by this slice
     assert OperatorRegistry.get("mean_reversion_half_life") is None
@@ -328,7 +328,7 @@ def test_param_specs_and_governance():
         assert specs["window"].param_role is not None
         assert not _op(name).metadata.relational_specs, name
 
-    from cleaned_operators.technical.indicators_v2 import _RECURSIVE_EWM
+    from factor_engine.cleaned_operators.technical.indicators_v2 import _RECURSIVE_EWM
 
     for name in REG_NAMES:
         assert name not in _RECURSIVE_EWM, name
@@ -338,11 +338,11 @@ def test_param_specs_and_governance():
 
 
 def test_promotion_membership_and_duplicate_skip():
-    from mining.direct_use import _RELATIVE_ALPHA_OPS
+    from factor_engine.mining.direct_use import _RELATIVE_ALPHA_OPS
 
     assert set(REG_NAMES) <= _RELATIVE_ALPHA_OPS
 
-    from cleaned_operators.operator_surface import (
+    from factor_engine.cleaned_operators.operator_surface import (
         _DAILY_REGRESSION_PACK_2026_08,
         classify_canonical,
         daily_factor_migrated,
@@ -357,7 +357,7 @@ def test_promotion_membership_and_duplicate_skip():
     assert "mean_reversion_half_life" not in _RELATIVE_ALPHA_OPS
     assert "mean_reversion_half_life" not in daily_factor_migrated()
 
-    from mining.direct_use import _PRICE_LEVEL_INTERMEDIATE_OPS
+    from factor_engine.mining.direct_use import _PRICE_LEVEL_INTERMEDIATE_OPS
 
     for name in REG_NAMES:
         assert name not in _PRICE_LEVEL_INTERMEDIATE_OPS, name

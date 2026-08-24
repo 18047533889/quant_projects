@@ -53,10 +53,10 @@ def test_clickhouse_config_from_env():
 @pytest.mark.integration
 def test_clickhouse_materialize_engine_path(tmp_path):
     """端到端：run + materialize(write_target=clickhouse) 写入真实 CH。"""
-    from api.columns import col
-    from api.factor import Factor
-    from backend.pandas_backend import PandasBackend
-    from runtime.engine import FactorEngine
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
     from tests.helpers import InMemorySeriesSource
 
     idx = pd.MultiIndex.from_product(
@@ -101,14 +101,14 @@ def test_clickhouse_materialize_engine_path(tmp_path):
 @pytest.mark.integration
 def test_clickhouse_panel_read_sql_pushdown():
     """ClickHouse 长表读 + clickhouse_sql 因子下推（真实 CH）。"""
-    from api import rank, ts_mean
-    from api.columns import col
-    from api.factor import Factor
-    from backend.factory import build_backend
+    from factor_engine.api import rank, ts_mean
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.factory import build_backend
     from data_access.clickhouse.panel import ClickHouseConfig, execute_query
     from data_access.clickhouse.write import ensure_panel_table, insert_dataframe
-    from runtime.engine import FactorEngine
-    from storage.factory import build_data_source
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.storage.factory import build_data_source
 
     table = f"panel_sql_it_{os.getpid()}"
     cfg = ClickHouseConfig.from_env()
@@ -154,7 +154,7 @@ def test_clickhouse_panel_read_sql_pushdown():
     assert len(result) >= 4
     assert result.notna().any()
 
-    from api import coalesce, ffill
+    from factor_engine.api import coalesce, ffill
 
     frame.iloc[1, frame.columns.get_loc("close")] = float("nan")
     execute_query(config=cfg, sql=f"TRUNCATE TABLE {table}")
@@ -172,7 +172,7 @@ def test_clickhouse_panel_read_sql_pushdown():
     assert len(result2) >= 4
     assert result2.notna().any()
 
-    from api import clip, protected_log, nan_to_num
+    from factor_engine.api import clip, protected_log, nan_to_num
 
     factor3 = Factor(name="ch_clip", expr=clip(col("close"), 50, 250))
     result3 = engine.run(factor3)["result"]
@@ -189,7 +189,7 @@ def test_clickhouse_panel_read_sql_pushdown():
     assert len(result5) >= 4
     assert result5.notna().all()
 
-    from api import where, is_finite, normalize
+    from factor_engine.api import where, is_finite, normalize
 
     zero = col("close") * 0
     factor6 = Factor(
@@ -204,7 +204,7 @@ def test_clickhouse_panel_read_sql_pushdown():
     assert len(result7) >= 4
     assert result7.notna().any()
 
-    from api import group_normalize
+    from factor_engine.api import group_normalize
 
     execute_query(config=cfg, sql=f"DROP TABLE IF EXISTS {table}")
     ensure_panel_table(
@@ -243,7 +243,7 @@ def test_clickhouse_panel_read_sql_pushdown():
     assert len(result8) >= 4
     assert result8.notna().any()
 
-    from api import group_percentile, group_decay_linear, group_rank
+    from factor_engine.api import group_percentile, group_decay_linear, group_rank
 
     result9 = engine_grp.run(
         Factor(name="ch_gpct", expr=group_percentile(col("close"), col("grp"), 0.5))

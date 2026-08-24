@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
 
 
 def test_benchmark_daily_broadcast_is_exact_not_stale_asof() -> None:

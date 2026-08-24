@@ -9,9 +9,9 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="legacy P0 semantics reference removed canonicals")
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.common.cs_broadcast import broadcast_row_stat, cs_rank_01
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.common.cs_broadcast import broadcast_row_stat, cs_rank_01
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module")
@@ -96,7 +96,7 @@ def test_vwap_zero_volume_is_nan(_loaded):
 
 
 def test_dropna_not_production_allowed(_loaded):
-    from cleaned_operators.operator_spec import build_operator_spec
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec
 
     spec = build_operator_spec("dropna")
     assert spec is not None
@@ -104,7 +104,7 @@ def test_dropna_not_production_allowed(_loaded):
 
 
 def test_rolling_beta_to_market_not_production_allowed(_loaded):
-    from cleaned_operators.operator_spec import build_operator_spec
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec
 
     spec = build_operator_spec("rolling_beta_to_market")
     assert spec is not None

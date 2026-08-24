@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from api.dsl_parser import parse_factor
-from mining.campaign import (
+from factor_engine.api.dsl_parser import parse_factor
+from factor_engine.mining.campaign import (
     CampaignSnapshotPinError,
     MiningCampaignSession,
     MiningCampaignSnapshot,
@@ -22,7 +22,7 @@ from mining.campaign import (
 
 @pytest.fixture(scope="module")
 def source_cls():
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     return DataAccessSource
 

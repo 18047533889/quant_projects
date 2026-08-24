@@ -13,7 +13,7 @@ import pytest
 import numpy as np
 import pandas as pd
 
-from planner.backend_region import (
+from factor_engine.planner.backend_region import (
     PhysicalBackend,
     Representation,
     TransferEdge,

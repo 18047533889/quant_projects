@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend.context import ExecutionContext
-from planner.backend_region import (
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.planner.backend_region import (
     BackendRegion,
     ExecutionAxis,
     PhysicalBackend,
@@ -15,21 +15,21 @@ from planner.backend_region import (
     TransferEdge,
     TransferTransform,
 )
-from planner.logical_plan import PlanNode
-from planner.physical_factor_dag import (
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.physical_factor_dag import (
     PhysicalFactorDAG,
     PhysicalFactorTask,
     TASK_CSE_SHARED,
     TASK_ROOT,
 )
-from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
-from runtime.engine import (
+from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+from factor_engine.runtime.engine import (
     PhysicalPlanRequiredError,
     _admit_ready_single_region_batch,
     _execute_ready_single_region_plan,
     _physical_backend_for_region,
 )
-from runtime.batch_service import _execute_root_with_path, _materialize_shared_subplan
+from factor_engine.runtime.batch_service import _execute_root_with_path, _materialize_shared_subplan
 
 
 class PandasBackend:
@@ -275,11 +275,11 @@ def test_execute_root_with_path_uses_real_snapshot_and_records_provenance(
     backend = HybridBackend()
     ctx = _Context(runtime_stats={})
     monkeypatch.setattr(
-        "runtime.batch_service.assert_production_fastpath_runtime",
+        "factor_engine.runtime.batch_service.assert_production_fastpath_runtime",
         lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(
-        "runtime.batch_service._assert_no_native_certified_fallback",
+        "factor_engine.runtime.batch_service._assert_no_native_certified_fallback",
         lambda *args, **kwargs: None,
     )
 
@@ -406,7 +406,7 @@ def test_serial_scheduler_shared_and_root_use_fixed_concrete_backend(
     concrete = backend._pandas
     ctx = _Context(runtime_stats={}, shared_result_cache={})
     monkeypatch.setattr(
-        "backend.plan_cost_router.choose_plan_route",
+        "factor_engine.backend.plan_cost_router.choose_plan_route",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             AssertionError("route selection must not run")
         ),

@@ -14,7 +14,7 @@ import os
 
 import pytest
 
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("DATA_ACCESS_COS_READ_MODE", "").lower() != "remote",
@@ -47,7 +47,7 @@ def _minute_panel(symbol: str = "688370.SH", day: str = "2026-06-30"):
 
 
 def test_real_cos_minute_produces_sensible_intraday_values():
-    from cleaned_operators.microstructure.intraday_agg import (
+    from factor_engine.cleaned_operators.microstructure.intraday_agg import (
         IntraAmihud,
         IntraExtremeBarReturn,
         IntraPathEfficiency,
@@ -67,7 +67,7 @@ def test_real_cos_minute_produces_sensible_intraday_values():
 
 
 def test_real_cos_minute_segment_and_lunch():
-    from cleaned_operators.microstructure.intraday_agg import (
+    from factor_engine.cleaned_operators.microstructure.intraday_agg import (
         IntraLunchGapReturn,
         IntraSegmentReturn,
         IntraSegmentVolumeShare,

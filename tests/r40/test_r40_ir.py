@@ -9,7 +9,7 @@ import pytest
 
 class TestProductionAnalyzerMarket:
     def test_production_analyzer_rejects_missing_market(self):
-        from ir.analyzer import Analyzer, ProductionMarketContextRequiredError
+        from factor_engine.ir.analyzer import Analyzer, ProductionMarketContextRequiredError
 
         with pytest.raises(ProductionMarketContextRequiredError):
             Analyzer(production=True)
@@ -24,7 +24,7 @@ class TestProductionAnalyzerMarket:
 
 class TestAxisEffectContract:
     def test_declared_axis_effect_contract(self):
-        from ir.types import (
+        from factor_engine.ir.types import (
             AXIS_EFFECT_CONTRACTS,
             AxisEffectKind,
             check_axis_effect_declared,
@@ -40,7 +40,7 @@ class TestAxisEffectContract:
         assert cs.has_cross_section_effect
 
     def test_undeclared_axis_effect_rejected_in_production(self):
-        from ir.types import check_axis_effect_declared
+        from factor_engine.ir.types import check_axis_effect_declared
 
         with pytest.raises(ValueError):
             check_axis_effect_declared("test_axis_undeclared_op", production=True)
@@ -50,16 +50,16 @@ class TestAxisEffectContract:
     def test_bulk_registration_covers_daily_surface(self):
         """R40 #176 收尾：daily 表面每个算子都声明了 AxisEffectContract——
         静态门 ``PRODUCTION_AXIS_EFFECT_UNDECLARED == 0``。"""
-        from cleaned_operators import load_all
-        from cleaned_operators import operator_surface
-        from ir.types import AXIS_EFFECT_CONTRACTS
+        from factor_engine.cleaned_operators import load_all
+        from factor_engine.cleaned_operators import operator_surface
+        from factor_engine.ir.types import AXIS_EFFECT_CONTRACTS
 
         load_all()
         daily = operator_surface.DAILY_CANONICALS
         undeclared = sorted(c for c in daily if c not in AXIS_EFFECT_CONTRACTS)
         assert undeclared == [], f"undeclared axis effects on daily surface: {undeclared}"
         # 代表性分类：ts_mean→TS、rank→CS、abs→ELEMENTWISE
-        from ir.types import axis_effect_contract_for
+        from factor_engine.ir.types import axis_effect_contract_for
 
         assert axis_effect_contract_for("ts_mean").has_time_series_effect
         assert axis_effect_contract_for("rank").has_cross_section_effect
@@ -69,7 +69,7 @@ class TestAxisEffectContract:
 
 class TestSemanticIdentityDigest:
     def test_supported_values(self):
-        from ir.types import SemanticIdentityDigest
+        from factor_engine.ir.types import SemanticIdentityDigest
 
         d = SemanticIdentityDigest.from_attrs({
             "market": "ashare",
@@ -79,7 +79,7 @@ class TestSemanticIdentityDigest:
         assert d.value  # non-empty
 
     def test_datetime_and_enum_supported(self):
-        from ir.types import SemanticIdentityDigest, SemanticType
+        from factor_engine.ir.types import SemanticIdentityDigest, SemanticType
 
         d = SemanticIdentityDigest.from_attrs({
             "source_vintage": datetime.datetime(2026, 1, 1),
@@ -88,7 +88,7 @@ class TestSemanticIdentityDigest:
         assert d.value
 
     def test_unsupported_object_rejected(self):
-        from ir.types import SemanticIdentityDigest
+        from factor_engine.ir.types import SemanticIdentityDigest
 
         class Opaque:
             def __str__(self):
@@ -98,7 +98,7 @@ class TestSemanticIdentityDigest:
             SemanticIdentityDigest.from_attrs({"market": Opaque()})
 
     def test_no_str_fallback_collision(self):
-        from ir.types import SemanticIdentityDigest
+        from factor_engine.ir.types import SemanticIdentityDigest
 
         a = SemanticIdentityDigest.from_attrs({"market": "us", "universe_id": "SPX"})
         b = SemanticIdentityDigest.from_attrs({"market": "us", "universe_id": "SPY"})

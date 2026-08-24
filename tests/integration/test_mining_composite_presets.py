@@ -100,8 +100,8 @@ def _seed(tmp_path: Path) -> None:
 
 
 def test_us_polygon_floats_composite_builds_and_loads(tmp_path, monkeypatch):
-    from api.mining_integration import default_us_polygon_floats_composite_config
-    from storage.factory import build_data_source
+    from factor_engine.api.mining_integration import default_us_polygon_floats_composite_config
+    from factor_engine.storage.factory import build_data_source
 
     reg = _write_registry(tmp_path)
     monkeypatch.setenv("DATA_ACCESS_CONFIG", str(reg))
@@ -116,7 +116,7 @@ def test_us_polygon_floats_composite_builds_and_loads(tmp_path, monkeypatch):
 
 
 def test_polygon_floats_preset_join_is_asof_backward():
-    from api.mining_integration import audit_composite_join_policies, default_us_polygon_floats_composite_config
+    from factor_engine.api.mining_integration import audit_composite_join_policies, default_us_polygon_floats_composite_config
 
     cfg = default_us_polygon_floats_composite_config()
     assert audit_composite_join_policies(cfg) == []
@@ -124,15 +124,15 @@ def test_polygon_floats_preset_join_is_asof_backward():
 
 
 def test_us_polygon_floats_in_pit_audit_presets():
-    from api.mining_integration import audit_default_data_source_configs
+    from factor_engine.api.mining_integration import audit_default_data_source_configs
 
     report = audit_default_data_source_configs()
     assert report["us_polygon_floats"] == []
 
 
 def test_us_sip_balance_sheet_composite_builds_and_loads(tmp_path, monkeypatch):
-    from api.mining_integration import default_us_sip_balance_sheet_composite_config
-    from storage.factory import build_data_source
+    from factor_engine.api.mining_integration import default_us_sip_balance_sheet_composite_config
+    from factor_engine.storage.factory import build_data_source
 
     content = f"""
 _daily: &daily
@@ -199,8 +199,8 @@ fundamentals_balance_sheet:
 
 
 def test_default_mining_presets_single_registry():
-    from api.datasets_contract import audit_mining_dataset_contract
-    from api.mining_integration import default_mining_data_source_presets
+    from factor_engine.api.datasets_contract import audit_mining_dataset_contract
+    from factor_engine.api.mining_integration import default_mining_data_source_presets
 
     presets = default_mining_data_source_presets()
     assert "us_sip_balance_sheet" in presets

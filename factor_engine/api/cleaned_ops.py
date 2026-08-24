@@ -15,8 +15,8 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from expr.base import ensure_expr
-from expr.cleaned_call import CleanedCall
+from factor_engine.expr.base import ensure_expr
+from factor_engine.expr.cleaned_call import CleanedCall
 
 
 def make_cleaned_call_factory(op_name: str) -> Callable[..., CleanedCall]:

@@ -28,18 +28,18 @@ import pytest
 
 # Register the owned modules directly (order matters for ts_argmax: gtja_compat
 # replaces the time_series pandas backend with the GTJA-compatible semantic).
-import cleaned_operators.common.group  # noqa: F401
-import cleaned_operators.common.group_polars  # noqa: F401
-import cleaned_operators.common.time_series  # noqa: F401
-import cleaned_operators.common.gtja_compat  # noqa: F401
-import cleaned_operators.common.polars_ops  # noqa: F401
-import cleaned_operators.common.polars_batch_mirror  # noqa: F401
+import factor_engine.cleaned_operators.common.group  # noqa: F401
+import factor_engine.cleaned_operators.common.group_polars  # noqa: F401
+import factor_engine.cleaned_operators.common.time_series  # noqa: F401
+import factor_engine.cleaned_operators.common.gtja_compat  # noqa: F401
+import factor_engine.cleaned_operators.common.polars_ops  # noqa: F401
+import factor_engine.cleaned_operators.common.polars_batch_mirror  # noqa: F401
 
-from cleaned_operators.base import ParamRole
-from cleaned_operators.common.gtja_compat import GTJATSArgmax, GTJATSArgmin
-from cleaned_operators.common.polars_batch_mirror import AggrTopNPolars
-from cleaned_operators.common.time_series import AggrTopN
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.base import ParamRole
+from factor_engine.cleaned_operators.common.gtja_compat import GTJATSArgmax, GTJATSArgmin
+from factor_engine.cleaned_operators.common.polars_batch_mirror import AggrTopNPolars
+from factor_engine.cleaned_operators.common.time_series import AggrTopN
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _panel(values, columns, dates=None):

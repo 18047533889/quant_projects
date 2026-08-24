@@ -37,7 +37,7 @@ CROSS_SECTION_SPECS: dict[str, CrossSectionSpec] = {
 
 
 def cross_section_spec_for(canon: str) -> CrossSectionSpec:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     return CROSS_SECTION_SPECS.get(name, CrossSectionSpec())

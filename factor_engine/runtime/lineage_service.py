@@ -6,13 +6,13 @@ import hashlib
 import json
 from typing import Any
 
-from api.factor import Factor
-from cleaned_operators.operator_policy import compute_operator_catalog_hash, effective_lookback
-from runtime.lineage import build_run_lineage, hash_data_source_config, resolve_git_commit_hash
-from storage.catalog import compute_ir_hash
-from storage.composite_source import CompositeDataSource
-from planner.lowerer import Lowerer
-from planner.plan_hash import structural_key
+from factor_engine.api.factor import Factor
+from factor_engine.cleaned_operators.operator_policy import compute_operator_catalog_hash, effective_lookback
+from factor_engine.runtime.lineage import build_run_lineage, hash_data_source_config, resolve_git_commit_hash
+from factor_engine.storage.catalog import compute_ir_hash
+from factor_engine.storage.composite_source import CompositeDataSource
+from factor_engine.planner.lowerer import Lowerer
+from factor_engine.planner.plan_hash import structural_key
 
 
 def resolve_lineage_expression(factor: Factor, expression: str | None) -> str | None:
@@ -30,7 +30,7 @@ def _universe_mask_failure_must_raise(production: bool | None) -> bool:
     """
     if production is not None:
         return bool(production)
-    from runtime.production_policy import is_production_mode
+    from factor_engine.runtime.production_policy import is_production_mode
 
     return is_production_mode()
 
@@ -48,7 +48,7 @@ def _composite_lowering_hash() -> str:
     lowering 实现（AST/bytecode）变化会改变哈希 -> 旧 checkpoint/cache 失效。
     """
     try:
-        import planner.composite_lowering as cl
+        import factor_engine.planner.composite_lowering as cl
 
         cl._ensure_lowerings_loaded()
         payload = json.dumps(
@@ -65,15 +65,15 @@ def _optimizer_rewrite_hash(ir_node: Any) -> str:
     若 optimizer 可用，对优化后的计划做 structural_key；否则退化为 IR 结构哈希。
     """
     try:
-        from planner.optimizer import Optimizer
+        from factor_engine.planner.optimizer import Optimizer
 
         plan = Optimizer().optimize(ir_node)
-        from planner.plan_hash import structural_key
+        from factor_engine.planner.plan_hash import structural_key
 
         return structural_key(plan) or ""
     except Exception:  # noqa: BLE001
         try:
-            from storage.catalog import compute_ir_hash
+            from factor_engine.storage.catalog import compute_ir_hash
 
             return compute_ir_hash(ir_node)
         except Exception:  # noqa: BLE001
@@ -282,7 +282,7 @@ def build_materialize_lineage(
     # existing callers keep current behavior.
     production: bool | None = None,
 ):
-    from backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
     ensure_cleaned_loaded()
     primary_snapshot_id = resolve_data_snapshot_id(data_source, data_source_config)
@@ -341,7 +341,7 @@ def build_materialize_lineage(
         try:
             import numpy as _np
 
-            from market.universe import (
+            from factor_engine.market.universe import (
                 apply_universe_mask,
                 apply_universe_mask_to_panel,
                 universe_mask_contract,

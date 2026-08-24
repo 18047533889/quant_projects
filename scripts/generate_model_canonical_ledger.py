@@ -68,7 +68,7 @@ def git_sha() -> str:
 
 def _surface_of(canonical: str) -> str:
     try:
-        from cleaned_operators.operator_surface import classify_canonical
+        from factor_engine.cleaned_operators.operator_surface import classify_canonical
         return classify_canonical(canonical)
     except Exception:
         return "unclassified"
@@ -79,17 +79,17 @@ def main() -> int:
     out_dir = Path(sys.argv[sys.argv.index("--out") + 1]) if "--out" in sys.argv else DEFAULT_OUT
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
-    from cleaned_operators.model_timing import (
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.model_timing import (
         MODEL_TIMING_CONTRACTS,
         TimingKind,
         is_model_like_name,
         model_family_of,
         timing_kind_for,
     )
-    from cleaned_operators.model_lane import assign_model_lane, _category_of
-    from cleaned_operators.model_contract import get_model_operator_contract
+    from factor_engine.cleaned_operators.model_lane import assign_model_lane, _category_of
+    from factor_engine.cleaned_operators.model_contract import get_model_operator_contract
 
     load_all()
     canonicals = sorted(OperatorRegistry.list_canonical())
@@ -121,7 +121,7 @@ def main() -> int:
         # parameter domain: any certified point in the runtime store
         param_certified = False
         try:
-            from runtime.parameter_domain_store import ParameterDomainCertificationStore
+            from factor_engine.runtime.parameter_domain_store import ParameterDomainCertificationStore
             store = ParameterDomainCertificationStore()
             param_certified = bool(store.operator_has_any_certified_region(c))
         except Exception:

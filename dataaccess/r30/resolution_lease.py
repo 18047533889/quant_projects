@@ -30,6 +30,7 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
+from data_access.core.exceptions import DeadlineExceeded
 from data_access.r30.execution_lease import ExecutionLease
 
 __all__ = [
@@ -78,11 +79,14 @@ class ResolutionLease:
         R32-P0-003：deadline 检查（expired → 拒绝）。
         """
         slots = max(1, int(slots))
-        # R32-P0-003：deadline 已过 → 拒绝。
+        # R32-P0-003：deadline 已过 → 拒绝（fail-closed，显式信号而非返回 False
+        # 让调用方误判为「slot 暂时不可用」）。
         if self.absolute_deadline is not None:
             import time
             if time.monotonic() >= self.absolute_deadline:
-                return False
+                raise DeadlineExceeded(
+                    f"ResolutionLease {self.lease_id} deadline 已过，拒绝 discovery（R32-P0-003）"
+                )
         # 锁内：检查状态 + 预留 slot。
         with self._lock:
             if self.phase is ResolutionPhase.RELEASED:
@@ -200,11 +204,11 @@ class ResolutionLease:
         R32-P0-003：deadline 已过 → 禁止进入执行相。
         R32-P0-004：外部注入 execution_lease 必须验证。
         """
-        # R32-P0-003：deadline 已过 → 禁止 transition。
+        # R32-P0-003：deadline 已过 → 禁止 transition（fail-closed）。
         if self.absolute_deadline is not None:
             import time
             if time.monotonic() >= self.absolute_deadline:
-                raise RuntimeError(
+                raise DeadlineExceeded(
                     f"ResolutionLease {self.lease_id} deadline 已过，禁止进入执行相"
                 )
         with self._lock:

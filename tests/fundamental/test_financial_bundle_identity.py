@@ -9,8 +9,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.alignment import PanelAxisMismatch
-from cleaned_operators.fundamental.quality_v2 import _walk_two
+from factor_engine.cleaned_operators.alignment import PanelAxisMismatch
+from factor_engine.cleaned_operators.fundamental.quality_v2 import _walk_two
 
 
 def test_walk_two_rejects_misaligned_secondary_panel():

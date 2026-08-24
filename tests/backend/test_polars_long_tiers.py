@@ -9,17 +9,17 @@ import pytest
 
 pytest.importorskip("polars")
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from backend.polars_long_policy import (
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.backend.polars_long_policy import (
     POLARS_LONG_PASSTHROUGH,
     classify_plan_op,
     infer_polars_long_tier,
 )
-from cleaned_operators import load_all
-from runtime.engine import FactorEngine
+from factor_engine.cleaned_operators import load_all
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 
@@ -35,7 +35,7 @@ def source():
 
 
 def test_bfill_is_blocked_causal_not_passthrough():
-    from backend.polars_long_policy import POLARS_LONG_BLOCKED_CAUSAL, POLARS_LONG_PASSTHROUGH
+    from factor_engine.backend.polars_long_policy import POLARS_LONG_BLOCKED_CAUSAL, POLARS_LONG_PASSTHROUGH
 
     assert "bfill" in POLARS_LONG_BLOCKED_CAUSAL
     assert "bfill" not in POLARS_LONG_PASSTHROUGH
@@ -44,7 +44,7 @@ def test_bfill_is_blocked_causal_not_passthrough():
 
 
 def test_bfill_long_path_raises(source):
-    from backend.polars_long_policy import UnsupportedCausalOperatorError
+    from factor_engine.backend.polars_long_policy import UnsupportedCausalOperatorError
 
     expr = make_cleaned_call_factory("bfill")(col("close"))
     with pytest.raises(UnsupportedCausalOperatorError):
@@ -55,7 +55,7 @@ def test_bfill_long_path_raises(source):
 
 def test_if_else_production_tier():
     load_all()
-    from backend.operator_capability import summarize_operator
+    from factor_engine.backend.operator_capability import summarize_operator
 
     spec = summarize_operator("if_else")
     assert spec.polars_long_tier == "native"

@@ -32,12 +32,12 @@ import pytest
 # not depend on ``load_all``'s whole-tree import succeeding).  When the full
 # suite runs first, ``load_all`` has already imported these modules, so the
 # imports below are cached no-ops and the registry lifecycle is unaffected.
-import cleaned_operators.stateful.episode  # noqa: F401
-import cleaned_operators.stateful.events  # noqa: F401
-import cleaned_operators.stateful.sequential  # noqa: F401
-import cleaned_operators.state_event  # noqa: F401
+import factor_engine.cleaned_operators.stateful.episode  # noqa: F401
+import factor_engine.cleaned_operators.stateful.events  # noqa: F401
+import factor_engine.cleaned_operators.stateful.sequential  # noqa: F401
+import factor_engine.cleaned_operators.state_event  # noqa: F401
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 # Operators whose condition / event / reset / trigger slot must be a
 # ConditionBool.  ``state_since_*`` and ``state_since_trend_tstat`` read a

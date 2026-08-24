@@ -10,8 +10,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
@@ -102,7 +102,7 @@ def test_group_signal_attraction_share_is_analytic():
 # #122 _stack_panels must not silently reindex
 # ---------------------------------------------------------------------------
 def test_stack_panels_mismatched_axes_raise():
-    from cleaned_operators.relation import distribution as rdist
+    from factor_engine.cleaned_operators.relation import distribution as rdist
 
     base = pd.DataFrame({"A": [1.0, 2.0]}, index=pd.date_range("2024-01-01", periods=2))
     mis_col = pd.DataFrame({"B": [1.0, 2.0]}, index=base.index)
@@ -161,7 +161,7 @@ def test_rank_mobility_slot_vs_entity_differ():
 # #125 concentration acceleration history = 2 * window
 # ---------------------------------------------------------------------------
 def test_concentration_acceleration_history_formula():
-    from runtime.execution_contract import history_requirement
+    from factor_engine.runtime.execution_contract import history_requirement
 
     hr = history_requirement("relation_concentration_acceleration", {"window": 5})
     assert hr.kind == "finite"
@@ -192,7 +192,7 @@ def test_churn_network_na_id_is_not_a_node():
 # #127 structured entity key (HolderID is the node identity)
 # ---------------------------------------------------------------------------
 def test_churn_network_entity_key_is_holder_id():
-    from cleaned_operators.shareholder.churn_network import _id_key
+    from factor_engine.cleaned_operators.shareholder.churn_network import _id_key
 
     # A holder row with a missing id is not a node; a real id is kept verbatim.
     assert _id_key(pd.NA) is None
@@ -359,7 +359,7 @@ def test_ffill_forward_fill_allowance_gate():
     # ``ffill`` is a DSL-level operator that layer_governance unregisters from
     # the final OperatorRegistry (unlimited forward fill is not operational-
     # production), so the contract gate is asserted on the operator class.
-    from cleaned_operators.common.data_cleaning import FillForward
+    from factor_engine.cleaned_operators.common.data_cleaning import FillForward
 
     op = FillForward()
     idx = pd.date_range("2024-01-01", periods=4)

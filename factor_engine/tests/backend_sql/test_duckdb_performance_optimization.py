@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from backend.sql_pushdown.duckdb_performance import (
+from factor_engine.backend.sql_pushdown.duckdb_performance import (
     DuckDBParallelConfig,
     IndexConfig,
     OptimizedDuckDBExecutor,

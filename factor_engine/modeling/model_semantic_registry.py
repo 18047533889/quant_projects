@@ -35,14 +35,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from cleaned_operators.model_contract import get_model_operator_contract
-from cleaned_operators.model_lane import MODEL_LANES, assign_model_lane
-from cleaned_operators.model_timing import (
+from factor_engine.cleaned_operators.model_contract import get_model_operator_contract
+from factor_engine.cleaned_operators.model_lane import MODEL_LANES, assign_model_lane
+from factor_engine.cleaned_operators.model_timing import (
     TimingKind,
     get_model_timing_contract,
     timing_kind_for,
 )
-from cleaned_operators.operator_surface import classify_canonical
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
 from modeling.legacy import classification_of, classify_execution_class
 
 __all__ = [
@@ -125,7 +125,7 @@ def _typed_inputs(canonical: str, mc: Any) -> str | None:
     if mc is not None and getattr(mc, "feature_params", None):
         return ",".join(mc.feature_params)
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         ops = OperatorRegistry._operators.get(canonical, {}) or {}
         if ops:
@@ -140,7 +140,7 @@ def _typed_inputs(canonical: str, mc: Any) -> str | None:
 
 def _unit(canonical: str) -> str | None:
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         ops = OperatorRegistry._operators.get(canonical, {}) or {}
         if ops:

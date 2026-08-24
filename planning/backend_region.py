@@ -18,7 +18,7 @@ enum values, dataclasses, and validation semantics.
 """
 from __future__ import annotations
 
-from planner.backend_region import (
+from factor_engine.planner.backend_region import (
     BackendRegion,
     ExecutionAxis,
     PhysicalBackend,

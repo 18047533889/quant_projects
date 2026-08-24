@@ -26,19 +26,19 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.spectral_ext  # noqa: F401
-import cleaned_operators.memory_ext  # noqa: F401
-import cleaned_operators.research_spectral  # noqa: F401
-import cleaned_operators.ts_model.wavelet_spectral as _ws  # noqa: F401
+import factor_engine.cleaned_operators.spectral_ext  # noqa: F401
+import factor_engine.cleaned_operators.memory_ext  # noqa: F401
+import factor_engine.cleaned_operators.research_spectral  # noqa: F401
+import factor_engine.cleaned_operators.ts_model.wavelet_spectral as _ws  # noqa: F401
 
-from cleaned_operators.base import ParamRole
-from cleaned_operators.memory_ext import (
+from factor_engine.cleaned_operators.base import ParamRole
+from factor_engine.cleaned_operators.memory_ext import (
     _fd_discarded_weight_mass,
     _geyer_ims_tau,
     _geyer_ips_tau,
     _sample_acf,
 )
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _frame(values: np.ndarray, start: str = "2024-01-01") -> pd.DataFrame:
@@ -284,7 +284,7 @@ def test_autocorrelation_time_ips_canonical_matches_ips():
 
 def test_integrated_autocorrelation_time_alias_still_resolves():
     # the precise spelling keeps resolving to the (now Geyer IMS) canonical
-    from cleaned_operators.registry import OperatorRegistry as _reg
+    from factor_engine.cleaned_operators.registry import OperatorRegistry as _reg
 
     target = _reg.resolve_canonical("ts_integrated_autocorrelation_time")
     assert target == "ts_autocorrelation_time"

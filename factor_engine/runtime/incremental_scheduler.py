@@ -21,9 +21,9 @@ from typing import Any
 
 import pandas as pd
 
-from cleaned_operators.operator_policy import effective_lookback
-from runtime.incremental import build_incremental_plan
-from storage.catalog import FactorCatalog
+from factor_engine.cleaned_operators.operator_policy import effective_lookback
+from factor_engine.runtime.incremental import build_incremental_plan
+from factor_engine.storage.catalog import FactorCatalog
 
 logger = logging.getLogger(__name__)
 
@@ -269,7 +269,7 @@ def _physical_dataset_for_logical_table(table: str) -> str | None:
     if not table:
         return None
     try:
-        from fields import get_field_registry
+        from factor_engine.fields import get_field_registry
 
         spec = get_field_registry().resolve_table(table)
         if spec is not None and getattr(spec, "dataset", None):
@@ -277,7 +277,7 @@ def _physical_dataset_for_logical_table(table: str) -> str | None:
     except Exception:  # pragma: no cover - registry 缺失不阻塞 edge 构建
         pass
     try:
-        from fields.market_registry import multi_market_registry
+        from factor_engine.fields.market_registry import multi_market_registry
 
         mm = multi_market_registry()
         for market in getattr(mm, "markets", ("ashare", "us")):
@@ -313,7 +313,7 @@ def _implementation_digest(impl: Any) -> str | None:
     import hashlib
 
     try:
-        from cleaned_operators.registry import (
+        from factor_engine.cleaned_operators.registry import (
             _contract_hash,
             _fn_payload,
             _impl_source_hash,
@@ -352,8 +352,8 @@ def _operator_manifest_from_ir(
     if ir is None:
         return None
     try:
-        from backend.cleaned_bridge import ensure_cleaned_loaded
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         ensure_cleaned_loaded()
         seen: dict[str, dict[str, str]] = {}
@@ -485,7 +485,7 @@ def _calendar_version(data_source: Any, *, production: bool = False) -> str | No
             or getattr(data_source, "market_code", None)
         )
         if not market:
-            from storage.trading_calendar import infer_market
+            from factor_engine.storage.trading_calendar import infer_market
 
             market = infer_market(
                 universe=getattr(data_source, "universe", None),
@@ -494,7 +494,7 @@ def _calendar_version(data_source: Any, *, production: bool = False) -> str | No
         if not market:
             # 无市场/无日历绑定：该数据源不依赖交易日历，无需指纹。
             return None
-        from storage.trading_calendar import get_trading_calendar
+        from factor_engine.storage.trading_calendar import get_trading_calendar
 
         calendar = get_trading_calendar(market)
         if calendar is None:
@@ -622,7 +622,7 @@ def _extend_date_forward(
     if not end_date or bars <= 0:
         return end_date
     try:
-        from storage.trading_calendar import get_trading_calendar, trading_day_offset
+        from factor_engine.storage.trading_calendar import get_trading_calendar, trading_day_offset
 
         calendar = get_trading_calendar(market)
         shifted = trading_day_offset(pd.Timestamp(end_date), int(bars), calendar=calendar)
@@ -684,7 +684,7 @@ def plan_updates_from_data_event(
         # unknown).  ``effective_forward_bars`` resolves it to scheduler bars:
         # ``None`` = unbounded (reach cap / latest data), ``unknown`` in
         # production resolves conservatively to unbounded (mandatory reindex).
-        from runtime.dependency_catalog import (
+        from factor_engine.runtime.dependency_catalog import (
             ForwardImpactRequirement,
             effective_forward_bars,
         )
@@ -759,13 +759,13 @@ def _edges_from_analysis(
     both fail with ``DependencyDatasetResolutionError``; research logs a warning
     and skips the unresolved edge.
     """
-    from runtime.dependency_catalog import FactorDependencyEdge, UNBOUNDED_FORWARD_IMPACT
+    from factor_engine.runtime.dependency_catalog import FactorDependencyEdge, UNBOUNDED_FORWARD_IMPACT
 
     ref_fields = getattr(analysis, "referenced_fields", {}) or {}
     # P0-01: forward impact of the whole factor — any changed source field
     # propagates with the factor's forward reach (None = unbounded, stored as
     # the -1 sentinel so legacy ``None`` keeps meaning "not recorded").
-    from runtime.execution_contract import factor_forward_impact
+    from factor_engine.runtime.execution_contract import factor_forward_impact
 
     fwd = None
     try:
@@ -778,7 +778,7 @@ def _edges_from_analysis(
     # dependency identity differ even when the parquet data is unchanged.
     field_catalog_hash = None
     try:
-        from fields import FIELD_REGISTRY
+        from factor_engine.fields import FIELD_REGISTRY
 
         field_catalog_hash = str(FIELD_REGISTRY.catalog_hash() or "")
     except Exception:  # pragma: no cover - registry 缺失时无版本
@@ -863,7 +863,7 @@ def record_factor_dependency_from_analysis(
     failure (operator manifest, calendar fingerprint, unresolvable physical
     dataset) into a hard error — never silently omit lineage.
     """
-    from runtime.dependency_catalog import DependencyCatalog
+    from factor_engine.runtime.dependency_catalog import DependencyCatalog
 
     referenced_columns = getattr(analysis, "referenced_columns", set()) or set()
     lookback = int(getattr(analysis, "lookback", 0))
@@ -909,8 +909,8 @@ def factor_from_catalog_info(info: dict) -> Any:
     """
     import dataclasses
 
-    from api.dsl_parser import parse_factor
-    from api.factor import FactorExecutionScopeHint
+    from factor_engine.api.dsl_parser import parse_factor
+    from factor_engine.api.factor import FactorExecutionScopeHint
 
     expression = info.get("expression")
     if not expression or not str(expression).strip():
@@ -963,9 +963,9 @@ def _default_engine_factory(
     own engine.  Overridable via ``engine_factory=`` for tests / alternate
     backends.
     """
-    from backend.factory import build_backend
-    from runtime.engine import FactorEngine
-    from storage.factory import DataSourceBuildContext, build_data_source
+    from factor_engine.backend.factory import build_backend
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.storage.factory import DataSourceBuildContext, build_data_source
 
     ds_config = dict(full_def.get("data_source_config") or {})
     if not ds_config:
@@ -1060,14 +1060,14 @@ def _verify_factor_semantic_identity(
             )
     ast_hash = full_def.get("ast_hash")
     if ast_hash and str(ast_hash).strip():
-        from storage.catalog import compute_ir_hash
+        from factor_engine.storage.catalog import compute_ir_hash
 
         try:
             # R14 #4：rebuild 的 factor 是 Expr，materialize 落库的 ast_hash 来自
             # ``compute_ir_hash(analysis.ir)``（IRNode）。直接对 Expr 哈希会拿不到
             # ``.attrs`` 报错——必须先按与执行同源的路径 lower 成 IR 再哈希，否则
             # production 事件（full_def 含 ast_hash）永远无法证明 identity。
-            from ir.analyzer import Analyzer
+            from factor_engine.ir.analyzer import Analyzer
 
             # R40 #174：production 下 Analyzer 必须带显式 market（从 factor 解析，
             # 解析不到 → ProductionMarketContextRequiredError，fail-closed）。
@@ -1690,7 +1690,7 @@ def _is_production_run(event: DataEvent) -> bool:
     if mode and str(mode).strip().lower() in {"production", "prod"}:
         return True
     try:
-        from runtime.production_policy import is_production_mode
+        from factor_engine.runtime.production_policy import is_production_mode
 
         return bool(is_production_mode())
     except Exception:  # pragma: no cover - 策略解析失败按 research 处理
@@ -1717,8 +1717,8 @@ def execute_incremental_updates_from_event(
     partial-success events: any failure raises ``PartialIncrementalFailureError``
     and the event stays pending.
     """
-    from storage.materializer import ParquetMaterializer
-    from runtime.dependency_catalog import DependencyCatalog
+    from factor_engine.storage.materializer import ParquetMaterializer
+    from factor_engine.runtime.dependency_catalog import DependencyCatalog
 
     event = normalize_data_event(event)
     production = _is_production_run(event)
@@ -1728,7 +1728,7 @@ def execute_incremental_updates_from_event(
     # 显式 ``DATA_EVENT_PRODUCTION_AUTO_PUBLISH=1`` 才启用（实验性，真正 event
     # transaction 留待后续）。research 事件不受影响。
     if production:
-        from runtime.production_policy import (
+        from factor_engine.runtime.production_policy import (
             production_data_event_auto_publish_enabled,
         )
 
@@ -1901,7 +1901,7 @@ def execute_incremental_updates_from_event(
     # event_id 幂等收敛，最终只 commit 一次。
     published: list[str] = []
     if production and not dry_run:
-        from storage.materialize.lake_publish import publish_factor_lake
+        from factor_engine.storage.materialize.lake_publish import publish_factor_lake
 
         # R14 复查 P0-2：publish 前再做一次 fencing 校验（renew = 续租 + 断言
         # 所有权）——lease 已被接管的 stale worker 不得 publish。

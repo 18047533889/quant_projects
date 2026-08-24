@@ -29,14 +29,14 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from runtime.dependency_catalog import DependencyCatalog, FactorDependencyEdge
-from runtime.incremental_scheduler import (
+from factor_engine.runtime.dependency_catalog import DependencyCatalog, FactorDependencyEdge
+from factor_engine.runtime.incremental_scheduler import (
     DataEvent,
     PartialIncrementalFailureError,
     ProductionEventAutoPublishDisabled,
     execute_incremental_updates_from_event,
 )
-from storage.materializer import ParquetMaterializer
+from factor_engine.storage.materializer import ParquetMaterializer
 
 
 def _ser() -> pd.Series:
@@ -79,9 +79,9 @@ def _setup_lake(tmp_path, *, fail_stage_on: str | None = None) -> tuple:
     注册**真实** IR hash——否则 production 下 ``_verify_factor_semantic_identity``
     的 ast_hash 校验会失败（R14 #4 后按 Expr→IR lower 计算）。
     """
-    from api.dsl_parser import parse_factor
-    from ir.analyzer import Analyzer
-    from storage.catalog import compute_ir_hash
+    from factor_engine.api.dsl_parser import parse_factor
+    from factor_engine.ir.analyzer import Analyzer
+    from factor_engine.storage.catalog import compute_ir_hash
 
     _ir = Analyzer(production=True).lower(
         parse_factor('field("close")').expr
@@ -154,7 +154,7 @@ def _prod_event() -> DataEvent:
 
 def _force_production(monkeypatch) -> None:
     monkeypatch.setattr(
-        "runtime.production_policy.is_production_mode", lambda: True
+        "factor_engine.runtime.production_policy.is_production_mode", lambda: True
     )
 
 

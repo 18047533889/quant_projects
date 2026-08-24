@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from storage.sources.intraday_feature_extension import _calc
+from factor_engine.storage.sources.intraday_feature_extension import _calc
 
 
 _TIMES = ["09:31", "09:36", "09:41", "09:46", "09:51", "09:56", "13:01", "13:06", "13:11", "13:16"]
@@ -38,8 +38,8 @@ def _bar(rows: int | None = None, seed: int = 0, cross_lunch: bool = False) -> p
 
 
 def test_intraday_features_and_intra_native_ops_are_exposed() -> None:
-    from api.intraday_daily import INTRADAY_DAILY_DSL_FUNCTIONS
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.api.intraday_daily import INTRADAY_DAILY_DSL_FUNCTIONS
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     for name in (
         "intraday_lunch_gap_return",

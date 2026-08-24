@@ -33,7 +33,7 @@ def _anchor(days=("2024-01-02", "2024-01-03", "2024-01-04"), instruments=("A",))
 # #279 mining_allowed production hard gate
 # ---------------------------------------------------------------------------
 def test_mining_gate_rejects_mining_allowed_false_field():
-    from api.columns import field
+    from factor_engine.api.columns import field
 
     # index_weight is mining_allowed=False (one_to_many, must be aggregated).
     assert field("index_weight").table == "IndexConstituent"
@@ -42,11 +42,11 @@ def test_mining_gate_rejects_mining_allowed_false_field():
 
 
 def test_mining_gate_source_level_raw_read_rejection():
-    from storage.sources.data_access_source import (
+    from factor_engine.storage.sources.data_access_source import (
         DataAccessSource,
         FieldMiningGateError,
     )
-    from storage.sources.field_plan import NormalizedFieldPlan
+    from factor_engine.storage.sources.field_plan import NormalizedFieldPlan
 
     src = DataAccessSource(dataset="ashare_stock_daily", enforce_mining_gate=True)
     plan = NormalizedFieldPlan(logical_concept="idx", mining_allowed=False)
@@ -61,11 +61,11 @@ def test_mining_gate_source_level_raw_read_rejection():
 # #280 current_snapshot_only cannot backfill a historical window
 # ---------------------------------------------------------------------------
 def test_current_snapshot_only_historical_backfill_rejected():
-    from storage.sources.data_access_source import (
+    from factor_engine.storage.sources.data_access_source import (
         DataAccessSource,
         HistoricalSnapshotBackfillError,
     )
-    from storage.sources.field_plan import NormalizedFieldPlan
+    from factor_engine.storage.sources.field_plan import NormalizedFieldPlan
 
     src = DataAccessSource(
         dataset="ashare_stock_daily",
@@ -80,8 +80,8 @@ def test_current_snapshot_only_historical_backfill_rejected():
 
 
 def test_current_snapshot_only_allowed_with_snapshot_now_only():
-    from storage.sources.data_access_source import DataAccessSource
-    from storage.sources.field_plan import NormalizedFieldPlan
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.field_plan import NormalizedFieldPlan
 
     src = DataAccessSource(
         dataset="ashare_stock_daily",
@@ -96,8 +96,8 @@ def test_current_snapshot_only_allowed_with_snapshot_now_only():
 
 
 def test_current_snapshot_only_now_window_allowed():
-    from storage.sources.data_access_source import DataAccessSource
-    from storage.sources.field_plan import NormalizedFieldPlan
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.field_plan import NormalizedFieldPlan
 
     today = pd.Timestamp.now().strftime("%Y-%m-%d")
     src = DataAccessSource(
@@ -139,11 +139,11 @@ def test_four_layer_pit_combined_eligibility():
 
 
 def test_four_layer_pit_source_preflight_rejects_field_layer():
-    from storage.sources.data_access_source import (
+    from factor_engine.storage.sources.data_access_source import (
         DataAccessSource,
         FourLayerPITError,
     )
-    from storage.sources.field_plan import NormalizedFieldPlan
+    from factor_engine.storage.sources.field_plan import NormalizedFieldPlan
 
     src = DataAccessSource(dataset="ashare_stock_daily")
     plan = NormalizedFieldPlan(logical_concept="div", strict_pit_allowed=False)
@@ -155,7 +155,7 @@ def test_four_layer_pit_source_preflight_rejects_field_layer():
 # #283 FieldRegistry.replace must clean old aliases
 # ---------------------------------------------------------------------------
 def test_replace_cleans_old_field_aliases():
-    from fields import FieldRegistry, FieldSpec, TableSpec
+    from factor_engine.fields import FieldRegistry, FieldSpec, TableSpec
 
     reg = FieldRegistry(tables=[TableSpec("T", "d")])
     reg.register(FieldSpec("f", "T", "OldName", aliases=("old_alias",)))
@@ -173,7 +173,7 @@ def test_replace_cleans_old_field_aliases():
 
 
 def test_replace_table_cleans_old_aliases():
-    from fields import FieldRegistry, TableSpec
+    from factor_engine.fields import FieldRegistry, TableSpec
 
     reg = FieldRegistry()
     reg.register_table(TableSpec("T", "old_dataset", aliases=("OldT",)))
@@ -187,7 +187,7 @@ def test_replace_table_cleans_old_aliases():
 # #284 role vocabulary validation (catalog load fails on unknown values)
 # ---------------------------------------------------------------------------
 def test_role_typo_fails_catalog_validation():
-    from fields.catalog import FieldRole, validate_field_role
+    from factor_engine.fields.catalog import FieldRole, validate_field_role
 
     assert FieldRole.FEATURE.value == "feature"
     validate_field_role("feature")  # known role is accepted
@@ -197,7 +197,7 @@ def test_role_typo_fails_catalog_validation():
 
 
 def test_role_typo_fails_field_builder():
-    from fields.catalog import _f  # private builder used by ASHARE_FIELD_SPECS
+    from factor_engine.fields.catalog import _f  # private builder used by ASHARE_FIELD_SPECS
 
     # _f validates role before constructing a FieldSpec; a typo must raise.
     with pytest.raises(ValueError, match="unknown field role"):
@@ -208,7 +208,7 @@ def test_role_typo_fails_field_builder():
 # #289 SourceRef scalar params reject NaN / Inf
 # ---------------------------------------------------------------------------
 def test_source_ref_rejects_non_finite_scalars():
-    from api.source_ref import make_source_ref
+    from factor_engine.api.source_ref import make_source_ref
 
     spec = make_source_ref("StockDailyBar", "Close", params={"lookback": 5})
     assert spec.params_dict()["lookback"] == 5
@@ -225,7 +225,7 @@ def test_source_ref_rejects_non_finite_scalars():
 # #290 minute→daily exact alignment — no asof carry on missing days
 # ---------------------------------------------------------------------------
 def test_minute_daily_exact_alignment_no_asof_carry():
-    from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+    from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
 
     anchor = _anchor()
     # minute-aggregated daily is missing 2024-01-03 for instrument A.
@@ -256,7 +256,7 @@ def test_minute_daily_exact_alignment_no_asof_carry():
 # #291 Intermediate/DerivedField default join_policy=exact
 # ---------------------------------------------------------------------------
 def test_intermediate_derived_default_join_policy_exact():
-    from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+    from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
 
     anchor = _anchor()
     series = pd.Series(
@@ -289,7 +289,7 @@ def test_intermediate_derived_default_join_policy_exact():
 # #292 all-missing minute volume/amount → NaN, not 0
 # ---------------------------------------------------------------------------
 def test_minute_all_missing_volume_is_nan_not_zero():
-    from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+    from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
 
     grp = pd.DataFrame({"value": [np.nan, np.nan]})
     assert np.isnan(LQTPLogicalDataSource._minute_semantic_aggregate_frame(grp, "volume"))
@@ -302,13 +302,13 @@ def test_minute_all_missing_volume_is_nan_not_zero():
 # #293 timestamp convention from the DatasetContract, not a 09:30 heuristic
 # ---------------------------------------------------------------------------
 def test_session_timestamp_convention_reads_contract():
-    from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+    from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
 
     assert LQTPLogicalDataSource._session_timestamp_convention() == "bar_end"
 
 
 def test_session_slots_use_declared_convention():
-    from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+    from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
 
     frame = pd.DataFrame(
         {"timestamp": pd.to_datetime([
@@ -326,7 +326,7 @@ def test_session_slots_use_declared_convention():
 # #315 HistoricalCoverageContract
 # ---------------------------------------------------------------------------
 def test_historical_coverage_contract_violations():
-    from storage.sources.data_access_source import (
+    from factor_engine.storage.sources.data_access_source import (
         HistoricalCoverageContract,
         assert_historical_coverage,
         HistoricalCoverageError,
@@ -348,13 +348,13 @@ def test_historical_coverage_contract_violations():
 
 
 def test_coverage_gate_source_level():
-    from storage.sources.data_access_source import (
+    from factor_engine.storage.sources.data_access_source import (
         DataAccessSource,
         HistoricalCoverageContract,
         HistoricalCoverageError,
         register_coverage_contract,
     )
-    from storage.sources.field_plan import NormalizedFieldPlan
+    from factor_engine.storage.sources.field_plan import NormalizedFieldPlan
 
     field_name = "test_cov_field_315"
     register_coverage_contract(
@@ -375,7 +375,7 @@ def test_coverage_gate_source_level():
 # #316 MissingSemantic enum + field→semantic mapping
 # ---------------------------------------------------------------------------
 def test_missing_semantic_mapping():
-    from storage.sources.field_plan import (
+    from factor_engine.storage.sources.field_plan import (
         MissingSemantic,
         NormalizedFieldPlan,
         missing_semantic_for_plan,
@@ -423,7 +423,7 @@ def test_missing_semantic_mapping():
 # #317 source_dependency_hash in the source materialization identity
 # ---------------------------------------------------------------------------
 def test_source_dependency_hash_stable_and_identity_bound():
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     src = DataAccessSource(dataset="ashare_stock_daily")
     src._ensure_field_plans(["ret", "close"])

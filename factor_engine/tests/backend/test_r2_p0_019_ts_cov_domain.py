@@ -5,8 +5,8 @@ import pytest
 
 import polars as pl
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def test_ts_cov_rejects_min_periods_above_window() -> None:

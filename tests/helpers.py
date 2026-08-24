@@ -6,7 +6,7 @@ from typing import Any
 
 import pandas as pd
 
-from storage.datasource import DataSource
+from factor_engine.storage.datasource import DataSource
 
 FE_ROOT = Path(__file__).resolve().parents[1]
 QUANT_ROOT = FE_ROOT.parent
@@ -26,7 +26,7 @@ class InMemorySeriesSource(DataSource):
         """返回 ``ts / inst / <columns>`` 的 Polars LazyFrame（无 panel 往返）。"""
         import polars as pl
 
-        from storage.factor_format import series_to_long_table
+        from factor_engine.storage.factor_format import series_to_long_table
 
         merged: pd.DataFrame | None = None
         tcol = icol = None
@@ -49,7 +49,7 @@ class InMemorySeriesSource(DataSource):
         if merged is None:
             raise ValueError("scan_polars_long: no columns")
         renamed = merged.rename(columns={tcol: "ts", icol: "inst"})
-        from backend.long_frame import long_table_to_polars_lazy
+        from factor_engine.backend.long_frame import long_table_to_polars_lazy
 
         return long_table_to_polars_lazy(renamed, float_cols=columns)
 
@@ -79,7 +79,7 @@ class NoLoadColumnSource:
     def scan_polars_long(self, columns: list[str]):
         import polars as pl
 
-        from storage.factor_format import series_to_long_table
+        from factor_engine.storage.factor_format import series_to_long_table
 
         merged = None
         tcol = icol = None
@@ -97,7 +97,7 @@ class NoLoadColumnSource:
             merged = part if merged is None else merged.merge(part, on=[tcol, icol], how="outer")
             merged[name] = merged[name].astype("float64")
         renamed = merged.rename(columns={tcol: "ts", icol: "inst"})
-        from backend.long_frame import long_table_to_polars_lazy
+        from factor_engine.backend.long_frame import long_table_to_polars_lazy
 
         return long_table_to_polars_lazy(renamed, float_cols=columns)
 

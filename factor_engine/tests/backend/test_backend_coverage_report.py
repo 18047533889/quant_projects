@@ -5,16 +5,16 @@ from __future__ import annotations
 
 import pytest
 
-from runtime.config import BackendConfig, FactorEngineConfig, FactorDefinitionConfig, DataSourceConfig
-from cleaned_operators import load_all
-from cleaned_operators.operator_policy import (
+from factor_engine.runtime.config import BackendConfig, FactorEngineConfig, FactorDefinitionConfig, DataSourceConfig
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.operator_policy import (
     POLARS_PARITY_VERIFIED,
     POLARS_PRODUCTION_SAFE,
     POLARS_PRODUCTION_SAFE_CORE,
     check_polars_production_gate,
     polars_implemented_canonicals,
 )
-from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
+from factor_engine.cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
 
 
 def test_backend_config_default_is_auto():
@@ -38,7 +38,7 @@ def test_polars_production_gate_contract(loaded):
 
 
 def test_polars_safe_requires_independent_edge_and_no_fallback_evidence(loaded):
-    from backend.primitive_evidence import POLARS_EDGE_VERIFIED, POLARS_NO_FALLBACK_VERIFIED
+    from factor_engine.backend.primitive_evidence import POLARS_EDGE_VERIFIED, POLARS_NO_FALLBACK_VERIFIED
 
     assert POLARS_PRODUCTION_SAFE <= POLARS_EDGE_VERIFIED
     assert POLARS_PRODUCTION_SAFE <= POLARS_NO_FALLBACK_VERIFIED
@@ -49,8 +49,8 @@ def test_polars_implemented_superset_production_safe(loaded):
 
 
 def test_production_safe_capabilities_have_explicit_contract_metadata(loaded):
-    from backend.operator_capability import capability_for
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.backend.operator_capability import capability_for
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
 
     required = {
         "execution_kind", "supports_lazy", "supports_streaming",
@@ -68,8 +68,8 @@ def test_production_safe_capabilities_have_explicit_contract_metadata(loaded):
 
 
 def test_policy_table_contains_only_active_canonicals_and_covers_daily(loaded):
-    from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
-    from cleaned_operators.operator_surface import (
+    from factor_engine.cleaned_operators.operator_policy import _EXPLICIT_POLICIES
+    from factor_engine.cleaned_operators.operator_surface import (
         DAILY_CANONICALS,
         EXTENDED_ONLY_CANONICALS,
         INTERNAL_ONLY_CANONICALS,

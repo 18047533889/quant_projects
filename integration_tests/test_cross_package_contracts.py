@@ -55,8 +55,8 @@ def _sha256(payload: str) -> str:
 def _module_names():
     """Return (module, display_name) pairs the FE/FP adapter contract uses."""
     return [
-        ("runtime.factor_identity", "FE.runtime.factor_identity"),
-        ("ir.types", "FE.ir.types"),
+        ("factor_engine.runtime.factor_identity", "FE.runtime.factor_identity"),
+        ("factor_engine.ir.types", "FE.ir.types"),
         ("factor_preprocess.contracts.feature_bundle", "FP.contracts.feature_bundle"),
     ]
 
@@ -90,8 +90,8 @@ def test_01_fe_factor_identity_and_snapshot_flow_to_qe():
         ``FactorSemanticIdentity.identity_digest()`` and
         ``SourceVintageSpec.snapshot_id``.
     """
-    fe_id_mod, err_id = _import_optional("runtime.factor_identity")
-    fe_ir_mod, err_ir = _import_optional("ir.types")
+    fe_id_mod, err_id = _import_optional("factor_engine.runtime.factor_identity")
+    fe_ir_mod, err_ir = _import_optional("factor_engine.ir.types")
     if err_id or err_ir:
         pytest.skip(f"factor_engine not importable here: {err_id or err_ir}")
 
@@ -335,7 +335,7 @@ def test_05_fo_mutation_to_fa_admission_lineage_intact():
     fo_tr, err_tr = _import_optional("factor_optimizer.contracts.trial")
     ev_mod, err_ev = _import_optional("factor_assets.contracts.evidence_ref")
     lc_mod, err_lc = _import_optional("factor_assets.contracts.lifecycle")
-    fe_ir, err_ir = _import_optional("ir.types")
+    fe_ir, err_ir = _import_optional("factor_engine.ir.types")
     missing = [e for e in (err_cm, err_tr, err_ev, err_lc, err_ir) if e]
     if missing:
         pytest.skip("import failure: " + "; ".join(missing))
@@ -410,7 +410,7 @@ def test_06_snapshot_ref_identical_across_packages():
         not at all), so the assertion below asserts the FE/FA/FP triple and
         documents the FO/QE gap rather than fabricating a 5-way equality.
     """
-    fe_ir, err_ir = _import_optional("ir.types")
+    fe_ir, err_ir = _import_optional("factor_engine.ir.types")
     fa_mod, err_fa = _import_optional("factor_assets.contracts.factor_set")
     fp_mod, err_fp = _import_optional("factor_preprocess.contracts.state")
     fo_mod, err_fo = _import_optional("factor_optimizer.contracts.candidate_mutation")

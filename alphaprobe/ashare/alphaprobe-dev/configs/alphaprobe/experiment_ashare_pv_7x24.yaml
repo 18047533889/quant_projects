@@ -1,0 +1,79 @@
+# AlphaPROBE A 股 7×24 连续挖掘
+# 每轮：新 campaign_id → 冷启动 100 条 → 40 轮迭代 → disk.v1 投递 candidate_pool
+# 投递规范：~/quant_projects/factor_engine/docs/miner_delivery_spec.md
+
+data:
+  source: ashare
+  ashare_data_dir: data/a_share/lqtp_data
+  # factor_engine 数据源：价量 + 估值（pe/pb/turnover/market_cap），对应 COS 镜像
+  fe_profile: ashare_pv_valuation
+
+# A 股本地日线自 2016-01-04 起；train 从 2016 起（valid/test 与投递规范一致）
+split:
+  train_start: 2016-01-01
+  train_end: 2021-12-31
+  valid_start: 2022-01-01
+  valid_end: 2023-12-31
+  test_start: 2024-01-01
+  test_end: 2026-07-31
+
+delivery:
+  # 每轮由 run_continuous 自动生成 alphaprobe_ashare_pv_YYYYMMDDHHMM
+  campaign_id: ""
+  generator_name: alphaprobe
+  generator_version: "0.1.0"
+  mined_by: sunhaiwei
+  market: ashare
+  universe_id: A_SHARE_ALL_A_EX_ST
+  domain_root: price_volume
+  domain: price_volume
+  frequency_bucket: daily
+  signal_structure: cross_sectional
+  asset_class: equity
+  operator_policy: lqtp_pv_daily
+  mining_scope:
+    primary_tables: [StockDailyBar, StockValuationDaily, StockCapitalDaily]
+    auxiliary_tables: [StockList, StockStatus, StockIndustry, Calendar]
+    forbidden_tables: [StockBalance, StockIncome, StockCashFlow]
+  data_source:
+    local: data/a_share/lqtp_data/
+    cos: cos://qs-cold/clean_data/ashare/lqtp_data/
+  output_dir: ~/quant_projects/data/factor_pools/candidate_pool
+
+mining:
+  label_days: 20
+  # fitness 标签：vwap_t+label / vwap_t - 1（非 close→close / open→open）
+  label_price_pair: vwap_to_vwap
+  search_time: 40
+  pool_capacity: 2000
+  ic_threshold: 0.006
+  ic_export_threshold: 0.006
+  max_files: null
+  checkpoint:
+    enabled: true
+    # 连续模式：正常每轮新冷启动；进程崩溃后由 continuous 用同一 campaign resume 衔接
+    resume: true
+  cold_start_sample_size: 100
+  # V9 + expand 冷启动主库；全区间 value_cache 供免重算（train/valid/test IC 已写入 metrics）
+  cold_start_library: ~/quant_projects/cold_start_library/data/ashare/backend_v9_core.yaml
+  cold_start_mix:
+    enabled: true
+    pv_structural_diversity: true
+    ratios:
+      pv: 1.0
+      alpha101: 0.0
+      alpha191: 0.0
+      alpha158: 0.0
+    libraries:
+      pv: ~/quant_projects/cold_start_library/data/ashare/backend_v9_core.yaml
+  prompts:
+    dir: configs/prompts
+
+# 7×24 调度参数（apps/alphaprobe/run_continuous.py）
+continuous:
+  enabled: true
+  sleep_seconds: 30
+  error_sleep_seconds: 300   # 失败后退避
+  max_rounds: null           # null = 不限轮数（由 max_hours 约束）
+  max_hours: 24              # 墙钟 24h 后干净退出
+  llm_quota_max_consecutive: 1  # 额度类错误（llm 内已重试约 3 次）出现即写 STOP_QUOTA 退出，避免空转

@@ -37,7 +37,7 @@ pytestmark = pytest.mark.integration
 
 @pytest.mark.skipif(not _ashare_daily_available(), reason="A 股 StockDailyBar parquet 不可用")
 def test_real_ashare_stock_daily_loads_close():
-    from storage.factory import build_data_source
+    from factor_engine.storage.factory import build_data_source
 
     src = build_data_source(
         {
@@ -55,7 +55,7 @@ def test_real_ashare_stock_daily_loads_close():
 
 @pytest.mark.skipif(not _us_daily_available(), reason="美股 StockDailyBar parquet 不可用")
 def test_real_us_stock_daily_loads_close():
-    from storage.factory import build_data_source
+    from factor_engine.storage.factory import build_data_source
 
     src = build_data_source(
         {
@@ -72,11 +72,11 @@ def test_real_us_stock_daily_loads_close():
 
 @pytest.mark.skipif(not _ashare_daily_available(), reason="A 股 parquet 不可用")
 def test_real_ashare_rank_smoke():
-    from api.columns import col
-    from api.factor import Factor
-    from backend.pandas_backend import PandasBackend
-    from runtime.engine import FactorEngine
-    from storage.factory import build_data_source
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.storage.factory import build_data_source
 
     src = build_data_source(
         {

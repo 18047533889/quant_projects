@@ -23,9 +23,9 @@ from __future__ import annotations
 import json
 
 import pytest
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators import load_all
-from mining.direct_use import build_direct_use_operator
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.mining.direct_use import build_direct_use_operator
 
 # Honest: no in-scope canonical has six-way evidence -> empty certified set.
 R23_CERTIFIED_CANONICALS: frozenset[str] = frozenset()
@@ -88,7 +88,7 @@ def test_no_in_scope_operator_is_production_admitted():
 
 def test_pit_denied_canonicals_remain_fail_closed():
     """The 21 PIT11/PIT18 denied canonicals must not be certified by this pass."""
-    from cleaned_operators.operator_spec import PRODUCTION_DENIED_CANONICALS
+    from factor_engine.cleaned_operators.operator_spec import PRODUCTION_DENIED_CANONICALS
 
     scope = _in_scope_canonicals()
     pit_denied = scope & set(PRODUCTION_DENIED_CANONICALS)

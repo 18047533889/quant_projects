@@ -127,13 +127,13 @@ def _fingerprint(series: pd.Series) -> dict[str, Any]:
 def record_recipe_execution_fingerprints() -> dict[str, dict[str, Any]]:
     """Execute every production recipe and return {name: fingerprint}."""
     import os
-    from factor_recipes import FactorRecipeRegistry
-    from backend.recipe_evidence import _production_recipe_names
+    from factor_engine.factor_recipes import FactorRecipeRegistry
+    from factor_engine.backend.recipe_evidence import _production_recipe_names
 
     os.environ["FACTOR_ENGINE_EXPAND_RECIPE_USAGE"] = "1"
-    from factor_recipes.planner_bridge import compile_recipe_plans
-    from backend.context import ExecutionContext
-    from backend.factory import build_backend
+    from factor_engine.factor_recipes.planner_bridge import compile_recipe_plans
+    from factor_engine.backend.context import ExecutionContext
+    from factor_engine.backend.factory import build_backend
     from tests.helpers import InMemorySeriesSource
 
     names = sorted(_production_recipe_names())

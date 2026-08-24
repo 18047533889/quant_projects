@@ -13,15 +13,15 @@ import pytest
 
 def setup_module():
     """Reset registry lifecycle to allow operator registration during test imports."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     if OperatorRegistry._lifecycle != OperatorRegistry.Lifecycle.BUILDING:
         OperatorRegistry._lifecycle = OperatorRegistry.Lifecycle.BUILDING
 
 
-import cleaned_operators.intraday.state_space  # noqa: F401  (registers operators)
+import factor_engine.cleaned_operators.intraday.state_space  # noqa: F401  (registers operators)
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
@@ -79,7 +79,7 @@ def _all_nan_panel(days: int, bars: int, cols: int = 2) -> pd.DataFrame:
 
 @pytest.mark.parametrize("name", sorted(CANONICALS))
 def test_registered_and_classified(name: str) -> None:
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     assert OperatorRegistry.get(name) is not None, name
     assert classify_canonical(name) in ("daily", "extended", "research"), name

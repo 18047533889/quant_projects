@@ -20,9 +20,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from backend.operator_errors import OperatorParameterError
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.operator_errors import OperatorParameterError
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -44,7 +44,7 @@ def test_huber_matches_independent_irls_reference():
     x = rng.normal(0, 1, 60)
     y = 1.5 * x + 0.3 + rng.normal(0, 0.05, 60)
     y[::7] = 50.0  # outliers
-    from cleaned_operators.regression_models import _huber_fit
+    from factor_engine.cleaned_operators.regression_models import _huber_fit
 
     design = np.column_stack([np.ones(60), x])
     beta = _huber_fit(design, y)
@@ -99,7 +99,7 @@ def test_new_high_warmup_is_nan_not_zero():
 # P0-08 / P0-09 candlestick golden patterns
 # --------------------------------------------------------------------------
 def _candle_engine():
-    from cleaned_operators.price_volume.candle_pattern_engine_v2 import _engine
+    from factor_engine.cleaned_operators.price_volume.candle_pattern_engine_v2 import _engine
 
     return _engine
 
@@ -129,7 +129,7 @@ def test_3_outside_golden():
 
 
 def test_candle_active_params_helper():
-    from cleaned_operators.price_volume.candle_pattern_engine_v2 import (
+    from factor_engine.cleaned_operators.price_volume.candle_pattern_engine_v2 import (
         candlestick_active_params,
     )
 
@@ -176,7 +176,7 @@ def test_integer_param_rejects_float():
 # P0-14 systemic-tail cold start
 # --------------------------------------------------------------------------
 def test_tail_extreme_cold_start_nan():
-    from cleaned_operators.tail_systemic import _extreme_indicator_panel
+    from factor_engine.cleaned_operators.tail_systemic import _extreme_indicator_panel
 
     xv = np.arange(1.0, 6.0).reshape(-1, 1)
     E = _extreme_indicator_panel(xv, 5, 0.1, "lower", 10)

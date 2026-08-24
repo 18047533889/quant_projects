@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from api.dsl_parser import DSLParseError, parse_expr
-from backend.operator_types import check_operator_types
-from expr.field import FieldRef
-from planner.logical_plan import PlanNode
+from factor_engine.api.dsl_parser import DSLParseError, parse_expr
+from factor_engine.backend.operator_types import check_operator_types
+from factor_engine.expr.field import FieldRef
+from factor_engine.planner.logical_plan import PlanNode
 
 
 def test_canonical_expression_is_stable_and_field_aware() -> None:
-    from expr.canonical import canonical_expression
+    from factor_engine.expr.canonical import canonical_expression
 
     first = parse_expr("ts_mean(field('close'), 3)")
     second = parse_expr("ts_mean(close, 3)")
@@ -30,7 +30,7 @@ def test_dsl_unknown_column_remains_legacy_column() -> None:
 
 
 def test_ir_propagates_field_semantics() -> None:
-    from ir.analyzer import Analyzer
+    from factor_engine.ir.analyzer import Analyzer
 
     analysis = Analyzer().lower(parse_expr("ts_mean(close, 3)"))
     semantic = analysis.ir.semantic_attrs
@@ -41,7 +41,7 @@ def test_ir_propagates_field_semantics() -> None:
 
 
 def test_max_domains_is_enforced() -> None:
-    from ir.analyzer import Analyzer, validate_max_domains
+    from factor_engine.ir.analyzer import Analyzer, validate_max_domains
 
     analysis = Analyzer().lower(parse_expr("add(field('close'), field('pe_ratio'))"))
     assert validate_max_domains(analysis, max_domains=2) == []
@@ -74,7 +74,7 @@ def test_boolean_signatures_are_strict() -> None:
 
 
 def test_semantic_signature_rejects_frequency_cardinality_and_pit() -> None:
-    from backend.operator_types import ArgSpec, OperatorSignature, TypeKind
+    from factor_engine.backend.operator_types import ArgSpec, OperatorSignature, TypeKind
 
     signature = OperatorSignature(
         "typed_test",

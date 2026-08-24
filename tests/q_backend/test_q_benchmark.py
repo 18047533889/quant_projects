@@ -11,10 +11,10 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from backend.q_backend.q_backend import QBackend
-from backend.pandas_backend import PandasBackend
-from backend.context import ExecutionContext
-from planner.logical_plan import PlanNode
+from factor_engine.backend.q_backend.q_backend import QBackend
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.planner.logical_plan import PlanNode
 
 
 # Benchmark 配置

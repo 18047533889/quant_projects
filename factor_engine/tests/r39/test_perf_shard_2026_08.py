@@ -18,14 +18,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from runtime.shard_execution_plan import (
+from factor_engine.runtime.shard_execution_plan import (
     SHARD_TIME,
     ShardDescriptor,
     ShardExecutionPlan,
     ShardMergeContract,
     ShardMergeMode,
 )
-from runtime.shard_executor import (
+from factor_engine.runtime.shard_executor import (
     ArrowSpoolRef,
     ShardDirectWriteManifest,
     ShardExecutor,

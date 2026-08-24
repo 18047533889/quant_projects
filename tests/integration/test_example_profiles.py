@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from runtime.config import load_config
-from storage.factory import build_data_source
+from factor_engine.runtime.config import load_config
+from factor_engine.storage.factory import build_data_source
 
 PROFILES_ROOT = Path(__file__).resolve().parent.parent / "examples" / "profiles"
 

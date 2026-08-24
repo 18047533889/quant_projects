@@ -10,8 +10,8 @@
 
 常用导入::
 
-    from api import col, rank, ts_mean, Factor
-    from api import parse_expr   # 见 dsl_parser
+    from factor_engine.api import col, rank, ts_mean, Factor
+    from factor_engine.api import parse_expr   # 见 dsl_parser
 
 未在 ``__all__`` 里显式导出的算子名，可通过 ``from api import ts_corr`` 动态解析，
 前提是该名已在 ``build_dsl_allowlist()`` 白名单内（canonical 或别名，且已有 runtime）。
@@ -70,7 +70,7 @@ def __getattr__(name: str) -> Callable[..., Any]:
     AttributeError
         算子未在 registry 中实现。
     """
-    from api.operator_registry import build_dsl_allowlist
+    from factor_engine.api.operator_registry import build_dsl_allowlist
 
     if name not in build_dsl_allowlist():
         raise AttributeError(

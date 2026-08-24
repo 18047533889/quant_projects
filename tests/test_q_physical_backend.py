@@ -12,7 +12,7 @@ import os
 # Ensure the project root is in the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from planner.backend_region import (
+from factor_engine.planner.backend_region import (
     PhysicalBackend,
     Representation,
     StateContract,

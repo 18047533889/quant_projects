@@ -440,7 +440,9 @@ def test_coverage_glob_failure_not_complete(phase_store, tmp_path, monkeypatch):
 def test_ignore_errors_rejected_in_strict(monkeypatch):
     from data_access.read.formats import FormatSpec
 
-    monkeypatch.setenv("FACTOR_ENGINE_RUN_MODE", "production")
+    # R39 P0 #51：strict 语义的唯一权威现在是 DATA_ACCESS_STRICT_READ（不再读
+    # FACTOR_ENGINE_RUN_MODE / QUANT_PRODUCTION_MODE 这两个旧开关）。
+    monkeypatch.setenv("DATA_ACCESS_STRICT_READ", "1")
     with pytest.raises(ValidationError, match="ignore_errors"):
         FormatSpec.from_yaml({"type": "csv", "extra": {"ignore_errors": True}})
 
@@ -626,7 +628,7 @@ def test_cos_asof_reserved_name_collision():
 def test_semantic_catalog_env_path_cached(monkeypatch, tmp_path):
     from data_access.read import semantic_catalog as sc
 
-    custom = tmp_path / "fields.yaml"
+    custom = tmp_path / "factor_engine.fields.yaml"
     custom.write_text("_meta: {}\n", encoding="utf-8")
     monkeypatch.setenv("DATA_ACCESS_SEMANTIC_FIELDS", str(custom))
     sc.reset_semantic_catalog()

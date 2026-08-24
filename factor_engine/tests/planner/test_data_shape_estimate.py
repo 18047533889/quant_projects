@@ -4,14 +4,14 @@
 import pandas as pd
 import pytest
 
-from planner.data_shape_estimate import (
+from factor_engine.planner.data_shape_estimate import (
     DataShapeEstimate,
     estimate_dates_from_calendar,
     estimate_instruments_from_universe,
     estimate_shape_from_metadata,
     shape_to_cost_context,
 )
-from storage.trading_calendar import TradingCalendar
+from factor_engine.storage.trading_calendar import TradingCalendar
 
 
 class TestEstimateInstrumentsFromUniverse:

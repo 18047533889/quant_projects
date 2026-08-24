@@ -13,7 +13,7 @@ These tests lock in the corrected behaviour.  No xfail / skip.
 """
 from __future__ import annotations
 
-from cleaned_operators.operator_cost_model import (
+from factor_engine.cleaned_operators.operator_cost_model import (
     ComplexityClass,
     CostResolution,
     CostShape,
@@ -28,7 +28,7 @@ from cleaned_operators.operator_cost_model import (
     runtime_cost,
     search_budget_gate,
 )
-from cleaned_operators.operator_surface import classify_canonical
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
 
 def _assert_ratio(actual: float, expected: float, factor: float = 2.0) -> None:

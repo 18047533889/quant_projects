@@ -21,16 +21,16 @@ import pytest
 
 
 def _ensure_technical_chain() -> None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if OperatorRegistry.lifecycle() == "frozen":
         return
     if OperatorRegistry.get("KeltnerPosition", "pandas_numpy") is not None:
         return
-    from cleaned_operators.technical import signal  # noqa: F401
-    from cleaned_operators.technical import polars_signal  # noqa: F401
-    from cleaned_operators import composite_fastpath  # noqa: F401
-    from cleaned_operators.technical import indicators_v2  # noqa: F401
+    from factor_engine.cleaned_operators.technical import signal  # noqa: F401
+    from factor_engine.cleaned_operators.technical import polars_signal  # noqa: F401
+    from factor_engine.cleaned_operators import composite_fastpath  # noqa: F401
+    from factor_engine.cleaned_operators.technical import indicators_v2  # noqa: F401
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -39,7 +39,7 @@ def _bootstrap():
 
 
 def _op(name: str):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get(name, "pandas_numpy") or OperatorRegistry.get(name)
     assert op is not None, f"{name} not registered"
@@ -53,7 +53,7 @@ def _ohlc(values, spread=1.0):
 
 def test_keltner_width_pct_matches_manual_oracle():
     high, low, close = _ohlc(np.linspace(10.0, 15.0, 40), spread=0.4)
-    from cleaned_operators.technical.indicators_v2 import (
+    from factor_engine.cleaned_operators.technical.indicators_v2 import (
         KeltnerMid, KeltnerUpper, KeltnerLower,
     )
 
@@ -81,7 +81,7 @@ def test_keltner_width_pct_masks_non_positive_mid():
         high, low, close, ema_window=3, atr_window=3, multiplier=2.0
     )
     # Every bar whose EMA mid is <= 0 must be NaN (strict-positive masking).
-    from cleaned_operators.technical.indicators_v2 import KeltnerMid
+    from factor_engine.cleaned_operators.technical.indicators_v2 import KeltnerMid
 
     mid = KeltnerMid(close, 3).iloc[:, 0]
     for i in range(n):
@@ -118,7 +118,7 @@ def test_keltner_breakout_strength_above_band():
     close = pd.DataFrame({"A": [float(v) for v in vals]})
     high = close + 0.05
     low = close - 0.05
-    from cleaned_operators.technical.indicators_v2 import (
+    from factor_engine.cleaned_operators.technical.indicators_v2 import (
         KeltnerUpper, KeltnerLower,
     )
 
@@ -144,7 +144,7 @@ def test_keltner_breakout_strength_below_band():
     close = pd.DataFrame({"A": [float(v) for v in vals]})
     high = close + 0.05
     low = close - 0.05
-    from cleaned_operators.technical.indicators_v2 import (
+    from factor_engine.cleaned_operators.technical.indicators_v2 import (
         KeltnerUpper, KeltnerLower,
     )
 
@@ -221,7 +221,7 @@ def test_keltner_family_param_specs_and_recursive_stateful_tag():
         "keltner_compression": {"ema_window", "atr_window", "multiplier", "score_window"},
         "keltner_breakout_strength": {"ema_window", "atr_window", "multiplier"},
     }
-    from cleaned_operators.technical.indicators_v2 import _RECURSIVE_EWM
+    from factor_engine.cleaned_operators.technical.indicators_v2 import _RECURSIVE_EWM
 
     for name, params in expected_specs.items():
         specs = _op(name).metadata.param_specs
@@ -235,7 +235,7 @@ def test_keltner_family_param_specs_and_recursive_stateful_tag():
 
 
 def test_keltner_relative_alpha_membership():
-    from mining.direct_use import _RELATIVE_ALPHA_OPS
+    from factor_engine.mining.direct_use import _RELATIVE_ALPHA_OPS
 
     promoted = {"keltner_width_pct", "keltner_compression", "keltner_breakout_strength"}
     assert promoted <= _RELATIVE_ALPHA_OPS

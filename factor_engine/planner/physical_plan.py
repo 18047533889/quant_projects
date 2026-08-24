@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Mapping
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 
 class ExecKind(str, Enum):
@@ -92,7 +92,7 @@ def build_physical_execution_contract(
     由 ``sql_lowerer`` / 执行编排方在构造 PhysicalNode 后调用；未提供覆盖时从
     计划根 semantic_attrs 读取 input/output grain 与 availability。
     """
-    from planner.plan_hash import _semantic_digest
+    from factor_engine.planner.plan_hash import _semantic_digest
 
     plan = node.plan
     output_semantic_digest = _semantic_digest(plan) or ""

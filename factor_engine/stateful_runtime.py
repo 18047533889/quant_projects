@@ -87,7 +87,7 @@ def _implementation_hash(canonical: str) -> str:
     code = getattr(kernel, "__code__", None)
     if code is None:
         return "unknown"
-    from cleaned_operators.registry import _code_payload
+    from factor_engine.cleaned_operators.registry import _code_payload
 
     return _code_payload(code, include_names=True)
 

@@ -5,10 +5,10 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from api.factor import Factor
-from backend.factory import build_backend
-from planner.logical_plan import PlanNode
-from runtime.engine import FactorEngine
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 
@@ -21,8 +21,8 @@ def _walk_ops(plan: PlanNode) -> set[str]:
 
 @pytest.fixture(scope="module")
 def _loaded():
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
@@ -41,8 +41,8 @@ def engine(_loaded):
 
 
 def test_compile_preserves_divide_by_default(engine):
-    from api import divide
-    from api.columns import col
+    from factor_engine.api import divide
+    from factor_engine.api.columns import col
 
     factor = Factor(name="rw_div", expr=divide(col("close"), col("volume")))
     plan, _ = engine.compile(factor)

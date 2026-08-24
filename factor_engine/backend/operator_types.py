@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Sequence
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 
 class TypeKind(str, Enum):
@@ -314,9 +314,9 @@ OPERATOR_SIGNATURES: dict[str, OperatorSignature] = {
 
 # Lazy import to avoid circular dependency
 def _load_all_signatures():
-    from backend.operator_signatures_phase1 import phase1_operator_signatures
-    from backend.operator_signatures_phase2 import phase2_operator_signatures
-    from backend.operator_signatures_phase3 import phase3_operator_signatures
+    from factor_engine.backend.operator_signatures_phase1 import phase1_operator_signatures
+    from factor_engine.backend.operator_signatures_phase2 import phase2_operator_signatures
+    from factor_engine.backend.operator_signatures_phase3 import phase3_operator_signatures
 
     OPERATOR_SIGNATURES.update(phase1_operator_signatures())
     OPERATOR_SIGNATURES.update(phase2_operator_signatures())
@@ -327,7 +327,7 @@ _load_all_signatures()
 
 def check_operator_types(node: PlanNode, *, canonical: str | None = None) -> list[str]:
     """对 plan 节点做类型/schema 校验。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     canon = canonical or OperatorRegistry._aliases.get(str(node.op or ""), str(node.op or ""))
     sig = OPERATOR_SIGNATURES.get(canon)
@@ -349,7 +349,7 @@ def check_plan_types(plan: Any) -> list[str]:
             for child in node.inputs or []:
                 walk(child)
             return
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         canon = OperatorRegistry._aliases.get(op, op)
         violations.extend(check_operator_types(node, canonical=canon))

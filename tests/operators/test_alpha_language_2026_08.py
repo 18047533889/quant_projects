@@ -17,11 +17,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.operator_policy import infer_operator_policy
-from cleaned_operators.operator_surface import classify_canonical
-import cleaned_operators.operator_surface as _surface_mod
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
+import factor_engine.cleaned_operators.operator_surface as _surface_mod
 
 ensure_cleaned_loaded()
 
@@ -113,7 +113,7 @@ def test_alpha_language_policies_pit_safe_with_intended_scope():
 
 
 def test_alpha_language_dsl_usable_on_daily_surface():
-    from cleaned_operators.operator_surface import is_dsl_name_allowed
+    from factor_engine.cleaned_operators.operator_surface import is_dsl_name_allowed
     blocked = [
         c for c in sorted(ALPHA_LANGUAGE)
         if not is_dsl_name_allowed(c, c, surface="daily")

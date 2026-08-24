@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from storage.factory import build_data_source
+from factor_engine.storage.factory import build_data_source
 
 
 @pytest.fixture(autouse=True)
@@ -220,7 +220,7 @@ def market_env(tmp_path, monkeypatch):
 
 
 def test_data_access_source_ashare_daily(market_env):
-    from api.mining_integration import default_ashare_pv_data_source_config
+    from factor_engine.api.mining_integration import default_ashare_pv_data_source_config
 
     source = build_data_source(default_ashare_pv_data_source_config())
     close = source.load_column("close")
@@ -231,7 +231,7 @@ def test_data_access_source_ashare_daily(market_env):
 
 
 def test_data_access_source_us_daily(market_env):
-    from api.mining_integration import default_us_pv_data_source_config
+    from factor_engine.api.mining_integration import default_us_pv_data_source_config
 
     source = build_data_source(default_us_pv_data_source_config())
     close = source.load_column("close")
@@ -241,7 +241,7 @@ def test_data_access_source_us_daily(market_env):
 
 
 def test_composite_ashare_valuation_asof(market_env):
-    from api.mining_integration import default_ashare_pv_valuation_data_source_config
+    from factor_engine.api.mining_integration import default_ashare_pv_valuation_data_source_config
 
     source = build_data_source(default_ashare_pv_valuation_data_source_config())
     pe = source.load_column("valuation.pe")
@@ -249,7 +249,7 @@ def test_composite_ashare_valuation_asof(market_env):
 
 
 def test_composite_ashare_valuation_pe_alias(market_env):
-    from api.mining_integration import default_ashare_pv_valuation_data_source_config
+    from factor_engine.api.mining_integration import default_ashare_pv_valuation_data_source_config
 
     source = build_data_source(default_ashare_pv_valuation_data_source_config())
     pe = source.load_column("pe")
@@ -258,7 +258,7 @@ def test_composite_ashare_valuation_pe_alias(market_env):
 
 @pytest.mark.skip(reason="external US valuation registry fixture uses a schema outside FactorEngine scope")
 def test_composite_us_valuation_asof(market_env):
-    from api.mining_integration import default_us_pv_valuation_data_source_config
+    from factor_engine.api.mining_integration import default_us_pv_valuation_data_source_config
 
     source = build_data_source(default_us_pv_valuation_data_source_config())
     pe = source.load_column("valuation.pe")
@@ -267,7 +267,7 @@ def test_composite_us_valuation_asof(market_env):
 
 @pytest.mark.skip(reason="external US valuation registry fixture uses a schema outside FactorEngine scope")
 def test_composite_us_valuation_pe_alias(market_env):
-    from api.mining_integration import default_us_pv_valuation_data_source_config
+    from factor_engine.api.mining_integration import default_us_pv_valuation_data_source_config
 
     source = build_data_source(default_us_pv_valuation_data_source_config())
     pe = source.load_column("pe")
@@ -275,7 +275,7 @@ def test_composite_us_valuation_pe_alias(market_env):
 
 
 def test_composite_ashare_universe_asof(market_env):
-    from api.mining_integration import default_ashare_pv_universe_data_source_config
+    from factor_engine.api.mining_integration import default_ashare_pv_universe_data_source_config
 
     source = build_data_source(
         default_ashare_pv_universe_data_source_config(index_symbol="000300.SH")
@@ -287,7 +287,7 @@ def test_composite_ashare_universe_asof(market_env):
 
 
 def test_composite_us_universe_exact(market_env):
-    from api.mining_integration import default_us_pv_universe_data_source_config
+    from factor_engine.api.mining_integration import default_us_pv_universe_data_source_config
 
     source = build_data_source(default_us_pv_universe_data_source_config())
     uni = source.load_column("universe.universe_ticker")
@@ -300,7 +300,7 @@ def test_local_ashare_parquet_smoke_if_present():
     root = Path("/home/shw/quant_projects/data/a_share/lqtp_data/StockDailyBar")
     if not root.exists():
         pytest.skip("local ashare parquet not present")
-    from api.mining_integration import default_ashare_pv_data_source_config
+    from factor_engine.api.mining_integration import default_ashare_pv_data_source_config
 
     cfg = default_ashare_pv_data_source_config(
         start_date="2019-01-02",
@@ -315,7 +315,7 @@ def test_local_us_parquet_smoke_if_present():
     root = Path("/home/shw/quant_projects/data/us_stock/massive_data/StockDailyBar")
     if not root.exists():
         pytest.skip("local us parquet not present")
-    from api.mining_integration import default_us_pv_data_source_config
+    from factor_engine.api.mining_integration import default_us_pv_data_source_config
 
     cfg = default_us_pv_data_source_config(
         start_date="2003-09-10",
@@ -365,10 +365,10 @@ def test_data_access_source_forwards_params_to_store(monkeypatch):
             return _FakeReadResult()
 
     monkeypatch.setattr(
-        "storage.data_access_source._get_store",
+        "factor_engine.storage.data_access_source._get_store",
         lambda: _FakeStore(),
     )
-    from storage.data_access_source import DataAccessSource
+    from factor_engine.storage.data_access_source import DataAccessSource
 
     src = DataAccessSource(
         dataset="massive_ticks",
@@ -384,7 +384,7 @@ def test_data_access_source_forwards_params_to_store(monkeypatch):
 
 
 def test_factory_data_access_kind_shorthand():
-    from storage.data_access_source import DataAccessSource
+    from factor_engine.storage.data_access_source import DataAccessSource
 
     src = build_data_source(
         {

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from api.source_ref import source_col, transform_source_col
+from factor_engine.api.source_ref import source_col, transform_source_col
 
 _TIMESTAMP_CONVENTIONS = frozenset({"bar_end", "bar_start"})
 

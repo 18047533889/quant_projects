@@ -1,0 +1,34 @@
+# factor_engine 本地试算 smoke（非 disk.v1 投递配置）
+# 投递字段见 configs/alphaprobe/experiment_ashare_pv.yaml 的 delivery 块
+# 用法：
+#   cd ~/quant_projects/factor_engine
+#   PYTHONPATH=. python -c "from runtime.engine import FactorEngine; FactorEngine.run_from_config('~/quant_projects/workspaces/sunhaiwei/alphaprobe/ashare/alphaprobe-dev/configs/alphaprobe/factor_engine_smoke.yaml')"
+
+factor:
+  name: ashare_pv_smoke
+  expr: rank(ts_mean(close, 20))
+  freq: 1d
+  universe: A_SHARE_ALL_A_EX_ST
+  description: A 股 20 日收盘均线截面排名（本地 smoke）
+
+data_source:
+  type: parquet
+  root: ~/quant_projects/data/a_share/lqtp_data/StockDailyBar
+  timestamp_col: TradeDate
+  instrument_col: Symbol
+  fields:
+    open: Open
+    high: High
+    low: Low
+    close: Close
+    volume: Volume
+    vwap: Vwap
+  max_files: 30
+  start_date: "2019-01-01"
+  end_date: "2019-06-30"
+
+backend:
+  type: pandas
+
+engine:
+  enable_cache: true

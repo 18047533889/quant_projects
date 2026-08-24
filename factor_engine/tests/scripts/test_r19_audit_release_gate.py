@@ -264,7 +264,7 @@ def test_missing_sentinel_is_imported_when_available():
 
 
 def test_dead_param_parameter_level_coverage(monkeypatch):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     calls = []
 
@@ -311,7 +311,7 @@ def test_dead_param_parameter_level_coverage(monkeypatch):
 
 
 def test_dead_param_backward_compat_four_tuple(monkeypatch):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = _basic_panel_op(lambda x, **k: x)
     monkeypatch.setattr(mod, "assign_mining_role",
@@ -460,9 +460,9 @@ class _FakeMining:
 
 @pytest.fixture()
 def fake_mining_module(monkeypatch):
-    """Swap ``sys.modules['mining.operator_catalog']`` for the test duration."""
+    """Swap ``sys.modules['factor_engine.mining.operator_catalog']`` for the test duration."""
     fake = _FakeMining(present={"a", "b"})
-    monkeypatch.setitem(sys.modules, "mining.operator_catalog", fake)
+    monkeypatch.setitem(sys.modules, "factor_engine.mining.operator_catalog", fake)
     yield fake
 
 

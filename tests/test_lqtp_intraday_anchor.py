@@ -4,7 +4,7 @@ import pandas as pd
 
 
 def test_intraday_anchor_is_detected_without_external_frequency_flag() -> None:
-    from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+    from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
 
     class DummyInner:
         pass

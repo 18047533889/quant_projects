@@ -6,7 +6,7 @@
 
 from dataclasses import dataclass
 
-from expr.base import Expr
+from factor_engine.expr.base import Expr
 
 
 @dataclass(frozen=True)
@@ -117,7 +117,7 @@ class Factor:
         可绕过 service —— 必须下沉到 domain 层校验（``security.factor_id``）。
         非法名抛 ``ValueError``（冻结 dataclass 不赋值，仅校验）。
         """
-        from security.factor_id import FactorIdError, validate_factor_id
+        from factor_engine.security.factor_id import FactorIdError, validate_factor_id
 
         try:
             validate_factor_id(self.name)

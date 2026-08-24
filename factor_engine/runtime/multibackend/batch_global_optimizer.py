@@ -21,8 +21,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from backend.contracts import ExecutionKind
-from planner.backend_region import (
+from factor_engine.backend.contracts import ExecutionKind
+from factor_engine.planner.backend_region import (
     BackendRegion,
     ExecutionAxis,
     PhysicalBackend,
@@ -33,7 +33,7 @@ from planner.backend_region import (
     TransferTransform,
     infer_representation,
 )
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 
 # R45: Numba gets its OWN PhysicalImplementationID, distinct from pandas_numpy's
@@ -260,8 +260,8 @@ class PhysicalBatchGlobalOptimizer:
         Returns:
             BatchOptimizationResult with physical plan and choices
         """
-        from backend.plan_cost_router import plan_occurrences
-        from backend.operator_cost import estimate_backend_cost
+        from factor_engine.backend.plan_cost_router import plan_occurrences
+        from factor_engine.backend.operator_cost import estimate_backend_cost
 
         # Discover the complete graph from PlanNode.inputs.  Caller-supplied
         # adjacency maps are compatibility hints, not a complete source of truth.
@@ -318,7 +318,7 @@ class PhysicalBatchGlobalOptimizer:
             ctx, "data_source", None
         ) is not None:
             try:
-                from planner.data_shape import estimate_shape_from_context
+                from factor_engine.planner.data_shape import estimate_shape_from_context
 
                 shape = estimate_shape_from_context(ctx)
                 estimated_bytes = estimated_bytes or int(shape.estimated_bytes or 0) or None
@@ -445,7 +445,7 @@ class PhysicalBatchGlobalOptimizer:
         if getattr(ctx, "data_source", None) is None:
             return None
         try:
-            from planner.data_shape import estimate_shape_from_context
+            from factor_engine.planner.data_shape import estimate_shape_from_context
             value = int(estimate_shape_from_context(ctx).estimated_rows or 0)
             return value if value > 0 else None
         except Exception:
@@ -525,15 +525,15 @@ class PhysicalBatchGlobalOptimizer:
         self, node_id: str, node: PlanNode, rows: int, ctx: Any
     ) -> tuple[NodeBackendChoice, ...]:
         """Return explicitly evidenced physical candidates for one logical node."""
-        from backend.operator_capability import (
+        from factor_engine.backend.operator_capability import (
             UnsupportedOperatorBackendError,
             capability_for,
             supports_pandas,
             supports_polars,
             supports_sql,
         )
-        from backend.operator_cost import estimate_backend_cost
-        from backend.polars_backend_kind import canonical_polars_is_delegate
+        from factor_engine.backend.operator_cost import estimate_backend_cost
+        from factor_engine.backend.polars_backend_kind import canonical_polars_is_delegate
 
         op = getattr(node, "op", "")
         if op in {"column", "literal", "plan_ref"}:
@@ -660,7 +660,7 @@ class PhysicalBatchGlobalOptimizer:
             ))
         # Q/KDB backend
         try:
-            from backend.q_backend.q_physical_implementation_registry import (
+            from factor_engine.backend.q_backend.q_physical_implementation_registry import (
                 get_q_physical_implementation_registry,
             )
             registry = get_q_physical_implementation_registry()
@@ -685,7 +685,7 @@ class PhysicalBatchGlobalOptimizer:
             pass
         # Numba backend
         try:
-            from backend.routing import numba_enabled_for_op
+            from factor_engine.backend.routing import numba_enabled_for_op
             # R45: evaluate the Numba candidate against the node's REAL bound
             # parameters (window/span from the node's params), not a hard-coded
             # window=0.  The kernel signature is derived from the actual bound
@@ -700,12 +700,12 @@ class PhysicalBatchGlobalOptimizer:
                 numba_pi_id = ""
                 numba_certified = False
                 try:
-                    from backend.numba_kernel_registry import (
+                    from factor_engine.backend.numba_kernel_registry import (
                         NumbaKernelRegistry,
                         get_implementation_registry,
                     )
                     if not NumbaKernelRegistry.kernels():
-                        import backend.numba_kernels  # noqa: F401
+                        import factor_engine.backend.numba_kernels  # noqa: F401
                     impl = get_implementation_registry().get(op)
                     if impl is not None and impl.get("implementation_id"):
                         numba_pi_id = _numba_pi_id(
@@ -1238,7 +1238,7 @@ class PhysicalBatchGlobalOptimizer:
         Pandas baseline used in the initial estimate.  This method recalculates
         avoided compute based on the selected implementation.
         """
-        from backend.operator_cost import estimate_backend_cost
+        from factor_engine.backend.operator_cost import estimate_backend_cost
 
         benefits: dict[str, SharedNodeBenefit] = {}
         total_benefit = 0.0
@@ -1253,7 +1253,7 @@ class PhysicalBatchGlobalOptimizer:
             choice = per_node_choices.get(node_id)
             if choice is not None:
                 # Recompute cost with the selected backend
-                from backend.plan_cost_router import plan_occurrences
+                from factor_engine.backend.plan_cost_router import plan_occurrences
 
                 occurrences = plan_occurrences(node)
                 if occurrences:
@@ -1267,7 +1267,7 @@ class PhysicalBatchGlobalOptimizer:
                     compute_cost = choice.compute_cost_ms
             else:
                 # Shared node not directly assigned; use initial estimate
-                from backend.plan_cost_router import plan_occurrences
+                from factor_engine.backend.plan_cost_router import plan_occurrences
 
                 occurrences = plan_occurrences(node)
                 if occurrences:

@@ -15,8 +15,8 @@ FACTOR_ENGINE = ROOT / "factor_engine"
 if str(FACTOR_ENGINE) not in sys.path:
     sys.path.insert(0, str(FACTOR_ENGINE))
 
-from cleaned_operators import load_all  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators import load_all  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 
 def _yes(value: bool) -> str:
@@ -25,11 +25,11 @@ def _yes(value: bool) -> str:
 
 def main() -> None:
     load_all()
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     register_sql_backends()
-    from cleaned_operators.operator_surface import classify_canonical
-    from backend.operator_capability import capability_for
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.backend.operator_capability import capability_for
 
     catalog = OperatorRegistry.catalog()
     active = sorted(catalog)

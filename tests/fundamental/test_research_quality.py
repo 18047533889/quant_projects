@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.fundamental.research_quality import (
+from factor_engine.cleaned_operators.fundamental.research_quality import (
     pd_fiscal_asymmetric_timeliness,
 )
 

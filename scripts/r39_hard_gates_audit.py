@@ -14,7 +14,7 @@ from pathlib import Path
 def _counter(name: str) -> int | None:
     """读取进程级 PerfCounters（若已实现）。"""
     try:
-        mod = importlib.import_module("runtime.perf_counters")
+        mod = importlib.import_module("factor_engine.runtime.perf_counters")
         counters = mod.get_global_counters()
         return counters.get(name)
     except Exception:
@@ -25,15 +25,15 @@ def _direct_counter(name: str) -> int | None:
     """读取模块级计数器（若以 module 属性暴露）。"""
     # 常见暴露点：perf_counters 模块级、各 runtime 模块的模块级计数器。
     for modname in (
-        "runtime.perf_counters",
-        "runtime.batch_service",
-        "runtime.adaptive_batch_scheduler",
-        "runtime.streaming_result_sink",
-        "storage.materialize.materializer",
-        "storage.catalog",
-        "planner.read_wave_planner",
-        "planner.native_fusion",
-        "runtime.shard_executor",
+        "factor_engine.runtime.perf_counters",
+        "factor_engine.runtime.batch_service",
+        "factor_engine.runtime.adaptive_batch_scheduler",
+        "factor_engine.runtime.streaming_result_sink",
+        "factor_engine.storage.materialize.materializer",
+        "factor_engine.storage.catalog",
+        "factor_engine.planner.read_wave_planner",
+        "factor_engine.planner.native_fusion",
+        "factor_engine.runtime.shard_executor",
     ):
         try:
             mod = importlib.import_module(modname)

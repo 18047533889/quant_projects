@@ -27,8 +27,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ir.nodes import IRNode
-from runtime.execution_contract import (
+from factor_engine.ir.nodes import IRNode
+from factor_engine.runtime.execution_contract import (
     _UNKNOWN,
     _bound_param,
     factor_history_requirement,
@@ -59,7 +59,7 @@ def _delay(x: object, n: int) -> IRNode:
 # Direct-kernel executors for the three expressions (no full engine needed).
 # ---------------------------------------------------------------------------
 def _get_operator(canonical: str):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     return OperatorRegistry.get(canonical)
 

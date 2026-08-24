@@ -12,12 +12,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from fields.providers import apply_binding_transform, require_binding
+from factor_engine.fields.providers import apply_binding_transform, require_binding
 
 
 @pytest.fixture(scope="module", autouse=True)
 def _load():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
 
@@ -58,7 +58,7 @@ def test_golden_ratio_unit_identity() -> None:
     a_turn = require_binding("turnover_ratio_decimal", "ashare")
     assert float(a_turn.transform(np.array([1.6647]))[0]) == pytest.approx(0.016647)
     # US ROE already decimal.
-    from fields.providers import binding
+    from factor_engine.fields.providers import binding
 
     us_roe = binding("roe_decimal", "us")
     assert us_roe is not None
@@ -89,7 +89,7 @@ def test_golden_adjustment_backward_multiplier() -> None:
     ["ts_mean", "ts_std", "ts_rank"],
 )
 def test_golden_shared_operator_identity(op: str) -> None:
-    from cleaned_operators import OperatorRegistry
+    from factor_engine.cleaned_operators import OperatorRegistry
 
     a_bp, us_dec = _synthetic_panels()
     a_dec = apply_binding_transform(require_binding("return_decimal", "ashare"), a_bp)
@@ -125,14 +125,14 @@ def test_fail_us_ret_divided_by_10000() -> None:
 
 
 def test_fail_cross_currency_market_cap() -> None:
-    from fields.units_v2 import CNY, USD
+    from factor_engine.fields.units_v2 import CNY, USD
 
     with pytest.raises(ValueError):
         CNY.assert_compatible_with(USD)
 
 
 def test_fail_us_industry_without_provider() -> None:
-    from market.capability_resolver import explain_expression_support
+    from factor_engine.market.capability_resolver import explain_expression_support
 
     result = explain_expression_support(
         "industry_neutralize(ret, industry_code)", "us", production=True
@@ -141,7 +141,7 @@ def test_fail_us_industry_without_provider() -> None:
 
 
 def test_fail_us_price_limit() -> None:
-    from market.capability_resolver import explain_expression_support
+    from factor_engine.market.capability_resolver import explain_expression_support
 
     result = explain_expression_support(
         "ashare_limit_up_touch(close, high_limit)", "us", production=True
@@ -150,7 +150,7 @@ def test_fail_us_price_limit() -> None:
 
 
 def test_fail_us_top_holder_without_provider() -> None:
-    from market.capability_resolver import explain_expression_support
+    from factor_engine.market.capability_resolver import explain_expression_support
 
     result = explain_expression_support(
         "holder_concentration(share_ratio)", "us", production=True
@@ -159,10 +159,10 @@ def test_fail_us_top_holder_without_provider() -> None:
 
 
 def test_fail_strict_pit_ashare_dividend() -> None:
-    from fields.providers import explain_field_support
+    from factor_engine.fields.providers import explain_field_support
 
     support = explain_field_support("cash_dividend_per_share", "ashare")
-    from market import MarketStatus
+    from factor_engine.market import MarketStatus
 
     assert support.status == MarketStatus.PIT_BLOCKED
 
@@ -171,7 +171,7 @@ def test_fail_strict_pit_ashare_dividend() -> None:
 # PIT semantics (spec §105 PIT).
 # ---------------------------------------------------------------------------
 def test_pit_ashare_uses_pubdate_us_uses_filing_date() -> None:
-    from fields import MULTI_MARKET_FIELD_REGISTRY
+    from factor_engine.fields import MULTI_MARKET_FIELD_REGISTRY
 
     a_table = MULTI_MARKET_FIELD_REGISTRY.registry_for("ashare").resolve_table("StockIncome")
     us_table = MULTI_MARKET_FIELD_REGISTRY.registry_for("us").resolve_table("StockIncome")
@@ -181,7 +181,7 @@ def test_pit_ashare_uses_pubdate_us_uses_filing_date() -> None:
 
 
 def test_table_collision_isolation() -> None:
-    from fields import MULTI_MARKET_FIELD_REGISTRY
+    from factor_engine.fields import MULTI_MARKET_FIELD_REGISTRY
 
     # StockValuationDaily / StockIndicator exist in BOTH markets and must not
     # share a contract.  R17-019: US StockCapitalDaily is split into
@@ -210,7 +210,7 @@ def test_table_collision_isolation() -> None:
 # Session / timezone golden (spec §107).
 # ---------------------------------------------------------------------------
 def test_session_contracts() -> None:
-    from market import ASHARE_CONTEXT, US_CONTEXT
+    from factor_engine.market import ASHARE_CONTEXT, US_CONTEXT
 
     assert ASHARE_CONTEXT.session_id == "ASHARE_CONTINUOUS"
     assert ASHARE_CONTEXT.timezone == "Asia/Shanghai"

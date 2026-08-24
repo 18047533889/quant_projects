@@ -29,20 +29,20 @@ def _head() -> str:
 
 
 def _server_profile() -> dict:
-    from runtime.resource_governor import (
+    from factor_engine.runtime.resource_governor import (
         effective_cpu_slots,
         effective_memory_limit_bytes,
         spill_disk_available,
         tempfile_dir,
     )
-    from runtime.resource_monitor import (
+    from factor_engine.runtime.resource_monitor import (
         cgroup_pressure,
         psi_cpu,
         psi_io,
         psi_memory,
         swap_usage,
     )
-    from runtime.resource_shape import hardware_fingerprint
+    from factor_engine.runtime.resource_shape import hardware_fingerprint
 
     hw = hardware_fingerprint()
     return {
@@ -61,7 +61,7 @@ def _server_profile() -> dict:
 
 
 def _decision_trace() -> dict:
-    from runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.resource_broker import ResourceBroker
 
     broker = ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=4)
     log = []
@@ -76,8 +76,8 @@ def _decision_trace() -> dict:
 
 
 def _calibration_summary() -> dict:
-    from runtime.resource_calibration_store import global_calibration_store
-    from runtime.resource_shape import ResourceShapeKey
+    from factor_engine.runtime.resource_calibration_store import global_calibration_store
+    from factor_engine.runtime.resource_shape import ResourceShapeKey
 
     store = global_calibration_store()
     key = ResourceShapeKey("ts_mean", "duckdb", rows_bucket=2, instruments_bucket=2, window_bucket=1)

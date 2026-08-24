@@ -2,7 +2,7 @@
 """Late SQL semantic fixes shared with audited Pandas/Polars operators."""
 from __future__ import annotations
 
-from backend.sql_pushdown import emitter
+from factor_engine.backend.sql_pushdown import emitter
 
 _INSTALLED = False
 

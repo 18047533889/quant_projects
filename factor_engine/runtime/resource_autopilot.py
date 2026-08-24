@@ -21,7 +21,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from runtime.resource_broker import (
+from factor_engine.runtime.resource_broker import (
     STAGE_CRITICAL,
     STAGE_NORMAL,
     STAGE_PRESSURE_1,
@@ -30,7 +30,7 @@ from runtime.resource_broker import (
     STAGE_PRESSURE_4,
     ResourceBroker,
 )
-from runtime.resource_monitor import (
+from factor_engine.runtime.resource_monitor import (
     HostResourceEnvelope,
     MemorySlopeTracker,
     ResourceSignals,
@@ -40,7 +40,7 @@ from runtime.resource_monitor import (
 def _get_adaptive_bounds() -> dict[str, int]:
     """获取自适应内存边界。"""
     try:
-        from runtime.adaptive_config import get_global_adaptive_config
+        from factor_engine.runtime.adaptive_config import get_global_adaptive_config
         config = get_global_adaptive_config()
         return {
             "BLOCK_ABS_MAX": config.block_abs_max_bytes,
@@ -261,7 +261,7 @@ class ResourceController:
         # 7) 派生动态 budgets（§35..39/49）——R38 P0-014：从**同一个 SafeEnvelope**
         #    经 MemoryBudgetAllocator 统一分配，保证 sum(活预算)+emergency ≤ safe
         #    （不再各预算独立 clamp 导致总和超 safe）。
-        from runtime.memory_budget_allocator import MemoryBudgetAllocator
+        from factor_engine.runtime.memory_budget_allocator import MemoryBudgetAllocator
 
         host_safe = max(0, envelope.safe_memory_bytes)
         # A job lease is a hard per-job ceiling. Derive every in-memory budget

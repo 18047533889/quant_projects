@@ -130,7 +130,7 @@ def cs_scope_for_op(op: str) -> str:
     在 registry 不可用环境下仍稳定。
     """
     try:
-        from runtime.incremental_contract import CrossSectionScope
+        from factor_engine.runtime.incremental_contract import CrossSectionScope
 
         PER_DATE = CrossSectionScope.PER_DATE.value
         FULL_CS = CrossSectionScope.FULL_CROSS_SECTION_PER_DATE.value
@@ -144,7 +144,7 @@ def cs_scope_for_op(op: str) -> str:
     category: str | None = None
     biz_category: str | None = None
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         instance = OperatorRegistry.get(name, mode="any")
         if instance is not None:
@@ -305,7 +305,7 @@ def _column_identity(node: Any) -> "ColumnIdentity | None":
     )
     if name.startswith(_SOURCE_REF_PREFIX):
         try:
-            from api.source_ref import decode_source_ref
+            from factor_engine.api.source_ref import decode_source_ref
 
             spec = decode_source_ref(name)
         except Exception:
@@ -424,7 +424,7 @@ def _forward_offset(
 # ---------------------------------------------------------------------------
 def _production_mode() -> bool:
     try:
-        from runtime.production_policy import is_production_mode
+        from factor_engine.runtime.production_policy import is_production_mode
 
         return bool(is_production_mode())
     except Exception:
@@ -441,7 +441,7 @@ def _own_impact(op: str, attrs: dict[str, Any]) -> int | None:
     """
     production = _production_mode()
     try:
-        from runtime.execution_contract import forward_impact
+        from factor_engine.runtime.execution_contract import forward_impact
 
         impact = forward_impact(op, attrs, production=production)
     except Exception:
@@ -669,7 +669,7 @@ def compute_affected_domains(
     initial_group_key: str | None = None
     if event is not None:
         try:
-            from runtime.incremental_scheduler import normalize_data_event
+            from factor_engine.runtime.incremental_scheduler import normalize_data_event
 
             ev = normalize_data_event(event)
         except Exception:

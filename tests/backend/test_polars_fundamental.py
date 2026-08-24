@@ -8,8 +8,8 @@ import pytest
 
 pl = pytest.importorskip("polars")
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -176,7 +176,7 @@ def test_native_polars_fundamental_matches_pandas(fiscal, name, inputs, kwargs):
 
 def test_polars_fin_lag_fails_closed_for_unparseable_period_ids():
     """PIT period ordering must not fall back to first-seen IDs."""
-    from cleaned_operators.fundamental.polars_fundamental import _lag_walk_1d
+    from factor_engine.cleaned_operators.fundamental.polars_fundamental import _lag_walk_1d
 
     values = np.array([10.0, 20.0, 30.0])
     period_id = ["not-a-period", "2024Q1", "2024Q2"]

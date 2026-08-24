@@ -97,7 +97,7 @@ def _days_between(start: str | None, end: str | None) -> int:
 
 def _source_bounds(engine: Any) -> tuple[str | None, str | None]:
     try:
-        from runtime.run_window import extract_source_date_bounds
+        from factor_engine.runtime.run_window import extract_source_date_bounds
 
         start, end = extract_source_date_bounds(engine.data_source)
         return start, end
@@ -175,7 +175,7 @@ def _group_by_scan_cost(
 
 
 def _union_run_window(group: list[dict[str, Any]]) -> Any | None:
-    from runtime.run_window import RunWindow
+    from factor_engine.runtime.run_window import RunWindow
 
     rws = [e["run_window"] for e in group if e["run_window"] is not None]
     if not rws:
@@ -215,7 +215,7 @@ def compute_batch_warmup_plan(
     """
     if not auto_warmup:
         return BatchWarmupPlan(per_factor={}, groups=[])
-    from runtime.warmup_service import prepare_run_warmup
+    from factor_engine.runtime.warmup_service import prepare_run_warmup
 
     if factors is None:
         derived: list[Any] = []

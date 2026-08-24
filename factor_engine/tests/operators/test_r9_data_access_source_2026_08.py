@@ -15,7 +15,7 @@ import pytest
 
 
 def _contract(**kwargs):
-    from storage.sources.data_access_source import HistoricalCoverageContract
+    from factor_engine.storage.sources.data_access_source import HistoricalCoverageContract
 
     base = dict(field="r9_test_field")
     base.update(kwargs)
@@ -54,7 +54,7 @@ def test_covers_window_and_violations_share_evaluator():
 
 
 def test_assert_historical_coverage_is_window_aware():
-    from storage.sources.data_access_source import assert_historical_coverage
+    from factor_engine.storage.sources.data_access_source import assert_historical_coverage
 
     c = _contract(
         coverage_ratio=0.9,
@@ -167,7 +167,7 @@ def _source_with_gate_only(**kwargs):
     The catalog / store / preflight paths are short-circuited so the test checks
     the run-mode strictness resolution without touching dataset IO.
     """
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     src = DataAccessSource(dataset="ashare_stock_daily", **kwargs)
     src._preflight_logical_columns = lambda names: None
@@ -180,7 +180,7 @@ def _source_with_gate_only(**kwargs):
 
 
 def test_run_mode_production_rejects_unknown_field():
-    from storage.sources.data_access_source import UnknownFieldSemanticError
+    from factor_engine.storage.sources.data_access_source import UnknownFieldSemanticError
 
     src = _source_with_gate_only(run_mode="production")
     assert src.strict_unknown_fields is True
@@ -199,7 +199,7 @@ def test_run_mode_research_allows_unknown_field():
 
 
 def test_production_flag_and_strict_unknown_fields_backward_compatible():
-    from storage.sources.data_access_source import UnknownFieldSemanticError
+    from factor_engine.storage.sources.data_access_source import UnknownFieldSemanticError
 
     # production=True behaves like strict_unknown_fields=True.
     src = _source_with_gate_only(production=True)

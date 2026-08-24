@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import pytest
 
-from planner.clock_semantics import (
+from factor_engine.planner.clock_semantics import (
     ANY_INPUT,
     ClockContract,
     ClockSemantics,

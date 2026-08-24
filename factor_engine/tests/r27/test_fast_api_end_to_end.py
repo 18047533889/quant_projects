@@ -7,11 +7,11 @@ import os
 import pandas as pd
 import pytest
 
-from api import rank, ts_mean, ts_std
-from api.columns import col
-from api.factor import Factor
-from backend.pandas_backend import PandasBackend
-from runtime.engine import FactorEngine
+from factor_engine.api import rank, ts_mean, ts_std
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 
@@ -46,7 +46,7 @@ def test_plan_many_fast_dry_run(engine):
 
 def test_materialize_many_fast_matches_serial(engine):
     # R27-154/257：fast 路径与 serial run_many 数值/NaN/索引一致。
-    from runtime.batch_service import execute_run_many
+    from factor_engine.runtime.batch_service import execute_run_many
 
     factors = _factors()
     # serial reference（无 CSE，逐因子）。

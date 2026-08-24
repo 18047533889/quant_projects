@@ -9,15 +9,15 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from api.columns import col
-from api.factor import Factor
-from api import ts_mean
-from backend.pandas_backend import PandasBackend
-from runtime.engine import FactorEngine
-from runtime.incremental_scheduler import DataEvent, plan_updates_from_data_event
-from runtime.materialize_service import execute_materialize
-from storage.catalog import FactorCatalog
-from storage.materializer import ParquetMaterializer
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.api import ts_mean
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.runtime.incremental_scheduler import DataEvent, plan_updates_from_data_event
+from factor_engine.runtime.materialize_service import execute_materialize
+from factor_engine.storage.catalog import FactorCatalog
+from factor_engine.storage.materializer import ParquetMaterializer
 from tests.helpers import InMemorySeriesSource
 
 
@@ -68,7 +68,7 @@ def test_execute_materialize_records_dependency(tmp_path, monkeypatch):
     eng.data_source = _DS()
 
     monkeypatch.setattr(
-        "runtime.materialize_service.dual_write_service.dual_write_clickhouse",
+        "factor_engine.runtime.materialize_service.dual_write_service.dual_write_clickhouse",
         lambda *args, **kwargs: args[1],
     )
     execute_materialize(

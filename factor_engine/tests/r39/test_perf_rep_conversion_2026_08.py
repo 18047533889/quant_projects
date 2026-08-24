@@ -13,8 +13,8 @@ import pandas as pd
 import polars as pl
 import pytest
 
-import backend.panel_polars as pp
-from backend.panel_polars import (
+import factor_engine.backend.panel_polars as pp
+from factor_engine.backend.panel_polars import (
     convert_panel_to_polars_bulk,
     convert_polars_to_panel_bulk,
     _panel_to_polars_column_loop,
@@ -22,11 +22,11 @@ from backend.panel_polars import (
     panel_to_polars,
     polars_to_panel,
 )
-from backend.rep_transition import (
+from factor_engine.backend.rep_transition import (
     get_rep_transition_tracker,
     rep_transition_snapshot,
 )
-from runtime.temp_array_arena import (
+from factor_engine.runtime.temp_array_arena import (
     TemporaryArrayArena,
     with_scratch,
 )

@@ -39,7 +39,7 @@ def _default_token_budgets() -> tuple[int, int, int]:
     探测失败回退 ``(8, 4, 32GiB)``——回退值绝不做 4 倍放大。
     """
     try:
-        from runtime.resource_governor import effective_cpu_slots, effective_memory_limit_bytes
+        from factor_engine.runtime.resource_governor import effective_cpu_slots, effective_memory_limit_bytes
 
         cpu = effective_cpu_slots()
         io = max(1, cpu)

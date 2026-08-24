@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from cleaned_operators.dependence_ext import _partial_dcor_proxy
+from factor_engine.cleaned_operators.dependence_ext import _partial_dcor_proxy
 
 
 def test_partial_distance_proxy_singular_control_fails_closed() -> None:

@@ -6,8 +6,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any
 
-from runtime.config import FactorEngineConfig, MaterializationConfig
-from runtime.dq_profiles import resolve_input_dq_thresholds, resolve_output_dq_thresholds
+from factor_engine.runtime.config import FactorEngineConfig, MaterializationConfig
+from factor_engine.runtime.dq_profiles import resolve_input_dq_thresholds, resolve_output_dq_thresholds
 
 
 def _production_mode(config: FactorEngineConfig) -> bool:
@@ -270,8 +270,8 @@ def build_data_source_config(config: FactorEngineConfig) -> dict[str, Any]:
 
 def config_data_scope_key(config: FactorEngineConfig) -> str:
     """配置对应的数据源作用域键（run_many 分组用）。"""
-    from storage.data_scope import compute_data_scope
-    from storage.factory import DataSourceBuildContext, build_data_source
+    from factor_engine.storage.data_scope import compute_data_scope
+    from factor_engine.storage.factory import DataSourceBuildContext, build_data_source
 
     build_context = DataSourceBuildContext(
         run_mode=getattr(config.run, "mode", None),

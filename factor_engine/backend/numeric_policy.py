@@ -14,9 +14,9 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
-from backend.elementwise_semantics import compute_precision_policy
-from cleaned_operators._numpy_kernels import DEFAULT_DEGENERACY_POLICY
-from runtime.execution_traits import NumericDeterminismLevel
+from factor_engine.backend.elementwise_semantics import compute_precision_policy
+from factor_engine.cleaned_operators._numpy_kernels import DEFAULT_DEGENERACY_POLICY
+from factor_engine.runtime.execution_traits import NumericDeterminismLevel
 
 
 def _stable_digest(payload: Mapping[str, Any]) -> str:

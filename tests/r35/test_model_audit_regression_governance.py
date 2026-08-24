@@ -38,14 +38,14 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from cleaned_operators.base import ParamRole  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators.base import ParamRole  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 # Direct module imports register each family's canonicals + aliases (no load_all).
-import cleaned_operators.regression_models as RM  # noqa: E402
-import cleaned_operators.ts_model.ar_meanrev as AM  # noqa: E402
-import cleaned_operators.ts_model.dynamic_regression as DR  # noqa: E402
-import cleaned_operators.ts_model.volatility as V  # noqa: E402
+import factor_engine.cleaned_operators.regression_models as RM  # noqa: E402
+import factor_engine.cleaned_operators.ts_model.ar_meanrev as AM  # noqa: E402
+import factor_engine.cleaned_operators.ts_model.dynamic_regression as DR  # noqa: E402
+import factor_engine.cleaned_operators.ts_model.volatility as V  # noqa: E402
 
 
 def _get(name: str):

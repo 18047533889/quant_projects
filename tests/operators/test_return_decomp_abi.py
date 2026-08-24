@@ -12,9 +12,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
-from market.price_basis import PriceBasis
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.market.price_basis import PriceBasis
 
 ensure_cleaned_loaded()
 

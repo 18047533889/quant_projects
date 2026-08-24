@@ -65,8 +65,8 @@ def is_phase1_in_scope(canon: str) -> bool:
 
 def phase1_production_certified(canon: str) -> bool:
     """是否已通过 dual-backend / composite 完整证据认证（可 production fastpath）。"""
-    from backend.composite_evidence import composite_production_safe
-    from backend.primitive_evidence import primitive_dual_backend_production_safe
+    from factor_engine.backend.composite_evidence import composite_production_safe
+    from factor_engine.backend.primitive_evidence import primitive_dual_backend_production_safe
 
     if canon in phase1_composites():
         return composite_production_safe(canon)
@@ -93,13 +93,13 @@ def assert_production_requires_certification(canon: str) -> None:
 
 
 def phase1_summary() -> dict[str, Any]:
-    from backend.composite_evidence import (
+    from factor_engine.backend.composite_evidence import (
         COMPOSITE_FULL_PARITY_VERIFIED,
         composite_production_safe,
     )
-    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
-    from cleaned_operators.operator_spec import is_production_denied
-    from planner.composite_lowering import list_composite_lowerings
+    from factor_engine.backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    from factor_engine.cleaned_operators.operator_spec import is_production_denied
+    from factor_engine.planner.composite_lowering import list_composite_lowerings
 
     prim = phase1_primitives()
     comp = phase1_composites()

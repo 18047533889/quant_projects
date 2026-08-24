@@ -17,8 +17,8 @@ import types
 
 import pytest
 
-from planner.projected_column_footprint import ProjectedColumnFootprint
-from planner.read_wave_planner import (
+from factor_engine.planner.projected_column_footprint import ProjectedColumnFootprint
+from factor_engine.planner.read_wave_planner import (
     ReadWave,
     ReadWavePlan,
     ReadWavePlanner,
@@ -29,13 +29,13 @@ from planner.read_wave_planner import (
     non_source_tasks_in_wave_source_tasks,
     scope_compatibility,
 )
-from planner.source_representation import (
+from factor_engine.planner.source_representation import (
     SourceRepresentation,
     consumer_backend_mask,
     preferred_representation_for_mask,
     representation_for_backend,
 )
-from planner.wave_recovery import (
+from factor_engine.planner.wave_recovery import (
     WaveRecoveryCategory,
     WaveRecoveryPlan,
     classify_wave_failure,
@@ -43,7 +43,7 @@ from planner.wave_recovery import (
     recover_wave_failure,
     would_fallback_to_n_root_scans,
 )
-from planner.physical_factor_dag import SourceScanSpec
+from factor_engine.planner.physical_factor_dag import SourceScanSpec
 
 
 def _task(
@@ -517,7 +517,7 @@ class TestPerf011SourceRepresentation:
 
 class TestSourceWaveExecutorRepresentation:
     def test_executor_emits_preferred_representation(self):
-        from runtime.buffer_ref import SourceWaveExecutor
+        from factor_engine.runtime.buffer_ref import SourceWaveExecutor
 
         class _Src:
             dataset = "ashare_daily"
@@ -540,7 +540,7 @@ class TestSourceWaveExecutorRepresentation:
         assert ref.location == "source.native"
 
     def test_executor_default_remains_pandas(self):
-        from runtime.buffer_ref import SourceWaveExecutor
+        from factor_engine.runtime.buffer_ref import SourceWaveExecutor
 
         class _Src:
             dataset = "ashare_daily"

@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from storage.materialize.factor_matrix_materializer import (
+from factor_engine.storage.materialize.factor_matrix_materializer import (
     FactorMatrixMaterializer,
     _read_manifest,
 )
@@ -185,7 +185,7 @@ def test_r14_orphan_generation_cleaned_on_failure(tmp_path):
         factor_versions={"f": "digest-v1"},
     )
     base = tmp_path / "matrix" / "universe=u" / "freq=1d"
-    from storage.materialize.factor_matrix_materializer import (
+    from factor_engine.storage.materialize.factor_matrix_materializer import (
         FactorMatrixVersionMismatchError,
     )
 

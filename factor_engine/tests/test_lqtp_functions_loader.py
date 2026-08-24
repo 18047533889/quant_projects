@@ -6,9 +6,9 @@ import pytest
 
 
 def test_external_functions_yaml_alias_and_template(tmp_path: Path) -> None:
-    from api.operator_registry import build_dsl_allowlist
-    from api.lqtp_functions_loader import augment_from_functions_yaml
-    from api.columns import col
+    from factor_engine.api.operator_registry import build_dsl_allowlist
+    from factor_engine.api.lqtp_functions_loader import augment_from_functions_yaml
+    from factor_engine.api.columns import col
 
     path = tmp_path / "functions.yaml"
     path.write_text(
@@ -31,9 +31,9 @@ templates:
 
 
 def test_external_template_rejects_unbound_fields_and_unknown_functions(tmp_path: Path) -> None:
-    from api.operator_registry import build_dsl_allowlist
-    from api.lqtp_functions_loader import augment_from_functions_yaml, LQTPFunctionsConfigError
-    from api.columns import col
+    from factor_engine.api.operator_registry import build_dsl_allowlist
+    from factor_engine.api.lqtp_functions_loader import augment_from_functions_yaml, LQTPFunctionsConfigError
+    from factor_engine.api.columns import col
 
     base = build_dsl_allowlist(surface="compat_research", dialect="lqtp")
     bad_field = tmp_path / "bad_field.yaml"

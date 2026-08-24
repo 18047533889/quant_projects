@@ -26,8 +26,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
@@ -175,7 +175,7 @@ def test_weighted_moment_align_is_exact() -> None:
 #         non-searchable (cs_multi_robust_resid is a deprecated alias)
 # ---------------------------------------------------------------------------
 def test_ridge_knob_versioned_and_non_searchable() -> None:
-    from cleaned_operators.weighted_moment_ext import _RIDGE
+    from factor_engine.cleaned_operators.weighted_moment_ext import _RIDGE
 
     assert _RIDGE == 1e-3
     # the deprecated alias still resolves to the honest canonical

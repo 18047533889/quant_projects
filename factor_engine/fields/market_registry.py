@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from market.capabilities import MarketSupport
-from market.context import ASHARE_CONTEXT, US_CONTEXT, MarketContext
+from factor_engine.market.capabilities import MarketSupport
+from factor_engine.market.context import ASHARE_CONTEXT, US_CONTEXT, MarketContext
 
 from .catalog import ASHARE_FIELD_SPECS, ASHARE_TABLE_SPECS
 from .catalog_us import US_FIELD_SPECS, US_TABLE_SPECS

@@ -19,7 +19,7 @@ from pathlib import Path
 sys.path.insert(0, ".")
 sys.path.insert(0, "..")
 
-from runtime.r34_evidence import (  # noqa: E402
+from factor_engine.runtime.r34_evidence import (  # noqa: E402
     EvidenceHeader,
     GateResult,
     component_hashes,

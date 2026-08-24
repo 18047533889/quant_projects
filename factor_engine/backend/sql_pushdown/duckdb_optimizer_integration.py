@@ -9,9 +9,9 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from backend.context import ExecutionContext
-from backend.pandas_compat import pd
-from planner.logical_plan import PlanNode
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.backend.pandas_compat import pd
+from factor_engine.planner.logical_plan import PlanNode
 
 from .emitter import (
     BatchCompiledSql,
@@ -152,7 +152,7 @@ def execute_batch_compiled_sql_optimized(
             # 提取单列并转换为 Series（使用统一的 long_frame 转换器）
             sid_df = part.select(["ts", "inst", pl.col(alias).alias("_v")]).collect()
             # R47 P1-05: Use polars_long_to_multiindex_series for native conversion
-            from backend.long_frame import polars_long_to_multiindex_series
+            from factor_engine.backend.long_frame import polars_long_to_multiindex_series
             out[sid] = polars_long_to_multiindex_series(
                 sid_df,
                 timestamp_col="ts",
@@ -195,7 +195,7 @@ def try_execute_sql_pushdown_batch_optimized(
             dialect=pctx.dialect,
         )
     except Exception as exc:
-        from runtime.resource_errors import (
+        from factor_engine.runtime.resource_errors import (
             CapabilityMiss,
             CompilationUnsupported,
             is_fail_closed_error,

@@ -39,7 +39,7 @@ from tests.r35.model_oracle import (  # noqa: E402
 # --------------------------------------------------------------------------
 
 def test_pca_oracle_matches_engine_loadings():
-    from cleaned_operators.cross_section.panel_model import _pca_svd
+    from factor_engine.cleaned_operators.cross_section.panel_model import _pca_svd
 
     rng = np.random.default_rng(1)
     X = rng.standard_normal((60, 8))
@@ -63,7 +63,7 @@ def test_pca_latent_factor_recovery():
     (a near-equal-weight direction), not their magnitudes.  The correct
     recovery assertions are: (a) PC1 loading signs match ``sign(loads)``, and
     (b) with moderate noise the sign pattern stays clean."""
-    from cleaned_operators.cross_section.panel_model import _pca_svd
+    from factor_engine.cleaned_operators.cross_section.panel_model import _pca_svd
 
     rng = np.random.default_rng(2)
     f = rng.standard_normal(120)
@@ -90,7 +90,7 @@ def test_pca_latent_factor_recovery():
 # --------------------------------------------------------------------------
 
 def test_rolling_ols_oracle_matches_engine():
-    from cleaned_operators.cross_section.peer_ops import _rolling_regression
+    from factor_engine.cleaned_operators.cross_section.peer_ops import _rolling_regression
 
     rng = np.random.default_rng(3)
     n = 80
@@ -154,9 +154,9 @@ def test_kalman_oracle_matches_engine_kernel():
     backcasts from the sample mean, so the first ~dozen rows carry an init
     transient; the steady-state filter (both use the same predict/update
     recursion and covariance advance) must agree to tight tolerance."""
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
-    from cleaned_operators.ts_model.state_space import _kalman_level
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.ts_model.state_space import _kalman_level
 
     load_all()
     rng = np.random.default_rng(9)
@@ -197,7 +197,7 @@ def test_garch_persistence_oracle_recovers():
 
 
 def test_garch_oracle_matches_engine_persistence():
-    from cleaned_operators.ts_model.volatility import _garch_path
+    from factor_engine.cleaned_operators.ts_model.volatility import _garch_path
 
     rng = np.random.default_rng(13)
     rets = rng.standard_normal(300)
@@ -212,7 +212,7 @@ def test_garch_oracle_matches_engine_persistence():
 # --------------------------------------------------------------------------
 
 def test_har_oracle_matches_engine():
-    from cleaned_operators.ts_model.volatility import _har_rv
+    from factor_engine.cleaned_operators.ts_model.volatility import _har_rv
 
     rng = np.random.default_rng(14)
     rv = np.abs(rng.standard_normal(300)) + 1.0

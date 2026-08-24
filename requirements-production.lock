@@ -1,18 +1,90 @@
-# R21-119..122 production exact dependency lock
-# lock_digest=879a391afb03e349b085fe69a22303f65ab43fd055ca06df5afd076dced7efa8
+# R46 production exact dependency lock — REAL resolver + hashes
+# Replaces the R21 draft lock (==missing sentinels, data-access==0.2.0, wrong
+# 'yaml==6.0.3' dist name). See body notes.
+# lock_digest=b0dbd0fae1fece243de17024d0b7a5d710b964d11eded543d94e2be421a6ecae
+# lock_digest_scope=sha256 of the dependency body (everything below this header,
+#     excluding this digest line itself)
+# python_version=3.12.3
+# platform=x86_64-linux-gnu (cp312)
+# production_target_python=3.10.12  (declared runtime; see NETWORK note)
+# NETWORK: third-party sha256 hashes below were resolved ONLINE via pip's
+#     resolver under CPython 3.12.3. Hashes are wheel- and interpreter-specific,
+#     so the production hash pass MUST be re-run under a CPython 3.10 interpreter
+#     (this sandbox only has 3.12). No '==missing' sentinels remain.
+# usage: pip install --require-hashes -r requirements-production.lock
 
-python==3.10.12
-numpy==2.2.6
-pandas==2.3.3
-pyarrow==25.0.0
-scipy==1.15.3
-numba==missing
-polars==1.42.1
-duckdb==1.5.4
-clickhouse-connect==missing
-data-access==0.2.0
-factor-engine==missing
-fastapi==0.139.2
-pydantic==2.13.4
-uvicorn==missing
-yaml==6.0.3
+# R46 production exact dependency lock — REAL resolver + hashes
+#
+# Replaces the R21 draft lock that contained '==missing' sentinels, a
+# hard-coded 'data-access==0.2.0' and the wrong PyYAML distribution name
+# ('yaml==6.0.3' is not a PyPI distribution; the dist is 'PyYAML').
+#
+# RESOLUTION: pip's PEP-665 resolver dry-run report, then hashes pinned
+# per wheel. Resolved on CPython 3.12.3 x86_64-linux-gnu (sandbox).
+# Production declares python==3.10.12 as the runtime target; the cp312
+# hashes below are interpreter-specific, so a final hash pass MUST be
+# re-run under a CPython 3.10 interpreter before production use (see
+# 'python_version' field + NETWORK note). No '==missing' sentinels remain.
+#
+# Usage: pip install --require-hashes -r requirements-production.lock
+# (with the six internal wheels built fresh from their own canonical
+#  pyprojects — see scripts/fresh_wheel_matrix.sh).
+
+# --- runtime interpreter ---
+python==3.12.3
+
+# --- internal monorepo distributions (built fresh from own pyproject;
+#     sha256 verified at build time by fresh_wheel_matrix.sh, NOT baked
+#     here because the artifact is regenerated on every build) ---
+data-access==0.10.2  # built from dataaccess/pyproject.toml
+factor-engine==0.3.1  # built from factor_engine/pyproject.toml
+quant-evaluator==0.0.1a1  # built from quant_evaluator/pyproject.toml
+factor-optimizer==0.1.0  # built from factor_optimizer/pyproject.toml
+factor-assets==0.1.0  # built from factor_assets/pyproject.toml
+factor-preprocess==0.1.0  # built from factor_preprocess/pyproject.toml
+
+# --- third-party, pinned with sha256 (resolved cp312) ---
+annotated-doc==0.0.5 --hash=sha256:117bac03a25ede5df5440e855b32d556049ca169ead221505badf432fed4b101
+annotated-types==0.8.0 --hash=sha256:f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0
+anyio==4.14.2 --hash=sha256:9f505dda5ac9f0c8309b5e8bd445a8c2bf7246f3ce950121e45ea15bc41d1494
+backports.zstd==1.7.0 --hash=sha256:470895d0bcddc850766e593d1b26764fb138c2feed149f515a2627ef9587d54c
+bottleneck==1.6.0 --hash=sha256:0fbf5d0787af9aee6cef4db9cdd14975ce24bd02e0cc30155a51411ebe2ff35f
+certifi==2026.7.22 --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775
+click==8.4.2 --hash=sha256:e6f9f66136c816745b9d65817da91d61d957fb16e02e4dcd0552553c5a197b76
+clickhouse-connect==1.7.2 --hash=sha256:26728faddb7f881f064757d449f52b1d8f788b77d149d0dac6e036e6f1a3fcdb
+dataclasses-json==0.6.7 --hash=sha256:0dbf33f26c8d5305befd61b39d2b3414e8a407bedc2834dea9b8d642666fb40a
+duckdb==1.5.4 --hash=sha256:0cda263d8c20addb8d4f95464787cbe0af1144f7ab7e21db3709fb826ee01725
+fastapi==0.139.2 --hash=sha256:b9ad015a835173d59865e2f5d8296fbc2b317bf56a2ba1a5bfbdd03de2fd4b1c
+h11==0.16.0 --hash=sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86
+idna==3.19 --hash=sha256:815e7be7a7806d54abb586dc943addc79e8b2ee16915059658cbeff4b1b43bf4
+llvmlite==0.49.0 --hash=sha256:6acba646d88abbc87d5c113a3d62c1fbf8b8fee11c6493f516803e30f21ae870
+lz4==4.4.5 --hash=sha256:24092635f47538b392c4eaeff14c7270d2c8e806bf4be2a6446a378591c5e69e
+marshmallow==3.26.2 --hash=sha256:013fa8a3c4c276c24d26d84ce934dc964e2aa794345a0f8c7e5a7191482c8a73
+mypy-extensions==1.1.0 --hash=sha256:1be4cccdb0f2482337c4743e60421de3a356cd97508abadd57d47403e94f5505
+numba==0.67.0 --hash=sha256:f63d43db06b4756424d6d2484737c902e0ae944a0eec3e8b0b4de2c695b15caa
+numpy==2.2.6 --hash=sha256:fd83c01228a688733f1ded5201c678f0c53ecc1006ffbc404db9f7a899ac6249
+packaging==26.3 --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
+pandas==2.3.3 --hash=sha256:b3d11d2fda7eb164ef27ffc14b4fcab16a80e1ce67e9f57e19ec0afaf715ba89
+patsy==1.0.2 --hash=sha256:37bfddbc58fcf0362febb5f54f10743f8b21dd2aa73dec7e7ef59d1b02ae668a
+polars==1.42.1 --hash=sha256:3c0c65cdfa21a621650c4bdcbbccf93964d052fd766c3e70e84a55d961c259fd
+polars-runtime-32==1.42.1 --hash=sha256:d059e8e53cc114ff82f9bd791fd341dc53534a2c745e6f6aa37594c3a93f01fe
+psutil==7.2.2 --hash=sha256:076a2d2f923fd4821644f5ba89f059523da90dc9014e85f8e45a5774ca5bc6f9
+pyarrow==25.0.0 --hash=sha256:5d1dbf24e151042f2fa3c129563f65d66674128868496fb008c4272b16bdf778
+pydantic==2.13.4 --hash=sha256:45a282cde31d808236fd7ea9d919b128653c8b38b393d1c4ab335c62924d9aba
+pydantic-core==2.46.4 --hash=sha256:926c9541b14b12b1681dca8a0b75feb510b06c6341b70a8e500c2fdcff837cce
+python-dateutil==2.9.0.post0 --hash=sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427
+pytz==2026.3.post1 --hash=sha256:dd95840dd199baea12d9cc096a1d452caa6596a1c1e4b5f3dbd1541855d5e815
+pywavelets==1.9.0 --hash=sha256:573b650805d2f3c981a0e5ae95191c781a722022c37a0f6eba3fa7eae8e0ee17
+pyyaml==6.0.3 --hash=sha256:ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc
+scipy==1.15.3 --hash=sha256:271e3713e645149ea5ea3e97b57fdab61ce61333f97cfae392c28ba786f9bb49
+six==1.17.0 --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274
+sqlglot==30.17.0 --hash=sha256:84435ac283a60173da31b5fd7d11a725037a1c3fd6ed1e21fb065de74ddb579f
+starlette==1.6.0 --hash=sha256:a86dd39d14bb45f85a3d18525215a9ef0cfd1f192ac793220e72598c90335f0c
+statsmodels==0.14.6 --hash=sha256:19b58cf7474aa9e7e3b0771a66537148b2df9b5884fbf156096c0e6c1ff0469d
+threadpoolctl==3.6.0 --hash=sha256:43a0b8fd5a2928500110039e43a5eed8480b918967083ea48dc3ab9f13c4a7fb
+typing-extensions==4.16.0 --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
+typing-inspect==0.9.0 --hash=sha256:9ee6fc59062311ef8547596ab6b955e1b8aa46242d854bfc78f4f6b0eff35f9f
+typing-inspection==0.4.4 --hash=sha256:65b8397ba37ccbce054456aaccddfc91e6e3083c92824df348d96ca832f3f147
+tzdata==2026.3 --hash=sha256:dc096730c87af6cab1b171c9d532be840741ff5d459015e7f6947bd7d7e54931
+urllib3==2.7.0 --hash=sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897
+uvicorn==0.52.4 --hash=sha256:f86e41a149d7d05a9969337e3946a9c171c06a5d42680896daaba624aeac8da1

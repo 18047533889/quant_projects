@@ -20,15 +20,15 @@ from pathlib import Path
 sys.path.insert(0, ".")
 sys.path.insert(0, "..")
 
-from backend.cleaned_bridge import ensure_cleaned_loaded  # noqa: E402
-from backend.evidence_provenance import current_commit_sha  # noqa: E402
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded  # noqa: E402
+from factor_engine.backend.evidence_provenance import current_commit_sha  # noqa: E402
 
 OUT = Path("docs/evidence/r37")
 OUT.mkdir(parents=True, exist_ok=True)
 
 
 def _component_tree_hash(subdir: str) -> str:
-    from backend.evidence_provenance import _tree_hash
+    from factor_engine.backend.evidence_provenance import _tree_hash
 
     root = Path(subdir)
     if root.is_dir():
@@ -37,9 +37,9 @@ def _component_tree_hash(subdir: str) -> str:
 
 
 def build_operator_inventory() -> list[dict]:
-    from cleaned_operators.production_hardening import factor_production_targets
-    from cleaned_operators.registry import OperatorRegistry
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.production_hardening import factor_production_targets
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     rows = []
     for canon in sorted(factor_production_targets()):
@@ -52,7 +52,7 @@ def build_operator_inventory() -> list[dict]:
         except Exception:
             backends = "unknown"
         try:
-            from backend.production_signature import signature_for
+            from factor_engine.backend.production_signature import signature_for
 
             sig = signature_for(canon)
             typed = sig is not None and bool(getattr(sig, "params", ()))
@@ -75,15 +75,15 @@ def build_resource_arch() -> dict:
         "single_authority": False,
     }
     probes = {
-        "host_resource_coordinator": "runtime.host_resource_coordinator",
-        "resource_broker": "runtime.resource_broker",
-        "resource_governor": "runtime.resource_governor",
-        "resource_autopilot": "runtime.resource_autopilot",
-        "resource_calibration_store": "runtime.resource_calibration_store",
-        "resource_monitor": "runtime.resource_monitor",
-        "auto_shard_planner": "runtime.auto_shard_planner",
-        "governed_buffer_store": "runtime.buffer_store",
-        "change_impact_dag": "runtime.change_impact",
+        "host_resource_coordinator": "factor_engine.runtime.host_resource_coordinator",
+        "resource_broker": "factor_engine.runtime.resource_broker",
+        "resource_governor": "factor_engine.runtime.resource_governor",
+        "resource_autopilot": "factor_engine.runtime.resource_autopilot",
+        "resource_calibration_store": "factor_engine.runtime.resource_calibration_store",
+        "resource_monitor": "factor_engine.runtime.resource_monitor",
+        "auto_shard_planner": "factor_engine.runtime.auto_shard_planner",
+        "governed_buffer_store": "factor_engine.runtime.buffer_store",
+        "change_impact_dag": "factor_engine.runtime.change_impact",
     }
     for name, modname in probes.items():
         try:
@@ -95,7 +95,7 @@ def build_resource_arch() -> dict:
             arch["modules"][name] = {"importable": False, "error": str(e)}
     # 是否存在唯一 HostResourceCoordinator singleton？
     try:
-        from runtime.host_resource_coordinator import HostResourceCoordinator
+        from factor_engine.runtime.host_resource_coordinator import HostResourceCoordinator
 
         has_singleton = hasattr(HostResourceCoordinator, "instance")
         arch["host_resource_coordinator_class"] = HostResourceCoordinator.__name__
@@ -115,8 +115,8 @@ def build_fe_da_boundary() -> dict:
         "dataaccess_capabilities": "dataaccess.capabilities",
         "dataaccess_resource_bridge": "dataaccess.runtime.resource_bridge",
         "dataaccess_governor": "dataaccess.runtime.resource_governor",
-        "fe_prepared_batch_session": "runtime.batch_service",
-        "fe_batch_data_request": "runtime.batch_service",
+        "fe_prepared_batch_session": "factor_engine.runtime.batch_service",
+        "fe_batch_data_request": "factor_engine.runtime.batch_service",
     }.items():
         try:
             mod = __import__(modname, fromlist=["*"])

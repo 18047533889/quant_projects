@@ -125,7 +125,7 @@ def compile_many_chunked(engine, factors: list, chunk_size: int = 500):
 
 def patch_factor_engine_with_validation():
     """Patch FactorEngine.compile_many to add validation."""
-    from runtime.engine import FactorEngine
+    from factor_engine.runtime.engine import FactorEngine
 
     original_compile_many = FactorEngine.compile_many
 
@@ -174,12 +174,12 @@ def test_fixes():
 
     # Test 2: Chunked compilation
     print("\nTest 2: Chunked compilation")
-    from api.columns import col
-    from api.factor import Factor
-    from api import ts_mean
-    from backend.debug_backend import DebugBackend
-    from runtime.engine import FactorEngine
-    from storage.datasource import DataSource
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.api import ts_mean
+    from factor_engine.backend.debug_backend import DebugBackend
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.storage.datasource import DataSource
 
     class DummyDS(DataSource):
         def load_column(self, name: str):

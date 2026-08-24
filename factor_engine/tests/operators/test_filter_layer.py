@@ -14,17 +14,17 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module")
 def registry():
     """加载完整算子注册表。"""
     # Import only what's needed for filter layer tests
-    import cleaned_operators.filter_despike
-    import cleaned_operators.filter_smooth
-    import cleaned_operators.filter_hysteresis
-    from cleaned_operators.registry import OperatorRegistry
+    import factor_engine.cleaned_operators.filter_despike
+    import factor_engine.cleaned_operators.filter_smooth
+    import factor_engine.cleaned_operators.filter_hysteresis
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     return OperatorRegistry
 
 

@@ -8,8 +8,8 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.crossing import _crossing_acceleration_series
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.crossing import _crossing_acceleration_series
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _native_operator_class():

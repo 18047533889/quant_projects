@@ -30,32 +30,32 @@ def _ensure_runtime_importable() -> None:
     if "storage" in sys.modules:
         return
     try:
-        import storage  # noqa: F401
-        import storage.time_window  # noqa: F401
+        import factor_engine.storage  # noqa: F401
+        import factor_engine.storage.time_window  # noqa: F401
 
         return  # real storage works; no seeding needed
     except (SyntaxError, ModuleNotFoundError, ImportError):
         pass
-    _tw = types.ModuleType("storage.time_window")
+    _tw = types.ModuleType("factor_engine.storage.time_window")
     _tw.narrow_data_source_for_window = lambda **kw: None
     _sp = types.ModuleType("storage")
     _sp.time_window = _tw
     sys.modules["storage"] = _sp
-    sys.modules["storage.time_window"] = _tw
+    sys.modules["factor_engine.storage.time_window"] = _tw
 
 
 _ensure_runtime_importable()
 
 import pytest  # noqa: E402
 
-from planner.physical_factor_dag import (  # noqa: E402
+from factor_engine.planner.physical_factor_dag import (  # noqa: E402
     TASK_ROOT,
     PhysicalFactorDAG,
     PhysicalFactorTask,
 )
-from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler  # noqa: E402
-from runtime.resource_broker import ResourceBroker  # noqa: E402
-from runtime.task_resource_contract import TaskResourceContract  # noqa: E402
+from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler  # noqa: E402
+from factor_engine.runtime.resource_broker import ResourceBroker  # noqa: E402
+from factor_engine.runtime.task_resource_contract import TaskResourceContract  # noqa: E402
 
 _SOURCE_SCOPE = "dataset:mock::snapshot:s1::market:us"
 _EXEC_SCOPE = '{"frequency":"1d","universe_id":"ALL","market":"us"}'
@@ -123,7 +123,7 @@ class _Ctx:
 
 def test_certificate_data_layer_fields(tmp_path):
     """证书数据层：build_plan_execution_certificate 各字段来自 task+plan_cost。"""
-    from runtime.plan_execution_certificate import (
+    from factor_engine.runtime.plan_execution_certificate import (
         PlanExecutionCertificate,
         build_plan_execution_certificate,
     )
@@ -169,9 +169,9 @@ def test_plan_builds_execution_certificate_o1(monkeypatch):
     用 monkeypatch 替换 ``lower_batch_dag`` 返回合成 physical DAG，避免依赖
     storage/backend 全链路（storage 正被并发 cluster 临时编辑）。
     """
-    import planner.physical_lowerer as pl
-    from planner.dag import DAGPlan, FactorPlan
-    from planner.logical_plan import PlanNode
+    import factor_engine.planner.physical_lowerer as pl
+    from factor_engine.planner.dag import DAGPlan, FactorPlan
+    from factor_engine.planner.logical_plan import PlanNode
 
     def fake_lower(
         dag, analyses=None, ctx=None, rows=None, instruments=0, scan_cost_map=None
@@ -239,7 +239,7 @@ def test_priority_score_consumes_certificate_cost(monkeypatch):
     dag.roots = ("root:F0", "root:F1")
     sched = _make_scheduler()
     # 预置证书：cost 与 task 的 contract 不同 → 应读证书。
-    from runtime.plan_execution_certificate import build_plan_execution_certificate
+    from factor_engine.runtime.plan_execution_certificate import build_plan_execution_certificate
 
     task = dag.tasks["root:F0"]
     sched._certificates["root:F0"] = build_plan_execution_certificate(
@@ -295,7 +295,7 @@ def test_micro_batch_coalesces_cheap_roots(monkeypatch):
 
 def test_dispatch_micro_batch_per_root_error_isolation():
     """dispatch_micro_batch 单元：一个 root 失败，其余 19 个仍正常返回。"""
-    from runtime.micro_batch_task import dispatch_micro_batch
+    from factor_engine.runtime.micro_batch_task import dispatch_micro_batch
 
     task_by_id = {f"root:F{i}": _cheap_root(i) for i in range(20)}
 
@@ -355,7 +355,7 @@ def test_future_per_factor_ratio_drops(monkeypatch):
     on = out_on["scheduler_stats"]
 
     # without micro-batch（把 MIN_ROOTS 顶到无穷 → 不形成 micro-batch）
-    import runtime.adaptive_batch_scheduler as abs_mod
+    import factor_engine.runtime.adaptive_batch_scheduler as abs_mod
 
     monkeypatch.setattr(abs_mod, "_MICRO_BATCH_MIN_ROOTS", 10**9)
     sched_off = _make_scheduler()

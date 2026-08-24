@@ -41,13 +41,19 @@ def _hash_tree(root: Path) -> str:
     for path in sorted(root.rglob("*.py")):
         if "__pycache__" in path.parts:
             continue
+        # R22-EVIDENCE-CONTAMINATION: never hash test-certified / fixture /
+        # synthetic subtrees as production evidence.
+        from factor_engine.backend.evidence_provenance import evidence_path_excluded
+
+        if evidence_path_excluded(path, root=root):
+            continue
         digest.update(str(path.relative_to(root)).encode())
         digest.update(path.read_bytes())
     return digest.hexdigest()
 
 
 def _production_recipe_names() -> set[str]:
-    from factor_recipes import FactorRecipeRegistry
+    from factor_engine.factor_recipes import FactorRecipeRegistry
 
     return set(FactorRecipeRegistry.list_names(status="production"))
 
@@ -131,9 +137,9 @@ def _expression_dependencies(expression: str) -> tuple[set[str], set[str]]:
 
 
 def _leaf_backend_sets(name: str, stack: tuple[str, ...]) -> list[frozenset[str]]:
-    from backend.operator_capability import production_eligible_backends
-    from cleaned_operators.registry import OperatorRegistry
-    from factor_recipes import FactorRecipeRegistry
+    from factor_engine.backend.operator_capability import production_eligible_backends
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.factor_recipes import FactorRecipeRegistry
 
     if name in stack:
         raise ValueError("cyclic recipe expansion: " + " -> ".join((*stack, name)))
@@ -176,9 +182,9 @@ def _leaf_backend_sets(name: str, stack: tuple[str, ...]) -> list[frozenset[str]
 
 @lru_cache(maxsize=256)
 def _derived_recipe_backends(name: str) -> frozenset[str]:
-    from backend.evidence_provenance import evidence_artifact_valid
-    from backend.factor_operator_evidence import factor_operator_evidence_valid
-    from cleaned_operators import load_all
+    from factor_engine.backend.evidence_provenance import evidence_artifact_valid
+    from factor_engine.backend.factor_operator_evidence import factor_operator_evidence_valid
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
     if not evidence_artifact_valid() or not factor_operator_evidence_valid():

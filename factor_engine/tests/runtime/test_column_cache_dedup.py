@@ -7,8 +7,8 @@ from typing import Any
 
 import pandas as pd
 
-from runtime.input_dq import assert_input_dq
-from storage.datasource import DataSource
+from factor_engine.runtime.input_dq import assert_input_dq
+from factor_engine.storage.datasource import DataSource
 
 
 def _panel(values: list[float]) -> pd.Series:

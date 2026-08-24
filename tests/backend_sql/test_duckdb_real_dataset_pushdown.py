@@ -32,12 +32,12 @@ def duckdb_source(tmp_path, monkeypatch):
         reset_store()
     except ImportError:
         pass
-    from storage.factory import build_data_source
+    from factor_engine.storage.factory import build_data_source
 
     return build_data_source({"type": "data_access", "dataset": "test_daily"})
 
 
-from api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
 
 EXTRA_DUCKDB_CASES = [
     ("vwap", lambda: make_cleaned_call_factory("vwap")(_col("close"), _col("volume"), 3)),
@@ -56,13 +56,13 @@ EXTRA_DUCKDB_CASES = [
 
 @pytest.mark.parametrize("name,expr_builder", DUCKDB_CASES + EXTRA_DUCKDB_CASES)
 def test_duckdb_real_dataset_pushdown_matches_pandas(duckdb_source, name, expr_builder):
-    from api.factor import Factor
-    from backend.factory import build_backend
-    from runtime.engine import FactorEngine
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.factory import build_backend
+    from factor_engine.runtime.engine import FactorEngine
 
     expr = expr_builder()
     pd_out = _result_series(_run(duckdb_source, expr, "pandas"))
-    from backend.factory import build_backend
+    from factor_engine.backend.factory import build_backend
 
     out = FactorEngine(
         backend=build_backend("duckdb_sql"), data_source=duckdb_source
@@ -82,9 +82,9 @@ def test_duckdb_real_dataset_pushdown_matches_pandas(duckdb_source, name, expr_b
 
 def test_auto_long_hybrid_matches_pandas(duckdb_source):
     """auto_long + DuckDB：parity 且 primary_route 为 SQL 或 hybrid polars。"""
-    from api.factor import Factor
-    from backend.factory import build_backend
-    from runtime.engine import FactorEngine
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.factory import build_backend
+    from factor_engine.runtime.engine import FactorEngine
 
     f = make_cleaned_call_factory
     expr = f("rank")(f("ts_mean")(_col("close"), 3))

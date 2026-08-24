@@ -8,13 +8,13 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from runtime.config_runtime import (
+from factor_engine.runtime.config_runtime import (
     PipelineConfigOverrides,
     config_materialize_batch_key,
     config_run_batch_key,
     resolve_materialize_kwargs_for_pipeline,
 )
-from runtime.engine import FactorEngine
+from factor_engine.runtime.engine import FactorEngine
 
 
 def _write_factor_yaml(tmp_path: Path, name: str, expr: str, root: Path) -> Path:

@@ -40,8 +40,8 @@ def main() -> int:
     if fe not in sys.path:
         sys.path.insert(0, fe)
 
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     canon = [c for c in OperatorRegistry.list_canonical() if OperatorRegistry.backends_for(c)]

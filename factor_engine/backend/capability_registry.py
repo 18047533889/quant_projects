@@ -13,7 +13,7 @@ from __future__ import annotations
 import warnings
 
 # Re-export everything from the unified authority
-from backend.operator_capability import (
+from factor_engine.backend.operator_capability import (
     CAPABILITY_REGISTRY_VERSION,
     BackendCapability,
     BackendCapabilityRecord,

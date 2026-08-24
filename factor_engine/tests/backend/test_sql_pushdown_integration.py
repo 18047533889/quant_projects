@@ -9,12 +9,12 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="legacy alias integration matrix; primitive DuckDB certification covers the active surface")
 
-from api import rank, ts_mean
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from runtime.engine import FactorEngine
-from storage.factory import build_data_source
+from factor_engine.api import rank, ts_mean
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.storage.factory import build_data_source
 
 
 @pytest.fixture(autouse=True)
@@ -176,8 +176,8 @@ def test_ts_corr_pushdown_matches_pandas(tmp_path, monkeypatch):
             )
     pd.DataFrame(rows).to_parquet(root / "panel.parquet")
 
-    from api import ts_corr
-    from api.columns import col
+    from factor_engine.api import ts_corr
+    from factor_engine.api.columns import col
 
     source = build_data_source({"type": "data_access", "dataset": "test_daily"})
     expr = ts_corr(col("Close"), col("Open"), 3)
@@ -203,7 +203,7 @@ def test_sql_tier2_ffill_and_decay_match_pandas(tmp_path, monkeypatch):
     df.loc[(df["Symbol"] == "A") & (df["TradeDate"] == df["TradeDate"].iloc[1]), "Close"] = float("nan")
     df.to_parquet(root / "panel.parquet", index=False)
 
-    from api import ts_decay_linear, ffill
+    from factor_engine.api import ts_decay_linear, ffill
 
     source = build_data_source(
         {
@@ -237,7 +237,7 @@ def test_sql_rank_ffill_with_nulls_match_pandas(tmp_path, monkeypatch):
     df.loc[(df["Symbol"] == "A") & (df["TradeDate"] == df["TradeDate"].iloc[1]), "Close"] = float("nan")
     df.to_parquet(root / "panel.parquet", index=False)
 
-    from api import rank, ffill
+    from factor_engine.api import rank, ffill
 
     source = build_data_source(
         {
@@ -263,7 +263,7 @@ def test_sql_group_rank_and_zscore_match_pandas(tmp_path, monkeypatch):
     )
     _seed_group_data(tmp_path / "data")
 
-    from api import group_rank, group_zscore, group_normalize, group_percentile, group_decay_linear
+    from factor_engine.api import group_rank, group_zscore, group_normalize, group_percentile, group_decay_linear
 
     source = build_data_source(
         {
@@ -301,7 +301,7 @@ def test_sql_coalesce_ffill_open_match_pandas(tmp_path, monkeypatch):
     df.loc[(df["Symbol"] == "A") & (df["TradeDate"] == df["TradeDate"].iloc[1]), "Close"] = float("nan")
     df.to_parquet(root / "panel.parquet", index=False)
 
-    from api import coalesce, ffill, rank
+    from factor_engine.api import coalesce, ffill, rank
 
     source = build_data_source(
         {
@@ -333,7 +333,7 @@ def test_sql_winsorize_and_protected_div_match_pandas(tmp_path, monkeypatch):
     df.loc[(df["Symbol"] == "B") & (df["TradeDate"] == df["TradeDate"].iloc[0]), "Open"] = 0.0
     df.to_parquet(root / "panel.parquet", index=False)
 
-    from api import protected_div, winsorize
+    from factor_engine.api import protected_div, winsorize
 
     source = build_data_source(
         {
@@ -366,7 +366,7 @@ def test_sql_clip_and_protected_math_match_pandas(tmp_path, monkeypatch):
     df.loc[(df["Symbol"] == "B") & (df["TradeDate"] == df["TradeDate"].iloc[0]), "Close"] = -1.0
     df.to_parquet(root / "panel.parquet", index=False)
 
-    from api import clip, protected_log, protected_sqrt
+    from factor_engine.api import clip, protected_log, protected_sqrt
 
     source = build_data_source(
         {
@@ -399,7 +399,7 @@ def test_sql_nan_to_num_rank_match_pandas(tmp_path, monkeypatch):
     df.loc[(df["Symbol"] == "A") & (df["TradeDate"] == df["TradeDate"].iloc[1]), "Close"] = float("nan")
     df.to_parquet(root / "panel.parquet", index=False)
 
-    from api import nan_to_num, rank
+    from factor_engine.api import nan_to_num, rank
 
     source = build_data_source(
         {
@@ -427,7 +427,7 @@ def test_sql_fillna_is_nan_scale_match_pandas(tmp_path, monkeypatch):
     df.loc[(df["Symbol"] == "A") & (df["TradeDate"] == df["TradeDate"].iloc[1]), "Close"] = float("nan")
     df.to_parquet(root / "panel.parquet", index=False)
 
-    from api import fillna, is_null, is_finite, scale, rank
+    from factor_engine.api import fillna, is_null, is_finite, scale, rank
 
     source = build_data_source(
         {
@@ -465,7 +465,7 @@ def test_sql_where_is_finite_and_cs_demean_pipeline(tmp_path, monkeypatch):
     df.loc[(df["Symbol"] == "A") & (df["TradeDate"] == df["TradeDate"].iloc[1]), "Close"] = float("nan")
     df.to_parquet(root / "panel.parquet", index=False)
 
-    from api import where, is_finite, cs_demean, rank
+    from factor_engine.api import where, is_finite, cs_demean, rank
 
     source = build_data_source(
         {
@@ -501,7 +501,7 @@ def test_sql_normalize_and_standardize_match_pandas(tmp_path, monkeypatch):
     df.loc[(df["Symbol"] == "A") & (df["TradeDate"] == df["TradeDate"].iloc[1]), "Close"] = float("nan")
     df.to_parquet(root / "panel.parquet", index=False)
 
-    from api import normalize, standardize, if_else, is_finite, rank
+    from factor_engine.api import normalize, standardize, if_else, is_finite, rank
 
     source = build_data_source(
         {
@@ -539,7 +539,7 @@ def test_sql_cs_resid_and_regression_match_pandas(tmp_path, monkeypatch):
     df.loc[(df["Symbol"] == "A") & (df["TradeDate"] == df["TradeDate"].iloc[1]), "Close"] = float("nan")
     df.to_parquet(root / "panel.parquet", index=False)
 
-    from api import cs_resid, cs_regression
+    from factor_engine.api import cs_resid, cs_regression
 
     source = build_data_source(
         {
@@ -566,8 +566,8 @@ def test_sql_cs_resid_and_regression_match_pandas(tmp_path, monkeypatch):
 
 
 def test_clickhouse_dialect_emitter():
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
-    from planner.logical_plan import PlanNode
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.planner.logical_plan import PlanNode
 
     plan = PlanNode(op="ts_mean", inputs=[PlanNode(op="column", attrs={"name": "close"})], attrs={"d": 3})
     compiled = compile_plan_to_sql(
@@ -580,12 +580,12 @@ def test_clickhouse_dialect_emitter():
     assert compiled is not None
     assert "panel_daily" in compiled.query
 
-    from backend.sql_pushdown.emitter import (
+    from factor_engine.backend.sql_pushdown.emitter import (
         SqlDialect,
         SqlPushdownFilter,
         compile_plan_to_sql,
     )
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     plan = PlanNode(op="column", attrs={"name": "Close"})
     compiled = compile_plan_to_sql(

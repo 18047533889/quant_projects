@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from runtime.env_bootstrap import bootstrap_runtime_env
+from factor_engine.runtime.env_bootstrap import bootstrap_runtime_env
 from workspace_paths import quant_projects_root
 
 
@@ -37,9 +37,9 @@ def test_engine_calls_bootstrap(monkeypatch):
     def _fake():
         called["n"] += 1
 
-    monkeypatch.setattr("runtime.engine.bootstrap_runtime_env", _fake)
-    from runtime.engine import FactorEngine
-    from backend.pandas_backend import PandasBackend
+    monkeypatch.setattr("factor_engine.runtime.engine.bootstrap_runtime_env", _fake)
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.backend.pandas_backend import PandasBackend
     from tests.helpers import InMemorySeriesSource
     import pandas as pd
 

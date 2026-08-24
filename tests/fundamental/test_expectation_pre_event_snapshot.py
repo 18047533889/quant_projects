@@ -9,7 +9,7 @@ print would leak.  The surprise family must DECLARE
 """
 from __future__ import annotations
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 _PRE_EVENT_CANONICALS = (
     "fin_surprise",
@@ -58,7 +58,7 @@ def test_surprise_event_zscore_is_prior_only():
     import numpy as np
     import pandas as pd
 
-    from cleaned_operators.fundamental.expectation_v2 import fin_surprise_event_zscore
+    from factor_engine.cleaned_operators.fundamental.expectation_v2 import fin_surprise_event_zscore
 
     n = 10
     idx = pd.date_range("2024-01-01", periods=n, freq="B")

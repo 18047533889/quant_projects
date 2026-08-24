@@ -9,10 +9,10 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 # 现在可以导入
-from cache.unified_cache import UnifiedCache, EvictionPolicy
-from cache.tiered_cache import TieredCache, create_standard_tiered_cache
-from cache.cache_decorator import cached, cached_property, memoize
-from cache.cache_manager import GlobalCacheManager, get_global_cache_manager
+from factor_engine.cache.unified_cache import UnifiedCache, EvictionPolicy
+from factor_engine.cache.tiered_cache import TieredCache, create_standard_tiered_cache
+from factor_engine.cache.cache_decorator import cached, cached_property, memoize
+from factor_engine.cache.cache_manager import GlobalCacheManager, get_global_cache_manager
 
 import time
 import threading

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from market import MarketStatus
-from market.capability_resolver import (
+from factor_engine.market import MarketStatus
+from factor_engine.market.capability_resolver import (
     explain_expression_support,
     explain_operator_support,
     operator_support,
@@ -14,7 +14,7 @@ from market.capability_resolver import (
 
 @pytest.fixture(scope="module", autouse=True)
 def _load():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
 
@@ -67,8 +67,8 @@ def test_unknown_operator() -> None:
 
 def test_production_gate_research_only() -> None:
     # An operator NOT on the production allowlist fails closed in production.
-    from cleaned_operators.registry import OperatorRegistry
-    from market.capability_resolver import _production_allowlist
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.market.capability_resolver import _production_allowlist
 
     prod = _production_allowlist()
     if not prod:

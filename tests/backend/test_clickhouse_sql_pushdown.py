@@ -9,13 +9,13 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-from backend.context import ExecutionContext
-from backend.factory import build_backend
-from backend.sql_pushdown.executor import extract_pushdown_context, try_execute_sql_pushdown
-from backend.sql_pushdown.source_resolver import resolve_pushdown_source
-from planner.logical_plan import PlanNode
-from runtime.config import load_config
-from storage.factory import build_data_source
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.backend.factory import build_backend
+from factor_engine.backend.sql_pushdown.executor import extract_pushdown_context, try_execute_sql_pushdown
+from factor_engine.backend.sql_pushdown.source_resolver import resolve_pushdown_source
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.runtime.config import load_config
+from factor_engine.storage.factory import build_data_source
 from workspace_paths import quant_projects_root
 
 
@@ -252,7 +252,7 @@ def test_try_execute_sql_pushdown_clickhouse_where_is_finite():
 
 def test_build_backend_clickhouse_sql_alias():
     backend = build_backend("clickhouse_sql")
-    from backend.sql_backend import SqlBackend
+    from factor_engine.backend.sql_backend import SqlBackend
 
     assert isinstance(backend, SqlBackend)
 

@@ -26,7 +26,7 @@ REGRESSION_SPECS: dict[str, RegressionSpec] = {
 
 
 def regression_spec_for(canon: str) -> RegressionSpec:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     return REGRESSION_SPECS.get(name, RegressionSpec())

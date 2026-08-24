@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.relation import distribution as rdist
+from factor_engine.cleaned_operators.relation import distribution as rdist
 
 
 # ---------------------------------------------------------------------------

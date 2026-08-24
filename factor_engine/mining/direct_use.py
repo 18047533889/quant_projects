@@ -39,8 +39,8 @@ from typing import Any, Iterable, Sequence
 import numpy as np
 import pandas as pd  # noqa: F401  (used by the R25 parameter-injectivity probe)
 
-from market.context import Market
-from mining.operator_catalog import (
+from factor_engine.market.context import Market
+from factor_engine.mining.operator_catalog import (
     MiningRole,
     RoleSource,
     _ROLE_AST_POSITIONS,
@@ -1185,7 +1185,7 @@ def resolve_direct_use(canonical: str, catalog: dict[str, Any] | None = None) ->
     R22-146: a research-tool verdict also records its causal replacement, so the
     research manifest can report ``reason_not_mineable`` +
     ``recommended_factor_replacement`` (or ``NO_SAFE_REPLACEMENT``)."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     catalog = dict(catalog) if catalog is not None else (OperatorRegistry._catalog.get(canonical) or {})
     explicit = _resolve_explicit(canonical, catalog)
@@ -1575,7 +1575,7 @@ def default_input_recipe(canonical: str) -> dict[str, str]:
         if pattern.endswith("*") and _fnmatch_any(canonical, (pattern,)):
             return dict(recipe)
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         cat = OperatorRegistry._catalog.get(canonical) or {}
         panel, _scalar = _authoritative_param_split(canonical, cat)
@@ -1750,7 +1750,7 @@ class DirectUseContext:
 
 def _alias_map() -> dict[str, str]:
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         return dict(OperatorRegistry._aliases)
     except Exception:
@@ -1759,7 +1759,7 @@ def _alias_map() -> dict[str, str]:
 
 def _op_class_name(canonical: str) -> str:
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         op = OperatorRegistry.get(canonical, "pandas_numpy") or OperatorRegistry.get(canonical)
         return type(op).__name__
@@ -1769,7 +1769,7 @@ def _op_class_name(canonical: str) -> str:
 
 def _op_module(canonical: str) -> str:
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         op = OperatorRegistry.get(canonical, "pandas_numpy") or OperatorRegistry.get(canonical)
         return getattr(type(op), "__module__", "") or ""
@@ -1781,8 +1781,8 @@ def _search_grades(canonical: str) -> dict[str, str]:
     """R18-028: full/coarse/fixed/excluded per searchable param."""
     grades: dict[str, str] = {}
     try:
-        from cleaned_operators.base import param_search_grade
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.base import param_search_grade
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         op = OperatorRegistry.get(canonical, "pandas_numpy") or OperatorRegistry.get(canonical)
         meta = getattr(op, "metadata", None)
@@ -1802,7 +1802,7 @@ def _backend_names(canonical: str) -> tuple[str, str]:
     reference = "pandas_numpy"
     preferred = "pandas_numpy"
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         for be in ("polars_udf", "polars", "sql", "pandas_numpy"):
             if OperatorRegistry.get(canonical, be) is not None:
@@ -1821,8 +1821,8 @@ def _authoritative_param_split(canonical: str, catalog: dict[str, Any]) -> tuple
     boundary.  Falls back to the name heuristic only when resolution fails.
     """
     try:
-        from cleaned_operators.registry import OperatorRegistry
-        from cleaned_operators.search.factor_dedup import split_scalar_panel_params
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.search.factor_dedup import split_scalar_panel_params
 
         op = OperatorRegistry.get(canonical, "pandas_numpy") or OperatorRegistry.get(canonical)
         meta = getattr(op, "metadata", None)
@@ -1979,7 +1979,7 @@ def _is_production_denied(canonical: str) -> bool:
     """R22-116..117: the static ``PRODUCTION_DENIED`` gate feeds ``production_admitted``
     (admission), never ``terminal_usable`` / ``mining_visible`` (semantic role)."""
     try:
-        from cleaned_operators.operator_spec import PRODUCTION_DENIED_CANONICALS
+        from factor_engine.cleaned_operators.operator_spec import PRODUCTION_DENIED_CANONICALS
 
         return canonical in PRODUCTION_DENIED_CANONICALS
     except Exception:
@@ -1997,7 +1997,7 @@ def _has_physical_production_evidence(canonical: str) -> bool:
     Returns False if no backend has verifiable production evidence.
     """
     try:
-        from backend.operator_capability import enumerate_physical_inventory
+        from factor_engine.backend.operator_capability import enumerate_physical_inventory
 
         for record in enumerate_physical_inventory():
             if record.canonical != canonical:
@@ -2113,15 +2113,15 @@ def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> Direct
         panel_params=panel_params, scalar_params=scalar_params,
     )
     split = split_input_slots(canonical, catalog, slots=slots)
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     tier = classify_canonical(canonical)
     try:
-        from cleaned_operators.base import searchable_param_names
+        from factor_engine.cleaned_operators.base import searchable_param_names
 
         op = None
         try:
-            from cleaned_operators.registry import OperatorRegistry
+            from factor_engine.cleaned_operators.registry import OperatorRegistry
 
             op = OperatorRegistry.get(canonical, "pandas_numpy") or OperatorRegistry.get(canonical)
         except Exception:
@@ -2137,7 +2137,7 @@ def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> Direct
     except Exception:
         searchable = tuple(split["scalar_parameters"])
     try:
-        from runtime.execution_contract import execution_contract
+        from factor_engine.runtime.execution_contract import execution_contract
 
         ec = execution_contract(canonical)
         state_model = str(getattr(ec, "state_model", "stateless"))
@@ -2281,7 +2281,7 @@ def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> Direct
 
 def _aliases_of(canonical: str) -> tuple[str, ...]:
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         return tuple(sorted(a for a, t in OperatorRegistry._aliases.items() if t == canonical))
     except Exception:
@@ -2302,8 +2302,8 @@ def get_direct_use_mining_operators(
 
     R21-P033: context is required; market=None is not allowed.
     """
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     ctx = context
@@ -2352,8 +2352,8 @@ def get_direct_use_mining_operators(
 
 def direct_use_matrix_rows() -> list[DirectUseOperator]:
     """R18-096: every registered canonical -> a DirectUseOperator row."""
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     rows: list[DirectUseOperator] = []
@@ -2696,8 +2696,8 @@ def get_direct_use_mining_operators_from_manifest(
     if context is not None:
         filtered: list[str] = []
         # Load full operator metadata for proper filtering
-        from cleaned_operators import load_all
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators import load_all
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         load_all()
 

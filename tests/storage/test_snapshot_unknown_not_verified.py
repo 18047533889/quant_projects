@@ -7,11 +7,11 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from storage.composite_source import (
+from factor_engine.storage.composite_source import (
     CompositeDataSource,
     CompositeSnapshotVerificationError,
 )
-from storage.datasource import DataSource
+from factor_engine.storage.datasource import DataSource
 from tests.storage.test_composite_source import _build_series
 
 
@@ -89,7 +89,7 @@ def test_token_read_failure_is_never_confirmed_none() -> None:
 
 def test_unverified_manifest_is_always_changed() -> None:
     # P0-29/R24-080: an unverified observation forces invalidation.
-    from storage.composite_source import SnapshotState
+    from factor_engine.storage.composite_source import SnapshotState
 
     old = (("f", SnapshotState(version="A", verified=True)),)
     new_unverified = (("f", SnapshotState(version="A", verified=False)),)

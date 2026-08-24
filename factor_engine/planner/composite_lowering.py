@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 LoweringFn = Callable[[PlanNode], PlanNode]
 
@@ -343,7 +343,7 @@ def _ensure_lowerings_loaded() -> None:
     global _LOWERINGS_LOADED
     if _LOWERINGS_LOADED:
         return
-    from planner.lowerings import (  # noqa: F401
+    from factor_engine.planner.lowerings import (  # noqa: F401
         ashare,
         fundamental,
         microstructure,
@@ -362,7 +362,7 @@ def list_composite_lowerings() -> frozenset[str]:
 
 
 def has_composite_lowering(canon: str) -> bool:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     resolved = OperatorRegistry._aliases.get(canon, canon)
     _ensure_lowerings_loaded()
@@ -373,7 +373,7 @@ def infer_execution_kind(canon: str) -> str:
     """推断算子 execution_kind（不受 production deny 影响）。"""
     resolved = canon
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         resolved = OperatorRegistry._aliases.get(canon, canon)
     except Exception:
@@ -386,7 +386,7 @@ def infer_execution_kind(canon: str) -> str:
     if resolved in STATEFUL_DEFERRED_CANONICALS:
         return "stateful"
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         op = OperatorRegistry.get(resolved)
         meta = getattr(op, "metadata", None) if op else None
@@ -408,7 +408,7 @@ def infer_execution_contract(canon: str) -> ExecutionContract:
     """
     resolved = canon
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         resolved = OperatorRegistry._aliases.get(canon, canon)
     except Exception:
@@ -424,7 +424,7 @@ def infer_execution_contract(canon: str) -> ExecutionContract:
     elif has_composite_lowering(resolved):
         execution = "composite"
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         op = OperatorRegistry.get(resolved)
         meta = getattr(op, "metadata", None) if op else None
@@ -471,7 +471,7 @@ def infer_execution(canon: str) -> str:
 
 def build_lowering_trace(before: PlanNode, after: PlanNode) -> tuple[tuple[str, tuple[str, ...]], ...]:
     """对比 lowering 前后 plan，返回 ``(source_canonical, lowered_primitives...)`` 轨迹。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     before_ops = set(collect_plan_ops(before))
     trace: list[tuple[str, tuple[str, ...]]] = []
@@ -498,7 +498,7 @@ def lower_composite_operators(
 ) -> PlanNode:
     """自底向上递归，将已注册的高级算子展开为基础 DAG。"""
     _ensure_lowerings_loaded()
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     children = [lower_composite_operators(child, _stack=_stack) for child in node.inputs]
     current = PlanNode(
@@ -540,7 +540,7 @@ def lower_composite_operators(
 
 def collect_plan_ops(node: PlanNode) -> list[str]:
     """深度优先收集 plan 中的 canonical 算子（去重保序）。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     seen: set[str] = set()
     ops: list[str] = []
@@ -569,14 +569,14 @@ def composite_dual_backend_capable(canon: str) -> bool:
     prims = lowered_primitives(canon)
     if not prims:
         return False
-    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    from factor_engine.backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
 
     return all(p in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE for p in prims)
 
 
 def _resolve_composite(canon: str) -> str | None:
     """Resolve an alias/canonical to a registered composite, else None."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     _ensure_lowerings_loaded()
     resolved = OperatorRegistry._aliases.get(canon, canon)
@@ -592,7 +592,7 @@ def _kernel_panel_count(resolved: str) -> int | None:
     inputs.  Falls back to ``None`` when the signature cannot be introspected.
     """
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         op = OperatorRegistry.get(resolved)
     except Exception:
@@ -651,7 +651,7 @@ def _probe_attrs(resolved: str, deps: tuple[str, ...]) -> dict[str, object]:
     branches = composite_param_branches(resolved)
     if branches:
         return {name: values[0] for name, values in branches.items()}
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op_meta = getattr(OperatorRegistry.get(resolved), "metadata", None)
     specs = getattr(op_meta, "param_specs", None) or {}
@@ -745,7 +745,7 @@ def composite_param_branches(canon: str) -> dict[str, tuple[float, ...]]:
     deps = tuple(contract.deps)
     if not deps:
         return {}
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op_meta = getattr(OperatorRegistry.get(resolved), "metadata", None)
     specs = getattr(op_meta, "param_specs", None) or {}
@@ -801,7 +801,7 @@ def certified_for_declared_branch_coverage(canon: str) -> bool:
     A branch that raises during lowering or yields an uncertified primitive
     fails the certification (returns ``False``) — it is never a silent pass.
     """
-    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    from factor_engine.backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
 
     resolved = _resolve_composite(canon)
     if resolved is None:
@@ -1120,7 +1120,7 @@ def composite_direct_vs_lowered_equivalent(
     """
     import numpy as np
 
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     resolved = _resolve_composite(canon)
     if resolved is None:

@@ -9,15 +9,15 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from runtime.dependency_catalog import DependencyCatalog, FactorDependencyEdge
-from runtime.incremental_scheduler import (
+from factor_engine.runtime.dependency_catalog import DependencyCatalog, FactorDependencyEdge
+from factor_engine.runtime.incremental_scheduler import (
     DataEvent,
     execute_incremental_updates_from_event,
     normalize_data_event,
     plan_updates_from_data_event,
 )
-from storage.catalog import FactorCatalog
-from storage.materializer import ParquetMaterializer
+from factor_engine.storage.catalog import FactorCatalog
+from factor_engine.storage.materializer import ParquetMaterializer
 
 
 # ---------------------------------------------------------------------------
@@ -244,9 +244,9 @@ def test_data_event_carries_revision_fields():
 # ---------------------------------------------------------------------------
 
 def test_lineage_universe_mask_production_raises_research_keeps_drop_reason():
-    from api.dsl_parser import parse_factor
-    from ir.analyzer import Analyzer
-    from runtime.lineage_service import build_materialize_lineage
+    from factor_engine.api.dsl_parser import parse_factor
+    from factor_engine.ir.analyzer import Analyzer
+    from factor_engine.runtime.lineage_service import build_materialize_lineage
 
     factor = parse_factor('col("close")', name="f_um")
     analysis = Analyzer().lower(factor.expr)

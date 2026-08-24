@@ -38,7 +38,7 @@ QUANTILE_OP_SPECS: dict[str, QuantileOpSpec] = {
 
 
 def quantile_spec_for(canon: str) -> QuantileOpSpec:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     return QUANTILE_OP_SPECS.get(name, QuantileOpSpec(role="value"))

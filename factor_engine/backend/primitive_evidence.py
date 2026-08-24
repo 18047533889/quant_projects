@@ -44,7 +44,7 @@ def _verified_set(key: str) -> frozenset[str]:
 
 
 def evidence_artifact_valid() -> bool:
-    from backend.evidence_provenance import evidence_artifact_valid as _valid
+    from factor_engine.backend.evidence_provenance import evidence_artifact_valid as _valid
 
     return _valid()
 
@@ -125,12 +125,12 @@ def primitive_operational_production_certified(canon: str) -> bool:
         return False
     if canon not in PRIMITIVE_BACKEND_EXECUTION_CERTIFIED:
         return False
-    from cleaned_operators.operator_spec import build_operator_spec
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec
 
     spec = build_operator_spec(canon)
     if spec is None or not spec.allow_in_production:
         return False
-    from backend.production_signature import operational_production_allowed
+    from factor_engine.backend.production_signature import operational_production_allowed
 
     return operational_production_allowed(canon)
 

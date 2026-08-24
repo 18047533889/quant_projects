@@ -24,8 +24,8 @@ def main() -> None:
     chunk = int(sys.argv[1]) if len(sys.argv) > 1 else 250
     os.chdir(REPO)
     sys.path.insert(0, str(REPO))
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     canonicals = sorted(OperatorRegistry.list_canonical())

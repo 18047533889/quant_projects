@@ -31,10 +31,10 @@ from pathlib import Path
 sys.path.insert(0, ".")
 sys.path.insert(0, "..")
 
-from backend.cleaned_bridge import ensure_cleaned_loaded  # noqa: E402
-from backend.evidence_provenance import current_commit_sha  # noqa: E402
-from cleaned_operators.production_hardening import factor_production_targets  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded  # noqa: E402
+from factor_engine.backend.evidence_provenance import current_commit_sha  # noqa: E402
+from factor_engine.cleaned_operators.production_hardening import factor_production_targets  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 E = Path("docs/evidence/r37")
 
@@ -57,7 +57,7 @@ def _load_param_domain() -> set[str]:
 
 def _surface(canonical: str) -> str:
     try:
-        from cleaned_operators.operator_surface import classify_canonical
+        from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
         return classify_canonical(canonical)
     except Exception:
@@ -65,7 +65,7 @@ def _surface(canonical: str) -> str:
 
 
 def _typed_signature_status(canonical: str) -> tuple[str, str]:
-    from backend.production_signature import signature_for
+    from factor_engine.backend.production_signature import signature_for
 
     sig = signature_for(canonical)
     if sig is None:
@@ -76,7 +76,7 @@ def _typed_signature_status(canonical: str) -> tuple[str, str]:
 
 
 def _edge_status(canonical: str) -> tuple[str, str]:
-    from cleaned_operators.edge_requirements import (
+    from factor_engine.cleaned_operators.edge_requirements import (
         edge_contract,
         production_edge_evidence_complete,
     )

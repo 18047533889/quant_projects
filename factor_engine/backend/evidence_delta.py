@@ -45,7 +45,7 @@ def _load_delta() -> dict[str, Any]:
 
 
 def _validate_delta_against_current_source(delta: dict[str, Any]) -> None:
-    from backend import evidence_provenance as provenance
+    from factor_engine.backend import evidence_provenance as provenance
 
     expected_emitters = provenance.emitter_hashes()
     emitter_overrides = dict(delta.get("emitter_hash_overrides") or {})
@@ -136,7 +136,7 @@ def load_effective_primitive_evidence(
 
 def install_evidence_delta() -> None:
     """Install effective evidence before any capability module snapshots it."""
-    from backend import evidence_provenance as provenance
+    from factor_engine.backend import evidence_provenance as provenance
 
     if getattr(provenance, "_primitive_delta_installed", False):
         return

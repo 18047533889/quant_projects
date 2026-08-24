@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from storage.factory import build_data_source
+from factor_engine.storage.factory import build_data_source
 
 EXAMPLES_ROOT = Path(__file__).resolve().parent.parent / "examples"
 LEGACY_TYPES = frozenset({"cleaned_parquet", "multi_parquet", "parquet_kline"})

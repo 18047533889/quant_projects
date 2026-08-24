@@ -3,7 +3,7 @@
 from __future__ import annotations
 import math
 from typing import Any
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 _PANEL_NAMES=frozenset({
 "x","y","z","a","b","w","g","left","right","numerator","denominator","ret","returns","benchmark_ret","market_ret","benchmark","market","open","high","low","close","price","volume","amount","vwap","turnover","weight","weights","condition","group","industry","sector","fiscal_quarter","period_id","quarter","revision_id","decision_time","available_time","available_at","exposure","exposures","control","controls","factor","target","mask","event","sort_col","float_shares","flow","balance","earnings","cashflow","assets","working_capital","base","dollar_volume","scale_base",
@@ -26,7 +26,7 @@ def _declared_panel_params(canonical: str) -> frozenset[str]:
     from a hardcoded name list.  ``OperatorMetadata.panel_params`` /
     ``scalar_params`` (R7-224) are authoritative when present."""
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         op = OperatorRegistry.get(canonical, backend="pandas_numpy")
         meta = getattr(op, "metadata", None)
@@ -52,7 +52,7 @@ def _declared_int_params(canonical: str) -> frozenset[str]:
     the authoritative source for the positive-integer gate.  Empty = the
     operator declares no ParamSpec, so the legacy name heuristic applies."""
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         op = OperatorRegistry.get(canonical, backend="pandas_numpy")
         meta = getattr(op, "metadata", None)
@@ -69,7 +69,7 @@ def _int_spec_min(canonical: str, name: str) -> int:
     """R7-314: the declared ``ParamSpec.min`` for an int param (default 1 when
     unset — the static gate keeps its historical conservative default)."""
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         op = OperatorRegistry.get(canonical, backend="pandas_numpy")
         meta = getattr(op, "metadata", None)
@@ -106,7 +106,7 @@ def _integer(v):
     if not _finite(v):return None
     x=float(v);return int(x) if int(x)==x else None
 def _call_values(node,canonical):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     names=[str(x) for x in (OperatorRegistry._catalog.get(canonical,{}).get("param_names") or []) if str(x)!="..."];values={};dynamic=[]
     for i,name in enumerate(names):
         if _is_panel(canonical,name):continue
@@ -142,7 +142,7 @@ def _range(canonical,values,name,lo=None,hi=None,strict_lo=False,strict_hi=False
     return None
 
 def validate_pandas_first_call(canonical:str,node:PlanNode)->tuple[bool,str]:
-    from cleaned_operators.production_tiers import PANDAS_FIRST_PRODUCTION_CANONICALS
+    from factor_engine.cleaned_operators.production_tiers import PANDAS_FIRST_PRODUCTION_CANONICALS
     if canonical not in PANDAS_FIRST_PRODUCTION_CANONICALS:return True,""
     values,dynamic=_call_values(node,canonical)
     if dynamic:return False,f"{canonical}: production tuning parameter(s) must be literal: {', '.join(dynamic)}"
@@ -226,8 +226,8 @@ def validate_pandas_first_call(canonical:str,node:PlanNode)->tuple[bool,str]:
     return True,""
 
 def check_pandas_first_plan_signatures(plan:Any)->list[str]:
-    from cleaned_operators.production_tiers import PANDAS_FIRST_PRODUCTION_CANONICALS
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.production_tiers import PANDAS_FIRST_PRODUCTION_CANONICALS
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     errors=[]
     def walk(node):
         op=str(getattr(node,"op","") or "")

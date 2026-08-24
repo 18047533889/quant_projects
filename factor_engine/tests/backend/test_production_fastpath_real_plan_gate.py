@@ -12,15 +12,15 @@ pytest.importorskip("polars")
 
 @pytest.fixture(scope="module")
 def _loaded():
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
 
 
 def test_real_plan_gate_accepts_multi_column(_loaded):
-    from backend.production_fastpath_gate import check_production_fastpath_formula_ops
+    from factor_engine.backend.production_fastpath_gate import check_production_fastpath_formula_ops
 
     result = check_production_fastpath_formula_ops(
         "rank(col('close'))",
@@ -32,7 +32,7 @@ def test_real_plan_gate_accepts_multi_column(_loaded):
 
 
 def test_real_plan_gate_accepts_composite(_loaded):
-    from backend.production_fastpath_gate import check_production_fastpath_formula_ops
+    from factor_engine.backend.production_fastpath_gate import check_production_fastpath_formula_ops
 
     result = check_production_fastpath_formula_ops(
         "rank(col('close'))",
@@ -44,7 +44,7 @@ def test_real_plan_gate_accepts_composite(_loaded):
 
 
 def test_real_plan_gate_rejects_deferred(_loaded):
-    from backend.production_fastpath_gate import check_production_fastpath_formula_ops
+    from factor_engine.backend.production_fastpath_gate import check_production_fastpath_formula_ops
 
     result = check_production_fastpath_formula_ops(
         "ts_decay_linear(col('close'), 5)",
@@ -55,7 +55,7 @@ def test_real_plan_gate_rejects_deferred(_loaded):
 
 
 def test_real_plan_gate_collects_all_referenced_columns(_loaded):
-    from backend.production_fastpath_gate import check_production_fastpath_formula_ops
+    from factor_engine.backend.production_fastpath_gate import check_production_fastpath_formula_ops
 
     result = check_production_fastpath_formula_ops(
         "zscore(col('volume'))",
@@ -67,11 +67,11 @@ def test_real_plan_gate_collects_all_referenced_columns(_loaded):
 
 
 def test_polars_long_no_load_executes_multi_column_plan(_loaded):
-    from api.cleaned_ops import make_cleaned_call_factory
-    from api.columns import col
-    from api.factor import Factor
-    from backend.factory import build_backend
-    from runtime.engine import FactorEngine
+    from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.factory import build_backend
+    from factor_engine.runtime.engine import FactorEngine
     from tests.helpers import NoLoadColumnSource
 
     idx = pd.MultiIndex.from_tuples(
@@ -102,7 +102,7 @@ def test_polars_long_no_load_executes_multi_column_plan(_loaded):
 
 
 def test_minimal_plan_hint_differs_from_real_plan(_loaded):
-    from backend.production_fastpath_gate import check_production_fastpath_formula_ops
+    from factor_engine.backend.production_fastpath_gate import check_production_fastpath_formula_ops
 
     formula = "ts_decay_linear(col('close'), 5)"
     real = check_production_fastpath_formula_ops(formula, use_real_plan=True)
@@ -112,7 +112,7 @@ def test_minimal_plan_hint_differs_from_real_plan(_loaded):
 
 
 def test_real_plan_gate_accepts_mom_when_primitives_certified(_loaded):
-    from backend.production_fastpath_gate import check_production_fastpath_formula_ops
+    from factor_engine.backend.production_fastpath_gate import check_production_fastpath_formula_ops
 
     result = check_production_fastpath_formula_ops(
         "MOM(col('close'), 5)",
@@ -123,8 +123,8 @@ def test_real_plan_gate_accepts_mom_when_primitives_certified(_loaded):
 
 
 def test_gate_rejects_unlowered_composite_in_strict(_loaded):
-    from backend.production_fastpath_gate import check_production_fastpath_plan_ops
-    from planner.logical_plan import PlanNode
+    from factor_engine.backend.production_fastpath_gate import check_production_fastpath_plan_ops
+    from factor_engine.planner.logical_plan import PlanNode
 
     plan = PlanNode(
         op="MOM",

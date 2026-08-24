@@ -21,12 +21,12 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-from runtime.spill_store import SpillStore, SpillRef
+from factor_engine.runtime.spill_store import SpillStore, SpillRef
 
 
 def _estimate_bytes(value: Any) -> int:
     try:
-        from runtime.resource_governor import estimate_object_bytes
+        from factor_engine.runtime.resource_governor import estimate_object_bytes
 
         return max(0, int(estimate_object_bytes(value)))
     except Exception:

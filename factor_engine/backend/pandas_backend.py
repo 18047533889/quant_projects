@@ -27,10 +27,10 @@ from typing import Any, Sequence
 
 import pandas as pd
 
-from planner.logical_plan import PlanNode
-from planner.plan_hash import contract_is_resolved, plan_cache_key
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.plan_hash import contract_is_resolved, plan_cache_key
 
-from runtime.perf_config import PerfConfig
+from factor_engine.runtime.perf_config import PerfConfig
 
 from .base import Backend
 from .cleaned_bridge import list_cleaned_ops_for_backend, make_cleaned_kernel
@@ -54,7 +54,7 @@ class PandasBackend(Backend):
         ``os.environ``。modin 未安装时 ``pandas_compat`` 自动回退标准 pandas。
         """
         if use_modin_pandas is not None:
-            from backend.pandas_compat import set_modin_enabled
+            from factor_engine.backend.pandas_compat import set_modin_enabled
 
             set_modin_enabled(bool(use_modin_pandas))
         self._registry = KernelRegistry()
@@ -133,7 +133,7 @@ class PandasBackend(Backend):
                     return val
                 # 尝试 spill reload（SPILLED 的 sid）。
                 try:
-                    from runtime.spill_store import SpillRef
+                    from factor_engine.runtime.spill_store import SpillRef
 
                     ref = getattr(store, "_spill_ref", None)
                     _ = ref
@@ -167,7 +167,7 @@ class PandasBackend(Backend):
         try:
             kernel = self._registry.get(node.op)
         except KeyError as exc:
-            from cleaned_operators.registry import OperatorRegistry
+            from factor_engine.cleaned_operators.registry import OperatorRegistry
             try:
                 resolved = "where" if node.op == "if_else" else OperatorRegistry.resolve_canonical(node.op)
                 kernel = self._registry.get(resolved)
@@ -183,7 +183,7 @@ class PandasBackend(Backend):
             # rebuilt with the registry); disk survives across processes where a
             # stale "unregistered" entry could collide with a later resolved
             # operator set.
-            from storage.cache import PersistentPlanCache
+            from factor_engine.storage.cache import PersistentPlanCache
 
             _is_persistent = isinstance(cache, PersistentPlanCache)
             if not _is_persistent or contract_is_resolved(node):
@@ -198,7 +198,7 @@ class PandasBackend(Backend):
         for op in list_cleaned_ops_for_backend(set()):
             reg(op, make_cleaned_kernel(self._eval, op))
         # Compatibility aliases resolve to the now-registered canonical kernel.
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
         for alias, canonical in OperatorRegistry._aliases.items():
             if canonical in self._registry._kernels:
                 reg(alias, self._registry._kernels[canonical])
@@ -249,25 +249,25 @@ class PandasBackend(Backend):
 
 
 def _col(name: str) -> "PlanNode":
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     return PlanNode(op="column", attrs={"name": name})
 
 
 def _lit(value: float) -> "PlanNode":
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     return PlanNode(op="literal", attrs={"value": value})
 
 
 def _binop(op: str, left: "PlanNode", right: "PlanNode") -> "PlanNode":
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     return PlanNode(op=op, inputs=(left, right))
 
 
 def _unop(op: str, child: "PlanNode") -> "PlanNode":
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     return PlanNode(op=op, inputs=(child,))
 
@@ -423,7 +423,7 @@ class PandasBackendLiveEvidence:
 
 def _current_head_sha() -> str:
     try:
-        from backend.evidence_provenance import current_commit_sha
+        from factor_engine.backend.evidence_provenance import current_commit_sha
 
         return current_commit_sha()
     except Exception:
@@ -442,7 +442,7 @@ def _live_evidence_source(data: dict[str, pd.Series]) -> Any:
 
         return InMemorySeriesSource(data=data)
     except Exception:
-        from storage.datasource import DataSource as _DataSource
+        from factor_engine.storage.datasource import DataSource as _DataSource
 
         class _InlineSeriesSource(_DataSource):
             def __init__(self, d):

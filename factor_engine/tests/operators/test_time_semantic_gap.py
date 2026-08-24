@@ -12,10 +12,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.time_semantic_gap  # noqa: F401
+import factor_engine.cleaned_operators.time_semantic_gap  # noqa: F401
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
@@ -58,7 +58,7 @@ def _with_gaps(df: pd.DataFrame, gap_rows: list[int]) -> pd.DataFrame:
 @pytest.mark.parametrize("name", sorted(CANONICALS))
 def test_registered_and_classified(name: str) -> None:
     """All three operators are registered and on extended surface."""
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     assert OperatorRegistry.get(name) is not None, name
     surf = classify_canonical(name)
@@ -295,7 +295,7 @@ def test_all_nan_input_produces_all_nan(name: str) -> None:
 @pytest.mark.parametrize("name", CANONICALS)
 def test_pit_safe_policy(name: str) -> None:
     """All operators have pit_safe=True in explicit policies."""
-    from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
+    from factor_engine.cleaned_operators.operator_policy import _EXPLICIT_POLICIES
 
     policy = _EXPLICIT_POLICIES.get(name)
     assert policy is not None, f"{name} missing from _EXPLICIT_POLICIES"

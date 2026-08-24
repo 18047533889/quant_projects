@@ -25,22 +25,22 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.base import ParamRole
-from cleaned_operators.crossing import (
+from factor_engine.cleaned_operators.base import ParamRole
+from factor_engine.cleaned_operators.crossing import (
     _crossing_acceleration_series,
     _crossing_parts,
     _crossing_speed_series,
 )
-from cleaned_operators.envelope import (
+from factor_engine.cleaned_operators.envelope import (
     _boundary_dwell_series,
     _compression_series,
     _normalised_position,
     _pressure_series,
 )
-from cleaned_operators.interval_geometry import (
+from factor_engine.cleaned_operators.interval_geometry import (
     _union_coverage_series,
 )
-from cleaned_operators.multiscale_trend import (
+from factor_engine.cleaned_operators.multiscale_trend import (
     _consensus_series,
     _curvature_series,
     _dispersion_series,
@@ -64,7 +64,7 @@ def _frame(values, cols=("A",)) -> pd.DataFrame:
 # Item 96 — multiscale trend: ``window`` is a dead parameter
 # ---------------------------------------------------------------------------
 def test_window_declared_policy_non_searchable():
-    from cleaned_operators.multiscale_trend import TsMultiscaleTrendConsensus
+    from factor_engine.cleaned_operators.multiscale_trend import TsMultiscaleTrendConsensus
 
     spec = TsMultiscaleTrendConsensus.metadata.param_specs["window"]
     assert spec.searchable is False
@@ -73,7 +73,7 @@ def test_window_declared_policy_non_searchable():
 
 
 def test_window_does_not_participate_in_output():
-    from cleaned_operators.multiscale_trend import TsMultiscaleTrendConsensus
+    from factor_engine.cleaned_operators.multiscale_trend import TsMultiscaleTrendConsensus
 
     rng = np.random.default_rng(0)
     f = _frame(np.cumsum(rng.normal(0, 1, 80)))
@@ -84,7 +84,7 @@ def test_window_does_not_participate_in_output():
 
 
 def test_window_still_bounds_scales():
-    from cleaned_operators.multiscale_trend import TsMultiscaleTrendConsensus
+    from factor_engine.cleaned_operators.multiscale_trend import TsMultiscaleTrendConsensus
 
     f = _frame(np.arange(60, dtype=float) + 0.01 * np.random.default_rng(0).normal(size=60))
     with pytest.raises(ValueError):
@@ -289,7 +289,7 @@ def test_interval_union_coverage_constant_envelope_nan():
 # a hard dependency on unrelated concurrent-registry state.
 # ---------------------------------------------------------------------------
 def test_registered_ops_smoke():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     rng = np.random.default_rng(0)
     idx = pd.date_range("2024-01-01", periods=80, freq="D")

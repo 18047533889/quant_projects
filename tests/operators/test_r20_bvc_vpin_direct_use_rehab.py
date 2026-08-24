@@ -43,16 +43,16 @@ import pytest
 
 
 def _ensure_technical_chain() -> None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if OperatorRegistry.lifecycle() == "frozen":
         return
     if OperatorRegistry.get("bvc_sign_pct", "pandas_numpy") is not None:
         return
-    from cleaned_operators.technical import signal  # noqa: F401
-    from cleaned_operators.technical import polars_signal  # noqa: F401
-    from cleaned_operators import composite_fastpath  # noqa: F401
-    from cleaned_operators.technical import indicators_v2  # noqa: F401
+    from factor_engine.cleaned_operators.technical import signal  # noqa: F401
+    from factor_engine.cleaned_operators.technical import polars_signal  # noqa: F401
+    from factor_engine.cleaned_operators import composite_fastpath  # noqa: F401
+    from factor_engine.cleaned_operators.technical import indicators_v2  # noqa: F401
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -61,7 +61,7 @@ def _bootstrap():
 
 
 def _op(name: str):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get(name, "pandas_numpy") or OperatorRegistry.get(name)
     assert op is not None, f"{name} not registered"
@@ -495,7 +495,7 @@ def test_bounds_on_random_panel():
 # param contracts / governance
 # ---------------------------------------------------------------------------
 def test_param_specs_and_governance():
-    from cleaned_operators.technical.indicators_v2 import _RECURSIVE_EWM
+    from factor_engine.cleaned_operators.technical.indicators_v2 import _RECURSIVE_EWM
 
     specs = _op("bvc_sign_pct").metadata.param_specs
     assert set(specs) == {"window"}
@@ -543,8 +543,8 @@ def test_below_min_windows_rejected():
 
 
 def test_promotion_membership_and_duplicate_skip():
-    from mining.direct_use import _RELATIVE_ALPHA_OPS
-    from cleaned_operators.operator_surface import (
+    from factor_engine.mining.direct_use import _RELATIVE_ALPHA_OPS
+    from factor_engine.cleaned_operators.operator_surface import (
         _INTRADAY_BVC_PACK_2026_08,
         _TECHNICAL_V2_CANONICALS,
         DAILY_FACTOR_MIGRATED,
@@ -579,7 +579,7 @@ def test_legacy_micro_vpin_is_not_true_vpin():
     # per-bar moves it behaves differently from the landed true VPIN (equal-
     # volume buckets, BVC sign flow).  This documents the non-duplicate
     # rationale with an executable check.
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = (
         OperatorRegistry.get("micro_vpin", "pandas_numpy")

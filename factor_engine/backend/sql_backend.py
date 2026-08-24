@@ -11,8 +11,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, replace
 from typing import Any
 
-from planner.logical_plan import PlanNode
-from planner.sql_lowerer import lower_to_physical_plan
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.sql_lowerer import lower_to_physical_plan
 
 from .base import Backend
 from .context import ExecutionContext

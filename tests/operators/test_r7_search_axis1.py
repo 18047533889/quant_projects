@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.search.factor_dedup import (
+from factor_engine.cleaned_operators.search.factor_dedup import (
     DedupPolicy,
     FactorKind,
     build_typed_fixtures,
@@ -67,7 +67,7 @@ def test_rank_duplicates_uses_cross_sectional_axis1():
     def fb(_f):
         return pd.DataFrame(p + t, index=_f.index, columns=_f.columns)
 
-    from cleaned_operators.search.factor_dedup import are_rank_duplicates
+    from factor_engine.cleaned_operators.search.factor_dedup import are_rank_duplicates
 
     # cross-sectional rank says: same factor -> duplicates.
     assert are_rank_duplicates(fa, fb, panel=panel) is True
@@ -86,7 +86,7 @@ def test_rank_duplicates_uses_cross_sectional_axis1():
 
 
 def test_hash_columns_rank_axis1_differs_from_axis0():
-    from cleaned_operators.search.factor_dedup import _hash_columns_rank
+    from factor_engine.cleaned_operators.search.factor_dedup import _hash_columns_rank
 
     df = pd.DataFrame(
         [[1.0, 2.0], [3.0, 1.0], [2.0, 3.0]],
@@ -115,7 +115,7 @@ def test_nan_placement_changes_hash():
     The old ``nan_to_num(..., nan=-1e300)`` approach collapsed these to the
     same hash; the validity-mask hash must distinguish them.
     """
-    from cleaned_operators.search.factor_dedup import _hash_columns
+    from factor_engine.cleaned_operators.search.factor_dedup import _hash_columns
 
     a = pd.DataFrame([[1.0, np.nan], [np.nan, 2.0]])
     b = pd.DataFrame([[np.nan, 1.0], [2.0, np.nan]])
@@ -126,7 +126,7 @@ def test_nan_placement_changes_hash():
 
 def test_nan_vs_finite_same_values_differ():
     """NaN substitution (nan->0) would make NaN==0; the mask must not."""
-    from cleaned_operators.search.factor_dedup import _hash_columns
+    from factor_engine.cleaned_operators.search.factor_dedup import _hash_columns
 
     with_nan = pd.DataFrame([[1.0, np.nan]])
     with_zero = pd.DataFrame([[1.0, 0.0]])
@@ -138,7 +138,7 @@ def test_nan_vs_finite_same_values_differ():
 # --------------------------------------------------------------------------- #
 def test_numeric_signature_not_rounded():
     """Two values differing in the 10th decimal must hash differently."""
-    from cleaned_operators.search.factor_dedup import _hash_columns
+    from factor_engine.cleaned_operators.search.factor_dedup import _hash_columns
 
     a = pd.DataFrame([[1.0000000001, 2.0]])
     b = pd.DataFrame([[1.0000000002, 2.0]])
@@ -167,7 +167,7 @@ class _FakeOp:
 
 
 def test_choices_sampling_enumerates_legal_choices():
-    from cleaned_operators.base import ParamSpec
+    from factor_engine.cleaned_operators.base import ParamSpec
 
     mod = _load_audit_module()
     op = _FakeOp({"bins": ParamSpec(dtype=int, choices=(3, 5))})
@@ -175,7 +175,7 @@ def test_choices_sampling_enumerates_legal_choices():
 
 
 def test_int_bounds_sample_legal_integer_grid():
-    from cleaned_operators.base import ParamSpec
+    from factor_engine.cleaned_operators.base import ParamSpec
 
     mod = _load_audit_module()
     op = _FakeOp({"window": ParamSpec(dtype=int, min=2, max=6)})
@@ -186,7 +186,7 @@ def test_int_bounds_sample_legal_integer_grid():
 
 
 def test_float_bounds_sample_reviewed_quantiles():
-    from cleaned_operators.base import ParamSpec
+    from factor_engine.cleaned_operators.base import ParamSpec
 
     mod = _load_audit_module()
     op = _FakeOp({"alpha": ParamSpec(dtype=float, min=0.0, max=1.0)})
@@ -200,7 +200,7 @@ def test_float_bounds_sample_reviewed_quantiles():
 # (e) sign-invariant DedupPolicy — review #306
 # --------------------------------------------------------------------------- #
 def test_sign_invariant_policy_dedups_x_and_neg_x():
-    from cleaned_operators.search.factor_dedup import are_rank_duplicates
+    from factor_engine.cleaned_operators.search.factor_dedup import are_rank_duplicates
 
     panel = probe_panel()
     f = lambda _f: _f
@@ -336,7 +336,7 @@ def test_factor_signatures_rejects_empty_ast_hash():
 # split_scalar_panel_params (review #295)
 # --------------------------------------------------------------------------- #
 def test_split_scalar_panel_params_never_splits_panel_as_scalar():
-    from cleaned_operators.search.factor_dedup import split_scalar_panel_params
+    from factor_engine.cleaned_operators.search.factor_dedup import split_scalar_panel_params
 
     class Meta:
         param_names = ["close", "volume", "window", "lag"]
@@ -352,7 +352,7 @@ def test_split_scalar_panel_params_never_splits_panel_as_scalar():
 
 
 def test_split_fallback_uses_numeric_control_names():
-    from cleaned_operators.search.factor_dedup import split_scalar_panel_params
+    from factor_engine.cleaned_operators.search.factor_dedup import split_scalar_panel_params
 
     class Meta:
         param_names = ["high", "low", "close", "volume", "window"]
@@ -369,7 +369,7 @@ def test_split_fallback_uses_numeric_control_names():
 def test_split_never_treats_control_knob_as_panel_even_if_metadata_mislabels():
     """window/lag/... are scalar knobs even when a legacy metadata block lists
     them in input_fields (see ts_average_volume / ts_regression_slope)."""
-    from cleaned_operators.search.factor_dedup import split_scalar_panel_params
+    from factor_engine.cleaned_operators.search.factor_dedup import split_scalar_panel_params
 
     class Meta:
         param_names = ["x", "window"]

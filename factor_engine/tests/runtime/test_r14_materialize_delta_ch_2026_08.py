@@ -15,11 +15,11 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from api import rank
-from api.columns import col
-from api.factor import Factor
-from backend.pandas_backend import PandasBackend
-from runtime.engine import FactorEngine
+from factor_engine.api import rank
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 
@@ -53,7 +53,7 @@ def _fake_ch_target(captured: dict):
 
 
 def test_r14_execute_materialize_delta_tombstones_reach_ch(tmp_path, monkeypatch):
-    import storage.write_targets
+    import factor_engine.storage.write_targets
 
     captured: dict = {}
     monkeypatch.setattr(
@@ -92,7 +92,7 @@ def test_r14_execute_materialize_delta_parity_parquet_and_ch(tmp_path, monkeypat
     ``semantic_identity_digest`` 派生显示版本——若 orchestrator 没把 digest 塞进
     delta（仍只传 ``factor_version``），CH 侧可能与 catalog 的权威版本失配。
     """
-    import storage.write_targets
+    import factor_engine.storage.write_targets
 
     captured: dict = {}
     monkeypatch.setattr(
@@ -114,7 +114,7 @@ def test_r14_execute_materialize_delta_parity_parquet_and_ch(tmp_path, monkeypat
     assert isinstance(ch_version, str) and len(ch_version) == 16
     # catalog 权威存 full digest；CH 显示版本必须 == catalog full digest 的 16 位
     # 前缀——即 CH 从 delta 携带的同一份 full semantic digest 派生，不是 ast_hash。
-    from storage.materializer import ParquetMaterializer
+    from factor_engine.storage.materializer import ParquetMaterializer
 
     catalog = ParquetMaterializer(lake_root=tmp_path / "lake").catalog
     cat_version = catalog.get_factor_info("a")["factor_version"]

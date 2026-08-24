@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from runtime.resource_errors import ResourceBudgetExceeded, ResourceContractApplyError
+from factor_engine.runtime.resource_errors import ResourceBudgetExceeded, ResourceContractApplyError
 
 _logger = logging.getLogger(__name__)
 
@@ -770,7 +770,7 @@ class ExecutionResourcePlan:
         shape 可用时按 {1,2,4,8} 固定 profile 池选择；shape 未知（scan_bytes<=0）
         或 cohort 关闭时回退静态 ``self.duckdb_threads``（legacy 公式）。
         """
-        from runtime.query_class_cohort import cohort_profiles_enabled, QueryClassCohort
+        from factor_engine.runtime.query_class_cohort import cohort_profiles_enabled, QueryClassCohort
 
         if not cohort_profiles_enabled():
             return int(self.duckdb_threads)
@@ -983,7 +983,7 @@ class MemoryGovernor:
         # R36 P0-007（§14/15）：统一优先 **process family PSS**（主进程+子进程，
         # 共享页不重复计）；不可用 → family RSS → self RSS → VmRSS → ru_maxrss。
         try:
-            from runtime.resource_governor import process_family_memory_bytes
+            from factor_engine.runtime.resource_governor import process_family_memory_bytes
 
             v = process_family_memory_bytes(prefer_pss=True)
             if v is not None and v > 0:
@@ -1278,7 +1278,7 @@ class ExecutionResourceScope:
         # ``ResourcePlan``（缺 duckdb_budget_bytes / spill_dir 等 ExecutionResourcePlan
         # 字段），直接进 ``__enter__`` 会 AttributeError —— 这里统一 coerce。
         try:
-            from runtime.execution_resources import ResourcePlan as _LegacyResourcePlan
+            from factor_engine.runtime.execution_resources import ResourcePlan as _LegacyResourcePlan
 
             if isinstance(plan, _LegacyResourcePlan):
                 plan = ExecutionResourcePlan.auto(max_workers=plan.n_jobs)

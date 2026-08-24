@@ -6,13 +6,13 @@ and rejects identifiers with special characters that could enable injection.
 """
 import pytest
 
-from backend.sql_pushdown.emitter import (
+from factor_engine.backend.sql_pushdown.emitter import (
     _validate_sql_identifier,
     _duckdb_dataset_ref,
     compile_plan_to_sql,
     SqlDialect,
 )
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 
 class TestSqlIdentifierValidation:
@@ -188,7 +188,7 @@ class TestDateFilterPitSafety:
 
     def test_date_filter_inclusive_bounds(self):
         """Date filters should use >= for start and <= for end (inclusive)."""
-        from backend.sql_pushdown.emitter import _build_filter_clause, SqlPushdownFilter
+        from factor_engine.backend.sql_pushdown.emitter import _build_filter_clause, SqlPushdownFilter
 
         filt = SqlPushdownFilter(
             time_column="trade_date",
@@ -208,7 +208,7 @@ class TestDateFilterPitSafety:
 
     def test_date_filter_quoted_identifiers(self):
         """Date filter column names should be properly quoted."""
-        from backend.sql_pushdown.emitter import _build_filter_clause, SqlPushdownFilter
+        from factor_engine.backend.sql_pushdown.emitter import _build_filter_clause, SqlPushdownFilter
 
         filt = SqlPushdownFilter(
             time_column="trade_date",
@@ -223,7 +223,7 @@ class TestDateFilterPitSafety:
 
     def test_date_filter_no_sql_literal_injection(self):
         """Date literals should be properly escaped (no raw interpolation)."""
-        from backend.sql_pushdown.emitter import _build_filter_clause, SqlPushdownFilter
+        from factor_engine.backend.sql_pushdown.emitter import _build_filter_clause, SqlPushdownFilter
 
         # Attempt injection via date literal
         filt = SqlPushdownFilter(

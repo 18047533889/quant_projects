@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 
 try:
     load_all()
@@ -32,11 +32,11 @@ except Exception:
     # ``purge_gap`` ParamSpec drift, ...).  Those are unrelated to these P0
     # fixes; fall back to loading ONLY the operator modules this file exercises
     # so the marked-event / update-clock semantics can still be validated.
-    import cleaned_operators.marked_event  # noqa: F401
-    import cleaned_operators.update_clock  # noqa: F401
+    import factor_engine.cleaned_operators.marked_event  # noqa: F401
+    import factor_engine.cleaned_operators.update_clock  # noqa: F401
 
-from cleaned_operators.registry import OperatorRegistry
-from runtime.execution_contract import (
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.runtime.execution_contract import (
     execution_contract,
     history_requirement,
     own_history_requirement,

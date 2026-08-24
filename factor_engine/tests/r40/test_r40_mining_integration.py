@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from api.mining_integration import (
+from factor_engine.api.mining_integration import (
     validate_production_fastpath_dsl,
     validate_syntax_only_dsl,
     validate_us_dsl,
@@ -20,12 +20,12 @@ def _stub_parse(monkeypatch):
     ``api.mining_integration`` imports ``parse_expr`` at module import time, so
     the module attribute must be patched (not the source module's attribute).
     """
-    monkeypatch.setattr("api.mining_integration.parse_expr", lambda *a, **k: None)
+    monkeypatch.setattr("factor_engine.api.mining_integration.parse_expr", lambda *a, **k: None)
 
 
 def _stub_fastpath_gate(monkeypatch):
     monkeypatch.setattr(
-        "backend.production_fastpath_gate.check_production_fastpath_formula_ops",
+        "factor_engine.backend.production_fastpath_gate.check_production_fastpath_formula_ops",
         lambda formula, strict=None: SimpleNamespace(ok=True, violations=[]),
     )
 
@@ -43,7 +43,7 @@ def test_fastpath_market_passthrough(monkeypatch):
         return True, "OK"
 
     monkeypatch.setattr(
-        "api.mining_integration.validate_production_dsl", fake_prod_dsl
+        "factor_engine.api.mining_integration.validate_production_dsl", fake_prod_dsl
     )
     _stub_fastpath_gate(monkeypatch)
     ok, msg = validate_production_fastpath_dsl("close", market="us")
@@ -59,7 +59,7 @@ def test_fastpath_market_none_defaults(monkeypatch):
         return True, "OK"
 
     monkeypatch.setattr(
-        "api.mining_integration.validate_production_dsl", fake_prod_dsl
+        "factor_engine.api.mining_integration.validate_production_dsl", fake_prod_dsl
     )
     _stub_fastpath_gate(monkeypatch)
     ok, msg = validate_production_fastpath_dsl("close", market=None)
@@ -75,7 +75,7 @@ def test_manifest_for_execution_threads_market(monkeypatch):
         return True, "OK"
 
     monkeypatch.setattr(
-        "api.mining_integration.validate_production_fastpath_dsl", fake_fastpath
+        "factor_engine.api.mining_integration.validate_production_fastpath_dsl", fake_fastpath
     )
     validate_manifest_for_execution(
         market="us", expression_type="dsl", formula="close", require_fastpath=True

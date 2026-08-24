@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from market.universe import (
+from factor_engine.market.universe import (
     apply_universe_mask,
     universe_mask_contract,
 )

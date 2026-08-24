@@ -11,13 +11,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from cleaned_operators.registry import _contract_hash, _fn_payload
-from cleaned_operators.base import ParamSpec, ParamRole, MISSING, BroadcastSpec
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import _contract_hash, _fn_payload
+from factor_engine.cleaned_operators.base import ParamSpec, ParamRole, MISSING, BroadcastSpec
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def test_contract_hash_includes_param_role():
-    from cleaned_operators.base import ParamRole
+    from factor_engine.cleaned_operators.base import ParamRole
 
     # Two ops identical except one declares HORIZON vs ESTIMATOR_RESOLUTION.
     op_a = OperatorRegistry.get("KAMA")
@@ -62,7 +62,7 @@ def test_contract_hash_fails_closed_on_resolution():
 def test_contract_hash_changes_with_same_session_usable():
     # A session-close factor vs same-bar usable factor differ in digest.
     # Build two lightweight metadata twins with only same_session_usable flipped.
-    from cleaned_operators.base import OperatorMetadata
+    from factor_engine.cleaned_operators.base import OperatorMetadata
 
     def _mk(ssu):
         return OperatorMetadata(

@@ -23,7 +23,7 @@ import json
 
 import pytest
 
-from runtime.incremental_scheduler import (
+from factor_engine.runtime.incremental_scheduler import (
     DataEvent,
     DataEventLedger,
     DataEventLedgerCorruptionError,

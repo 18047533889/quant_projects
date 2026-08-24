@@ -9,8 +9,8 @@ import pandas as pd
 import polars as pl
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 load_all()
 
@@ -41,9 +41,9 @@ def _polars_values(result: pl.DataFrame) -> np.ndarray:
 
 
 def test_bootstrap_selects_direct_window_authorities() -> None:
-    assert type(PANDAS_AUTHORITY).__module__ == "cleaned_operators.robust_stats"
+    assert type(PANDAS_AUTHORITY).__module__ == "factor_engine.cleaned_operators.robust_stats"
     assert type(PANDAS_AUTHORITY).__name__ == "TsTrimmedMean"
-    assert type(POLARS_AUTHORITY).__module__ == "cleaned_operators.common.polars_robust_stats"
+    assert type(POLARS_AUTHORITY).__module__ == "factor_engine.cleaned_operators.common.polars_robust_stats"
     assert type(POLARS_AUTHORITY).__name__ == "PolarsRobustStats_ts_trimmed_mean"
     assert OperatorRegistry.get("ts_trimmed_mean", backend="duckdb") is None
 

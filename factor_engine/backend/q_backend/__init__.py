@@ -43,13 +43,13 @@ __all__ = [
     "is_q_available",
 ]
 
-from backend.q_backend.q_backend import QBackend, get_q_backend
-from backend.q_backend.q_capability import QBackendCapability
-from backend.q_backend.q_process_manager import (
+from factor_engine.backend.q_backend.q_backend import QBackend, get_q_backend
+from factor_engine.backend.q_backend.q_capability import QBackendCapability
+from factor_engine.backend.q_backend.q_process_manager import (
     QProcessManager,
     check_q_availability,
     is_q_available,
 )
-from backend.q_backend.q_adapter import QTypeAdapter
-from backend.q_backend.q_executor import QExecutor
-from backend.q_backend.q_compiler import QCompiler, QRegionPlan, get_q_compiler
+from factor_engine.backend.q_backend.q_adapter import QTypeAdapter
+from factor_engine.backend.q_backend.q_executor import QExecutor
+from factor_engine.backend.q_backend.q_compiler import QCompiler, QRegionPlan, get_q_compiler

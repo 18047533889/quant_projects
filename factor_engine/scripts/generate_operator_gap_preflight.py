@@ -224,9 +224,9 @@ def main() -> int:
     import sys
     sys.path.insert(0, ".")
     sys.path.insert(0, "..")
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     load_all()
     sha = git_sha()

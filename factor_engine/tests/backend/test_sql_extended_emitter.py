@@ -2,8 +2,8 @@
 """SQL group_rank / winsorize emitter 测试。"""
 from __future__ import annotations
 
-from backend.sql_pushdown.emitter import compile_plan_to_sql, plan_is_sql_capable
-from planner.logical_plan import PlanNode
+from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql, plan_is_sql_capable
+from factor_engine.planner.logical_plan import PlanNode
 
 
 def _col(name: str) -> PlanNode:
@@ -84,7 +84,7 @@ def test_ts_ema_sql_duckdb():
 
 
 def test_batch_compile_sql():
-    from backend.sql_pushdown.emitter import compile_plans_batch_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import compile_plans_batch_to_sql
 
     p1 = PlanNode(op="ts_mean", inputs=[_col("close")], attrs={"window": 5})
     p2 = PlanNode(op="ts_std", inputs=[_col("open")], attrs={"window": 5})

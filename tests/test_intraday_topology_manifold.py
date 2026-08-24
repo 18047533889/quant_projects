@@ -16,13 +16,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module")
 def registry():
     """Load topology_manifold operators."""
-    import cleaned_operators.intraday.topology_manifold
+    import factor_engine.cleaned_operators.intraday.topology_manifold
     return OperatorRegistry
 
 

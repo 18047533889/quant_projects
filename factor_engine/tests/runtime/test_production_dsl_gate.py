@@ -7,18 +7,18 @@ import os
 
 import pytest
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from cleaned_operators.operator_policy import normalize_bars_market
-from runtime.engine import FactorEngine, PhysicalPlanRequiredError, _assert_backend_plan_authority
-from runtime.production_policy import (
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.cleaned_operators.operator_policy import normalize_bars_market
+from factor_engine.runtime.engine import FactorEngine, PhysicalPlanRequiredError, _assert_backend_plan_authority
+from factor_engine.runtime.production_policy import (
     ProductionPolicyViolation,
     assert_production_plan_ops,
     assert_production_factors,
 )
-from runtime.warmup_service import prepare_run_warmup
+from factor_engine.runtime.warmup_service import prepare_run_warmup
 from tests.helpers import InMemorySeriesSource
 
 
@@ -26,8 +26,8 @@ shuffle = make_cleaned_call_factory("shuffle")
 
 
 def test_hybrid_backend_rejects_logical_plan_without_physical_consumer():
-    from planner.logical_plan import PlanNode
-    from backend.hybrid_backend import HybridBackend
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.backend.hybrid_backend import HybridBackend
 
     with pytest.raises(PhysicalPlanRequiredError, match="PhysicalRegionPlan"):
         _assert_backend_plan_authority(HybridBackend(), PlanNode("column"))
@@ -39,7 +39,7 @@ def test_normalize_bars_market_maps_ashare_to_cn():
 
 
 def test_production_compile_blocks_shuffle():
-    from backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
     ensure_cleaned_loaded()
     idx = __import__("pandas").MultiIndex.from_product(
@@ -59,8 +59,8 @@ def test_production_compile_blocks_shuffle():
 
 
 def test_production_run_many_validates_source_expr():
-    from backend.cleaned_bridge import ensure_cleaned_loaded
-    from api import ts_mean
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.api import ts_mean
 
     ensure_cleaned_loaded()
     idx = __import__("pandas").MultiIndex.from_product(
@@ -90,7 +90,7 @@ def test_production_run_many_validates_source_expr():
 
 
 def test_production_rejects_source_expr_mismatch():
-    from api import ts_mean
+    from factor_engine.api import ts_mean
 
     factor = Factor(
         name="mismatch",
@@ -102,7 +102,7 @@ def test_production_rejects_source_expr_mismatch():
 
 
 def test_warmup_uses_market_bars_per_day():
-    from ir.analyzer import Analyzer
+    from factor_engine.ir.analyzer import Analyzer
 
     class _DS:
         dataset = "ashare_stock_minute"

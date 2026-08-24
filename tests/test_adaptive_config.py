@@ -4,7 +4,7 @@ import os
 import pytest
 from unittest.mock import patch, mock_open
 
-from runtime.adaptive_config import (
+from factor_engine.runtime.adaptive_config import (
     AdaptiveResourceConfig,
     auto_configure,
     get_adaptive_config,

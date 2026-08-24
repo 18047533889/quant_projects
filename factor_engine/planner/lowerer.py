@@ -1,6 +1,6 @@
 """IR → 逻辑计划：结构一一对应，仅把 ``tuple`` 子节点转为 ``list``。"""
 
-from ir.nodes import IRNode
+from factor_engine.ir.nodes import IRNode
 
 from .logical_plan import PlanNode
 

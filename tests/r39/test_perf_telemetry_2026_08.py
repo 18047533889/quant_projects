@@ -17,12 +17,12 @@ import json
 
 import pytest
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 
 @pytest.fixture(scope="module")
 def loaded():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
     yield
@@ -34,7 +34,7 @@ def loaded():
 
 
 def test_perf_counters_incr_add_snapshot_and_declared_slots():
-    from runtime.perf_counters import COUNTER_SLOTS, PerfCounters
+    from factor_engine.runtime.perf_counters import COUNTER_SLOTS, PerfCounters
 
     c = PerfCounters()
     c.incr("future_count")
@@ -68,7 +68,7 @@ def test_perf_counters_incr_add_snapshot_and_declared_slots():
 
 
 def test_perf_counters_undeclared_name_raises_keyerror():
-    from runtime.perf_counters import PerfCounters
+    from factor_engine.runtime.perf_counters import PerfCounters
 
     c = PerfCounters()
     with pytest.raises(KeyError):
@@ -78,7 +78,7 @@ def test_perf_counters_undeclared_name_raises_keyerror():
 
 
 def test_perf_counters_snapshot_does_not_mutate():
-    from runtime.perf_counters import PerfCounters
+    from factor_engine.runtime.perf_counters import PerfCounters
 
     c = PerfCounters()
     c.add("factor_count", 7)
@@ -89,7 +89,7 @@ def test_perf_counters_snapshot_does_not_mutate():
 
 
 def test_perf_counters_global_singleton_and_reset():
-    from runtime.perf_counters import get_global_counters, reset_global_counters
+    from factor_engine.runtime.perf_counters import get_global_counters, reset_global_counters
 
     reset_global_counters()
     g1 = get_global_counters()
@@ -109,8 +109,8 @@ def test_perf_counters_global_singleton_and_reset():
 def _simple_route_ctx():
     import pandas as pd
 
-    from backend.context import ExecutionContext
-    from runtime.perf_config import PerfConfig
+    from factor_engine.backend.context import ExecutionContext
+    from factor_engine.runtime.perf_config import PerfConfig
     from tests.helpers import InMemorySeriesSource
 
     idx = pd.MultiIndex.from_product(
@@ -131,8 +131,8 @@ def _simple_route_ctx():
 
 
 def test_certificate_built_by_choose_plan_route_and_o1_validate(loaded):
-    from backend.plan_cost_router import choose_plan_route
-    from runtime.production_execution_certificate import normalize_backend, validate
+    from factor_engine.backend.plan_cost_router import choose_plan_route
+    from factor_engine.runtime.production_execution_certificate import normalize_backend, validate
 
     ctx, plan = _simple_route_ctx()
     route = choose_plan_route(plan, ctx)
@@ -168,7 +168,7 @@ def test_certificate_built_by_choose_plan_route_and_o1_validate(loaded):
 def test_certificate_hash_tamper_fails_closed():
     from dataclasses import replace
 
-    from runtime.production_execution_certificate import ProductionExecutionCertificate
+    from factor_engine.runtime.production_execution_certificate import ProductionExecutionCertificate
 
     cert = ProductionExecutionCertificate.build(
         structural_hash="abc",
@@ -183,9 +183,9 @@ def test_certificate_hash_tamper_fails_closed():
 
 
 def test_hybrid_executor_records_event_and_validates_o1(loaded):
-    from backend.plan_cost_router import choose_plan_route
-    from runtime.hybrid_executor import HybridExecutor
-    from runtime.resource_broker import ResourceBroker
+    from factor_engine.backend.plan_cost_router import choose_plan_route
+    from factor_engine.runtime.hybrid_executor import HybridExecutor
+    from factor_engine.runtime.resource_broker import ResourceBroker
 
     ctx, plan = _simple_route_ctx()
     route = choose_plan_route(plan, ctx)
@@ -205,8 +205,8 @@ def test_hybrid_executor_records_event_and_validates_o1(loaded):
 
 
 def test_hybrid_executor_submit_records_event(loaded):
-    from runtime.hybrid_executor import HybridExecutor
-    from runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.hybrid_executor import HybridExecutor
+    from factor_engine.runtime.resource_broker import ResourceBroker
 
     executor = HybridExecutor(
         broker=ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=4)
@@ -228,8 +228,8 @@ def test_hybrid_executor_submit_records_event(loaded):
 
 
 def test_run_summary_from_counters_maps_fields():
-    from runtime.perf_counters import PerfCounters
-    from runtime.performance_run_summary import PerformanceRunSummary
+    from factor_engine.runtime.perf_counters import PerfCounters
+    from factor_engine.runtime.performance_run_summary import PerformanceRunSummary
 
     c = PerfCounters()
     c.add("factor_count", 100)
@@ -289,7 +289,7 @@ def test_run_summary_from_counters_maps_fields():
 
 
 def test_run_summary_from_counters_defaults_missing():
-    from runtime.performance_run_summary import PerformanceRunSummary
+    from factor_engine.runtime.performance_run_summary import PerformanceRunSummary
 
     s = PerformanceRunSummary.from_counters(None, {})
     assert s.factor_count == 0
@@ -303,8 +303,8 @@ def test_run_summary_from_counters_defaults_missing():
 
 
 def test_render_r39_json_writes_parseable_payload(tmp_path):
-    from runtime.perf_counters import PerfCounters
-    from runtime.performance_run_summary import PerformanceRunSummary, render_r39_json
+    from factor_engine.runtime.perf_counters import PerfCounters
+    from factor_engine.runtime.performance_run_summary import PerformanceRunSummary, render_r39_json
 
     c = PerfCounters()
     c.add("factor_count", 10)
@@ -378,7 +378,7 @@ def test_render_r39_json_writes_parseable_payload(tmp_path):
 
 
 def test_capture_environment_expected_keys():
-    from runtime.performance_run_summary import capture_environment
+    from factor_engine.runtime.performance_run_summary import capture_environment
 
     env = capture_environment()
     for key in (

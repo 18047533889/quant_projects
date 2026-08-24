@@ -20,7 +20,7 @@ os.environ.setdefault("FACTOR_ENGINE_CPU_BUDGET", "4")
 
 def test_gate_result_extended_fields():
     """R37 GateResult 必须记录 passed_cases/case_ids/component_hashes/fixture_hashes。"""
-    from runtime.r34_evidence import GateResult
+    from factor_engine.runtime.r34_evidence import GateResult
 
     g = GateResult.from_cases(
         "G", [True, True, False], case_ids=["a", "b", "c"],
@@ -35,7 +35,7 @@ def test_gate_result_extended_fields():
 
 def test_nc1_old_sha_red():
     """旧 SHA 绑定必须让 freshness 门 FAIL（不是 presence-only PASS）。"""
-    from runtime.evidence_truth import EvidenceTruthEngine
+    from factor_engine.runtime.evidence_truth import EvidenceTruthEngine
 
     engine = EvidenceTruthEngine(commit_sha="a" * 40)
     artifacts = {
@@ -48,7 +48,7 @@ def test_nc1_old_sha_red():
 
 def test_nc1b_unbound_red():
     """未绑定 artifact 也必须 FAIL——不再把 bound_sha 为空当通过。"""
-    from runtime.evidence_truth import EvidenceTruthEngine
+    from factor_engine.runtime.evidence_truth import EvidenceTruthEngine
 
     engine = EvidenceTruthEngine(commit_sha="a" * 40)
     g = engine.freshness_gate("NC1B", {"x": {"bound_sha": ""}})
@@ -75,7 +75,7 @@ def test_nc2_semantic_mutation_red():
 
 def test_nc3_pit_future_shift_red():
     """PIT 前视（shift(-1) 语义）必须被 availability clock 拒绝。"""
-    from cleaned_operators.availability_clock import default_available_at
+    from factor_engine.cleaned_operators.availability_clock import default_available_at
 
     # close 在 session_close 才可知；若把它当 session_open 可知就是前视泄漏。
     assert default_available_at(("close",)) == "session_close"
@@ -86,7 +86,7 @@ def test_nc4_literal_true_gate_caught():
     """literal True gate 必须被 AST 扫描捕获（负控不靠文件存在）。"""
     import tempfile
 
-    from runtime.r34_evidence import scan_hardcoded_true_gates
+    from factor_engine.runtime.r34_evidence import scan_hardcoded_true_gates
 
     with tempfile.TemporaryDirectory() as td:
         p = Path(td) / "audit_fake.py"
@@ -97,7 +97,7 @@ def test_nc4_literal_true_gate_caught():
 
 def test_nc5_deleted_cases_not_run():
     """删掉真实 case 只留 JSON 的 evidence 必须 NOT_RUN。"""
-    from runtime.r34_evidence import GateResult
+    from factor_engine.runtime.r34_evidence import GateResult
 
     assert GateResult.from_cases("NC5", []).status == "NOT_RUN"
     # JSON 里有 status 但没有 executed case 结构 => NOT_RUN，不是 PASS
@@ -107,7 +107,7 @@ def test_nc5_deleted_cases_not_run():
 
 def test_nc6_component_hash_mismatch_red():
     """组件 hash mismatch 必须让组件门 FAIL。"""
-    from runtime.evidence_truth import EvidenceTruthEngine
+    from factor_engine.runtime.evidence_truth import EvidenceTruthEngine
 
     engine = EvidenceTruthEngine(commit_sha="a" * 40)
     cur = engine.component_hashes
@@ -119,7 +119,7 @@ def test_nc6_component_hash_mismatch_red():
 
 def test_nc7_fixture_hash_mismatch_red():
     """golden fixture hash mismatch 必须 FAIL。"""
-    from runtime.evidence_truth import EvidenceTruthEngine
+    from factor_engine.runtime.evidence_truth import EvidenceTruthEngine
 
     engine = EvidenceTruthEngine(commit_sha="a" * 40)
     g = engine.fixture_hash_gate("NC7", Path("tests/operator_golden").resolve(), "deadbeef")
@@ -141,7 +141,7 @@ def test_real_evidence_truth_gates_current_head():
 
 def test_evidence_truth_artifact_regenerated_on_dirty_tree():
     """R37_HEAD 的 dirty_tree_hash 必须随工作树变化（证据绑定 working tree）。"""
-    from runtime.r34_evidence import current_evidence_header
+    from factor_engine.runtime.r34_evidence import current_evidence_header
 
     h = current_evidence_header()
     assert h.dirty_tree_hash, "dirty_tree_hash 必须计算"

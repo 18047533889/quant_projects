@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from backend.parameter_aliases import ParameterAliasError
-from expr.cleaned_call import CleanedCall
-from expr.column import ColumnRef
-from ir.analyzer import Analyzer
+from factor_engine.backend.parameter_aliases import ParameterAliasError
+from factor_engine.expr.cleaned_call import CleanedCall
+from factor_engine.expr.column import ColumnRef
+from factor_engine.ir.analyzer import Analyzer
 
 
 def _call(op: str, **kwargs) -> CleanedCall:

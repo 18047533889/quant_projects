@@ -26,8 +26,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 load_all()
 
@@ -128,7 +128,7 @@ def test_pca_resid_single_missing_stock_isolates():
 # ---------------------------------------------------------------------------
 
 def test_pca_svd_excludes_low_coverage_stock_and_reports_telemetry():
-    from cleaned_operators.cross_section.panel_model import _pca_svd
+    from factor_engine.cleaned_operators.cross_section.panel_model import _pca_svd
 
     rng = np.random.default_rng(5)
     X = rng.standard_normal((60, 4))
@@ -160,7 +160,7 @@ def test_pca_resid_low_coverage_stock_stays_nan_not_imputed():
 # ---------------------------------------------------------------------------
 
 def test_pca_resid_vol_history_is_double_window():
-    from runtime.execution_contract import history_requirement
+    from factor_engine.runtime.execution_contract import history_requirement
 
     for canon in ("panel_rolling_pca_resid_vol", "panel_rolling_pca_resid_momentum"):
         req = history_requirement(canon, {"window": 120})

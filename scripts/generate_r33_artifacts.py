@@ -60,11 +60,11 @@ def _small_batch_benchmark() -> dict[str, Any]:
     try:
         import numpy as np
         import pandas as pd
-        from api.columns import col
-        from api.factor import Factor
-        from api import ts_mean, ts_std, rank
-        from backend.pandas_backend import PandasBackend
-        from runtime.engine import FactorEngine
+        from factor_engine.api.columns import col
+        from factor_engine.api.factor import Factor
+        from factor_engine.api import ts_mean, ts_std, rank
+        from factor_engine.backend.pandas_backend import PandasBackend
+        from factor_engine.runtime.engine import FactorEngine
         from tests.helpers import InMemorySeriesSource
 
         idx = pd.MultiIndex.from_product(
@@ -129,7 +129,7 @@ def main() -> None:
     # R33_FE_DA_BOUNDARY_AUDIT.json —— 真实检查 FE/DA 规划边界。
     fe_uses_da = False
     try:
-        from storage.sources.data_access_source import DataAccessSource
+        from factor_engine.storage.sources.data_access_source import DataAccessSource
         fe_uses_da = callable(getattr(DataAccessSource, "estimate_scan_cost", None))
     except Exception:
         pass
@@ -145,7 +145,7 @@ def main() -> None:
     )
 
     # R33_READ_WAVE_RUNTIME_TRACE.json —— 真实 SourceWaveExecutor trace。
-    from runtime.buffer_ref import SourceWaveExecutor
+    from factor_engine.runtime.buffer_ref import SourceWaveExecutor
     import types
 
     src = types.SimpleNamespace(
@@ -163,7 +163,7 @@ def main() -> None:
     # R33_CROSS_SECTION_BLOCK_PARITY.json + ROLLING_MULTI_OUTPUT.json
     import numpy as np
 
-    from runtime.block_dq import FactorBlock, compute_block_dq, cross_section_block
+    from factor_engine.runtime.block_dq import FactorBlock, compute_block_dq, cross_section_block
 
     block = FactorBlock(
         factor_ids=("r1", "z1"),
@@ -181,7 +181,7 @@ def main() -> None:
     )
 
     # R33_STREAM_SINK_FAILURE_INJECTION.json
-    from runtime.streaming_result_sink import StreamingResultSink
+    from factor_engine.runtime.streaming_result_sink import StreamingResultSink
 
     def bad(_batch):
         raise RuntimeError("deterministic write bug")

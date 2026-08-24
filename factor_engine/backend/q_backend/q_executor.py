@@ -21,18 +21,18 @@ from typing import Any
 
 import pandas as pd
 
-from backend.q_backend.q_adapter import (
+from factor_engine.backend.q_backend.q_adapter import (
     QResidentTableHandle,
     QTypeAdapter,
     get_q_type_adapter,
 )
-from backend.q_backend.q_compiler import QRegionPlan
-from backend.q_backend.q_errors import (
+from factor_engine.backend.q_backend.q_compiler import QRegionPlan
+from factor_engine.backend.q_backend.q_errors import (
     QDataUnavailableError,
     QExecutionError,
     QProcessUnavailableError,
 )
-from backend.q_backend.q_process_manager import (
+from factor_engine.backend.q_backend.q_process_manager import (
     QAvailabilityStatus,
     QProcessManager,
     get_q_process_manager,
@@ -537,14 +537,21 @@ class QExecutor:
     def _load_inputs_to_q(
         self,
         q: Any,
-        input_data: dict[str, pd.DataFrame | QResidentTableHandle],
+        input_data: dict[str, pd.DataFrame | QResidentTableHandle | Any],
         *,
         workspace_id: str,
         generation_id: str,
         workspace_prefix: str,
         allow_legacy_handles: bool,
     ) -> dict[str, str]:
-        """Load inputs into an execution-owned q namespace."""
+        """Load inputs into an execution-owned q namespace.
+
+        Inputs may be pandas DataFrames, ``QResidentTableHandle`` (region
+        intermediate kept resident), or Arrow tables (``pyarrow.Table``).  The
+        Arrow case is the R21 cross-backend boundary (``Q_TO_ARROW``): a prior
+        producer region can hand the q region an Arrow table instead of forcing
+        a pandas round-trip in between.
+        """
         bindings: dict[str, str] = {}
         for table_name, data in input_data.items():
             symbol = f"{workspace_prefix}{_safe_q_identifier(table_name)}"
@@ -554,6 +561,17 @@ class QExecutor:
                 if data.table_name != symbol:
                     q(f"{symbol}: {data.q_symbol or data.table_name}")
                 self._increment_telemetry("resident_reuse_count")
+            elif self._is_arrow_table(data):
+                # Cross-backend q boundary (R21-TRANSFER-BOUNDARIES Q_TO_ARROW):
+                # accept an Arrow table directly, not just pandas.  Zero-copy
+                # remains an optimization, never a correctness requirement.
+                arrow_df = data.to_pandas()
+                q[symbol] = self.type_adapter.pandas_to_q(
+                    arrow_df, preserve_index=True, zero_copy=True
+                )
+                self._increment_telemetry(
+                    "python_to_q_bytes", int(arrow_df.memory_usage(deep=True).sum())
+                )
             else:
                 q[symbol] = self.type_adapter.pandas_to_q(
                     data, preserve_index=True, zero_copy=True
@@ -569,6 +587,19 @@ class QExecutor:
                     raise QExecutionError("Execution workspace lease identity conflict")
                 lease[2].add(symbol)
         return bindings
+
+    @staticmethod
+    def _is_arrow_table(data: Any) -> bool:
+        """True when ``data`` is an Arrow table (R21 Q_TO_ARROW boundary).
+
+        Duck-typed rather than importing pyarrow at module import time so the
+        q executor stays importable even when pyarrow is absent.
+        """
+        module = type(data).__module__ or ""
+        type_name = type(data).__name__
+        if module.startswith("pyarrow") and type_name == "Table":
+            return True
+        return False
 
     def execute_batch_regions(
         self,

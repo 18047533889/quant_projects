@@ -21,12 +21,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 
 load_all()
 
-from runtime.session_calendar import SessionCalendar  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.runtime.session_calendar import SessionCalendar  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 # P0-10: the official session grid is NEVER inferred from the observed minute
 # data — the operators require an explicit exchange calendar.  The synthetic
@@ -81,7 +81,7 @@ def _subsampled_rv_reference(minute_returns: np.ndarray, sampling: int) -> float
 
 
 def test_subsampled_rv_aggregates_in_sample_minutes():
-    from cleaned_operators.advanced_intraday import _block_returns
+    from factor_engine.cleaned_operators.advanced_intraday import _block_returns
 
     r = np.array([0.01, -0.02, 0.03, 0.01, -0.01, 0.02])
     # sampling=2, offset 0 -> blocks (r0+r1), (r2+r3), (r4+r5)
@@ -96,7 +96,7 @@ def test_subsampled_rv_aggregates_in_sample_minutes():
 
 
 def test_subsampled_rv_dispersion_matches_hand_aggregation():
-    from cleaned_operators.advanced_intraday import _subsampled_rv_dispersion
+    from factor_engine.cleaned_operators.advanced_intraday import _subsampled_rv_dispersion
 
     rng = np.random.default_rng(7)
     r = rng.normal(0.0, 0.01, size=90)
@@ -107,7 +107,7 @@ def test_subsampled_rv_dispersion_matches_hand_aggregation():
 
 
 def test_realized_power_variation_aggregates_blocks():
-    from cleaned_operators.advanced_intraday import _realized_power_variation
+    from factor_engine.cleaned_operators.advanced_intraday import _realized_power_variation
 
     r = np.array([0.01, -0.02, 0.03, 0.01, -0.01, 0.02])
     blocks = np.array([r[0] + r[1], r[2] + r[3], r[4] + r[5]])
@@ -140,7 +140,7 @@ def _us_afterhours_utc_frame():
 
 
 def test_us_session_grouping_uses_session_tz():
-    from cleaned_operators.advanced_intraday import _per_day_returns
+    from factor_engine.cleaned_operators.advanced_intraday import _per_day_returns
 
     frame = _us_afterhours_utc_frame()
     days_ny, _ = _per_day_returns(frame, session_tz="America/New_York")
@@ -271,7 +271,7 @@ def test_degenerate_pca_subspace_is_nan_not_zero():
 
 
 def test_pca_score_series_zero_history_variance_nan():
-    from cleaned_operators.advanced_intraday import _pca_score_series
+    from factor_engine.cleaned_operators.advanced_intraday import _pca_score_series
 
     const = [np.full(120, 0.05)] * 60
     vals = _pca_score_series(const, lookback=50, k=1)
@@ -283,7 +283,7 @@ def test_pca_score_series_zero_history_variance_nan():
 # ---------------------------------------------------------------------------
 
 def test_phase_shift_below_threshold_is_nan():
-    from cleaned_operators.advanced_intraday import _best_phase
+    from factor_engine.cleaned_operators.advanced_intraday import _best_phase
 
     # A sine profile has a unique best alignment at shift 0 (a linear ramp is
     # affine-shift invariant, so its phase is ambiguous).
@@ -315,7 +315,7 @@ def _minute_frame_naive(n_days: int, bars: int) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 def test_recovery_missing_minute_is_nan_not_false_precise():
-    from cleaned_operators.session_recovery import _recovery_day
+    from factor_engine.cleaned_operators.session_recovery import _recovery_day
 
     # Event at minute 1 (shock 10.0 -> 10.5); minute 2 is MISSING; minute 3
     # happens to be back near the baseline.  The true recovery lies in
@@ -327,7 +327,7 @@ def test_recovery_missing_minute_is_nan_not_false_precise():
 
 
 def test_recovery_fully_observed_is_precise():
-    from cleaned_operators.session_recovery import _recovery_day
+    from factor_engine.cleaned_operators.session_recovery import _recovery_day
 
     x = np.array([10.0, 10.5, 10.05, 10.02, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0])
     event = np.zeros(10)
@@ -340,7 +340,7 @@ def test_recovery_fully_observed_is_precise():
 
 
 def test_recovery_event_must_be_bool():
-    from cleaned_operators.session_recovery import _recovery_day
+    from factor_engine.cleaned_operators.session_recovery import _recovery_day
 
     x = np.linspace(10.0, 10.5, 10)
     event = np.zeros(10)
@@ -349,7 +349,7 @@ def test_recovery_event_must_be_bool():
 
 
 def test_recovery_residual_fraction_out_of_range_rejected():
-    from cleaned_operators.session_recovery import _recovery_day
+    from factor_engine.cleaned_operators.session_recovery import _recovery_day
 
     x = np.linspace(10.0, 10.5, 10)
     event = np.zeros(10)
@@ -362,7 +362,7 @@ def test_recovery_residual_fraction_out_of_range_rejected():
 
 
 def test_recovery_refractory_suppresses_overlap():
-    from cleaned_operators.session_recovery import _recovery_day
+    from factor_engine.cleaned_operators.session_recovery import _recovery_day
 
     x = np.linspace(10.0, 10.6, 12)
     event = np.zeros(12)

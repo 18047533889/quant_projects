@@ -26,7 +26,7 @@ import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Callable
 
-from runtime.resource_broker import ResourceBroker
+from factor_engine.runtime.resource_broker import ResourceBroker
 
 _logger = logging.getLogger(__name__)
 
@@ -102,7 +102,7 @@ class HybridExecutor:
         self.broker = broker or ResourceBroker()
         self.prefer_process = prefer_process
         self.worker_threads = max(1, worker_threads)
-        from runtime.resource_governor import effective_cpu_slots
+        from factor_engine.runtime.resource_governor import effective_cpu_slots
 
         cpu = effective_cpu_slots()
         # 不是 thread/process 各开 CPU 数（R27-210 双倍 oversubscribe）：
@@ -119,7 +119,7 @@ class HybridExecutor:
         # R39-P1-PERF-082: 最近一次 runtime backend event（submit 时记录）。
         self._last_runtime_backend_event: dict[str, Any] | None = None
         # R40 #256: 记录 BLAS vendor/version/thread config（production evidence）。
-        from runtime.execution_traits import record_blas_config
+        from factor_engine.runtime.execution_traits import record_blas_config
 
         self._blas_config = record_blas_config()
 
@@ -136,7 +136,7 @@ class HybridExecutor:
         shape 可用时按 {1,2,4,8} 固定 profile 池选择；shape 未知或 cohort 关闭时
         回退 ``self.worker_threads``（legacy 公式）。
         """
-        from runtime.query_class_cohort import cohort_profiles_enabled, QueryClassCohort
+        from factor_engine.runtime.query_class_cohort import cohort_profiles_enabled, QueryClassCohort
 
         if not cohort_profiles_enabled():
             return int(self.worker_threads)
@@ -194,8 +194,8 @@ class HybridExecutor:
         allowed_fallbacks: Any = (),
     ) -> bool:
         """O(1) 校验（不 import plan / 不 walk 树）；失败只计数 + 告警，不阻断执行。"""
-        from runtime.perf_counters import get_global_counters
-        from runtime.production_execution_certificate import validate
+        from factor_engine.runtime.perf_counters import get_global_counters
+        from factor_engine.runtime.production_execution_certificate import validate
 
         ok = validate(certificate, event, allowed_fallbacks)
         if not ok:

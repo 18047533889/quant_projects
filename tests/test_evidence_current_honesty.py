@@ -41,7 +41,7 @@ if str(_REPO_ROOT) not in sys.path:
 import evidence.current as ec  # noqa: E402
 
 try:
-    from backend.evidence_provenance import implementation_closure_hash_for as _backend_closure
+    from factor_engine.backend.evidence_provenance import implementation_closure_hash_for as _backend_closure
 except Exception:  # pragma: no cover - backend may be unavailable
     _backend_closure = None
 
@@ -175,9 +175,14 @@ def _first_catalog_module_file() -> Path | None:
     if not module_ref or module_ref == "builtins":
         return None
     rel_parts = module_ref.split(".")
+    # R45: catalog refs are ``cleaned_operators.<sub>`` or
+    # ``factor_engine.cleaned_operators.<sub>``; both resolve under the single
+    # canonical package factor_engine/cleaned_operators/.
+    if rel_parts[0] == "factor_engine":
+        rel_parts = rel_parts[1:]
     if rel_parts[0] == "cleaned_operators":
         rel_parts = rel_parts[1:]
-    pkg_root = ec._REPO_ROOT / "cleaned_operators"
+    pkg_root = ec._REPO_ROOT / "factor_engine" / "cleaned_operators"
     rel_file = pkg_root.joinpath(*rel_parts).with_suffix(".py")
     if rel_file.is_file():
         return rel_file
@@ -328,16 +333,36 @@ def test_dirty_tree_digest_shape_and_discrimination():
 
 
 def test_root_repo_sha_dirty_marker_replaced():
-    """HEAD (working-tree-dirty) is gone; dirty returns a digest dict."""
+    """HEAD (working-tree-dirty) is gone; root_repo_sha returns RepoIdentity always.
+
+    R46 P0-04/P0-D: the old ``dict | str`` dual type is replaced by a single
+    immutable :class:`RepoIdentity` returned ALWAYS.  ``to_dict()`` carries the
+    DirtyTreeDigest schema; ``str()`` yields the bare HEAD SHA for back-compat.
+    """
+    from evidence.repo_identity import RepoIdentity
     r = ec.root_repo_sha()
     d = ec._dirty_tree_digest()
-    if d["dirty"]:
-        assert isinstance(r, dict)
-        assert "(working-tree-dirty)" not in str(r)
-        assert r["HEAD"] == d["HEAD"]
-    else:
-        assert isinstance(r, str)
-        assert "(working-tree-dirty)" not in r
+    assert isinstance(r, RepoIdentity)
+    assert r.head_sha == d["HEAD"]
+    assert r.dirty == d["dirty"]
+    assert r.working_tree_hash == d["diff_hash"]
+    assert r.staged_hash == d["cached_diff_hash"]
+    assert r.untracked_source_hash == d["untracked_source_hash"]
+    # canonical single hash is stable + the bare HEAD SHA via str()
+    assert isinstance(r.identity_hash, str) and r.identity_hash
+    assert str(r) == d["HEAD"]
+    # to_dict() carries the VER-P0-03 DirtyTreeDigest schema
+    rd = r.to_dict()
+    assert rd["HEAD"] == d["HEAD"]
+    assert isinstance(rd["dirty"], bool)
+    assert all(k in rd for k in (
+        "HEAD", "dirty", "diff_hash", "cached_diff_hash",
+        "untracked_source_hash", "identity_hash",
+    ))
+    assert "(working-tree-dirty)" not in str(r)
+    # never a bare dict or bare str anymore (single type)
+    assert not isinstance(r, dict)
+    assert not isinstance(r, str)
 
 
 # ---------------------------------------------------------------------------

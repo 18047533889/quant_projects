@@ -15,14 +15,14 @@ from __future__ import annotations
 
 import pytest
 
-from planner.dag import (
+from factor_engine.planner.dag import (
     DuplicateFactorNameError,
     FactorExecutionScope,
     assert_unique_factor_names,
 )
-from planner.logical_plan import PlanNode
-from planner.rolling_cache import _window_from_literals
-from planner.rolling_cse import apply_rolling_cse, rolling_semantic_key
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.rolling_cache import _window_from_literals
+from factor_engine.planner.rolling_cse import apply_rolling_cse, rolling_semantic_key
 
 
 # ---------------------------------------------------------------------------
@@ -187,11 +187,11 @@ def test_duplicate_factor_name_raises():
     import numpy as np
     import pandas as pd
 
-    from api import ts_mean
-    from api.columns import col
-    from api.factor import Factor
-    from backend.pandas_backend import PandasBackend
-    from runtime.engine import FactorEngine
+    from factor_engine.api import ts_mean
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
     from tests.helpers import InMemorySeriesSource
 
     idx = pd.MultiIndex.from_product(
@@ -212,11 +212,11 @@ def test_unique_factor_names_ok():
     import numpy as np
     import pandas as pd
 
-    from api import ts_mean
-    from api.columns import col
-    from api.factor import Factor
-    from backend.pandas_backend import PandasBackend
-    from runtime.engine import FactorEngine
+    from factor_engine.api import ts_mean
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
     from tests.helpers import InMemorySeriesSource
 
     idx = pd.MultiIndex.from_product(
@@ -238,7 +238,7 @@ def test_unique_factor_names_ok():
 # run_mode 严格化
 # ---------------------------------------------------------------------------
 def test_run_mode_strict_rejects_typo_at_engine_construction():
-    from runtime.engine import FactorEngine, _validate_run_mode
+    from factor_engine.runtime.engine import FactorEngine, _validate_run_mode
 
     # 合法值
     _validate_run_mode("production")

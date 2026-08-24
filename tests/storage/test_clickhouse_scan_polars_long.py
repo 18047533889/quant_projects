@@ -22,7 +22,7 @@ def _path():
 def test_clickhouse_scan_polars_long_renames_columns():
     pytest.importorskip("polars")
 
-    from storage.sources.clickhouse_source import ClickHouseSource
+    from factor_engine.storage.sources.clickhouse_source import ClickHouseSource
 
     src = ClickHouseSource(
         table="panel_daily",

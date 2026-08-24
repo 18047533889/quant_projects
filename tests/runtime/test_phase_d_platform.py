@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from runtime.dependency_catalog import DependencyCatalog
-from runtime.incremental_scheduler import DataEvent
-from runtime.task_queue import FileTaskQueue
-from storage.catalog import FactorCatalog
+from factor_engine.runtime.dependency_catalog import DependencyCatalog
+from factor_engine.runtime.incremental_scheduler import DataEvent
+from factor_engine.runtime.task_queue import FileTaskQueue
+from factor_engine.storage.catalog import FactorCatalog
 
 
 def test_dependency_catalog_reverse_index(tmp_path):

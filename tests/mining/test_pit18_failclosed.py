@@ -19,13 +19,13 @@ import os
 
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.operator_spec import (
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.operator_spec import (
     PRODUCTION_DENIED_CANONICALS,
     is_production_denied,
 )
-from cleaned_operators.registry import OperatorRegistry
-from mining.direct_use import _is_production_denied, build_direct_use_operator
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.mining.direct_use import _is_production_denied, build_direct_use_operator
 
 # The 14 PIT18 canonicals, deduped from docs/R23_PER_CANONICAL_AUDIT.json by
 # blocker=PIT18_REVISION_EVENT_UNPROVEN.  Note the audit list is UNAMBIGUOUS —
@@ -149,8 +149,8 @@ class TestPit18FailClosed:
 
     def test_pit18_not_in_eligible_admission(self) -> None:
         """No PIT18 canonical appears in the eligible (production) mining set."""
-        from market.context import Market
-        from mining.direct_use import DirectUseContext, get_direct_use_mining_operators
+        from factor_engine.market.context import Market
+        from factor_engine.mining.direct_use import DirectUseContext, get_direct_use_mining_operators
 
         operators = get_direct_use_mining_operators(
             context=DirectUseContext(market=Market.ASHARE),

@@ -22,18 +22,18 @@ import time
 
 import pytest
 
-from runtime.multibackend.cost_model_calibrator import (
+from factor_engine.runtime.multibackend.cost_model_calibrator import (
     CALIBRATION_SCHEMA_VERSION,
     CalibrationKey,
     CostModelCalibrator,
     _build_calibration_key,
     default_calibration_path,
 )
-from runtime.resource_calibration_store import (
+from factor_engine.runtime.resource_calibration_store import (
     ResourceCalibrationStore,
     ShapeCalibration,
 )
-from runtime.resource_shape import ResourceShapeKey
+from factor_engine.runtime.resource_shape import ResourceShapeKey
 
 
 # ---------------------------------------------------------------------------
@@ -274,7 +274,7 @@ def test_old_schema_file_rejected() -> None:
 
 def test_process_lock_busy_fails_closed() -> None:
     """进程锁被占用时 fail-closed：抛 RuntimeError（不静默覆盖）。"""
-    from runtime.resource_calibration_store import _CalibrationAtomicWrite
+    from factor_engine.runtime.resource_calibration_store import _CalibrationAtomicWrite
 
     tmp = tempfile.mkdtemp()
     target = os.path.join(tmp, "out.json")
@@ -292,7 +292,7 @@ def test_process_lock_busy_fails_closed() -> None:
 
 def test_atomic_write_success() -> None:
     """原子写成功：目标文件完整，无残留。"""
-    from runtime.resource_calibration_store import _CalibrationAtomicWrite
+    from factor_engine.runtime.resource_calibration_store import _CalibrationAtomicWrite
 
     tmp = tempfile.mkdtemp()
     target = os.path.join(tmp, "out.json")

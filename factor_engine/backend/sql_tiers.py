@@ -9,7 +9,7 @@ import threading
 from collections import OrderedDict
 from typing import Any
 
-from backend.production_fastpath_tiers import (
+from factor_engine.backend.production_fastpath_tiers import (
     P0_PRODUCTION_FASTPATH_CANONICALS,
     P1_DUCKDB_PARITY_PENDING,
     P1_DUCKDB_PRODUCTION_SAFE,
@@ -639,7 +639,7 @@ DUCKDB_SQL_PRODUCTION_SAFE: frozenset[str] = frozenset()
 CLICKHOUSE_SQL_PARITY_VERIFIED: frozenset[str] = frozenset()
 CLICKHOUSE_SQL_PRODUCTION_SAFE: frozenset[str] = frozenset()
 
-from backend.primitive_evidence import (
+from factor_engine.backend.primitive_evidence import (
     DUCKDB_REAL_SQL_VERIFIED,
     POLARS_REFERENCE_PARITY_VERIFIED,
     PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE,
@@ -649,7 +649,7 @@ SQL_PARITY_VERIFIED_CANONICALS: frozenset[str] = frozenset(
     {"column", "literal"}
 ) | DUCKDB_REAL_SQL_VERIFIED
 
-from cleaned_operators.operator_surface import DAILY_CANONICALS as _DAILY_CANONICALS
+from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS as _DAILY_CANONICALS
 
 _STATIC_SQL_CANDIDATES: frozenset[str] = (
     frozenset({"column", "literal", "protected_div"}) | frozenset(_DAILY_CANONICALS)
@@ -698,7 +698,7 @@ def is_sql_implemented(canon: str) -> bool:
     返回:
         是否在 ``SQL_IMPLEMENTED_CANONICALS`` 内。
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     return name in SQL_IMPLEMENTED_CANONICALS
@@ -713,7 +713,7 @@ def is_sql_parity_verified(canon: str) -> bool:
     返回:
         是否在 ``SQL_PARITY_VERIFIED_CANONICALS`` 内。
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     return name in SQL_PARITY_VERIFIED_CANONICALS
@@ -728,7 +728,7 @@ def is_sql_production_safe(canon: str) -> bool:
     返回:
         是否在 ``SQL_PRODUCTION_SAFE_CANONICALS`` 内（不含运行时降级）。
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     return name in SQL_PRODUCTION_SAFE_CANONICALS
@@ -818,7 +818,7 @@ def duckdb_downgraded_canonicals(*, refresh: bool = False) -> frozenset[str]:
     ``refresh=True`` 强制重新探测；否则按 capability fingerprint 命中缓存。
     """
     try:
-        from backend.sql_pushdown.duckdb_capabilities import (
+        from factor_engine.backend.sql_pushdown.duckdb_capabilities import (
             downgrade_sql_canonicals,
             get_duckdb_capability_report,
         )
@@ -860,7 +860,7 @@ def _parameter_domain_backend_certified(
     ``assert_parameter_point_certified`` 强制）。
     """
     try:
-        from runtime.parameter_domain_store import get_parameter_domain_store
+        from factor_engine.runtime.parameter_domain_store import get_parameter_domain_store
 
         store = get_parameter_domain_store()
     except Exception:
@@ -881,7 +881,7 @@ def is_sql_production_safe(canon: str) -> bool:
     白名单是"emitter 能编译"，参数域认证才是"该 backend 行为已被独立 oracle
     验证"。
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     if name not in SQL_PRODUCTION_SAFE_CANONICALS:
@@ -891,7 +891,7 @@ def is_sql_production_safe(canon: str) -> bool:
 
 def effective_sql_production_safe(canon: str, *, refresh_duckdb: bool = False) -> bool:
     """静态 SQL_PRODUCTION_SAFE ∩ 参数域认证 减去 DuckDB 运行时能力降级。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     if not is_sql_production_safe(name):

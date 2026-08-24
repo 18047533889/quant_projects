@@ -18,25 +18,25 @@ import pytest
 
 pytest.importorskip("polars")
 
-from backend.operator_capability import _polars_status, backend_status
-from backend.polars_backend_kind import (
+from factor_engine.backend.operator_capability import _polars_status, backend_status
+from factor_engine.backend.polars_backend_kind import (
     PolarsImplementationKind,
     canonical_polars_is_delegate,
     canonical_polars_kind,
 )
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module")
 def loaded():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
     load_all()
     yield
 
 
 def test_polars_status_rejects_delegates_from_production_safe(loaded):
     """Delegates must never reach production_safe, even with evidence."""
-    from backend.primitive_evidence import (
+    from factor_engine.backend.primitive_evidence import (
         POLARS_REFERENCE_PARITY_VERIFIED,
         POLARS_EDGE_VERIFIED,
         POLARS_NO_FALLBACK_VERIFIED,
@@ -62,7 +62,7 @@ def test_polars_status_rejects_delegates_from_production_safe(loaded):
 
 def test_polars_status_allows_native_production_safe(loaded):
     """Native implementations can be production_safe with evidence."""
-    from backend.primitive_evidence import (
+    from factor_engine.backend.primitive_evidence import (
         POLARS_REFERENCE_PARITY_VERIFIED,
         POLARS_EDGE_VERIFIED,
         POLARS_NO_FALLBACK_VERIFIED,

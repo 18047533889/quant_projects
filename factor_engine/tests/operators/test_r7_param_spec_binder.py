@@ -11,7 +11,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from cleaned_operators.base import (
+from factor_engine.cleaned_operators.base import (
     MISSING,
     OperatorMetadata,
     ParamSpec,

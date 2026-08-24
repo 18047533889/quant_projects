@@ -23,57 +23,18 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass
-from enum import Enum
 from typing import Any
 
-from runtime.exceptions import FactorEngineError
+from factor_engine.planner.backend_region import Representation, TransferTransform
+
+from factor_engine.runtime.exceptions import (
+    SemanticMismatchError,
+    TransferInputTypeError,
+    TypedTransferError,
+    UnknownTransferTargetError,
+)
 
 _logger = logging.getLogger(__name__)
-
-
-class TransferTransform(str, Enum):
-    """Transfer operation type at region boundary.
-
-    R21-TRANSFER-BOUNDARIES: Formal transfer boundaries for cross-backend data
-    movement. Each transform has a specific cost model and semantic contract.
-    """
-
-    SAME_BACKEND_NATIVE = "same_backend_native"  # No conversion
-    DUCKDB_TO_ARROW = "duckdb_to_arrow"  # Section 21: Preferred boundary
-    Q_TO_ARROW = "q_to_arrow"  # R21: Q → Arrow for cross-backend consumption
-    CLICKHOUSE_TO_ARROW = "clickhouse_to_arrow"  # R21: ClickHouse → Arrow boundary
-    ARROW_TO_POLARS = "arrow_to_polars"  # Arrow → Polars DataFrame/LazyFrame
-    ARROW_TO_PANDAS = "arrow_to_pandas"  # Arrow → Pandas DataFrame
-    POLARS_TO_PANDAS = "polars_to_pandas"  # Polars → Pandas
-    PANDAS_TO_POLARS = "pandas_to_polars"  # Pandas → Polars
-    POLARS_TO_NUMPY = "polars_to_numpy"  # R21: Polars Series → NumPy ndarray
-    NUMPY_TO_POLARS = "numpy_to_polars"  # R21: NumPy ndarray → Polars Series
-    WIDE_TO_LONG = "wide_to_long"  # Reshape operation
-    LONG_TO_WIDE = "long_to_wide"  # Reshape operation
-    SORT = "sort"  # Explicit sort to satisfy downstream property
-    REPARTITION = "repartition"  # Repartition by different key
-    DTYPE_CAST = "dtype_cast"  # Type conversion
-
-
-class TypedTransferError(FactorEngineError):
-    """类型化传输失败（R21-TRANSFER-EXECUTOR）。
-
-    由 BatchTransferOptimizer / TransferExecutor 抛出，代表一次 backend 边界
-    数据转换的确定性失败。不得被上层静默吞掉 —— 调用方必须能把它与普通 IO
-    错误区分并据此决定失败关闭（fail closed）。
-    """
-
-
-class UnknownTransferTargetError(TypedTransferError):
-    """未知传输目标 backend / transform —— 必须 fail closed，不得静默成功。"""
-
-
-class TransferInputTypeError(TypedTransferError):
-    """传输输入的类型/格式与 transform 契约不匹配（无法执行真实转换）。"""
-
-
-class SemanticMismatchError(TypedTransferError):
-    """传输后语义快照与源不一致（date/instrument/order/dtype/null/timezone/grain 等）。"""
 
 
 # ---------------------------------------------------------------------------

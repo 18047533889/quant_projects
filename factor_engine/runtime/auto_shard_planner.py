@@ -65,7 +65,7 @@ def _policy_for(task: Any) -> tuple[str | None, ...]:
     if node_ref is not None:
         root = getattr(node_ref, "root", None) or node_ref
         try:
-            from planner.physical_lowerer import plan_shard_semantics
+            from factor_engine.planner.physical_lowerer import plan_shard_semantics
 
             shardable, dim = plan_shard_semantics(root)
         except Exception:
@@ -82,7 +82,7 @@ def _policy_for(task: Any) -> tuple[str | None, ...]:
 def _single_op_policy(op: str) -> tuple[str | None, ...]:
     """单个 op 的合法 shard 维度（委托 planner 的结构化分类）。"""
     try:
-        from planner.physical_lowerer import single_op_shard_policy
+        from factor_engine.planner.physical_lowerer import single_op_shard_policy
 
         policy = single_op_shard_policy(op)
         if policy:
@@ -389,7 +389,7 @@ class AutoShardPlanner:
         """
         import pandas as pd
 
-        from runtime.shard_execution_plan import (
+        from factor_engine.runtime.shard_execution_plan import (
             SHARD_ASSET,
             SHARD_SESSION,
             SHARD_TIME,
@@ -506,7 +506,7 @@ class AutoShardPlanner:
             ``new_shape_signature != failed_shape_signature``
         否则返回 None（禁止同 shape 重试）。
         """
-        from runtime.shard_execution_plan import shape_signature
+        from factor_engine.runtime.shard_execution_plan import shape_signature
 
         old = self._min_shards
         if min_shards_override is not None:

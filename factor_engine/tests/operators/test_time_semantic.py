@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.time_semantic import (
+from factor_engine.cleaned_operators.time_semantic import (
     pd_report_asof,
     pd_event_window_return_asof,
     pd_financial_snapshot_lag,

@@ -5,8 +5,8 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from planner.logical_plan import PlanNode
-from planner.plan_hash import structural_key
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.plan_hash import structural_key
 
 
 def deep_copy_plan(node: PlanNode) -> PlanNode:
@@ -165,7 +165,7 @@ def _node_scope_category(op: str) -> PlanScopeCategory:
     if op in _CROSS_SECTIONAL_OPS:
         return PlanScopeCategory.CROSS_SECTIONAL
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         canonical = OperatorRegistry.resolve_canonical(op)
         if (
@@ -247,7 +247,7 @@ def cse_scope_key(
     实际 resolved membership 也必须进入 CSE scope（非空 instrument_filter 与
     相同 universe 标签不再能跨 membership 共享）。
     """
-    from storage.data_scope import execution_scope_key as _exec_scope_key
+    from factor_engine.storage.data_scope import execution_scope_key as _exec_scope_key
 
     return _exec_scope_key(
         scope,
@@ -265,7 +265,7 @@ def assert_cse_contracts_resolved(plan: PlanNode, *, production: bool = False) -
     """
     if not production:
         return
-    from planner.plan_hash import assert_plan_contracts_resolved
+    from factor_engine.planner.plan_hash import assert_plan_contracts_resolved
 
     assert_plan_contracts_resolved(plan, production=True)
 

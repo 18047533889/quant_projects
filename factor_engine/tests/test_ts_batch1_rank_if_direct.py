@@ -28,7 +28,7 @@ def _register_operator(**_kwargs):
     return lambda cls: cls
 
 
-base = types.ModuleType("cleaned_operators.base")
+base = types.ModuleType("factor_engine.cleaned_operators.base")
 base.SeriesOperator = _SeriesOperator
 base.register_operator = _register_operator
 base.OperatorMetadata = _Metadata
@@ -39,7 +39,7 @@ base.ParamRole = types.SimpleNamespace(
 package = types.ModuleType("cleaned_operators")
 package.__path__ = [str(ROOT / "cleaned_operators")]
 sys.modules["cleaned_operators"] = package
-sys.modules["cleaned_operators.base"] = base
+sys.modules["factor_engine.cleaned_operators.base"] = base
 
 _SPEC = spec_from_file_location(
     "ts_batch1_rank_direct", ROOT / "cleaned_operators" / "polars_native" / "ts_batch1.py"

@@ -13,22 +13,22 @@ import types
 import numpy as np
 import pytest
 
-from planner.physical_factor_dag import (
+from factor_engine.planner.physical_factor_dag import (
     SourceScanSpec,
     SourceScopeId,
     source_scope_from_key,
 )
-from planner.batch_data_request import ScanCostUnavailable, build_batch_data_request
-from planner.read_wave_planner import ReadWavePlanner
-from planner.logical_plan import PlanNode
-from runtime.block_dq import (
+from factor_engine.planner.batch_data_request import ScanCostUnavailable, build_batch_data_request
+from factor_engine.planner.read_wave_planner import ReadWavePlanner
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.runtime.block_dq import (
     FactorBlock,
     compute_block_dq,
     cross_section_block,
     cross_section_block_parity,
 )
-from runtime.buffer_ref import SourceWaveExecutor
-from runtime.streaming_result_sink import BoundedResultQueue, StreamingResultSink
+from factor_engine.runtime.buffer_ref import SourceWaveExecutor
+from factor_engine.runtime.streaming_result_sink import BoundedResultQueue, StreamingResultSink
 
 
 def _plan(cols=("close",)):
@@ -77,7 +77,7 @@ class TestSourceScopeTyped:
 
 class TestSourceScanSpec:
     def test_required_columns_real(self):
-        from planner.physical_lowerer import lower_root_plan
+        from factor_engine.planner.physical_lowerer import lower_root_plan
 
         stages = lower_root_plan(_plan(), factor_name="f1", ctx=None, rows=1000)
         scan = next(s for s in stages if s.task_type == "SOURCE_SCAN")
@@ -86,7 +86,7 @@ class TestSourceScanSpec:
         assert scan.executable is True
 
     def test_virtual_stage_not_executable(self):
-        from planner.physical_lowerer import lower_root_plan
+        from factor_engine.planner.physical_lowerer import lower_root_plan
 
         stages = lower_root_plan(
             PlanNode(
@@ -105,7 +105,7 @@ class TestSourceScanSpec:
 
 class TestReadWavePhysical:
     def test_wave_columns_are_physical(self):
-        from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+        from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
 
         sched = AdaptiveBatchScheduler(max_concurrency=2)
         ctx = _ctx()
@@ -120,7 +120,7 @@ class TestReadWavePhysical:
         assert any("close" in w.columns for w in plan.read_waves.waves)
 
     def test_wave_time_range_real(self):
-        from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+        from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
 
         sched = AdaptiveBatchScheduler(max_concurrency=2)
         plan = sched.plan(
@@ -186,7 +186,7 @@ class TestBatchDataRequest:
 
 class TestBatchRoute:
     def test_batch_physical_route_fields(self):
-        from backend.plan_cost_router import plan_batch_route
+        from factor_engine.backend.plan_cost_router import plan_batch_route
 
         ctx = _ctx(data_kind="duckdb")
         route = plan_batch_route({"f1": _plan()}, ctx, factor_count=1)
@@ -196,7 +196,7 @@ class TestBatchRoute:
         assert route.generation_commit_ms > 0
 
     def test_native_subgraph_fraction(self):
-        from backend.plan_cost_router import plan_native_subgraph_fraction
+        from factor_engine.backend.plan_cost_router import plan_native_subgraph_fraction
 
         sub = plan_native_subgraph_fraction(_plan(), _ctx(data_kind="duckdb"))
         assert "native_fraction" in sub
@@ -205,8 +205,8 @@ class TestBatchRoute:
 
 class TestFusionPerGroup:
     def test_uncertified_backend_not_planned(self):
-        from planner.native_fusion import plan_native_fusion_groups
-        from planner.physical_lowerer import lower_root_plan
+        from factor_engine.planner.native_fusion import plan_native_fusion_groups
+        from factor_engine.planner.physical_lowerer import lower_root_plan
 
         stages = lower_root_plan(_plan(), factor_name="f1", ctx=None, rows=1000)
         root = next(s for s in stages if s.task_type == "ROOT")
@@ -258,14 +258,14 @@ class TestFactorBlock:
 
 class TestRepresentationCache:
     def test_global_eviction_exists(self):
-        from storage.sources.data_access_source import DataAccessSource
+        from factor_engine.storage.sources.data_access_source import DataAccessSource
 
         assert hasattr(DataAccessSource, "_evict_global_lru")
 
 
 class TestAutoMode:
     def test_direct_vector_for_small_batch(self):
-        from runtime.batch_service import choose_execution_mode
+        from factor_engine.runtime.batch_service import choose_execution_mode
 
         mode = choose_execution_mode(
             [1, 2],  # noqa: F401

@@ -225,7 +225,7 @@ class ComputeRequest(_RequestModel):
     def _name_cap(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
-        from security.factor_id import FactorIdError, validate_factor_id
+        from factor_engine.security.factor_id import FactorIdError, validate_factor_id
 
         try:
             return validate_factor_id(v)
@@ -293,7 +293,7 @@ class MaterializeRequest(_RequestModel):
     def _factor_id_cap(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
-        from security.factor_id import FactorIdError, validate_factor_id
+        from factor_engine.security.factor_id import FactorIdError, validate_factor_id
 
         try:
             return validate_factor_id(v)

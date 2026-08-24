@@ -7,12 +7,12 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="legacy ratio primitives were removed in favour of explicit recipes")
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.fundamental.field_contract import (
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.fundamental.field_contract import (
     FUNDAMENTAL_RATIO_FIELD_CONTRACTS,
     check_fundamental_ratio_field_contracts,
 )
-from cleaned_operators.operator_spec import build_operator_spec
+from factor_engine.cleaned_operators.operator_spec import build_operator_spec
 
 
 @pytest.fixture(scope="module")

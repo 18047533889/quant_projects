@@ -16,7 +16,7 @@ def r27_low_memory() -> None:
 
 @pytest.fixture(autouse=True)
 def r27_reset_calibration():
-    from runtime.runtime_calibration import reset_calibration
+    from factor_engine.runtime.runtime_calibration import reset_calibration
 
     reset_calibration()
     yield

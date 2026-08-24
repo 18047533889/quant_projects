@@ -14,6 +14,7 @@ behaviour.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from enum import Enum
 from types import MappingProxyType
@@ -45,11 +46,25 @@ _OUTPUT_TYPE_TO_ARTIFACT_KIND: Dict[str, str] = {
     "distribution": "distribution",
 }
 
-_VALID_DIRECTIONS = frozenset({"higher_is_better", "lower_is_better"})
+_VALID_DIRECTIONS = frozenset(
+    {"higher_is_better", "lower_is_better", "neutral"}
+)
 
 _VALID_ARTIFACT_KINDS = frozenset(
     {"scalar", "series", "vector", "matrix", "distribution"}
 )
+
+
+def _content_hash(identity: str) -> str:
+    """Return a stable 16-hex content hash of an implementation identity.
+
+    The identity is the implementing module+function (e.g.
+    ``"quant_evaluator.metrics.portfolio_stats.compute_maximum_drawdown"``),
+    so the hash is a real, stable fingerprint of the kernel — never just the
+    metric_id. Two metrics sharing a kernel still hash to the same value,
+    which is the correct semantic (same implementation).
+    """
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
 
 
 @dataclass(frozen=True)
@@ -63,6 +78,7 @@ class MetricSpec:
     output_type: str = "scalar"
     metric_version: str = "0.1.0"
     implementation_id: str = ""
+    implementation_hash: str = ""
     artifact_kind: str = "scalar"
     required_axes: Tuple[str, ...] = ()
     units: str = ""
@@ -108,6 +124,19 @@ class MetricSpec:
             raise ValueError("MetricSpec.implementation_id must be a string")
         if not self.implementation_id.strip():
             object.__setattr__(self, "implementation_id", self.metric_id)
+
+        # implementation_hash: stable content hash of the implementing
+        # module+function. When left empty it is derived from the
+        # implementation_id (never from metric_id alone), so two metrics that
+        # share a kernel still carry distinct, real implementation identity.
+        if not isinstance(self.implementation_hash, str):
+            raise ValueError("MetricSpec.implementation_hash must be a string")
+        if not self.implementation_hash.strip():
+            object.__setattr__(
+                self,
+                "implementation_hash",
+                _content_hash(self.implementation_id),
+            )
 
         if not isinstance(self.missing_policy, str) or not self.missing_policy.strip():
             raise ValueError("MetricSpec.missing_policy must be a non-empty string")
@@ -223,6 +252,15 @@ def _register(
     description: str,
     required_inputs: Set[str],
     output_type: str = "scalar",
+    *,
+    implementation_id: str = "",
+    metric_version: str = "0.1.0",
+    artifact_kind: str = "scalar",
+    required_axes: Tuple[str, ...] = (),
+    units: str = "",
+    direction: str = "higher_is_better",
+    missing_policy: str = "nan",
+    numeric_policy: str = "finite",
 ) -> None:
     """Register a metric spec into the global catalog via the registry."""
     spec = MetricSpec(
@@ -231,6 +269,14 @@ def _register(
         description=description,
         required_inputs=required_inputs,
         output_type=output_type,
+        implementation_id=implementation_id,
+        metric_version=metric_version,
+        artifact_kind=artifact_kind,
+        required_axes=required_axes,
+        units=units,
+        direction=direction,
+        missing_policy=missing_policy,
+        numeric_policy=numeric_policy,
     )
     _REGISTRY.register(spec)
 
@@ -253,24 +299,50 @@ _register(
     "pearson_ic",
     "Pearson correlation between factor values and forward returns",
     {"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.ic.compute_daily_ic",
+    metric_version="1.0.0",
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="drop_pair",
+    numeric_policy="finite",
 )
 _register(
     Domain.IC,
     "spearman_ic",
     "Spearman rank correlation between factor values and forward returns",
     {"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.ic.compute_daily_ic",
+    metric_version="1.0.0",
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="drop_pair",
+    numeric_policy="finite",
 )
 _register(
     Domain.IC,
     "rank_ic",
     "Rank IC (alias for spearman_ic) averaged cross-sectionally",
     {"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.ic.compute_daily_ic",
+    metric_version="1.0.0",
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="drop_pair",
+    numeric_policy="finite",
 )
 _register(
     Domain.IC,
     "ic_summary",
     "Summary statistics (mean, std, skew, kurtosis) of IC time series",
     {"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.ic_summary.compute_rolling_ic_stats",
+    metric_version="1.0.0",
+    artifact_kind="distribution",
+    required_axes=("time",),
+    units="correlation",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 
 # ---- Domain RANK_IC ----
@@ -280,6 +352,13 @@ _register(
     "Rank IC computed per time slice, returned as a time series",
     {"factor", "forward_returns"},
     output_type="timeseries",
+    implementation_id="quant_evaluator.metrics.ic.compute_daily_ic",
+    metric_version="1.0.0",
+    required_axes=("time",),
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="drop_pair",
+    numeric_policy="finite",
 )
 _register(
     Domain.RANK_IC,
@@ -287,6 +366,13 @@ _register(
     "Rank IC computed cross-sectionally for each date",
     {"factor", "forward_returns"},
     output_type="series",
+    implementation_id="quant_evaluator.metrics.ic.compute_daily_ic",
+    metric_version="1.0.0",
+    required_axes=("time",),
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="drop_pair",
+    numeric_policy="finite",
 )
 
 # ---- Domain QUANTILE ----
@@ -296,12 +382,25 @@ _register(
     "Average forward return per quantile bucket",
     {"factor", "forward_returns"},
     output_type="series",
+    implementation_id="quant_evaluator.metrics.quantile.compute_quantile_returns",
+    metric_version="1.0.0",
+    required_axes=("quantile",),
+    units="return",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 _register(
     Domain.QUANTILE,
     "quantile_spread",
     "Spread between top and bottom quantile returns",
     {"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.quantile.compute_top_bottom_spread",
+    metric_version="1.0.0",
+    units="return",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 _register(
     Domain.QUANTILE,
@@ -309,6 +408,13 @@ _register(
     "Stability of quantile return rankings across time",
     {"factor", "forward_returns"},
     output_type="timeseries",
+    implementation_id="quant_evaluator.metrics.ic_summary.compute_ic_stability",
+    metric_version="1.0.0",
+    required_axes=("time",),
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 
 # ---- Domain DRAWDOWN ----
@@ -317,18 +423,36 @@ _register(
     "max_drawdown",
     "Maximum drawdown of the cumulative IC series",
     {"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.portfolio_stats.compute_maximum_drawdown",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 _register(
     Domain.DRAWDOWN,
     "drawdown_duration",
     "Duration (in periods) of the longest drawdown",
     {"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.risk.drawdown_analysis.compute_drawdown_duration",
+    metric_version="1.0.0",
+    units="periods",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 _register(
     Domain.DRAWDOWN,
     "calmar_ratio",
     "Calmar ratio: annualized return / max drawdown",
     {"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.portfolio_stats.compute_calmar_ratio",
+    metric_version="1.0.0",
+    units="ratio",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 
 # ---- Domain TURNOVER ----
@@ -337,18 +461,36 @@ _register(
     "turnover_rate",
     "Average rate of change in factor ranking between periods",
     {"factor"},
+    implementation_id="quant_evaluator.metrics.turnover.compute_turnover",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 _register(
     Domain.TURNOVER,
     "turnover_cost",
     "Estimated transaction cost from factor rebalancing",
     {"factor", "transaction_costs"},
+    implementation_id="quant_evaluator.metrics.turnover.compute_weighted_turnover",
+    metric_version="1.0.0",
+    units="bps",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 _register(
     Domain.TURNOVER,
     "turnover_adjusted_ic",
     "IC adjusted for turnover-induced transaction costs",
     {"factor", "forward_returns", "transaction_costs"},
+    implementation_id="quant_evaluator.metrics.turnover.compute_turnover_contribution",
+    metric_version="1.0.0",
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 
 # ---- Domain TAIL_RISK ----
@@ -357,36 +499,72 @@ _register(
     "var_95",
     "Value at Risk at 95% confidence level",
     {"forward_returns"},
+    implementation_id="quant_evaluator.metrics.risk.var_cvar.compute_var",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 _register(
     Domain.TAIL_RISK,
     "var_99",
     "Value at Risk at 99% confidence level",
     {"forward_returns"},
+    implementation_id="quant_evaluator.metrics.risk.var_cvar.compute_var",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 _register(
     Domain.TAIL_RISK,
     "cvar_95",
     "Conditional Value at Risk (Expected Shortfall) at 95%",
     {"forward_returns"},
+    implementation_id="quant_evaluator.metrics.risk.var_cvar.compute_cvar",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 _register(
     Domain.TAIL_RISK,
     "cvar_99",
     "Conditional Value at Risk (Expected Shortfall) at 99%",
     {"forward_returns"},
+    implementation_id="quant_evaluator.metrics.risk.var_cvar.compute_cvar",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 _register(
     Domain.TAIL_RISK,
     "skewness",
     "Skewness of the return distribution",
     {"forward_returns"},
+    implementation_id="quant_evaluator.metrics.distribution.compute_skewness",
+    metric_version="1.0.0",
+    units="dimensionless",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 _register(
     Domain.TAIL_RISK,
     "kurtosis",
     "Excess kurtosis of the return distribution",
     {"forward_returns"},
+    implementation_id="quant_evaluator.metrics.distribution.compute_kurtosis",
+    metric_version="1.0.0",
+    units="dimensionless",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 
 # ---- Domain COVERAGE ----
@@ -395,18 +573,36 @@ _register(
     "factor_coverage",
     "Fraction of universe with non-null factor values",
     {"factor"},
+    implementation_id="quant_evaluator.metrics.quality.compute_coverage",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 _register(
     Domain.COVERAGE,
     "return_coverage",
     "Fraction of universe with non-null forward returns",
     {"forward_returns"},
+    implementation_id="quant_evaluator.metrics.quality.compute_coverage",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 _register(
     Domain.COVERAGE,
     "joint_coverage",
     "Fraction of universe with both factor and return available",
     {"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.quality.compute_coverage_per_factor",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 
 # ---- Domain HHI ----
@@ -415,12 +611,24 @@ _register(
     "hhi_concentration",
     "Herfindahl-Hirschman Index of factor value concentration",
     {"factor"},
+    implementation_id="quant_evaluator.metrics.exposure.compute_concentration_hhi",
+    metric_version="1.0.0",
+    units="dimensionless",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 _register(
     Domain.HHI,
     "hhi_effective_n",
     "Effective number of groups (1/HHI) for factor concentration",
     {"factor"},
+    implementation_id="quant_evaluator.metrics.exposure.compute_concentration_hhi",
+    metric_version="1.0.0",
+    units="count",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 
 # ---- Domain STABILITY ----
@@ -429,18 +637,36 @@ _register(
     "ic_stability",
     "Rolling correlation of IC values across sub-periods",
     {"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.ic_summary.compute_ic_stability",
+    metric_version="1.0.0",
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 _register(
     Domain.STABILITY,
     "turnover_stability",
     "Variance of turnover rate across periods",
     {"factor"},
+    implementation_id="quant_evaluator.metrics.turnover.compute_turnover",
+    metric_version="1.0.0",
+    units="variance",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 _register(
     Domain.STABILITY,
     "coverage_stability",
     "Variance of factor coverage across periods",
     {"factor"},
+    implementation_id="quant_evaluator.metrics.quality.compute_per_time_coverage",
+    metric_version="1.0.0",
+    units="variance",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 
 # ---- Domain TEMPORAL ----
@@ -450,6 +676,13 @@ _register(
     "Rolling window IC values over time",
     {"factor", "forward_returns"},
     output_type="timeseries",
+    implementation_id="quant_evaluator.metrics.ic_summary.compute_rolling_ic_stats",
+    metric_version="1.0.0",
+    required_axes=("time",),
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 _register(
     Domain.TEMPORAL,
@@ -457,6 +690,13 @@ _register(
     "IC decay: correlation at increasing forward horizons",
     {"factor", "forward_returns"},
     output_type="timeseries",
+    implementation_id="quant_evaluator.metrics.ic_summary.compute_ic_decay",
+    metric_version="1.0.0",
+    required_axes=("horizon",),
+    units="correlation",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 _register(
     Domain.TEMPORAL,
@@ -464,6 +704,13 @@ _register(
     "Autocorrelation of IC values at specified lags",
     {"factor", "forward_returns"},
     output_type="timeseries",
+    implementation_id="quant_evaluator.metrics.temporal.compute_ic_autocorrelation",
+    metric_version="1.0.0",
+    required_axes=("lag",),
+    units="correlation",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
 )
 
 # Seal the default catalog: from this point on the module-level CATALOG is

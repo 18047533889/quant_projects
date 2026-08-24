@@ -26,7 +26,7 @@ from .field_plan import (
     plan_from_field_spec,
 )
 
-logger = get_logger("storage.data_access_source")
+logger = get_logger("factor_engine.storage.data_access_source")
 
 
 class _SourceThreadState(threading.local):
@@ -560,7 +560,7 @@ def _default_data_cache_budget() -> int:
         except ValueError as exc:
             raise ValueError(f"FACTOR_ENGINE_DATA_CACHE_MAX_BYTES must be an integer") from exc
     try:
-        from runtime.resource_governor import ExecutionResourcePlan
+        from factor_engine.runtime.resource_governor import ExecutionResourcePlan
 
         plan = ExecutionResourcePlan.auto()
         return max(128 * 1024 * 1024, int(plan.process_budget_bytes * 0.15))
@@ -706,7 +706,7 @@ class DataAccessSource(DataSource):
         # that build child ``DataAccessSource`` instances can propagate it.
         self.run_mode = str(run_mode).lower() if run_mode else None
         if production is None and self.run_mode is not None:
-            from runtime.production_policy import is_production_mode
+            from factor_engine.runtime.production_policy import is_production_mode
 
             production = bool(is_production_mode(self.run_mode))
         self.production = bool(production)
@@ -957,7 +957,7 @@ class DataAccessSource(DataSource):
     def _assert_healthy(self) -> None:
         """R20-111：production 下 corrupted-state 必须 abort，不能继续用坏 source。"""
         if self._corrupted_state is not None:
-            from runtime.production_policy import is_production_mode
+            from factor_engine.runtime.production_policy import is_production_mode
 
             if is_production_mode(self.run_mode):
                 raise RuntimeError(
@@ -1031,7 +1031,7 @@ class DataAccessSource(DataSource):
           physical column.
         """
         requested = [str(name) for name in names]
-        from cleaned_operators.production_tiers import LQTP_SOURCE_DEPENDENT_NAMES
+        from factor_engine.cleaned_operators.production_tiers import LQTP_SOURCE_DEPENDENT_NAMES
 
         derived = sorted(
             name for name in requested
@@ -1045,8 +1045,8 @@ class DataAccessSource(DataSource):
             )
 
         try:
-            from backend.cleaned_bridge import ensure_cleaned_loaded
-            from cleaned_operators.registry import OperatorRegistry
+            from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+            from factor_engine.cleaned_operators.registry import OperatorRegistry
 
             ensure_cleaned_loaded()
             operator_names = set(OperatorRegistry.list_canonical()) | set(OperatorRegistry._aliases)
@@ -1308,7 +1308,7 @@ class DataAccessSource(DataSource):
         allowed).
         """
         try:
-            from fields.registry import (
+            from factor_engine.fields.registry import (
                 AmbiguousField,
                 ResolvedField,
                 UnknownField as UnknownFieldResult,
@@ -1326,7 +1326,7 @@ class DataAccessSource(DataSource):
             # registry.  A US dataset's fields must not be hit by A-share aliases.
             dataset_market = _market_from_dataset(self.dataset)
             if dataset_market:
-                from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+                from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
                 # Market registry returns a FieldSpec directly (or None).
                 resolved = MULTI_MARKET_FIELD_REGISTRY.resolve_field(
@@ -1339,7 +1339,7 @@ class DataAccessSource(DataSource):
                         )
                     return None
                 return resolved
-            from fields import FIELD_REGISTRY
+            from factor_engine.fields import FIELD_REGISTRY
 
             resolved = FIELD_REGISTRY.resolve_field(name, table=self.dataset)
         except Exception as exc:
@@ -1721,13 +1721,13 @@ class DataAccessSource(DataSource):
             return None
         try:
             if getattr(plan, "market", None):
-                from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+                from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
                 table_spec = MULTI_MARKET_FIELD_REGISTRY.registry_for(
                     plan.market
                 ).resolve_table(str(plan.physical_dataset))
             else:
-                from fields import FIELD_REGISTRY
+                from factor_engine.fields import FIELD_REGISTRY
 
                 table_spec = FIELD_REGISTRY.resolve_table(str(plan.physical_dataset))
             if table_spec is None:
@@ -2086,7 +2086,7 @@ class DataAccessSource(DataSource):
     @staticmethod
     def _series_bytes(value: Any) -> int:
         """估算缓存对象的字节占用（Phase 5 R7：deep 感知，不再只看 nbytes）。"""
-        from runtime.resource_governor import estimate_object_bytes
+        from factor_engine.runtime.resource_governor import estimate_object_bytes
 
         return estimate_object_bytes(value)
 
@@ -2160,7 +2160,7 @@ class DataAccessSource(DataSource):
 
         if self._lazy_scan:
             # 显式 polars-lazy 优化（collect 前表达式仍在 DuckDB 内下推）
-            from backend.polars_lazy import scan_dataset_columns
+            from factor_engine.backend.polars_lazy import scan_dataset_columns
 
             fetched = scan_dataset_columns(
                 store,
@@ -2305,13 +2305,13 @@ class DataAccessSource(DataSource):
                     # R17-001: resolve within the dataset's market registry.
                     _mkt = _market_from_dataset(self.dataset)
                     if _mkt:
-                        from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+                        from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
                         spec = MULTI_MARKET_FIELD_REGISTRY.resolve_field(
                             _mkt, name, table=self.dataset, strict=False
                         )
                     else:
-                        from fields import FIELD_REGISTRY
+                        from factor_engine.fields import FIELD_REGISTRY
 
                         spec = FIELD_REGISTRY.get(name, table=self.dataset)
                     if spec is not None and spec.dataset == self.dataset:
@@ -2340,7 +2340,7 @@ class DataAccessSource(DataSource):
         physical, output_names = self._resolve_columns(needed)
         store = _get_store()
         ds, normalize, unit = self._adapter_options(store)
-        from backend.polars_lazy import build_lazy_column_bundle
+        from factor_engine.backend.polars_lazy import build_lazy_column_bundle
 
         if self._lazy_bundle is None:
             merged_physical = physical
@@ -2431,7 +2431,7 @@ class DataAccessSource(DataSource):
         store = _get_store()
         ds = store.get_dataset(self.dataset)
         frequency = self._detect_source_frequency(ds)
-        from backend.polars_lazy import build_scan_polars_long, enforce_source_ordering
+        from factor_engine.backend.polars_lazy import build_scan_polars_long, enforce_source_ordering
 
         lf = build_scan_polars_long(
             store,
@@ -2510,7 +2510,7 @@ class DataAccessSource(DataSource):
         self.refresh_snapshot()
         store = _get_store()
         ds = store.get_dataset(self.dataset)
-        from backend.polars_lazy import build_scan_index_long
+        from factor_engine.backend.polars_lazy import build_scan_index_long
 
         return build_scan_index_long(
             store,

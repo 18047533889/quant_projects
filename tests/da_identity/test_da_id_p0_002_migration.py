@@ -11,7 +11,7 @@ import pytest
 
 def test_data_knowledge_identity_digest_is_256_bit():
     """DA-ID-P0-002: FactorId digest must use full 256-bit SHA-256."""
-    from semantic.data_knowledge_identity import DataKnowledgeIdentity
+    from factor_engine.semantic.data_knowledge_identity import DataKnowledgeIdentity
 
     identity = DataKnowledgeIdentity(
         dataset_id="test_dataset",
@@ -34,7 +34,7 @@ def test_data_knowledge_identity_digest_is_256_bit():
 
 def test_compute_payload_hash_is_256_bit():
     """DA-ID-P0-002: Evidence payload hash must use full 256-bit SHA-256."""
-    from backend.evidence_provenance import compute_payload_hash
+    from factor_engine.backend.evidence_provenance import compute_payload_hash
 
     payload = {"operator": "ts_mean", "window": 5, "backend": "polars"}
     hash_value = compute_payload_hash(payload)
@@ -48,7 +48,7 @@ def test_compute_payload_hash_is_256_bit():
 
 def test_compute_implementation_hash_is_256_bit():
     """DA-ID-P0-002: Implementation hash must use full 256-bit SHA-256."""
-    from backend.evidence_provenance import compute_implementation_hash
+    from factor_engine.backend.evidence_provenance import compute_implementation_hash
 
     source_code = """
 def calculate(x, window):
@@ -65,7 +65,7 @@ def calculate(x, window):
 
 def test_different_identities_produce_different_digests():
     """Verify that distinct DataKnowledgeIdentity instances produce distinct digests."""
-    from semantic.data_knowledge_identity import DataKnowledgeIdentity
+    from factor_engine.semantic.data_knowledge_identity import DataKnowledgeIdentity
 
     id1 = DataKnowledgeIdentity(dataset_id="ds1", market="A")
     id2 = DataKnowledgeIdentity(dataset_id="ds2", market="A")
@@ -97,7 +97,7 @@ def test_collision_probability_documentation():
 
 def test_legacy_16_char_digest_rejected():
     """Verify that 16-character (64-bit) digests are now rejected/migrated."""
-    from semantic.data_knowledge_identity import DataKnowledgeIdentity
+    from factor_engine.semantic.data_knowledge_identity import DataKnowledgeIdentity
 
     identity = DataKnowledgeIdentity(dataset_id="test", market="A")
     digest = identity.digest()
@@ -109,7 +109,7 @@ def test_legacy_16_char_digest_rejected():
 
 def test_evidence_hash_binding_uniqueness():
     """Verify that distinct evidence payloads produce distinct hashes."""
-    from backend.evidence_provenance import compute_payload_hash
+    from factor_engine.backend.evidence_provenance import compute_payload_hash
 
     payload1 = {"op": "ts_mean", "window": 5}
     payload2 = {"op": "ts_mean", "window": 10}
@@ -130,7 +130,7 @@ def test_evidence_hash_binding_uniqueness():
 
 def test_implementation_source_changes_detected():
     """Verify implementation hash changes when source code changes."""
-    from backend.evidence_provenance import compute_implementation_hash
+    from factor_engine.backend.evidence_provenance import compute_implementation_hash
 
     source_v1 = "def calc(x): return x.mean()"
     source_v2 = "def calc(x): return x.sum()"

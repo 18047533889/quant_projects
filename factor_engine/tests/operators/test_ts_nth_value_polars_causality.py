@@ -12,7 +12,7 @@ pl = pytest.importorskip("polars")
 
 
 def _load_target_class():
-    package_name = "cleaned_operators.polars_native"
+    package_name = "factor_engine.cleaned_operators.polars_native"
     package = types.ModuleType(package_name)
     package.__path__ = [str(Path(__file__).parents[2] / "cleaned_operators" / "polars_native")]
     sys.modules[package_name] = package

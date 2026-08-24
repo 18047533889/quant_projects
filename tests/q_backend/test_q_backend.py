@@ -7,13 +7,13 @@ from __future__ import annotations
 
 import pytest
 
-from backend.q_backend.q_capability import (
+from factor_engine.backend.q_backend.q_capability import (
     QBackendCapability,
     QCapabilityLevel,
     get_q_capability,
 )
-from backend.q_backend.q_compiler import QCompiler, get_q_compiler
-from backend.q_backend.q_process_manager import (
+from factor_engine.backend.q_backend.q_compiler import QCompiler, get_q_compiler
+from factor_engine.backend.q_backend.q_process_manager import (
     QAvailabilityStatus,
     check_q_availability,
     is_q_available,
@@ -275,14 +275,14 @@ class TestQBackendIntegration:
 
     def test_import_q_backend(self):
         """测试 Q backend 导入。"""
-        from backend.q_backend import QBackend, get_q_backend
+        from factor_engine.backend.q_backend import QBackend, get_q_backend
 
         backend = get_q_backend()
         assert isinstance(backend, QBackend)
 
     def test_q_backend_initialization(self):
         """测试 Q backend 初始化。"""
-        from backend.q_backend import QBackend
+        from factor_engine.backend.q_backend import QBackend
 
         backend = QBackend(fallback_to_pandas=True, production_mode=False)
         assert backend.runtime_backend_label == "q_kdb"
@@ -291,7 +291,7 @@ class TestQBackendIntegration:
 
     def test_q_backend_stats(self):
         """测试 Q backend 统计。"""
-        from backend.q_backend import QBackend
+        from factor_engine.backend.q_backend import QBackend
 
         backend = QBackend()
         stats = backend.get_stats()
@@ -318,13 +318,13 @@ class TestCapabilityRegistryIntegration:
 
     def test_q_backend_in_registry(self):
         """测试 Q backend 在 registry 中注册。"""
-        from backend.capability_registry import BackendKind
+        from factor_engine.backend.capability_registry import BackendKind
 
         assert BackendKind.Q_KDB in BackendKind
 
     def test_query_q_capability(self):
         """测试通过 registry 查询 Q capability。"""
-        from backend.capability_registry import BackendCapabilityRegistry, BackendKind
+        from factor_engine.backend.capability_registry import BackendCapabilityRegistry, BackendKind
 
         # Query Q backend capability for a native operator
         result = BackendCapabilityRegistry.query(

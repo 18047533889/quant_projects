@@ -1,0 +1,289 @@
+# factor_engine DSL — 可用字段与算子（A 股日频价量）
+# 唯一合法语法：factor_engine（FactorEngine）函数式 DSL。
+# 禁止 AlphaGen / qlib / pandas 表达式。
+# 与 cold_start_library V9、disk.v1 投递一致（miner_delivery_spec）。
+# 目标：下列白名单内算子均可使用；生成时应主动轮换不同算子族，勿只扎堆 ts_mean/rank。
+
+## 0. 引擎与语法（必读）
+- 引擎：factor_engine（我们自己的因子引擎）
+- 写法：函数嵌套；字段名**不加** `$`
+- 名称必须与白名单**完全一致**（含大小写：`RSI_WILDER`、`MACD_hist`、`ADX` 等）
+- 合法：`rank(ts_mean(close, 20))`、`rank(RSI_WILDER(close, 14))`
+- 非法：`$close`、`TsMean($close, 5)`、`Div(a,b)`、`Mul(a,b)`、`Ref(close,1)`、`close + open`、`%d`
+- 禁止 Python 运算符 `+ - * /`；一律用 add/subtract/multiply/divide/safe_div_null
+
+## 1. 字段（价量日频 + 估值；本地 COS 镜像可加载）
+open       — 开盘价
+high       — 最高价
+low        — 最低价
+close      — 收盘价
+volume     — 成交量（股数）
+vwap       — 成交量加权均价
+pre_close  — 前收（构造收益优先用它）
+amount     — 成交额
+factor     — 复权因子（较少用）
+pe         — 市盈率（估值）
+pb         — 市净率（估值）
+turnover_ratio — 换手率（估值）
+market_cap — 总市值（估值）
+circulating_market_cap — 流通市值（估值）
+
+禁止：财报科目、美股专有字段（bid/ask、ret__overnight 等）、行业分组字段（当前挖掘引擎未接 industry）。
+禁止裸写字段名 `ret`（A 股底层可能是 bp）；需要收益时写：
+  `safe_div_null(close, pre_close) - 1.0`
+  或 `ts_log_return(close, 1)` / `ts_pct(close, 1)` / `pct_change(close, 1)` / `returns(close)`
+
+## 2. 常量与窗口
+- 滚动窗口：正整数，从下列集合选取（短/中/长都要覆盖）：
+  1, 2, 3, 4, 5, 7, 10, 12, 15, 18, 20, 25, 30, 35, 40, 50, 60, 70, 80, 90, 100, 120, 150, 180, 200, 220, 250, 300, 500, 800, 1000
+- 技术指标常用：RSI/ADX/ATR 用 7/14/20；MACD 用 12,26,9
+- 算术常数：0.0、0.01、0.001、0.0001、1.0、2.0、0.1、0.9、252.0 等
+- 禁止科学计数法（写 0.0001，不要 1e-4）；禁止占位符 `%d`
+- **单条表达式可含多个不同窗口**（推荐）：每个滚动算子各自写整数，不必全式共用一个窗口
+- 长窗（≥250）更重；批内短/中/长搭配，勿全扎堆在 5/10/20
+
+## 3. 算子白名单（factor_engine compat；与 V9 冷启动覆盖对齐）
+
+### 3.1 截面 / 标准化
+rank(x)
+zscore(x)
+winsorize(x, p)              — p 如 0.01
+normalize(x)
+scale(x, c)                  — 常 c=1.0
+cs_pct_rank(x)
+cs_rank_gaussian(x)          — 也可 cs_rank_gaussian(x, 'blom')
+cs_mad_zscore(x)             — 稳健截面 z
+cs_demean(x)    cs_mean(x)   cs_std(x)   cs_sum(x)   cs_count(x)   cs_mad(x)
+cs_weighted_demean(x, w)     — 如用 volume 加权
+cs_multi_resid(y, x1, x2)    — 截面多元残差（谨慎，参数多为序列）
+cs_wls_resid(y, x, w)        — 加权截面残差
+
+### 3.2 一元变换
+abs(x)    sign(x)    neg(x)    inverse(x)    — 1/x（不要写 inv）
+log(x)    log_abs(x)    ln 勿用；对 volume 常用 log(add(volume, 1.0))
+exp(x)    sqrt(x)    signed_log(x)    signed_sqrt(x)    tanh(x)
+is_finite(x)
+
+### 3.3 二元算术 / 聚合
+add(x, y)    subtract(x, y)    multiply(x, y)    divide(x, y)    power(x, y)
+safe_div_null(x, y)          — 分母为 0 → null（优先于 divide）
+maximum(x, y)    minimum(x, y)   — 亦可用 max / min
+clip(x, lo, hi)
+coalesce(a, b)               — 空值回退
+fillna_const(x, c)
+
+# power 的指数必须是常数
+
+### 3.4 比较与逻辑
+gt(x, y)    lt(x, y)    ge(x, y)    le(x, y)    eq(x, y)    ne(x, y)
+and_(a, b)    or_(a, b)          — 必须带下划线；禁止 and(...) / or(...)
+if_else(cond, x, y)    where(cond, x, y)   — 二者皆可
+
+### 3.5 时间序列 — 基础
+ts_delay(x, d)       ts_delta(x, d)
+ts_mean(x, d)        ts_sum(x, d)         ts_std(x, d)        ts_var(x, d)
+ts_min(x, d)         ts_max(x, d)         ts_median(x, d)     ts_mad(x, d)
+ts_rank(x, d)        ts_product(x, d)     ts_argmax(x, d)     ts_argmin(x, d)
+ts_skew(x, d)        ts_kurt(x, d)        ts_zscore(x, d)
+ts_ema(x, d)         ema(x, d)            — 同义优先 ts_ema
+# 注意：勿用 ewm(x,d,alpha)，当前运行时会报错；用 ts_ema / ema 代替
+ts_decay_linear(x, d)
+ts_corr(x, y, d)     ts_cov(x, y, d)
+pct_change(x, d)     ts_pct(x, d)         — 百分比变化
+ts_log_return(x, d)  returns(x)
+
+### 3.6 时间序列 — 进阶（请主动使用，扩大搜索）
+ts_quantile(x, d, q)                 — q 如 0.1 / 0.9
+ts_autocorr(x, d, lag)               — lag 常 1
+ts_beta(y, x, d)                     — 也可用关键字 window=d
+ts_partial_corr(x, y, z, d)
+ts_regression_slope(y, x, d)         ts_regression_r2(y, x, d)    ts_regression_resid(y, x, d)
+ts_sharpe(x, d)                      — 也可 ts_sharpe(x, d, 252.0)
+ts_max_drawdown(x, d)
+ts_time_slope(x, d)                  ts_trend_tstat(x, d)
+ts_tail_mean(x, d)
+ts_topk_mean(x, d, k)    ts_topk_std(x, d, k)    ts_topk_sum(x, d, k)
+ts_bottomk_mean(x, d, k) ts_bottomk_std(x, d, k)
+ts_count_if(cond, d)                 — 窗口内条件成立次数
+ts_sum_if(cond, x, d)                — 条件求和
+ts_days_since(cond)                  — 距上次条件成立天数
+ts_true_streak(cond, d)              — 连续成立长度
+
+### 3.7 技术指标（factor_engine 名，大小写勿改）
+RSI_WILDER(close, n)                 — n 常 14
+ADX(high, low, close, n)             — n 常 14
+ATR_WILDER(high, low, close, n)      — n 常 14
+true_range(high, low, close)
+MACD_line(close, fast, slow, signal)     — 常 12,26,9
+MACD_signal(close, fast, slow, signal)
+MACD_hist(close, fast, slow, signal)
+MACD(close, fast, slow, signal)
+SMA(close, n)  WMA(close, n)  DEMA(close, n)  TEMA(close, n)
+KAMA(close, n, fast, slow)           — 常 n=10,fast=2,slow=30
+efficiency_ratio(close, n)
+PPO(close, fast, slow)  PPO_signal(...)  PPO_hist(...)
+PVO(volume, fast, slow)  PVO_signal(...)  PVO_hist(...)
+CMO(close, n)  MFI(high, low, close, volume, n)  CMF(...)
+NATR(high, low, close, n)  ForceIndex(close, volume, n)
+EaseOfMovement(high, low, volume, n)  choppiness_index(high, low, close, n)
+DMI_plus / DMI_minus / DX(high, low, close, n)
+VortexPlus / VortexMinus(high, low, close, n)
+TSI(close, r, s)  TSI_signal(close, r, s, signal)
+UltimateOscillator(high, low, close, 7, 14, 28)
+PSAR(high, low, af, max_af)          — 常 0.02, 0.2
+Supertrend / SupertrendDirection(high, low, close, period, mult)
+ADL(high, low, close, volume)  ChaikinOscillator(high, low, close, volume, 3, 10)
+bollinger_pct_b(close, n, k)  bollinger_width(close, n, k)
+KeltnerPosition(high, low, close, n, atr_n, mult)  KeltnerMid(close, n)
+donchian_position(close, high, low, n)  donchian_upper(high, n)  donchian_lower(low, n)  donchian_mid(high, low, n)
+ichimoku_tenkan / ichimoku_kijun / ichimoku_cloud_position / ichimoku_cloud_width / ichimoku_senkou_a / ichimoku_senkou_b
+
+### 3.8 波动 / 流动性 / 换手（请主动轮换）
+parkinson_vol(high, low, n)  yang_zhang_vol(open, high, low, close, n)
+rogers_satchell_vol(...)  garman_klass_vol(...)  ulcer_index(close, n)
+amihud_illiquidity(close, volume, n)  abnormal_volume(volume, n)  relative_volume(volume, n)
+volume_zscore / volume_momentum / volume_shock / volume_acceleration
+up_volume_ratio / up_down_volume_ratio / down_volume_ratio(close, volume, n)
+return_volume_corr / abs_return_volume_corr / price_volume_divergence
+turnover_zscore / abnormal_turnover / turnover_momentum / turnover_shock(turnover_ratio, n)
+return_per_turnover(close, turnover_ratio, n)  dollar_volume(close, volume)
+vwap_deviation(close, vwap)  rolling_vwap(close, volume, n)  rolling_obv / rolling_pvt
+
+### 3.9 通道 / 突破 / 支撑阻力 / 摆动
+ts_channel_position / ts_channel_width_pct / ts_channel_width / ts_channel_width_atr
+ts_breakout_high / ts_breakdown_low / ts_new_high / ts_new_low
+ts_distance_to_high / ts_distance_to_low / ts_days_since_high / ts_days_since_low
+ts_resistance_level / ts_support_level / ts_resistance_break / ts_support_break
+ts_swing_amplitude / ts_swing_amplitude_pct / ts_swing_duration / ts_swing_velocity
+ts_confirmed_pivot_high / ts_confirmed_pivot_low / ts_last_pivot_high / ts_last_pivot_low
+ts_impulse_return / ts_impulse_volume / ts_impulse_strength
+ts_ewm_std / ts_ewm_var / ewm_mean / ewm_std / ewm_var   — 勿用裸 ewm(...)
+
+### 3.10 K 线 / 形态（open,high,low,close；gap 用 open,pre_close）
+candle_body_ratio / candle_close_location / candle_direction / candle_gap_pct / candle_range
+cdl_doji / cdl_hammer / cdl_engulfing / cdl_morning_star / cdl_evening_star / …
+pattern_double_bottom / pattern_head_shoulders / pattern_bull_flag / pattern_cup_handle / …
+
+### 3.11 明确不在白名单（不要用）
+- 行业/分组：group_*、industry_neutral*、ind_neutralize
+- AlphaGen 旧名：TsMean、Div、Mul、Ref、Abs、Rank（PascalCase）等
+- 财报日历：ttm_*、yoy_by_period、period_*
+- 分钟面板专有复杂 `intraday_*`（当前日频挖掘无分钟数据；OHLC 日频代理如 `intraday_volatility(high,low,close,open)` 可用）
+- 别名堆砌：delay/shift/ma/mean/corr 等（请用 ts_delay / ts_mean / ts_corr）
+- 裸 `ewm(...)`（运行时会报错；用 ts_ema / ewm_mean / ts_ewm_std）
+
+## 4. 合法示例
+divide(subtract(high, low), add(subtract(high, low), 0.001))
+rank(ts_mean(close, 20))
+rank(safe_div_null(ts_std(close, 20), ts_mean(close, 20)))
+subtract(rank(ts_delta(close, 5)), rank(ts_delta(volume, 10)))
+if_else(gt(close, ts_mean(close, 20)), rank(ts_delta(close, 1)), rank(ts_delta(close, 5)))
+rank(RSI_WILDER(close, 14))
+rank(ADX(high, low, close, 14))
+rank(MACD_hist(close, 12, 26, 9))
+rank(ts_zscore(ts_log_return(close, 1), 60))
+rank(ts_sharpe(ts_pct(close, 1), 60))
+rank(ts_max_drawdown(close, 120))
+rank(ts_corr(ts_pct(close, 1), ts_pct(volume, 1), 40))
+rank(ts_partial_corr(close, volume, ts_mean(volume, 20), 60))
+cs_mad_zscore(ts_delta(close, 5))
+rank(ts_topk_mean(volume, 20, 5))
+rank(ts_count_if(gt(close, ts_delay(close, 1)), 20))
+where(gt(ts_mean(close, 5), ts_mean(close, 60)), rank(volume), neg(rank(volume)))
+rank(subtract(ts_mean(close, 5), ts_mean(close, 60)))
+rank(safe_div_null(ATR_WILDER(high, low, close, 14), close))
+rank(KAMA(close, 10, 2, 30))
+rank(MFI(high, low, close, volume, 14))
+rank(bollinger_pct_b(close, 20, 2.0))
+rank(SupertrendDirection(high, low, close, 10, 3.0))
+rank(amihud_illiquidity(close, volume, 20))
+rank(yang_zhang_vol(open, high, low, close, 20))
+rank(ts_channel_position(close, 60))
+rank(candle_body_ratio(open, high, low, close))
+rank(pattern_double_bottom(close, 60))
+
+## 4.1 多窗口（单条内强烈推荐）
+- rank(subtract(ts_mean(close, 5), ts_mean(close, 60)))
+- rank(safe_div_null(ts_std(close, 10), ts_mean(close, 60)))
+- subtract(rank(ts_delta(close, 5)), rank(ts_delta(close, 60)))
+- rank(subtract(ts_rank(close, 20), ts_rank(close, 120)))
+- if_else(gt(ts_mean(close, 5), ts_mean(close, 20)), rank(ts_delta(volume, 10)), rank(ts_delta(volume, 60)))
+
+## 4.2 窗口档位
+超短 1–5 / 短 7–20 / 中 25–60 / 中长 70–150 / 长 180–300 / 超长 500–1000
+单式内嵌套滚动算子时优先跨档；一批内至少覆盖两类尺度。
+
+## 4.3 算子覆盖要求（生成时）
+在一批多条输出中，尽量让不同条目命中不同算子族，例如：
+技术指标 / 相关协整 / 回归斜率 / 分位数与 topk / 条件计数 / 回撤夏普 / 截面稳健 z / 逻辑门控。
+不要整批全是 `rank(ts_mean(...))` 换窗口。
+
+## 5. 完整算子名清单（仅可使用下列名称）
+abs, add, and_, or_, clip, coalesce, fillna_const,
+cs_count, cs_demean, cs_mad, cs_mad_zscore, cs_mean, cs_multi_resid, cs_pct_rank,
+cs_quantile, cs_rank_gaussian, cs_resid, cs_std, cs_sum, cs_weighted_demean, cs_wls_resid, cs_zscore,
+divide, eq, ne, exp, ge, gt, le, lt, inverse, is_finite,
+log, log_abs, maximum, minimum, max, min, multiply, neg, normalize, power,
+rank, safe_div_null, scale, sign, signed_log, signed_power, signed_sqrt, sqrt, subtract, tanh,
+where, if_else, winsorize, zscore,
+ts_argmax, ts_argmin, ts_autocorr, ts_average_volume, ts_beta, ts_bottomk_mean, ts_bottomk_std, ts_bottomk_sum,
+ts_breakout_high, ts_breakdown_low, ts_channel_position, ts_channel_width, ts_channel_width_atr, ts_channel_width_pct, ts_channel_width_slope,
+ts_confirmed_pivot_high, ts_confirmed_pivot_low, ts_consolidation_slope, ts_consolidation_volume_decay, ts_consolidation_width,
+ts_corr, ts_count_if, ts_cov, ts_days_since, ts_days_since_high, ts_days_since_low, ts_decay_exp_window, ts_decay_linear, ts_delay, ts_delta,
+ts_distance_to_high, ts_distance_to_low, ts_distance_to_resistance, ts_distance_to_support,
+ts_ema, ema, ewm_mean, ewm_std, ewm_var, ts_ewm_std, ts_ewm_var, ts_ewm_corr, ts_ewm_cov,
+ts_impulse_return, ts_impulse_strength, ts_impulse_volume,
+ts_kurt, ts_last_if, ts_last_pivot_high, ts_last_pivot_low, ts_line_convergence, ts_line_parallelism,
+ts_log_return, ts_mad, ts_max, ts_max_buildup, ts_max_drawdown, ts_mean, ts_mean_if, ts_median, ts_min, ts_moment,
+ts_new_high, ts_new_low, ts_nth_pivot_high, ts_nth_pivot_high_age, ts_nth_pivot_low, ts_nth_pivot_low_age, ts_nth_value,
+ts_partial_corr, ts_pattern_symmetry, ts_pct, pct_change, ts_pivot_high_age, ts_pivot_high_count, ts_pivot_high_spacing,
+ts_pivot_low_age, ts_pivot_low_count, ts_pivot_low_spacing, ts_poly2_coeff, ts_poly2_resid, ts_prev_high, ts_prev_low,
+ts_product, ts_quantile, ts_rank, ts_range_expansion, ts_ratio,
+ts_regression_intercept, ts_regression_r2, ts_regression_resid, ts_regression_slope, ts_regression_tstat,
+ts_resistance_break, ts_resistance_fit_r2, ts_resistance_level, ts_resistance_slope,
+ts_sharpe, ts_skew, ts_sma_cn, ts_std, ts_std_if, ts_sum, ts_sum_decay, ts_sum_if,
+ts_support_break, ts_support_fit_r2, ts_support_level, ts_support_slope,
+ts_swing_amplitude, ts_swing_amplitude_atr, ts_swing_amplitude_pct, ts_swing_duration, ts_swing_velocity,
+ts_tail_mean, ts_time_slope, ts_topk_mean, ts_topk_std, ts_topk_sum, ts_trend_tstat, ts_true_streak, ts_var, ts_zscore,
+returns, true_range, efficiency_ratio, hump_decay,
+RSI_WILDER, ADX, ATR_WILDER, MACD, MACD_line, MACD_signal, MACD_hist,
+SMA, WMA, DEMA, TEMA, KAMA, PPO, PPO_signal, PPO_hist, PVO, PVO_signal, PVO_hist,
+CMO, MFI, CMF, NATR, ForceIndex, EaseOfMovement, choppiness_index,
+DMI_plus, DMI_minus, DX, VortexPlus, VortexMinus, TSI, TSI_signal, UltimateOscillator, PSAR,
+Supertrend, SupertrendDirection, ADL, ChaikinOscillator,
+bollinger_pct_b, bollinger_width, KeltnerPosition, KeltnerMid, KeltnerUpper, KeltnerLower,
+donchian_position, donchian_upper, donchian_lower, donchian_mid,
+ichimoku_tenkan, ichimoku_kijun, ichimoku_cloud_position, ichimoku_cloud_width, ichimoku_senkou_a, ichimoku_senkou_b,
+parkinson_vol, yang_zhang_vol, rogers_satchell_vol, garman_klass_vol, ulcer_index, range_volatility, overnight_volatility,
+intraday_volatility, high_low_spread_proxy, corwin_schultz_spread, roll_spread_proxy, zero_return_ratio,
+amihud_illiquidity, abnormal_volume, relative_volume, volume_zscore, volume_momentum, volume_shock, volume_acceleration,
+volume_volatility, volume_autocorr, volume_to_range, volume_weighted_return, volume_weighted_momentum,
+up_volume_ratio, up_down_volume_ratio, down_volume_ratio, return_volume_corr, abs_return_volume_corr,
+price_volume_divergence, price_impact, dollar_volume, adv, rolling_obv, rolling_pvt, rolling_vwap, vwap_deviation,
+bounded_nvi, bounded_pvi,
+turnover_zscore, abnormal_turnover, average_turnover, turnover_momentum, turnover_shock, turnover_volatility,
+turnover_autocorr, turnover_acceleration, return_per_turnover, price_turnover_divergence, turnover_adjusted_volatility,
+candle_body, candle_abs_body, candle_body_ratio, candle_body_position, candle_body_zscore, candle_body_percentile,
+candle_close_location, candle_close_strength, candle_direction, candle_gap, candle_gap_pct, candle_gap_atr,
+candle_range, candle_range_atr, candle_range_zscore, candle_range_percentile,
+candle_upper_shadow, candle_upper_shadow_ratio, candle_upper_shadow_zscore,
+candle_lower_shadow, candle_lower_shadow_ratio, candle_lower_shadow_zscore,
+candle_rejection_upper, candle_rejection_lower, candle_overlap_ratio, candle_inside_ratio,
+cdl_doji, cdl_hammer, cdl_inverted_hammer, cdl_shooting_star, cdl_engulfing, cdl_harami, cdl_harami_cross,
+cdl_morning_star, cdl_evening_star, cdl_three_white_soldiers, cdl_three_black_crows, cdl_marubozu, cdl_spinning_top,
+cdl_dark_cloud_cover, cdl_piercing, cdl_hanging_man, cdl_dragonfly_doji, cdl_gravestone_doji,
+cdl_inside_bar, cdl_outside_bar, cdl_tweezer_top, cdl_tweezer_bottom,
+pattern_double_bottom, pattern_double_top, pattern_triple_bottom, pattern_triple_top,
+pattern_head_shoulders, pattern_inverse_head_shoulders, pattern_ascending_triangle, pattern_descending_triangle,
+pattern_sym_triangle, pattern_bull_flag, pattern_bear_flag, pattern_bull_pennant, pattern_bear_pennant,
+pattern_cup, pattern_cup_handle, pattern_rounding_bottom, pattern_rounding_top,
+pattern_rising_wedge, pattern_falling_wedge, pattern_rising_channel, pattern_falling_channel,
+pattern_rectangle, pattern_broadening, pattern_breakout_retest, pattern_breakdown_retest,
+pattern_123_bull, pattern_123_bear, Covariance, rank_corr
+
+## 6. 禁止写法
+- AlphaGen / qlib：`$close`、`TsMean(...)`、`Div`、`Mul`、`Sub`、`Add`、`Ref`、`%d`
+- Python 运算符代替函数名
+- 未在第 5 节清单中的算子名
+- `and(...)` / `or(...)`（请用 `and_` / `or_`）
+- `ewm(...)`、`group_*`、`industry_*`、`intraday_*`、财报 `ttm_*` / `period_*`

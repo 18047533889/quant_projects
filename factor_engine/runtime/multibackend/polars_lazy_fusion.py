@@ -65,7 +65,7 @@ class PolarsLazyFusionOptimizer:
                                        If None, uses adaptive config.
         """
         if streaming_threshold_bytes is None:
-            from runtime.adaptive_config import get_global_adaptive_config
+            from factor_engine.runtime.adaptive_config import get_global_adaptive_config
             streaming_threshold_bytes = get_global_adaptive_config().streaming_threshold_bytes
         self.streaming_threshold_bytes = streaming_threshold_bytes
         self._metrics = LazyFusionMetrics()

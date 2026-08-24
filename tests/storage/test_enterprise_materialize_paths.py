@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from runtime.dq_gates import assert_factor_dq, evaluate_factor_dq
+from factor_engine.runtime.dq_gates import assert_factor_dq, evaluate_factor_dq
 
 
 def _series(values):
@@ -42,7 +42,7 @@ def test_preserve_invalid_rows_with_strict_dq_passes():
 
 
 def test_effective_lookback_scales_intraday_to_daily():
-    from cleaned_operators.operator_policy import bars_per_day, effective_lookback
+    from factor_engine.cleaned_operators.operator_policy import bars_per_day, effective_lookback
 
     assert bars_per_day("5m") == 78
     daily = effective_lookback(20, factor_freq="1d", source_bar_freq="1d")
@@ -53,7 +53,7 @@ def test_effective_lookback_scales_intraday_to_daily():
 
 def test_staging_clickhouse_target_writes_staging_only_in_materializer(tmp_path, monkeypatch):
     """materializer 层：staging_clickhouse 仅 upsert staging（CH 由 engine 层追加）。"""
-    from storage.materializer import ParquetMaterializer
+    from factor_engine.storage.materializer import ParquetMaterializer
 
     idx = pd.MultiIndex.from_product(
         [pd.date_range("2024-01-02", periods=2), ["A"]],
@@ -83,10 +83,10 @@ def test_staging_clickhouse_target_writes_staging_only_in_materializer(tmp_path,
 
 def test_materialize_incremental_staging_clickhouse_dual_write(tmp_path, monkeypatch):
     """增量路径：staging_clickhouse 应 upsert staging 并追加 CH 写入。"""
-    from api.columns import col
-    from api.factor import Factor
-    from backend.pandas_backend import PandasBackend
-    from runtime.engine import FactorEngine
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
     from tests.helpers import InMemorySeriesSource
     from unittest.mock import MagicMock, patch
 
@@ -149,7 +149,7 @@ def test_materialize_incremental_staging_clickhouse_dual_write(tmp_path, monkeyp
 
 
 def test_incremental_plan_scales_intraday_source_to_calendar_days():
-    from runtime.incremental import build_incremental_plan
+    from factor_engine.runtime.incremental import build_incremental_plan
 
     plan = build_incremental_plan(
         factor_id="x",
@@ -166,7 +166,7 @@ def test_incremental_plan_scales_intraday_source_to_calendar_days():
     # R32-P0-004：intraday 窗口改用 session bar clock（跳过午休、跨日跳周末），
     # 不再「零点 + bar_duration×N」。
     assert plan.window_mode == "intraday_session_clock"
-    from cleaned_operators.operator_policy import bar_freq_to_timedelta, bars_per_day
+    from factor_engine.cleaned_operators.operator_policy import bar_freq_to_timedelta, bars_per_day
 
     bpd = bars_per_day("5m")
     bar_td = bar_freq_to_timedelta("5m")
@@ -175,11 +175,11 @@ def test_incremental_plan_scales_intraday_source_to_calendar_days():
 
 
 def test_dual_write_clickhouse_failure_raises_with_partial_summary(tmp_path, monkeypatch):
-    from api.columns import col
-    from api.factor import Factor
-    from backend.pandas_backend import PandasBackend
-    from runtime.engine import FactorEngine
-    from storage.exceptions import DualWriteError
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.storage.exceptions import DualWriteError
     from tests.helpers import InMemorySeriesSource
     from unittest.mock import MagicMock, patch
 
@@ -219,18 +219,18 @@ def test_dual_write_clickhouse_failure_raises_with_partial_summary(tmp_path, mon
     assert excinfo.value.summary.get("partial_write") is True
     assert excinfo.value.summary.get("primary_write_completed") is True
     assert len(staging_calls) == 1
-    from storage.materializer import ParquetMaterializer
+    from factor_engine.storage.materializer import ParquetMaterializer
 
     mat = ParquetMaterializer(lake_root=tmp_path)
     assert mat.catalog.get_watermark("dual_fail") is None
 
 
 def test_defer_watermark_commits_after_ch_success(tmp_path, monkeypatch):
-    from api.columns import col
-    from api.factor import Factor
-    from backend.pandas_backend import PandasBackend
-    from runtime.engine import FactorEngine
-    from storage.materializer import ParquetMaterializer
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.storage.materializer import ParquetMaterializer
     from tests.helpers import InMemorySeriesSource
     from unittest.mock import MagicMock, patch
 
@@ -267,7 +267,7 @@ def test_defer_watermark_commits_after_ch_success(tmp_path, monkeypatch):
 
 
 def test_clickhouse_materializer_uses_insert_dataframe(tmp_path):
-    from storage.clickhouse_materializer import ClickHouseMaterializer
+    from factor_engine.storage.clickhouse_materializer import ClickHouseMaterializer
     from unittest.mock import MagicMock, patch
 
     idx = pd.MultiIndex.from_product(

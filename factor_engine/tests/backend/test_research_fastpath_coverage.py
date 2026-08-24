@@ -9,17 +9,17 @@ pytestmark = pytest.mark.skip(reason="legacy P1 rollout tiers; static daily/exte
 
 @pytest.fixture(scope="module")
 def _loaded():
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
 
 
 def test_sql_implemented_subset_of_research_fastpath(_loaded):
-    from backend.fastpath_allowlists import research_fastpath_allowlist
-    from backend.production_fastpath_tiers import P2_RESEARCH_ONLY
-    from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
+    from factor_engine.backend.fastpath_allowlists import research_fastpath_allowlist
+    from factor_engine.backend.production_fastpath_tiers import P2_RESEARCH_ONLY
+    from factor_engine.backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
 
     research = research_fastpath_allowlist()
     skip = {"column", "literal"} | P2_RESEARCH_ONLY
@@ -28,8 +28,8 @@ def test_sql_implemented_subset_of_research_fastpath(_loaded):
 
 
 def test_p1_extended_tier(_loaded):
-    from backend.polars_long_policy import infer_polars_long_tier
-    from backend.production_fastpath_tiers import P1_EXTENDED_CANONICALS, P1_EXTENDED_CUM_PRODUCTION_SAFE
+    from factor_engine.backend.polars_long_policy import infer_polars_long_tier
+    from factor_engine.backend.production_fastpath_tiers import P1_EXTENDED_CANONICALS, P1_EXTENDED_CUM_PRODUCTION_SAFE
 
     python_rolling = {"WMA", "ts_skew", "ts_quantile", "Slope", "ts_argmax", "ts_argmin"}
     for canon in sorted(P1_EXTENDED_CANONICALS):

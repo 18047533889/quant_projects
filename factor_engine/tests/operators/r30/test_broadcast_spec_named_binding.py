@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.base import (
+from factor_engine.cleaned_operators.base import (
     BroadcastSpec,
     OperatorMetadata,
     _verify_broadcast_specs,

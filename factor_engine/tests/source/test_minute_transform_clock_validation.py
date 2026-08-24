@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from api.source_ref import make_source_ref
+from factor_engine.api.source_ref import make_source_ref
 
 
 def test_valid_minute_at_accepted() -> None:

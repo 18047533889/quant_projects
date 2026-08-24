@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from fields import MULTI_MARKET_FIELD_REGISTRY
-from fields.concepts import concept_alias_map, get_concept, list_concepts, require_concept
-from fields.providers import (
+from factor_engine.fields import MULTI_MARKET_FIELD_REGISTRY
+from factor_engine.fields.concepts import concept_alias_map, get_concept, list_concepts, require_concept
+from factor_engine.fields.providers import (
     PROVIDER_REGISTRY,
     explain_field_support,
     require_binding,
 )
-from market import CoverageClass, MarketStatus, ProviderQuality
+from factor_engine.market import CoverageClass, MarketStatus, ProviderQuality
 
 
 def test_concept_alias_map() -> None:
@@ -71,7 +71,7 @@ def test_industry_us_provider_required() -> None:
 
 
 def test_dividend_pit_blocked_ashare_allowed_research() -> None:
-    from market.context import ASHARE_CONTEXT
+    from factor_engine.market.context import ASHARE_CONTEXT
 
     a_prod = explain_field_support("cash_dividend_per_share", "ashare")
     assert a_prod.status == MarketStatus.PIT_BLOCKED

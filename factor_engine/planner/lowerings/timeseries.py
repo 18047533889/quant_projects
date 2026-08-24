@@ -2,9 +2,9 @@
 """时序 primitive composite lowering。"""
 from __future__ import annotations
 
-from planner.composite_lowering import register_lowering
-from planner.logical_plan import PlanNode
-from planner.lowerings import _helpers as H
+from factor_engine.planner.composite_lowering import register_lowering
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.lowerings import _helpers as H
 
 
 @register_lowering("ts_ratio", deps=("window", "lag"), min_inputs=2)

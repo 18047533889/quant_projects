@@ -21,10 +21,10 @@ if str(ROOT) not in sys.path:
 
 
 def build_operator_manifest() -> dict[str, Any]:
-    from cleaned_operators import OperatorRegistry, load_all
+    from factor_engine.cleaned_operators import OperatorRegistry, load_all
 
     load_all()
-    from market.capability_resolver import build_market_operator_manifest
+    from factor_engine.market.capability_resolver import build_market_operator_manifest
 
     return build_market_operator_manifest(OperatorRegistry.list_canonical())
 

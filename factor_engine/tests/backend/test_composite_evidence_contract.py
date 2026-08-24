@@ -7,15 +7,15 @@ import pytest
 
 @pytest.fixture(scope="module")
 def _loaded():
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
 
 
 def test_composite_reference_evidence_matches_reference_cases(_loaded):
-    from backend.composite_evidence import COMPOSITE_REFERENCE_TO_LOWERED_PANDAS_VERIFIED
+    from factor_engine.backend.composite_evidence import COMPOSITE_REFERENCE_TO_LOWERED_PANDAS_VERIFIED
     from tests.backend_parity.composite_reference_helpers import COMPOSITE_REFERENCE_CASES
 
     tested = frozenset(c.canon for c in COMPOSITE_REFERENCE_CASES)
@@ -23,7 +23,7 @@ def test_composite_reference_evidence_matches_reference_cases(_loaded):
 
 
 def test_composite_polars_evidence_matches_triple_parity_cases(_loaded):
-    from backend.composite_evidence import COMPOSITE_LOWERED_POLARS_VERIFIED
+    from factor_engine.backend.composite_evidence import COMPOSITE_LOWERED_POLARS_VERIFIED
     from tests.backend_parity.test_composite_lowered_triple_parity import COMPOSITE_TRIPLE_PARITY_CASES
 
     tested = frozenset(c["canon"] for c in COMPOSITE_TRIPLE_PARITY_CASES)
@@ -31,7 +31,7 @@ def test_composite_polars_evidence_matches_triple_parity_cases(_loaded):
 
 
 def test_composite_duckdb_evidence_matches_triple_parity_cases(_loaded):
-    from backend.composite_evidence import COMPOSITE_LOWERED_DUCKDB_VERIFIED
+    from factor_engine.backend.composite_evidence import COMPOSITE_LOWERED_DUCKDB_VERIFIED
     from tests.backend_parity.test_composite_lowered_triple_parity import COMPOSITE_TRIPLE_PARITY_CASES
 
     tested = frozenset(c["canon"] for c in COMPOSITE_TRIPLE_PARITY_CASES)
@@ -39,7 +39,7 @@ def test_composite_duckdb_evidence_matches_triple_parity_cases(_loaded):
 
 
 def test_composite_edge_evidence_matches_edge_cases(_loaded):
-    from backend.composite_evidence import COMPOSITE_EDGE_VERIFIED
+    from factor_engine.backend.composite_evidence import COMPOSITE_EDGE_VERIFIED
     from tests.backend_parity.composite_edge_helpers import COMPOSITE_EDGE_CASES
 
     tested = frozenset(c.canon for c in COMPOSITE_EDGE_CASES)
@@ -47,7 +47,7 @@ def test_composite_edge_evidence_matches_edge_cases(_loaded):
 
 
 def test_composite_edge_evidence_is_subset_of_reference(_loaded):
-    from backend.composite_evidence import (
+    from factor_engine.backend.composite_evidence import (
         COMPOSITE_EDGE_VERIFIED,
         COMPOSITE_REFERENCE_TO_LOWERED_PANDAS_VERIFIED,
     )
@@ -56,7 +56,7 @@ def test_composite_edge_evidence_is_subset_of_reference(_loaded):
 
 
 def test_composite_full_parity_is_intersection(_loaded):
-    from backend.composite_evidence import (
+    from factor_engine.backend.composite_evidence import (
         COMPOSITE_FULL_PARITY_VERIFIED,
         COMPOSITE_LOWERED_DUCKDB_VERIFIED,
         COMPOSITE_LOWERED_POLARS_VERIFIED,

@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -162,7 +162,7 @@ def test_macd_alias_matches_composed_line() -> None:
 def test_native_polars_matches_pandas(operator, args) -> None:
     pl = pytest.importorskip("polars")
     if "polars" not in OperatorRegistry.backends_for(operator):
-        from cleaned_operators.operator_surface import classify_canonical
+        from factor_engine.cleaned_operators.operator_surface import classify_canonical
         assert classify_canonical(operator) in {"daily", "extended"}
         pytest.skip("operator has no certified pure-Polars implementation")
     pandas_result = OperatorRegistry.get(operator, backend="pandas_numpy").calculate(*args)

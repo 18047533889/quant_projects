@@ -19,7 +19,7 @@ class TestMBP0001SourceLoweredNameError:
 
     def test_mixed_cost_source_relation_no_nameerror(self):
         """Mixed cost with source_ref should not raise NameError."""
-        from backend.plan_cost_router import _dag_aware_mixed_cost, BoundNodeOccurrence
+        from factor_engine.backend.plan_cost_router import _dag_aware_mixed_cost, BoundNodeOccurrence
 
         # Simple occurrence with no source ref
         occ = BoundNodeOccurrence(
@@ -46,7 +46,7 @@ class TestMBP0001SourceLoweredNameError:
 
     def test_lowerable_source_ref_keeps_native_candidates(self):
         """When source_ref is lowerable, SQL candidates should be eligible."""
-        from backend.plan_cost_router import _dag_aware_mixed_cost, BoundNodeOccurrence
+        from factor_engine.backend.plan_cost_router import _dag_aware_mixed_cost, BoundNodeOccurrence
 
         occ = BoundNodeOccurrence(
             canonical="add",
@@ -87,7 +87,7 @@ class TestMBP0002GenericSQLBackend:
 
     def test_mixed_cost_uses_duckdb_sql_not_generic_sql(self):
         """Mixed cost for duckdb should use duckdb_sql, not generic "sql"."""
-        from backend.plan_cost_router import _dag_aware_mixed_cost, BoundNodeOccurrence
+        from factor_engine.backend.plan_cost_router import _dag_aware_mixed_cost, BoundNodeOccurrence
 
         occ = BoundNodeOccurrence(
             canonical="add",
@@ -112,7 +112,7 @@ class TestMBP0002GenericSQLBackend:
 
     def test_normalize_backend_name_rejects_generic_sql(self):
         """normalize_backend_name should convert 'sql' to specific backend."""
-        from planner.backend_region import normalize_backend_name, PhysicalBackend
+        from factor_engine.planner.backend_region import normalize_backend_name, PhysicalBackend
 
         # Generic "sql" should normalize to duckdb_sql (default SQL backend)
         result = normalize_backend_name("sql")
@@ -129,8 +129,8 @@ class TestMBP0003BackendSpecificNativeFraction:
 
     def test_native_fraction_polars_uses_polars_capability(self):
         """Polars native fraction should check polars capability, not SQL."""
-        from planner.native_fraction import plan_native_subgraph_fraction
-        from planner.logical_plan import PlanNode
+        from factor_engine.planner.native_fraction import plan_native_subgraph_fraction
+        from factor_engine.planner.logical_plan import PlanNode
 
         # Simple plan with one operator
         plan = PlanNode(op="add", inputs=())
@@ -147,8 +147,8 @@ class TestMBP0003BackendSpecificNativeFraction:
 
     def test_native_fraction_duckdb_uses_sql_capability(self):
         """DuckDB native fraction should check SQL capability, not polars."""
-        from planner.native_fraction import plan_native_subgraph_fraction
-        from planner.logical_plan import PlanNode
+        from factor_engine.planner.native_fraction import plan_native_subgraph_fraction
+        from factor_engine.planner.logical_plan import PlanNode
 
         plan = PlanNode(op="add", inputs=())
 
@@ -161,8 +161,8 @@ class TestMBP0003BackendSpecificNativeFraction:
 
     def test_delegate_not_counted_native(self):
         """Polars delegate operations should not count as native."""
-        from planner.native_fraction import plan_native_subgraph_fraction
-        from planner.logical_plan import PlanNode
+        from factor_engine.planner.native_fraction import plan_native_subgraph_fraction
+        from factor_engine.planner.logical_plan import PlanNode
 
         plan = PlanNode(op="add", inputs=())
 
@@ -186,7 +186,7 @@ class TestMBP0004BackendRegionModel:
 
     def test_backend_region_model_exists(self):
         """BackendRegion dataclass should be importable and usable."""
-        from planner.backend_region import (
+        from factor_engine.planner.backend_region import (
             BackendRegion,
             PhysicalBackend,
             Representation,
@@ -212,7 +212,7 @@ class TestMBP0004BackendRegionModel:
 
     def test_transfer_edge_model_exists(self):
         """TransferEdge dataclass should be importable and usable."""
-        from planner.backend_region import (
+        from factor_engine.planner.backend_region import (
             TransferEdge,
             PhysicalBackend,
             Representation,
@@ -246,7 +246,7 @@ class TestMBP0005PhysicalRegionPlan:
 
     def test_physical_region_plan_model_exists(self):
         """PhysicalRegionPlan should be importable and usable."""
-        from planner.backend_region import (
+        from factor_engine.planner.backend_region import (
             PhysicalRegionPlan,
             BackendRegion,
             TransferEdge,
@@ -316,7 +316,7 @@ class TestMBP0005PhysicalRegionPlan:
 
     def test_every_logical_node_assigned_exactly_once(self):
         """Each logical node should appear in exactly one region."""
-        from planner.backend_region import (
+        from factor_engine.planner.backend_region import (
             PhysicalRegionPlan,
             BackendRegion,
             PhysicalBackend,
@@ -378,7 +378,7 @@ class TestMBP0006ExecutorMustNotReroute:
 
     def test_plan_route_carries_backend_decision(self):
         """PlanRoute should clearly specify the chosen backend."""
-        from backend.plan_cost_router import PlanRoute
+        from factor_engine.backend.plan_cost_router import PlanRoute
 
         route = PlanRoute(
             backend="polars_panel",
@@ -403,7 +403,7 @@ class TestMBP0006ExecutorMustNotReroute:
 
     def test_physical_region_plan_is_executable(self):
         """PhysicalRegionPlan should contain all info needed for execution."""
-        from planner.backend_region import (
+        from factor_engine.planner.backend_region import (
             PhysicalRegionPlan,
             BackendRegion,
             PhysicalBackend,

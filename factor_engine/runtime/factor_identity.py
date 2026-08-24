@@ -248,7 +248,7 @@ def _plan_operator_canonicals(plan: Any) -> list[str]:
         op = str(getattr(node, "op", "") or "")
         if op and op not in {"column", "literal", "plan_ref", "materialized_series"}:
             try:
-                from cleaned_operators.registry import OperatorRegistry
+                from factor_engine.cleaned_operators.registry import OperatorRegistry
 
                 canonical = OperatorRegistry.resolve_canonical(op)
             except Exception:  # noqa: BLE001 - bootstrap 保守按原 op
@@ -320,13 +320,13 @@ class OperatorSemanticContractDigest:
         backend_hashes。registry 未加载 / 未知算子时抛出底层异常，由调用方
         决定回退（plan_hash 回退 ``semantic_version="unregistered"``）。
         """
-        from cleaned_operators.operator_policy import infer_operator_policy
-        from cleaned_operators.registry import OperatorRegistry
-        from backend.evidence_provenance import (
+        from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+        from factor_engine.backend.evidence_provenance import (
             compute_payload_hash,
             implementation_hashes_for,
         )
-        from backend.production_signature import signature_for
+        from factor_engine.backend.production_signature import signature_for
 
         resolved = OperatorRegistry.resolve_canonical(canonical)
         catalog = OperatorRegistry._catalog.get(resolved, {})
@@ -404,7 +404,7 @@ def scoped_field_contract_hash(plan: Any) -> str:
     if not cols:
         return _stable_hash({"scoped_fields": []})
     try:
-        from fields import get_field_registry
+        from factor_engine.fields import get_field_registry
 
         registry = get_field_registry()
         field_specs = {
@@ -469,7 +469,7 @@ def compute_factor_identity(plan: Any, ctx: Any = None) -> FactorSemanticIdentit
     ``fields.compute_field_catalog_hash``、``runtime.lineage.hash_data_source_config``、
     ``planner.source_dependencies.source_dependency_hash``。
     """
-    from storage.catalog import compute_ir_hash
+    from factor_engine.storage.catalog import compute_ir_hash
 
     ir_hash = _ctx_override(ctx, "ir_hash")
     if ir_hash is None:
@@ -483,7 +483,7 @@ def compute_factor_identity(plan: Any, ctx: Any = None) -> FactorSemanticIdentit
         if plan is not None:
             operator_contract_hash = scoped_operator_contract_hash(plan)
         else:
-            from cleaned_operators.operator_policy import compute_operator_catalog_hash
+            from factor_engine.cleaned_operators.operator_policy import compute_operator_catalog_hash
 
             operator_contract_hash = compute_operator_catalog_hash()
 
@@ -493,13 +493,13 @@ def compute_factor_identity(plan: Any, ctx: Any = None) -> FactorSemanticIdentit
         if plan is not None:
             field_contract_hash = scoped_field_contract_hash(plan)
         else:
-            from fields import compute_field_catalog_hash
+            from factor_engine.fields import compute_field_catalog_hash
 
             field_contract_hash = compute_field_catalog_hash()
 
     source_contract_hash = _ctx_override(ctx, "source_contract_hash")
     if source_contract_hash is None:
-        from runtime.lineage import hash_data_source_config
+        from factor_engine.runtime.lineage import hash_data_source_config
 
         data_source_config = _ctx_override(ctx, "data_source_config")
         source_contract_hash = hash_data_source_config(data_source_config or {})
@@ -507,7 +507,7 @@ def compute_factor_identity(plan: Any, ctx: Any = None) -> FactorSemanticIdentit
     source_dependency_hash = _ctx_override(ctx, "source_dependency_hash")
     if source_dependency_hash is None:
         if plan is not None:
-            from planner.source_dependencies import source_dependency_hash as _src_dep_hash
+            from factor_engine.planner.source_dependencies import source_dependency_hash as _src_dep_hash
 
             source_dependency_hash = _src_dep_hash(plan)
         else:

@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from fields.concepts import (
+from factor_engine.fields.concepts import (
     FieldConceptSpec,
     FieldLegalityError,
     assert_field_legality,
     check_field_legality,
     validate_concept_metadata,
 )
-from fields.units_v2 import RATIO, UnitSpec
+from factor_engine.fields.units_v2 import RATIO, UnitSpec
 
 
 class TestSemanticExtensions:
@@ -104,7 +104,7 @@ class TestFieldLegalityPass:
 
 class TestPeriodDurationAndBundle:
     def test_period_duration_normalized(self):
-        from ir.types import PeriodDuration, normalize_period_duration
+        from factor_engine.ir.types import PeriodDuration, normalize_period_duration
 
         assert normalize_period_duration("QUARTER") == PeriodDuration.QUARTER.value
         assert normalize_period_duration("ttm") == "ttm"
@@ -113,14 +113,14 @@ class TestPeriodDurationAndBundle:
             normalize_period_duration("weekly")
 
     def test_period_duration_in_factor_identity(self):
-        from ir.types import SemanticIdentityDigest
+        from factor_engine.ir.types import SemanticIdentityDigest
 
         d1 = SemanticIdentityDigest.from_attrs({"period_duration": "quarter"})
         d2 = SemanticIdentityDigest.from_attrs({"period_duration": "annual"})
         assert d1.value != d2.value
 
     def test_semantic_bundle_covers_economic_dimensions(self):
-        from ir.types import SemanticTypeBundle
+        from factor_engine.ir.types import SemanticTypeBundle
 
         b = SemanticTypeBundle.from_field_like(
             type("S", (), {"period_duration": "annual", "frequency": "daily", "value_kind": "ratio"})()

@@ -788,10 +788,10 @@ def check_model_direct_use_readiness() -> tuple[int, int, dict[str, list[str]]]:
     ready_count = 0. Never fake a counter without the real artifact.
     """
     try:
-        from cleaned_operators import load_all
-        from cleaned_operators.registry import OperatorRegistry
-        from cleaned_operators.model_timing import MODEL_TIMING_CONTRACTS, is_model_like_name
-        from cleaned_operators.model_lane import assign_model_lane, _category_of
+        from factor_engine.cleaned_operators import load_all
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.model_timing import MODEL_TIMING_CONTRACTS, is_model_like_name
+        from factor_engine.cleaned_operators.model_lane import assign_model_lane, _category_of
 
         load_all()
         canonicals = sorted(OperatorRegistry.list_canonical())
@@ -824,7 +824,7 @@ def check_model_direct_use_readiness() -> tuple[int, int, dict[str, list[str]]]:
             # Gate 4: parameter domain certified (real check against store)
             param_certified = False
             try:
-                from runtime.parameter_domain_store import ParameterDomainCertificationStore
+                from factor_engine.runtime.parameter_domain_store import ParameterDomainCertificationStore
                 store = ParameterDomainCertificationStore()
                 param_certified = bool(store.operator_has_any_certified_region(c))
             except Exception:

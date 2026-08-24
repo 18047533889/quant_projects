@@ -66,8 +66,8 @@ _to_frame = _HARNESS._to_frame
 # P0-08: bound at module scope (after the harness has made ``cleaned_operators``
 # importable) so ``main()``'s production-candidate gate is monkeypatchable by
 # tests (``monkeypatch.setattr(audit, "factor_production_targets", ...)``).
-from cleaned_operators.production_hardening import factor_production_targets
-from cleaned_operators.semantic_certification import should_fail_closed
+from factor_engine.cleaned_operators.production_hardening import factor_production_targets
+from factor_engine.cleaned_operators.semantic_certification import should_fail_closed
 
 # --- operator sample ---------------------------------------------------------
 # Always-audited causal kernels (pivot/extrema/structural/directional and the
@@ -81,10 +81,10 @@ _ALWAYS_CAUSAL_PREFIXES = (
 
 
 def _canonical_sample(rng: random.Random, n_random: int = 60) -> list[str]:
-    import cleaned_operators as co
+    import factor_engine.cleaned_operators as co
 
     co.load_all()
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     all_c = list(OperatorRegistry.list_canonical())
     always = sorted(c for c in all_c if c.startswith(_ALWAYS_CAUSAL_PREFIXES))
@@ -94,7 +94,7 @@ def _canonical_sample(rng: random.Random, n_random: int = 60) -> list[str]:
 
 
 def _warmup_rows(canonical: str) -> int:
-    from runtime.execution_contract import history_requirement
+    from factor_engine.runtime.execution_contract import history_requirement
 
     try:
         return max(1, history_requirement(canonical, {}).rows)
@@ -192,10 +192,10 @@ def audit_prefix_invariance(
     Operators whose fixture execution raises (the auditor cannot construct valid
     inputs) are appended to ``unaudited`` (P0-08) instead of passing silently.
     """
-    import cleaned_operators as co
+    import factor_engine.cleaned_operators as co
 
     co.load_all()
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     _unaudited = unaudited if unaudited is not None else []
     n_rows = panels["x"].shape[0]
@@ -270,11 +270,11 @@ def audit_stateful_contract_discovery(
     (P0-08).  The second-half slice uses :func:`_slice_range` so it is the real
     trailing half (``iloc[half:]``), not the leading half (P0-06).
     """
-    import cleaned_operators as co
+    import factor_engine.cleaned_operators as co
 
     co.load_all()
-    from cleaned_operators.registry import OperatorRegistry
-    from runtime.execution_contract import execution_contract
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.runtime.execution_contract import execution_contract
 
     _unaudited = unaudited if unaudited is not None else []
     errors: list[str] = []
@@ -322,7 +322,7 @@ def audit_stateful_contract_discovery(
         # executed with — an operator that requires its window params
         # (left_window/right_window) has a bound-param warmup far larger than the
         # ``{}`` default floor (2), so using the default would false-flag it.
-        from runtime.execution_contract import history_requirement
+        from factor_engine.runtime.execution_contract import history_requirement
 
         skip = _warmup_rows(canonical)
         try:
@@ -368,12 +368,12 @@ def audit_default_parameter_history(
     in a fixture) are NOT a history bug and are not flagged.  Operators that
     raise on the fixture are appended to ``unaudited`` (P0-08), never FAILed.
     """
-    import cleaned_operators as co
+    import factor_engine.cleaned_operators as co
 
     co.load_all()
-    from cleaned_operators.base import _kernel_param_defaults
-    from cleaned_operators.registry import OperatorRegistry
-    from runtime.execution_contract import history_requirement
+    from factor_engine.cleaned_operators.base import _kernel_param_defaults
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.runtime.execution_contract import history_requirement
 
     _unaudited = unaudited if unaudited is not None else []
     errors: list[str] = []
@@ -485,10 +485,10 @@ def _is_variadic(meta: Any) -> bool:
 def audit_unit_algebra() -> list[str]:
     """``same_as:<param>`` references must resolve to real declared params; the
     formula families must carry the dimensional-analysis-correct output unit."""
-    import cleaned_operators as co
+    import factor_engine.cleaned_operators as co
 
     co.load_all()
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     errors: list[str] = []
     for canonical in OperatorRegistry.list_canonical():
@@ -525,7 +525,7 @@ def audit_unit_algebra() -> list[str]:
 
 
 def _curated_causal_panels() -> dict[str, pd.DataFrame]:
-    import cleaned_operators as co
+    import factor_engine.cleaned_operators as co
 
     co.load_all()
     return _panels(rows=420, columns=6)

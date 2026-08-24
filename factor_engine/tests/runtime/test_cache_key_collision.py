@@ -15,7 +15,7 @@ import hashlib
 import pandas as pd
 import pytest
 
-from storage.cache import CacheManager, PersistentPlanCache
+from factor_engine.storage.cache import CacheManager, PersistentPlanCache
 
 
 def test_scoped_key_collision_vulnerability():
@@ -129,7 +129,7 @@ def test_cache_key_digest_validation_rejects_mismatched_key(tmp_path):
     # Try to load with wrong key (scoped_b)
     scoped_b = cache._scoped_key("key_b")
 
-    from storage.cache import _load_value
+    from factor_engine.storage.cache import _load_value
 
     # Load with mismatched cache_key should fail validation
     hit = _load_value(path_a, cache_key=scoped_b)

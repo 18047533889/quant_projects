@@ -71,9 +71,9 @@ def scenario_1_10k_batch(engine, data_source) -> ScenarioResult:
     - 执行时间
     - 结果形状正确性
     """
-    from api import col, rank, ts_mean, ts_std_dev, ts_delta, delay, zscore
-    from api.factor import Factor
-    from runtime.perf_config import PerfConfig
+    from factor_engine.api import col, rank, ts_mean, ts_std_dev, ts_delta, delay, zscore
+    from factor_engine.api.factor import Factor
+    from factor_engine.runtime.perf_config import PerfConfig
 
     logger.info("=" * 80)
     logger.info("场景 1: 10k Factor Batch（大规模批处理）")
@@ -254,8 +254,8 @@ def scenario_2_research_workflow(engine, data_source) -> ScenarioResult:
     3. 因子预处理（标准化、去极值）
     4. 因子评价（IC 计算）
     """
-    from api import col, rank, ts_mean, ts_std_dev, ts_delta, delay, zscore
-    from api.factor import Factor
+    from factor_engine.api import col, rank, ts_mean, ts_std_dev, ts_delta, delay, zscore
+    from factor_engine.api.factor import Factor
 
     logger.info("=" * 80)
     logger.info("场景 2: 真实研究工作流")
@@ -387,8 +387,8 @@ def scenario_3_realtime_simulation(engine, data_source) -> ScenarioResult:
     - 增量计算延迟（< 1s）
     - 结果正确性
     """
-    from api import col, rank, ts_mean
-    from api.factor import Factor
+    from factor_engine.api import col, rank, ts_mean
+    from factor_engine.api.factor import Factor
 
     logger.info("=" * 80)
     logger.info("场景 3: 实时计算场景（模拟）")
@@ -483,7 +483,7 @@ def scenario_3_realtime_simulation(engine, data_source) -> ScenarioResult:
 
 def build_test_data_source():
     """构造测试用数据源（模拟 A 股全市场）"""
-    from storage.datasource import DataSource
+    from factor_engine.storage.datasource import DataSource
 
     class TestDataSource(DataSource):
         """内存测试数据源"""
@@ -648,8 +648,8 @@ def generate_report(report: ValidationReport, output_path: str):
 def main():
     """主验证流程"""
     from datetime import datetime
-    from backend.pandas_backend import PandasBackend
-    from runtime.engine import FactorEngine
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
 
     logger.info("=" * 80)
     logger.info("开始生产场景端到端验证")

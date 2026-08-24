@@ -7,13 +7,13 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from api import rank, ts_mean
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from planner.sql_lowerer import lower_to_physical_plan
-from runtime.engine import FactorEngine
-from storage.factory import build_data_source
+from factor_engine.api import rank, ts_mean
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.planner.sql_lowerer import lower_to_physical_plan
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.storage.factory import build_data_source
 
 
 @pytest.fixture(autouse=True)
@@ -78,7 +78,7 @@ def test_sql_lowerer_splits_macd_mixed_tree(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_ACCESS_CONFIG", str(_registry(tmp_path, tmp_path / "data")))
     _seed(tmp_path / "data")
 
-    from api.cleaned_ops import make_cleaned_call_factory
+    from factor_engine.api.cleaned_ops import make_cleaned_call_factory
 
     where = make_cleaned_call_factory("where")
     macd = make_cleaned_call_factory("MACD")
@@ -97,7 +97,7 @@ def test_partial_sql_hybrid_matches_pandas(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_ACCESS_CONFIG", str(_registry(tmp_path, tmp_path / "data")))
     _seed(tmp_path / "data")
 
-    from api.cleaned_ops import make_cleaned_call_factory
+    from factor_engine.api.cleaned_ops import make_cleaned_call_factory
 
     where = make_cleaned_call_factory("where")
     macd = make_cleaned_call_factory("MACD")

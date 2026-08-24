@@ -13,12 +13,12 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from runtime.engine import FactorEngine
-from storage.factory import build_data_source
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.storage.factory import build_data_source
 
 
 @pytest.fixture(autouse=True)
@@ -108,10 +108,10 @@ def _run_pair(tmp_path, monkeypatch, expr, name, *, rtol=1e-4, atol=1e-6):
 
 @pytest.fixture(scope="module", autouse=True)
 def _load():
-    from backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
     ensure_cleaned_loaded()
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     register_sql_backends()
 

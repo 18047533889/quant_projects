@@ -16,9 +16,9 @@ lowering / PIT validation / grain validation / unit validation。
 
 from __future__ import annotations
 
-from ir.nodes import IRNode
-from planner.logical_plan import PlanNode
-from planner.lowerer import Lowerer
+from factor_engine.ir.nodes import IRNode
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.lowerer import Lowerer
 
 
 def _semantic() -> dict:
@@ -111,7 +111,7 @@ def test_plain_attrs_mutation_does_not_mutate_semantic_attrs() -> None:
 
 
 def test_plan_rebuild_sites_carry_semantic_attrs() -> None:
-    from planner.cse import deep_copy_plan
+    from factor_engine.planner.cse import deep_copy_plan
 
     plan = Lowerer().to_logical_plan(_make_ir())
     copied = deep_copy_plan(plan)

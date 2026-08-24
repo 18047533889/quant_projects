@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import os
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -60,7 +60,7 @@ def test_no_canonical_claims_semantic_or_source_evidence_from_runtime():
 def test_volume_recipe_binds_raw_volume_shares():
     # R25-029/030/173: volume must bind to raw_volume_shares (share count), NOT
     # a price-adjusted continuous_volume concept.
-    from mining.direct_use import _DEFAULT_INPUT_RECIPE, _INPUT_CONCEPT_FALLBACK
+    from factor_engine.mining.direct_use import _DEFAULT_INPUT_RECIPE, _INPUT_CONCEPT_FALLBACK
 
     assert _DEFAULT_INPUT_RECIPE["ts_average_volume"]["volume"] == "raw_volume_shares"
     assert _DEFAULT_INPUT_RECIPE["dollar_volume"]["volume"] == "raw_volume_shares"
@@ -69,7 +69,7 @@ def test_volume_recipe_binds_raw_volume_shares():
 
 def test_generic_anonymous_slot_fallbacks_removed():
     # R25-032/033: sid*/p*/s*/weight must NOT fall back to continuous_close.
-    from mining.direct_use import _INPUT_CONCEPT_FALLBACK
+    from factor_engine.mining.direct_use import _INPUT_CONCEPT_FALLBACK
 
     assert "weight" not in _INPUT_CONCEPT_FALLBACK
     assert "weights" not in _INPUT_CONCEPT_FALLBACK
@@ -79,7 +79,7 @@ def test_generic_anonymous_slot_fallbacks_removed():
 
 def test_output_domain_corr_is_neg_one_one():
     # R25-086/087/175: *_corr is [-1,1], *_r2 is not uniformly [0,1].
-    from mining.direct_use import _OUTPUT_DOMAIN_ALPHA_PATTERNS
+    from factor_engine.mining.direct_use import _OUTPUT_DOMAIN_ALPHA_PATTERNS
 
     mapping = dict(_OUTPUT_DOMAIN_ALPHA_PATTERNS)
     assert mapping["_corr"] == "neg_one_one"
@@ -88,13 +88,13 @@ def test_output_domain_corr_is_neg_one_one():
 
 def test_injectivity_is_not_hardcoded_false():
     # R25-040/172: parameter_injectivity_passed must come from a real probe.
-    from mining.direct_use import build_direct_use_operator
+    from factor_engine.mining.direct_use import build_direct_use_operator
 
     op = OperatorRegistry.get("ts_rank")
     assert op is not None
     row = build_direct_use_operator("ts_rank", OperatorRegistry._catalog["ts_rank"])
     assert row.searchable_params == ("window",)
     # ts_rank's window genuinely changes the output on a 40-row fixture.
-    from mining.direct_use import _probe_parameter_injectivity
+    from factor_engine.mining.direct_use import _probe_parameter_injectivity
 
     assert _probe_parameter_injectivity("ts_rank", op, ("window",), ("x",)) is True

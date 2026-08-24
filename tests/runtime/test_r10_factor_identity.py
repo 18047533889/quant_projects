@@ -19,8 +19,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ir.nodes import IRNode
-from runtime.factor_identity import (
+from factor_engine.ir.nodes import IRNode
+from factor_engine.runtime.factor_identity import (
     NO_FACTOR_IDENTITY,
     FactorIdentityMismatch,
     FactorSemanticIdentity,
@@ -29,7 +29,7 @@ from runtime.factor_identity import (
     compute_factor_identity,
     partition_input_fingerprint,
 )
-from storage.materializer import ParquetMaterializer
+from factor_engine.storage.materializer import ParquetMaterializer
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +223,7 @@ class TestComputeFactorIdentity:
 
 
 def compute_ir_hash_of(plan):
-    from storage.catalog import compute_ir_hash
+    from factor_engine.storage.catalog import compute_ir_hash
 
     return compute_ir_hash(plan)
 

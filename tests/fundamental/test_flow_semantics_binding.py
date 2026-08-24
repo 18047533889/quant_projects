@@ -4,8 +4,8 @@ parameter; and A-share YTD fields bind to CumulativeYTDFlow at the catalog level
 """
 from __future__ import annotations
 
-from fields.catalog import ASHARE_FIELD_SPECS, ASHARE_TABLE_SPECS
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.fields.catalog import ASHARE_FIELD_SPECS, ASHARE_TABLE_SPECS
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 _FLOW_TYPE_OPS = (
     "fin_pct_change",

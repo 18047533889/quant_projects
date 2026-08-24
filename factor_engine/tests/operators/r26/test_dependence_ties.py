@@ -14,8 +14,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from cleaned_operators.dependence_ext import _chatterjee_xi
-from cleaned_operators.cross_section_local import _copula_cross_series
+from factor_engine.cleaned_operators.dependence_ext import _chatterjee_xi
+from factor_engine.cleaned_operators.cross_section_local import _copula_cross_series
 
 
 def _xi(xv, yv):

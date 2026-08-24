@@ -1,0 +1,51 @@
+# 因子生成任务（基于父因子扩展）— 仅 factor_engine DSL
+
+你的任务：在给定父因子、主题、解释与优化轨迹的基础上，生成 {num} 条**新的** factor_engine DSL 表达式。
+
+## 引擎硬约束（最高优先级）
+1. 表达式必须可被 **factor_engine**（我们自己的 FactorEngine）解析与执行。
+2. **禁止** AlphaGen / qlib 语法：`$close`、`TsMean`、`Div`、`Mul`、`Ref`、`%d` 等。
+3. **只能**使用上文白名单中的字段与算子；名称大小写、拼写不可改动（`and_` / `or_` 带下划线）。
+4. 滚动窗口写具体整数，禁止 `%d`。优先从扩大后的窗口集合选取：
+   1,2,3,4,5,7,10,12,15,18,20,25,30,35,40,50,60,70,80,90,100,120,150,180,200,220,250,300,500,800,1000。
+5. **单条表达式内允许多个不同窗口**（已解除「整式共用一个窗口」限制）。嵌套多个滚动算子时，优先写跨档窗口（如 `ts_mean(..., 5)` 与 `ts_mean(..., 60)` 同式），不要默认整式只出现一个窗口整数。
+6. 新表达式须与「给定表达式」及本批其它输出在结构上明显不同；不得复制粘贴父因子。
+7. 新表达式须与主题「{topic}」相关。
+8. 若 generation traces 非空，参考历史路径但勿重复已有结构。
+9. 复杂度不必递增；简化、换统计量也是有效创新。
+10. 输出前自检：字段、算子、括号、窗口整数（可多个）、无量纲、是否误用旧语法。
+
+## 多样性策略（{num} 条之间必须两两不同）
+对每条新因子，从下列维度中**刻意选择不同组合**：
+
+| 维度 | 选项示例 |
+|------|----------|
+| 时间尺度 | 超短 1–5 / 短 7–20 / 中 25–60 / 中长 70–150 / 长 180–300 / 超长 500–1000（**批内跨档；单式内也可短+长并存**） |
+| 多窗口结构 | 短长均线差 / 短波动÷长均值 / 双尺度动量差 / 短窗信号门控长窗特征 |
+| 截面 vs 时序 | rank / zscore / cs_mad_zscore / cs_pct_rank vs ts_rank / ts_zscore |
+| 算子族（批内轮换） | 技术指标 RSI/ADX/ATR/MACD/KAMA/PPO/MFI/Supertrend；通道 donchian/Keltner/bollinger/ts_channel_*；波动 yang_zhang/parkinson/ulcer；流动性 amihud/relative_volume/turnover_*；支撑阻力/摆动 ts_resistance_*/ts_swing_*；K线 cdl_*/candle_*/pattern_*；相关 ts_corr/ts_partial_corr；回归 ts_regression_* / ts_beta；分位 ts_quantile / topk_*；条件 ts_count_if / ts_sum_if；风险 ts_max_drawdown / ts_sharpe |
+| 价格结构 | 收盘 vs 高低振幅/true_range vs 开收差 vs vwap/pre_close 偏离 |
+| 量能 | volume / amount 的 rank、ts_pct、与价变化 ts_corr |
+| 逻辑门控 | if_else / where + gt/lt/and_/or_（适度） |
+
+## 参数多样化
+- **单式多窗口**：至少约一半输出应在同一条 DSL 内使用 ≥2 个不同窗口整数。
+- **算子覆盖**：一批内尽量使用 ≥3 个不同算子族；禁止全部只改 `ts_mean`/`rank` 的窗口。
+- 父因子用 `ts_mean(close, 20)` 时，可改为 RSI/ADX、ts_corr、ts_sharpe、短长差、cs_mad_zscore 等，不要五条全是换窗口的 mean。
+- 做 `rank(ts_...)` 与 `ts_rank(...)` 对比时，窗口也应错开（跨短/中/长档）。
+- **禁止** {num} 条输出全部使用与父因子相同的窗口整数；至少一半应使用父因子中未出现的窗口或算子族。
+- 鼓励在同一批里同时出现短窗、长窗、以及短长组合因子，扩大搜索覆盖。
+- 收益相关优先 `ts_pct` / `ts_log_return` / `safe_div_null(close, pre_close) - 1.0`，不要裸写 `ret`。
+
+## 输出 JSON（仅此一个对象，无其它文字）
+{{
+  "expressions": ["共 {num} 条新 factor_engine DSL 字符串"],
+  "expressions_fixed": ["若某条违反硬性要求则在此修正；否则与 expressions 对应项相同"],
+  "explanations": ["共 {num} 条中文简要解释，与 expressions 同序"]
+}}
+
+## 输入
+主题 topic: {topic}
+父因子表达式: {expressions}
+父因子解释: {explanations}
+优化轨迹 traces: {traces}

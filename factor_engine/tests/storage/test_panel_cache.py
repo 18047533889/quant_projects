@@ -6,9 +6,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import series_to_panel
-from backend.context import ExecutionContext
-from cache.panel_cache import series_panel_cache_key
+from factor_engine.backend.cleaned_bridge import series_to_panel
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.cache.panel_cache import series_panel_cache_key
 from tests.helpers import InMemorySeriesSource
 
 

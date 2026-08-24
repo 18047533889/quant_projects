@@ -6,7 +6,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from market.universe import (
+from factor_engine.market.universe import (
     OPEN_ENDED,
     NON_PIT_STATIC_UNIVERSE,
     CoverageExitReason,

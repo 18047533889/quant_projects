@@ -7,16 +7,16 @@ from dataclasses import replace
 import pandas as pd
 import pytest
 
-from api import rank
-from api.columns import col
-from api.factor import Factor
-from backend.context import ExecutionContext
-from backend.pandas_backend import PandasBackend
-from backend.polars_backend import PolarsBackend
-from planner.cost_summary import summarize_plans
-from planner.logical_plan import PlanNode
-from runtime.engine import FactorEngine
-from runtime.production_policy import (
+from factor_engine.api import rank
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.backend.polars_backend import PolarsBackend
+from factor_engine.planner.cost_summary import summarize_plans
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.runtime.production_policy import (
     ProductionPolicyViolation,
     assert_no_production_pandas_fallbacks,
     record_production_pandas_fallback,

@@ -23,8 +23,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from cleaned_operators import load_all  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators import load_all  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 
 def _load():
@@ -118,7 +118,7 @@ def test_panel_forecast_hostile_feature():
 
 
 def test_pca_n_components_boundaries():
-    from cleaned_operators.cross_section.panel_model import _pca_svd
+    from factor_engine.cleaned_operators.cross_section.panel_model import _pca_svd
 
     rng = np.random.default_rng(5)
     X = rng.standard_normal((60, 6))
@@ -134,7 +134,7 @@ def test_pca_n_components_boundaries():
 def test_pca_one_suspended_stock():
     """§62: one all-NaN stock must be dropped from the active set without
     poisoning peers."""
-    from cleaned_operators.cross_section.panel_model import _pca_svd
+    from factor_engine.cleaned_operators.cross_section.panel_model import _pca_svd
 
     rng = np.random.default_rng(6)
     X = rng.standard_normal((60, 5))
@@ -148,7 +148,7 @@ def test_pca_one_suspended_stock():
 
 def test_pca_all_equal_stocks():
     """§62: all-equal columns must not crash (unit-scale fallback)."""
-    from cleaned_operators.cross_section.panel_model import _pca_svd
+    from factor_engine.cleaned_operators.cross_section.panel_model import _pca_svd
 
     X = np.ones((40, 4))
     pca = _pca_svd(X, 2)
@@ -160,7 +160,7 @@ def test_pca_all_equal_stocks():
 # --------------------------------------------------------------------------
 
 def test_enet_alpha_l1_domain():
-    from cleaned_operators.cross_section.panel_model import _enet_predict
+    from factor_engine.cleaned_operators.cross_section.panel_model import _enet_predict
 
     rng = np.random.default_rng(7)
     X = rng.standard_normal((60, 3))
@@ -177,7 +177,7 @@ def test_enet_alpha_l1_domain():
 
 
 def test_pls_component_boundaries():
-    from cleaned_operators.cross_section.panel_model import _pls1_predict
+    from factor_engine.cleaned_operators.cross_section.panel_model import _pls1_predict
 
     rng = np.random.default_rng(8)
     X = rng.standard_normal((60, 4))
@@ -201,7 +201,7 @@ def test_pls_component_boundaries():
 # --------------------------------------------------------------------------
 
 def test_kalman_rejects_invalid_q_r():
-    from cleaned_operators.ts_model.state_space import _kalman_level
+    from factor_engine.cleaned_operators.ts_model.state_space import _kalman_level
 
     x = np.arange(50, dtype=float)
     for q, r in ((-1.0, 1.0), (1.0, 0.0), (1.0, -1.0), (np.inf, 1.0)):
@@ -211,7 +211,7 @@ def test_kalman_rejects_invalid_q_r():
 
 def test_kalman_q_zero_and_small_r():
     """§66: q=0 and small r must work without crashing."""
-    from cleaned_operators.ts_model.state_space import _kalman_level
+    from factor_engine.cleaned_operators.ts_model.state_space import _kalman_level
 
     rng = np.random.default_rng(9)
     x = rng.standard_normal(80)

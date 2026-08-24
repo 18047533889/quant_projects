@@ -8,7 +8,7 @@ from datetime import date, datetime
 
 # Conditionally import pydantic-dependent features
 try:
-    from validation.contracts import (
+    from factor_engine.validation.contracts import (
         FactorBatchSchema,
         FeatureBundleSchema,
         LabelBundleSchema,

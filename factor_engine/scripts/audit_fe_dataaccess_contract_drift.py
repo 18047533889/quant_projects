@@ -74,8 +74,8 @@ def _dataaccess_registry_datasets() -> dict:
 
 
 def _fe_table_specs() -> list:
-    from fields.catalog import ASHARE_TABLE_SPECS
-    from fields.catalog_us import US_TABLE_SPECS
+    from factor_engine.fields.catalog import ASHARE_TABLE_SPECS
+    from factor_engine.fields.catalog_us import US_TABLE_SPECS
 
     return list(ASHARE_TABLE_SPECS) + list(US_TABLE_SPECS)
 

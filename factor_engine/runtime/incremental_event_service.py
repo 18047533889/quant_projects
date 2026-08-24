@@ -11,13 +11,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Sequence
 
-from runtime.incremental_scheduler import (
+from factor_engine.runtime.incremental_scheduler import (
     DataEvent,
     execute_incremental_updates_from_event,
     normalize_data_event as _normalize_data_event,
     plan_updates_from_data_event,
 )
-from storage.materializer import ParquetMaterializer
+from factor_engine.storage.materializer import ParquetMaterializer
 
 
 def normalize_data_event(event: DataEvent | dict[str, Any]) -> DataEvent:
@@ -27,7 +27,7 @@ def normalize_data_event(event: DataEvent | dict[str, Any]) -> DataEvent:
 
 def _production_for_event(event: DataEvent) -> bool:
     """P0-19/P0-20: effective production mode for a planning-only call."""
-    from runtime.incremental_scheduler import _is_production_run
+    from factor_engine.runtime.incremental_scheduler import _is_production_run
 
     return _is_production_run(event)
 
@@ -47,7 +47,7 @@ def plan_incremental_from_event(
     """数据列更新事件 → 受影响因子增量重算计划。"""
     normalized = normalize_data_event(event)
     catalog = ParquetMaterializer(lake_root=lake_root).catalog
-    from runtime.dependency_catalog import DependencyCatalog
+    from factor_engine.runtime.dependency_catalog import DependencyCatalog
 
     dep_catalog = DependencyCatalog(catalog)
     production = _production_for_event(normalized)
@@ -94,7 +94,7 @@ def materialize_incremental_from_event(
 
 def _factor_from_config(config: Any) -> Any:
     """``config.factor`` → :class:`Factor`（与 ``from_loaded_config`` 完全同源）。"""
-    from api.dsl_parser import parse_factor
+    from factor_engine.api.dsl_parser import parse_factor
 
     return parse_factor(
         config.factor.expr,
@@ -136,10 +136,10 @@ def materialize_incremental_many_from_config(
     输出结构不变：``materializations`` 按 ``factor.name`` 键、每个结果带
     ``config`` 与 ``config_path`` —— 与逐配置串行完全一致。
     """
-    from runtime.config import load_config
-    from runtime.config_runtime import resolve_materialize_kwargs_for_pipeline
-    from runtime.execution_identity import execution_identity_from_config
-    from runtime.factor_campaign_session import FactorCampaignSession
+    from factor_engine.runtime.config import load_config
+    from factor_engine.runtime.config_runtime import resolve_materialize_kwargs_for_pipeline
+    from factor_engine.runtime.execution_identity import execution_identity_from_config
+    from factor_engine.runtime.factor_campaign_session import FactorCampaignSession
 
     # 1. load all configs first; resolve materialize opts (identity depends on
     #    the effective write target / market / PIT, including pipeline overrides).

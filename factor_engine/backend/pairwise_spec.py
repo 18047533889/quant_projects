@@ -24,7 +24,7 @@ PAIRWISE_SPECS: dict[str, PairwiseRollingSpec] = {
 
 
 def pairwise_spec_for(canon: str) -> PairwiseRollingSpec:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     return PAIRWISE_SPECS.get(name, PairwiseRollingSpec())

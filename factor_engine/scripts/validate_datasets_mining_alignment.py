@@ -32,7 +32,7 @@ def main() -> int:
     if fe not in sys.path:
         sys.path.insert(0, fe)
 
-    from api.datasets_contract import audit_full_datasets_contract
+    from factor_engine.api.datasets_contract import audit_full_datasets_contract
 
     report = audit_full_datasets_contract(profile_name=args.profile)
     if args.json:

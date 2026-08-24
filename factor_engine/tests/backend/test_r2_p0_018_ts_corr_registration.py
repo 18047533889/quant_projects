@@ -5,14 +5,14 @@ import numpy as np
 import pandas as pd
 import polars as pl
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def test_ts_corr_registry_points_to_repaired_native_operator() -> None:
     load_all()
     operator = OperatorRegistry.get("ts_corr", "polars", mode="research")
-    assert operator.__class__.__module__ == "cleaned_operators.common.polars_ts_rolling"
+    assert operator.__class__.__module__ == "factor_engine.cleaned_operators.common.polars_ts_rolling"
     assert operator.__class__.__name__ == "TSCorrNative"
 
 

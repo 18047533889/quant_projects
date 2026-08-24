@@ -7,9 +7,9 @@ import pytest
 
 pytest.importorskip("polars")
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from cleaned_operators.operator_surface import DAILY_CANONICALS
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
 from tests.backend_parity.duckdb_parity_helpers import assert_duckdb_real_sql_execution
 from tests.backend_parity.test_production_core_triple_parity import (
     _result_series,

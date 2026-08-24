@@ -2,9 +2,9 @@
 """技术指标 composite lowering：高级算子 → 基础 PlanNode DAG。"""
 from __future__ import annotations
 
-from planner.composite_lowering import register_lowering
-from planner.logical_plan import PlanNode
-from planner.lowerings import _helpers as H
+from factor_engine.planner.composite_lowering import register_lowering
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.lowerings import _helpers as H
 
 
 def _macd_windows(node: PlanNode) -> tuple[int, int, int]:

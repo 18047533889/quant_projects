@@ -25,24 +25,24 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.closure.axis_contract import (
+from factor_engine.cleaned_operators.closure.axis_contract import (
     SameAxisError,
     assert_same_axes,
     declare_axis_contract,
     has_axis_contract,
 )
-from cleaned_operators.closure.missing_policy import (
+from factor_engine.cleaned_operators.closure.missing_policy import (
     MissingPolicy,
     declare_missing_policy,
     missing_policy_for,
 )
-from cleaned_operators.closure.strict_scalar import (
+from factor_engine.cleaned_operators.closure.strict_scalar import (
     strict_bool,
     strict_enum,
     strict_float,
     strict_int,
 )
-from cleaned_operators.closure.window_semantics import (
+from factor_engine.cleaned_operators.closure.window_semantics import (
     WindowSemantics,
     declare_window_semantics,
     window_semantics_for,
@@ -161,7 +161,7 @@ def _frame(data: dict):
 
 
 def test_valid_count_excludes_inf_pandas():
-    from cleaned_operators.safe_ops import pd_ts_valid_count
+    from factor_engine.cleaned_operators.safe_ops import pd_ts_valid_count
 
     df = _frame({"A": [1.0, np.nan, np.inf, 4.0, 5.0, 6.0, np.nan, 8.0]})
     out = pd_ts_valid_count(df, 4, 1)["A"].to_numpy()
@@ -171,7 +171,7 @@ def test_valid_count_excludes_inf_pandas():
 
 def test_valid_count_pandas_polars_parity_with_inf():
     pl = pytest.importorskip("polars")
-    from cleaned_operators.safe_ops import (
+    from factor_engine.cleaned_operators.safe_ops import (
         _pl_finite_count_expr,
         pd_ts_valid_count,
     )
@@ -193,7 +193,7 @@ def test_valid_count_pandas_polars_parity_with_inf():
 
 def test_coverage_ratio_pandas_polars_parity_with_inf():
     pl = pytest.importorskip("polars")
-    from cleaned_operators.safe_ops import (
+    from factor_engine.cleaned_operators.safe_ops import (
         _pl_finite_count_expr,
         pd_ts_coverage_ratio,
     )
@@ -217,7 +217,7 @@ def _event_frame(vals):
 
 
 def test_event_interval_strict_eventbool():
-    from cleaned_operators.event_interval import _event_mask
+    from factor_engine.cleaned_operators.event_interval import _event_mask
 
     # only 0 / 1 / NaN accepted
     assert _event_mask(np.array([0.0, 1.0, np.nan, 1.0])).tolist() == [
@@ -229,7 +229,7 @@ def test_event_interval_strict_eventbool():
 
 
 def test_event_fano_right_aligned_blocks_and_ddof1():
-    from cleaned_operators.event_interval import EventFanoFactor
+    from factor_engine.cleaned_operators.event_interval import EventFanoFactor
 
     ev = np.zeros(100, dtype=float)
     ev[95] = ev[96] = ev[97] = ev[98] = ev[99] = 1.0
@@ -241,7 +241,7 @@ def test_event_fano_right_aligned_blocks_and_ddof1():
 
 
 def test_event_fano_min_valid_blocks_gate():
-    from cleaned_operators.event_interval import EventFanoFactor
+    from factor_engine.cleaned_operators.event_interval import EventFanoFactor
 
     # window 45 / block 20 -> only 2 full blocks < min_valid_blocks=5 -> NaN
     ev = np.zeros(45, dtype=float)
@@ -251,7 +251,7 @@ def test_event_fano_min_valid_blocks_gate():
 
 
 def test_event_fano_excess_is_zero_centered():
-    from cleaned_operators.event_interval import EventFanoExcess
+    from factor_engine.cleaned_operators.event_interval import EventFanoExcess
 
     ev = np.zeros(100, dtype=float)
     ev[95] = ev[96] = ev[97] = ev[98] = ev[99] = 1.0
@@ -260,7 +260,7 @@ def test_event_fano_excess_is_zero_centered():
 
 
 def test_event_interval_minimum_support():
-    from cleaned_operators.event_interval import EventIntervalMemory
+    from factor_engine.cleaned_operators.event_interval import EventIntervalMemory
 
     # 5 events -> 4 intervals -> NaN (minimum 6)
     ev5 = np.zeros(40, dtype=float)
@@ -286,8 +286,8 @@ def test_event_interval_minimum_support():
 # ---------------------------------------------------------------------------
 
 def test_rqa_param_clamps_now_raise():
-    from cleaned_operators.rqa_ext import _check_params as rqa_check
-    from cleaned_operators.recurrence_analysis import _check_params as rec_check
+    from factor_engine.cleaned_operators.rqa_ext import _check_params as rqa_check
+    from factor_engine.cleaned_operators.recurrence_analysis import _check_params as rec_check
 
     assert rqa_check(240, 2, 1, 0.1, 2) == (240, 2, 1, 0.1, 2, 1)
     assert rec_check(240, 2, 1, 0.1, 2) == (240, 2, 1, 0.1, 2)
@@ -304,7 +304,7 @@ def test_rqa_param_clamps_now_raise():
 
 
 def test_evt_allan_scale_param_raises_instead_of_clamp():
-    from cleaned_operators.evt_allan import _allan_factor_single
+    from factor_engine.cleaned_operators.evt_allan import _allan_factor_single
 
     v = np.array([1, 0, 1, 0, 1, 0, 1, 0, 1, 0], dtype=float)
     assert _allan_factor_single(v, 2) == 0.0
@@ -317,7 +317,7 @@ def test_evt_allan_scale_param_raises_instead_of_clamp():
 # ---------------------------------------------------------------------------
 
 def test_round14_family_policy_declarations():
-    from cleaned_operators.closure.declared_policies import declare_all
+    from factor_engine.cleaned_operators.closure.declared_policies import declare_all
 
     declare_all()
     expectations = {
@@ -338,7 +338,7 @@ def test_round14_family_policy_declarations():
 
 
 def test_round14_multi_input_axis_contracts():
-    from cleaned_operators.closure.declared_policies import declare_all
+    from factor_engine.cleaned_operators.closure.declared_policies import declare_all
 
     declare_all()
     for canon in (
@@ -356,7 +356,7 @@ def test_round14_multi_input_axis_contracts():
 # ---------------------------------------------------------------------------
 
 def test_semantic_closure_audit_runs_on_subset():
-    from cleaned_operators.closure.closure_audit import run_semantic_closure_audit
+    from factor_engine.cleaned_operators.closure.closure_audit import run_semantic_closure_audit
 
     fake_cat = {
         "demo_good": {

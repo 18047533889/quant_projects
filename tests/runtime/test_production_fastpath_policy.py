@@ -6,12 +6,12 @@ import os
 
 import pytest
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.factor import Factor
-from backend.sql_pushdown.plan_fixtures import minimal_plan
-from runtime.engine import FactorEngine
-from runtime.production_policy import (
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.sql_pushdown.plan_fixtures import minimal_plan
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.runtime.production_policy import (
     ProductionPolicyViolation,
     assert_no_unapproved_map_groups_in_production,
     assert_production_fastpath_plan,
@@ -20,8 +20,8 @@ from runtime.production_policy import (
 
 @pytest.fixture(scope="module")
 def loaded():
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
@@ -56,7 +56,7 @@ def test_run_records_backend_path_summary(loaded):
         names=["timestamp", "instrument"],
     )
     src = InMemorySeriesSource(data={"close": pd.Series([1.0, 2.0], index=idx)})
-    from backend.factory import build_backend
+    from factor_engine.backend.factory import build_backend
 
     eng = FactorEngine(backend=build_backend("polars_long"), data_source=src)
     out = eng.run(Factor(name="t", expr=make_cleaned_call_factory("ts_mean")(col("close"), 2)))

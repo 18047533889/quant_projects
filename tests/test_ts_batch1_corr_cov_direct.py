@@ -6,7 +6,7 @@ import math
 import polars as pl
 import pytest
 
-from cleaned_operators.common.polars_ts_rolling import TSCorrNative, TSCovNative
+from factor_engine.cleaned_operators.common.polars_ts_rolling import TSCorrNative, TSCovNative
 
 
 def _direct_centered_oracle(x, y, *, window=4, min_periods=2, ddof=1):

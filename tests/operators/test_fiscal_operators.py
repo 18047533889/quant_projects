@@ -22,19 +22,19 @@ import pytest
 
 def setup_module():
     """Reset registry lifecycle to allow operator registration during test imports."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     if OperatorRegistry._lifecycle != OperatorRegistry.Lifecycle.BUILDING:
         OperatorRegistry._lifecycle = OperatorRegistry.Lifecycle.BUILDING
 
     # Bypass layer governance check
     try:
-        import cleaned_operators.layer_governance as gov
+        import factor_engine.cleaned_operators.layer_governance as gov
         gov._FINALIZED = False
     except (ImportError, AttributeError):
         pass
 
 
-from cleaned_operators.common.fiscal_operators import (
+from factor_engine.cleaned_operators.common.fiscal_operators import (
     pd_fiscal_delta,
     pd_fiscal_pct_change,
     pd_fiscal_acceleration,
@@ -45,7 +45,7 @@ from cleaned_operators.common.fiscal_operators import (
 )
 
 # These operators already exist in fiscal_event_ops.py
-from cleaned_operators.fiscal_event_ops import (
+from factor_engine.cleaned_operators.fiscal_event_ops import (
     pd_date_diff_days,
     pd_fin_seasonal_zscore,
     pd_fin_seasonal_percentile,

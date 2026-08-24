@@ -24,7 +24,7 @@ def _col(vals, name: str = "A") -> pd.DataFrame:
 # P0-5: group_tail_lead_score prefix invariance.
 # ---------------------------------------------------------------------------
 def test_group_tail_lead_score_prefix_invariance() -> None:
-    from cleaned_operators.tail_systemic import _tail_lead_series
+    from factor_engine.cleaned_operators.tail_systemic import _tail_lead_series
 
     rng = np.random.default_rng(7)
     rows, cols = 40, 4
@@ -50,7 +50,7 @@ def test_group_tail_lead_score_prefix_invariance() -> None:
 # P0-6: cs_weighted_percentile_rank hand-computed unsort.
 # ---------------------------------------------------------------------------
 def test_cs_weighted_percentile_rank_hand_golden() -> None:
-    from cleaned_operators.gather_ext import _cs_weighted_percentile_rank
+    from factor_engine.cleaned_operators.gather_ext import _cs_weighted_percentile_rank
 
     x = pd.DataFrame([[30.0, 10.0, 20.0]], columns=["a", "b", "c"])
     w = pd.DataFrame([[1.0, 1.0, 1.0]], columns=["a", "b", "c"])
@@ -67,7 +67,7 @@ def test_cs_weighted_percentile_rank_hand_golden() -> None:
 # P0-7: ts_score_rank_weighted_mean weight/target alignment.
 # ---------------------------------------------------------------------------
 def test_score_rank_weighted_mean_hand_golden() -> None:
-    from cleaned_operators.advanced_information import _score_rank_weighted_mean
+    from factor_engine.cleaned_operators.advanced_information import _score_rank_weighted_mean
 
     # sv=[3,1,2] -> ranks [0,2,1]; tv=[30,10,20]; decay=0.5
     # weights = [1, 0.25, 0.5] normalized -> mean = (30 + 2.5 + 10)/1.75 = 24.2857.
@@ -81,7 +81,7 @@ def test_score_rank_weighted_mean_hand_golden() -> None:
 # P0-12: persistence-diagram W1 must not resolve via illegal 0-cost edges.
 # ---------------------------------------------------------------------------
 def test_diagram_w1_no_illegal_zero_edges() -> None:
-    from cleaned_operators.advanced_topology import _diagram_w1
+    from factor_engine.cleaned_operators.advanced_topology import _diagram_w1
 
     # A=[(1,3)], B=[(1,3),(10,20)]. True W1: A matches B1 at cost 0, B2 matches
     # the diagonal at (20-10)/2=5 -> total 5.0 (TOTAL assignment cost, not the
@@ -102,7 +102,7 @@ def test_diagram_w1_no_illegal_zero_edges() -> None:
 # P1-23: group_topk_mean tie policy is column-permutation invariant.
 # ---------------------------------------------------------------------------
 def test_group_topk_mean_tie_column_permutation_invariant() -> None:
-    from cleaned_operators.gather_ext import _group_topk_mean
+    from factor_engine.cleaned_operators.gather_ext import _group_topk_mean
 
     tgt = pd.DataFrame([[1.0, 2.0, 3.0, 4.0, 5.0]], columns=["a", "b", "c", "d", "e"])
     sc = pd.DataFrame([[5.0, 5.0, 5.0, 1.0, 0.0]], columns=["a", "b", "c", "d", "e"])
@@ -118,7 +118,7 @@ def test_group_topk_mean_tie_column_permutation_invariant() -> None:
 # P1-24: event_level_survival_share tracks the whole path, not today only.
 # ---------------------------------------------------------------------------
 def test_event_level_survival_share_path_aware() -> None:
-    from cleaned_operators.gather_ext import _event_level_survival_share
+    from factor_engine.cleaned_operators.gather_ext import _event_level_survival_share
 
     ev = pd.DataFrame([[1.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
     lv = pd.DataFrame([[10.0, 0.0], [0.0, 0.0], [0.0, 0.0]])

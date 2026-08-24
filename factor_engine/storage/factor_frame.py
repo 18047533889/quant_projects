@@ -8,8 +8,8 @@ from typing import Any
 
 import pandas as pd
 
-from storage.catalog import compute_ir_hash
-from storage.materializer import MaterializeMetadata, ParquetMaterializer
+from factor_engine.storage.catalog import compute_ir_hash
+from factor_engine.storage.materializer import MaterializeMetadata, ParquetMaterializer
 
 
 def prepare_factor_dataframe(
@@ -50,7 +50,7 @@ def prepare_factor_dataframe(
 
     dq_report = None
     if dq_check:
-        from runtime.dq_gates import assert_factor_dq
+        from factor_engine.runtime.dq_gates import assert_factor_dq
 
         dq_report = assert_factor_dq(
             result,

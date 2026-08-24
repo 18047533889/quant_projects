@@ -7,7 +7,7 @@ backend/sql_pushdown/emitter.py 的入口点。
 使用方法：
     在 emitter.py 的 _compile_layer_impl 函数中，添加对本模块的调用：
 
-    from backend.sql_pushdown.emitter_integration import try_compile_advanced_operator
+    from factor_engine.backend.sql_pushdown.emitter_integration import try_compile_advanced_operator
 
     # 在 _compile_layer_impl 函数开头添加：
     advanced = try_compile_advanced_operator(node, dialect)
@@ -19,9 +19,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
-from backend.sql_pushdown.advanced_sql_operators import (
+from factor_engine.backend.sql_pushdown.advanced_sql_operators import (
     cs_zscore_sql,
     cs_winsorize_sql,
     cs_rank_normalize_sql,
@@ -38,7 +38,7 @@ from backend.sql_pushdown.advanced_sql_operators import (
 
 def _compile_layer(node: PlanNode, dialect: SqlDialect):
     """占位：实际调用 emitter 的 _compile_layer（避免循环导入）。"""
-    from backend.sql_pushdown.emitter import _compile_layer as emitter_compile_layer
+    from factor_engine.backend.sql_pushdown.emitter import _compile_layer as emitter_compile_layer
     return emitter_compile_layer(node, dialect=dialect)
 
 
@@ -79,7 +79,7 @@ def try_compile_advanced_operator(node: PlanNode, dialect: SqlDialect):
         _Layer 对象或 None（不支持时）
     """
     # 导入 _Layer（避免循环导入）
-    from backend.sql_pushdown.emitter import _Layer
+    from factor_engine.backend.sql_pushdown.emitter import _Layer
 
     op = node.op
 
@@ -283,7 +283,7 @@ def register_advanced_operators_to_sql_tiers():
 
     应该在模块加载时调用一次。
     """
-    from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
+    from factor_engine.backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
 
     new_ops = {
         "cs_zscore",

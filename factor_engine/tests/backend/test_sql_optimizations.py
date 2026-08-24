@@ -42,8 +42,8 @@ class TestDuckDBTimeout:
 
     def test_default_timeout_applied(self, mock_duckdb_store, monkeypatch):
         """测试默认超时（60 秒）被应用。"""
-        from backend.sql_pushdown.executor import _execute_duckdb_table
-        from backend.sql_pushdown.emitter import CompiledSql, SqlDialect
+        from factor_engine.backend.sql_pushdown.executor import _execute_duckdb_table
+        from factor_engine.backend.sql_pushdown.emitter import CompiledSql, SqlDialect
 
         store, conn = mock_duckdb_store
 
@@ -65,8 +65,8 @@ class TestDuckDBTimeout:
 
     def test_budget_timeout_used(self, mock_duckdb_store, monkeypatch):
         """测试 QueryBudget 中的超时被使用。"""
-        from backend.sql_pushdown.executor import _execute_duckdb_table
-        from backend.sql_pushdown.emitter import CompiledSql, SqlDialect
+        from factor_engine.backend.sql_pushdown.executor import _execute_duckdb_table
+        from factor_engine.backend.sql_pushdown.emitter import CompiledSql, SqlDialect
         from data_access.read.query_budget import QueryBudget
 
         store, conn = mock_duckdb_store
@@ -87,8 +87,8 @@ class TestDuckDBTimeout:
 
     def test_env_timeout_override(self, mock_duckdb_store, monkeypatch):
         """测试环境变量覆盖默认超时。"""
-        from backend.sql_pushdown.executor import _execute_duckdb_table
-        from backend.sql_pushdown.emitter import CompiledSql, SqlDialect
+        from factor_engine.backend.sql_pushdown.executor import _execute_duckdb_table
+        from factor_engine.backend.sql_pushdown.emitter import CompiledSql, SqlDialect
 
         monkeypatch.setenv("FACTOR_ENGINE_DUCKDB_MAX_QUERY_TIMEOUT_MS", "15000")
         store, conn = mock_duckdb_store
@@ -112,9 +112,9 @@ class TestQueryPlanCache:
 
     def test_cache_records_query(self, mock_duckdb_store, monkeypatch):
         """测试查询被记录到缓存。"""
-        from backend.sql_pushdown.executor import _execute_duckdb_table
-        from backend.sql_pushdown.emitter import CompiledSql, SqlDialect
-        from backend.sql_pushdown.duckdb_performance import get_query_plan_cache
+        from factor_engine.backend.sql_pushdown.executor import _execute_duckdb_table
+        from factor_engine.backend.sql_pushdown.emitter import CompiledSql, SqlDialect
+        from factor_engine.backend.sql_pushdown.duckdb_performance import get_query_plan_cache
 
         store, conn = mock_duckdb_store
 
@@ -138,9 +138,9 @@ class TestQueryPlanCache:
 
     def test_cache_can_be_disabled(self, mock_duckdb_store, monkeypatch):
         """测试可以通过环境变量禁用缓存。"""
-        from backend.sql_pushdown.executor import _execute_duckdb_table
-        from backend.sql_pushdown.emitter import CompiledSql, SqlDialect
-        from backend.sql_pushdown.duckdb_performance import get_query_plan_cache
+        from factor_engine.backend.sql_pushdown.executor import _execute_duckdb_table
+        from factor_engine.backend.sql_pushdown.emitter import CompiledSql, SqlDialect
+        from factor_engine.backend.sql_pushdown.duckdb_performance import get_query_plan_cache
 
         monkeypatch.setenv("DUCKDB_ENABLE_QUERY_CACHE", "false")
         store, conn = mock_duckdb_store
@@ -169,8 +169,8 @@ class TestDuckDBParallelConfig:
 
     def test_parallel_config_applied(self, mock_duckdb_store, monkeypatch):
         """测试并行配置被应用。"""
-        from backend.sql_pushdown.executor import _execute_duckdb_table
-        from backend.sql_pushdown.emitter import CompiledSql, SqlDialect
+        from factor_engine.backend.sql_pushdown.executor import _execute_duckdb_table
+        from factor_engine.backend.sql_pushdown.emitter import CompiledSql, SqlDialect
 
         monkeypatch.setenv("DUCKDB_THREADS", "4")
         monkeypatch.setenv("DUCKDB_MEMORY_LIMIT_MB", "1024")
@@ -192,8 +192,8 @@ class TestDuckDBParallelConfig:
 
     def test_parallel_config_can_be_disabled(self, mock_duckdb_store, monkeypatch):
         """测试可以禁用并行配置。"""
-        from backend.sql_pushdown.executor import _execute_duckdb_table
-        from backend.sql_pushdown.emitter import CompiledSql, SqlDialect
+        from factor_engine.backend.sql_pushdown.executor import _execute_duckdb_table
+        from factor_engine.backend.sql_pushdown.emitter import CompiledSql, SqlDialect
 
         monkeypatch.setenv("DUCKDB_ENABLE_PARALLEL_CONFIG", "false")
         store, conn = mock_duckdb_store
@@ -218,7 +218,7 @@ class TestClickHouseConnectionPool:
 
     def test_connection_pool_reuses_connections(self, monkeypatch):
         """测试连接池复用连接。"""
-        from backend.sql_pushdown.executor import _CLICKHOUSE_POOL
+        from factor_engine.backend.sql_pushdown.executor import _CLICKHOUSE_POOL
 
         mock_config = Mock()
         mock_config.host = "localhost"
@@ -244,7 +244,7 @@ class TestClickHouseConnectionPool:
 
     def test_connection_pool_respects_max_size(self, monkeypatch):
         """测试连接池最大尺寸限制。"""
-        from backend.sql_pushdown.executor import _ClickHouseConnectionPool
+        from factor_engine.backend.sql_pushdown.executor import _ClickHouseConnectionPool
 
         pool = _ClickHouseConnectionPool(max_size=2)
 
@@ -266,12 +266,12 @@ class TestClickHouseConnectionPool:
 
     def test_connection_pool_can_be_disabled(self, mock_clickhouse_config, monkeypatch):
         """测试可以禁用连接池。"""
-        from backend.sql_pushdown.executor import (
+        from factor_engine.backend.sql_pushdown.executor import (
             _execute_clickhouse_table,
             PushdownContext,
             SqlDialect,
         )
-        from backend.sql_pushdown.emitter import CompiledSql
+        from factor_engine.backend.sql_pushdown.emitter import CompiledSql
 
         monkeypatch.setenv("CLICKHOUSE_ENABLE_POOL", "false")
 
@@ -296,7 +296,7 @@ class TestClickHouseConnectionPool:
         )
 
         with patch("clickhouse_connect.get_client", return_value=mock_client):
-            with patch("backend.sql_pushdown.executor._ensure_data_access"):
+            with patch("factor_engine.backend.sql_pushdown.executor._ensure_data_access"):
                 with patch("data_access.clickhouse.panel.ClickHouseConfig.from_env", return_value=mock_clickhouse_config):
                     _execute_clickhouse_table(compiled, pctx)
 
@@ -309,8 +309,8 @@ class TestPerformanceImpact:
 
     def test_timeout_prevents_runaway_queries(self, mock_duckdb_store, monkeypatch):
         """验证超时能阻止失控查询。"""
-        from backend.sql_pushdown.executor import _execute_duckdb_table
-        from backend.sql_pushdown.emitter import CompiledSql, SqlDialect
+        from factor_engine.backend.sql_pushdown.executor import _execute_duckdb_table
+        from factor_engine.backend.sql_pushdown.emitter import CompiledSql, SqlDialect
 
         store, conn = mock_duckdb_store
         monkeypatch.setenv("FACTOR_ENGINE_DUCKDB_MAX_QUERY_TIMEOUT_MS", "1000")
@@ -331,9 +331,9 @@ class TestPerformanceImpact:
 
     def test_cache_reduces_planning_overhead(self, mock_duckdb_store, monkeypatch):
         """验证缓存减少查询规划开销。"""
-        from backend.sql_pushdown.executor import _execute_duckdb_table
-        from backend.sql_pushdown.emitter import CompiledSql, SqlDialect
-        from backend.sql_pushdown.duckdb_performance import get_query_plan_cache
+        from factor_engine.backend.sql_pushdown.executor import _execute_duckdb_table
+        from factor_engine.backend.sql_pushdown.emitter import CompiledSql, SqlDialect
+        from factor_engine.backend.sql_pushdown.duckdb_performance import get_query_plan_cache
 
         store, conn = mock_duckdb_store
 

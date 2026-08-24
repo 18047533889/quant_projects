@@ -14,7 +14,7 @@ import warnings
 
 import pytest
 
-from backend.numba_kernel_registry import (
+from factor_engine.backend.numba_kernel_registry import (
     NumbaKernel,
     NumbaKernelSpec,
     KernelUnavailableError,

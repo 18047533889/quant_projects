@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.telemetry_region import (
+from factor_engine.backend.telemetry_region import (
     PIID_TELEMETRY_FIELDS,
     BatchExecutionTelemetry,
     RegionTelemetry,
@@ -216,8 +216,8 @@ class TestBatchPiidTelemetry:
 # ---------------------------------------------------------------------------
 
 def _valid_spec():
-    from backend.contracts import ExecutionKind, PhysicalImplementationSpec
-    from backend.evidence_provenance import implementation_closure_hash_for
+    from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+    from factor_engine.backend.evidence_provenance import implementation_closure_hash_for
 
     closure = implementation_closure_hash_for("ts_mean")
     return PhysicalImplementationSpec(

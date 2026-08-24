@@ -12,13 +12,13 @@ import pandas as pd
 import pytest
 from unittest.mock import MagicMock, patch
 
-from runtime.dual_write_reconcile import (
+from factor_engine.runtime.dual_write_reconcile import (
     reconcile_all_dual_write_states,
     reconcile_dual_write_state,
     repair_dual_write_clickhouse,
 )
-from storage.catalog import FactorCatalog
-from storage.materializer import ParquetMaterializer
+from factor_engine.storage.catalog import FactorCatalog
+from factor_engine.storage.materializer import ParquetMaterializer
 
 
 def test_repair_dual_write_from_local_parquet(tmp_path, monkeypatch):
@@ -37,7 +37,7 @@ def test_repair_dual_write_from_local_parquet(tmp_path, monkeypatch):
         database="quant",
     )
     with patch(
-        "storage.clickhouse_materializer.ClickHouseMaterializer.materialize",
+        "factor_engine.storage.clickhouse_materializer.ClickHouseMaterializer.materialize",
         return_value=mock_summary,
     ):
         out = repair_dual_write_clickhouse(
@@ -76,11 +76,11 @@ def test_repair_from_staging_when_no_local(tmp_path, monkeypatch):
 
     mock_summary = MagicMock(rows_written=2, table="fv", database="q", factor_id="stg_only")
     monkeypatch.setattr(
-        "storage.staging_loader.load_factor_series_from_staging",
+        "factor_engine.storage.staging_loader.load_factor_series_from_staging",
         _fake_staging,
     )
     with patch(
-        "storage.clickhouse_materializer.ClickHouseMaterializer.materialize",
+        "factor_engine.storage.clickhouse_materializer.ClickHouseMaterializer.materialize",
         return_value=mock_summary,
     ):
         out = repair_dual_write_clickhouse(factor_id="stg_only", lake_root=tmp_path)
@@ -154,12 +154,12 @@ def test_repair_dual_write_respects_no_compensate_staging(tmp_path, monkeypatch)
         return {"deleted_rows": 0}
 
     monkeypatch.setattr(
-        "storage.staging_loader.delete_staging_rows",
+        "factor_engine.storage.staging_loader.delete_staging_rows",
         _skip_delete,
     )
     mock_summary = MagicMock(rows_written=2, table="fv", database="q", factor_id="no_comp")
     with patch(
-        "storage.clickhouse_materializer.ClickHouseMaterializer.materialize",
+        "factor_engine.storage.clickhouse_materializer.ClickHouseMaterializer.materialize",
         return_value=mock_summary,
     ):
         out = repair_dual_write_clickhouse(
@@ -187,12 +187,12 @@ def test_repair_dual_write_compensates_staging_by_default(tmp_path, monkeypatch)
         return {"deleted_rows": 1}
 
     monkeypatch.setattr(
-        "storage.staging_loader.delete_staging_rows",
+        "factor_engine.storage.staging_loader.delete_staging_rows",
         _do_delete,
     )
     mock_summary = MagicMock(rows_written=2, table="fv", database="q", factor_id="with_comp")
     with patch(
-        "storage.clickhouse_materializer.ClickHouseMaterializer.materialize",
+        "factor_engine.storage.clickhouse_materializer.ClickHouseMaterializer.materialize",
         return_value=mock_summary,
     ):
         repair_dual_write_clickhouse(factor_id="with_comp", lake_root=tmp_path)

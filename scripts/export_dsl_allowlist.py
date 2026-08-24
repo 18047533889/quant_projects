@@ -10,7 +10,7 @@ FE = Path(__file__).resolve().parents[1]
 if str(FE) not in sys.path:
     sys.path.insert(0, str(FE))
 
-from api.mining_integration import write_dsl_allowlist  # noqa: E402
+from factor_engine.api.mining_integration import write_dsl_allowlist  # noqa: E402
 
 
 def main() -> int:

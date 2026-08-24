@@ -10,9 +10,9 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from backend.context import ExecutionContext
-from backend.pandas_compat import pd
-from planner.logical_plan import PlanNode
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.backend.pandas_compat import pd
+from factor_engine.planner.logical_plan import PlanNode
 
 from .emitter import (
     BatchCompiledSql,
@@ -51,7 +51,7 @@ def _ensure_data_access() -> None:
     No runtime ``sys.path`` mutation — which data_access an install uses must be
     reproducible.  A missing package fails loudly instead of being patched in.
     """
-    from storage.data_access_loader import ensure_data_access_importable
+    from factor_engine.storage.data_access_loader import ensure_data_access_importable
 
     ensure_data_access_importable()
 
@@ -63,7 +63,7 @@ def _sql_fallback_allowed(exc: BaseException, ctx: ExecutionContext) -> bool:
     - ``ResourceBudgetExceeded`` / OOM / Deadline / PIT / Schema / DQ → 禁止 fallback
     - 未知异常：production fail-closed（宁可显式失败），research 允许 fallback
     """
-    from runtime.resource_errors import ResourceGovernanceError, is_fail_closed_error
+    from factor_engine.runtime.resource_errors import ResourceGovernanceError, is_fail_closed_error
 
     if is_fail_closed_error(exc):
         return False
@@ -87,8 +87,8 @@ def fallback_reason_is_fail_closed(reason_class: str) -> bool:
     if not reason_class:
         return False
     try:
-        import runtime.resource_errors as re_mod
-        from runtime.resource_errors import (
+        import factor_engine.runtime.resource_errors as re_mod
+        from factor_engine.runtime.resource_errors import (
             CapabilityMiss,
             CompilationUnsupported,
             ResourceGovernanceError,
@@ -633,7 +633,7 @@ def _execute_clickhouse_table(
 
             # surface a stable budget code so the error taxonomy does not parse text
             if "max_result" in str(exc).lower() or "memory limit" in str(exc).lower() or "limit exceeded" in str(exc).lower():
-                from runtime.resource_errors import ResourceBudgetExceeded
+                from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
 
                 raise ResourceBudgetExceeded(f"ClickHouse budget exceeded: {exc}") from exc
             raise
@@ -657,7 +657,7 @@ def _execute_clickhouse_table(
         except Exception as exc:
             # surface a stable budget code so the error taxonomy does not parse text
             if "max_result" in str(exc).lower() or "memory limit" in str(exc).lower() or "limit exceeded" in str(exc).lower():
-                from runtime.resource_errors import ResourceBudgetExceeded
+                from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
 
                 raise ResourceBudgetExceeded(f"ClickHouse budget exceeded: {exc}") from exc
             raise
@@ -737,7 +737,7 @@ def try_execute_sql_pushdown_long(
         if not _sql_fallback_allowed(exc, ctx):
             raise
         _note_sql_fallback(ctx, type(exc).__name__, sid=sid)
-        from backend.sql_pushdown.strict import handle_sql_long_pushdown_failure
+        from factor_engine.backend.sql_pushdown.strict import handle_sql_long_pushdown_failure
 
         try:
             handle_sql_long_pushdown_failure(ctx, sid=sid, exc=exc, phase="long_single")
@@ -807,7 +807,7 @@ def try_execute_sql_pushdown_batch_long(
         _note_sql_fallback(
             ctx, type(exc).__name__, sid=",".join(sorted(plans.keys())[:3])
         )
-        from backend.sql_pushdown.strict import handle_sql_long_pushdown_failure
+        from factor_engine.backend.sql_pushdown.strict import handle_sql_long_pushdown_failure
 
         try:
             handle_sql_long_pushdown_failure(
@@ -848,7 +848,7 @@ def try_execute_sql_pushdown(
         # #365/#366 compile fail-closed：只有「可下推失败」类（CapabilityMiss /
         # CompilationUnsupported）允许返回 None（换后端 fallback）；其余 fail-closed
         # 或 production 未知异常必须上抛，research 未知异常才允许 fallback。
-        from runtime.resource_errors import (
+        from factor_engine.runtime.resource_errors import (
             CapabilityMiss,
             CompilationUnsupported,
             is_fail_closed_error,
@@ -903,7 +903,7 @@ def try_execute_sql_pushdown_batch(
         )
     except Exception as exc:
         # #365/#366 compile fail-closed（同 try_execute_sql_pushdown）。
-        from runtime.resource_errors import (
+        from factor_engine.runtime.resource_errors import (
             CapabilityMiss,
             CompilationUnsupported,
             is_fail_closed_error,

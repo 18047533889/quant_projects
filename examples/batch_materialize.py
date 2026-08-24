@@ -38,14 +38,14 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from api.columns import col
-from api.factor import Factor
-from api import rank, ts_mean, ts_std_dev, ts_delta
-from backend.pandas_backend import PandasBackend
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.api import rank, ts_mean, ts_std_dev, ts_delta
+from factor_engine.backend.pandas_backend import PandasBackend
 from logging_utils import ProgressLogger, configure_logging, get_logger
-from runtime.engine import FactorEngine
-from storage import ParquetMaterializer
-from storage.datasource import DataSource
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.storage import ParquetMaterializer
+from factor_engine.storage.datasource import DataSource
 
 configure_logging("INFO")
 logger = get_logger("examples.batch_materialize")

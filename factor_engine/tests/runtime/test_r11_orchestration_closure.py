@@ -23,16 +23,16 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from runtime.dependency_catalog import DependencyCatalog, FactorDependencyEdge
-from runtime.incremental_scheduler import (
+from factor_engine.runtime.dependency_catalog import DependencyCatalog, FactorDependencyEdge
+from factor_engine.runtime.incremental_scheduler import (
     DataEvent,
     _coerce_deleted_keys,
     _edges_from_analysis,
     plan_updates_from_data_event,
 )
-from storage.catalog import FactorCatalog
-from storage.exceptions import FactorSemanticIdentityMismatchError
-from storage.materializer import ParquetMaterializer
+from factor_engine.storage.catalog import FactorCatalog
+from factor_engine.storage.exceptions import FactorSemanticIdentityMismatchError
+from factor_engine.storage.materializer import ParquetMaterializer
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +69,7 @@ def _register(catalog: FactorCatalog, fid: str, *, version: str | None = None) -
 
 
 def test_event_service_normalize_no_recursion():
-    from runtime.incremental_event_service import normalize_data_event
+    from factor_engine.runtime.incremental_event_service import normalize_data_event
 
     ev = normalize_data_event(
         {"dataset": "d", "column": "c", "updated_date": "2026-08-09"}
@@ -266,7 +266,7 @@ def test_edges_unresolved_logical_table_skips_research_fails_production():
     edges = _edges_from_analysis("f", analysis, data_source, production=False)
     assert edges == []
     # production：fail-closed
-    from runtime.incremental_scheduler import DependencyDatasetResolutionError
+    from factor_engine.runtime.incremental_scheduler import DependencyDatasetResolutionError
 
     with pytest.raises(DependencyDatasetResolutionError):
         _edges_from_analysis("f", analysis, data_source, production=True)
@@ -440,7 +440,7 @@ def test_delete_factor_cleans_edge_and_full_definition(tmp_path):
 
 
 def test_matrix_partial_update_merges_not_overwrites(tmp_path):
-    from storage.materialize.factor_matrix_materializer import (
+    from factor_engine.storage.materialize.factor_matrix_materializer import (
         FactorMatrixMaterializer,
     )
 

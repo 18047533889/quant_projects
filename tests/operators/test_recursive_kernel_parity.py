@@ -28,7 +28,7 @@ from recursive_kernel import (
     rsi_wilder_segment,
 )
 
-from cleaned_operators.technical.signal import (
+from factor_engine.cleaned_operators.technical.signal import (
     _compute_atr_wilder,
     _compute_dmi_adx,
     _compute_rsi_wilder,

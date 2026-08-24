@@ -23,13 +23,13 @@ if _PROJECT_ROOT not in sys.path:
 
 import pandas as pd
 
-from api.columns import col
-from api.factor import Factor
-from api import rank, ts_mean
-from backend.pandas_backend import PandasBackend
-from runtime.engine import FactorEngine
-from storage.datasource import DataSource
-from storage import ParquetMaterializer, build_result_store
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.api import rank, ts_mean
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.storage.datasource import DataSource
+from factor_engine.storage import ParquetMaterializer, build_result_store
 
 # ============================================================================
 # 1. 准备：内存数据源 + 因子定义

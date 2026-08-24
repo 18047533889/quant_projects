@@ -37,9 +37,9 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 
 def _load_deps():
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
-    from mining.operator_catalog import get_mining_operators, MiningRole
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.mining.operator_catalog import get_mining_operators, MiningRole
     from scripts.audit_all_factor_production import _panels, _build_call
     return {
         "load_all": load_all,

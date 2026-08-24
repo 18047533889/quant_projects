@@ -9,13 +9,13 @@ import pytest
 
 pytest.importorskip("polars")
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from backend.polars_expr_backend import POLARS_LONG_NATIVE, plan_is_polars_expr_capable
-from cleaned_operators import load_all
-from runtime.engine import FactorEngine
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.backend.polars_expr_backend import POLARS_LONG_NATIVE, plan_is_polars_expr_capable
+from factor_engine.cleaned_operators import load_all
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 
@@ -58,8 +58,8 @@ def _run_expr(source, expr, *, use_polars_expr: bool):
 
 
 def test_polars_expr_capable_subset_of_production_ops():
-    from backend.fastpath_evidence import polars_executed_parity_canonicals
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.backend.fastpath_evidence import polars_executed_parity_canonicals
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
 
     # native expr 已实现但 production 门禁尚未同步的算子
     # native long path 已有；panel production parity 以 ``where`` 别名代表
@@ -150,9 +150,9 @@ def test_polars_expr_capable_subset_of_production_ops():
 )
 def test_polars_expr_matches_polars_bridge(source, factory_name, expr_builder):
     expr = expr_builder()
-    from runtime.engine import FactorEngine
-    from backend.factory import build_backend
-    from api.factor import Factor
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.backend.factory import build_backend
+    from factor_engine.api.factor import Factor
 
     # compile plan for capability check
     eng = FactorEngine(backend=build_backend("pandas"), data_source=source)
@@ -160,8 +160,8 @@ def test_polars_expr_matches_polars_bridge(source, factory_name, expr_builder):
         plan, _ = eng.compile(Factor(name="t", expr=expr))
     except KeyError:
         pytest.skip(f"{factory_name} is no longer an active operator canonical")
-    from cleaned_operators.operator_surface import classify_canonical
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     canonical = OperatorRegistry._aliases.get(plan.op, plan.op)
     if classify_canonical(canonical) != "daily":
@@ -178,7 +178,7 @@ def test_polars_expr_matches_polars_bridge(source, factory_name, expr_builder):
 def test_macd_exported_on_daily_api(source):
     # 2026-08 第三轮:MACD_line / MACD_signal / MACD_hist 经 full-replay 生产路径
     # 升到 daily 表面,可在默认 DSL 中按分解算子使用。
-    from api.operator_registry import build_dsl_allowlist
+    from factor_engine.api.operator_registry import build_dsl_allowlist
 
     pub = build_dsl_allowlist()
     for name in ("MACD_line", "MACD_signal", "MACD_hist"):

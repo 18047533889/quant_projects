@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 
 def strict_int(value: object, name: str) -> int:

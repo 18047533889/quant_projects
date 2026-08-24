@@ -10,13 +10,13 @@ import pytest
 
 pytest.importorskip("polars")
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from cleaned_operators import load_all
-from runtime.engine import FactorEngine
-from storage.factory import build_data_source
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.cleaned_operators import load_all
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.storage.factory import build_data_source
 from tests.helpers import InMemorySeriesSource
 
 
@@ -346,8 +346,8 @@ def _assert_series(pd_out, other_out):
 
 @pytest.mark.parametrize("name,expr_builder", POLARS_BULK_CASES)
 def test_bulk_polars_long_matches_pandas(bulk_source, name, expr_builder):
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     if OperatorRegistry._aliases.get(name, name) not in DAILY_CANONICALS:
         pytest.skip("not on the production daily surface")
     expr = expr_builder()
@@ -358,8 +358,8 @@ def test_bulk_polars_long_matches_pandas(bulk_source, name, expr_builder):
 
 @pytest.mark.parametrize("name,expr_builder", DUCKDB_BULK_CASES)
 def test_bulk_duckdb_matches_pandas(duckdb_bulk_source, name, expr_builder):
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     if OperatorRegistry._aliases.get(name, name) not in DAILY_CANONICALS:
         pytest.skip("not on the production daily surface")
     from tests.backend_parity.duckdb_parity_helpers import assert_duckdb_real_sql_execution

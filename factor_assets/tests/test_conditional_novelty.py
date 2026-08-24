@@ -4,11 +4,12 @@ Tests for conditional novelty with result identity and reverse cache.
 
 import pytest
 from factor_assets.novelty.conditional import (
-    ConditionalNoveltyProvider,
+   
+        ConditionalNoveltyProvider,
     NoveltyResult,
     ResultIdentity,
     ResultIdentityCache,
-    SimpleConditionalNoveltyAssessor,
+    ResultIdentityNoveltyAssessor,
 )
 
 
@@ -230,6 +231,62 @@ class TestResultIdentityCache:
         assert cache.find_equivalent(different_context) == ()
         assert not cache.has_equivalent(different_context)
 
+    def test_different_data_snapshot_is_not_equivalent(self):
+        """Same values on different data snapshots are NOT equivalent."""
+        cache = ResultIdentityCache()
+        base = ResultIdentity.from_values(
+            factor_id="factor1",
+            values=b"same_bytes",
+            universe_ref="top3000",
+            period_start="2023-01-01",
+            period_end="2023-12-31",
+            num_observations=1000,
+            data_snapshot_ref="snapshot:2024-08-01",
+        )
+        other_snapshot = ResultIdentity.from_values(
+            factor_id="factor2",
+            values=b"same_bytes",
+            universe_ref="top3000",
+            period_start="2023-01-01",
+            period_end="2023-12-31",
+            num_observations=1000,
+            data_snapshot_ref="snapshot:2024-09-01",
+        )
+
+        cache.add(base)
+
+        assert base.result_hash == other_snapshot.result_hash
+        assert cache.find_equivalent(other_snapshot) == ()
+        assert not cache.has_equivalent(other_snapshot)
+
+    def test_different_factor_version_is_not_equivalent(self):
+        """Same values under different factor versions are NOT equivalent."""
+        cache = ResultIdentityCache()
+        base = ResultIdentity.from_values(
+            factor_id="factor1",
+            values=b"same_bytes",
+            universe_ref="top3000",
+            period_start="2023-01-01",
+            period_end="2023-12-31",
+            num_observations=1000,
+            factor_version="v1",
+        )
+        other_version = ResultIdentity.from_values(
+            factor_id="factor2",
+            values=b"same_bytes",
+            universe_ref="top3000",
+            period_start="2023-01-01",
+            period_end="2023-12-31",
+            num_observations=1000,
+            factor_version="v2",
+        )
+
+        cache.add(base)
+
+        assert base.result_hash == other_version.result_hash
+        assert cache.find_equivalent(other_version) == ()
+        assert not cache.has_equivalent(other_version)
+
     def test_clear(self):
         """Test clearing the cache."""
         cache = ResultIdentityCache()
@@ -251,13 +308,13 @@ class TestResultIdentityCache:
         assert not cache.has_equivalent(result_id)
 
 
-class TestSimpleConditionalNoveltyAssessor:
-    """Tests for SimpleConditionalNoveltyAssessor."""
+class TestResultIdentityNoveltyAssessor:
+    """Tests for ResultIdentityNoveltyAssessor."""
 
     def test_novel_factor(self):
         """Test assessing a novel factor."""
         cache = ResultIdentityCache()
-        assessor = SimpleConditionalNoveltyAssessor(cache)
+        assessor = ResultIdentityNoveltyAssessor(cache)
 
         result_id = ResultIdentity.from_values(
             factor_id="new_factor",
@@ -283,7 +340,7 @@ class TestSimpleConditionalNoveltyAssessor:
     def test_redundant_factor(self):
         """Test assessing a redundant factor."""
         cache = ResultIdentityCache()
-        assessor = SimpleConditionalNoveltyAssessor(cache)
+        assessor = ResultIdentityNoveltyAssessor(cache)
 
         values = b"shared_values"
 
@@ -323,7 +380,7 @@ class TestSimpleConditionalNoveltyAssessor:
     def test_equivalent_not_in_pool(self):
         """Test that equivalents outside pool don't affect novelty."""
         cache = ResultIdentityCache()
-        assessor = SimpleConditionalNoveltyAssessor(cache)
+        assessor = ResultIdentityNoveltyAssessor(cache)
 
         values = b"shared_values"
 

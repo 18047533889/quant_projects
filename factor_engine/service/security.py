@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
-from service.errors import ServiceError
+from factor_engine.service.errors import ServiceError
 
 _TRUSTED_PROXY_HEADER = "X-Remote-User"
 

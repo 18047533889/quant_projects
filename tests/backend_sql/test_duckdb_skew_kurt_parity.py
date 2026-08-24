@@ -22,12 +22,12 @@ import pytest
 pytest.importorskip("duckdb")
 import duckdb
 
-from backend.sql_pushdown.emitter import (
+from factor_engine.backend.sql_pushdown.emitter import (
     compile_plan_to_sql,
     reset_sql_template_cache,
 )
-from backend.sql_pushdown.plan_fixtures import column, literal
-from planner.logical_plan import PlanNode
+from factor_engine.backend.sql_pushdown.plan_fixtures import column, literal
+from factor_engine.planner.logical_plan import PlanNode
 
 
 def _execute(compiled, frame: pd.DataFrame) -> pd.Series:

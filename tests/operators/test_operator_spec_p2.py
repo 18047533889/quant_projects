@@ -7,9 +7,9 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="legacy fiscal-quarter parameter contract superseded by strict period_id semantics")
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.operator_policy import bars_per_day
-from cleaned_operators.operator_spec import (
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.operator_policy import bars_per_day
+from factor_engine.cleaned_operators.operator_spec import (
     PRODUCTION_CORE_CANONICALS,
     PRODUCTION_PIT_REQUIRED,
     OperatorSpec,
@@ -18,7 +18,7 @@ from cleaned_operators.operator_spec import (
     check_production_pit_declarations,
     iter_operator_specs,
 )
-from runtime.session_calendar import SessionBarCalendar, SessionCalendar
+from factor_engine.runtime.session_calendar import SessionBarCalendar, SessionCalendar
 
 
 @pytest.fixture(scope="module")
@@ -68,7 +68,7 @@ def test_iter_operator_specs_nonempty(_loaded):
 
 
 def test_production_pit_required_subset_of_runtime(_loaded):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     missing_runtime = [
         c for c in PRODUCTION_PIT_REQUIRED if OperatorRegistry.get(c) is None

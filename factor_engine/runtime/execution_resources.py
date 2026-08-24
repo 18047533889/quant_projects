@@ -23,7 +23,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from runtime.resource_governor import (
+from factor_engine.runtime.resource_governor import (
     ExecutionResourcePlan,
     effective_cpu_slots,
     effective_memory_limit_bytes,

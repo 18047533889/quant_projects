@@ -30,7 +30,7 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
 
 
 def semantic_version(canon: str) -> int:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     return OPERATOR_SEMANTIC_VERSIONS.get(name, 1)

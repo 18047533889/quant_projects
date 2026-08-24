@@ -6,7 +6,7 @@ HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(HERE)
 if ROOT not in sys.path: sys.path.insert(0, ROOT)
 
 def main() -> None:
-    from runtime.resource_governor import MemoryGovernor, live_memory_headroom_bytes
+    from factor_engine.runtime.resource_governor import MemoryGovernor, live_memory_headroom_bytes
     gov = MemoryGovernor(process_budget_bytes=16 * 1024**3, duckdb_budget_bytes=1024**3)
     stage = gov.external_pressure_stage()
     assert stage in {"normal", "stop_warmup", "throttle", "critical"}

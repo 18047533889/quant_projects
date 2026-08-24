@@ -26,10 +26,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.operator_errors import FutureReferenceError, OperatorParameterError
-from cleaned_operators.common.polars_statistics import AutocorrPolars
-from cleaned_operators.common.statistics import ACF, Mad, Mode, autocorr, residual
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.operator_errors import FutureReferenceError, OperatorParameterError
+from factor_engine.cleaned_operators.common.polars_statistics import AutocorrPolars
+from factor_engine.cleaned_operators.common.statistics import ACF, Mad, Mode, autocorr, residual
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _get(canonical: str, backend: str = "pandas_numpy"):
@@ -46,7 +46,7 @@ def _get(canonical: str, backend: str = "pandas_numpy"):
 @pytest.fixture(scope="module", autouse=True)
 def _load_operators():
     try:
-        from cleaned_operators import load_all
+        from factor_engine.cleaned_operators import load_all
 
         load_all()
     except Exception:  # pragma: no cover - pre-existing env state (concurrent session)
@@ -305,7 +305,7 @@ def test_residual_matches_central_ts_regression_resid():
 
 
 def test_regress_retval_residual_is_current_in_sample_residual():
-    from cleaned_operators.common.statistics import regress
+    from factor_engine.cleaned_operators.common.statistics import regress
 
     y = pd.DataFrame({"A": [3.0, 1.0, 4.0, 2.0, 5.0, 100.0, 7.0, 8.0]})
     x = pd.DataFrame({"A": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]})
@@ -333,7 +333,7 @@ def test_residual_polars_matches_pandas():
 
 
 def test_ridge_dual_input_recovers_known_slope():
-    from cleaned_operators.common.statistics import Ridge
+    from factor_engine.cleaned_operators.common.statistics import Ridge
 
     x = pd.DataFrame({"A": np.arange(1.0, 9.0)})
     y = 2.0 * x
@@ -343,7 +343,7 @@ def test_ridge_dual_input_recovers_known_slope():
 
 
 def test_ridge_alpha_changes_regularized_slope():
-    from cleaned_operators.common.statistics import Ridge
+    from factor_engine.cleaned_operators.common.statistics import Ridge
 
     x = pd.DataFrame({"A": np.arange(1.0, 9.0)})
     y = 2.0 * x
@@ -354,7 +354,7 @@ def test_ridge_alpha_changes_regularized_slope():
 
 
 def test_ridge_positional_and_keyword_alpha_are_equivalent():
-    from cleaned_operators.common.statistics import Ridge
+    from factor_engine.cleaned_operators.common.statistics import Ridge
 
     x = pd.DataFrame({"A": np.arange(1.0, 9.0)})
     y = 2.0 * x
@@ -364,7 +364,7 @@ def test_ridge_positional_and_keyword_alpha_are_equivalent():
 
 
 def test_ridge_dual_all_nan_preserves_nan_without_masking_other_column():
-    from cleaned_operators.common.statistics import Ridge
+    from factor_engine.cleaned_operators.common.statistics import Ridge
 
     x = pd.DataFrame({"A": np.arange(1.0, 9.0), "B": [np.nan] * 8})
     y = 2.0 * x
@@ -375,7 +375,7 @@ def test_ridge_dual_all_nan_preserves_nan_without_masking_other_column():
 
 @pytest.mark.parametrize("window", [0, 2, 3.5, True])
 def test_ridge_rejects_invalid_window(window):
-    from cleaned_operators.common.statistics import Ridge
+    from factor_engine.cleaned_operators.common.statistics import Ridge
 
     x = pd.DataFrame({"A": np.arange(1.0, 8.0)})
     with pytest.raises(ValueError, match="window"):
@@ -383,7 +383,7 @@ def test_ridge_rejects_invalid_window(window):
 
 
 def test_ridge_rejects_shape_mismatch_and_ambiguous_calls():
-    from cleaned_operators.common.statistics import Ridge
+    from factor_engine.cleaned_operators.common.statistics import Ridge
 
     x = pd.DataFrame({"A": np.arange(1.0, 8.0)})
     y = pd.DataFrame({"B": np.arange(1.0, 8.0)})
@@ -396,7 +396,7 @@ def test_ridge_rejects_shape_mismatch_and_ambiguous_calls():
 
 
 def test_ridge_degenerate_predictor_window_is_nan():
-    from cleaned_operators.common.statistics import Ridge
+    from factor_engine.cleaned_operators.common.statistics import Ridge
 
     x = pd.DataFrame({"A": [1.0] * 8})
     y = pd.DataFrame({"A": np.arange(1.0, 9.0)})

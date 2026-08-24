@@ -12,7 +12,7 @@ sys.path.insert(0, str(project_root))
 
 def extract_operators_from_surface():
     """Extract all operator canonicals from operator_surface.py."""
-    from cleaned_operators.operator_surface import (
+    from factor_engine.cleaned_operators.operator_surface import (
         DAILY_CANONICALS,
         EXTENDED_ONLY_CANONICALS,
         DAILY_FACTOR_MIGRATED,

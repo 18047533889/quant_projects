@@ -175,7 +175,7 @@ def estimate_compute_cost(
         Estimated compute time in milliseconds
     """
     try:
-        from backend.operator_cost import CostContext, estimate_backend_cost
+        from factor_engine.backend.operator_cost import CostContext, estimate_backend_cost
 
         ctx = CostContext(
             rows=shape.estimated_rows,

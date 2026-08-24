@@ -1,5 +1,11 @@
 """核心基础设施：引擎、能力、存储、异常、命名空间、审计。"""
-from .engine import DuckDBEngine, get_shared_engine, reset_shared_engine
+from .engine import (
+    DuckDBEngine,
+    StorageKind,
+    StorageRequirement,
+    get_shared_engine,
+    reset_shared_engine,
+)
 from .duckdb_capabilities import (
     DuckDBCapabilities,
     detect_duckdb_capabilities,
@@ -22,6 +28,8 @@ from .retry import retry_io
 
 __all__ = [
     "DuckDBEngine",
+    "StorageKind",
+    "StorageRequirement",
     "get_shared_engine",
     "reset_shared_engine",
     "DuckDBCapabilities",

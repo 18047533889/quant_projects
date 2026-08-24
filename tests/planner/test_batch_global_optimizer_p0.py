@@ -4,11 +4,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from planner.backend_region import PhysicalBackend, Representation
-from backend.contracts import ExecutionKind
-from backend.operator_capability import UnsupportedOperatorBackendError
-from planner.batch_global_optimizer import BatchGlobalOptimizer
-from planner.logical_plan import PlanNode
+from factor_engine.planner.backend_region import PhysicalBackend, Representation
+from factor_engine.backend.contracts import ExecutionKind
+from factor_engine.backend.operator_capability import UnsupportedOperatorBackendError
+from factor_engine.planner.batch_global_optimizer import BatchGlobalOptimizer
+from factor_engine.planner.logical_plan import PlanNode
 
 
 def _ctx(rows: int | None, *, mode: str = "research", complete: bool = False):
@@ -140,9 +140,9 @@ def test_known_rows_alone_are_not_production_ready():
 
 
 def test_complete_estimates_and_contracts_are_production_ready(monkeypatch):
-    monkeypatch.setattr("backend.operator_capability.supports_pandas", lambda *a, **k: True)
-    monkeypatch.setattr("backend.operator_capability.supports_polars", lambda *a, **k: False)
-    monkeypatch.setattr("backend.operator_capability.capability_for", lambda *a, **k: SimpleNamespace(
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_pandas", lambda *a, **k: True)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_polars", lambda *a, **k: False)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.capability_for", lambda *a, **k: SimpleNamespace(
         execution_kind=ExecutionKind.PANDAS_REFERENCE,
         is_production_eligible=lambda: True,
     ))
@@ -179,8 +179,8 @@ def test_empty_plan_is_not_fake_production_ready():
 
 
 def test_production_unsupported_operator_fails_closed(monkeypatch):
-    monkeypatch.setattr("backend.operator_capability.supports_pandas", lambda *a, **k: False)
-    monkeypatch.setattr("backend.operator_capability.supports_polars", lambda *a, **k: False)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_pandas", lambda *a, **k: False)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_polars", lambda *a, **k: False)
     root = PlanNode("synthetic_uncertified", inputs=(PlanNode("column"),))
 
     with pytest.raises(UnsupportedOperatorBackendError, match="production-certified"):
@@ -190,9 +190,9 @@ def test_production_unsupported_operator_fails_closed(monkeypatch):
 
 
 def test_research_polars_delegate_is_explicit_and_not_ready(monkeypatch):
-    monkeypatch.setattr("backend.operator_capability.supports_pandas", lambda *a, **k: False)
-    monkeypatch.setattr("backend.operator_capability.supports_polars", lambda *a, **k: True)
-    monkeypatch.setattr("backend.polars_backend_kind.canonical_polars_is_delegate", lambda *a, **k: True)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_pandas", lambda *a, **k: False)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_polars", lambda *a, **k: True)
+    monkeypatch.setattr("factor_engine.backend.polars_backend_kind.canonical_polars_is_delegate", lambda *a, **k: True)
     root = PlanNode("synthetic_delegate", inputs=(PlanNode("column"),))
 
     result = BatchGlobalOptimizer().optimize_batch(
@@ -205,9 +205,9 @@ def test_research_polars_delegate_is_explicit_and_not_ready(monkeypatch):
 
 
 def test_source_node_inherits_consumer_backend_when_neutral(monkeypatch):
-    monkeypatch.setattr("backend.operator_capability.supports_pandas", lambda *a, **k: False)
-    monkeypatch.setattr("backend.operator_capability.supports_polars", lambda *a, **k: True)
-    monkeypatch.setattr("backend.polars_backend_kind.canonical_polars_is_delegate", lambda *a, **k: False)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_pandas", lambda *a, **k: False)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_polars", lambda *a, **k: True)
+    monkeypatch.setattr("factor_engine.backend.polars_backend_kind.canonical_polars_is_delegate", lambda *a, **k: False)
     source = PlanNode("column", node_id="source")
     root = PlanNode("synthetic_polars", inputs=(source,), node_id="root")
 
@@ -221,9 +221,9 @@ def test_source_node_inherits_consumer_backend_when_neutral(monkeypatch):
 
 
 def test_same_backend_representation_change_has_typed_transfer(monkeypatch):
-    monkeypatch.setattr("backend.operator_capability.supports_pandas", lambda *a, **k: False)
-    monkeypatch.setattr("backend.operator_capability.supports_polars", lambda *a, **k: True)
-    monkeypatch.setattr("backend.polars_backend_kind.canonical_polars_is_delegate", lambda *a, **k: False)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_pandas", lambda *a, **k: False)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_polars", lambda *a, **k: True)
+    monkeypatch.setattr("factor_engine.backend.polars_backend_kind.canonical_polars_is_delegate", lambda *a, **k: False)
     source = PlanNode(
         "column",
         attrs={
@@ -258,9 +258,9 @@ def test_invalid_source_residency_fails_closed():
 
 
 def test_explicit_source_residency_creates_typed_transfer(monkeypatch):
-    monkeypatch.setattr("backend.operator_capability.supports_pandas", lambda *a, **k: True)
-    monkeypatch.setattr("backend.operator_capability.supports_polars", lambda *a, **k: False)
-    monkeypatch.setattr("backend.operator_capability.capability_for", lambda *a, **k: SimpleNamespace(
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_pandas", lambda *a, **k: True)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_polars", lambda *a, **k: False)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.capability_for", lambda *a, **k: SimpleNamespace(
         execution_kind=ExecutionKind.PANDAS_REFERENCE,
         is_production_eligible=lambda: True,
     ))
@@ -287,10 +287,10 @@ def test_explicit_source_residency_creates_typed_transfer(monkeypatch):
 
 
 def test_region_and_transfer_estimates_use_local_node_evidence(monkeypatch):
-    monkeypatch.setattr("backend.operator_capability.supports_pandas", lambda *a, **k: True)
-    monkeypatch.setattr("backend.operator_capability.supports_polars", lambda *a, **k: False)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_pandas", lambda *a, **k: True)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_polars", lambda *a, **k: False)
     monkeypatch.setattr(
-        "backend.operator_capability.capability_for",
+        "factor_engine.backend.operator_capability.capability_for",
         lambda *a, **k: SimpleNamespace(
             execution_kind=ExecutionKind.PANDAS_REFERENCE,
             is_production_eligible=lambda: True,
@@ -337,10 +337,10 @@ def test_region_and_transfer_estimates_use_local_node_evidence(monkeypatch):
 
 
 def test_native_fraction_is_derived_from_execution_kinds(monkeypatch):
-    monkeypatch.setattr("backend.operator_capability.supports_pandas", lambda *a, **k: True)
-    monkeypatch.setattr("backend.operator_capability.supports_polars", lambda *a, **k: False)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_pandas", lambda *a, **k: True)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_polars", lambda *a, **k: False)
     monkeypatch.setattr(
-        "backend.operator_capability.capability_for",
+        "factor_engine.backend.operator_capability.capability_for",
         lambda *a, **k: SimpleNamespace(
             execution_kind=ExecutionKind.NATIVE_EXPR,
             is_production_eligible=lambda: True,

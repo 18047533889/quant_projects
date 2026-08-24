@@ -10,23 +10,23 @@ from textwrap import dedent
 import pandas as pd
 import pytest
 
-from runtime.metrics_export import push_otlp_http, to_otlp_json
-from runtime.run_audit_correlate import correlate_runs_with_audit, read_audit_log
-from runtime.task_queue import FileTaskQueue, shard_config_paths
-from storage.catalog import FactorCatalog
-from storage.lake_version import (
+from factor_engine.runtime.metrics_export import push_otlp_http, to_otlp_json
+from factor_engine.runtime.run_audit_correlate import correlate_runs_with_audit, read_audit_log
+from factor_engine.runtime.task_queue import FileTaskQueue, shard_config_paths
+from factor_engine.storage.catalog import FactorCatalog
+from factor_engine.storage.lake_version import (
     diff_factor_trees,
     list_publish_archives,
     rollback_factor_publish,
     summarize_factor_tree,
 )
-from storage.materializer import ParquetMaterializer
+from factor_engine.storage.materializer import ParquetMaterializer
 
 
 def test_to_otlp_json_has_service_name():
     payload = to_otlp_json({"metrics": {"pipeline": {"configs_total": 1}}})
     attrs = payload["resourceMetrics"][0]["resource"]["attributes"]
-    assert any(item["key"] == "service.name" for item in attrs)
+    assert any(item["key"] == "factor_engine.service.name" for item in attrs)
 
 
 def test_to_otlp_json_time_is_unix_nano():
@@ -44,7 +44,7 @@ def test_to_otlp_json_time_is_unix_nano():
 
 
 def test_push_otlp_grpc_falls_back_to_http():
-    from runtime.metrics_export import push_otlp_grpc
+    from factor_engine.runtime.metrics_export import push_otlp_grpc
 
     summary = {"metrics": {"pipeline": {"configs_total": 1, "configs_success": 1, "configs_failed": 0}}}
     result = push_otlp_grpc(summary, "127.0.0.1:4317", timeout_sec=0.2)

@@ -2,8 +2,8 @@
 """R2-P0-017 physical implementation identity and inventory gates."""
 from __future__ import annotations
 
-from backend.contracts import ExecutionKind, PhysicalImplementationSpec
-from backend.operator_capability import enumerate_physical_inventory
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+from factor_engine.backend.operator_capability import enumerate_physical_inventory
 
 
 def test_live_production_slots_have_bound_native_physical_specs():
@@ -18,9 +18,9 @@ def test_live_production_slots_have_bound_native_physical_specs():
         ("ts_std", "polars"),
     )
     try:
-        from cleaned_operators import load_all
-        from cleaned_operators.registry import OperatorRegistry
-        from backend.polars_backend_kind import (
+        from factor_engine.cleaned_operators import load_all
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+        from factor_engine.backend.polars_backend_kind import (
             PolarsImplementationKind,
             canonical_polars_kind,
             canonical_polars_is_delegate,

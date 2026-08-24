@@ -4,8 +4,8 @@ annualization/extra guard, and production semantic-kind gating."""
 from __future__ import annotations
 
 import pytest
-from fields.spec import FieldSpec, semantic_kind_of_field
-from market.context import ASHARE_CONTEXT, MarketContext, US_CONTEXT
+from factor_engine.fields.spec import FieldSpec, semantic_kind_of_field
+from factor_engine.market.context import ASHARE_CONTEXT, MarketContext, US_CONTEXT
 
 
 class TestFlowSemantics:
@@ -16,7 +16,7 @@ class TestFlowSemantics:
         spec = self._spec("flow_annual")
         assert spec.flow_semantics == "annual_flow"
         # explicit declaration is also honored and bound by ir.types
-        from ir.types import semantic_type_of, SemanticType
+        from factor_engine.ir.types import semantic_type_of, SemanticType
 
         kind = semantic_type_of(flow_semantics="annual_flow")
         assert kind == SemanticType.FINANCIAL_ANNUAL_FLOW

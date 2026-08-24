@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from cleaned_operators.base import (
+from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
     OperatorParameterError,
     ParamSpec,

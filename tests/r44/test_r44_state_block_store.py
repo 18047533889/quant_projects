@@ -15,14 +15,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from runtime.state_block_store import (
+from factor_engine.runtime.state_block_store import (
     StateBlock,
     StateBlockStore,
     StatefulCheckpointStoreAdapter,
 )
-from runtime.stateful_incremental import try_stateful_segmented_incremental
+from factor_engine.runtime.stateful_incremental import try_stateful_segmented_incremental
 from stateful_runtime import execute_stateful_segment
-from ir.nodes import IRNode
+from factor_engine.ir.nodes import IRNode
 
 
 class _PanelSource:

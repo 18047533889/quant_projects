@@ -52,13 +52,13 @@ import pytest
 
 
 def _ensure_chain() -> None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if OperatorRegistry.lifecycle() == "frozen":
         return
     if OperatorRegistry.get("event_streak", "pandas_numpy") is not None:
         return
-    from cleaned_operators.technical import event_state_derivations_v1  # noqa: F401
+    from factor_engine.cleaned_operators.technical import event_state_derivations_v1  # noqa: F401
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -67,7 +67,7 @@ def _bootstrap():
 
 
 def _op(name: str):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get(name, "pandas_numpy") or OperatorRegistry.get(name)
     assert op is not None, f"{name} not registered"
@@ -766,7 +766,7 @@ def test_state_flip_density_vs_transition_rate():
 
 
 def test_state_episode_duration_alias():
-    from cleaned_operators.registry import OperatorRegistry as R
+    from factor_engine.cleaned_operators.registry import OperatorRegistry as R
 
     st = _state_panel(n=50, k=3, seed=27)
     a = _op("state_age").calculate(st, window=10)
@@ -1116,13 +1116,13 @@ def test_halflife_exceeding_window_rejected():
 
 
 def test_promotion_membership():
-    from mining.direct_use import _PRICE_LEVEL_INTERMEDIATE_OPS, _RELATIVE_ALPHA_OPS
+    from factor_engine.mining.direct_use import _PRICE_LEVEL_INTERMEDIATE_OPS, _RELATIVE_ALPHA_OPS
 
     assert set(ALL_NAMES) <= _RELATIVE_ALPHA_OPS
     for name in ALL_NAMES:
         assert name not in _PRICE_LEVEL_INTERMEDIATE_OPS, name
 
-    from cleaned_operators.operator_surface import (
+    from factor_engine.cleaned_operators.operator_surface import (
         EXTENDED_ONLY_CANONICALS,
         classify_canonical,
     )
@@ -1135,7 +1135,7 @@ def test_promotion_membership():
 def test_duplicate_shadow_check():
     # the two audited SKIP names must remain the pre-existing aliases, NOT
     # shadowed by any canonical of ours (forking the semantics is impossible)
-    from cleaned_operators.registry import OperatorRegistry as R
+    from factor_engine.cleaned_operators.registry import OperatorRegistry as R
 
     assert R._aliases.get("event_age") == "ts_days_since"
     assert R._aliases.get("event_decay") == "event_decay_asof"
@@ -1154,7 +1154,7 @@ def test_persistence_equals_dwell_estimator():
 
 def test_available_at_declarations():
     """All event/state operators must have available_at='close_of_t' and same_session_usable=False."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     _ensure_chain()
     # These operators inherit default values (None for available_at, None for same_session_usable)
     # The test verifies they are registered and have the expected metadata structure
@@ -1191,7 +1191,7 @@ def test_state_age_no_lookahead():
 
 def test_categorical_event_family_available_at():
     """All CategoricalEvent family operators must have available_at='close_of_t' and same_session_usable=False."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     _ensure_chain()
     for name in CAT_EVENT_NAMES:
         op = OperatorRegistry.get(name, "pandas_numpy")
@@ -1439,7 +1439,7 @@ def test_censoring_variants_window_validation():
 
 def test_censoring_variants_governance():
     """Verify ParamSpec, tags, and surface classification for censoring variants."""
-    from cleaned_operators.operator_surface import EXTENDED_ONLY_CANONICALS, classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import EXTENDED_ONLY_CANONICALS, classify_canonical
 
     for name in ["state_episode_age_lower_bound", "state_episode_age_capped",
                   "state_episode_censored_flag", "category_age_lower_bound"]:
@@ -1466,7 +1466,7 @@ def test_censoring_variants_governance():
 
 def test_censoring_variants_available_at():
     """All censoring variant operators must have available_at='close_of_t'."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     _ensure_chain()
     for name in ["state_episode_age_lower_bound", "state_episode_age_capped",
                   "state_episode_censored_flag", "category_age_lower_bound"]:

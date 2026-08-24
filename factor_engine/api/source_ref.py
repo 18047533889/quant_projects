@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass, field, replace
 from typing import Any, Mapping
 
-from api.columns import col
+from factor_engine.api.columns import col
 
 _PREFIX = "__fe_source_ref_v1__"
 _MINUTE_FIELDS = {

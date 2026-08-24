@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from service.errors import ServiceError
+from factor_engine.service.errors import ServiceError
 
 MANIFEST_SCHEMA_VERSION = 3
 
@@ -127,7 +127,7 @@ class JobRecord:
         self.heartbeat_at = _utc_now()
 
     def to_public(self) -> dict[str, Any]:
-        from service.errors import sanitize_message
+        from factor_engine.service.errors import sanitize_message
 
         public_artifacts = {
             key: value

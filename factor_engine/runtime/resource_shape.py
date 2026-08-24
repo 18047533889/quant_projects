@@ -156,7 +156,7 @@ def hardware_fingerprint() -> dict[str, Any]:
         import socket
 
         hostname_hash = abs(hash(socket.gethostname())) % (10**10)
-        from runtime.resource_governor import effective_cpu_slots, effective_memory_limit_bytes
+        from factor_engine.runtime.resource_governor import effective_cpu_slots, effective_memory_limit_bytes
 
         return {
             "hostname_hash": hostname_hash,

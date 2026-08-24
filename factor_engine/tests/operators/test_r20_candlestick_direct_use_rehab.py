@@ -28,16 +28,16 @@ import pytest
 
 
 def _ensure_technical_chain() -> None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if OperatorRegistry.lifecycle() == "frozen":
         return
     if OperatorRegistry.get("KAMA", "pandas_numpy") is not None:
         return
-    from cleaned_operators.technical import signal  # noqa: F401
-    from cleaned_operators.technical import polars_signal  # noqa: F401
-    from cleaned_operators import composite_fastpath  # noqa: F401
-    from cleaned_operators.technical import indicators_v2  # noqa: F401
+    from factor_engine.cleaned_operators.technical import signal  # noqa: F401
+    from factor_engine.cleaned_operators.technical import polars_signal  # noqa: F401
+    from factor_engine.cleaned_operators import composite_fastpath  # noqa: F401
+    from factor_engine.cleaned_operators.technical import indicators_v2  # noqa: F401
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -46,7 +46,7 @@ def _bootstrap():
 
 
 def _op(name: str):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get(name, "pandas_numpy") or OperatorRegistry.get(name)
     assert op is not None, f"{name} not registered"
@@ -324,7 +324,7 @@ def test_candle_prefix_invariance():
 
 
 def test_candle_param_specs_and_rolling_governance():
-    from cleaned_operators.technical.indicators_v2 import _RECURSIVE_EWM
+    from factor_engine.cleaned_operators.technical.indicators_v2 import _RECURSIVE_EWM
 
     names = {"candle_body_strength", "candle_wick_balance",
              "candle_range_pct", "candle_pattern_count"}
@@ -344,7 +344,7 @@ def test_candle_param_specs_and_rolling_governance():
 
 
 def test_relative_alpha_membership_and_binary_detector_exclusion():
-    from mining.direct_use import _RELATIVE_ALPHA_OPS
+    from factor_engine.mining.direct_use import _RELATIVE_ALPHA_OPS
 
     promoted = {"candle_body_strength", "candle_wick_balance",
                 "candle_range_pct", "candle_pattern_count"}
@@ -352,7 +352,7 @@ def test_relative_alpha_membership_and_binary_detector_exclusion():
     # One-off binary detectors are NOT aggregate strength — must stay out.
     for binary in ("cdl_doji", "cdl_hammer", "cdl_engulfing", "cdl_shooting_star"):
         assert binary not in _RELATIVE_ALPHA_OPS, f"{binary} must not be promoted"
-    from cleaned_operators.operator_surface import DAILY_FACTOR_MIGRATED, _TECHNICAL_V2_CANONICALS
+    from factor_engine.cleaned_operators.operator_surface import DAILY_FACTOR_MIGRATED, _TECHNICAL_V2_CANONICALS
 
     assert promoted <= DAILY_FACTOR_MIGRATED
     assert promoted <= _TECHNICAL_V2_CANONICALS

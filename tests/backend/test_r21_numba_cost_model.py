@@ -18,7 +18,7 @@ from planning.backend_selector import (
     _BACKEND_CHARACTERISTICS,
 )
 from planning.backend_region import PhysicalBackend, ExecutionAxis
-from backend.contracts import Accelerator, ExecutionKind
+from factor_engine.backend.contracts import Accelerator, ExecutionKind
 
 
 class TestNumbaIsAcceleratorNotBackend:
@@ -92,7 +92,7 @@ class TestNumbaTTDCIntegration:
 
     def test_ttdc_includes_jit_cost(self):
         """TTDC predictor should still work for a normal backend."""
-        from backend.plan_cost_router import predict_ttdc, TtdcEstimate
+        from factor_engine.backend.plan_cost_router import predict_ttdc, TtdcEstimate
 
         # Create a mock shape object
         class MockShape:

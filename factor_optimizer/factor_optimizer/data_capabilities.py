@@ -225,6 +225,10 @@ class DataCapability:
         if len(requested) != len(self._allowed_mask):
             return False
         authorized = self._authorized_positions()
+        # A capability that authorizes no rows cannot evaluate anything, and an
+        # empty request is not a meaningful evaluation.
+        if not authorized or not any(requested):
+            return False
         for i, flag in enumerate(requested):
             if flag and i not in authorized:
                 return False

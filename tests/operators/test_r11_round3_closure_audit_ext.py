@@ -20,17 +20,17 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators
-from cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec
-from cleaned_operators.closure_audit import CLOSURE_CATEGORIES
+import factor_engine.cleaned_operators
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec
+from factor_engine.cleaned_operators.closure_audit import CLOSURE_CATEGORIES
 
 cleaned_operators.load_all()
 
-from cleaned_operators.semantic_audit import OperatorSample, _panel
+from factor_engine.cleaned_operators.semantic_audit import OperatorSample, _panel
 
 
 def _check_direct(op, category, frames, kwargs):
-    from cleaned_operators.closure_audit import CLOSURE_CATEGORIES as _CATS
+    from factor_engine.cleaned_operators.closure_audit import CLOSURE_CATEGORIES as _CATS
 
     sample = OperatorSample("test", frames, kwargs)
     ctx = {"sample": sample, "canonical": "test", "op": op}
@@ -55,7 +55,7 @@ def test_round3_categories_registered():
 
 def test_new_categories_can_skip_honestly():
     """Ops that cannot be exercised record a NOT_APPLICABLE skip, never a crash."""
-    from cleaned_operators.closure_audit import run_closure_audit
+    from factor_engine.cleaned_operators.closure_audit import run_closure_audit
 
     report = run_closure_audit(
         canonical_names=["ts_count_if"], categories=["practical_usability"]

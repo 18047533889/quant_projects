@@ -14,7 +14,7 @@ os.environ.setdefault("FACTOR_ENGINE_CPU_BUDGET", "4")
 
 
 def _identity(**over):
-    from semantic.data_knowledge_identity import DataKnowledgeIdentity
+    from factor_engine.semantic.data_knowledge_identity import DataKnowledgeIdentity
 
     base = dict(dataset_id="daily_bar", snapshot_id="snap1", schema_epoch="e1",
                 market="ashare", calendar_id="ashare_cal", universe_snapshot_id="CSI300",
@@ -54,8 +54,8 @@ def test_identity_changes_on_revision():
 
 def test_identity_from_factor_identity():
     """从 FactorSemanticIdentity 组合 DataKnowledgeIdentity。"""
-    from runtime.factor_identity import FactorSemanticIdentity
-    from semantic.data_knowledge_identity import DataKnowledgeIdentity
+    from factor_engine.runtime.factor_identity import FactorSemanticIdentity
+    from factor_engine.semantic.data_knowledge_identity import DataKnowledgeIdentity
 
     fi = FactorSemanticIdentity(
         ir_hash="h1", operator_contract_hash="h2", field_contract_hash="h3",
@@ -85,7 +85,7 @@ def test_identity_deterministic_across_instances():
 
 
 def test_universe_membership_pit_effective_at():
-    from market.universe import UniverseMembership
+    from factor_engine.market.universe import UniverseMembership
 
     m = UniverseMembership(universe="CSI300", instrument="000001",
                            valid_time="2024-01-01", knowledge_time="2024-01-05")
@@ -99,7 +99,7 @@ def test_universe_membership_pit_effective_at():
 
 def test_universe_membership_before_valid_red():
     """成分加入前不能出现：valid_time 之后才 effective。"""
-    from market.universe import UniverseMembership
+    from factor_engine.market.universe import UniverseMembership
 
     m = UniverseMembership(universe="CSI300", instrument="000001",
                            valid_time="2024-03-01", knowledge_time="2024-03-05")
@@ -108,7 +108,7 @@ def test_universe_membership_before_valid_red():
 
 
 def test_universe_membership_hash_differs_by_membership():
-    from market.universe import universe_membership_identity
+    from factor_engine.market.universe import universe_membership_identity
 
     h1 = universe_membership_identity("CSI300", ("a", "b"), as_of="2024-01-01")
     h2 = universe_membership_identity("CSI300", ("a", "b", "c"), as_of="2024-01-01")
@@ -126,7 +126,7 @@ def test_universe_membership_hash_differs_by_membership():
 
 
 def test_price_basis_canonical_normalization():
-    from fields.concepts import PriceBasis
+    from factor_engine.fields.concepts import PriceBasis
 
     assert PriceBasis.canonical("RAW") == "RAW"
     assert PriceBasis.canonical("CONTINUOUS") == "CONTINUOUS"

@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import runtime.batch_service as bs
+import factor_engine.runtime.batch_service as bs
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +144,7 @@ def test_legacy_layer_loop_still_prefetches(monkeypatch):
 
 
 def test_overlay_map_read_write_isolation_semantics():
-    from runtime.readonly_overlay_map import ReadOnlyOverlayMap
+    from factor_engine.runtime.readonly_overlay_map import ReadOnlyOverlayMap
 
     base = {"a": 1, "b": 2}
     ov = ReadOnlyOverlayMap(base, {})
@@ -181,7 +181,7 @@ def test_overlay_map_read_write_isolation_semantics():
 def test_execute_root_with_path_uses_overlay_no_full_copy(monkeypatch):
     from dataclasses import dataclass, field, replace
 
-    from runtime.readonly_overlay_map import ReadOnlyOverlayMap
+    from factor_engine.runtime.readonly_overlay_map import ReadOnlyOverlayMap
 
     monkeypatch.setattr(
         bs, "assert_production_fastpath_runtime", lambda *a, **k: None
@@ -252,8 +252,8 @@ def test_execute_root_with_path_uses_overlay_no_full_copy(monkeypatch):
 
 
 def _fake_warmup_ctx(engine, rw, *, full=False):
-    from runtime.run_window import RunWindow
-    from runtime.warmup_service import WarmupContext
+    from factor_engine.runtime.run_window import RunWindow
+    from factor_engine.runtime.warmup_service import WarmupContext
 
     if rw is None:
         rw = RunWindow(
@@ -305,7 +305,7 @@ def _analysis(name: str, cols, full: bool = False, lookback: int = 5):
 
 
 def test_batch_warmup_plan_computed_once_and_groups_by_scan_cost(monkeypatch):
-    import runtime.batch_warmup_plan as bwp
+    import factor_engine.runtime.batch_warmup_plan as bwp
 
     calls: dict[str, int] = {"prepare_run_warmup": 0}
 
@@ -314,7 +314,7 @@ def test_batch_warmup_plan_computed_once_and_groups_by_scan_cost(monkeypatch):
         full = bool(getattr(analysis, "requires_full_history", False))
         return _fake_warmup_ctx(engine, None, full=full)
 
-    monkeypatch.setattr("runtime.warmup_service.prepare_run_warmup", _spy_prepare_run_warmup)
+    monkeypatch.setattr("factor_engine.runtime.warmup_service.prepare_run_warmup", _spy_prepare_run_warmup)
 
     factors = [
         _FakeFactor("short_a"),
@@ -354,8 +354,8 @@ def test_batch_warmup_plan_computed_once_and_groups_by_scan_cost(monkeypatch):
 
 
 def test_maybe_prepare_batch_warmup_consumes_plan_no_recompute(monkeypatch):
-    import runtime.batch_service as bs_mod
-    import runtime.batch_warmup_plan as bwp
+    import factor_engine.runtime.batch_service as bs_mod
+    import factor_engine.runtime.batch_warmup_plan as bwp
 
     calls: dict[str, int] = {"prepare_run_warmup": 0}
 
@@ -363,7 +363,7 @@ def test_maybe_prepare_batch_warmup_consumes_plan_no_recompute(monkeypatch):
         calls["prepare_run_warmup"] += 1
         return _fake_warmup_ctx(engine, None)
 
-    monkeypatch.setattr("runtime.warmup_service.prepare_run_warmup", _spy_prepare_run_warmup)
+    monkeypatch.setattr("factor_engine.runtime.warmup_service.prepare_run_warmup", _spy_prepare_run_warmup)
 
     factors = [_FakeFactor("a"), _FakeFactor("b")]
     analyses = {
@@ -399,10 +399,10 @@ def test_maybe_prepare_batch_warmup_consumes_plan_no_recompute(monkeypatch):
 
 
 def test_cluster_factors_by_cost_uses_scan_cost_groups(monkeypatch):
-    import runtime.batch_warmup_plan as bwp
+    import factor_engine.runtime.batch_warmup_plan as bwp
 
     monkeypatch.setattr(
-        "runtime.warmup_service.prepare_run_warmup",
+        "factor_engine.runtime.warmup_service.prepare_run_warmup",
         lambda engine, factor, analysis, **kw: _fake_warmup_ctx(
             engine,
             None,
@@ -458,13 +458,13 @@ def _result_series():
 
 
 def test_output_slice_zero_copy_positional_trim():
-    from planner.output_slice import (
+    from factor_engine.planner.output_slice import (
         OutputSlice,
         apply_output_slice,
         carried_output_slice,
         compute_output_slice,
     )
-    from storage.time_window import slice_series_time_window
+    from factor_engine.storage.time_window import slice_series_time_window
 
     s = _result_series()
     rw = SimpleNamespace(
@@ -486,8 +486,8 @@ def test_output_slice_zero_copy_positional_trim():
 
 
 def test_trim_batch_result_respects_carried_slice_and_falls_back():
-    from planner.output_slice import compute_output_slice
-    from storage.time_window import slice_series_time_window
+    from factor_engine.planner.output_slice import compute_output_slice
+    from factor_engine.storage.time_window import slice_series_time_window
 
     s = _result_series()
     rw = SimpleNamespace(
@@ -522,7 +522,7 @@ def test_trim_batch_result_skips_without_trim():
 
 
 def test_output_slice_falls_back_on_non_monotonic():
-    from planner.output_slice import compute_output_slice
+    from factor_engine.planner.output_slice import compute_output_slice
 
     # 非单调索引 → 返回 None（调用方走旧 mask 语义，行为不变）
     idx = pd.MultiIndex.from_tuples(
@@ -538,7 +538,7 @@ def test_output_slice_falls_back_on_non_monotonic():
         requested_start="2024-01-02", requested_end="2024-01-03", trim_output=True
     )
     assert compute_output_slice(s, rw, bars_per_day=1) is None
-    from storage.time_window import slice_series_time_window
+    from factor_engine.storage.time_window import slice_series_time_window
 
     out = bs._trim_batch_result(s, rw, bars_per_day=1)
     expected = slice_series_time_window(
@@ -550,7 +550,7 @@ def test_output_slice_falls_back_on_non_monotonic():
 
 
 def test_output_slice_validation():
-    from planner.output_slice import OutputSlice
+    from factor_engine.planner.output_slice import OutputSlice
 
     assert OutputSlice(0, None).is_full
     assert OutputSlice(2, 6).to_dict() == {"start_offset": 2, "end_offset": 6}

@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.operator_spec import PERMANENTLY_FORBIDDEN_CANONICALS
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.operator_spec import PERMANENTLY_FORBIDDEN_CANONICALS
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -23,7 +23,7 @@ FORBIDDEN = sorted(PERMANENTLY_FORBIDDEN_CANONICALS)
 
 
 def _registry():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     return OperatorRegistry
 
@@ -38,21 +38,21 @@ def test_permanently_forbidden_not_registered_for_runtime():
 
 
 def test_permanently_forbidden_not_in_daily_allowlist():
-    import cleaned_operators.operator_surface as surf
+    import factor_engine.cleaned_operators.operator_surface as surf
 
     present = sorted(set(FORBIDDEN) & set(surf.DAILY_CANONICALS))
     assert present == [], f"forbidden in DAILY surface: {present}"
 
 
 def test_permanently_forbidden_not_in_extended_allowlist():
-    import cleaned_operators.operator_surface as surf
+    import factor_engine.cleaned_operators.operator_surface as surf
 
     present = sorted(set(FORBIDDEN) & set(surf.EXTENDED_ONLY_CANONICALS))
     assert present == [], f"forbidden in EXTENDED surface: {present}"
 
 
 def test_permanently_forbidden_not_in_research_or_unsafe_surface():
-    import cleaned_operators.operator_surface as surf
+    import factor_engine.cleaned_operators.operator_surface as surf
 
     present = sorted(
         set(FORBIDDEN)
@@ -62,7 +62,7 @@ def test_permanently_forbidden_not_in_research_or_unsafe_surface():
 
 
 def test_permanently_forbidden_not_in_mining_catalog():
-    from mining.operator_catalog import (
+    from factor_engine.mining.operator_catalog import (
         MiningRole,
         assign_mining_role,
     )
@@ -82,7 +82,7 @@ def test_permanently_forbidden_not_in_mining_catalog():
 
 
 def test_permanently_forbidden_not_in_direct_use():
-    from mining.direct_use import (
+    from factor_engine.mining.direct_use import (
         DirectUseStatus,
         resolve_direct_use_status,
     )
@@ -102,8 +102,8 @@ def test_permanently_forbidden_not_in_direct_use():
 
 def test_permanently_forbidden_not_in_backend_emitters():
     """The forbidden names must not appear in pandas/polars/SQL emitter tables."""
-    import backend.polars_expr_emitter as pl_emit
-    import backend.sql_pushdown.emitter as sql_emit
+    import factor_engine.backend.polars_expr_emitter as pl_emit
+    import factor_engine.backend.sql_pushdown.emitter as sql_emit
 
     text_sources = []
     for mod in (pl_emit, sql_emit):
@@ -132,7 +132,7 @@ def test_permanently_forbidden_alias_cannot_escape():
 
 
 def test_legacy_formula_gets_explicit_forbidden_error():
-    from api.mining_integration import validate_production_dsl
+    from factor_engine.api.mining_integration import validate_production_dsl
 
     for formula in ("bfill(close)", "Lead(close, 1)", "rand_uniform(close)", "shuffle(close)"):
         ok, msg = validate_production_dsl(formula)
@@ -141,7 +141,7 @@ def test_legacy_formula_gets_explicit_forbidden_error():
 
 
 def test_forbidden_not_in_dsl_allowlist():
-    from api.mining_integration import list_dsl_allowlist
+    from factor_engine.api.mining_integration import list_dsl_allowlist
 
     allow = set(list_dsl_allowlist(surface="daily")) | set(list_dsl_allowlist(surface="extended"))
     present = sorted(set(FORBIDDEN) & allow)
@@ -152,7 +152,7 @@ def test_constant_is_denied_internal_grammar_helper():
     """``constant`` is the one deliberately-retained runtime name: an internal
     scalar-literal helper for the DSL/recipes, DENIED and INTERNAL-only, never a
     factor terminal."""
-    import cleaned_operators.operator_surface as surf
+    import factor_engine.cleaned_operators.operator_surface as surf
 
     assert "constant" in surf.INTERNAL_ONLY_CANONICALS
     assert surf.classify_canonical("constant") == "internal"

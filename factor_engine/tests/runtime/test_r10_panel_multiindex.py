@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from cleaned_operators.common._polars_bridge import (
+from factor_engine.cleaned_operators.common._polars_bridge import (
     PanelIdentity,
     verify_frames_share_identity,
 )

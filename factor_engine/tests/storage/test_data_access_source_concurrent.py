@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from storage.sources.data_access_source import DataAccessSource
+from factor_engine.storage.sources.data_access_source import DataAccessSource
 
 
 class TestConcurrentCacheSafety:
@@ -18,7 +18,7 @@ class TestConcurrentCacheSafety:
 
     def test_concurrent_refresh_snapshot_single_flight(self):
         """验证 refresh_snapshot 的 single-flight 行为：多线程同时刷新时只有一个执行。"""
-        with patch("storage.sources.data_access_source._get_store") as mock_get_store:
+        with patch("factor_engine.storage.sources.data_access_source._get_store") as mock_get_store:
             mock_store = MagicMock()
             mock_store.manifest_version.return_value = {
                 "has_manifest": False,
@@ -54,7 +54,7 @@ class TestConcurrentCacheSafety:
 
     def test_concurrent_load_columns_cache_bytes_accurate(self):
         """验证并发 load_columns 时 _cache_bytes 计数准确。"""
-        with patch("storage.sources.data_access_source._get_store") as mock_get_store:
+        with patch("factor_engine.storage.sources.data_access_source._get_store") as mock_get_store:
             mock_store = MagicMock()
             mock_store.get_dataset.return_value = MagicMock(
                 time_column="date",
@@ -103,7 +103,7 @@ class TestConcurrentCacheSafety:
 
     def test_concurrent_enable_lazy_scan_no_cache_clear(self):
         """验证并发 enable_lazy_scan 不会清空共享 cache。"""
-        with patch("storage.sources.data_access_source._get_store") as mock_get_store:
+        with patch("factor_engine.storage.sources.data_access_source._get_store") as mock_get_store:
             mock_store = MagicMock()
             mock_store.get_dataset.return_value = MagicMock(
                 time_column="date",
@@ -173,7 +173,7 @@ class TestConcurrentResourceManagement:
 
     def test_lazy_bundle_lifecycle_concurrent(self):
         """验证并发场景下 lazy_bundle 的生命周期管理。"""
-        with patch("storage.sources.data_access_source._get_store") as mock_get_store:
+        with patch("factor_engine.storage.sources.data_access_source._get_store") as mock_get_store:
             mock_store = MagicMock()
             mock_store.get_dataset.return_value = MagicMock(
                 time_column="date",
@@ -181,7 +181,7 @@ class TestConcurrentResourceManagement:
             )
             mock_get_store.return_value = mock_store
 
-            with patch("backend.polars_lazy.build_lazy_column_bundle") as mock_build:
+            with patch("factor_engine.backend.polars_lazy.build_lazy_column_bundle") as mock_build:
                 # Mock bundle with close() method
                 closed_bundles = []
 
@@ -214,7 +214,7 @@ class TestConcurrentResourceManagement:
 
     def test_context_manager_cleanup(self):
         """验证 context manager 正确清理资源。"""
-        with patch("storage.sources.data_access_source._get_store"):
+        with patch("factor_engine.storage.sources.data_access_source._get_store"):
             with DataAccessSource(dataset="test_dataset") as source:
                 source._closed = False
                 assert not source._closed
@@ -239,7 +239,7 @@ class TestConcurrentEdgeCases:
 
     def test_concurrent_clear_cache_and_read(self):
         """验证 clear_cache 与并发读取不会导致崩溃。"""
-        with patch("storage.sources.data_access_source._get_store") as mock_get_store:
+        with patch("factor_engine.storage.sources.data_access_source._get_store") as mock_get_store:
             mock_store = MagicMock()
             mock_store.get_dataset.return_value = MagicMock(
                 time_column="date",
@@ -289,7 +289,7 @@ class TestConcurrentEdgeCases:
 
     def test_concurrent_snapshot_change_during_read(self):
         """验证快照变化时并发读取的行为。"""
-        with patch("storage.sources.data_access_source._get_store") as mock_get_store:
+        with patch("factor_engine.storage.sources.data_access_source._get_store") as mock_get_store:
             mock_store = MagicMock()
             mock_store.manifest_version.return_value = {
                 "has_manifest": True,

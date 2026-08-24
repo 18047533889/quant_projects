@@ -12,12 +12,12 @@ import time
 sys.path.insert(0, ".")
 
 t0 = time.time()
-import cleaned_operators  # noqa: F401
-from cleaned_operators.registry import OperatorRegistry
+import factor_engine.cleaned_operators  # noqa: F401
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 # classify
 try:
-    from cleaned_operators.operator_surface import classify_canonical, is_dsl_name_allowed
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical, is_dsl_name_allowed
 except Exception as e:  # pragma: no cover
     classify_canonical = None
     is_dsl_name_allowed = None
@@ -64,7 +64,7 @@ for k in sorted(risky):
 
 # pit_safe=False on daily surface
 print("\nDAILY PIT_SAFE=FALSE:")
-from cleaned_operators.operator_policy import infer_operator_policy
+from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
 pit_false = []
 for c in with_runtime:
     if surfaces.get(c) == "daily":

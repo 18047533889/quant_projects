@@ -18,28 +18,39 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Mapping
+from uuid import uuid4
 
 import pandas as pd
 
-from backend.base import Backend
-from backend.context import ExecutionContext
-from backend.q_backend.q_adapter import get_q_type_adapter
-from backend.q_backend.q_capability import get_q_capability
-from backend.q_backend.q_compiler import QRegionPlan, get_q_compiler
-from backend.q_backend.q_errors import (
+from factor_engine.backend.base import Backend
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.backend.operator_capability import BackendUnavailableError
+from factor_engine.backend.q_backend.q_adapter import get_q_type_adapter
+from factor_engine.backend.q_backend.q_capability import get_q_capability
+from factor_engine.backend.q_backend.q_compiler import QRegionPlan, get_q_compiler
+from factor_engine.backend.q_backend.q_errors import (
     QDataUnavailableError,
     QOutputContract,
     QOutputContractViolation,
     QPhysicalRegionNotImplemented,
     QPlanningFallbackAllowed,
+    QProcessUnavailableError,
+    semantic_kind_to_output_dtype,
+    semantic_null_policy_of_contract,
 )
-from backend.q_backend.q_executor import (
+from factor_engine.backend.q_backend.q_executor import (
     QExecutionFallbackPolicy,
     get_q_executor,
 )
-from backend.q_backend.q_process_manager import get_q_process_manager
-from backend.runtime_events import append_runtime_event
-from planner.logical_plan import PlanNode
+from factor_engine.backend.q_backend.q_process_manager import get_q_process_manager
+from factor_engine.backend.runtime_events import append_runtime_event
+from factor_engine.planner.backend_region import (
+    BackendRegion,
+    PhysicalBackend,
+    PhysicalRegionPlan,
+    Representation,
+)
+from factor_engine.planner.logical_plan import PlanNode
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +125,28 @@ class QBackend(Backend):
             QPlanningFallbackAllowed: Planning-time 允许的 fallback (Q2-P0-018)
         """
         if self._production_mode:
+            # Q2-P0-015 (RESOLVED): when the planner already produced a
+            # planner-admitted PhysicalRegionPlan, execute it directly instead
+            # of re-deriving a region from the whole tree.  Planner remains the
+            # sole execution authority (BACKEND_REGION_PLANNER_IS_EXECUTION_AUTHORITY).
+            if isinstance(plan, PhysicalRegionPlan):
+                # Production: q runtime must be available for physical regions.
+                if not self._process_manager.is_available():
+                    info = self._process_manager.check_availability()
+                    raise BackendUnavailableError(
+                        f"q runtime unavailable in production mode: {info.status.value}. "
+                        f"Error: {info.error_message}"
+                    )
+                return self.execute_physical_plan(plan, ctx)
+
+            # Any non-physical PlanNode reaching production q execution is not
+            # planner-admitted; fail closed regardless of q runtime availability.
+            if not self._process_manager.is_available():
+                info = self._process_manager.check_availability()
+                raise BackendUnavailableError(
+                    f"q runtime unavailable in production mode: {info.status.value}. "
+                    f"Error: {info.error_message}"
+                )
             raise QPhysicalRegionNotImplemented(
                 "Production q execution requires a planner-admitted physical "
                 "region; whole-tree PlanNode self-routing is disabled"
@@ -238,6 +271,245 @@ class QBackend(Backend):
                 ) from e
             else:
                 raise
+
+    def execute_physical_region(
+        self,
+        region: BackendRegion,
+        ctx: ExecutionContext,
+        *,
+        input_data: Mapping[str, Any] | None = None,
+        return_resident_handle: bool = False,
+        workspace_id: str | None = None,
+        generation_id: str | None = None,
+        nodes: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> Any:
+        """Execute a planner-admitted q region (BackendRegion).
+
+        Q2-P0-015 (RESOLVED) production path:
+          PhysicalRegionPlan → QCompiler → QExecutor → QResidentHandle.
+
+        The region is not re-derived from a whole-tree ``PlanNode``: the plan's
+        node list, region boundaries and backend residency are supplied by the
+        Planner and honored verbatim
+        (``BACKEND_REGION_PLANNER_IS_EXECUTION_AUTHORITY``).  q region
+        intermediate outputs stay Q-resident (``q_to_python_bytes=0``).
+
+        参数:
+            region: Planner 生成的 q BackendRegion
+            ctx: 执行上下文
+            input_data: 可选显式输入（表名 → DataFrame/QResidentTableHandle/Arrow）
+                       缺省时从 ``ctx`` 加载基础数据
+            return_resident_handle: 返回 Q-resident handle 供后续 region 复用
+            workspace_id/generation_id: q 工作区租约标识（batch 复用）
+            nodes: 可选 ``node_id → {op, inputs, attrs, semantic_attrs}`` 结构。
+                   由 Planner 提供；缺省且 region 不带节点结构时 fail-closed。
+
+        返回:
+            pandas.Series (MultiIndex: timestamp × instrument)；若
+            ``return_resident_handle`` 则返回 ``QExecutionResult``。
+
+        抛出:
+            BackendUnavailableError: q 运行时不可用
+            QPhysicalRegionNotImplemented: region 未经 Planner 认可或缺少节点结构
+            QOutputContractViolation: 输出 schema 不匹配
+            QDataUnavailableError: 基础数据缺失或执行失败
+        """
+        # 1. Region-level fail-closed availability gate (MB-P2-006).
+        if not self._process_manager.is_available():
+            info = self._process_manager.check_availability()
+            raise BackendUnavailableError(
+                f"q runtime unavailable in production mode: {info.status.value}. "
+                f"Error: {info.error_message}"
+            )
+
+        # 2. Planner is the only execution authority: a q region must be
+        #    planner-admitted and carry a canonical identity.  We fail closed
+        #    rather than re-derive a region from a whole PlanNode.
+        if region.backend != PhysicalBackend.Q_KDB:
+            raise QPhysicalRegionNotImplemented(
+                f"execute_physical_region expects a q_kdb region, "
+                f"got {region.backend.value!r}"
+            )
+        if not region.node_ids:
+            raise QPhysicalRegionNotImplemented(
+                f"q region {region.region_id!r} has no planner-admitted nodes"
+            )
+
+        # 3. Compile the admitted region (canonical-IR only, zero semantic
+        #    authority).  Node order and structure are supplied by the planner.
+        region_plan = self._compile_region_plan(region, nodes=nodes)
+
+        # 4. Resolve inputs.  Caller-supplied inputs win; otherwise derive the
+        #    base table from ctx.  Region intermediates arrive as
+        #    QResidentTableHandle and are consumed without a pandas round-trip.
+        if input_data is None:
+            input_data = {"input_table": self._get_base_data(ctx)}
+        missing = [t for t in region_plan.input_tables if t not in input_data]
+        if missing:
+            raise QDataUnavailableError(
+                f"Missing input tables for q region {region.region_id}: {missing}"
+            )
+
+        self._stats["regions_compiled"] += 1
+        append_runtime_event(
+            ctx,
+            "q_backend_start",
+            backend="q_kdb",
+            plan_node_id=region.region_id,
+        )
+
+        # 5. Execute.  Runtime fallback is disabled (Q2-P0-018): planning-time
+        #    capability decision is the only fallback point.
+        fallback_policy = QExecutionFallbackPolicy(
+            allow_fallback=False,
+            fail_on_unavailable=True,
+        )
+        try:
+            result = self._executor.execute_region(
+                region_plan,
+                dict(input_data),
+                fallback_policy=fallback_policy,
+                return_resident_handle=return_resident_handle,
+                materialize_output=not return_resident_handle,
+                workspace_id=workspace_id,
+                generation_id=generation_id,
+            )
+        except QProcessUnavailableError:
+            self._stats["regions_failed"] += 1
+            info = self._process_manager.check_availability()
+            raise BackendUnavailableError(
+                f"q runtime unavailable in production mode: {info.status.value}. "
+                f"Error: {info.error_message}"
+            ) from None
+
+        if not result.success:
+            self._stats["regions_failed"] += 1
+            raise QDataUnavailableError(
+                f"q execution failed for region {region.region_id}: {result.error_message}"
+            )
+
+        self._stats["regions_executed"] += 1
+        self._stats["total_rows_processed"] += result.rows_processed
+        self._stats["total_execution_time_ms"] += result.execution_time_ms
+        append_runtime_event(
+            ctx,
+            "q_backend_success",
+            backend="q_kdb",
+            rows=result.rows_processed,
+            execution_time_ms=result.execution_time_ms,
+        )
+
+        if return_resident_handle:
+            return result
+
+        # 6. QAdapter: q result → MultiIndex Series with schema validation.
+        return self._result_to_series_validated(result.output_df, ctx)
+
+    def execute_physical_plan(
+        self,
+        plan: PhysicalRegionPlan,
+        ctx: ExecutionContext,
+        *,
+        input_data: Mapping[str, Any] | None = None,
+        nodes: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> Any:
+        """Execute a planner-admitted q PhysicalRegionPlan in topological order.
+
+        Regions are executed in the plan's declared order; q region
+        intermediate outputs are handed downstream as ``QResidentTableHandle``
+        so no pandas round-trip occurs between q regions
+        (``Q_BACKEND_OPERATOR_LEVEL_PINGPONG_ZERO``).  The root region's value
+        is materialized and returned.
+
+        抛出:
+            BackendUnavailableError: q 运行时不可用
+            QPhysicalRegionNotImplemented: 存在非 q region 或节点结构缺失
+            QDataUnavailableError: 基础数据缺失或执行失败
+        """
+        if not self._process_manager.is_available():
+            info = self._process_manager.check_availability()
+            raise BackendUnavailableError(
+                f"q runtime unavailable in production mode: {info.status.value}. "
+                f"Error: {info.error_message}"
+            )
+
+        regions = {r.region_id: r for r in plan.regions}
+        workspace_id = f"q_{plan.plan_id}"
+        generation_id = uuid4().hex
+        available: dict[str, Any] = dict(input_data) if input_data is not None else {}
+        root_region_id = plan.root_region_ids[0] if plan.root_region_ids else plan.topological_order[-1]
+
+        for region_id in plan.topological_order:
+            region = regions[region_id]
+            if region.backend != PhysicalBackend.Q_KDB:
+                raise QPhysicalRegionNotImplemented(
+                    f"execute_physical_plan is q-only; region {region_id!r} "
+                    f"uses backend {region.backend.value!r}"
+                )
+            region_inputs = {
+                "input_table": available.get("input_table", self._get_base_data(ctx))
+            }
+            is_root = region_id == root_region_id
+            result = self.execute_physical_region(
+                region,
+                ctx,
+                input_data=region_inputs,
+                return_resident_handle=not is_root,
+                workspace_id=workspace_id,
+                generation_id=generation_id,
+                nodes=nodes,
+            )
+            if is_root:
+                return result
+            # Keep the q result resident for downstream q regions.
+            if isinstance(result, QExecutionResult) and result.resident_handle is not None:
+                available["input_table"] = result.resident_handle
+            else:
+                available["input_table"] = result
+        raise QPhysicalRegionNotImplemented(
+            f"q PhysicalRegionPlan {plan.plan_id!r} has no root region"
+        )
+
+    def _compile_region_plan(
+        self,
+        region: BackendRegion,
+        *,
+        nodes: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> QRegionPlan:
+        """Compile a planner-admitted BackendRegion into a QRegionPlan.
+
+        The region's ``node_ids`` select which nodes belong to the region; the
+        node structure (op/inputs/attrs/semantic_attrs) is supplied by the
+        planner via ``nodes``.  q stays a physical target whose identity comes
+        from the canonical IR: a planner region that omits node structure
+        cannot be admitted, so we fail closed instead of inventing operators.
+        """
+        specs: list[dict[str, Any]] = []
+        for node_id in region.node_ids:
+            if nodes is not None and node_id in nodes:
+                spec = nodes[node_id]
+                specs.append(
+                    {
+                        "node_id": node_id,
+                        "op": spec.get("op"),
+                        "inputs": list(spec.get("inputs", [])),
+                        "attrs": dict(spec.get("attrs", {}) or {}),
+                        "semantic_attrs": dict(spec.get("semantic_attrs", {}) or {}),
+                    }
+                )
+            else:
+                raise QPhysicalRegionNotImplemented(
+                    f"q region {region.region_id!r} node {node_id!r} has no "
+                    "planner-supplied structure; cannot compile a canonical region"
+                )
+        mode = "production" if self._production_mode else "research"
+        return self._compiler.compile_region(
+            region_id=region.region_id,
+            nodes=specs,
+            input_tables=["input_table"],
+            output_name="result",
+            mode=mode,
+        )
 
     def _plan_to_q_region(
         self,
@@ -410,26 +682,41 @@ class QBackend(Backend):
     def _build_output_contract(self, ctx: ExecutionContext) -> QOutputContract:
         """Derive output contract from execution context semantic contract.
 
-        ``grain`` is no longer hardcoded. The validator now defaults to
-        ``allow_nulls=True`` so legal rolling-warmup NaN rows pass through.
+        ``grain`` is no longer hardcoded.  The ``value`` dtype is derived from
+        the canonical semantic kind (Event→bool, State/Group→int64,
+        timestamp-role→datetime, else float64), and the null policy comes from
+        the semantic kind too — a sparse event/mask panel is structurally
+        nullable, a timestamp role forbids nulls, and a numeric series only
+        permits rolling-warmup NaN.
         """
         grain = None
+        semantic_kind: str | None = None
         semantic = getattr(ctx, "semantic_attrs", None)
         if isinstance(semantic, Mapping):
             grain = semantic.get("grain") or semantic.get("frequency")
+            semantic_kind = semantic.get("semantic_kind")
         if grain is None:
             grain = getattr(ctx, "grain", None)
+        if semantic_kind is None:
+            # fallback: some contexts pin the semantic kind on a sibling attr
+            semantic_kind = getattr(ctx, "semantic_kind", None)
+
+        value_dtype = semantic_kind_to_output_dtype(semantic_kind)
+        null_policy = semantic_null_policy_of_contract(semantic_kind)
 
         return QOutputContract(
             expected_columns=("timestamp", "instrument", "value"),
             expected_dtypes={
                 "timestamp": "datetime64[ns]",
-                "value": "float64",
+                "value": value_dtype,
             },
             require_sorted=True,
-            allow_nulls=True,
+            allow_nulls=bool(null_policy["allow_nulls"]),
             grain=str(grain) if grain is not None else None,
             min_rows=0,
+            warmup_nulls_allowed=bool(null_policy["warmup_nulls_allowed"]),
+            structural_nulls_allowed=bool(null_policy["structural_nulls_allowed"]),
+            output_null_policy=str(null_policy["output_null_policy"]),
         )
 
     def _result_to_series_validated(
@@ -588,7 +875,7 @@ class QBackend(Backend):
         返回:
             执行结果
         """
-        from backend.pandas_backend import PandasBackend
+        from factor_engine.backend.pandas_backend import PandasBackend
 
         pandas_backend = PandasBackend()
         return pandas_backend.execute(plan, ctx)

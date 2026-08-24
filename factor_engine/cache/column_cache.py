@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from storage.data_scope import compute_data_scope
+from factor_engine.storage.data_scope import compute_data_scope
 
 
 @dataclass(frozen=True)

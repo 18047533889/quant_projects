@@ -33,7 +33,7 @@ def test_startup_gate_production_clean():
 
     result = run_startup_gate(store, production=True, checks=[_clean])
     assert result.passed is True
-    assert result.problems == []
+    assert list(result.problems) == []
 
 
 def test_startup_gate_research_nonblocking():

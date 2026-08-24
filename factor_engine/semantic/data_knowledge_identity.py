@@ -17,7 +17,7 @@ materialization manifest / lineage / evidence / incremental invalidation 全部
   权威来源抽取；本模块只做组合 + 哈希。
 
 Wire-in（R37-P0-011 要求进入 cache/checkpoint/lineage）：
-    from semantic.data_knowledge_identity import DataKnowledgeIdentity
+    from factor_engine.semantic.data_knowledge_identity import DataKnowledgeIdentity
     dki = DataKnowledgeIdentity.from_factor_identity(identity, snapshot_meta=...)
     cache_key_suffix = dki.to_key()
 """

@@ -103,7 +103,7 @@ def __getattr__(name: str) -> Any:
 
 # Re-export the WS-B PanelSchema/PanelIdentity machinery (single source of truth
 # lives in cleaned_operators.common._polars_bridge).
-from cleaned_operators.common._polars_bridge import (  # noqa: E402
+from factor_engine.cleaned_operators.common._polars_bridge import (  # noqa: E402
     FE_TIME_COL,
     PanelIdentity,
     PanelSchema,
@@ -227,7 +227,7 @@ def panel_to_polars(panel: pd.DataFrame, *, use_arrow: bool = True) -> Any:
         raise TypeError(f"expected DataFrame panel, got {type(panel)!r}")
     # R40 #167: physical column names must be injective at the representation
     # boundary (bulk and column-loop paths both pass through here).
-    from cleaned_operators.common._polars_bridge import PhysicalColumnNameMap
+    from factor_engine.cleaned_operators.common._polars_bridge import PhysicalColumnNameMap
 
     PhysicalColumnNameMap.validate_injective(panel.columns)
     if use_arrow and _arrow_safe_panel(panel):
@@ -265,7 +265,7 @@ def verify_and_restore_axis(result: Any, template: pd.DataFrame, *, strict: bool
     materializing the pandas panel, so the two paths share ONE axis
     verification.
     """
-    from cleaned_operators.common._polars_bridge import FE_TIME_COL, frame_time_index
+    from factor_engine.cleaned_operators.common._polars_bridge import FE_TIME_COL, frame_time_index
 
     if pl is None or not isinstance(result, pl.DataFrame):
         return
@@ -387,7 +387,7 @@ def polars_to_panel(
     if not isinstance(result, pl.DataFrame):
         raise TypeError(f"expected polars DataFrame, got {type(result)!r}")
     # R40 #167: physical column names must be injective on the result too.
-    from cleaned_operators.common._polars_bridge import PhysicalColumnNameMap
+    from factor_engine.cleaned_operators.common._polars_bridge import PhysicalColumnNameMap
 
     PhysicalColumnNameMap.validate_injective(result.columns)
     out_cols = _polars_output_cols(result, template)

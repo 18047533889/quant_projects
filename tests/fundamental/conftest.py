@@ -8,6 +8,6 @@ import pytest
 @pytest.fixture(scope="session", autouse=True)
 def r23_load_all() -> None:
     """One load_all per pytest session for all R23 fundamental tests."""
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()

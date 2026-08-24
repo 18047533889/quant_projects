@@ -8,7 +8,7 @@ import numpy as np
 
 def test_ts_std_operator_default_ddof():
     """Test TSStdNative operator with default ddof=1."""
-    from cleaned_operators.common.polars_ts_basic import TSStdNative
+    from factor_engine.cleaned_operators.common.polars_ts_basic import TSStdNative
 
     data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
     df = pl.DataFrame({"value": data})
@@ -25,7 +25,7 @@ def test_ts_std_operator_default_ddof():
 
 def test_ts_std_operator_ddof_0():
     """Test TSStdNative operator with explicit ddof=0."""
-    from cleaned_operators.common.polars_ts_basic import TSStdNative
+    from factor_engine.cleaned_operators.common.polars_ts_basic import TSStdNative
 
     data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
     df = pl.DataFrame({"value": data})
@@ -42,7 +42,7 @@ def test_ts_std_operator_ddof_0():
 
 def test_ts_std_operator_ddof_1_explicit():
     """Test TSStdNative operator with explicit ddof=1."""
-    from cleaned_operators.common.polars_ts_basic import TSStdNative
+    from factor_engine.cleaned_operators.common.polars_ts_basic import TSStdNative
 
     data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
     df = pl.DataFrame({"value": data})
@@ -59,7 +59,7 @@ def test_ts_std_operator_ddof_1_explicit():
 
 def test_ts_std_operator_metadata():
     """Test TSStdNative operator metadata includes ddof parameter."""
-    from cleaned_operators.common.polars_ts_basic import TSStdNative
+    from factor_engine.cleaned_operators.common.polars_ts_basic import TSStdNative
 
     op = TSStdNative()
 
@@ -78,7 +78,7 @@ def test_ts_std_operator_metadata():
 
 def test_ts_std_operator_with_nan_data():
     """Test TSStdNative operator handles NaN correctly with different ddof."""
-    from cleaned_operators.common.polars_ts_basic import TSStdNative
+    from factor_engine.cleaned_operators.common.polars_ts_basic import TSStdNative
 
     data = [1.0, 2.0, np.nan, 4.0, 5.0, 6.0, np.nan, 8.0, 9.0, 10.0]
     df = pl.DataFrame({"value": data})

@@ -94,9 +94,9 @@ def main() -> int:
 
     # ---- 1. classification ledger -----------------------------------------
     try:
-        from cleaned_operators import load_all
-        from cleaned_operators.model_lane import assign_model_lane
-        from cleaned_operators.model_timing import is_model_like_name
+        from factor_engine.cleaned_operators import load_all
+        from factor_engine.cleaned_operators.model_lane import assign_model_lane
+        from factor_engine.cleaned_operators.model_timing import is_model_like_name
     except Exception:
         assign_model_lane = None
         is_model_like_name = lambda n, c=None, s=None: False
@@ -105,7 +105,7 @@ def main() -> int:
     classification_rows: list[dict] = []
     try:
         load_all()
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
         canons = sorted(OperatorRegistry.list_canonical())
     except Exception:
         canons = sorted(LEGACY_LOCAL_PREDICTIVE_CANONICALS)
@@ -307,7 +307,7 @@ def main() -> int:
             KNOWN_NOT_CLOSED_CANONICALS,
             ModelSemanticRegistry,
         )
-        from cleaned_operators.model_timing import is_model_like_name
+        from factor_engine.cleaned_operators.model_timing import is_model_like_name
 
         sem_reg = ModelSemanticRegistry()
         model_like = [c for c in canons if is_model_like_name(c)]

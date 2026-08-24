@@ -14,18 +14,18 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 
 load_all()
 
-from cleaned_operators.base import OperatorMetadata, OperatorParameterError  # noqa: E402
-from cleaned_operators.semantic_audit import (  # noqa: E402
+from factor_engine.cleaned_operators.base import OperatorMetadata, OperatorParameterError  # noqa: E402
+from factor_engine.cleaned_operators.semantic_audit import (  # noqa: E402
     AuditFinding,
     AuditReport,
     RULES,
     run_audit,
 )
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

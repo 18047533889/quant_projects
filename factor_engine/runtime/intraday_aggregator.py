@@ -9,9 +9,9 @@ from typing import Any
 import pandas as pd
 
 from logging_utils import get_logger
-from storage.datasource import DataSource
+from factor_engine.storage.datasource import DataSource
 
-logger = get_logger("runtime.intraday_aggregator")
+logger = get_logger("factor_engine.runtime.intraday_aggregator")
 
 
 def _require_multiindex(series: pd.Series, name: str) -> pd.Series:
@@ -170,7 +170,7 @@ class IntradayAggregatedDataSource(DataSource):
 
     def execution_spec(self) -> dict[str, Any] | None:
         """#收官轮 P0：还原 intraday_daily 子源 + features 可重建配置。"""
-        from storage.sources.datasource import clean_execution_spec
+        from factor_engine.storage.sources.datasource import clean_execution_spec
 
         fn = getattr(self.inner, "execution_spec", None)
         inner_spec = fn() if callable(fn) else None

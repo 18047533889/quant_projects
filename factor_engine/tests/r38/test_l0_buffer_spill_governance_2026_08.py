@@ -17,8 +17,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from runtime.buffer_store import GovernedBufferStore
-from runtime.spill_store import SpillStore
+from factor_engine.runtime.buffer_store import GovernedBufferStore
+from factor_engine.runtime.spill_store import SpillStore
 
 
 def _frame(n: int = 100) -> pd.DataFrame:
@@ -87,7 +87,7 @@ def test_evict_lru_cost_decision():
 
 
 def test_expression_cache_is_pure_adapter():
-    from cache.expression_cache import ExpressionCache
+    from factor_engine.cache.expression_cache import ExpressionCache
 
     backing: dict = {}
     store = GovernedBufferStore(backing, budget_bytes=10**9)

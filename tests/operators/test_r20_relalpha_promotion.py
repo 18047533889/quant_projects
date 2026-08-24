@@ -22,12 +22,12 @@ Contract under test:
 """
 from __future__ import annotations
 
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 
 load_all()
 
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
-from mining.direct_use import (  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.mining.direct_use import (  # noqa: E402
     _RELATIVE_ALPHA_OPS,
     build_direct_use_operator,
     resolve_direct_use,

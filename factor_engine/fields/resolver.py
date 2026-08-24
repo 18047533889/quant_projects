@@ -43,7 +43,7 @@ def _resolve_in(active: FieldRegistry, value: Any, *, table: str | None, strict:
             )
         return None
     try:
-        from api.source_ref import decode_source_ref
+        from factor_engine.api.source_ref import decode_source_ref
 
         source = decode_source_ref(name)
     except (ImportError, ValueError, TypeError):
@@ -100,7 +100,7 @@ class ResolvedMarketField:
 
 def _canonical_market(market_context: Any) -> str:
     """Canonical market id from a ``MarketContext`` or a plain market string."""
-    from market.context import market_context as resolve_ctx
+    from factor_engine.market.context import market_context as resolve_ctx
 
     if market_context is None:
         raise TypeError(

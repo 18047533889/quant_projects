@@ -138,9 +138,9 @@ def _fastpath_block_reason(
     composite_production_safe: bool,
 ) -> str:
     """推断 canonical 被 production fast path 阻断的原因（优先级有序）。"""
-    from backend.polars_long_production import POLARS_LONG_FASTPATH_DEFERRED
-    from backend.sql_tiers import SQL_PRODUCTION_DEFERRED_CANONICALS
-    from cleaned_operators.operator_spec import is_production_permanently_forbidden
+    from factor_engine.backend.polars_long_production import POLARS_LONG_FASTPATH_DEFERRED
+    from factor_engine.backend.sql_tiers import SQL_PRODUCTION_DEFERRED_CANONICALS
+    from factor_engine.cleaned_operators.operator_spec import is_production_permanently_forbidden
 
     if canon in {"column", "literal", "materialized_series", "plan_ref"}:
         return ""
@@ -183,33 +183,33 @@ def build_fastpath_coverage_row(canon: str) -> FastpathCoverageRow:
     返回:
         聚合各 backend 状态与 parity 证据的 ``FastpathCoverageRow``。
     """
-    from backend.operator_capability import (
+    from factor_engine.backend.operator_capability import (
         _sql_emitter_ok,
         capability_for,
         polars_long_tier,
         resolve_canonical,
     )
-    from backend.polars_long_policy import infer_polars_long_tier
-    from backend.polars_long_production import (
+    from factor_engine.backend.polars_long_policy import infer_polars_long_tier
+    from factor_engine.backend.polars_long_production import (
         duckdb_triple_parity_verified,
         is_polars_long_native_production_safe,
         polars_long_production_tier,
     )
-    from backend.primitive_evidence import (
+    from factor_engine.backend.primitive_evidence import (
         DUCKDB_REAL_SQL_VERIFIED,
         POLARS_REFERENCE_PARITY_VERIFIED,
     )
-    from backend.production_fast_path import PRODUCTION_TRIPLE_PARITY_CANONICALS
-    from backend.sql_tiers import (
+    from factor_engine.backend.production_fast_path import PRODUCTION_TRIPLE_PARITY_CANONICALS
+    from factor_engine.backend.sql_tiers import (
         SQL_IMPLEMENTED_CANONICALS,
         SQL_PARITY_VERIFIED_CANONICALS,
         effective_sql_production_safe,
     )
-    from backend.sql_pushdown.clickhouse_capabilities import effective_clickhouse_production_safe
-    from cleaned_operators.operator_policy import POLARS_PARITY_VERIFIED
-    from cleaned_operators.operator_spec import build_operator_spec
+    from factor_engine.backend.sql_pushdown.clickhouse_capabilities import effective_clickhouse_production_safe
+    from factor_engine.cleaned_operators.operator_policy import POLARS_PARITY_VERIFIED
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec
 
-    from cleaned_operators.operator_spec import build_operator_spec, infer_production_policy
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec, infer_production_policy
 
     name = resolve_canonical(canon)
     spec = build_operator_spec(name)
@@ -231,8 +231,8 @@ def build_fastpath_coverage_row(canon: str) -> FastpathCoverageRow:
     dual_backend_parity = pandas_polars_parity and pandas_duckdb_parity
     benchmark_set = _benchmark_canonicals()
 
-    from backend.composite_evidence import composite_production_safe as is_composite_production_safe
-    from planner.composite_lowering import (
+    from factor_engine.backend.composite_evidence import composite_production_safe as is_composite_production_safe
+    from factor_engine.planner.composite_lowering import (
         composite_dual_backend_capable,
         has_composite_lowering,
         infer_execution_kind,
@@ -321,7 +321,7 @@ def build_fastpath_coverage_matrix(
     返回:
         ``FastpathCoverageRow`` 列表。
     """
-    from backend.operator_capability import build_capability_matrix, resolve_canonical
+    from factor_engine.backend.operator_capability import build_capability_matrix, resolve_canonical
 
     if canonicals is None:
         summaries = build_capability_matrix()

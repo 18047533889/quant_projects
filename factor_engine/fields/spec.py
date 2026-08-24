@@ -268,7 +268,7 @@ def semantic_kind_of_field(
     price_basis = getattr(spec_or_name, "price_basis", None)
     flow_semantics = getattr(spec_or_name, "flow_semantics", None)
     if price_basis or flow_semantics:
-        from ir.types import semantic_type_of
+        from factor_engine.ir.types import semantic_type_of
 
         kind = semantic_type_of(
             price_basis=price_basis,
@@ -279,7 +279,7 @@ def semantic_kind_of_field(
         if kind is not None:
             return kind.value
     if production is None:
-        from runtime.production_policy import is_production_mode
+        from factor_engine.runtime.production_policy import is_production_mode
 
         production = is_production_mode()
     if production:

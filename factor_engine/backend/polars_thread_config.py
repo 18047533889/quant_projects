@@ -181,7 +181,7 @@ def configure_polars_for_execution(
     else:
         # 使用自适应配置
         try:
-            from runtime.adaptive_config import get_global_adaptive_config
+            from factor_engine.runtime.adaptive_config import get_global_adaptive_config
             chunk_size = get_global_adaptive_config().polars_streaming_chunk_size
         except ImportError:
             chunk_size = 100_000  # 回退默认值
@@ -214,7 +214,7 @@ def infer_task_type_from_plan(plan: Any) -> TaskType:
         - 纯 literal/plan_ref/materialized_series → compute
         - 混合 → mixed
     """
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     if not isinstance(plan, PlanNode):
         return "mixed"

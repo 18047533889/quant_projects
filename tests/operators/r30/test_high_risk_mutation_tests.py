@@ -65,7 +65,7 @@ def test_nan_to_zero_mutation_killed():
 
 # --- CURRENT_MISSING_BACKOFF: path_signature must fail closed -------------
 def test_current_missing_backoff_killed_for_path_signature():
-    from cleaned_operators.ts_model.path_signature import _trailing_contiguous_xy
+    from factor_engine.cleaned_operators.ts_model.path_signature import _trailing_contiguous_xy
 
     # Last row is NaN: the current decision-time input is unobservable -> None.
     x = np.array([1.0, 2.0, 3.0, 5.0, np.nan])

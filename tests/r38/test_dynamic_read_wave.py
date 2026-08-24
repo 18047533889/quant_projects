@@ -11,14 +11,14 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from planner.physical_factor_dag import (
+from factor_engine.planner.physical_factor_dag import (
     TASK_SOURCE_SCAN,
     PhysicalFactorDAG,
     PhysicalFactorTask,
 )
-from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
-from runtime.resource_autopilot import ResourceDecision
-from runtime.resource_broker import ResourceBroker
+from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+from factor_engine.runtime.resource_autopilot import ResourceDecision
+from factor_engine.runtime.resource_broker import ResourceBroker
 
 
 def _source_task(tid: str, n_cols: int) -> PhysicalFactorTask:

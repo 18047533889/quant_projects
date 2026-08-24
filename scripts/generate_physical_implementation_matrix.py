@@ -66,8 +66,8 @@ def _bootstrap() -> None:
     fe = str(FE_ROOT)
     if fe not in sys.path:
         sys.path.insert(0, fe)
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
@@ -102,21 +102,21 @@ def build_matrix() -> list[dict[str, Any]]:
     """Walk the live registry and return one row per physical backend slot."""
     _bootstrap()
 
-    from backend.operator_capability import enumerate_physical_inventory
-    from backend.primitive_evidence import (
+    from factor_engine.backend.operator_capability import enumerate_physical_inventory
+    from factor_engine.backend.primitive_evidence import (
         DUCKDB_EDGE_VERIFIED,
         DUCKDB_NAN_EDGE_VERIFIED,
     )
-    from backend.sql_tiers import (
+    from factor_engine.backend.sql_tiers import (
         SQL_PARITY_VERIFIED_CANONICALS,
         SQL_PRODUCTION_SAFE_CANONICALS,
     )
-    from backend import evidence_provenance
-    from cleaned_operators.operator_policy import (
+    from factor_engine.backend import evidence_provenance
+    from factor_engine.cleaned_operators.operator_policy import (
         POLARS_PARITY_VERIFIED,
         POLARS_PRODUCTION_SAFE,
     )
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     head_sha = _current_head()
     oracle = _oracle_records()
@@ -234,8 +234,8 @@ def build_matrix() -> list[dict[str, Any]]:
 
 def build_direct_use_rows() -> list[dict[str, Any]]:
     """DIRECT_USE_MATRIX fields per canonical — delegated to mining.direct_use."""
-    from mining.direct_use import build_direct_use_operator
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.mining.direct_use import build_direct_use_operator
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     out: list[dict[str, Any]] = []
     catalog = OperatorRegistry._catalog

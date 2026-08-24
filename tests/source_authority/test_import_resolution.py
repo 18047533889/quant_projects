@@ -66,7 +66,7 @@ def test_import_resolves_to_factor_engine(module_name):
     import importlib
 
     # Clear any cached module AND all of its already-imported submodules
-    # (e.g. "planner.logical_plan").  Otherwise a stale submodule cached from
+    # (e.g. "factor_engine.planner.logical_plan").  Otherwise a stale submodule cached from
     # the root copy shadows the factor_engine one via relative imports.
     prefix = module_name + "."
     for cached_name in [

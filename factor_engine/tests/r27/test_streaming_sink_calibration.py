@@ -5,14 +5,14 @@ from __future__ import annotations
 
 import threading
 
-from runtime.resource_telemetry import (
+from factor_engine.runtime.resource_telemetry import (
     _lifetime_peak_rss_bytes,
     _rss_bytes,
     finalize_resource_telemetry,
     resource_telemetry_summary,
 )
-from runtime.runtime_calibration import calibrated_peak_bytes, record_task_actual
-from runtime.streaming_result_sink import BoundedResultQueue, ResultItem
+from factor_engine.runtime.runtime_calibration import calibrated_peak_bytes, record_task_actual
+from factor_engine.runtime.streaming_result_sink import BoundedResultQueue, ResultItem
 
 
 def test_rss_telemetry_current_vs_peak():
@@ -53,7 +53,7 @@ def test_calibration_ema_and_calibrated_peak():
         rss_delta_bytes=200 * 1024 * 1024, rows=1_000_000, instruments=500,
         window=20, predicted_ms=100, predicted_peak_bytes=100 * 1024 * 1024,
     )
-    from runtime.runtime_calibration import calibration_key
+    from factor_engine.runtime.runtime_calibration import calibration_key
 
     key = calibration_key(
         operator="ts_mean", backend="pandas_numpy",

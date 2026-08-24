@@ -2,8 +2,8 @@ from __future__ import annotations
 
 
 def _analyze(formula: str):
-    from api.dsl_parser import parse_factor
-    from ir.analyzer import Analyzer
+    from factor_engine.api.dsl_parser import parse_factor
+    from factor_engine.ir.analyzer import Analyzer
 
     factor = parse_factor(formula, name=f"warmup::{formula[:20]}", surface="extended")
     return Analyzer().lower(factor.expr)

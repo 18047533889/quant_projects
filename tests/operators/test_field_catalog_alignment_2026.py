@@ -12,9 +12,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from fields import FIELD_REGISTRY
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.fields import FIELD_REGISTRY
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -154,7 +154,7 @@ def test_one_to_many_shareholder_fields_not_mining_allowed():
 
 
 def test_strict_unknown_fields_fail_closed_in_production():
-    from storage.sources.data_access_source import (
+    from factor_engine.storage.sources.data_access_source import (
         DataAccessSource,
         UnknownFieldSemanticError,
     )
@@ -173,7 +173,7 @@ def test_strict_unknown_fields_fail_closed_in_production():
 
 
 def test_research_mode_keeps_raw_column_fallback():
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     src = DataAccessSource(dataset="ashare_stock_daily")  # default research lenient
     assert src.strict_unknown_fields is False
@@ -209,8 +209,8 @@ def test_fin_applicability_mask_nan_parity_with_polars():
 
 def test_walk_periods_orders_by_fiscal_ordinal_not_appearance():
     """A late-disclosed 2023Q2 arriving after 2023Q3 must not reorder the lag."""
-    from cleaned_operators.fundamental.flow_semantics_v2 import fin_ttm_quarterly
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.fundamental.flow_semantics_v2 import fin_ttm_quarterly
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     x = _panel([10.0, 60.0, 30.0])            # Q1=10, Q3=60, then Q2=30 back-filled
     period_id = _panel(["2023Q1", "2023Q3", "2023Q2"])
@@ -221,7 +221,7 @@ def test_walk_periods_orders_by_fiscal_ordinal_not_appearance():
 
 
 def test_fin_ttm_quarterly_fails_closed_on_skipped_quarter():
-    from cleaned_operators.fundamental.flow_semantics_v2 import fin_ttm_quarterly
+    from factor_engine.cleaned_operators.fundamental.flow_semantics_v2 import fin_ttm_quarterly
 
     x = _panel([10.0, 20.0, 40.0])            # Q1, Q2, Q4 (Q3 missing)
     period_id = _panel(["2023Q1", "2023Q2", "2023Q4"])
@@ -230,7 +230,7 @@ def test_fin_ttm_quarterly_fails_closed_on_skipped_quarter():
 
 
 def test_fin_quarter_from_cumulative_rejects_cross_year_subtraction():
-    from cleaned_operators.fundamental.flow_semantics_v2 import fin_quarter_from_cumulative
+    from factor_engine.cleaned_operators.fundamental.flow_semantics_v2 import fin_quarter_from_cumulative
 
     x = _panel([10.0, 30.0])
     period_id = _panel(["2024Q1", "2025Q2"])
@@ -283,7 +283,7 @@ def test_valuation_gap_variants_polars_parity():
 
 
 def test_growth_mismatch_rejects_free_scale_mask():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get("valuation_growth_mismatch", backend="pandas_numpy")
     ey = _panel([0.08])
@@ -297,7 +297,7 @@ def test_growth_mismatch_rejects_free_scale_mask():
 
 
 def test_capital_change_age_maps_weekend_change_date_to_next_trading_day():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     # B-freq dates: Mon 01-01, 01-02, 01-03, 01-04, 01-05, Mon 01-08, 01-09, ...
     # An S1 capital snapshot reports ChangeDate = Saturday 2024-01-06 from the
@@ -387,7 +387,7 @@ def test_concentration_trend_advances_by_snapshot_not_ffill_rows():
     # §6.8: holder_concentration_slope with snapshot_date must advance once per
     # distinct report snapshot and hold across the ffilled daily flat tail,
     # instead of the legacy daily-rolling window decaying to zero.
-    from cleaned_operators.shareholder.churn_network import _concentration_slope
+    from factor_engine.cleaned_operators.shareholder.churn_network import _concentration_slope
 
     idx = pd.date_range("2024-01-01", periods=60, freq="B")
     n = len(idx)
@@ -419,7 +419,7 @@ def test_concentration_trend_advances_by_snapshot_not_ffill_rows():
 def test_concentration_trend_backward_compatible_without_snapshot_date():
     # Omitting snapshot_date keeps the historical daily rolling behaviour; the
     # optional third parameter defaults to None and never changes the signature.
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get("holder_concentration_slope", backend="pandas_numpy")
     assert op is not None
@@ -510,8 +510,8 @@ _EXPERIMENTAL_FAMILIES = [
 
 
 def test_experimental_families_excluded_from_production_mining():
-    from backend.fastpath_allowlists import production_allowlist
-    from cleaned_operators.operator_spec import build_operator_spec
+    from factor_engine.backend.fastpath_allowlists import production_allowlist
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec
 
     prod = production_allowlist()
     missing = [c for c in _EXPERIMENTAL_FAMILIES if c not in OperatorRegistry.list_canonical()]
@@ -525,8 +525,8 @@ def test_experimental_families_excluded_from_production_mining():
 
 def test_production_allowlist_is_evidence_gated_not_surface_gated():
     """Daily-surface experimental ops must not sneak into production mining."""
-    from backend.fastpath_allowlists import production_allowlist
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.backend.fastpath_allowlists import production_allowlist
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     prod = production_allowlist()
     # Every production-allowed canonical must be certified (not fail-closed) and
@@ -563,7 +563,7 @@ def test_expectile_quantile_regression_in_sample_stamped_and_hidden():
             assert entry["preferred_replacements"] == replacement, canon
     # hidden_from_default_mining is load-bearing: excluded from the production
     # allowlist independently of the diagnostic_only flag.
-    from backend.fastpath_allowlists import production_allowlist
+    from factor_engine.backend.fastpath_allowlists import production_allowlist
 
     prod = production_allowlist()
     assert "ts_expectile_regression_coeff" not in prod
@@ -576,8 +576,8 @@ def test_expectile_quantile_regression_in_sample_stamped_and_hidden():
 
 
 def test_every_financial_pit_field_has_a_period_selection_contract():
-    from storage.sources.financial import FUNDAMENTAL_FIELD_CONTRACTS
-    from storage.sources.logical_tables import logical_table_contract
+    from factor_engine.storage.sources.financial import FUNDAMENTAL_FIELD_CONTRACTS
+    from factor_engine.storage.sources.logical_tables import logical_table_contract
 
     financial = [
         spec for spec in FIELD_REGISTRY.fields()
@@ -595,8 +595,8 @@ def test_every_financial_pit_field_has_a_period_selection_contract():
 
 
 def test_analyzer_accepts_contracted_fundamental_field():
-    from api.dsl_parser import parse_expr
-    from ir.analyzer import Analyzer
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.ir.analyzer import Analyzer
 
     expr = parse_expr("ts_delta(StockIncome.net_profit, n=1)", dialect="lqtp")
     result = Analyzer().lower(expr)
@@ -605,8 +605,8 @@ def test_analyzer_accepts_contracted_fundamental_field():
 
 
 def test_analyzer_fails_closed_on_unregistered_financial_field():
-    from fields.spec import FieldSpec
-    from ir.analyzer import PeriodSelectionContractError, validate_fundamental_period_contracts
+    from factor_engine.fields.spec import FieldSpec
+    from factor_engine.ir.analyzer import PeriodSelectionContractError, validate_fundamental_period_contracts
 
     ghost = FieldSpec(name="ghost_income", table="StockIncome", source_name="GhostIncome")
     errors = validate_fundamental_period_contracts({"ghost_income": ghost})
@@ -619,8 +619,8 @@ def test_analyzer_fails_closed_on_unregistered_financial_field():
 
 
 def test_cumulative_flow_kernels_accept_flow_ytd_and_reject_balance():
-    from api.dsl_parser import parse_expr
-    from ir.analyzer import Analyzer, FieldGrainContractError
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.ir.analyzer import Analyzer, FieldGrainContractError
 
     Analyzer().lower(
         parse_expr("fin_ttm_cumulative(StockIncome.net_profit, period_id=1, fiscal_quarter=1)",
@@ -645,8 +645,8 @@ def test_cumulative_flow_kernels_accept_flow_ytd_and_reject_balance():
 def test_one_period_ttm_rejects_raw_cumulative_field():
     # fin_ttm_quarterly consumes derived one-period flows; a raw YTD-cumulative
     # statement field is the "treating a cumulative value as a quarter" hazard.
-    from api.dsl_parser import parse_expr
-    from ir.analyzer import Analyzer, FieldGrainContractError
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.ir.analyzer import Analyzer, FieldGrainContractError
 
     with pytest.raises(FieldGrainContractError):
         Analyzer().lower(
@@ -659,8 +659,8 @@ def test_one_period_ttm_rejects_raw_cumulative_field():
 
 
 def test_balance_average_accepts_balance_only():
-    from api.dsl_parser import parse_expr
-    from ir.analyzer import Analyzer, FieldGrainContractError
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.ir.analyzer import Analyzer, FieldGrainContractError
 
     Analyzer().lower(parse_expr("fin_average_balance(StockBalance.total_assets)", dialect="lqtp"))
     with pytest.raises(FieldGrainContractError):
@@ -672,8 +672,8 @@ def test_balance_average_accepts_balance_only():
 def test_synthetic_columns_with_default_grain_are_skipped():
     # Research formulas may feed derived period flows; the contract check must
     # not fire on columns that carry no declared economic grain.
-    from ir.analyzer import OPERATOR_INPUT_GRAIN_CONTRACTS, validate_field_grain_contracts
-    from ir.nodes import IRNode
+    from factor_engine.ir.analyzer import OPERATOR_INPUT_GRAIN_CONTRACTS, validate_field_grain_contracts
+    from factor_engine.ir.nodes import IRNode
 
     assert "fin_ttm_cumulative" in OPERATOR_INPUT_GRAIN_CONTRACTS
     derived = IRNode(op="column", attrs={"name": "derived_flow"})  # default grain
@@ -686,7 +686,7 @@ def test_synthetic_columns_with_default_grain_are_skipped():
 
 def test_financial_row_bundle_enforces_selector_contract():
     import pandas as pd
-    from storage.sources.financial import load_financial_row_bundle
+    from factor_engine.storage.sources.financial import load_financial_row_bundle
 
     events = pd.DataFrame({
         "instrument": ["A", "A"],

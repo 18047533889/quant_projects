@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from planner.logical_plan import PlanNode
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.planner.logical_plan import PlanNode
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -20,7 +20,7 @@ def _col(name: str) -> PlanNode:
 
 
 def test_size_and_dual_backends_registered() -> None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     for name in ("size_neutralize", "industry_size_neutralize", "group_neutralize"):
         backends = OperatorRegistry.backends_for(name)
@@ -31,7 +31,7 @@ def test_size_and_dual_backends_registered() -> None:
 
 
 def test_size_neutralize_sql_emitter() -> None:
-    from backend.sql_pushdown.emitter import compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql
 
     plan = PlanNode(op="size_neutralize", inputs=[_col("close"), _col("mcap")])
     compiled = compile_plan_to_sql(
@@ -46,7 +46,7 @@ def test_size_neutralize_sql_emitter() -> None:
 
 
 def test_industry_size_neutralize_sql_emitter() -> None:
-    from backend.sql_pushdown.emitter import compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql
 
     plan = PlanNode(
         op="industry_size_neutralize",
@@ -63,7 +63,7 @@ def test_industry_size_neutralize_sql_emitter() -> None:
 
 
 def test_size_neutralize_polars_matches_pandas() -> None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     rng = np.random.default_rng(0)
     idx = pd.bdate_range("2024-01-02", periods=8)
@@ -83,7 +83,7 @@ def test_size_neutralize_polars_matches_pandas() -> None:
 
 
 def test_industry_size_neutralize_polars_matches_pandas() -> None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     import polars as pl
 
     rng = np.random.default_rng(1)
@@ -110,8 +110,8 @@ def test_industry_size_neutralize_polars_matches_pandas() -> None:
 
 
 def test_polars_long_emitter_size_and_dual() -> None:
-    from backend.polars_expr_emitter import compile_plan_to_polars
-    from cleaned_operators._numpy_kernels import industry_size_resid_panel_
+    from factor_engine.backend.polars_expr_emitter import compile_plan_to_polars
+    from factor_engine.cleaned_operators._numpy_kernels import industry_size_resid_panel_
     import polars as pl
 
     base = pl.DataFrame(
@@ -149,7 +149,7 @@ def test_polars_long_emitter_size_and_dual() -> None:
 
 def test_industry_size_emitter_rejects_nonpositive_cap_like_kernel() -> None:
     """R19-024: non-positive mcap is missing, not silently clipped to log(1)."""
-    from backend.polars_expr_emitter import compile_plan_to_polars
+    from factor_engine.backend.polars_expr_emitter import compile_plan_to_polars
     import polars as pl
 
     base = pl.DataFrame(
@@ -177,8 +177,8 @@ def test_industry_size_emitter_rejects_nonpositive_cap_like_kernel() -> None:
 
 def test_size_neutralize_emitter_rejects_nonpositive_cap_like_kernel() -> None:
     """R19-024: size_neutralize emitter matches numpy legal-cap mask."""
-    from backend.polars_expr_emitter import compile_plan_to_polars
-    from cleaned_operators._numpy_kernels import size_resid_panel_
+    from factor_engine.backend.polars_expr_emitter import compile_plan_to_polars
+    from factor_engine.cleaned_operators._numpy_kernels import size_resid_panel_
     import polars as pl
 
     base = pl.DataFrame(
@@ -204,7 +204,7 @@ def test_size_neutralize_emitter_rejects_nonpositive_cap_like_kernel() -> None:
 def test_size_and_industry_sql_duckdb_matches_numpy() -> None:
     """DuckDB SQL emitter vs numpy for size + industry_size neutralize."""
     duckdb = pytest.importorskip("duckdb")
-    from backend.sql_pushdown.emitter import compile_plan_to_sql
+    from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql
 
     rows = [
         (1, "a", 1.0, 1.0, 10.0),
@@ -240,7 +240,7 @@ def test_size_and_industry_sql_duckdb_matches_numpy() -> None:
     dual_df = con.execute(dual_q).df().sort_values(["ts", "inst"])
     val_col = "value" if "value" in size_df.columns else "_v"
 
-    from cleaned_operators._numpy_kernels import (
+    from factor_engine.cleaned_operators._numpy_kernels import (
         industry_size_resid_panel_,
         size_resid_panel_,
     )

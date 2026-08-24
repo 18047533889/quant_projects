@@ -160,7 +160,7 @@ def _semantic_kind_of_field_spec(spec) -> str | None:
     if declared:
         return str(declared)
     try:
-        from fields.spec import semantic_kind_of_field
+        from factor_engine.fields.spec import semantic_kind_of_field
 
         return semantic_kind_of_field(spec)
     except ImportError:  # pragma: no cover - spec always importable

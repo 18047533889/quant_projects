@@ -7,31 +7,31 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="legacy API surface inventory superseded by static surface convergence tests")
 
-from api import add, delay, divide, multiply, rank, subtract, ts_mean, zscore
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.dsl_parser import DSLParseError, parse_expr, parse_factor
-from api.factor import Factor
-from api.operator_registry import STUB_IR_OPS, build_dsl_allowlist
-from backend.cleaned_bridge import (
+from factor_engine.api import add, delay, divide, multiply, rank, subtract, ts_mean, zscore
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.dsl_parser import DSLParseError, parse_expr, parse_factor
+from factor_engine.api.factor import Factor
+from factor_engine.api.operator_registry import STUB_IR_OPS, build_dsl_allowlist
+from factor_engine.backend.cleaned_bridge import (
     ensure_cleaned_loaded,
     list_cleaned_ops_for_backend,
     panel_to_series,
     series_to_panel,
 )
-from backend.context import ExecutionContext
-from backend.factory import build_backend
-from backend.pandas_backend import PandasBackend
-from cleaned_operators.base import OperatorMetadata, SeriesOperator
-from cleaned_operators.registry import OperatorRegistry
-from expr.base import ensure_expr
-from expr.cleaned_call import CleanedCall
-from expr.literal import Literal
-from ir.analyzer import Analyzer
-from planner.lowerer import Lowerer
-from planner.optimizer import Optimizer
-from runtime.engine import FactorEngine
-from storage.cache import CacheManager
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.backend.factory import build_backend
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.expr.base import ensure_expr
+from factor_engine.expr.cleaned_call import CleanedCall
+from factor_engine.expr.literal import Literal
+from factor_engine.ir.analyzer import Analyzer
+from factor_engine.planner.lowerer import Lowerer
+from factor_engine.planner.optimizer import Optimizer
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.storage.cache import CacheManager
 from tests.helpers import InMemorySeriesSource
 
 pd = pytest.importorskip("pandas")
@@ -125,7 +125,7 @@ class TestApiLayer:
 
     def test_deduplicated_aliases_resolve(self):
         """重复算子注销后，旧名仍可通过别名解析到保留实现。"""
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         pairs = [
             ("SMA", "ts_mean"),
@@ -161,14 +161,14 @@ class TestApiLayer:
         assert node.op == "rank"
 
     def test_dynamic_getattr_resolves_alias_and_caches(self):
-        import api
+        import factor_engine.api
 
         factory = api.ts_delay
         assert callable(factory)
         assert api.ts_delay is factory
 
     def test_dynamic_getattr_unknown_raises(self):
-        import api
+        import factor_engine.api
 
         with pytest.raises(AttributeError):
             _ = api.this_operator_does_not_exist_xyz
@@ -390,7 +390,7 @@ class TestBackendRegistration:
     def test_unregistered_op_raises(self, panel_source):
         backend = PandasBackend()
         ctx = _ctx(panel_source)
-        from planner.logical_plan import PlanNode
+        from factor_engine.planner.logical_plan import PlanNode
 
         bad = PlanNode(op="___not_registered_op___", inputs=[], attrs={})
         with pytest.raises(NotImplementedError):
@@ -557,7 +557,7 @@ class TestFutureOperatorExtension:
         OperatorRegistry._aliases.pop("FUTURE_DOUBLE", None)
 
     def test_future_op_in_allowlist_after_register(self, future_double_op):
-        from backend.cleaned_bridge import build_cleaned_dsl_allowlist
+        from factor_engine.backend.cleaned_bridge import build_cleaned_dsl_allowlist
 
         allow = build_cleaned_dsl_allowlist(surface="all")
         assert future_double_op in allow
@@ -571,7 +571,7 @@ class TestFutureOperatorExtension:
         pd.testing.assert_series_equal(result, expected, check_names=False)
 
     def test_future_op_dsl_parse_and_ir(self, future_double_op):
-        from backend.cleaned_bridge import build_cleaned_dsl_allowlist
+        from factor_engine.backend.cleaned_bridge import build_cleaned_dsl_allowlist
 
         allow = build_cleaned_dsl_allowlist(surface="all")
         expr = allow[future_double_op](col("close"))

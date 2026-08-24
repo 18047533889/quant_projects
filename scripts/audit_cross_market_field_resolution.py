@@ -27,9 +27,9 @@ def _load() -> None:
 
 def main() -> int:
     _load()
-    from fields.resolver import resolve_market_field
-    from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
-    from market.context import ASHARE_CONTEXT, US_CONTEXT
+    from factor_engine.fields.resolver import resolve_market_field
+    from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+    from factor_engine.market.context import ASHARE_CONTEXT, US_CONTEXT
 
     problems: list[str] = []
 

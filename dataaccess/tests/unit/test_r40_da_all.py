@@ -386,8 +386,11 @@ def test_startup_certificate_required_for_production_store():
     # 过期检测
     assert startup_certificate_expired(None) is True
     assert startup_certificate_expired(build_startup_certificate(True, [])) is False
-    bad = build_startup_certificate(True, [])
-    bad.passed = False
+    # StartupCertificate 是 frozen dataclass（R32-P0-013），不能原地改 passed；
+    # 用 dataclasses.replace 构造一个未通过证书验证过期检测。
+    import dataclasses
+
+    bad = dataclasses.replace(build_startup_certificate(True, []), passed=False)
     assert startup_certificate_expired(bad) is True
 
 
@@ -405,7 +408,7 @@ def test_run_startup_gate_returns_certificate():
     result = run_startup_gate(store, production=True, checks=[_clean])
     assert isinstance(result, StartupCertificate)
     assert result.passed is True
-    assert result.problems == []
+    assert list(result.problems) == []
 
 
 # ---------------------------------------------------------------------------

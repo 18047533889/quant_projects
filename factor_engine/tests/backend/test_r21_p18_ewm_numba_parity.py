@@ -10,10 +10,10 @@ import numpy as np
 import polars as pl
 import pytest
 
-from backend.numba_kernel_registry import NUMBA_AVAILABLE, NumbaKernelRegistry
+from factor_engine.backend.numba_kernel_registry import NUMBA_AVAILABLE, NumbaKernelRegistry
 
 # Force registration of EWM kernels
-import backend.numba_kernels.ewm_pairwise  # noqa: F401
+import factor_engine.backend.numba_kernels.ewm_pairwise  # noqa: F401
 
 
 def _get_ewm_kernel(kernel_name: str):

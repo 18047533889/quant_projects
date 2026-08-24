@@ -1,60 +1,61 @@
 {
   "schema_version": 1,
   "generated_by": "fresh_wheel_matrix",
+  "r46_note": "Six canonical wheels from their own pyprojects; lock deps installed ONLY via --require-hashes",
   "packages": {
     "factor_engine": {
       "pkg": "factor_engine",
-      "wheel_sha256": "0aac4b6b2c10a900cda6364d6beda8b25087f6acec51c58ec49f7785c43008c0",
+      "wheel_sha256": "1ab6ecd609f059eee26fe8b586c627f22f2b8dfc0120f44263369fe4352543d2",
       "built": true,
       "installed_import_ok": true,
       "integration_ok": true,
       "status": "PASS",
-      "reason": "root umbrella wheel quant_projects"
+      "reason": "built from /home/sunhaiwei/quant_projects/factor_engine/pyproject.toml"
     },
     "quant_evaluator": {
       "pkg": "quant_evaluator",
-      "wheel_sha256": "ded3a4badbf427fa6517943221928e510d54ee0025c57e0bf4ace8b34c6be5c9",
+      "wheel_sha256": "c847daffbe7a41982e2594db9cc154b5d5f219d07438082c828acfcc25ee31fd",
       "built": true,
       "installed_import_ok": true,
       "integration_ok": true,
       "status": "PASS",
-      "reason": ""
+      "reason": "built from /home/sunhaiwei/quant_projects/quant_evaluator/pyproject.toml"
     },
     "factor_optimizer": {
       "pkg": "factor_optimizer",
-      "wheel_sha256": "9802b234e5dbf91da356495f2ec322d11c83ed33c5c29a2fff01ab7f6be65c56",
+      "wheel_sha256": "9cbb3e213e0d7a360ab82f2c09917eee2d6a30d64e1f743a6ca0ce58487c0ccd",
       "built": true,
       "installed_import_ok": true,
       "integration_ok": true,
       "status": "PASS",
-      "reason": ""
+      "reason": "built from /home/sunhaiwei/quant_projects/factor_optimizer/pyproject.toml"
     },
     "factor_assets": {
       "pkg": "factor_assets",
-      "wheel_sha256": "3c6957bc88d02bcc65a61a59de090fbbdf625a7f0a1e9434b2f0d27918d11938",
+      "wheel_sha256": "ae30b695bf6a2060cab60046d88a10cf41e77b6bea41b070016c729f406b3901",
       "built": true,
       "installed_import_ok": true,
       "integration_ok": true,
       "status": "PASS",
-      "reason": ""
+      "reason": "built from /home/sunhaiwei/quant_projects/factor_assets/pyproject.toml"
     },
     "factor_preprocess": {
       "pkg": "factor_preprocess",
-      "wheel_sha256": "371c3a98a6813ec8a680b994afbd51a9882334d30e3e9d3688c86603e1adcf41",
+      "wheel_sha256": "1d2c2dec68ae5e518e9f0d18584f6d216431d85c5001e3d9b5d7fb26d012ed7f",
       "built": true,
       "installed_import_ok": true,
       "integration_ok": true,
       "status": "PASS",
-      "reason": ""
+      "reason": "built from /home/sunhaiwei/quant_projects/factor_preprocess/pyproject.toml"
     },
     "dataaccess": {
       "pkg": "dataaccess",
-      "wheel_sha256": "49e46338e9445da6dd2cd6df80846ab91f376683f5156d66a86ec937fa1e6cdc",
+      "wheel_sha256": "5bee067f7ec48d148386ccff2659cebc745abfe9ccc4665f3391a17906257200",
       "built": true,
       "installed_import_ok": true,
       "integration_ok": true,
       "status": "PASS",
-      "reason": ""
+      "reason": "built from /home/sunhaiwei/quant_projects/dataaccess/pyproject.toml"
     }
   },
   "integration_rc": 0,

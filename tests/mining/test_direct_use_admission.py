@@ -8,15 +8,15 @@ from __future__ import annotations
 
 from unittest.mock import patch, MagicMock
 
-from market.context import Market
-from mining.direct_use import (
+from factor_engine.market.context import Market
+from factor_engine.mining.direct_use import (
     build_direct_use_operator,
     DirectUseContext,
     get_direct_use_mining_operators,
     _has_physical_production_evidence,
 )
-from backend.contracts import PhysicalImplementationSpec, ExecutionKind
-from backend.operator_capability import (
+from factor_engine.backend.contracts import PhysicalImplementationSpec, ExecutionKind
+from factor_engine.backend.operator_capability import (
     PhysicalInventoryAdmission,
     PhysicalInventoryRecord,
 )
@@ -24,7 +24,7 @@ from backend.operator_capability import (
 
 # `_has_physical_production_evidence` imports the inventory lazily from
 # `backend.operator_capability`, so patch it there (not on mining.direct_use).
-_INVENTORY = "backend.operator_capability.enumerate_physical_inventory"
+_INVENTORY = "factor_engine.backend.operator_capability.enumerate_physical_inventory"
 
 
 _SHA = "0123456789abcdef" * 4  # 64-char lowercase hex SHA-256
@@ -66,8 +66,8 @@ class TestProductionAdmittedRequiresPhysicalEvidence:
 
     def test_production_admitted_requires_physical_evidence(self) -> None:
         """production_admitted is False when no physical evidence exists."""
-        from cleaned_operators import load_all
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators import load_all
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         load_all()
         canonical = "ts_mean"
@@ -84,8 +84,8 @@ class TestProductionAdmittedRequiresPhysicalEvidence:
         an empty evidence query is exactly that state, and admission must
         fail closed (never true when every backend is NOT_RUN).
         """
-        from cleaned_operators import load_all
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators import load_all
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         load_all()
         canonical = "ts_mean"
@@ -98,8 +98,8 @@ class TestProductionAdmittedRequiresPhysicalEvidence:
 
     def test_production_admitted_passes_with_evidence(self) -> None:
         """production_admitted can be True when physical evidence exists."""
-        from cleaned_operators import load_all
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators import load_all
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         load_all()
         canonical = "ts_mean"
@@ -107,11 +107,11 @@ class TestProductionAdmittedRequiresPhysicalEvidence:
 
         record = _admitted_record(canonical)
         with patch(_INVENTORY, return_value=[record]):
-            with patch("mining.direct_use.cost_contract_declared", return_value=True):
-                with patch("mining.direct_use.source_status") as mock_source:
+            with patch("factor_engine.mining.direct_use.cost_contract_declared", return_value=True):
+                with patch("factor_engine.mining.direct_use.source_status") as mock_source:
                     mock_source.return_value = MagicMock(missing=())
                     with patch(
-                        "mining.direct_use._is_production_denied", return_value=False
+                        "factor_engine.mining.direct_use._is_production_denied", return_value=False
                     ):
                         row = build_direct_use_operator(canonical, catalog)
                         if row.production_certified:
@@ -127,8 +127,8 @@ class TestDirectlyUsableRequiresProductionAdmitted:
 
     def test_directly_usable_requires_production_admitted(self) -> None:
         """directly_usable is False when production_admitted is False."""
-        from cleaned_operators import load_all
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators import load_all
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         load_all()
         canonical = "ts_mean"
@@ -145,8 +145,8 @@ class TestPhysicalInventoryAdmissionConsistency:
 
     def test_physical_inventory_admission_consistency(self) -> None:
         """Every admitted inventory row must carry evidence and an exact ID."""
-        from cleaned_operators import load_all
-        from backend.operator_capability import enumerate_physical_inventory
+        from factor_engine.cleaned_operators import load_all
+        from factor_engine.backend.operator_capability import enumerate_physical_inventory
 
         load_all()
         records = list(enumerate_physical_inventory())
@@ -170,8 +170,8 @@ class TestProductionAdmittedLogic:
 
     def test_production_admitted_all_conditions_must_pass(self) -> None:
         """production_admitted requires every gate to pass."""
-        from cleaned_operators import load_all
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators import load_all
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         load_all()
         canonical = "ts_mean"
@@ -183,7 +183,7 @@ class TestProductionAdmittedLogic:
 
         record = _admitted_record(canonical)
         with patch(_INVENTORY, return_value=[record]):
-            with patch("mining.direct_use.cost_contract_declared", return_value=False):
+            with patch("factor_engine.mining.direct_use.cost_contract_declared", return_value=False):
                 row = build_direct_use_operator(canonical, catalog)
                 assert row.production_admitted is False
 
@@ -204,7 +204,7 @@ class TestDirectUseMiningOperatorsAdmission:
 
     def test_eligible_admission_requires_production_admitted(self) -> None:
         """'eligible' admission filters out non-production-admitted operators."""
-        from cleaned_operators import load_all
+        from factor_engine.cleaned_operators import load_all
 
         load_all()
 
@@ -225,7 +225,7 @@ class TestOperatorFamilyId:
 
     def test_same_family_returns_same_id(self) -> None:
         """Same-family canonicals resolve to the same family id."""
-        from mining.direct_use import operator_family_id
+        from factor_engine.mining.direct_use import operator_family_id
 
         # ts_mean / ts_return are both in the "trend" economic family (R18-068)
         # and neither is captured by a semantic redundancy group, so both must
@@ -236,7 +236,7 @@ class TestOperatorFamilyId:
 
     def test_different_family_returns_different_id(self) -> None:
         """Different-family canonicals resolve to different family ids."""
-        from mining.direct_use import operator_family_id
+        from factor_engine.mining.direct_use import operator_family_id
 
         # ts_ema is in the "smoothed_price" semantic redundancy group (R18-069),
         # which wins over the trend economic family — so it must differ from

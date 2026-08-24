@@ -52,7 +52,7 @@ COMPOSITE_DUCKDB_REAL_SQL_VERIFIED = COMPOSITE_LOWERED_DUCKDB_VERIFIED
 
 def composite_structurally_capable(canon: str) -> bool:
     """展开后 primitive 均已 dual-backend production 认证（可组合 nesting）。"""
-    from planner.composite_lowering import composite_dual_backend_capable
+    from factor_engine.planner.composite_lowering import composite_dual_backend_capable
 
     return composite_dual_backend_capable(canon)
 
@@ -79,7 +79,7 @@ def composite_full_parity_verified(canon: str) -> bool:
 
 def composite_evidence_complete(canon: str) -> bool:
     """Composite 五证齐全（不含 production policy / allow 判定）。"""
-    from planner.composite_lowering import has_composite_lowering
+    from factor_engine.planner.composite_lowering import has_composite_lowering
 
     if not has_composite_lowering(canon):
         return False
@@ -93,10 +93,10 @@ def composite_evidence_complete(canon: str) -> bool:
 
 def composite_production_safe(canon: str) -> bool:
     """Composite 可认证为 production-safe 的完整证据链（不依赖 allow_in_production 循环）。"""
-    from cleaned_operators.operator_spec import _infer_status, is_production_denied
-    from cleaned_operators.registry import OperatorRegistry
-    from cleaned_operators.operator_policy import infer_operator_policy
-    from planner.composite_lowering import has_composite_lowering
+    from factor_engine.cleaned_operators.operator_spec import _infer_status, is_production_denied
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
+    from factor_engine.planner.composite_lowering import has_composite_lowering
 
     if not has_composite_lowering(canon):
         return False

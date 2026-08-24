@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.elementwise_semantics import (
+from factor_engine.backend.elementwise_semantics import (
     DIV_OR_DEFAULT_SEMANTICS,
     DEFAULT_COMPUTE_PRECISION,
     compute_precision_policy,
@@ -20,13 +20,13 @@ from backend.elementwise_semantics import (
     inf_semantics_for,
     protected_division_truth_table,
 )
-from backend.numeric_semantics import (
+from factor_engine.backend.numeric_semantics import (
     DEFAULT_MOMENT_CONVENTION,
     MomentConvention,
     canonical_numeric_algorithm,
     moment_convention_for,
 )
-from cleaned_operators._numpy_kernels import (
+from factor_engine.cleaned_operators._numpy_kernels import (
     DEFAULT_DEGENERACY_POLICY,
     cs_regression_,
     cs_resid_,
@@ -34,8 +34,8 @@ from cleaned_operators._numpy_kernels import (
     pairwise_sum_,
     welford_rolling_var_,
 )
-from cleaned_operators.edge_requirements import EdgeContract, edge_contract_numeric_identity
-from cleaned_operators.math_certificate import (
+from factor_engine.cleaned_operators.edge_requirements import EdgeContract, edge_contract_numeric_identity
+from factor_engine.cleaned_operators.math_certificate import (
     CHECKPOINT_CHUNK_INVARIANCE_FAILURE,
     CHUNK_BOUNDARY_INVARIANCE,
     PREFIX_INVARIANCE_FAILURE,
@@ -44,13 +44,13 @@ from cleaned_operators.math_certificate import (
     check_prefix_invariance_all_causal_ts,
     cross_process_determinism_probe,
 )
-from runtime.execution_traits import (
+from factor_engine.runtime.execution_traits import (
     NumericDeterminismLevel,
     determinism_level_for,
     record_blas_config,
 )
-from runtime.hybrid_executor import HybridExecutor
-from runtime.resource_broker import ResourceBroker
+from factor_engine.runtime.hybrid_executor import HybridExecutor
+from factor_engine.runtime.resource_broker import ResourceBroker
 
 
 def test_near_zero_variance_produces_null_not_exploded_beta() -> None:
@@ -204,7 +204,7 @@ def test_edge_corpus_and_inf_semantics_declared() -> None:
 
 def test_protected_div_truth_table_matches_pandas() -> None:
     """#199/#200: ProtectedDivisionSemantics 真值表与 pandas emitter 一致。"""
-    from backend.elementwise_semantics import (
+    from factor_engine.backend.elementwise_semantics import (
         PROTECTED_DIV_SEMANTICS,
         div_or_default_pandas,
         protected_div_pandas,

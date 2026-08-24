@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.operator_spec import PERMANENTLY_FORBIDDEN_CANONICALS
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.operator_spec import PERMANENTLY_FORBIDDEN_CANONICALS
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -21,7 +21,7 @@ def _loaded():
 
 
 def _research_and_diagnostic():
-    from cleaned_operators.operator_surface import (
+    from factor_engine.cleaned_operators.operator_surface import (
         RESEARCH_ONLY_CANONICALS,
         UNSAFE_CANONICALS,
     )
@@ -30,13 +30,13 @@ def _research_and_diagnostic():
 
 
 def _internal_canonicals():
-    import cleaned_operators.operator_surface as surf
+    import factor_engine.cleaned_operators.operator_surface as surf
 
     return set(surf.INTERNAL_ONLY_CANONICALS)
 
 
 def _mining_visible_names(tier="research"):
-    from api.mining_integration import default_typed_mining_search_space_config
+    from factor_engine.api.mining_integration import default_typed_mining_search_space_config
 
     cfg = default_typed_mining_search_space_config(tier=tier)
     names = set()
@@ -56,7 +56,7 @@ def test_forbidden_not_in_mining_discovery():
 
 
 def _production_admitted_names():
-    from api.mining_integration import default_typed_mining_search_space_config
+    from factor_engine.api.mining_integration import default_typed_mining_search_space_config
 
     cfg = default_typed_mining_search_space_config(tier="production")
     admitted = set()
@@ -98,7 +98,7 @@ def test_constant_grammar_helper_not_mining_visible():
 
 
 def test_production_operators_reachable():
-    from api.mining_integration import validate_production_dsl
+    from factor_engine.api.mining_integration import validate_production_dsl
 
     for formula in (
         "ts_mean(close, 5)",
@@ -117,8 +117,8 @@ def test_production_operators_reachable():
 
 def test_alias_policy_monotonicity():
     """alias_safety must not be wider than canonical_safety (R28 §一百零四..五)."""
-    from cleaned_operators.registry import OperatorRegistry
-    from cleaned_operators.operator_surface import is_dsl_name_allowed
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_surface import is_dsl_name_allowed
 
     aliases = dict(getattr(OperatorRegistry, "_aliases", {}) or {})
     for alias, canonical in aliases.items():
@@ -135,7 +135,7 @@ def test_alias_policy_monotonicity():
 
 def test_deprecated_alias_not_independent_search_candidate():
     """An alias must never let mining treat the same kernel as two candidates."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     names = _mining_visible_names()
     aliases = dict(getattr(OperatorRegistry, "_aliases", {}) or {})

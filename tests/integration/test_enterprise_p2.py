@@ -6,8 +6,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from runtime.session_calendar import SessionBarCalendar
-from runtime.warmup_service import _build_intraday_run_window
+from factor_engine.runtime.session_calendar import SessionBarCalendar
+from factor_engine.runtime.warmup_service import _build_intraday_run_window
 
 
 def test_session_bar_calendar_warmup_load_start():
@@ -30,8 +30,8 @@ def test_build_intraday_run_window_expands_load_start():
 
 
 def test_lineage_service_expression_prefers_source_expr():
-    from api.dsl_parser import parse_factor
-    from runtime.lineage_service import resolve_lineage_expression
+    from factor_engine.api.dsl_parser import parse_factor
+    from factor_engine.runtime.lineage_service import resolve_lineage_expression
 
     factor = parse_factor("rank(close)", name="t")
     assert resolve_lineage_expression(factor, None) == "rank(close)"

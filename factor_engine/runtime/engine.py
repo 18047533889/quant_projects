@@ -35,31 +35,31 @@ from typing import Any
 
 import pandas as pd
 
-from api.dsl_parser import parse_factor
-from api.factor import Factor
-from backend.context import ExecutionContext
-from backend.factory import build_backend
-from ir.analyzer import AnalysisResult, Analyzer
+from factor_engine.api.dsl_parser import parse_factor
+from factor_engine.api.factor import Factor
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.backend.factory import build_backend
+from factor_engine.ir.analyzer import AnalysisResult, Analyzer
 from logging_utils import get_logger
-from planner.cse import apply_cse
-from planner.dag import (
+from factor_engine.planner.cse import apply_cse
+from factor_engine.planner.dag import (
     DAGPlan,
     FactorExecutionScope,
     FactorPlan,
     assert_unique_factor_names,
 )
-from planner.logical_plan import PlanNode
-from planner.lowerer import Lowerer
-from planner.optimizer import Optimizer
-from runtime.config import FactorEngineConfig, load_config
-from runtime.env_bootstrap import bootstrap_runtime_env
-from runtime.perf_config import PerfConfig
-from storage.cache import CacheManager, PersistentPlanCache
-from storage.data_scope import compute_data_scope
-from storage.factory import build_data_source
-from storage.materializer import ParquetMaterializer
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.lowerer import Lowerer
+from factor_engine.planner.optimizer import Optimizer
+from factor_engine.runtime.config import FactorEngineConfig, load_config
+from factor_engine.runtime.env_bootstrap import bootstrap_runtime_env
+from factor_engine.runtime.perf_config import PerfConfig
+from factor_engine.storage.cache import CacheManager, PersistentPlanCache
+from factor_engine.storage.data_scope import compute_data_scope
+from factor_engine.storage.factory import build_data_source
+from factor_engine.storage.materializer import ParquetMaterializer
 
-logger = get_logger("runtime.engine")
+logger = get_logger("factor_engine.runtime.engine")
 
 #: run_mode 严格白名单（#6）；任何其他值（含 typo）在引擎构造时直接抛
 #: ``ValueError``，不允许静默回落为 research。
@@ -87,7 +87,7 @@ def _admit_ready_single_region_batch(
     logical_root_ids: tuple[str, ...],
 ) -> Any:
     """Admit a production-ready physical plan without changing its routing."""
-    from planner.backend_region import (
+    from factor_engine.planner.backend_region import (
         PhysicalBackend,
         PhysicalRegionPlan,
         Representation,
@@ -177,38 +177,7 @@ def _admit_ready_single_region_batch(
 
 
 def _physical_backend_for_region(backend: Any, region_backend: Any) -> Any:
-    from planner.backend_region import PhysicalBackend
-
-    # R23 P0-3: q/K is a real physical executor only when a live q runtime is
-    # certified.  No runtime certificate (e.g. pykx missing / license absent) is
-    # fail-closed: the planner-admitted Q region cannot be executed and must not
-    # silently degrade to another backend.
-    if region_backend == PhysicalBackend.Q_KDB:
-        from backend.q_backend.q_process_manager import (
-            QAvailabilityStatus,
-            get_q_process_manager,
-        )
-        from backend.operator_capability import BackendUnavailableError
-
-        info = get_q_process_manager().check_availability()
-        if info.status != QAvailabilityStatus.AVAILABLE:
-            raise BackendUnavailableError(
-                f"physical region selected q_kdb but no live q runtime certificate "
-                f"({info.status.value}{(': ' + info.error_message) if info.error_message else ''}); "
-                "production planner must choose a certified alternative backend"
-            )
-        from backend.q_backend.q_backend import QBackend
-
-        if backend.__class__.__name__ == "HybridBackend":
-            return getattr(backend, "_q", None) or get_q_backend(
-                production_mode=True, fallback_to_pandas=False
-            )
-        if isinstance(backend, QBackend):
-            return backend
-        raise PhysicalPlanRequiredError(
-            f"configured backend {backend.__class__.__name__!r} does not match "
-            f"physical backend {getattr(region_backend, 'value', region_backend)!r}"
-        )
+    from factor_engine.planner.backend_region import PhysicalBackend
 
     if backend.__class__.__name__ == "HybridBackend":
         if region_backend == PhysicalBackend.PANDAS_NUMPY:
@@ -270,6 +239,12 @@ def _physical_plan_telemetry(
         "materialization_count": materialization_count,
         "resident_reuse_count": 0,
         "python_to_q_bytes": 0,
+        # R22 P0: the data-source residency the root region executed on.  Only
+        # written when the region actually carries a source snapshot binding;
+        # otherwise it stays the default empty string (never fabricated).
+        "source_residency": str(
+            getattr(region, "source_snapshot", "") or ""
+        ),
     }
 
 
@@ -537,7 +512,7 @@ def compute_source_scope_hash(
 @functools.lru_cache(maxsize=1)
 def _field_catalog_version() -> str:
     """惰性计算字段目录版本（模块级缓存，避免每因子重算）。"""
-    from fields import compute_field_catalog_hash
+    from factor_engine.fields import compute_field_catalog_hash
 
     return compute_field_catalog_hash()
 
@@ -602,7 +577,7 @@ def _scope_from_factor(
             getattr(factor, "calendar", None),
         )
 
-        from runtime.production_policy import ProductionPolicyViolation, is_production_mode
+        from factor_engine.runtime.production_policy import ProductionPolicyViolation, is_production_mode
 
         if is_production_mode():
             # FE-P0-032: production requires explicit frequency and calendar (grain/session)
@@ -650,7 +625,7 @@ def _scope_from_factor(
             or getattr(factor, "calendar", None)
         )
 
-        from runtime.production_policy import ProductionPolicyViolation, is_production_mode
+        from factor_engine.runtime.production_policy import ProductionPolicyViolation, is_production_mode
 
         if is_production_mode():
             # FE-P0-032: production requires explicit frequency and calendar
@@ -777,8 +752,8 @@ def _assert_production_plan_gates(
     was handed in precompiled.  This helper applies exactly the gates
     ``compile()`` applies, so a precompiled plan gets the same certification.
     """
-    from runtime.pit_audit import assert_pit_safe
-    from runtime.production_policy import (
+    from factor_engine.runtime.pit_audit import assert_pit_safe
+    from factor_engine.runtime.production_policy import (
         assert_no_unapproved_map_groups_in_production,
         assert_no_stub_operators,
         assert_production_fastpath_plan,
@@ -812,7 +787,7 @@ def _plan_has_cross_sectional_ops(plan: Any) -> bool:
         return True
     if op:
         try:
-            from cleaned_operators.registry import OperatorRegistry
+            from factor_engine.cleaned_operators.registry import OperatorRegistry
 
             canonical = OperatorRegistry.resolve_canonical(op)
             if (
@@ -936,7 +911,7 @@ def assert_execution_scope_contract(
     UniverseSnapshotIdentity（目前通过 scoped data_source 强制），universe
     缺失时不得默认 "ALL"。
     """
-    from runtime.production_policy import ProductionPolicyViolation, is_production_mode
+    from factor_engine.runtime.production_policy import ProductionPolicyViolation, is_production_mode
 
     # FE-P0-031: production + cross-sectional → universe 必须是 validated
     # UniverseSnapshotIdentity (digest/members/policy_version)，不能只是字符串名字。
@@ -1034,7 +1009,7 @@ class FactorEngine:
             run_mode: 显式运行模式；缺省从环境变量解析。
         """
         bootstrap_runtime_env()
-        from runtime.production_policy import resolve_run_mode
+        from factor_engine.runtime.production_policy import resolve_run_mode
 
         self.backend = backend  # PandasBackend / PolarsBackend / …，由 build_backend 构造
         self.data_source = data_source  # 从 parquet 等拉 MultiIndex 面板的统一入口
@@ -1052,7 +1027,7 @@ class FactorEngine:
         # rejection, WS-C #273) was silently OFF in every real production
         # ``FactorEngine`` compile.  A run_mode != production still gets a
         # research-policy analyzer.
-        from runtime.production_policy import is_production_mode
+        from factor_engine.runtime.production_policy import is_production_mode
 
         self.analyzer = Analyzer(production=is_production_mode(self.run_mode))
         self.lowerer = Lowerer()  # IR → 逻辑计划树
@@ -1081,7 +1056,7 @@ class FactorEngine:
             ProductionPolicyViolation: production 模式下计划不合规。
             PITAuditError: PIT 审计失败（``pit_enforce=True`` 时）。
         """
-        from runtime.production_policy import is_production_mode
+        from factor_engine.runtime.production_policy import is_production_mode
 
         pit_enforce = bool(pit_enforce or is_production_mode(self.run_mode))
         started_at = time.perf_counter()
@@ -1090,7 +1065,7 @@ class FactorEngine:
         # 解析（semantic_identity.market → factor.market），解析不到即 fail-closed。
         # research/compat 仍用 init 时构造的 analyzer（market=None legacy 路径）。
         if is_production_mode(self.run_mode):
-            from ir.analyzer import Analyzer, ProductionMarketContextRequiredError
+            from factor_engine.ir.analyzer import Analyzer, ProductionMarketContextRequiredError
 
             market = _market_of_factor(factor)
             if not market:
@@ -1103,7 +1078,7 @@ class FactorEngine:
         else:
             analysis = self.analyzer.lower(factor.expr)
         if pit_enforce:
-            from runtime.pit_audit import assert_pit_safe
+            from factor_engine.runtime.pit_audit import assert_pit_safe
 
             assert_pit_safe(
                 analysis.ir,
@@ -1114,7 +1089,7 @@ class FactorEngine:
         optimized_plan = self.optimizer.optimize(
             logical_plan, production=is_production_mode(self.run_mode)
         )
-        from runtime.production_policy import (
+        from factor_engine.runtime.production_policy import (
             assert_no_unapproved_map_groups_in_production,
             assert_production_fastpath_plan,
             assert_production_plan_ops,
@@ -1216,7 +1191,7 @@ class FactorEngine:
         返回：
             ``(改写后的根列表, shared_nodes 字典)``
         """
-        from planner.rolling_cse import apply_rolling_cse
+        from factor_engine.planner.rolling_cse import apply_rolling_cse
 
         groups: dict[str, list[int]] = {}
         for i, scope in enumerate(scopes):
@@ -1288,7 +1263,7 @@ class FactorEngine:
         Returns:
             含 ``dag``、``analyses``、``batch_graph`` 的字典。
         """
-        from planner.dependency_graph import build_factor_batch_graph
+        from factor_engine.planner.dependency_graph import build_factor_batch_graph
 
         dag, analyses = self._dag_from_factors(
             factors, enable_cse=enable_cse, perf=perf
@@ -1327,7 +1302,7 @@ class FactorEngine:
             ``(engine, factor)`` 元组。
         """
         if execution_policy is not None:
-            from runtime.endpoint_policy import (
+            from factor_engine.runtime.endpoint_policy import (
                 EndpointExecutionPolicy,
                 ProductionPolicyConflictError,
                 collect_config_policy_conflicts,
@@ -1346,7 +1321,7 @@ class FactorEngine:
         # gates ON (strict fields / mining / PIT), instead of relying on the YAML
         # author to remember them per-source.  ``config.run.market/calendar`` are
         # already resolved separately (R10-P0-025); research runs stay research.
-        from storage.factory import DataSourceBuildContext
+        from factor_engine.storage.factory import DataSourceBuildContext
 
         build_context = DataSourceBuildContext(
             run_mode=config.run.mode,
@@ -1431,7 +1406,7 @@ class FactorEngine:
         engine, factor, config = cls.from_config(
             config_path, profile=profile, execution_policy=execution_policy
         )
-        from runtime.config_runtime import resolve_run_kwargs
+        from factor_engine.runtime.config_runtime import resolve_run_kwargs
 
         opts = resolve_run_kwargs(config)
         run_kwargs = opts.to_run_kwargs()
@@ -1464,7 +1439,7 @@ class FactorEngine:
         pipeline_overrides: Any | None = None,
     ) -> dict[str, Any]:
         """单配置文件跑一个因子：合并 pipeline overrides 后 ``engine.run``。"""
-        from runtime.config_runtime import resolve_run_kwargs_for_pipeline
+        from factor_engine.runtime.config_runtime import resolve_run_kwargs_for_pipeline
 
         opts = resolve_run_kwargs_for_pipeline(config, pipeline_overrides)
         one = engine.run(factor, **opts.to_run_kwargs())
@@ -1486,7 +1461,7 @@ class FactorEngine:
         configs: dict[str, FactorEngineConfig],
     ) -> None:
         """同 data_scope + run kwargs 的一组配置：单条直接 run，多条 ``run_many``/并行。"""
-        from runtime.config_runtime import config_run_batch_key, resolve_run_kwargs_for_pipeline
+        from factor_engine.runtime.config_runtime import config_run_batch_key, resolve_run_kwargs_for_pipeline
 
         batches: dict[
             tuple[Any, ...],
@@ -1566,7 +1541,7 @@ class FactorEngine:
         Returns:
             含 ``results``、``runs``、``configs`` 的字典。
         """
-        from runtime.config_runtime import config_data_scope_key
+        from factor_engine.runtime.config_runtime import config_data_scope_key
 
         loaded: list[tuple[FactorEngine, Factor, FactorEngineConfig, str | Path]] = []
         for path in config_paths:
@@ -1633,7 +1608,7 @@ class FactorEngine:
         pipeline_overrides: Any | None = None,
     ) -> tuple[str, dict[str, Any]]:
         """落盘单个 config 项，返回 ``(factor_name, materialize_output)``。"""
-        from runtime.config_runtime import resolve_materialize_kwargs_for_pipeline
+        from factor_engine.runtime.config_runtime import resolve_materialize_kwargs_for_pipeline
 
         if opts is None:
             opts = resolve_materialize_kwargs_for_pipeline(config, pipeline_overrides)
@@ -1654,11 +1629,11 @@ class FactorEngine:
         parallel: bool,
         n_jobs: int | None,
     ) -> None:
-        from runtime.config_runtime import (
+        from factor_engine.runtime.config_runtime import (
             config_materialize_batch_key,
             resolve_materialize_kwargs_for_pipeline,
         )
-        from runtime.materialize_service import (
+        from factor_engine.runtime.materialize_service import (
             can_batch_materialize_compute,
             execute_materialize_from_resolved,
         )
@@ -1772,7 +1747,7 @@ class FactorEngine:
         Returns:
             含 ``materializations`` 字典的结果。
         """
-        from runtime.config_runtime import config_data_scope_key
+        from factor_engine.runtime.config_runtime import config_data_scope_key
 
         loaded: list[tuple[FactorEngine, Factor, FactorEngineConfig, str | Path]] = []
         for path in config_paths:
@@ -1867,7 +1842,7 @@ class FactorEngine:
         engine = self
 
         if shard_by == "factor_id":
-            from runtime.shard_materialize import shard_factor_ids
+            from factor_engine.runtime.shard_materialize import shard_factor_ids
 
             selected_ids = set(
                 shard_factor_ids(
@@ -1896,7 +1871,7 @@ class FactorEngine:
             sel_ids = list(ids)
             ds = self.data_source
             if shard_by == "asset_bucket":
-                from runtime.shard_materialize import shard_bucket_values
+                from factor_engine.runtime.shard_materialize import shard_bucket_values
 
                 bucket_count = int(mat.pop("bucket_count", 64))
                 buckets = shard_bucket_values(
@@ -1914,7 +1889,7 @@ class FactorEngine:
                     scoped._panel_cache = {}
                     engine = self.with_data_source(scoped, fresh_cache=True)
             elif shard_by == "time_month":
-                from runtime.shard_materialize import (
+                from factor_engine.runtime.shard_materialize import (
                     month_date_bounds,
                     month_keys_between,
                     shard_time_months,
@@ -2025,7 +2000,7 @@ class FactorEngine:
         wave_memory_budget: int = 4 * 1024**3,
     ) -> tuple[Any, Any, dict[str, AnalysisResult]]:
         """编译 → PhysicalFactorDAG 调度计划（R27-004..006/063）。"""
-        from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+        from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
 
         dag, analyses = self._dag_from_factors(
             factors,
@@ -2054,7 +2029,7 @@ class FactorEngine:
         返回预计读取 GB / task 数 / CSE 节省 / 峰值内存 / worker / shards /
         backend 分布 / 落盘 GB（R27-109 示例形态）。
         """
-        from runtime.production_policy import is_production_mode
+        from factor_engine.runtime.production_policy import is_production_mode
 
         pit_enforce = bool(pit_enforce or is_production_mode(self.run_mode))
         if enable_cse is None:
@@ -2159,16 +2134,16 @@ class FactorEngine:
             - ``shard_scope=(shard_index, shard_count)`` 供 ``materialize_sharded``
               流式落值（计算完成即 sink，不攒全量 results dict）。
         """
-        from runtime.batch_service import _maybe_prepare_batch_warmup
-        from runtime.materialize_batch import (
+        from factor_engine.runtime.batch_service import _maybe_prepare_batch_warmup
+        from factor_engine.runtime.materialize_batch import (
             GenerationTransaction,
             MaterializeItem,
             execute_materialize_batch,
         )
-        from runtime.materialize_service import execute_materialize
-        from runtime.production_policy import is_production_mode
-        from runtime.resource_broker import ResourceBroker
-        from runtime.streaming_result_sink import ResultItem, StreamingResultSink
+        from factor_engine.runtime.materialize_service import execute_materialize
+        from factor_engine.runtime.production_policy import is_production_mode
+        from factor_engine.runtime.resource_broker import ResourceBroker
+        from factor_engine.runtime.streaming_result_sink import ResultItem, StreamingResultSink
 
         ids = list(factor_ids) if factor_ids is not None else [f.name for f in factors]
         if len(ids) != len(factors):
@@ -2200,8 +2175,8 @@ class FactorEngine:
             market=mk.get("market"),
         )
         ctx = engine_to_use._make_context(shared_result_cache={}, perf=PerfConfig.from_env())
-        from backend.routing_env import routing_execution_scope
-        from runtime.resource_telemetry import record_resource_telemetry
+        from factor_engine.backend.routing_env import routing_execution_scope
+        from factor_engine.runtime.resource_telemetry import record_resource_telemetry
 
         ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats)
 
@@ -2242,7 +2217,7 @@ class FactorEngine:
         batch_write_transaction_count = 0
         # R39-PERF-068: shard 元数据传播（materialize_sharded 流式落值用）。
         shard_index, shard_count = shard_scope if shard_scope is not None else (0, 1)
-        from runtime.lineage import new_run_id
+        from factor_engine.runtime.lineage import new_run_id
 
         batch_generation = GenerationTransaction(generation_id=f"batch-{new_run_id()}")
 
@@ -2383,7 +2358,7 @@ class FactorEngine:
         Returns:
             物化摘要字典（由 ``matrix_service`` 返回）。
         """
-        from runtime.matrix_service import execute_materialize_matrix
+        from factor_engine.runtime.matrix_service import execute_materialize_matrix
 
         return execute_materialize_matrix(
             self,
@@ -2421,7 +2396,7 @@ class FactorEngine:
         Returns:
             增量计划字典（受影响因子列表及窗口）。
         """
-        from runtime.incremental_event_service import plan_incremental_from_event
+        from factor_engine.runtime.incremental_event_service import plan_incremental_from_event
 
         return plan_incremental_from_event(
             event,
@@ -2456,7 +2431,7 @@ class FactorEngine:
         Returns:
             物化结果或 dry_run 计划字典。
         """
-        from runtime.incremental_event_service import materialize_incremental_from_event
+        from factor_engine.runtime.incremental_event_service import materialize_incremental_from_event
 
         return materialize_incremental_from_event(
             self,
@@ -2481,7 +2456,7 @@ class FactorEngine:
 
         逐配置解析 incremental 参数并调用 ``materialize_incremental``。
         """
-        from runtime.incremental_event_service import (
+        from factor_engine.runtime.incremental_event_service import (
             materialize_incremental_many_from_config,
         )
 
@@ -2524,7 +2499,7 @@ class FactorEngine:
         """
         logger.info("开始从配置物化因子: %s", config_path)
         engine, factor, config = cls.from_config(config_path, execution_policy=execution_policy)
-        from runtime.config_runtime import resolve_materialize_kwargs
+        from factor_engine.runtime.config_runtime import resolve_materialize_kwargs
 
         opts = resolve_materialize_kwargs(
             config,
@@ -2569,7 +2544,7 @@ class FactorEngine:
         """
         logger.info("开始从配置增量物化因子: %s", config_path)
         engine, factor, config = cls.from_config(config_path)
-        from runtime.config_runtime import resolve_materialize_kwargs
+        from factor_engine.runtime.config_runtime import resolve_materialize_kwargs
 
         opts = resolve_materialize_kwargs(
             config,
@@ -2601,13 +2576,13 @@ class FactorEngine:
         When provided the plan cache is re-scoped so different secondary
         dependencies / execution semantics never share cached subtrees.
         """
-        from cache.session import ExecutionCacheSession
-        from storage.long_table_source import LongTableDataSource
+        from factor_engine.cache.session import ExecutionCacheSession
+        from factor_engine.storage.long_table_source import LongTableDataSource
 
         prefer_long = isinstance(self.data_source, LongTableDataSource)
         effective_perf = perf or PerfConfig.from_env()
-        from cleaned_operators.registry import OperatorRegistry
-        from backend.evidence_provenance import compute_payload_hash, load_verified_artifact
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+        from factor_engine.backend.evidence_provenance import compute_payload_hash, load_verified_artifact
         try:
             evidence = load_verified_artifact()
             evidence_version = compute_payload_hash((evidence or {}).get("provenance") or {})
@@ -2666,13 +2641,13 @@ class FactorEngine:
 
     @staticmethod
     def _resolve_lineage_expression(factor: Factor, expression: str | None) -> str | None:
-        from runtime.lineage_service import resolve_lineage_expression
+        from factor_engine.runtime.lineage_service import resolve_lineage_expression
 
         return resolve_lineage_expression(factor, expression)
 
     @staticmethod
     def _composite_lineage_from_source(data_source: Any) -> dict[str, Any]:
-        from runtime.lineage_service import composite_lineage_from_source
+        from factor_engine.runtime.lineage_service import composite_lineage_from_source
 
         return composite_lineage_from_source(data_source)
 
@@ -2685,7 +2660,7 @@ class FactorEngine:
         data_source: Any = None,
         **more: Any,
     ) -> dict[str, Any]:
-        from runtime.lineage_service import build_lineage_extra
+        from factor_engine.runtime.lineage_service import build_lineage_extra
 
         return build_lineage_extra(
             data_source_config=data_source_config,
@@ -2700,29 +2675,29 @@ class FactorEngine:
         data_source: Any | None,
         data_source_config: dict | None,
     ) -> str | None:
-        from runtime.lineage_service import resolve_data_snapshot_id
+        from factor_engine.runtime.lineage_service import resolve_data_snapshot_id
 
         return resolve_data_snapshot_id(data_source, data_source_config)
 
     @staticmethod
     def _resolve_parquet_write_target(write_target: str) -> str:
-        from runtime.materialize_service import resolve_parquet_write_target
+        from factor_engine.runtime.materialize_service import resolve_parquet_write_target
 
         return resolve_parquet_write_target(write_target)
 
     @staticmethod
     def _needs_clickhouse_write(write_target: str) -> bool:
-        from runtime.materialize_service import needs_clickhouse_write
+        from factor_engine.runtime.materialize_service import needs_clickhouse_write
 
         return needs_clickhouse_write(write_target)
 
     def _append_clickhouse_to_summary(self, summary: dict[str, Any], **kwargs) -> dict[str, Any]:
-        from runtime import dual_write_service
+        from factor_engine.runtime import dual_write_service
 
         return dual_write_service.append_clickhouse_to_summary(summary, **kwargs)
 
     def _dual_write_clickhouse(self, materializer, summary: dict[str, Any], **kwargs) -> dict[str, Any]:
-        from runtime import dual_write_service
+        from factor_engine.runtime import dual_write_service
 
         return dual_write_service.dual_write_clickhouse(materializer, summary, **kwargs)
 
@@ -2759,7 +2734,7 @@ class FactorEngine:
         """批量 input_dq + 单次 prefetch（run_many 快路径）。"""
         if not columns:
             return None
-        from storage.read_session import DataSourceReadSession
+        from factor_engine.storage.read_session import DataSourceReadSession
 
         session = DataSourceReadSession(data_source)
         input_report = session.prepare_batch(
@@ -2812,12 +2787,12 @@ class FactorEngine:
             ``input_dq``、``run_window``、``backend_path``、``production_pandas_fallbacks``
             及 SQL/Polars 路径诊断字段。
         """
-        from runtime.production_policy import is_production_mode
+        from factor_engine.runtime.production_policy import is_production_mode
 
         pit_enforce = bool(pit_enforce or is_production_mode(self.run_mode))
         started_at = time.perf_counter()
         logger.info("开始执行因子 '%s'", factor.name)
-        from runtime.production_policy import (
+        from factor_engine.runtime.production_policy import (
             assert_no_stub_operators,
             assert_production_factors,
             assert_production_run_flags,
@@ -2828,7 +2803,7 @@ class FactorEngine:
         # 证据 —— 禁止空 store / 旧 SHA store 悄悄存在（fail closed）。clean
         # 执行路径（``cleaned_bridge``）在算子级再次强制，这里是 run() 级 fail-fast。
         if is_production_mode(self.run_mode):
-            from runtime.parameter_domain_store import assert_parameter_domain_ready
+            from factor_engine.runtime.parameter_domain_store import assert_parameter_domain_ready
 
             assert_parameter_domain_ready()
         if plan is None or analysis is None:
@@ -2865,7 +2840,7 @@ class FactorEngine:
             context="run",
         )
         assert_no_stub_operators(plan, mode=self.run_mode)
-        from runtime.warmup_service import prepare_run_warmup
+        from factor_engine.runtime.warmup_service import prepare_run_warmup
 
         warmup = prepare_run_warmup(
             self,
@@ -2880,7 +2855,7 @@ class FactorEngine:
         s_bpd = warmup.bars_per_day
 
         input_report = None
-        from planner.sql_io import should_skip_column_prefetch
+        from factor_engine.planner.sql_io import should_skip_column_prefetch
 
         # DebugBackend renders plans without reading data; skip all source I/O.
         if engine_to_use.backend.__class__.__name__ == "DebugBackend":
@@ -2892,7 +2867,7 @@ class FactorEngine:
                 backend=engine_to_use.backend,
             )
         if analysis.referenced_columns and not skip_prefetch:
-            from storage.read_session import DataSourceReadSession
+            from factor_engine.storage.read_session import DataSourceReadSession
 
             session = DataSourceReadSession(engine_to_use.data_source)
             if input_dq_check:
@@ -2917,8 +2892,8 @@ class FactorEngine:
         cache_scope = None
         if engine_to_use.cache is not None:
             try:
-                from planner.source_dependencies import source_dependency_hash
-                from storage.data_scope import (
+                from factor_engine.planner.source_dependencies import source_dependency_hash
+                from factor_engine.storage.data_scope import (
                     DataExecutionScope,
                     compute_execution_cache_scope,
                 )
@@ -2938,14 +2913,14 @@ class FactorEngine:
                 logger.debug("execution cache scope construction failed; using base scope", exc_info=True)
                 cache_scope = None
         ctx = engine_to_use._make_context(cache_scope=cache_scope)
-        from runtime.production_policy import record_production_fastpath_check
-        from runtime.resource_telemetry import record_resource_telemetry
+        from factor_engine.runtime.production_policy import record_production_fastpath_check
+        from factor_engine.runtime.resource_telemetry import record_resource_telemetry
 
         ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats)
         record_production_fastpath_check(ctx, plan, mode=engine_to_use.run_mode)
         _assert_backend_plan_authority(engine_to_use.backend, plan)
         result = engine_to_use.backend.execute(plan, ctx)
-        from runtime.production_policy import assert_production_fastpath_runtime
+        from factor_engine.runtime.production_policy import assert_production_fastpath_runtime
 
         assert_production_fastpath_runtime(ctx, mode=engine_to_use.run_mode, context=f"run:{factor.name}")
         # R10 #7: production hard gate on unplanned pandas fallbacks — the gate
@@ -2953,7 +2928,7 @@ class FactorEngine:
         # got logged below.  Now a production run REJECTS the result when the
         # backend fell back to pandas for an operator that has backend evidence,
         # unless ``production_fallback_policy='warn'``.
-        from runtime.production_policy import assert_no_production_pandas_fallbacks
+        from factor_engine.runtime.production_policy import assert_no_production_pandas_fallbacks
 
         assert_no_production_pandas_fallbacks(
             ctx,
@@ -2962,7 +2937,7 @@ class FactorEngine:
         )
 
         if run_window is not None and run_window.trim_output and run_window.requested_start:
-            from storage.time_window import slice_series_time_window
+            from factor_engine.storage.time_window import slice_series_time_window
 
             trim_start = pd.Timestamp(run_window.requested_start)
             trim_end = (
@@ -2977,8 +2952,8 @@ class FactorEngine:
                 end=trim_end,
             )
 
-        from runtime.perf_config import PerfConfig
-        from runtime.result_budget import enforce_result_budget
+        from factor_engine.runtime.perf_config import PerfConfig
+        from factor_engine.runtime.result_budget import enforce_result_budget
 
         enforce_result_budget(
             result,
@@ -3004,7 +2979,7 @@ class FactorEngine:
             out["input_dq"] = input_report.to_dict()
         if run_window is not None:
             out["run_window"] = run_window.to_dict()
-        from runtime.production_policy import (
+        from factor_engine.runtime.production_policy import (
             format_pandas_fallback_report,
             is_production_mode,
             summarize_pandas_fallbacks,
@@ -3061,14 +3036,14 @@ class FactorEngine:
         ):
             if key in runtime:
                 out[key] = runtime[key]
-        from backend.path_summary import build_backend_path_summary, snapshot_backend_path
-        from backend.runtime_labels import resolve_runtime_backend_label
-        from runtime.resource_telemetry import record_resource_telemetry
+        from factor_engine.backend.path_summary import build_backend_path_summary, snapshot_backend_path
+        from factor_engine.backend.runtime_labels import resolve_runtime_backend_label
+        from factor_engine.runtime.resource_telemetry import record_resource_telemetry
 
         ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats, finalize=True)
         runtime = dict(getattr(ctx, "runtime_stats", None) or {})
-        from backend.runtime_labels import resolve_runtime_backend_label
-        from backend.path_summary import build_backend_path_summary, snapshot_backend_path
+        from factor_engine.backend.runtime_labels import resolve_runtime_backend_label
+        from factor_engine.backend.path_summary import build_backend_path_summary, snapshot_backend_path
 
         runtime.setdefault("backend", resolve_runtime_backend_label(getattr(engine_to_use, "backend", None)))
         if fallbacks and "production_pandas_fallbacks" not in runtime:
@@ -3164,7 +3139,7 @@ class FactorEngine:
             pit_enforce=pit_enforce,
             pit_forbid_forward_fill=pit_forbid_forward_fill,
         )
-        from runtime.materialize_service import execute_materialize
+        from factor_engine.runtime.materialize_service import execute_materialize
 
         return execute_materialize(
             self,
@@ -3324,7 +3299,7 @@ class FactorEngine:
             含 ``clickhouse_materialization`` 的结果字典。
         """
         engine, factor, config = cls.from_config(config_path)
-        from runtime.config_runtime import resolve_materialize_kwargs
+        from factor_engine.runtime.config_runtime import resolve_materialize_kwargs
 
         opts = resolve_materialize_kwargs(config)
         return engine.materialize_clickhouse(
@@ -3398,7 +3373,7 @@ class FactorEngine:
             含 ``results``、``dag``、``analyses`` 及可选 ``batch_graph``、
             ``input_dq``、``backend_paths``、``plan_costs`` 等的字典。
         """
-        from runtime.batch_service import execute_run_many
+        from factor_engine.runtime.batch_service import execute_run_many
 
         _assert_backend_plan_authority(self.backend)
         return execute_run_many(
@@ -3443,7 +3418,7 @@ class FactorEngine:
 
         ``precompiled=(dag, analyses)``：跳过重复编译（materialize_many 流式路径用）。
         """
-        from runtime.batch_service import execute_run_many_iter
+        from factor_engine.runtime.batch_service import execute_run_many_iter
 
         _assert_backend_plan_authority(self.backend)
         yield from execute_run_many_iter(
@@ -3498,7 +3473,7 @@ class FactorEngine:
         Raises:
             ImportError: 未安装 joblib。
         """
-        from runtime.batch_service import execute_run_many_parallel
+        from factor_engine.runtime.batch_service import execute_run_many_parallel
 
         _assert_backend_plan_authority(self.backend)
         return execute_run_many_parallel(
@@ -3609,14 +3584,14 @@ class FactorEngine:
         Returns:
             含 ``result``（已裁剪）、``incremental`` 计划及 ``analysis``、``plan`` 的字典。
         """
-        from cleaned_operators.operator_policy import infer_source_bar_freq
-        from runtime.incremental import (
+        from factor_engine.cleaned_operators.operator_policy import infer_source_bar_freq
+        from factor_engine.runtime.incremental import (
             build_incremental_plan,
             slice_factor_result_for_incremental,
         )
-        from storage.materializer import ParquetMaterializer
-        from storage.time_window import narrow_data_source_for_window
-        from storage.trading_calendar import get_trading_calendar, infer_market
+        from factor_engine.storage.materializer import ParquetMaterializer
+        from factor_engine.storage.time_window import narrow_data_source_for_window
+        from factor_engine.storage.trading_calendar import get_trading_calendar, infer_market
 
         fid = factor_id or factor.name
         materializer = ParquetMaterializer(lake_root=lake_root)
@@ -3643,7 +3618,7 @@ class FactorEngine:
         # checkpoint, so the recompute-tail overlap is unnecessary (the boundary
         # state is exact, not re-derived).  Zeroing it makes output_start =
         # watermark + 1 and the terminal checkpoint usable by the next run.
-        from runtime.stateful_incremental import segmented_incremental_available
+        from factor_engine.runtime.stateful_incremental import segmented_incremental_available
 
         segmented_eligible = (
             getattr(analysis, "ir", None) is not None
@@ -3695,9 +3670,9 @@ class FactorEngine:
         # A recursive operator cannot use a finite look-back window (its state
         # would be wrong), so when the checkpoint path is unavailable this block
         # forces a full-history replay instead of the narrow-and-replay path.
-        from runtime.incremental import FULL_HISTORY_LOOKBACK_SENTINEL
-        from runtime.stateful_checkpoint_store import StatefulCheckpointStore
-        from runtime.stateful_incremental import (
+        from factor_engine.runtime.incremental import FULL_HISTORY_LOOKBACK_SENTINEL
+        from factor_engine.runtime.stateful_checkpoint_store import StatefulCheckpointStore
+        from factor_engine.runtime.stateful_incremental import (
             try_stateful_segmented_incremental,
         )
 
@@ -3906,7 +3881,7 @@ class FactorEngine:
         if output["result"] is None or len(output["result"]) == 0:
             output["result"] = _empty_factor_series()
 
-        from runtime.materialize_service import execute_materialize
+        from factor_engine.runtime.materialize_service import execute_materialize
 
         output = execute_materialize(
             self,

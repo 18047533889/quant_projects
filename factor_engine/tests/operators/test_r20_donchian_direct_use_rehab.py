@@ -23,16 +23,16 @@ import pytest
 
 
 def _ensure_technical_chain() -> None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if OperatorRegistry.lifecycle() == "frozen":
         return
     if OperatorRegistry.get("donchian_width_pct", "pandas_numpy") is not None:
         return
-    from cleaned_operators.technical import signal  # noqa: F401
-    from cleaned_operators.technical import polars_signal  # noqa: F401
-    from cleaned_operators import composite_fastpath  # noqa: F401
-    from cleaned_operators.technical import indicators_v2  # noqa: F401
+    from factor_engine.cleaned_operators.technical import signal  # noqa: F401
+    from factor_engine.cleaned_operators.technical import polars_signal  # noqa: F401
+    from factor_engine.cleaned_operators import composite_fastpath  # noqa: F401
+    from factor_engine.cleaned_operators.technical import indicators_v2  # noqa: F401
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -41,7 +41,7 @@ def _bootstrap():
 
 
 def _op(name: str):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get(name, "pandas_numpy") or OperatorRegistry.get(name)
     assert op is not None, f"{name} not registered"
@@ -185,7 +185,7 @@ def test_donchian_family_param_specs_and_relative_alpha_classification():
         for p in params:
             assert specs[p].dtype is not None, f"{name}.{p} has no dtype"
 
-    from mining.direct_use import _RELATIVE_ALPHA_OPS
+    from factor_engine.mining.direct_use import _RELATIVE_ALPHA_OPS
 
     promoted = {
         "donchian_width_pct", "donchian_channel_position",
@@ -199,14 +199,14 @@ def test_donchian_family_param_specs_and_relative_alpha_classification():
 
 def test_donchian_family_not_recursive_ewm_and_daily_surface():
     # Rolling-only: bounded state, no full_replay governance tag.
-    from cleaned_operators.technical.indicators_v2 import _RECURSIVE_EWM
+    from factor_engine.cleaned_operators.technical.indicators_v2 import _RECURSIVE_EWM
 
     for name in ("donchian_width_pct", "donchian_channel_position",
                  "donchian_breakout_up", "donchian_breakout_down"):
         assert name not in _RECURSIVE_EWM
         assert "stateful" not in _op(name).metadata.tags
 
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     for name in ("donchian_width_pct", "donchian_channel_position",
                  "donchian_breakout_up", "donchian_breakout_down"):

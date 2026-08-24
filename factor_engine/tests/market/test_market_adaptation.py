@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from market.capability_resolver import explain_expression_support
+from factor_engine.market.capability_resolver import explain_expression_support
 
 _US_BLOCKED_EXPRESSIONS = [
     # minute-microstructure family (FULL_MINUTE_OHLCV is A-share only)
@@ -41,7 +41,7 @@ _US_BLOCKED_EXPRESSIONS = [
 
 @pytest.fixture(scope="module", autouse=True)
 def _load():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
 

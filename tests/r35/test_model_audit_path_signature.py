@@ -33,10 +33,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
 # Importing the modules registers their canonicals directly (no load_all needed,
 # so the tests are robust to concurrent-session load blockers elsewhere).
-import cleaned_operators.research_transform  # noqa: E402, F401  (mahalanobis anomaly)
-import cleaned_operators.ts_model.path_signature as ps  # noqa: E402  (3 canonicals)
-from cleaned_operators.model_timing import TimingKind, timing_kind_for  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+import factor_engine.cleaned_operators.research_transform  # noqa: E402, F401  (mahalanobis anomaly)
+import factor_engine.cleaned_operators.ts_model.path_signature as ps  # noqa: E402  (3 canonicals)
+from factor_engine.cleaned_operators.model_timing import TimingKind, timing_kind_for  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 
 def _get(name: str):

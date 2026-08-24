@@ -110,17 +110,17 @@ def main() -> int:
     import sys
     sys.path.insert(0, ".")
     sys.path.insert(0, "..")
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
-    from cleaned_operators.operator_surface import classify_canonical
-    from cleaned_operators.operator_policy import infer_operator_policy
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
 
     load_all()
     sha = git_sha()
 
     sql_impl: set[str] = set()
     try:
-        from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
+        from factor_engine.backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
         sql_impl = set(SQL_IMPLEMENTED_CANONICALS)
     except Exception:
         pass
@@ -165,9 +165,9 @@ def _is_native_polars(canonical: str) -> bool:
     """True when the polars slot is a real expression-native backend (not the
     honest pandas-delegate UDF stamped by polars_gap_coverage)."""
     try:
-        from cleaned_operators.polars_gap_coverage import _stamp_delegate_meta
+        from factor_engine.cleaned_operators.polars_gap_coverage import _stamp_delegate_meta
         # delegate slots carry execution_kind == "polars_udf_pandas_delegate"
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
         cat = OperatorRegistry._catalog.get(canonical, {})
         if cat.get("execution_kind") == "polars_udf_pandas_delegate":
             return False

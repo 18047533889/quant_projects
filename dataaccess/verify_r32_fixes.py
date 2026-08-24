@@ -27,7 +27,7 @@ def verify_identity_ordering():
 
 def verify_credential_family_atomicity():
     """P0-048: Credential security vulnerability fix."""
-    from security.credentials import EnvCredentialProvider, ValidationError
+    from factor_engine.security.credentials import EnvCredentialProvider, ValidationError
 
     # Save original env
     orig_env = os.environ.copy()
@@ -62,7 +62,7 @@ def verify_credential_family_atomicity():
 def verify_service_import():
     """Service import fix: duplicate asynccontextmanager."""
     try:
-        from service.app import create_app
+        from factor_engine.service.app import create_app
         print("✓ Service import fix verified")
         return True
     except Exception as e:

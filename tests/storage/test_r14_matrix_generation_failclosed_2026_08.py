@@ -19,7 +19,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from storage.materialize.factor_matrix_materializer import (
+from factor_engine.storage.materialize.factor_matrix_materializer import (
     FactorMatrixCorruptionError,
     FactorMatrixMaterializer,
     FactorMatrixReadError,
@@ -44,7 +44,7 @@ def _write_manifest(base, gen_id: str) -> dict:
         "manifest_version": 1,
         "generation": gen_id,
     }
-    from storage.materialize.factor_matrix_materializer import (
+    from factor_engine.storage.materialize.factor_matrix_materializer import (
         _write_manifest_atomic,
     )
 

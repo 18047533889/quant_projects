@@ -9,13 +9,13 @@ pytestmark = pytest.mark.skip(reason="legacy P1 batch is outside the static dail
 
 pytest.importorskip("polars")
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from backend.production_fastpath_tiers import P1_EXTENDED_CANONICALS
-from cleaned_operators import load_all
-from runtime.engine import FactorEngine
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.backend.production_fastpath_tiers import P1_EXTENDED_CANONICALS
+from factor_engine.cleaned_operators import load_all
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 

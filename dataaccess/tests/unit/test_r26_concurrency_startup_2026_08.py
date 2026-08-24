@@ -175,10 +175,22 @@ def _http_client_with_store(store):
 
 
 def test_tr26_svc003_ready_uses_real_engine_api():
-    """R26-P0-021：/ready 用真实 public engine API（execute_arrow），不是 .execute()。"""
+    """R26-P0-021：/ready 用真实 public engine API（execute_arrow），不是 .execute()。
+
+    本测试只验证 engine probe 走真实 ``execute_arrow`` 路径，不验证真实 store 的
+    startup gate（开发机 research 模式会因未配置 CredentialProvider / legacy home
+    fallback 等产生非阻塞 problems，导致 /ready fail-closed 503）。因此把 startup
+    gate 隔离为干净证书，让 /ready 走到 engine probe。
+    """
+    from data_access.runtime.startup_gate import build_startup_certificate
+
     client, store = _http_client_with_store(_base_store())
-    with patch("data_access.service.app.get_store", return_value=store):
-        resp = client.get("/ready")
+    with patch("data_access.service.app.get_store", return_value=store), patch(
+        "data_access.runtime.startup_gate.run_startup_gate",
+        return_value=build_startup_certificate(True, []),
+    ):
+        with client:
+            resp = client.get("/ready")
     assert resp.status_code == 200
     assert resp.json()["status"] == "ready"
     assert resp.json()["engine"] == "ok"

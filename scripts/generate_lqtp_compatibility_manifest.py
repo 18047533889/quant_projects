@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from api.lqtp_capabilities import build_lqtp_capability_manifest
+from factor_engine.api.lqtp_capabilities import build_lqtp_capability_manifest
 
 DEFAULT_OUTPUT = ROOT / "docs" / "lqtp_compatibility_manifest.json"
 

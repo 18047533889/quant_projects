@@ -66,8 +66,8 @@ warnings.warn(
 
 # 防御性 import：并发 session 可能改 factor_source_plan；不可得时用本地兜底。
 try:
-    from planner.factor_source_plan import FactorSourcePlan as _FactorSourcePlan
-    from planner.factor_source_plan import stable_digest as _stable_digest
+    from factor_engine.planner.factor_source_plan import FactorSourcePlan as _FactorSourcePlan
+    from factor_engine.planner.factor_source_plan import stable_digest as _stable_digest
 except Exception:  # pragma: no cover - 极端 import 环境
     _FactorSourcePlan = None  # type: ignore[assignment]
 
@@ -470,7 +470,7 @@ def plan_from_factors(
 def _as_time_range(time_range: Any) -> Any:
     """把 plan 的 time_range 适配为既有 typed ``TimeRange``（失败返回 None）。"""
     try:
-        from planner.source_binding import TimeRange
+        from factor_engine.planner.source_binding import TimeRange
     except Exception:  # pragma: no cover
         return None
     if isinstance(time_range, TimeRange):
@@ -492,8 +492,8 @@ def batch_data_request(plan: Any) -> Any | None:
     无成本规划降级），绝不抛异常。
     """
     try:
-        from planner.batch_data_request import BatchDataRequest, SourceScanGroup
-        from planner.physical_factor_dag import SourceScopeId
+        from factor_engine.planner.batch_data_request import BatchDataRequest, SourceScanGroup
+        from factor_engine.planner.physical_factor_dag import SourceScopeId
     except Exception:  # pragma: no cover
         return None
     if plan is None:

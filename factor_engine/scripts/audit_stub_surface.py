@@ -37,12 +37,12 @@ def main() -> int:
     args = parser.parse_args()
 
     stubs = set(_stub_definitions())
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
     load_all()
 
-    from cleaned_operators.operator_surface import classify_canonical
-    from cleaned_operators.production_hardening import factor_production_targets
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.production_hardening import factor_production_targets
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     canonicals = set(OperatorRegistry.list_canonical())
     aliases = set(OperatorRegistry._aliases)

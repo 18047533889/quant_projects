@@ -34,7 +34,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _get(name: str):
@@ -49,7 +49,7 @@ def _panel(vals: np.ndarray) -> pd.DataFrame:
 
 
 def _load():
-    import cleaned_operators.ts_model.state_space  # noqa: F401
+    import factor_engine.cleaned_operators.ts_model.state_space  # noqa: F401
 
 
 # ---------------------------------------------------------------------------

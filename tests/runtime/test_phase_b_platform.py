@@ -8,21 +8,21 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from api import rank, ts_mean
-from api.columns import col
-from api.factor import Factor
-from backend.pandas_backend import PandasBackend
-from backend.routing_env import routing_execution_scope
+from factor_engine.api import rank, ts_mean
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.backend.routing_env import routing_execution_scope
 from data_access.read.stats import DatasetStatsSnapshot, estimate_column_null_ratios
-from runtime.engine import FactorEngine
-from runtime.perf_config import PerfConfig
-from runtime.quality.input_dq import (
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.runtime.perf_config import PerfConfig
+from factor_engine.runtime.quality.input_dq import (
     InputDQThresholds,
     adjust_input_dq_thresholds_from_stats,
 )
-from runtime.task_queue import FileTaskQueue, JOB_TYPE_DATA_EVENT, enqueue_data_event
-from storage.materialize.factor_matrix_materializer import FactorMatrixMaterializer
-from storage.result_store import PandasResultStore
+from factor_engine.runtime.task_queue import FileTaskQueue, JOB_TYPE_DATA_EVENT, enqueue_data_event
+from factor_engine.storage.materialize.factor_matrix_materializer import FactorMatrixMaterializer
+from factor_engine.storage.result_store import PandasResultStore
 from tests.helpers import InMemorySeriesSource
 
 

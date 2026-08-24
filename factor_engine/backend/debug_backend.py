@@ -1,6 +1,6 @@
 """调试后端：不访问真实数据，只把逻辑计划树打印成缩进文本，便于检查编译结果。"""
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 from .base import Backend
 from .context import ExecutionContext

@@ -3,7 +3,7 @@
 import sys
 sys.path.insert(0, '.')
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 # R47 operators
 r47_ops = [
@@ -56,7 +56,7 @@ true_gap_ops = [
 all_new_ops = sorted(set(r47_ops + true_gap_ops))
 
 # Load all operators by calling load_all()
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 load_all()
 
 print('Backend Coverage for New Operators:')

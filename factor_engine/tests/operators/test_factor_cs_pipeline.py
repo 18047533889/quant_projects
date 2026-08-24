@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from runtime.config import load_config
+from factor_engine.runtime.config import load_config
 
 
 def test_factor_cs_pipeline_profile_loads():
@@ -21,7 +21,7 @@ def test_factor_cs_pipeline_profile_loads():
 def test_pr5_datasets_registered_with_schema():
     from pathlib import Path
 
-    from api.datasets_contract import audit_pr5_datasets_contract
+    from factor_engine.api.datasets_contract import audit_pr5_datasets_contract
     from data_access.registry import load_registry
 
     registry = load_registry()

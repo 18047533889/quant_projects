@@ -73,7 +73,7 @@ def execution_identity_from_config(
     re-resolving when the caller already has it — the resolved write target /
     market / PIT flags must enter the identity so CLI overrides affect grouping.
     """
-    from runtime.config_runtime import (
+    from factor_engine.runtime.config_runtime import (
         build_data_source_config,
         resolve_materialize_kwargs_for_pipeline,
     )

@@ -56,12 +56,12 @@ def strict_fiscal_parameter_domain_certification_guard():
 # P0-01/P1-05: full logical-contract backfill onto backend operator metadata.
 # ---------------------------------------------------------------------------
 def test_registry_backfill_copies_full_logical_contract() -> None:
-    from cleaned_operators.base import ParamSpec, RelationalParamSpec
-    from cleaned_operators.base_polars import (
+    from factor_engine.cleaned_operators.base import ParamSpec, RelationalParamSpec
+    from factor_engine.cleaned_operators.base_polars import (
         OperatorMetadata as PolarsMetadata,
         SeriesOperator as PolarsSeriesOperator,
     )
-    from cleaned_operators.registry import _backfill_logical_contract
+    from factor_engine.cleaned_operators.registry import _backfill_logical_contract
 
     prev = {
         "param_specs": {"window": ParamSpec(dtype=int, min=2, default=8)},
@@ -115,12 +115,12 @@ def test_registry_backfill_native_spec_must_match_canonical() -> None:
     slots; a conflicting non-empty value was the bug).  An empty native slot
     still inherits the canonical value.
     """
-    from cleaned_operators.base import ParamSpec
-    from cleaned_operators.base_polars import (
+    from factor_engine.cleaned_operators.base import ParamSpec
+    from factor_engine.cleaned_operators.base_polars import (
         OperatorMetadata as PolarsMetadata,
         SeriesOperator as PolarsSeriesOperator,
     )
-    from cleaned_operators.registry import _backfill_logical_contract
+    from factor_engine.cleaned_operators.registry import _backfill_logical_contract
 
     prev = {"param_specs": {"window": ParamSpec(dtype=int, min=2)}}
 
@@ -162,8 +162,8 @@ def test_registry_backfill_native_spec_must_match_canonical() -> None:
 def test_pl_to_pd_preserves_time_axis() -> None:
     import polars as pl
 
-    from cleaned_operators.common._polars_bridge import frame_time_index, to_pandas_panel
-    from cleaned_operators.rolling_pack import _pl_to_pd
+    from factor_engine.cleaned_operators.common._polars_bridge import frame_time_index, to_pandas_panel
+    from factor_engine.cleaned_operators.rolling_pack import _pl_to_pd
 
     n = 5
     df = pl.DataFrame(
@@ -192,8 +192,8 @@ def test_pl_to_pd_preserves_time_axis() -> None:
 # P0-06: MaxAvailability resolves CONCRETE timestamps (no descriptor order).
 # ---------------------------------------------------------------------------
 def test_latest_availability_concrete_max() -> None:
-    from ir.schema import propagate_available_at
-    from ir.types import (
+    from factor_engine.ir.schema import propagate_available_at
+    from factor_engine.ir.types import (
         MaxAvailability,
         PubDate,
         SessionClose,
@@ -228,7 +228,7 @@ def test_latest_availability_concrete_max() -> None:
 # P0-07/08: PanelIdentity ordered-pair identity + stable hash.
 # ---------------------------------------------------------------------------
 def test_panel_identity_ordered_pairs_distinguished() -> None:
-    from cleaned_operators.common._polars_bridge import PanelIdentity
+    from factor_engine.cleaned_operators.common._polars_bridge import PanelIdentity
 
     mi_a = pd.MultiIndex.from_tuples(
         [("2024-01-01", "A"), ("2024-01-01", "B"), ("2024-01-02", "A")],
@@ -247,7 +247,7 @@ def test_panel_identity_ordered_pairs_distinguished() -> None:
 
 
 def test_panel_identity_hash_stable_across_processes() -> None:
-    from cleaned_operators.common._polars_bridge import PanelIdentity
+    from factor_engine.cleaned_operators.common._polars_bridge import PanelIdentity
 
     mi = pd.MultiIndex.from_tuples(
         [("2024-01-01", "A"), ("2024-01-01", "B"), ("2024-01-02", "A")],
@@ -277,7 +277,7 @@ def test_panel_identity_hash_stable_across_processes() -> None:
 # P0-09: BroadcastSpec structured contract, unknown index fails closed.
 # ---------------------------------------------------------------------------
 def test_broadcast_spec_fail_closed() -> None:
-    from cleaned_operators.base import (
+    from factor_engine.cleaned_operators.base import (
         BroadcastSpec,
         OperatorMetadata,
         _verify_broadcast_specs,
@@ -307,7 +307,7 @@ def test_broadcast_spec_fail_closed() -> None:
 # P0-10: single-row universe mask cannot be broadcast across dates.
 # ---------------------------------------------------------------------------
 def test_universe_mask_single_row_rejected() -> None:
-    from cleaned_operators.alignment import PanelAxisMismatch, apply_universe_mask
+    from factor_engine.cleaned_operators.alignment import PanelAxisMismatch, apply_universe_mask
 
     idx = pd.bdate_range("2024-01-01", periods=5)
     panel = pd.DataFrame(np.ones((5, 3)), index=idx, columns=["a", "b", "c"])
@@ -327,7 +327,7 @@ def test_universe_mask_single_row_rejected() -> None:
 # P0-11/P1-08/P1-09: RQA formulas.
 # ---------------------------------------------------------------------------
 def test_rqa_eps_scales_with_sqrt_dim() -> None:
-    from cleaned_operators.recurrence_analysis import _recurrence_stats_window
+    from factor_engine.cleaned_operators.recurrence_analysis import _recurrence_stats_window
 
     rng = np.random.default_rng(0)
     x = np.cumsum(rng.normal(0, 1.0, 120))
@@ -338,7 +338,7 @@ def test_rqa_eps_scales_with_sqrt_dim() -> None:
 
 
 def test_rqa_entropy_normalized_within_bounds() -> None:
-    from cleaned_operators.recurrence_analysis import _recurrence_stats_window
+    from factor_engine.cleaned_operators.recurrence_analysis import _recurrence_stats_window
 
     v = np.sin(np.linspace(0, 30, 60))
     stats = _recurrence_stats_window(v, 1, 1, 0.15, 2)
@@ -348,7 +348,7 @@ def test_rqa_entropy_normalized_within_bounds() -> None:
 
 
 def test_rqa_theiler_rate_not_denominator_collapse() -> None:
-    from cleaned_operators.rqa_ext import _rqa_stats_window
+    from factor_engine.cleaned_operators.rqa_ext import _rqa_stats_window
 
     rng = np.random.default_rng(1)
     x = np.cumsum(rng.normal(0, 1.0, 120))
@@ -361,7 +361,7 @@ def test_rqa_theiler_rate_not_denominator_collapse() -> None:
 # P1-01: constrained typed slot + UNKNOWN kind fails closed in production.
 # ---------------------------------------------------------------------------
 def test_typed_input_strict_unknown() -> None:
-    from ir.analyzer import validate_input_type_contracts
+    from factor_engine.ir.analyzer import validate_input_type_contracts
 
     class _Node:
         def __init__(self, op, inputs=None, semantic_attrs=None, attrs=None):
@@ -387,7 +387,7 @@ def test_typed_input_strict_unknown() -> None:
 # P1-10: unified group-key missing-value normalisation.
 # ---------------------------------------------------------------------------
 def test_group_key_missing_normalization() -> None:
-    from cleaned_operators.common.group_key import is_missing_group_key, normalize_group_key
+    from factor_engine.cleaned_operators.common.group_key import is_missing_group_key, normalize_group_key
 
     for lab in [None, np.nan, float("nan"), pd.NA, pd.NaT, ""]:
         assert is_missing_group_key(lab), repr(lab)
@@ -401,7 +401,7 @@ def test_group_key_missing_normalization() -> None:
 # P1-11: align_panel_inputs(strict_axes=False) requires an AlignmentPlan.
 # ---------------------------------------------------------------------------
 def test_align_panel_inputs_requires_plan() -> None:
-    from cleaned_operators.alignment import AlignmentPlan, PanelAxisMismatch, align_panel_inputs
+    from factor_engine.cleaned_operators.alignment import AlignmentPlan, PanelAxisMismatch, align_panel_inputs
 
     idx = pd.bdate_range("2024-01-01", periods=3)
     a = pd.DataFrame(np.ones((3, 2)), index=idx, columns=["x", "y"])
@@ -422,7 +422,7 @@ def test_align_panel_inputs_requires_plan() -> None:
 def test_financial_lookback_production_fail_closed() -> None:
     import os
 
-    from ir import analyzer as A
+    from factor_engine.ir import analyzer as A
 
     os.environ.pop("FACTOR_ENGINE_REPORT_PERIOD_LOOKBACK_ROWS", None)
     r = A._financial_lookback("fin_yoy", {"periods": 2}, production=False)
@@ -436,8 +436,8 @@ def test_financial_lookback_production_fail_closed() -> None:
 # P0-04: shape-changing (minute->daily) result bypasses exact index check.
 # ---------------------------------------------------------------------------
 def test_normalize_operator_result_shape_changing() -> None:
-    from backend.cleaned_bridge import _normalize_operator_result
-    from cleaned_operators.base import OperatorMetadata
+    from factor_engine.backend.cleaned_bridge import _normalize_operator_result
+    from factor_engine.cleaned_operators.base import OperatorMetadata
 
     class _Ctx:
         timestamp_col = "ts"
@@ -446,7 +446,7 @@ def test_normalize_operator_result_shape_changing() -> None:
         def __init__(self, native=False):
             self._native = native
 
-    import backend.cleaned_bridge as cb
+    import factor_engine.backend.cleaned_bridge as cb
 
     def _native_enabled(ctx):
         return getattr(ctx, "_native", False)

@@ -1,6 +1,6 @@
 # R18 Delete / remediation plan
 
-Fingerprint: `14c60aae68231ff6d94b6c5a27a2c046ab362ef6` (dirty=True)
+Fingerprint: `7dea2af5d3c27fd6e85432aac098903797e4b93e` (dirty=True)
 
 **30** canonicals to delete / move.
 

@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("duckdb")
 
-from backend.sql_tiers import (
+from factor_engine.backend.sql_tiers import (
     SQL_PRODUCTION_SAFE_CANONICALS,
     duckdb_downgraded_canonicals,
     effective_sql_production_safe,

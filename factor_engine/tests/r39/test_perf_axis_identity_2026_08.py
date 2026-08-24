@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.axis_identity_certificate import (
+from factor_engine.cleaned_operators.axis_identity_certificate import (
     AxisIdentityCertificate,
     axis_identity_certificate_hit,
     axis_identity_compute_count,
@@ -27,7 +27,7 @@ from cleaned_operators.axis_identity_certificate import (
     clear_certificates,
     reset_axis_identity_counters,
 )
-from cleaned_operators.common._polars_bridge import (
+from factor_engine.cleaned_operators.common._polars_bridge import (
     PanelIdentity,
     verify_frames_share_identity,
 )

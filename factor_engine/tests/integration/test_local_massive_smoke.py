@@ -9,7 +9,7 @@ import pytest
 
 yaml = pytest.importorskip("yaml")
 
-from runtime.engine import FactorEngine
+from factor_engine.runtime.engine import FactorEngine
 from workspace_paths import quant_projects_root, resolve_path
 
 

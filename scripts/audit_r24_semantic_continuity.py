@@ -211,7 +211,7 @@ def _symbol_gates() -> dict[str, list[str]]:
     except Exception as exc:  # pragma: no cover
         out["PIT_OMITTED_LAYER_ASSUMED_TRUE"].append(f"import/run failed: {exc}")
     try:
-        from storage.sources.field_plan import MissingSemantic, NormalizedFieldPlan
+        from factor_engine.storage.sources.field_plan import MissingSemantic, NormalizedFieldPlan
 
         if MissingSemantic.OUT_OF_COVERAGE.value != "out_of_coverage":
             out["CURRENT_SNAPSHOT_MARKED_NOT_APPLICABLE"].append("OUT_OF_COVERAGE missing")
@@ -222,16 +222,16 @@ def _symbol_gates() -> dict[str, list[str]]:
     except Exception as exc:  # pragma: no cover
         out["FIELD_PLAN_TEMPORAL_METADATA_LOST"].append(f"import/run failed: {exc}")
     try:
-        from api.source_ref import decode_source_ref_production, make_source_ref
+        from factor_engine.api.source_ref import decode_source_ref_production, make_source_ref
 
         a = make_source_ref("StockIncome", "revenue", market="ashare", dataset="d_a")
         us = make_source_ref("StockIncome", "revenue", market="us", dataset="d_u")
-        from api.source_ref import encode_source_ref
+        from factor_engine.api.source_ref import encode_source_ref
 
         if encode_source_ref(a) == encode_source_ref(us):
             out["SOURCE_REF_CROSS_MARKET_COLLISION"].append("A and US revenue encode identically")
         try:
-            from api.source_ref import decode_source_ref
+            from factor_engine.api.source_ref import decode_source_ref
 
             bad = make_source_ref("S", "f", dialect_version="1999-01-01")
             decode_source_ref_production(encode_source_ref(bad))
@@ -241,7 +241,7 @@ def _symbol_gates() -> dict[str, list[str]]:
     except Exception as exc:  # pragma: no cover
         out["SOURCE_REF_CROSS_MARKET_COLLISION"].append(f"import/run failed: {exc}")
     try:
-        from api.label_pit import LabelOp, default_mining_label_config
+        from factor_engine.api.label_pit import LabelOp, default_mining_label_config
 
         cfg = default_mining_label_config(horizon_bars=5)
         if cfg["label_formula"] != "forward_return(close, 5)":

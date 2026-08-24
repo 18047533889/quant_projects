@@ -6,10 +6,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from storage.catalog import FactorCatalog
-from storage.materializer import ParquetMaterializer
-from storage.partition_policy import PartitionPolicy, attach_partition_columns, partition_key
-from storage.result_store import PandasResultStore
+from factor_engine.storage.catalog import FactorCatalog
+from factor_engine.storage.materializer import ParquetMaterializer
+from factor_engine.storage.partition_policy import PartitionPolicy, attach_partition_columns, partition_key
+from factor_engine.storage.result_store import PandasResultStore
 
 
 def _series():

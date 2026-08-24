@@ -13,15 +13,15 @@ import json
 import csv
 
 sys.path.insert(0, ".")
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 load_all()
 
-from cleaned_operators.registry import OperatorRegistry as R
-from cleaned_operators.operator_surface import classify_canonical
-from cleaned_operators.operator_policy import infer_operator_policy
-from cleaned_operators.operator_spec import _infer_panel_params, _infer_status, _compute_allow_in_production
-from cleaned_operators.tombstones import ALL_TOMBSTONED_NAMES
-from runtime.execution_contract import execution_contract
+from factor_engine.cleaned_operators.registry import OperatorRegistry as R
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
+from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
+from factor_engine.cleaned_operators.operator_spec import _infer_panel_params, _infer_status, _compute_allow_in_production
+from factor_engine.cleaned_operators.tombstones import ALL_TOMBSTONED_NAMES
+from factor_engine.runtime.execution_contract import execution_contract
 
 rows = []
 for canonical in sorted(R.list_canonical()):

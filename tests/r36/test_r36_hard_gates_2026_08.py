@@ -19,8 +19,8 @@ import pytest
 
 
 def test_max_concurrency_really_limits_admission():
-    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
-    from runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    from factor_engine.runtime.resource_broker import ResourceBroker
 
     broker = ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=4)
     sched = AdaptiveBatchScheduler(broker=broker, max_concurrency=2)
@@ -28,8 +28,8 @@ def test_max_concurrency_really_limits_admission():
 
 
 def test_scheduler_consumes_broker_resource_decision():
-    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
-    from runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    from factor_engine.runtime.resource_broker import ResourceBroker
 
     broker = ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=4)
     sched = AdaptiveBatchScheduler(broker=broker)
@@ -39,8 +39,8 @@ def test_scheduler_consumes_broker_resource_decision():
 
 
 def test_pressure_recovery_auto_upshift():
-    from runtime.resource_autopilot import ResourceController
-    from runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
+    from factor_engine.runtime.resource_autopilot import ResourceController
+    from factor_engine.runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
 
     class _Cpu:
         def __init__(self):
@@ -76,7 +76,7 @@ def test_pressure_recovery_auto_upshift():
 
 
 def test_dynamic_wave_and_sink_from_decision():
-    from runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.resource_broker import ResourceBroker
 
     broker = ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=4)
     d = broker.resource_decision()
@@ -90,8 +90,8 @@ def test_dynamic_wave_and_sink_from_decision():
 
 
 def test_memory_slope_triggers_predictive_pressure():
-    from runtime.resource_autopilot import ResourceController
-    from runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
+    from factor_engine.runtime.resource_autopilot import ResourceController
+    from factor_engine.runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
 
     class _B:
         hard_cpu_slots = 8
@@ -112,7 +112,7 @@ def test_memory_slope_triggers_predictive_pressure():
 
 
 def test_psi_readers_parse_real_files():
-    from runtime.resource_monitor import psi_cpu, psi_io, psi_memory
+    from factor_engine.runtime.resource_monitor import psi_cpu, psi_io, psi_memory
 
     for reader in (psi_cpu, psi_memory, psi_io):
         out = reader()
@@ -127,7 +127,7 @@ def test_psi_readers_parse_real_files():
 
 
 def test_memory_governor_uses_family_memory():
-    from runtime.resource_governor import MemoryGovernor, process_family_memory_bytes
+    from factor_engine.runtime.resource_governor import MemoryGovernor, process_family_memory_bytes
 
     v = process_family_memory_bytes(prefer_pss=True)
     assert v is not None and v > 0
@@ -136,7 +136,7 @@ def test_memory_governor_uses_family_memory():
 
 
 def test_run_peak_sampler_windows_only():
-    from runtime.run_peak_sampler import RunPeakSampler
+    from factor_engine.runtime.run_peak_sampler import RunPeakSampler
 
     s = RunPeakSampler(interval_s=0.02)
     s.start()
@@ -152,8 +152,8 @@ def test_run_peak_sampler_windows_only():
 
 
 def test_p99_memory_model_rises_on_underprediction():
-    from runtime.resource_calibration_store import ResourceCalibrationStore
-    from runtime.resource_shape import ResourceShapeKey
+    from factor_engine.runtime.resource_calibration_store import ResourceCalibrationStore
+    from factor_engine.runtime.resource_shape import ResourceShapeKey
 
     store = ResourceCalibrationStore()
     key = ResourceShapeKey("ts_mean", "duckdb", rows_bucket=2, instruments_bucket=2, window_bucket=1)
@@ -169,8 +169,8 @@ def test_p99_memory_model_rises_on_underprediction():
 
 
 def test_calibration_persists_and_restores(tmp_path):
-    from runtime.resource_calibration_store import ResourceCalibrationStore
-    from runtime.resource_shape import ResourceShapeKey
+    from factor_engine.runtime.resource_calibration_store import ResourceCalibrationStore
+    from factor_engine.runtime.resource_shape import ResourceShapeKey
 
     key = ResourceShapeKey("ts_mean", "polars", rows_bucket=1, instruments_bucket=1, window_bucket=0)
     store = ResourceCalibrationStore()
@@ -190,7 +190,7 @@ def test_calibration_persists_and_restores(tmp_path):
 
 
 def test_writer_failure_is_fatal():
-    from runtime.streaming_result_sink import StreamingResultSink
+    from factor_engine.runtime.streaming_result_sink import StreamingResultSink
 
     def _boom(batch):
         raise OSError("disk full")
@@ -203,8 +203,8 @@ def test_writer_failure_is_fatal():
 
 
 def test_sink_backpressure_reduces_compute_admission():
-    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
-    from runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    from factor_engine.runtime.resource_broker import ResourceBroker
 
     broker = ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=8)
     sched = AdaptiveBatchScheduler(broker=broker, max_concurrency=8)
@@ -224,7 +224,7 @@ def test_sink_backpressure_reduces_compute_admission():
 
 
 def test_governed_buffer_store_rejects_over_budget_and_reconciles():
-    from runtime.buffer_store import GovernedBufferStore, STATUS_MEMORY
+    from factor_engine.runtime.buffer_store import GovernedBufferStore, STATUS_MEMORY
 
     store = GovernedBufferStore({}, budget_bytes=100)
     # R38 P0-029：put 返回 BufferPutResult（不再裸 bool）。
@@ -237,13 +237,13 @@ def test_governed_buffer_store_rejects_over_budget_and_reconciles():
 
 
 def test_cache_governance_fail_closed_when_register_fails(monkeypatch):
-    import runtime.resource_governor as rg
+    import factor_engine.runtime.resource_governor as rg
 
     def _boom():
         raise RuntimeError("governor unavailable")
 
     monkeypatch.setattr(rg, "global_memory_governor", _boom)
-    from cache.session import ExecutionCacheSession
+    from factor_engine.cache.session import ExecutionCacheSession
 
     with pytest.raises(RuntimeError, match="governor"):
         ExecutionCacheSession(shared_result_cache={}, strict=True)
@@ -257,7 +257,7 @@ def test_cache_governance_fail_closed_when_register_fails(monkeypatch):
 
 
 def test_host_coordinator_is_single_authority_and_da_derives_envelope():
-    from runtime.host_resource_coordinator import (
+    from factor_engine.runtime.host_resource_coordinator import (
         get_host_coordinator,
         reset_host_coordinator,
     )
@@ -272,7 +272,7 @@ def test_host_coordinator_is_single_authority_and_da_derives_envelope():
 
 
 def test_service_broker_contextvar_no_race():
-    from service import queue as sq
+    from factor_engine.service import queue as sq
 
     results = []
     barrier = threading.Barrier(2)
@@ -298,8 +298,8 @@ def test_service_broker_contextvar_no_race():
 
 
 def test_auto_shard_when_task_exceeds_envelope():
-    from runtime.auto_shard_planner import AutoShardPlanner
-    from runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.runtime.auto_shard_planner import AutoShardPlanner
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
     class T:
         task_id = "root:x"
@@ -312,8 +312,8 @@ def test_auto_shard_when_task_exceeds_envelope():
 
 
 def test_illegal_shard_rejected():
-    from runtime.auto_shard_planner import AutoShardPlanner, legal_shard_dimensions
-    from runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.runtime.auto_shard_planner import AutoShardPlanner, legal_shard_dimensions
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
     class Cs:
         task_id = "root:cs"
@@ -330,13 +330,13 @@ def test_illegal_shard_rejected():
 
 def test_duckdb_cpu_token_matches_engine_threads(monkeypatch):
     monkeypatch.setenv("DUCKDB_MAX_THREADS", "6")
-    from planner.physical_lowerer import _engine_threads_for
+    from factor_engine.planner.physical_lowerer import _engine_threads_for
 
     assert _engine_threads_for("duckdb_sql") == 6
 
 
 def test_concurrent_global_resource_scope_race_detected():
-    from runtime.resource_governor import ExecutionResourceScope, _ACTIVE_SCOPE_THREADS
+    from factor_engine.runtime.resource_governor import ExecutionResourceScope, _ACTIVE_SCOPE_THREADS
 
     _ACTIVE_SCOPE_THREADS.add(999999)
     try:
@@ -347,14 +347,14 @@ def test_concurrent_global_resource_scope_race_detected():
 
 
 def test_blas_oversubscription_detected():
-    from runtime.resource_governor import check_nested_cpu_oversubscription
+    from factor_engine.runtime.resource_governor import check_nested_cpu_oversubscription
 
     assert check_nested_cpu_oversubscription(8, 8, 16) is True
     assert check_nested_cpu_oversubscription(2, 4, 16) is False
 
 
 def test_numba_parallel_contract_cpu_tokens():
-    from runtime.task_resource_contract import parallel_kernel_contract
+    from factor_engine.runtime.task_resource_contract import parallel_kernel_contract
 
     c = parallel_kernel_contract(numba_threads=8, peak_memory_bytes=1024)
     assert c.cpu_tokens == 8 and c.backend_threads == 8
@@ -366,8 +366,8 @@ def test_numba_parallel_contract_cpu_tokens():
 
 
 def test_co_tenancy_memory_stress_no_oom():
-    from runtime.resource_broker import ResourceBroker
-    from runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
     # 2GB 硬上限（模拟小容器）→ 大 task 拒绝而非 OOM。
     broker = ResourceBroker(hard_memory_limit=2 * 1024**3, cpu_slots=4, min_host_reserve_gb=0.0, min_host_reserve_fraction=0.0)
@@ -376,8 +376,8 @@ def test_co_tenancy_memory_stress_no_oom():
 
 
 def test_co_tenancy_recovery_after_external_load():
-    from runtime.resource_autopilot import ResourceController
-    from runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
+    from factor_engine.runtime.resource_autopilot import ResourceController
+    from factor_engine.runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
 
     class _Cpu:
         def __init__(self):

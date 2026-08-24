@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import polars as pl
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 load_all()
 
@@ -38,7 +38,7 @@ def test_selected_authorities_have_canonical_expected_shortfall_abi() -> None:
     assert POLARS is not None
     assert PANDAS.metadata.param_names == ["x", "window", "q", "side", "min_tail_count"]
     assert POLARS.metadata.param_names == ["x", "window", "q", "side", "min_tail_count"]
-    assert type(POLARS).__module__ == "cleaned_operators.rolling_pack"
+    assert type(POLARS).__module__ == "factor_engine.cleaned_operators.rolling_pack"
 
 
 def test_expected_shortfall_selected_backends_match_direct_window_oracle() -> None:

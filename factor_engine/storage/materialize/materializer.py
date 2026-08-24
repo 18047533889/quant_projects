@@ -44,7 +44,7 @@ import pandas as pd
 
 from workspace_paths import default_factor_lake_root
 
-from runtime.factor_identity import (
+from factor_engine.runtime.factor_identity import (
     NO_FACTOR_IDENTITY,
     FactorIdentityMismatch,
     FactorSemanticIdentity,
@@ -66,18 +66,18 @@ from ..partition_policy import (
 )
 from logging_utils import ProgressLogger, get_logger
 
-logger = get_logger("storage.materializer")
+logger = get_logger("factor_engine.storage.materializer")
 
-from storage.factor_schema import FACTOR_METADATA_COLUMNS as METADATA_COLUMNS
+from factor_engine.storage.factor_schema import FACTOR_METADATA_COLUMNS as METADATA_COLUMNS
 
-from storage.partition_stats import (
+from factor_engine.storage.partition_stats import (
     PartitionCommitStats,
     WritePassDQStats,
     compute_partition_commit_stats,
     compute_write_pass_dq,
     count_parquet_rows_from_footer,
 )
-from storage.write_amplification import WriteAmplificationTracker
+from factor_engine.storage.write_amplification import WriteAmplificationTracker
 
 # ---------------------------------------------------------------------------
 # R39 §28 hard-gate counters (read by scripts/r39_hard_gates_audit.py).
@@ -433,7 +433,7 @@ class ParquetMaterializer:
         # --- 0. 可选 DQ 门禁（在清洗前检查原始 result）---
         dq_report = None
         if dq_check:
-            from runtime.dq_gates import assert_factor_dq
+            from factor_engine.runtime.dq_gates import assert_factor_dq
 
             dq_report = assert_factor_dq(
                 result,
@@ -586,7 +586,7 @@ class ParquetMaterializer:
         # --- 0. 可选 DQ 门禁（在清洗前检查原始 block 值；evaluate_factor_dq 仍运行）---
         dq_report = None
         if dq_check:
-            from runtime.dq_gates import assert_factor_dq
+            from factor_engine.runtime.dq_gates import assert_factor_dq
 
             raw_series = self._block_to_raw_series(block)
             dq_report = assert_factor_dq(
@@ -676,7 +676,7 @@ class ParquetMaterializer:
             author = _get_default_author()
 
         # R32-P0-036/043: factor_id 统一 domain gate。
-        from security.factor_id import validate_factor_id
+        from factor_engine.security.factor_id import validate_factor_id
 
         factor_id = validate_factor_id(factor_id)
 
@@ -706,7 +706,7 @@ class ParquetMaterializer:
             )
 
         # #收官轮 P0（Integration）：write_target 在任何 side effect 之前严格枚举。
-        from storage.write_targets import normalize_write_target
+        from factor_engine.storage.write_targets import normalize_write_target
 
         write_target_flags = normalize_write_target(write_target)
         if production and write_target_flags["local"]:
@@ -1021,7 +1021,7 @@ class ParquetMaterializer:
         self.full_factor_rescan_count += 1
         full_factor_rescan_count += 1
         try:
-            from runtime.perf_counters import get_global_counters
+            from factor_engine.runtime.perf_counters import get_global_counters
 
             get_global_counters().incr("full_factor_rescan_count")
         except Exception:
@@ -1106,12 +1106,12 @@ class ParquetMaterializer:
         those stats (never a full-history value-cell re-scan), and write
         amplification is tracked.
         """
-        from storage.write_targets import normalize_write_target
+        from factor_engine.storage.write_targets import normalize_write_target
 
         # R39: resolve delta-mode activation once for this factor write.
         delta_mode_eff = self._resolve_delta_mode(delta_mode)
         if delta_mode_eff and self._lock_manager is None:
-            from storage.delta_store import PartitionLockManager
+            from factor_engine.storage.delta_store import PartitionLockManager
 
             self._lock_manager = PartitionLockManager()
 
@@ -1216,7 +1216,7 @@ class ParquetMaterializer:
         partition_keys_failed: list[str] = []
         partition_keys_skipped: list[str] = []
 
-        from runtime.lineage import new_run_id
+        from factor_engine.runtime.lineage import new_run_id
 
         checkpoint_run_id = (
             str(run_lineage.get("run_id"))
@@ -1224,7 +1224,7 @@ class ParquetMaterializer:
             else new_run_id()
         )
 
-        from security.factor_id import factor_dir_for
+        from factor_engine.security.factor_id import factor_dir_for
 
         factor_dir = factor_dir_for(self._lake_root, factor_id)
         work_df = attach_partition_columns(df, policy)
@@ -1747,7 +1747,7 @@ class ParquetMaterializer:
         """解析 production 标志：显式值优先，否则从运行模式推断。"""
         if production is not None:
             return bool(production)
-        from runtime.production_policy import is_production_mode
+        from factor_engine.runtime.production_policy import is_production_mode
 
         return is_production_mode()
 
@@ -1921,7 +1921,7 @@ class ParquetMaterializer:
         返回:
             dict
         """
-        from storage.write_targets import resolve_write_target
+        from factor_engine.storage.write_targets import resolve_write_target
 
         policy = policy or PartitionPolicy.from_config()
         out = attach_partition_columns(df, policy)
@@ -2206,7 +2206,7 @@ class ParquetMaterializer:
         monolithic partitions (no manifest) are migrated on first delta write by
         keeping ``data.parquet`` as the base file.
         """
-        from storage.delta_store import (
+        from factor_engine.storage.delta_store import (
             DeltaManifest,
             read_delta_partition,
             write_delta_fragment,
@@ -2292,10 +2292,10 @@ class ParquetMaterializer:
         the per-partition-write path does NOT call the monolithic
         ``_cleanup_orphan_tmp_files`` — this is the single startup scan.
         """
-        from storage.delta_store import recover_orphan_delta_tmp_files
+        from factor_engine.storage.delta_store import recover_orphan_delta_tmp_files
 
         if factor_id is not None:
-            from security.factor_id import factor_dir_for
+            from factor_engine.security.factor_id import factor_dir_for
 
             roots = [factor_dir_for(self._lake_root, factor_id)]
         else:
@@ -2320,11 +2320,11 @@ class ParquetMaterializer:
 
         Produces a single sorted new base equal to the merged base+deltas.
         """
-        from storage.delta_store import compact_partition as _compact
+        from factor_engine.storage.delta_store import compact_partition as _compact
 
         result = _compact(partition_dir, **kwargs)
         # After compaction the manifest holds no deltas → debt drops to 0.
-        from storage.delta_store import DeltaManifest
+        from factor_engine.storage.delta_store import DeltaManifest
 
         man = DeltaManifest.load(partition_dir)
         try:
@@ -2361,7 +2361,7 @@ class ParquetMaterializer:
         返回:
             PartitionCommitStats | None（R39 PERF-049）
         """
-        from storage.factor_format import pivot_long_to_wide, unpivot_wide_to_long
+        from factor_engine.storage.factor_format import pivot_long_to_wide, unpivot_wide_to_long
 
         partition_dir = factor_dir / partition_path_segments(
             part_values, column_order=policy.columns
@@ -2515,7 +2515,7 @@ class ParquetMaterializer:
         返回:
             无
         """
-        from security.factor_id import factor_dir_for, validate_factor_id
+        from factor_engine.security.factor_id import factor_dir_for, validate_factor_id
 
         factor_id = validate_factor_id(factor_id)
         self._catalog.delete_factor(factor_id)

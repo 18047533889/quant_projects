@@ -27,8 +27,8 @@ def _load() -> None:
 
 def main() -> int:
     _load()
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     registry = set(OperatorRegistry.list_canonical())

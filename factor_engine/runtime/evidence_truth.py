@@ -31,7 +31,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from runtime.r34_evidence import (
+from factor_engine.runtime.r34_evidence import (
     EvidenceHeader,
     GateResult,
     component_hashes,
@@ -115,7 +115,7 @@ def fixture_hash_mismatch_cases(
     if golden_dir is None or expected is None:
         return [("fixture:unconfigured", True)]  # 未配置 = N/A，不判 FAIL
     try:
-        from backend.evidence_provenance import _tree_hash
+        from factor_engine.backend.evidence_provenance import _tree_hash
 
         actual = _tree_hash(golden_dir, ("*.py", "*.csv", "*.json", "*.parquet"))
     except Exception:
@@ -356,7 +356,7 @@ def build_manifest_digest() -> str:
 def execution_tcb_hash_value() -> str:
     """TCB 组合 hash（懒加载避免 import 环）。"""
     try:
-        from backend.factor_operator_evidence import execution_tcb_hash
+        from factor_engine.backend.factor_operator_evidence import execution_tcb_hash
 
         return execution_tcb_hash()
     except Exception:
@@ -368,7 +368,7 @@ def artifact_hash_value(path: Path | None = None) -> str:
     p = Path(path) if path is not None else _PRIMITIVE_VERIFIED_JSON
     try:
         if p.is_file():
-            from backend.evidence_provenance import _source_hash
+            from factor_engine.backend.evidence_provenance import _source_hash
 
             return _source_hash(p)
     except Exception:
@@ -410,7 +410,7 @@ def _evidence_validity_uncached(version_key: tuple[str, str, str, str]) -> bool:
     """
     head_sha, build_digest, tcb_hash, artifact_hash = version_key
     try:
-        from backend.evidence_provenance import (
+        from factor_engine.backend.evidence_provenance import (
             _source_hash,
             load_verified_artifact,
         )

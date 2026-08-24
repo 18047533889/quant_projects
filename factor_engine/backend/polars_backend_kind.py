@@ -35,7 +35,7 @@ from enum import Enum
 from typing import Any
 
 # Import from unified contract authority (FE-P0-003, FE-P0-004)
-from backend.contracts import ExecutionKind, PhysicalImplementationSpec
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
 
 
@@ -71,7 +71,7 @@ PANDAS_DELEGATE_SOURCES: frozenset[str] = frozenset({
 #: operators (e.g. ``AbsPolars``), so module membership alone must not imply a
 #: delegate — the kernel-body inspection decides the rest.
 PANDAS_DELEGATE_MODULES: frozenset[str] = frozenset({
-    "cleaned_operators.rolling_pack",          # register_polars_udf / register_polars_bridge
+    "factor_engine.cleaned_operators.rolling_pack",          # register_polars_udf / register_polars_bridge
 })
 
 
@@ -220,7 +220,7 @@ def canonical_polars_kind(canonical: str, *, production_mode: bool = True) -> Po
     FE-P0-005: Defaults to production_mode=True (fail closed).
     """
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
     except Exception:  # pragma: no cover - registry unavailable
         return PolarsImplementationKind.UNSUPPORTED
     if "polars" not in OperatorRegistry.backends_for(canonical):
@@ -279,7 +279,7 @@ def capability_quality(canonical: str, backend: str, *, production_mode: bool = 
 
         # Try explicit spec first
         try:
-            from cleaned_operators.registry import OperatorRegistry
+            from factor_engine.cleaned_operators.registry import OperatorRegistry
             op = OperatorRegistry.get(canonical, "polars")
             if op is not None:
                 spec = get_physical_spec(op)

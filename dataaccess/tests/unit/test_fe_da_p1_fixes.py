@@ -62,7 +62,7 @@ def test_p1_6_env_var_validation_allow_full_sync(monkeypatch):
 def test_p1_6_env_var_validation_snapshot_ttl(monkeypatch):
     """P1-6: FACTOR_ENGINE_DATA_SNAPSHOT_TTL_SECONDS validates positive float."""
     monkeypatch.syspath_prepend(str(Path(__file__).parents[3] / "factor_engine"))
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     for val in ["60", "120.5", "0.1"]:
         monkeypatch.setenv("FACTOR_ENGINE_DATA_SNAPSHOT_TTL_SECONDS", val)

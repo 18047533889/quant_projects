@@ -13,14 +13,14 @@ import pytest
 
 
 def test_event_interval_window_is_bar_not_event_count():
-    import cleaned_operators.event_interval  # noqa: F401  (declares at import)
-    from cleaned_operators.closure.window_semantics import window_semantics_for
+    import factor_engine.cleaned_operators.event_interval  # noqa: F401  (declares at import)
+    from factor_engine.cleaned_operators.closure.window_semantics import window_semantics_for
     s = window_semantics_for("event_interval_memory")
     assert s is not None and s.value == "min_support_window"
 
 
 def test_event_bool_strict():
-    from cleaned_operators.event_interval import _event_mask
+    from factor_engine.cleaned_operators.event_interval import _event_mask
 
     assert np.array_equal(_event_mask(np.array([1.0, 0.0, np.nan, 1.0])),
                           np.array([True, False, False, True]))
@@ -29,7 +29,7 @@ def test_event_bool_strict():
 
 
 def test_event_interval_memory_min_support_six():
-    from cleaned_operators.event_interval import _interval_memory_series
+    from factor_engine.cleaned_operators.event_interval import _interval_memory_series
 
     # Irregular spacing so consecutive-interval correlation is defined.
     rng = np.random.default_rng(0)

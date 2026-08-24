@@ -15,7 +15,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from runtime.execution_traits import (  # noqa: E402
+from factor_engine.runtime.execution_traits import (  # noqa: E402
     EXECUTION_TRAITS,
     nested_thread_oversubscription_error,
     thread_budget,
@@ -94,8 +94,8 @@ def test_thread_budget_zero_is_noop():
 def test_kernel_reference_thread_safe():
     """Numba kernels are nogil and releases-GIL: running the same input twice
     (cold + warm) must give identical output — determinism under threading."""
-    import backend.numba_kernels  # noqa: F401
-    from backend.numba_kernel_registry import NumbaKernelRegistry
+    import factor_engine.backend.numba_kernels  # noqa: F401
+    from factor_engine.backend.numba_kernel_registry import NumbaKernelRegistry
 
     rng = np.random.default_rng(0)
     x = rng.standard_normal(200)

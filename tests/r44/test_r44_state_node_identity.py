@@ -7,9 +7,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ir.nodes import IRNode
-from runtime.stateful_checkpoint_store import StatefulCheckpointStore
-from runtime.stateful_incremental import (
+from factor_engine.ir.nodes import IRNode
+from factor_engine.runtime.stateful_checkpoint_store import StatefulCheckpointStore
+from factor_engine.runtime.stateful_incremental import (
     NodeIncrementalMode,
     compute_state_node_identity,
     plan_node_level_incremental,

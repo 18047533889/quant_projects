@@ -109,7 +109,7 @@ class PerfConfig:
 
     def build_resource_plan(self, config: dict | None = None) -> Any:
         """构造 Phase 5 ``ExecutionResourcePlan``（resources 配置 + 环境变量合并）。"""
-        from runtime.resource_governor import (
+        from factor_engine.runtime.resource_governor import (
             ExecutionResourcePlan,
             _cfg_bytes,
             effective_memory_limit_bytes,

@@ -4,7 +4,7 @@ import pytest
 
 pd = pytest.importorskip("pandas")
 
-from storage.parquet_source import ParquetSource
+from factor_engine.storage.parquet_source import ParquetSource
 
 
 def _write_day_file(root: Path, day: str) -> None:

@@ -113,8 +113,8 @@ def test_valid_numeric_sequence_is_accepted():
 
 
 def test_fold_literals_multiply_inf_not_folded():
-    from planner.logical_plan import PlanNode
-    from planner.optimizer import Optimizer
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.planner.optimizer import Optimizer
 
     plan = PlanNode(
         "multiply",
@@ -131,8 +131,8 @@ def test_fold_literals_multiply_inf_not_folded():
 
 
 def test_fold_literals_add_inf_not_folded():
-    from planner.logical_plan import PlanNode
-    from planner.optimizer import Optimizer
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.planner.optimizer import Optimizer
 
     plan = PlanNode(
         "add",
@@ -147,8 +147,8 @@ def test_fold_literals_add_inf_not_folded():
 
 
 def test_fold_nary_sum_inf_not_folded():
-    from planner.logical_plan import PlanNode
-    from planner.optimizer import Optimizer
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.planner.optimizer import Optimizer
 
     plan = PlanNode(
         "nary_add",
@@ -163,8 +163,8 @@ def test_fold_nary_sum_inf_not_folded():
 
 
 def test_fold_nary_mul_inf_not_folded():
-    from planner.logical_plan import PlanNode
-    from planner.optimizer import Optimizer
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.planner.optimizer import Optimizer
 
     plan = PlanNode(
         "nary_mul",
@@ -179,8 +179,8 @@ def test_fold_nary_mul_inf_not_folded():
 
 
 def test_fold_literals_finite_still_folds():
-    from planner.logical_plan import PlanNode
-    from planner.optimizer import Optimizer
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.planner.optimizer import Optimizer
 
     plan = PlanNode(
         "multiply",
@@ -201,7 +201,7 @@ def test_fold_literals_finite_still_folds():
 
 
 def test_source_ref_helpers_roundtrip():
-    from api.source_ref import (
+    from factor_engine.api.source_ref import (
         decode_source_ref,
         decode_source_ref_strict,
         encode_source_ref,
@@ -221,7 +221,7 @@ def test_source_ref_helpers_roundtrip():
 
 
 def test_looks_like_source_ref_rejects_non_string():
-    from api.source_ref import looks_like_source_ref
+    from factor_engine.api.source_ref import looks_like_source_ref
 
     assert not looks_like_source_ref(None)
     assert not looks_like_source_ref(123)
@@ -229,7 +229,7 @@ def test_looks_like_source_ref_rejects_non_string():
 
 
 def test_decode_source_ref_strict_raises_on_bad_base64():
-    from api.source_ref import decode_source_ref_strict, looks_like_source_ref
+    from factor_engine.api.source_ref import decode_source_ref_strict, looks_like_source_ref
 
     bad = "__fe_source_ref_v1__not-base64!!!"
     assert looks_like_source_ref(bad)
@@ -243,7 +243,7 @@ def test_decode_source_ref_strict_raises_on_bad_base64():
 
 def test_source_ref_scalar_rejects_nan_inf():
     """#468: NaN / Inf must never enter an encoded SourceRef identity."""
-    from api.source_ref import make_source_ref
+    from factor_engine.api.source_ref import make_source_ref
 
     for bad in (float("nan"), float("inf"), float("-inf")):
         with pytest.raises(ValueError, match="finite"):
@@ -255,7 +255,7 @@ def test_source_ref_scalar_rejects_nan_inf():
 
 def test_source_ref_strict_int_rejects_ambiguous_literals():
     """#469: True / 1.9 / '2' / NaN / Inf must not silently coerce to 1/2."""
-    from api.source_ref import _strict_int, intermediate_col
+    from factor_engine.api.source_ref import _strict_int, intermediate_col
 
     for bad in (True, 1.9, "2", float("nan"), float("inf"), None):
         with pytest.raises(ValueError):
@@ -274,7 +274,7 @@ def test_source_ref_strict_int_rejects_ambiguous_literals():
 
 def test_source_col_rejects_duplicate_parameters():
     """#470: a parameter given both positionally and as a keyword must raise."""
-    from api.source_ref import source_col
+    from factor_engine.api.source_ref import source_col
 
     with pytest.raises(ValueError, match="both positionally and as a keyword"):
         source_col("Intermediate", "value", "name", "alpha_x", name="alpha_y")
@@ -284,8 +284,8 @@ def test_source_col_rejects_duplicate_parameters():
 
 def test_source_ref_transform_rejects_unconsumed_parameters():
     """#470: known transforms must reject parameters they never consume."""
-    from api.columns import col
-    from api.source_ref import (
+    from factor_engine.api.columns import col
+    from factor_engine.api.source_ref import (
         encode_source_ref,
         make_source_ref,
         transform_source_col,
@@ -310,7 +310,7 @@ def test_source_ref_transform_rejects_unconsumed_parameters():
 def test_param_spec_missing_sentinel_distinguishes_none():
     """#461: ``default=None`` is a declared default; ``default=MISSING`` means
     "no default declared" — the two must be distinguishable."""
-    from cleaned_operators.base import MISSING, ParamSpec
+    from factor_engine.cleaned_operators.base import MISSING, ParamSpec
 
     assert ParamSpec().default is MISSING
     assert ParamSpec(dtype=int).default is MISSING
@@ -320,7 +320,7 @@ def test_param_spec_missing_sentinel_distinguishes_none():
 
 def test_relational_predicate_allowed_grammar():
     """#462: arithmetic + comparison relations evaluate correctly."""
-    from cleaned_operators.base import RelationalParamSpec
+    from factor_engine.cleaned_operators.base import RelationalParamSpec
 
     r = RelationalParamSpec("window >= 4 * k + 1")
     assert sorted(r.param_names) == ["k", "window"]
@@ -342,7 +342,7 @@ def test_relational_predicate_allowed_grammar():
 
 def test_relational_predicate_undecidable_is_unmet():
     """#462: NaN / missing params -> False (search forced to a feasible combo)."""
-    from cleaned_operators.base import RelationalParamSpec
+    from factor_engine.cleaned_operators.base import RelationalParamSpec
 
     r = RelationalParamSpec("window >= 4 * k + 1")
     assert r.check({"window": float("nan"), "k": 5}) is False
@@ -353,7 +353,7 @@ def test_relational_predicate_undecidable_is_unmet():
 def test_relational_predicate_rejects_dynamic_python():
     """#462: eval-free — function calls, attributes, subscripts, string
     literals, lambdas and membership tests all fail at construction."""
-    from cleaned_operators.base import RelationalParamSpec
+    from factor_engine.cleaned_operators.base import RelationalParamSpec
 
     bad = [
         "len(window) >= 2",
@@ -374,7 +374,7 @@ def test_relational_predicate_rejects_dynamic_python():
 def test_relational_predicate_canonical_hash_of_ast():
     """#462: search grammar and runtime share the same predicate object; the
     referenced-param set is derived from the AST, not the string."""
-    from cleaned_operators.base import RelationalParamSpec
+    from factor_engine.cleaned_operators.base import RelationalParamSpec
 
     a = RelationalParamSpec("window >= 4 * k + 1")
     b = RelationalParamSpec("  window >= 4 * k + 1  ")  # whitespace-insensitive
@@ -383,7 +383,7 @@ def test_relational_predicate_canonical_hash_of_ast():
 
 
 def test_decode_source_ref_strict_raises_on_missing_field():
-    from api.source_ref import decode_source_ref_strict
+    from factor_engine.api.source_ref import decode_source_ref_strict
 
     raw = base64.urlsafe_b64encode(json.dumps({"table": "T"}).encode()).decode().rstrip("=")
     with pytest.raises(ValueError, match="missing required field"):
@@ -391,7 +391,7 @@ def test_decode_source_ref_strict_raises_on_missing_field():
 
 
 def test_decode_source_ref_strict_raises_on_non_object_payload():
-    from api.source_ref import decode_source_ref_strict
+    from factor_engine.api.source_ref import decode_source_ref_strict
 
     raw = base64.urlsafe_b64encode(json.dumps([1, 2, 3]).encode()).decode().rstrip("=")
     with pytest.raises(ValueError, match="JSON object"):
@@ -404,7 +404,7 @@ def test_decode_source_ref_strict_raises_on_non_object_payload():
 
 
 def test_clock_for_family_rules():
-    from planner.clock_semantics import ClockSemantics, clock_for
+    from factor_engine.planner.clock_semantics import ClockSemantics, clock_for
 
     assert clock_for("ts_mean") == ClockSemantics.TRADING_BAR
     assert clock_for("ts_std") == ClockSemantics.TRADING_BAR
@@ -417,7 +417,7 @@ def test_clock_for_family_rules():
 
 
 def test_clock_explicit_table_wins_over_prefix():
-    from planner.clock_semantics import ClockSemantics, clock_for, declare_clock
+    from factor_engine.planner.clock_semantics import ClockSemantics, clock_for, declare_clock
 
     # declared override wins over the ts_ -> TRADING_BAR prefix rule.
     declare_clock("ts_my_event_op", ClockSemantics.EVENT)
@@ -425,7 +425,7 @@ def test_clock_explicit_table_wins_over_prefix():
 
 
 def test_clock_registry_view():
-    from planner.clock_semantics import clock_for, clock_registry
+    from factor_engine.planner.clock_semantics import clock_for, clock_registry
 
     reg = clock_registry()
     assert reg["ts_mean"] == "trading_bar"

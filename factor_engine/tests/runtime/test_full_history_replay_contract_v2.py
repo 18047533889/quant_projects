@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import pandas as pd
 import pytest
 
-from storage.datasource import DataSource
+from factor_engine.storage.datasource import DataSource
 
 
 class _Source(DataSource):
@@ -39,8 +39,8 @@ class _Engine:
 
 
 def _stateful_analysis():
-    from api.dsl_parser import parse_factor
-    from ir.analyzer import Analyzer
+    from factor_engine.api.dsl_parser import parse_factor
+    from factor_engine.ir.analyzer import Analyzer
 
     factor = parse_factor(
         "KAMA(close,10,2,30)", name="kama", surface="extended"
@@ -49,7 +49,7 @@ def _stateful_analysis():
 
 
 def test_full_history_analysis_encodes_incremental_sentinel():
-    from runtime.incremental import FULL_HISTORY_LOOKBACK_SENTINEL
+    from factor_engine.runtime.incremental import FULL_HISTORY_LOOKBACK_SENTINEL
 
     analysis = _stateful_analysis()
     assert analysis.requires_full_history is True
@@ -57,7 +57,7 @@ def test_full_history_analysis_encodes_incremental_sentinel():
 
 
 def test_incremental_watermark_is_ignored_without_checkpoint_restore():
-    from runtime.incremental import build_incremental_plan
+    from factor_engine.runtime.incremental import build_incremental_plan
 
     analysis = _stateful_analysis()
     plan = build_incremental_plan(
@@ -76,8 +76,8 @@ def test_incremental_watermark_is_ignored_without_checkpoint_restore():
 
 
 def test_production_full_history_requires_explicit_origin():
-    from runtime.production_policy import ProductionPolicyViolation
-    from runtime.warmup_service import prepare_run_warmup
+    from factor_engine.runtime.production_policy import ProductionPolicyViolation
+    from factor_engine.runtime.warmup_service import prepare_run_warmup
 
     with pytest.raises(ProductionPolicyViolation, match="full_history_start"):
         prepare_run_warmup(
@@ -91,7 +91,7 @@ def test_production_full_history_requires_explicit_origin():
 
 
 def test_production_full_history_loads_from_declared_origin():
-    from runtime.warmup_service import prepare_run_warmup
+    from factor_engine.runtime.warmup_service import prepare_run_warmup
 
     warmup = prepare_run_warmup(
         _Engine(_Source(full_history_start="2000-01-03")),

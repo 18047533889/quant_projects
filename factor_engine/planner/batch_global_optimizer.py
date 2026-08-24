@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Compatibility aliases for the runtime-owned physical batch optimizer."""
 
-from runtime.multibackend.batch_global_optimizer import (
+from factor_engine.runtime.multibackend.batch_global_optimizer import (
     BatchGlobalOptimizer,
     BatchOptimizationResult,
     NodeBackendChoice,

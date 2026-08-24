@@ -38,7 +38,9 @@ from data_access.core.exceptions import (
 from data_access.registry import load_registry
 from data_access.store import DataAccessStore
 
-_PKG = "/home/shw/quant_projects/dataaccess"
+# ``data_access`` is a repo-root shim forwarding to ``dataaccess/`` source root;
+# subprocess workers must have the repo root on sys.path to resolve it.
+_PKG = str(Path(__file__).resolve().parents[3])  # quant_projects/ repo root
 
 
 @pytest.fixture(autouse=True)

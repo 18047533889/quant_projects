@@ -16,8 +16,8 @@ os.environ.setdefault("FACTOR_ENGINE_MAX_MEMORY_BYTES", str(8 * 1024**3))
 
 
 def test_can_admit_is_pure_and_try_reserve_lease():
-    from runtime.resource_broker import ResourceBroker
-    from runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
     b = ResourceBroker(cpu_slots=4, hard_memory_limit=16 * 1024**3)
     t = TaskResourceContract(cpu_tokens=2, io_tokens=1, peak_memory_bytes=2 * 1024**3)
@@ -33,8 +33,8 @@ def test_can_admit_is_pure_and_try_reserve_lease():
 
 
 def test_failure_path_releases_exactly_once():
-    from runtime.resource_broker import ResourceBroker
-    from runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
     b = ResourceBroker(cpu_slots=2, hard_memory_limit=16 * 1024**3)
     lease = b.try_reserve(TaskResourceContract(cpu_tokens=2), task_id="x")
@@ -50,8 +50,8 @@ def test_failure_path_releases_exactly_once():
 
 
 def test_cost_counts_every_occurrence_with_bound_params():
-    from planner.logical_plan import PlanNode
-    from backend.plan_cost_router import plan_occurrences, _canonical_ops, _dag_aware_mixed_cost
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.backend.plan_cost_router import plan_occurrences, _canonical_ops, _dag_aware_mixed_cost
 
     close = PlanNode("column", (), {"name": "close"})
     vol = PlanNode("column", (), {"name": "volume"})
@@ -73,7 +73,7 @@ def test_cost_counts_every_occurrence_with_bound_params():
 
 
 def test_backend_specific_memory_cost():
-    from backend.plan_cost_router import estimate_plan_peak_memory
+    from factor_engine.backend.plan_cost_router import estimate_plan_peak_memory
 
     p_pd = estimate_plan_peak_memory(("ts_mean",), 500_000, "pandas_numpy")
     p_sql = estimate_plan_peak_memory(("ts_mean",), 500_000, "duckdb_sql")
@@ -86,8 +86,8 @@ def test_backend_specific_memory_cost():
 
 
 def test_lowerer_produces_real_stages():
-    from planner.logical_plan import PlanNode
-    from planner.physical_lowerer import lower_root_plan
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.planner.physical_lowerer import lower_root_plan
 
     plan = PlanNode(
         "add",
@@ -111,9 +111,9 @@ def test_lowerer_produces_real_stages():
 
 
 def test_fusion_scope_safety():
-    from planner.physical_factor_dag import PhysicalFactorTask
-    from planner.native_fusion import can_fuse_roots
-    from runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.planner.physical_factor_dag import PhysicalFactorTask
+    from factor_engine.planner.native_fusion import can_fuse_roots
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
     mk = lambda name, scope: PhysicalFactorTask(
         task_id=f"root:{name}", op="ts_mean", task_type="ROOT",
@@ -127,8 +127,8 @@ def test_fusion_scope_safety():
 
 
 def test_fusion_groups_actually_execute_or_fallback():
-    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
-    from planner.native_fusion import execute_fusion_group
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    from factor_engine.planner.native_fusion import execute_fusion_group
 
     scheduler = AdaptiveBatchScheduler()
     # execute_fusion_group 对不支持 execute_multi_roots 的 backend 走 honest fallback
@@ -144,7 +144,7 @@ def test_fusion_groups_actually_execute_or_fallback():
 
 
 def test_batch_data_request_unions_fields():
-    from planner.batch_data_request import build_batch_data_request
+    from factor_engine.planner.batch_data_request import build_batch_data_request
 
     req = build_batch_data_request(None, fields=["close", "volume", "open"])
     assert len(req.fields) >= 3
@@ -157,8 +157,8 @@ def test_batch_data_request_unions_fields():
 
 
 def test_change_impact_propagates():
-    from planner.logical_plan import PlanNode
-    from runtime.change_impact import affected_root_window
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.runtime.change_impact import affected_root_window
 
     w = affected_root_window(
         PlanNode("ts_mean", [PlanNode("column", attrs={"name": "close"})], attrs={"window": 5}),
@@ -183,8 +183,8 @@ def test_change_impact_propagates():
 
 
 def test_cancellation_stops_admission():
-    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler, _default_contract_for
-    from planner.physical_factor_dag import PhysicalFactorTask
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler, _default_contract_for
+    from factor_engine.planner.physical_factor_dag import PhysicalFactorTask
 
     sched = AdaptiveBatchScheduler()
     sched.cancel()

@@ -23,7 +23,7 @@ def _ensure_data_access_on_path():
 
 
 def test_materializer_delegates_to_insert():
-    from storage.clickhouse_materializer import ClickHouseMaterializer
+    from factor_engine.storage.clickhouse_materializer import ClickHouseMaterializer
 
     idx = pd.MultiIndex.from_product(
         [pd.date_range("2024-01-02", periods=2), ["A"]],
@@ -45,7 +45,7 @@ def test_materializer_delegates_to_insert():
 
 
 def test_materializer_preserve_invalid_rows_propagates_reason():
-    from storage.clickhouse_materializer import ClickHouseMaterializer
+    from factor_engine.storage.clickhouse_materializer import ClickHouseMaterializer
 
     idx = pd.MultiIndex.from_product(
         [pd.date_range("2024-01-02", periods=1), ["A", "B", "C"]],

@@ -38,7 +38,7 @@ def git_sha() -> str | None:
 def _probe_parameter_domain(canonical: str) -> dict[str, str | None]:
     """Check if canonical has any certified parameter-domain point."""
     try:
-        from runtime.parameter_domain_store import ParameterDomainCertificationStore
+        from factor_engine.runtime.parameter_domain_store import ParameterDomainCertificationStore
         store = ParameterDomainCertificationStore()
         # Try loading default evidence if available
         evidence_path = REPO / "docs" / "evidence" / "r37" / "R37_PARAMETER_DOMAIN_STORE.json"
@@ -72,7 +72,7 @@ def _probe_oracle_parity(canonical: str) -> dict[str, str | None]:
 def _probe_pit_safe(canonical: str) -> dict[str, str]:
     """Check PIT safety from timing kind."""
     try:
-        from cleaned_operators.model_timing import timing_kind_for, TimingKind
+        from factor_engine.cleaned_operators.model_timing import timing_kind_for, TimingKind
         kind = timing_kind_for(canonical)
         if kind == TimingKind.PRIOR_FIT_PREDICTIVE:
             return {"status": "CERTIFIED"}
@@ -97,7 +97,7 @@ def _probe_leakage_tested(canonical: str) -> dict[str, str]:
 def _probe_axis_effect(canonical: str) -> dict[str, str | None]:
     """Check AxisEffect certification."""
     try:
-        from cleaned_operators.axis_effect_audit import get_axis_effect
+        from factor_engine.cleaned_operators.axis_effect_audit import get_axis_effect
         effect = get_axis_effect(canonical)
         if effect and effect != "UNKNOWN":
             return {"status": "CERTIFIED", "value": str(effect)}
@@ -111,9 +111,9 @@ def main() -> int:
     out_dir = Path(sys.argv[sys.argv.index("--out") + 1]) if "--out" in sys.argv else DEFAULT_OUT
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
-    from cleaned_operators.model_timing import is_model_like_name
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.model_timing import is_model_like_name
 
     load_all()
     canonicals = sorted(OperatorRegistry.list_canonical())

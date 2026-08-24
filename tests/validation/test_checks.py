@@ -5,7 +5,7 @@ Tests data quality checks including NaN rates, outliers, and distribution statis
 import numpy as np
 import pytest
 
-from validation.checks import (
+from factor_engine.validation.checks import (
     DataQualityReport,
     OutlierStats,
     check_data_quality,

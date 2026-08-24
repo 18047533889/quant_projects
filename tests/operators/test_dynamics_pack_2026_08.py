@@ -12,9 +12,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.operator_surface import classify_canonical
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
 DAILY_OPS = {
     "ts_ordinal_irreversibility", "ts_state_density",
@@ -74,7 +74,7 @@ def test_dynamics_pack_registered_and_classified():
     for name in RESEARCH_OPS:
         assert classify_canonical(name) == "research", name
     # Research ops must not leak into the daily mining surface.
-    from cleaned_operators.operator_surface import DAILY_FACTOR_MIGRATED
+    from factor_engine.cleaned_operators.operator_surface import DAILY_FACTOR_MIGRATED
     assert not (RESEARCH_OPS & set(DAILY_FACTOR_MIGRATED))
 
 
@@ -346,7 +346,7 @@ def test_joint_energy_shift_polars_first_valid_row_and_cell_oracle():
     if not _polars_available():
         pytest.skip("polars not installed")
     import polars as pl
-    from cleaned_operators.distribution_break import _joint_shift_cell
+    from factor_engine.cleaned_operators.distribution_break import _joint_shift_cell
 
     recent, prior = 4, 7
     n = 30
@@ -378,7 +378,7 @@ def test_joint_energy_shift_polars_clamps_small_windows():
     if not _polars_available():
         pytest.skip("polars not installed")
     import polars as pl
-    from cleaned_operators.distribution_break import _joint_shift_cell
+    from factor_engine.cleaned_operators.distribution_break import _joint_shift_cell
 
     n = 12
     t = np.arange(n, dtype=float)

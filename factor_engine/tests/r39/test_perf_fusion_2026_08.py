@@ -16,19 +16,19 @@ from __future__ import annotations
 
 import pytest
 
-from planner.fusion_size_model import (
+from factor_engine.planner.fusion_size_model import (
     FusionSizeFeatures,
     estimate_fusion_cost,
 )
-from planner.logical_plan import PlanNode
-from planner.negative_fusion_cache import (
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.negative_fusion_cache import (
     NEGATIVE_FUSION_CACHE,
     NegativeFusionCacheKey,
 )
-from planner.physical_factor_dag import PhysicalFactorTask
-from runtime.task_resource_contract import TaskResourceContract
+from factor_engine.planner.physical_factor_dag import PhysicalFactorTask
+from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
-from planner.native_fusion import (
+from factor_engine.planner.native_fusion import (
     NativeFusionGroup,
     adaptive_fusion_block_size,
     execute_fusion_group,

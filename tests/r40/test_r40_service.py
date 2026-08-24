@@ -10,20 +10,20 @@ import pytest
 
 os.environ.setdefault("FACTOR_ENGINE_SERVICE_ROOT", "/tmp/r40_service_root")
 
-import api.dsl_parser  # noqa: E402,F401  (ensure submodule attr set before monkeypatch)
-import api.mining_integration  # noqa: E402,F401
+import factor_engine.api.dsl_parser  # noqa: E402,F401  (ensure submodule attr set before monkeypatch)
+import factor_engine.api.mining_integration  # noqa: E402,F401
 
-from runtime.endpoint_policy import EndpointExecutionPolicy  # noqa: E402
-from service.app import (  # noqa: E402
+from factor_engine.runtime.endpoint_policy import EndpointExecutionPolicy  # noqa: E402
+from factor_engine.service.app import (  # noqa: E402
     _redact_preview_for_access,
     _summarize_result,
     _validate_and_build_request,
     _validate_config_path_sources,
     _execute_inline,
 )
-from service.errors import ServiceError  # noqa: E402
-from service.jobstore import JobRecord  # noqa: E402
-from service.security import ANONYMOUS_PRINCIPAL  # noqa: E402
+from factor_engine.service.errors import ServiceError  # noqa: E402
+from factor_engine.service.jobstore import JobRecord  # noqa: E402
+from factor_engine.service.security import ANONYMOUS_PRINCIPAL  # noqa: E402
 
 
 def _build(payload):
@@ -42,7 +42,7 @@ def _build(payload):
 def test_validate_config_path_sources_fails_closed_on_import_error(monkeypatch):
     import sys as _sys
 
-    monkeypatch.setitem(_sys.modules, "runtime.config_runtime", None)
+    monkeypatch.setitem(_sys.modules, "factor_engine.runtime.config_runtime", None)
     with pytest.raises(ServiceError) as ei:
         _validate_config_path_sources("/tmp/whatever.yaml", production=True)
     assert ei.value.status == 500
@@ -63,14 +63,14 @@ def test_validate_spec_passes_market_to_production_validator(monkeypatch):
         return True, "OK"
 
     monkeypatch.setattr(
-        "api.mining_integration.validate_production_dsl", fake_validate_production_dsl
+        "factor_engine.api.mining_integration.validate_production_dsl", fake_validate_production_dsl
     )
     # parse_expr in the concurrent session is mid-edit (NameError) — stub it out.
-    monkeypatch.setattr("api.dsl_parser.parse_expr", lambda *a, **k: None)
+    monkeypatch.setattr("factor_engine.api.dsl_parser.parse_expr", lambda *a, **k: None)
     monkeypatch.setattr(
-        "api.dsl_parser.DSLParseError", type("DSLParseError", (Exception,), {})
+        "factor_engine.api.dsl_parser.DSLParseError", type("DSLParseError", (Exception,), {})
     )
-    from service.app import validate_spec
+    from factor_engine.service.app import validate_spec
 
     result = validate_spec(
         {"formula": "close", "run_mode": "production", "market": "us"}
@@ -87,13 +87,13 @@ def test_validate_spec_production_defaults_market_to_ashare(monkeypatch):
         return True, "OK"
 
     monkeypatch.setattr(
-        "api.mining_integration.validate_production_dsl", fake_validate_production_dsl
+        "factor_engine.api.mining_integration.validate_production_dsl", fake_validate_production_dsl
     )
-    monkeypatch.setattr("api.dsl_parser.parse_expr", lambda *a, **k: None)
+    monkeypatch.setattr("factor_engine.api.dsl_parser.parse_expr", lambda *a, **k: None)
     monkeypatch.setattr(
-        "api.dsl_parser.DSLParseError", type("DSLParseError", (Exception,), {})
+        "factor_engine.api.dsl_parser.DSLParseError", type("DSLParseError", (Exception,), {})
     )
-    from service.app import validate_spec
+    from factor_engine.service.app import validate_spec
 
     validate_spec({"formula": "close", "run_mode": "production"})
     assert captured["market"] == "ashare"
@@ -127,10 +127,10 @@ def test_execute_inline_passes_build_context(monkeypatch):
         def run(self, *a, **k):
             return {"result": None}
 
-    monkeypatch.setattr("storage.factory.build_data_source", fake_bds)
-    monkeypatch.setattr("backend.factory.build_backend", lambda *a, **k: object())
-    monkeypatch.setattr("runtime.engine.FactorEngine", FakeEngine)
-    monkeypatch.setattr("api.dsl_parser.parse_factor", lambda *a, **k: object())
+    monkeypatch.setattr("factor_engine.storage.factory.build_data_source", fake_bds)
+    monkeypatch.setattr("factor_engine.backend.factory.build_backend", lambda *a, **k: object())
+    monkeypatch.setattr("factor_engine.runtime.engine.FactorEngine", FakeEngine)
+    monkeypatch.setattr("factor_engine.api.dsl_parser.parse_factor", lambda *a, **k: object())
 
     job = JobRecord(run_id="bc_job", request={"execution": execution}, request_digest=digest)
     _execute_inline(job, execution)
@@ -169,8 +169,8 @@ def test_execute_inline_parse_factor_gets_name(monkeypatch):
         captured["name"] = name
         return object()
 
-    monkeypatch.setattr("storage.factory.build_data_source", lambda *a, **k: object())
-    monkeypatch.setattr("backend.factory.build_backend", lambda *a, **k: object())
+    monkeypatch.setattr("factor_engine.storage.factory.build_data_source", lambda *a, **k: object())
+    monkeypatch.setattr("factor_engine.backend.factory.build_backend", lambda *a, **k: object())
 
     class FakeEngine:
         def __init__(self, **kwargs):
@@ -179,8 +179,8 @@ def test_execute_inline_parse_factor_gets_name(monkeypatch):
         def run(self, *a, **k):
             return {"result": None}
 
-    monkeypatch.setattr("runtime.engine.FactorEngine", FakeEngine)
-    monkeypatch.setattr("api.dsl_parser.parse_factor", fake_parse_factor)
+    monkeypatch.setattr("factor_engine.runtime.engine.FactorEngine", FakeEngine)
+    monkeypatch.setattr("factor_engine.api.dsl_parser.parse_factor", fake_parse_factor)
     job = JobRecord(run_id="nm_job", request={"execution": execution}, request_digest=digest)
     _execute_inline(job, execution)
     assert captured["name"] == "parse_me"
@@ -220,7 +220,7 @@ def test_import_service_app_has_no_side_effects():
 
 
 def test_policy_reload_does_not_affect_inflight_jobs(tmp_path, monkeypatch):
-    import service.app as app
+    import factor_engine.service.app as app
 
     monkeypatch.setenv("FACTOR_ENGINE_SERVICE_ROOT", str(tmp_path))
     app._ensure_runtime(start=True)
@@ -232,7 +232,7 @@ def test_policy_reload_does_not_affect_inflight_jobs(tmp_path, monkeypatch):
         policy_version=app._POLICY_VERSION,
         policy_digest=old_digest,
     )
-    from service.policies import RuntimeFeaturePolicy
+    from factor_engine.service.policies import RuntimeFeaturePolicy
 
     fake = RuntimeFeaturePolicy(flags={"FASTPATH": True}, production=False)
     monkeypatch.setattr(
@@ -249,7 +249,7 @@ def test_policy_reload_does_not_affect_inflight_jobs(tmp_path, monkeypatch):
 
 
 def test_submit_job_snapshots_policy(monkeypatch, tmp_path):
-    import service.app as app
+    import factor_engine.service.app as app
 
     monkeypatch.setenv("FACTOR_ENGINE_SERVICE_ROOT", str(tmp_path))
     monkeypatch.setenv("FACTOR_ENGINE_SERVICE_PER_PRINCIPAL_JOBS", "100")

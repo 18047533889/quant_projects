@@ -69,7 +69,7 @@ def _try_fetch_resource_envelope() -> dict[str, Any] | None:
     无该方法）→ None（调用方回退保守默认）。绝不抛异常。
     """
     try:
-        from runtime.host_resource_coordinator import get_host_coordinator
+        from factor_engine.runtime.host_resource_coordinator import get_host_coordinator
 
         coord = get_host_coordinator()
         fn = getattr(coord, "resource_envelope", None)

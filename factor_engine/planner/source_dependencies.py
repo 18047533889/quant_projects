@@ -15,8 +15,8 @@ import json
 from collections.abc import Sequence
 from typing import Any
 
-from api.source_ref import SourceRefSpec, decode_source_ref
-from planner.logical_plan import PlanNode
+from factor_engine.api.source_ref import SourceRefSpec, decode_source_ref
+from factor_engine.planner.logical_plan import PlanNode
 
 # 与 api.source_ref 的 _PREFIX 保持一致；不 import 私有名以避免耦合。
 _SOURCE_REF_PREFIX = "__fe_source_ref_v1__"
@@ -123,10 +123,10 @@ def resolve_universe_membership(
         members = resolver(str(universe or ""), as_of)
     else:
         try:
-            from market.universe import resolve_universe_members  # type: ignore[attr-defined]
+            from factor_engine.market.universe import resolve_universe_members  # type: ignore[attr-defined]
         except Exception:  # pragma: no cover - resolver may live elsewhere
             try:
-                from market.universe import universe_members  # type: ignore[attr-defined]
+                from factor_engine.market.universe import universe_members  # type: ignore[attr-defined]
 
                 resolve_universe_members = universe_members
             except Exception:

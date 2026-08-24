@@ -63,6 +63,63 @@ packages = [
     "evidence",
     "export",
     "expr",
+    "factor_engine",
+    "factor_engine.api",
+    "factor_engine.backend",
+    "factor_engine.backend.contracts",
+    "factor_engine.backend.numba_kernels",
+    "factor_engine.backend.q_backend",
+    "factor_engine.backend.sql_pushdown",
+    "factor_engine.cache",
+    "factor_engine.cleaned_operators",
+    "factor_engine.cleaned_operators.ashare",
+    "factor_engine.cleaned_operators.closure",
+    "factor_engine.cleaned_operators.common",
+    "factor_engine.cleaned_operators.cross_section",
+    "factor_engine.cleaned_operators.docs",
+    "factor_engine.cleaned_operators.fundamental",
+    "factor_engine.cleaned_operators.index_listing",
+    "factor_engine.cleaned_operators.intraday",
+    "factor_engine.cleaned_operators.microstructure",
+    "factor_engine.cleaned_operators.overhaul",
+    "factor_engine.cleaned_operators.polars_native",
+    "factor_engine.cleaned_operators.price_volume",
+    "factor_engine.cleaned_operators.relation",
+    "factor_engine.cleaned_operators.shareholder",
+    "factor_engine.cleaned_operators.stateful",
+    "factor_engine.cleaned_operators.technical",
+    "factor_engine.cleaned_operators.ts_model",
+    "factor_engine.cleaned_operators.valuation",
+    "factor_engine.docs",
+    "factor_engine.evidence",
+    "factor_engine.export",
+    "factor_engine.expr",
+    "factor_engine.factor_recipes",
+    "factor_engine.fields",
+    "factor_engine.ir",
+    "factor_engine.market",
+    "factor_engine.mining",
+    "factor_engine.modeling",
+    "factor_engine.modeling.learners",
+    "factor_engine.planner",
+    "factor_engine.planner.lowerings",
+    "factor_engine.planning",
+    "factor_engine.research_operators",
+    "factor_engine.research_tools",
+    "factor_engine.runtime",
+    "factor_engine.runtime.multibackend",
+    "factor_engine.runtime.pipeline",
+    "factor_engine.runtime.quality",
+    "factor_engine.runtime.reconcile",
+    "factor_engine.security",
+    "factor_engine.semantic",
+    "factor_engine.service",
+    "factor_engine.storage",
+    "factor_engine.storage.materialize",
+    "factor_engine.storage.sources",
+    "factor_engine.telemetry",
+    "factor_engine.util",
+    "factor_engine.validation",
     "factor_recipes",
     "fields",
     "ir",
@@ -88,29 +145,123 @@ packages = [
     "storage.sources",
     "telemetry",
     "util",
+    "validation",
 ]
 
 [tool.setuptools.package-dir]
-"cleaned_operators" = "cleaned_operators_archived"
-"cleaned_operators.ashare" = "cleaned_operators_archived/ashare"
-"cleaned_operators.closure" = "cleaned_operators_archived/closure"
-"cleaned_operators.common" = "cleaned_operators_archived/common"
-"cleaned_operators.cross_section" = "cleaned_operators_archived/cross_section"
-"cleaned_operators.docs" = "cleaned_operators_archived/docs"
-"cleaned_operators.fundamental" = "cleaned_operators_archived/fundamental"
-"cleaned_operators.index_listing" = "cleaned_operators_archived/index_listing"
-"cleaned_operators.intraday" = "cleaned_operators_archived/intraday"
-"cleaned_operators.microstructure" = "cleaned_operators_archived/microstructure"
-"cleaned_operators.overhaul" = "cleaned_operators_archived/overhaul"
-"cleaned_operators.polars_native" = "cleaned_operators_archived/polars_native"
-"cleaned_operators.price_volume" = "cleaned_operators_archived/price_volume"
-"cleaned_operators.relation" = "cleaned_operators_archived/relation"
-"cleaned_operators.shareholder" = "cleaned_operators_archived/shareholder"
-"cleaned_operators.stateful" = "cleaned_operators_archived/stateful"
-"cleaned_operators.technical" = "cleaned_operators_archived/technical"
-"cleaned_operators.ts_model" = "cleaned_operators_archived/ts_model"
-"cleaned_operators.valuation" = "cleaned_operators_archived/valuation"
-
+"api" = "api"
+"backend" = "backend"
+"backend.contracts" = "backend/contracts"
+"backend.numba_kernels" = "backend/numba_kernels"
+"backend.q_backend" = "backend/q_backend"
+"backend.sql_pushdown" = "backend/sql_pushdown"
+"cache" = "cache"
+"cleaned_operators" = "cleaned_operators"
+"cleaned_operators.ashare" = "cleaned_operators/ashare"
+"cleaned_operators.closure" = "cleaned_operators/closure"
+"cleaned_operators.common" = "cleaned_operators/common"
+"cleaned_operators.cross_section" = "cleaned_operators/cross_section"
+"cleaned_operators.docs" = "cleaned_operators/docs"
+"cleaned_operators.fundamental" = "cleaned_operators/fundamental"
+"cleaned_operators.index_listing" = "cleaned_operators/index_listing"
+"cleaned_operators.intraday" = "cleaned_operators/intraday"
+"cleaned_operators.microstructure" = "cleaned_operators/microstructure"
+"cleaned_operators.overhaul" = "cleaned_operators/overhaul"
+"cleaned_operators.polars_native" = "cleaned_operators/polars_native"
+"cleaned_operators.price_volume" = "cleaned_operators/price_volume"
+"cleaned_operators.relation" = "cleaned_operators/relation"
+"cleaned_operators.shareholder" = "cleaned_operators/shareholder"
+"cleaned_operators.stateful" = "cleaned_operators/stateful"
+"cleaned_operators.technical" = "cleaned_operators/technical"
+"cleaned_operators.ts_model" = "cleaned_operators/ts_model"
+"cleaned_operators.valuation" = "cleaned_operators/valuation"
+"docs" = "docs"
+"evidence" = "evidence"
+"export" = "export"
+"expr" = "expr"
+"factor_engine" = "."
+"factor_engine.api" = "api"
+"factor_engine.backend" = "backend"
+"factor_engine.backend.contracts" = "backend/contracts"
+"factor_engine.backend.numba_kernels" = "backend/numba_kernels"
+"factor_engine.backend.q_backend" = "backend/q_backend"
+"factor_engine.backend.sql_pushdown" = "backend/sql_pushdown"
+"factor_engine.cache" = "cache"
+"factor_engine.cleaned_operators" = "cleaned_operators"
+"factor_engine.cleaned_operators.ashare" = "cleaned_operators/ashare"
+"factor_engine.cleaned_operators.closure" = "cleaned_operators/closure"
+"factor_engine.cleaned_operators.common" = "cleaned_operators/common"
+"factor_engine.cleaned_operators.cross_section" = "cleaned_operators/cross_section"
+"factor_engine.cleaned_operators.docs" = "cleaned_operators/docs"
+"factor_engine.cleaned_operators.fundamental" = "cleaned_operators/fundamental"
+"factor_engine.cleaned_operators.index_listing" = "cleaned_operators/index_listing"
+"factor_engine.cleaned_operators.intraday" = "cleaned_operators/intraday"
+"factor_engine.cleaned_operators.microstructure" = "cleaned_operators/microstructure"
+"factor_engine.cleaned_operators.overhaul" = "cleaned_operators/overhaul"
+"factor_engine.cleaned_operators.polars_native" = "cleaned_operators/polars_native"
+"factor_engine.cleaned_operators.price_volume" = "cleaned_operators/price_volume"
+"factor_engine.cleaned_operators.relation" = "cleaned_operators/relation"
+"factor_engine.cleaned_operators.shareholder" = "cleaned_operators/shareholder"
+"factor_engine.cleaned_operators.stateful" = "cleaned_operators/stateful"
+"factor_engine.cleaned_operators.technical" = "cleaned_operators/technical"
+"factor_engine.cleaned_operators.ts_model" = "cleaned_operators/ts_model"
+"factor_engine.cleaned_operators.valuation" = "cleaned_operators/valuation"
+"factor_engine.docs" = "docs"
+"factor_engine.evidence" = "evidence"
+"factor_engine.export" = "export"
+"factor_engine.expr" = "expr"
+"factor_engine.factor_recipes" = "factor_recipes"
+"factor_engine.fields" = "fields"
+"factor_engine.ir" = "ir"
+"factor_engine.market" = "market"
+"factor_engine.mining" = "mining"
+"factor_engine.modeling" = "modeling"
+"factor_engine.modeling.learners" = "modeling/learners"
+"factor_engine.planner" = "planner"
+"factor_engine.planner.lowerings" = "planner/lowerings"
+"factor_engine.planning" = "planning"
+"factor_engine.research_operators" = "research_operators"
+"factor_engine.research_tools" = "research_tools"
+"factor_engine.runtime" = "runtime"
+"factor_engine.runtime.multibackend" = "runtime/multibackend"
+"factor_engine.runtime.pipeline" = "runtime/pipeline"
+"factor_engine.runtime.quality" = "runtime/quality"
+"factor_engine.runtime.reconcile" = "runtime/reconcile"
+"factor_engine.security" = "security"
+"factor_engine.semantic" = "semantic"
+"factor_engine.service" = "service"
+"factor_engine.storage" = "storage"
+"factor_engine.storage.materialize" = "storage/materialize"
+"factor_engine.storage.sources" = "storage/sources"
+"factor_engine.telemetry" = "telemetry"
+"factor_engine.util" = "util"
+"factor_engine.validation" = "validation"
+"factor_recipes" = "factor_recipes"
+"fields" = "fields"
+"ir" = "ir"
+"market" = "market"
+"mining" = "mining"
+"modeling" = "modeling"
+"modeling.learners" = "modeling/learners"
+"planner" = "planner"
+"planner.lowerings" = "planner/lowerings"
+"planning" = "planning"
+"research_operators" = "research_operators"
+"research_tools" = "research_tools"
+"runtime" = "runtime"
+"runtime.multibackend" = "runtime/multibackend"
+"runtime.pipeline" = "runtime/pipeline"
+"runtime.quality" = "runtime/quality"
+"runtime.reconcile" = "runtime/reconcile"
+"security" = "security"
+"semantic" = "semantic"
+"service" = "service"
+"storage" = "storage"
+"storage.materialize" = "storage/materialize"
+"storage.sources" = "storage/sources"
+"telemetry" = "telemetry"
+"util" = "util"
+"validation" = "validation"
 [tool.setuptools.package-data]
 "docs" = ["*.json", "*.yaml", "*.md", "*.txt"]
 "evidence" = ["*.json", "*.yaml"]

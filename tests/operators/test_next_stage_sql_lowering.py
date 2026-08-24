@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from backend.sql_pushdown.sql_registry import is_sql_capable
-from planner.logical_plan import PlanNode
-from planner.optimizer import Optimizer
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.backend.sql_pushdown.sql_registry import is_sql_capable
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.optimizer import Optimizer
 
 ensure_cleaned_loaded()
 

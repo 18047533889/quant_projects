@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -41,7 +41,7 @@ def test_only_fused_composite_fastpaths_remain_active() -> None:
 
 
 def test_polars_fastpath_never_uses_pandas_bridge() -> None:
-    import cleaned_operators.composite_fastpath as module
+    import factor_engine.cleaned_operators.composite_fastpath as module
 
     source = inspect.getsource(module)
     assert ".to_pandas(" not in source

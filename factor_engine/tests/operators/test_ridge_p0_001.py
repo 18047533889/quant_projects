@@ -5,8 +5,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.operator_errors import OperatorParameterError
-from cleaned_operators.common.statistics import Ridge
+from factor_engine.backend.operator_errors import OperatorParameterError
+from factor_engine.cleaned_operators.common.statistics import Ridge
 
 
 def _oracle_slope(y: np.ndarray, x: np.ndarray, alpha: float) -> float:

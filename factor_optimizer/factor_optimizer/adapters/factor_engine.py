@@ -93,8 +93,8 @@ class OptionalDependencyMissing(Exception):
 
 def _count_operators(expr: Any) -> int:
     """Count operators in an expression tree."""
-    from expr.base import Expr
-    from expr.cleaned_call import CleanedCall
+    from factor_engine.expr.base import Expr
+    from factor_engine.expr.cleaned_call import CleanedCall
 
     if not isinstance(expr, Expr):
         return 0
@@ -108,8 +108,8 @@ def _count_operators(expr: Any) -> int:
 
 def _compute_max_depth(expr: Any) -> int:
     """Compute maximum depth of expression tree."""
-    from expr.base import Expr
-    from expr.cleaned_call import CleanedCall
+    from factor_engine.expr.base import Expr
+    from factor_engine.expr.cleaned_call import CleanedCall
 
     if not isinstance(expr, Expr):
         return 0
@@ -124,8 +124,8 @@ def _compute_max_depth(expr: Any) -> int:
 
 def _extract_lookback(expr: Any) -> int:
     """Extract maximum lookback period from expression."""
-    from expr.base import Expr
-    from expr.cleaned_call import CleanedCall
+    from factor_engine.expr.base import Expr
+    from factor_engine.expr.cleaned_call import CleanedCall
 
     if not isinstance(expr, Expr):
         return 0
@@ -170,10 +170,10 @@ def create_fe_adapter() -> FactorEngineAdapter:
         if os.path.exists(fe_path) and fe_path not in sys.path:
             sys.path.insert(0, os.path.abspath(fe_path))
 
-        import api  # FE top-level public API
-        from mining.campaign import candidate_semantic_hash  # For canonical identity
-        from cleaned_operators.registry import OperatorRegistry
-        from expr.base import Expr
+        import factor_engine.api  # FE top-level public API
+        from factor_engine.mining.campaign import candidate_semantic_hash  # For canonical identity
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+        from factor_engine.expr.base import Expr
 
         # Concrete adapter implementation
         class ConcreteFEAdapter:

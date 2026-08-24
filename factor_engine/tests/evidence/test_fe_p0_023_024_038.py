@@ -11,8 +11,8 @@ import json
 
 import pytest
 
-import backend.factor_operator_evidence as foe
-import backend.evidence_provenance as ep
+import factor_engine.backend.factor_operator_evidence as foe
+import factor_engine.backend.evidence_provenance as ep
 import evidence.scm_manifest as sm
 
 

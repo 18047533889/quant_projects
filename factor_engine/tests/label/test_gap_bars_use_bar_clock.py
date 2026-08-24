@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from api.label_pit import LabelIR, LabelOp
+from factor_engine.api.label_pit import LabelIR, LabelOp
 
 
 def test_gap_bars_is_bar_count() -> None:
@@ -22,7 +22,7 @@ def test_gap_bars_non_negative_int() -> None:
 
 def test_label_window_gap_does_not_use_calendar_timedelta() -> None:
     # The LabelWindowSpec keeps gap_bars as an integer bar count.
-    from api.label_pit import LabelWindowSpec
+    from factor_engine.api.label_pit import LabelWindowSpec
 
     spec = LabelWindowSpec(horizon_bars=5, feature_lookback_bars=20, gap_bars=1)
     assert spec.min_separation_bars == 1

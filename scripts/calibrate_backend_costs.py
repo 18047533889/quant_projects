@@ -93,7 +93,7 @@ def _shape_for_rows(rows: int) -> tuple[int, int]:
 
 def _pandas_case(canonical: str, rows: int):
     from scripts.audit_all_factor_production import _build_call, _panels
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     dates, instruments = _shape_for_rows(rows)
     panels = _panels(rows=dates, cols=instruments)
@@ -106,8 +106,8 @@ def _pandas_case(canonical: str, rows: int):
 
 def _polars_panel_case(canonical: str, rows: int):
     from scripts.audit_all_factor_production import _build_call, _panels
-    from cleaned_operators.registry import OperatorRegistry
-    from backend.panel_polars import panel_to_polars
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.panel_polars import panel_to_polars
 
     dates, instruments = _shape_for_rows(rows)
     panels = _panels(rows=dates, cols=instruments)
@@ -126,13 +126,13 @@ def _polars_panel_case(canonical: str, rows: int):
 
 
 def _minimal_plan(canonical: str):
-    from backend.sql_pushdown.plan_fixtures import minimal_plan
+    from factor_engine.backend.sql_pushdown.plan_fixtures import minimal_plan
     return minimal_plan(canonical)
 
 
 def _polars_long_case(canonical: str, rows: int):
-    from backend.fastpath_plan_probe import ProbeSchemaBuilder
-    from backend.polars_expr_emitter import compile_plan_to_polars
+    from factor_engine.backend.fastpath_plan_probe import ProbeSchemaBuilder
+    from factor_engine.backend.polars_expr_emitter import compile_plan_to_polars
 
     plan = _minimal_plan(canonical)
     instruments = min(128, max(4, int(math.sqrt(max(rows, 1)))))
@@ -153,8 +153,8 @@ def _polars_long_case(canonical: str, rows: int):
 
 def _duckdb_case(canonical: str, rows: int):
     import duckdb
-    from backend.fastpath_plan_probe import ProbeSchemaBuilder
-    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+    from factor_engine.backend.fastpath_plan_probe import ProbeSchemaBuilder
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = _minimal_plan(canonical)
     instruments = min(128, max(4, int(math.sqrt(max(rows, 1)))))
@@ -218,11 +218,11 @@ def main() -> int:
     if not sizes:
         raise SystemExit("--rows must contain positive sizes")
 
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
-    from cleaned_operators.production_hardening import factor_production_targets
-    from backend.operator_capability import supports_pandas, supports_polars, supports_sql
-    from backend.polars_long_production import is_polars_long_native_production_safe
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators.production_hardening import factor_production_targets
+    from factor_engine.backend.operator_capability import supports_pandas, supports_polars, supports_sql
+    from factor_engine.backend.polars_long_production import is_polars_long_native_production_safe
 
     load_all()
     register_sql_backends()

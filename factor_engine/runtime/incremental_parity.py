@@ -34,9 +34,9 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-from ir.nodes import IRNode
-from runtime.stateful_checkpoint_store import StatefulCheckpointStore
-from runtime.stateful_incremental import try_stateful_segmented_incremental
+from factor_engine.ir.nodes import IRNode
+from factor_engine.runtime.stateful_checkpoint_store import StatefulCheckpointStore
+from factor_engine.runtime.stateful_incremental import try_stateful_segmented_incremental
 from stateful_runtime import execute_stateful_segment
 
 #: 该 parity 套件拟覆盖的 segmented canonical（各带一组小参数）。
@@ -647,7 +647,7 @@ def run_destructive_scenarios(
 
     # --- 8. ST 变化（额外列切换 -> 经 change_impact 的受影响窗口重算）------
     try:
-        from runtime.change_impact import compute_change_impact
+        from factor_engine.runtime.change_impact import compute_change_impact
 
         ir = _segmented_ir(canonical, params)
         affected = compute_change_impact(
@@ -683,7 +683,7 @@ def run_destructive_scenarios(
 
     # --- 10. 行业重分类（GROUP 升级 -> change_impact）--------------------
     try:
-        from runtime.change_impact import compute_change_impact
+        from factor_engine.runtime.change_impact import compute_change_impact
 
         ir = _segmented_ir(canonical, params)
         affected = compute_change_impact(
@@ -700,7 +700,7 @@ def run_destructive_scenarios(
 
     # --- 11. 指数成分变化（FULL_UNIVERSE 升级 -> change_impact）-----------
     try:
-        from runtime.change_impact import compute_change_impact
+        from factor_engine.runtime.change_impact import compute_change_impact
 
         ir = _segmented_ir(canonical, params)
         affected = compute_change_impact(
@@ -716,7 +716,7 @@ def run_destructive_scenarios(
 
     # --- 12. 调整因子变化（价格调整 -> 前向影响 change_impact）-----------
     try:
-        from runtime.change_impact import compute_change_impact
+        from factor_engine.runtime.change_impact import compute_change_impact
 
         ir = _segmented_ir(canonical, params)
         affected = compute_change_impact(
@@ -743,7 +743,7 @@ def run_destructive_scenarios(
 
     # --- 14. 财报修正（发布后数值变化 -> 受影响窗口重算）-----------------
     try:
-        from runtime.change_impact import compute_change_impact
+        from factor_engine.runtime.change_impact import compute_change_impact
 
         ir = _segmented_ir(canonical, params)
         affected = compute_change_impact(
@@ -946,7 +946,7 @@ def _capability_counts() -> dict[str, Any]:
         "NOT_CERTIFIED": "NOT_RUN",
     }
     try:
-        from runtime.incremental_contract import incremental_capability_matrix
+        from factor_engine.runtime.incremental_contract import incremental_capability_matrix
 
         matrix = incremental_capability_matrix()
     except Exception:

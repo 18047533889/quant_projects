@@ -15,13 +15,13 @@ import time
 import pandas as pd
 import pytest
 
-from runtime.resource_calibration_store import (
+from factor_engine.runtime.resource_calibration_store import (
     CALIBRATION_SCHEMA_VERSION,
     ResourceCalibrationStore,
     ShapeCalibration,
 )
-from runtime.resource_shape import ResourceShapeKey
-from runtime.task_run_observation import (
+from factor_engine.runtime.resource_shape import ResourceShapeKey
+from factor_engine.runtime.task_run_observation import (
     ATTRIBUTION_UNATTRIBUTED,
     TaskRunObservation,
     estimate_output_bytes,
@@ -55,10 +55,10 @@ def test_elapsed_is_duration_not_timestamp():
 
 
 def test_scheduler_records_real_duration():
-    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
-    from runtime.resource_broker import ResourceBroker
-    from planner.physical_factor_dag import PhysicalFactorTask, TASK_ROOT
-    from runtime.resource_calibration_store import reset_calibration_store, global_calibration_store
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    from factor_engine.runtime.resource_broker import ResourceBroker
+    from factor_engine.planner.physical_factor_dag import PhysicalFactorTask, TASK_ROOT
+    from factor_engine.runtime.resource_calibration_store import reset_calibration_store, global_calibration_store
 
     reset_calibration_store()
     store = global_calibration_store()
@@ -82,16 +82,16 @@ def test_scheduler_records_real_duration():
 
 
 def test_output_bytes_comes_from_result():
-    from planner.physical_factor_dag import PhysicalFactorTask, TASK_ROOT
+    from factor_engine.planner.physical_factor_dag import PhysicalFactorTask, TASK_ROOT
 
     result = pd.Series([1.0, 2.0, 3.0])
     actual = estimate_output_bytes(result)
     assert actual > 0
     # scheduler 记录 output_bytes_actual 而非 contract.output_bytes。
-    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
-    from runtime.resource_broker import ResourceBroker
-    from runtime.resource_calibration_store import reset_calibration_store, global_calibration_store
-    from runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    from factor_engine.runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.resource_calibration_store import reset_calibration_store, global_calibration_store
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
     reset_calibration_store()
     store = global_calibration_store()
@@ -153,7 +153,7 @@ def test_old_schema_data_excluded(tmp_path):
         "spill_obs": [0.0] * 5,
         "updated_at_ms": 0.0,
     }]
-    from runtime.resource_shape import hardware_fingerprint
+    from factor_engine.runtime.resource_shape import hardware_fingerprint
     rows[0]["hardware_fingerprint"] = json.dumps(hardware_fingerprint(), sort_keys=True)
     path = str(tmp_path / "old.parquet")
     pd.DataFrame(rows).to_parquet(path, index=False)

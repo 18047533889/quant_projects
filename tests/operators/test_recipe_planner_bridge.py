@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from backend.sql_pushdown.sql_registry import is_sql_capable
-from factor_recipes.planner_bridge import compile_recipe_plans
-from planner.optimizer import Optimizer
+from factor_engine.backend.sql_pushdown.sql_registry import is_sql_capable
+from factor_engine.factor_recipes.planner_bridge import compile_recipe_plans
+from factor_engine.planner.optimizer import Optimizer
 
 
 def _find(root, op):

@@ -15,9 +15,9 @@ import time
 
 import pytest
 
-from runtime.resource_broker import ResourceBroker
-from runtime.resource_autopilot import ResourceDecision
-from runtime.resource_autopilot_service import ResourceDecisionSnapshot
+from factor_engine.runtime.resource_broker import ResourceBroker
+from factor_engine.runtime.resource_autopilot import ResourceDecision
+from factor_engine.runtime.resource_autopilot_service import ResourceDecisionSnapshot
 
 
 def _decision(**kw) -> ResourceDecision:
@@ -38,7 +38,7 @@ def _decision(**kw) -> ResourceDecision:
 
 
 def test_broker_records_and_autopilot_consumes_live_signals():
-    from runtime.resource_autopilot_service import ResourceAutopilotService
+    from factor_engine.runtime.resource_autopilot_service import ResourceAutopilotService
 
     broker = ResourceBroker()
     seen: dict = {}
@@ -63,7 +63,7 @@ def test_broker_records_and_autopilot_consumes_live_signals():
 
 def test_stale_decision_returns_conservative_not_stale():
     broker = ResourceBroker()
-    from runtime.resource_autopilot_service import start_resource_autopilot, stop_resource_autopilot
+    from factor_engine.runtime.resource_autopilot_service import start_resource_autopilot, stop_resource_autopilot
 
     # 手动构造一个已过期的 snapshot。
     snap = ResourceDecisionSnapshot(
@@ -80,7 +80,7 @@ def test_stale_decision_returns_conservative_not_stale():
         def last_decision(self):
             return snap
 
-    import runtime.resource_autopilot_service as _svc
+    import factor_engine.runtime.resource_autopilot_service as _svc
     old = _svc.get_resource_autopilot
     try:
         _svc.get_resource_autopilot = lambda: _AP()
@@ -93,8 +93,8 @@ def test_stale_decision_returns_conservative_not_stale():
 
 
 def test_concurrency_dual_gate_target_concurrency_and_cpu_tokens():
-    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
-    from runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
     sched = AdaptiveBatchScheduler(broker=ResourceBroker())
     sched._last_decision = _decision(target_concurrency=4, target_cpu_tokens=8)
@@ -129,7 +129,7 @@ def test_concurrency_dual_gate_target_concurrency_and_cpu_tokens():
 
 
 def test_recursive_release_evicts_children_from_leases():
-    from runtime.host_resource_coordinator import HostResourceCoordinator
+    from factor_engine.runtime.host_resource_coordinator import HostResourceCoordinator
 
     c = HostResourceCoordinator()
     job = c.request_job_lease(owner="j1", memory_bytes=10**9, cpu_tokens=1)
@@ -154,7 +154,7 @@ def test_da_governor_host_backed_admission():
         GlobalResourceGovernor,
         ResourceReservation,
     )
-    from runtime.host_resource_coordinator import HostResourceCoordinator
+    from factor_engine.runtime.host_resource_coordinator import HostResourceCoordinator
 
     gov = GlobalResourceGovernor(max_total_reserved_memory=1000)
     c = HostResourceCoordinator()

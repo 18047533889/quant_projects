@@ -9,11 +9,11 @@ import pytest
 
 sys.path.insert(0, "/home/shw/quant_projects/factor_engine")
 
-from api import rank, ts_mean  # noqa: E402  （导入即填充 OperatorRegistry）
-from api.columns import col
-from api.factor import Factor
-from backend.pandas_backend import PandasBackend
-from runtime.engine import FactorEngine
+from factor_engine.api import rank, ts_mean  # noqa: E402  （导入即填充 OperatorRegistry）
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 
@@ -23,7 +23,7 @@ def _skip_dynamic_reload(monkeypatch):
     会二次 load_all，撞上并发会话正在收口的 operator 重复注册（过渡期冲突）。
     这里跳过重复加载，不影响本用例验证的 run_many_iter/sink/CSE 逻辑。"""
     monkeypatch.setattr(
-        "backend.cleaned_bridge.ensure_cleaned_loaded", lambda: None
+        "factor_engine.backend.cleaned_bridge.ensure_cleaned_loaded", lambda: None
     )
 
 
@@ -86,7 +86,7 @@ def test_cse_shared_results_released_after_last_consumer():
 def test_materializer_streams_partitions(tmp_path):
     """R17：ParquetMaterializer 不再 ``list(iter_partition_groups(...))``，
     分区逐个写入且 upsert 幂等。"""
-    from storage.materializer import ParquetMaterializer
+    from factor_engine.storage.materializer import ParquetMaterializer
 
     dates = pd.bdate_range("2023-01-02", periods=260)  # 跨两个年份分区
     idx = pd.MultiIndex.from_product([dates, ["AAA", "BBB"]], names=["timestamp", "instrument"])

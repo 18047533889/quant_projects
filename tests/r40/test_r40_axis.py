@@ -9,7 +9,7 @@ import pandas as pd
 import polars as pl
 import pytest
 
-from cleaned_operators.common import _polars_bridge as pb
+from factor_engine.cleaned_operators.common import _polars_bridge as pb
 
 
 class TestColumnNameInjective:
@@ -119,7 +119,7 @@ class TestInstrumentCountUniqueCardinality:
 
 class TestPolarsBulkAxisVerification:
     def test_missing_fe_time_hard_fails_in_production(self):
-        from backend import panel_polars as pp
+        from factor_engine.backend import panel_polars as pp
 
         idx = pd.date_range("2024-01-01", periods=3)
         template = pd.DataFrame({"a": [0.0] * 3}, index=idx)
@@ -131,7 +131,7 @@ class TestPolarsBulkAxisVerification:
         assert list(out.index) == list(idx)
 
     def test_reordered_time_axis_detected(self):
-        from backend import panel_polars as pp
+        from factor_engine.backend import panel_polars as pp
 
         idx = pd.date_range("2024-01-01", periods=3)
         template = pd.DataFrame({"a": [0.0] * 3}, index=idx)
@@ -141,7 +141,7 @@ class TestPolarsBulkAxisVerification:
             pp.polars_to_panel(res, template=template)
 
     def test_both_paths_share_axis_verification(self):
-        from backend import panel_polars as pp
+        from factor_engine.backend import panel_polars as pp
 
         idx = pd.date_range("2024-01-01", periods=3)
         template = pd.DataFrame({"a": [0.0] * 3}, index=idx)
@@ -166,7 +166,7 @@ class TestFromPandasPanelRowOrder:
 
 class TestExtraOutputColumns:
     def test_extra_output_columns_rejected(self):
-        from backend import cleaned_bridge as cb
+        from factor_engine.backend import cleaned_bridge as cb
 
         idx = pd.date_range("2024-01-01", periods=3)
         template = pd.DataFrame({"a": [0.0] * 3, "b": [0.0] * 3}, index=idx)

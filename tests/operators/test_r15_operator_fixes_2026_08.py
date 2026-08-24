@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 
 
 def _panel(data: np.ndarray) -> pd.DataFrame:
@@ -34,7 +34,7 @@ def _loaded():
 def _plug_in_mi(a: np.ndarray, b: np.ndarray, grid: int, alpha: float = 0.5) -> float:
     """Raw plug-in MI (Jeffreys-smoothed joint, NO Miller–Madow correction)."""
     n = a.shape[0]
-    from cleaned_operators.cross_section_local import _rank_transform
+    from factor_engine.cleaned_operators.cross_section_local import _rank_transform
 
     u = np.clip((_rank_transform(np.stack([a, b], axis=1))[:, 0] * grid).astype(int), 0, grid - 1)
     v = np.clip((_rank_transform(np.stack([a, b], axis=1))[:, 1] * grid).astype(int), 0, grid - 1)
@@ -60,7 +60,7 @@ def test_rank_copula_mi_miller_madow_sign_independent() -> None:
     """R15-INC-174: on INDEPENDENT uniforms the plug-in MI is upward biased;
     the Miller–Madow-corrected MI must be SMALLER (damped toward 0), not
     inflated by the pre-R15 opposite-sign correction."""
-    from cleaned_operators.cross_section_local import _copula_cross_series
+    from factor_engine.cleaned_operators.cross_section_local import _copula_cross_series
 
     rng = np.random.default_rng(2026)
     n, grid = 4000, 8
@@ -82,7 +82,7 @@ def test_rank_copula_mi_miller_madow_sign_independent() -> None:
 def test_rank_copula_mi_positive_control_dependent() -> None:
     """R15-INC-174 positive control: strongly dependent data gives MI well above
     the independent null, so the correction does not over-damp a real signal."""
-    from cleaned_operators.cross_section_local import _copula_cross_series
+    from factor_engine.cleaned_operators.cross_section_local import _copula_cross_series
 
     rng = np.random.default_rng(7)
     n, grid = 4000, 8
@@ -109,8 +109,8 @@ def _complete_session_runs(duplicate_slot: bool = False, off_grid_second: bool =
     replaces the final row's timestamp with a stray seconds-level bar."""
     import numpy as np
 
-    from cleaned_operators.intraday_session import _official_grid, _session_runs
-    from runtime.session_calendar import SessionCalendar
+    from factor_engine.cleaned_operators.intraday_session import _official_grid, _session_runs
+    from factor_engine.runtime.session_calendar import SessionCalendar
 
     cal = SessionCalendar(market="CN", timestamp_convention="bar_start", bar_freq="1min")
     expected, close_mod, slot_set = _official_grid(cal)
@@ -163,7 +163,7 @@ def test_session_full_grid_completes() -> None:
 def test_knn_default_k_is_dof_floor() -> None:
     """Default ``k`` must be the DOF floor (20 for the 3-feature operators) so a
     default call is not a guaranteed-NaN dead region."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     for canonical in (
         "cs_knn_local_linear_residual",
@@ -183,7 +183,7 @@ def test_knn_effective_neighbourhood_is_max() -> None:
     the DOF floor must not silently degrade into a smaller fit.  With a
     cross-section of 40 valid stocks (≫ 20) the default k=20 produces finite
     values (the pre-R15 k=10 default was all-NaN for typical breadths)."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     rng = np.random.default_rng(3)
     rows, n = 1, 40  # a single cross-section day

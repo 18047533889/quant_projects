@@ -74,8 +74,8 @@ def test_r28_evidence_canonical_digest_current():
 
 
 def test_r28_evidence_all_canonicals_present():
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     registry = set(OperatorRegistry.list_canonical())
@@ -111,8 +111,8 @@ def test_r28_all_required_files_tracked():
 
 def test_r28_evidence_no_extra_deleted_canonicals():
     """Evidence must not reference canonicals that no longer exist."""
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     registry = set(OperatorRegistry.list_canonical())

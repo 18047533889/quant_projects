@@ -11,8 +11,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _load():
@@ -73,7 +73,7 @@ def test_panel_purge_embargo_contract_holds():
     overlapping forward label (horizon H), the training exclusion (purge) is
     exactly H rows and no label origin <= T-1-H is ever dropped."""
     _load()
-    from cleaned_operators.model_timing import get_model_timing_contract
+    from factor_engine.cleaned_operators.model_timing import get_model_timing_contract
 
     for name in (
         "panel_rolling_pcr_forecast",

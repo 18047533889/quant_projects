@@ -44,12 +44,12 @@ def _autoshard_parity() -> dict:
     import numpy as np
     import pandas as pd
 
-    from backend.pandas_backend import PandasBackend
-    from runtime.auto_shard_planner import AutoShardPlanner
-    from runtime.engine import FactorEngine
-    from runtime.shard_executor import ShardExecutor
-    from api import col, ts_mean
-    from api.factor import Factor
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.auto_shard_planner import AutoShardPlanner
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.runtime.shard_executor import ShardExecutor
+    from factor_engine.api import col, ts_mean
+    from factor_engine.api.factor import Factor
     from tests.helpers import InMemorySeriesSource
     from tests.r38.test_real_auto_shard_execution import _make_series, _task
 
@@ -85,7 +85,7 @@ def _autoshard_parity() -> dict:
 
 
 def _host_lease_stress() -> dict:
-    from runtime.host_resource_coordinator import HostResourceCoordinator
+    from factor_engine.runtime.host_resource_coordinator import HostResourceCoordinator
 
     c = HostResourceCoordinator()
     jobs = []
@@ -99,8 +99,8 @@ def _host_lease_stress() -> dict:
 
 
 def _controller_trace() -> dict:
-    from runtime.resource_autopilot_service import ResourceAutopilotService
-    from runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.resource_autopilot_service import ResourceAutopilotService
+    from factor_engine.runtime.resource_broker import ResourceBroker
 
     broker = ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=4)
     svc = ResourceAutopilotService(broker, interval_s=0.2)
@@ -116,7 +116,7 @@ def _fast_linear_benchmark() -> dict:
 
     import numpy as np
 
-    from backend.fast_linear_window import rolling_ols_reference, rolling_ols_sufficient, sliding_parity_check
+    from factor_engine.backend.fast_linear_window import rolling_ols_reference, rolling_ols_sufficient, sliding_parity_check
 
     rng = np.random.default_rng(0)
     T, p, window = 1500, 4, 120

@@ -89,13 +89,13 @@ def load_registry() -> tuple[Any, bool, str]:
     error = ""
     load_ok = True
     try:
-        from cleaned_operators import load_all
+        from factor_engine.cleaned_operators import load_all
         load_all()
     except Exception as exc:  # noqa: BLE001
         load_ok = False
         error = f"{type(exc).__name__}: {exc}"
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
         return OperatorRegistry, load_ok, error
     except Exception as exc:  # noqa: BLE001
         return None, False, f"{error}; registry_unavailable:{type(exc).__name__}: {exc}"
@@ -112,7 +112,7 @@ def _catalog_entry(reg, canonical: str) -> dict[str, Any]:
 
 def _semantics_for(canonical: str) -> Any:
     try:
-        from backend.numeric_semantics import semantics_for
+        from factor_engine.backend.numeric_semantics import semantics_for
         return semantics_for(canonical)
     except Exception:  # noqa: BLE001
         return None
@@ -161,7 +161,7 @@ def _source_of(op: Any) -> tuple[str, str]:
 
 def _axis_semantics(canonical: str, reg) -> str:
     try:
-        from cleaned_operators.operator_surface import classify_canonical
+        from factor_engine.cleaned_operators.operator_surface import classify_canonical
         surface = classify_canonical(canonical)
     except Exception:  # noqa: BLE001
         surface = None
@@ -456,7 +456,7 @@ def build_certificate(
     )
 
     try:
-        from cleaned_operators.operator_spec import build_operator_spec
+        from factor_engine.cleaned_operators.operator_spec import build_operator_spec
         spec = build_operator_spec(canonical)
     except Exception:  # noqa: BLE001
         spec = None

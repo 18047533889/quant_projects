@@ -2,13 +2,13 @@
 """SQL lowerer / Polars SAFE / hybrid speed-path regression tests."""
 from __future__ import annotations
 
-from planner.logical_plan import PlanNode
-from planner.sql_lowerer import lower_to_physical_plan
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.sql_lowerer import lower_to_physical_plan
 
 
 def test_lowerer_does_not_extract_bare_column_under_python_parent() -> None:
     """Non-SQL root with a column leaf must not DuckDB-round-trip the leaf."""
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
 
@@ -26,7 +26,7 @@ def test_lowerer_does_not_extract_bare_column_under_python_parent() -> None:
 
 
 def test_lowerer_still_extracts_non_leaf_sql_subtree() -> None:
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
 
@@ -44,7 +44,7 @@ def test_lowerer_still_extracts_non_leaf_sql_subtree() -> None:
 
 
 def test_bare_column_root_still_fully_sql() -> None:
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
 
@@ -55,8 +55,8 @@ def test_bare_column_root_still_fully_sql() -> None:
 
 
 def test_cs_aggregates_remain_polars_production_safe_after_rename() -> None:
-    from cleaned_operators import load_all, operator_policy
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all, operator_policy
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     for name in ("cs_mean", "cs_sum", "cs_count", "cs_std"):
@@ -65,18 +65,18 @@ def test_cs_aggregates_remain_polars_production_safe_after_rename() -> None:
 
 
 def test_hybrid_auto_upgrades_to_long_when_scan_available() -> None:
-    from backend.factory import build_backend
-    from backend.hybrid_backend import HybridBackend
-    from backend.hybrid_long_backend import HybridLongBackend
+    from factor_engine.backend.factory import build_backend
+    from factor_engine.backend.hybrid_backend import HybridBackend
+    from factor_engine.backend.hybrid_long_backend import HybridLongBackend
 
     assert isinstance(build_backend("auto"), HybridBackend)
     assert isinstance(build_backend("auto_long"), HybridLongBackend)
 
 
 def test_hybrid_auto_execute_uses_long_path_when_scan_present(monkeypatch) -> None:
-    from backend.hybrid_backend import HybridBackend
-    from backend.context import ExecutionContext
-    from planner.logical_plan import PlanNode
+    from factor_engine.backend.hybrid_backend import HybridBackend
+    from factor_engine.backend.context import ExecutionContext
+    from factor_engine.planner.logical_plan import PlanNode
 
     calls: list[str] = []
 
@@ -102,9 +102,9 @@ def test_hybrid_auto_execute_uses_long_path_when_scan_present(monkeypatch) -> No
 
 
 def test_hybrid_auto_execute_stays_wide_without_scan(monkeypatch) -> None:
-    from backend.hybrid_backend import HybridBackend
-    from backend.context import ExecutionContext
-    from planner.logical_plan import PlanNode
+    from factor_engine.backend.hybrid_backend import HybridBackend
+    from factor_engine.backend.context import ExecutionContext
+    from factor_engine.planner.logical_plan import PlanNode
 
     calls: list[str] = []
 

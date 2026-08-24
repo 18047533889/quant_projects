@@ -16,11 +16,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from api.columns import col
-from api.mining_integration import export_dsl_allowlist_json
-from market.universe import apply_universe_mask, coverage_metrics
-from runtime.config import FactorEngineConfig, RunConfig
-from runtime.config_runtime import _resolve_market, resolve_run_kwargs
+from factor_engine.api.columns import col
+from factor_engine.api.mining_integration import export_dsl_allowlist_json
+from factor_engine.market.universe import apply_universe_mask, coverage_metrics
+from factor_engine.runtime.config import FactorEngineConfig, RunConfig
+from factor_engine.runtime.config_runtime import _resolve_market, resolve_run_kwargs
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +108,7 @@ def test_sparse_field_does_not_report_high_breadth():
 # ---------------------------------------------------------------------------
 
 def test_strict_surface_rejects_implicit_minute_source():
-    from api.source_ref import transform_source_col
+    from factor_engine.api.source_ref import transform_source_col
 
     with pytest.raises(ValueError, match="strict"):
         transform_source_col(col("close"), "minute_bar", strict=True, period=5, index=0)

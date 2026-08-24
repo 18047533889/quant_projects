@@ -67,8 +67,8 @@ def generate_synthetic_data(
     Returns:
         (data_source, ctx): 可用于 backend.execute() 的上下文。
     """
-    from backend.context import ExecutionContext
-    from storage.in_memory_data_source import InMemoryDataSource
+    from factor_engine.backend.context import ExecutionContext
+    from factor_engine.storage.in_memory_data_source import InMemoryDataSource
 
     # 生成时间序列
     dates = pd.date_range("2023-01-01", periods=n_dates, freq="D")
@@ -131,8 +131,8 @@ def run_baseline_benchmark(
     ctx: Any,
 ) -> BenchmarkResult:
     """运行基线基准测试（无优化）。"""
-    from backend.polars_backend import PolarsBackend
-    from planner.dsl_parser import parse_factor
+    from factor_engine.backend.polars_backend import PolarsBackend
+    from factor_engine.planner.dsl_parser import parse_factor
 
     backend = PolarsBackend()
     gc.collect()
@@ -167,13 +167,13 @@ def run_optimized_benchmark(
     ctx: Any,
 ) -> BenchmarkResult:
     """运行优化后基准测试（streaming + 线程调优）。"""
-    from backend.polars_backend import PolarsBackend
-    from backend.polars_streaming_policy import should_use_streaming
-    from backend.polars_thread_config import (
+    from factor_engine.backend.polars_backend import PolarsBackend
+    from factor_engine.backend.polars_streaming_policy import should_use_streaming
+    from factor_engine.backend.polars_thread_config import (
         configure_polars_for_execution,
         get_physical_cores,
     )
-    from planner.dsl_parser import parse_factor
+    from factor_engine.planner.dsl_parser import parse_factor
 
     # 应用优化配置
     config = configure_polars_for_execution(

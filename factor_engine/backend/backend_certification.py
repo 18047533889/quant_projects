@@ -34,7 +34,7 @@ class BackendCertification:
 
 
 def _pandas_status(canonical: str) -> BackendStatus:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if "pandas_numpy" not in OperatorRegistry.backends_for(canonical):
         return "unsupported"
@@ -45,17 +45,17 @@ def _pandas_status(canonical: str) -> BackendStatus:
 
     # Existing daily primitives have a Pandas reference by construction; their
     # production admission remains governed by operator_spec/evidence.
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
     if canonical in DAILY_CANONICALS:
         return "production"
     return "research"
 
 
 def _polars_status(canonical: str) -> BackendStatus:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     if "polars" not in OperatorRegistry.backends_for(canonical):
         return "unsupported"
-    from backend.primitive_evidence import (
+    from factor_engine.backend.primitive_evidence import (
         POLARS_EDGE_VERIFIED,
         POLARS_NO_FALLBACK_VERIFIED,
         POLARS_REFERENCE_PARITY_VERIFIED,
@@ -72,13 +72,13 @@ def _polars_status(canonical: str) -> BackendStatus:
 
 
 def _duckdb_status(canonical: str) -> BackendStatus:
-    from backend.primitive_evidence import (
+    from factor_engine.backend.primitive_evidence import (
         DUCKDB_EDGE_VERIFIED,
         DUCKDB_NAN_EDGE_VERIFIED,
         DUCKDB_REAL_SQL_VERIFIED,
         DUCKDB_REFERENCE_PARITY_VERIFIED,
     )
-    from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
+    from factor_engine.backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
 
     if canonical not in SQL_IMPLEMENTED_CANONICALS:
         return "unsupported"
@@ -97,8 +97,8 @@ def _duckdb_status(canonical: str) -> BackendStatus:
 
 
 def backend_certification(canonical: str) -> BackendCertification:
-    from backend.cleaned_bridge import ensure_cleaned_loaded
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     ensure_cleaned_loaded()
     canon = OperatorRegistry.resolve_canonical_strict(canonical)
@@ -129,8 +129,8 @@ def production_backends(canonical: str) -> tuple[str, ...]:
 
 
 def build_backend_certification_manifest() -> dict[str, dict[str, object]]:
-    from backend.cleaned_bridge import ensure_cleaned_loaded
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     ensure_cleaned_loaded()
     return {

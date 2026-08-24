@@ -17,8 +17,8 @@ def _bootstrap() -> None:
     fe = str(FE_ROOT)
     if fe not in sys.path:
         sys.path.insert(0, fe)
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
@@ -41,7 +41,7 @@ def main() -> int:
     )
     args = parser.parse_args()
     _bootstrap()
-    from backend.operator_manifest import build_operator_manifest, write_operator_manifest
+    from factor_engine.backend.operator_manifest import build_operator_manifest, write_operator_manifest
 
     if args.check:
         import json

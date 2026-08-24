@@ -9,13 +9,13 @@ import pytest
 
 class TestCertificationHelpers:
     def _import_bridge(self):
-        from backend import cleaned_bridge as cb
+        from factor_engine.backend import cleaned_bridge as cb
 
         return cb
 
     def test_bound_scalar_parameters_complete(self):
         cb = self._import_bridge()
-        from cleaned_operators.common.data_cleaning import WindowMean
+        from factor_engine.cleaned_operators.common.data_cleaning import WindowMean
 
         op = WindowMean()
         idx = pd.date_range("2024-01-01", periods=5)
@@ -41,7 +41,7 @@ class TestCertificationHelpers:
 
     def test_execution_variant_reflects_actual_backend(self, monkeypatch):
         cb = self._import_bridge()
-        from cleaned_operators.common.data_cleaning import WindowMean
+        from factor_engine.cleaned_operators.common.data_cleaning import WindowMean
 
         op = WindowMean()
         variant = cb._execution_variant(op, "pandas_numpy", "window_mean")
@@ -56,7 +56,7 @@ class TestCertificationHelpers:
         def _boom(canonical):
             raise RuntimeError("resolver down")
 
-        monkeypatch.setattr("backend.operator_semantic_version.versioned_name", _boom)
+        monkeypatch.setattr("factor_engine.backend.operator_semantic_version.versioned_name", _boom)
         with pytest.raises(cb.ParameterCertificationInfrastructureError):
             cb._operator_semantic_version("ts_mean")
 
@@ -68,7 +68,7 @@ class TestCertificationHelpers:
 
 class TestGrainTransformCertificate:
     def test_grain_transform_certificate_minute_to_daily(self):
-        from backend import cleaned_bridge as cb
+        from factor_engine.backend import cleaned_bridge as cb
 
         cert = cb.GrainTransformCertificate(
             input_grain="minute", output_grain="daily",
@@ -81,7 +81,7 @@ class TestGrainTransformCertificate:
         assert cert.to_dict()["mapping_policy"] == "session_end"
 
     def test_grain_transform_rejects_duplicate_dates(self):
-        from backend import cleaned_bridge as cb
+        from factor_engine.backend import cleaned_bridge as cb
 
         idx_in = pd.date_range("2024-01-01", periods=4)
         template = pd.DataFrame({"a": [0.0] * 4}, index=idx_in)
@@ -96,7 +96,7 @@ class TestGrainTransformCertificate:
         assert any("not unique" in e for e in errors)
 
     def test_grain_transform_rejects_extra_columns(self):
-        from backend import cleaned_bridge as cb
+        from factor_engine.backend import cleaned_bridge as cb
 
         idx_in = pd.date_range("2024-01-01", periods=4)
         template = pd.DataFrame({"a": [0.0] * 4}, index=idx_in)
@@ -112,8 +112,8 @@ class TestGrainTransformCertificate:
 
 class TestBackendRouteTelemetry:
     def test_concurrent_counts_not_lost(self):
-        from backend import cleaned_bridge as cb
-        from backend.panel_polars import ExecutionPerfCounters, set_request_perf_counters, reset_request_perf_counters
+        from factor_engine.backend import cleaned_bridge as cb
+        from factor_engine.backend.panel_polars import ExecutionPerfCounters, set_request_perf_counters, reset_request_perf_counters
 
         counters = ExecutionPerfCounters()
         token = set_request_perf_counters(counters)
@@ -149,8 +149,8 @@ class TestBackendRouteTelemetry:
 
 class TestRepConversionCountersRequestScoped:
     def test_request_scoped_counters(self):
-        from backend import panel_polars as pp
-        from backend.panel_polars import ExecutionPerfCounters, set_request_perf_counters, reset_request_perf_counters
+        from factor_engine.backend import panel_polars as pp
+        from factor_engine.backend.panel_polars import ExecutionPerfCounters, set_request_perf_counters, reset_request_perf_counters
 
         idx = pd.date_range("2024-01-01", periods=5)
         df = pd.DataFrame(np.eye(5), index=idx, columns=["a", "b", "c", "d", "e"])

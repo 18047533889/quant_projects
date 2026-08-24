@@ -1,12 +1,12 @@
 """Collected coverage for automatic q region residency."""
 
-from backend.q_backend.q_compiler import QRegionPlan
-from backend.q_backend.q_executor import (
+from factor_engine.backend.q_backend.q_compiler import QRegionPlan
+from factor_engine.backend.q_backend.q_executor import (
     get_q_executor,
     get_q_executor_telemetry,
     reset_q_executor_telemetry,
 )
-from backend.q_backend.test_q_residency import (
+from factor_engine.backend.q_backend.test_q_residency import (
     mock_q_process,
     mock_type_adapter,
     reset_q_executor_singleton,

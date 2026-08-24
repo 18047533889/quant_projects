@@ -10,11 +10,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.cross_section.panel_batch1  # noqa: F401
-import cleaned_operators.cross_section.panel_batch1_polars  # noqa: F401
+import factor_engine.cleaned_operators.cross_section.panel_batch1  # noqa: F401
+import factor_engine.cleaned_operators.cross_section.panel_batch1_polars  # noqa: F401
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
@@ -52,7 +52,7 @@ def _event_panel(days: int = 100, cols: int = 3, seed: int = 0, event_prob: floa
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize("name", sorted(set(BATCH1_CANONICALS)))
 def test_registered_and_classified(name: str) -> None:
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     assert OperatorRegistry.get(name) is not None, name
     assert classify_canonical(name) in ("daily", "extended", "research"), name

@@ -7,17 +7,17 @@ import pytest
 
 @pytest.fixture(scope="module")
 def _loaded():
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
 
 
 def test_primitive_dual_backend_evidence_is_production_safe(_loaded):
-    from backend.fastpath_evidence import polars_executed_parity_canonicals
-    from backend.primitive_evidence import operational_production_certified_set
-    from backend.sql_tiers import effective_sql_production_safe
+    from factor_engine.backend.fastpath_evidence import polars_executed_parity_canonicals
+    from factor_engine.backend.primitive_evidence import operational_production_certified_set
+    from factor_engine.backend.sql_tiers import effective_sql_production_safe
 
     for canon in sorted(operational_production_certified_set()):
         assert canon in polars_executed_parity_canonicals(), canon
@@ -26,15 +26,15 @@ def test_primitive_dual_backend_evidence_is_production_safe(_loaded):
 
 def test_p0_is_exactly_evidence_certified(_loaded):
     """The reviewed P0 surface is authored only after full certification."""
-    from backend.production_fastpath_tiers import P0_PRODUCTION_FASTPATH_CANONICALS
-    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    from factor_engine.backend.production_fastpath_tiers import P0_PRODUCTION_FASTPATH_CANONICALS
+    from factor_engine.backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
 
     assert P0_PRODUCTION_FASTPATH_CANONICALS == PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
 
 
 def test_p1_group_dual_backend_subset(_loaded):
-    from backend.polars_long_production import is_polars_long_native_production_safe
-    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    from factor_engine.backend.polars_long_production import is_polars_long_native_production_safe
+    from factor_engine.backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
 
     assert "group_zscore" in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
     assert is_polars_long_native_production_safe("group_zscore")
@@ -45,12 +45,12 @@ def test_p1_group_dual_backend_subset(_loaded):
 
 
 def test_p1_robust_winsorize_dual_backend(_loaded):
-    from backend.polars_long_production import is_polars_long_native_production_safe
-    from backend.primitive_evidence import (
+    from factor_engine.backend.polars_long_production import is_polars_long_native_production_safe
+    from factor_engine.backend.primitive_evidence import (
         DUCKDB_REAL_SQL_VERIFIED,
         PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE,
     )
-    from backend.sql_tiers import effective_sql_production_safe
+    from factor_engine.backend.sql_tiers import effective_sql_production_safe
 
     assert "group_winsorize" in DUCKDB_REAL_SQL_VERIFIED
     assert "group_winsorize" in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
@@ -60,9 +60,9 @@ def test_p1_robust_winsorize_dual_backend(_loaded):
 
 
 def test_p1_regression_not_production_safe(_loaded):
-    from backend.polars_long_production import is_polars_long_native_production_safe
-    from backend.production_fastpath_tiers import P1_REGRESSION_PARITY_PENDING
-    from backend.sql_tiers import effective_sql_production_safe
+    from factor_engine.backend.polars_long_production import is_polars_long_native_production_safe
+    from factor_engine.backend.production_fastpath_tiers import P1_REGRESSION_PARITY_PENDING
+    from factor_engine.backend.sql_tiers import effective_sql_production_safe
 
     for canon in P1_REGRESSION_PARITY_PENDING:
         assert not is_polars_long_native_production_safe(canon), canon
@@ -70,9 +70,9 @@ def test_p1_regression_not_production_safe(_loaded):
 
 
 def test_p1_golden_ts_requires_evidence(_loaded):
-    from backend.polars_long_production import is_polars_long_native_production_safe
-    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
-    from backend.production_fastpath_tiers import P1_GOLDEN_VERIFIED_TS
+    from factor_engine.backend.polars_long_production import is_polars_long_native_production_safe
+    from factor_engine.backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    from factor_engine.backend.production_fastpath_tiers import P1_GOLDEN_VERIFIED_TS
 
     for canon in P1_GOLDEN_VERIFIED_TS:
         if canon in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE:
@@ -82,9 +82,9 @@ def test_p1_golden_ts_requires_evidence(_loaded):
 
 
 def test_p1_ts_complex_not_production_safe(_loaded):
-    from backend.polars_long_production import is_polars_long_native_production_safe
-    from backend.production_fastpath_tiers import P1_TS_COMPLEX_PARITY_PENDING
-    from backend.sql_tiers import effective_sql_production_safe
+    from factor_engine.backend.polars_long_production import is_polars_long_native_production_safe
+    from factor_engine.backend.production_fastpath_tiers import P1_TS_COMPLEX_PARITY_PENDING
+    from factor_engine.backend.sql_tiers import effective_sql_production_safe
 
     for canon in P1_TS_COMPLEX_PARITY_PENDING:
         assert not is_polars_long_native_production_safe(canon), canon
@@ -92,14 +92,14 @@ def test_p1_ts_complex_not_production_safe(_loaded):
 
 
 def test_rolling_beta_native_not_map_groups(_loaded):
-    from backend.polars_long_policy import POLARS_LONG_MAP_GROUPS, infer_polars_long_tier
+    from factor_engine.backend.polars_long_policy import POLARS_LONG_MAP_GROUPS, infer_polars_long_tier
 
     assert infer_polars_long_tier("rolling_beta") == "native"
     assert "rolling_beta" not in POLARS_LONG_MAP_GROUPS
 
 
 def test_map_groups_production_allowed_empty(_loaded):
-    from backend.polars_long_production import (
+    from factor_engine.backend.polars_long_production import (
         APPROVED_POLARS_LONG_MAP_GROUPS_PRODUCTION,
         POLARS_LONG_MAP_GROUPS_PRODUCTION_ALLOWED,
     )
@@ -109,15 +109,15 @@ def test_map_groups_production_allowed_empty(_loaded):
 
 
 def test_p2_and_forbidden_not_production_safe(_loaded):
-    from backend.polars_long_production import is_polars_long_native_production_safe
-    from backend.production_fastpath_tiers import (
+    from factor_engine.backend.polars_long_production import is_polars_long_native_production_safe
+    from factor_engine.backend.production_fastpath_tiers import (
         FORBIDDEN_PRODUCTION_FASTPATH,
         P2_RESEARCH_ONLY,
         resolve_polars_native_canonical,
     )
-    from backend.production_fastpath_gate import check_production_fastpath_plan_ops
-    from backend.sql_pushdown.plan_fixtures import minimal_plan
-    from backend.sql_tiers import effective_sql_production_safe
+    from factor_engine.backend.production_fastpath_gate import check_production_fastpath_plan_ops
+    from factor_engine.backend.sql_pushdown.plan_fixtures import minimal_plan
+    from factor_engine.backend.sql_tiers import effective_sql_production_safe
 
     sample = sorted(P2_RESEARCH_ONLY | FORBIDDEN_PRODUCTION_FASTPATH)[:12]
     for canon in sample:
@@ -135,9 +135,9 @@ def test_p2_and_forbidden_not_production_safe(_loaded):
 
 
 def test_p2_map_groups_not_production_safe(_loaded):
-    from backend.polars_long_policy import infer_polars_long_tier
-    from backend.production_fastpath_tiers import P2_MAP_GROUPS_CANONICALS, resolve_polars_native_canonical
-    from backend.polars_long_production import is_polars_long_native_production_safe
+    from factor_engine.backend.polars_long_policy import infer_polars_long_tier
+    from factor_engine.backend.production_fastpath_tiers import P2_MAP_GROUPS_CANONICALS, resolve_polars_native_canonical
+    from factor_engine.backend.polars_long_production import is_polars_long_native_production_safe
 
     for canon in P2_MAP_GROUPS_CANONICALS:
         if resolve_polars_native_canonical(canon) != canon:
@@ -147,7 +147,7 @@ def test_p2_map_groups_not_production_safe(_loaded):
 
 
 def test_sql_tier_aliases(_loaded):
-    from backend.sql_tiers import (
+    from factor_engine.backend.sql_tiers import (
         CLICKHOUSE_SQL_PARITY_VERIFIED,
         CLICKHOUSE_SQL_PRODUCTION_SAFE,
         DUCKDB_SQL_PARITY_VERIFIED,

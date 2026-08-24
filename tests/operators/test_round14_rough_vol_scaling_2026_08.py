@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import OperatorRegistry, load_all
+from factor_engine.cleaned_operators import OperatorRegistry, load_all
 
 # NaN at positions 3 and 8 of every 11-slot block: [x x x NaN x x x x NaN x x].
 _MISSING_PATTERN = np.array([0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0], dtype=bool)

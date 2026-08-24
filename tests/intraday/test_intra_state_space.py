@@ -17,13 +17,13 @@ def setup_module():
     import operator classes trigger registration at import time. This hook ensures
     the registry is writable before the imports happen.
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     if OperatorRegistry._lifecycle != OperatorRegistry.Lifecycle.BUILDING:
         # Safe to reset for test isolation
         OperatorRegistry._lifecycle = OperatorRegistry.Lifecycle.BUILDING
 
 
-from cleaned_operators.intraday.intra_state_space import (
+from factor_engine.cleaned_operators.intraday.intra_state_space import (
     IntraFunctionalMotifScore,
     IntraFunctionalMotifScorePolars,
     IntraKalmanLatentPrice,

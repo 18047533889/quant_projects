@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from backend.factory import build_backend
-from backend.q_backend import QBackend
+from factor_engine.backend.factory import build_backend
+from factor_engine.backend.q_backend import QBackend
 
 
 class TestQKdbFactoryIntegration:
@@ -35,9 +35,9 @@ class TestQBackendExecuteProductionUnavailable:
 
     def test_production_mode_q_unavailable_raises_backend_unavailable(self):
         """If production_mode=True and q runtime is not available, must raise BackendUnavailableError."""
-        from backend.operator_capability import BackendUnavailableError
-        from backend.q_backend.q_process_manager import QProcessManager, QAvailabilityStatus, QProcessInfo
-        from planner.logical_plan import PlanNode
+        from factor_engine.backend.operator_capability import BackendUnavailableError
+        from factor_engine.backend.q_backend.q_process_manager import QProcessManager, QAvailabilityStatus, QProcessInfo
+        from factor_engine.planner.logical_plan import PlanNode
 
         # Create a QBackend in production mode
         backend = QBackend(fallback_to_pandas=False, production_mode=True)
@@ -54,7 +54,7 @@ class TestQBackendExecuteProductionUnavailable:
         # Create a dummy plan node
         dummy_plan = PlanNode(op="add", inputs=(), attrs={}, node_id="test_node")
 
-        from backend.context import ExecutionContext
+        from factor_engine.backend.context import ExecutionContext
 
         # Create minimal context
         ctx = ExecutionContext(data_source=None, run_mode="research")
@@ -68,9 +68,9 @@ class TestQBackendExecuteMinimalPath:
 
     def test_research_mode_checks_availability_before_execution(self):
         """Research mode should check q availability before executing."""
-        from backend.q_backend.q_process_manager import QProcessManager, QAvailabilityStatus, QProcessInfo
-        from planner.logical_plan import PlanNode
-        from backend.context import ExecutionContext
+        from factor_engine.backend.q_backend.q_process_manager import QProcessManager, QAvailabilityStatus, QProcessInfo
+        from factor_engine.planner.logical_plan import PlanNode
+        from factor_engine.backend.context import ExecutionContext
 
         backend = QBackend(fallback_to_pandas=False, production_mode=False)
 
@@ -87,7 +87,7 @@ class TestQBackendExecuteMinimalPath:
         ctx = ExecutionContext(data_source=None, run_mode="research")
 
         # Should raise QDataUnavailableError (not BackendUnavailableError) in research mode
-        from backend.q_backend.q_errors import QDataUnavailableError, QPlanningFallbackAllowed
+        from factor_engine.backend.q_backend.q_errors import QDataUnavailableError, QPlanningFallbackAllowed
 
         with pytest.raises((QDataUnavailableError, QPlanningFallbackAllowed)):
             backend.execute(dummy_plan, ctx)

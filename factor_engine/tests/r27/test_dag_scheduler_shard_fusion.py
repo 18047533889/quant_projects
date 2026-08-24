@@ -4,18 +4,18 @@ shard legality + native fusion + as_completed。
 """
 from __future__ import annotations
 
-from planner.physical_factor_dag import (
+from factor_engine.planner.physical_factor_dag import (
     TASK_CSE_SHARED,
     TASK_ROOT,
     PhysicalFactorDAG,
     PhysicalFactorTask,
 )
-from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
-from runtime.adaptive_sharding import adaptive_shard_size, classify_shard_legality
-from runtime.resource_broker import ResourceBroker
-from runtime.task_resource_contract import TaskResourceContract
+from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+from factor_engine.runtime.adaptive_sharding import adaptive_shard_size, classify_shard_legality
+from factor_engine.runtime.resource_broker import ResourceBroker
+from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
-from planner.native_fusion import adaptive_fusion_block_size, can_fuse_roots
+from factor_engine.planner.native_fusion import adaptive_fusion_block_size, can_fuse_roots
 
 
 def _dag_with_shared() -> PhysicalFactorDAG:

@@ -35,7 +35,7 @@ def main() -> int:
     # because a parse-time A-share-bound FieldRef is intentionally rejected when
     # analyzed under the US market — that rejection IS the isolation guarantee.)
     try:
-        from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+        from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
         h_a = MULTI_MARKET_FIELD_REGISTRY.registry_for("ashare").catalog_hash()
         h_u = MULTI_MARKET_FIELD_REGISTRY.registry_for("us").catalog_hash()
@@ -57,7 +57,7 @@ def main() -> int:
 
     # Provider identity changes market-cap hash: A provider vs US provider.
     try:
-        from fields.providers import binding
+        from factor_engine.fields.providers import binding
         import json
 
         a = binding("market_cap_local", "ashare")

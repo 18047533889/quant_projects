@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from factor_recipes.registry import FactorRecipeRegistry
+from factor_engine.factor_recipes.registry import FactorRecipeRegistry
 
 
 @pytest.mark.parametrize(

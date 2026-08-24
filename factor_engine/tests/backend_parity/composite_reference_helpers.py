@@ -7,9 +7,9 @@ from typing import Any
 
 import pandas as pd
 
-from cleaned_operators.registry import OperatorRegistry
-from planner.logical_plan import PlanNode
-from planner.optimizer import Optimizer
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.optimizer import Optimizer
 
 
 @dataclass(frozen=True)
@@ -153,7 +153,7 @@ def lowered_plan_for(case: CompositeReferenceCase) -> PlanNode:
 
 def execute_lowered_pandas(plan: PlanNode, ctx) -> pd.Series:
     """在 Pandas backend 上执行已 lowered 的 plan，返回 MultiIndex Series。"""
-    from backend.pandas_backend import PandasBackend
+    from factor_engine.backend.pandas_backend import PandasBackend
 
     return PandasBackend().execute(plan, ctx)
 

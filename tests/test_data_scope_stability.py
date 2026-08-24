@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from storage.data_scope import compute_data_scope
+from factor_engine.storage.data_scope import compute_data_scope
 
 
 @dataclass

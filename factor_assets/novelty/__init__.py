@@ -5,17 +5,19 @@ Provides protocol boundaries for QE evidence without duplicating evaluation logi
 """
 
 from factor_assets.novelty.provider import (
-    EvidenceProvider,
+   
+        EvidenceProvider,
     EvidenceQuery,
     EvidenceResult,
     MockEvidenceProvider,
 )
 from factor_assets.novelty.conditional import (
-    NoveltyResult,
+   
+        NoveltyResult,
     ResultIdentity,
     ResultIdentityCache,
     ConditionalNoveltyProvider,
-    SimpleConditionalNoveltyAssessor,
+    ResultIdentityNoveltyAssessor,
 )
 
 __all__ = [
@@ -27,5 +29,5 @@ __all__ = [
     "ResultIdentity",
     "ResultIdentityCache",
     "ConditionalNoveltyProvider",
-    "SimpleConditionalNoveltyAssessor",
+    "ResultIdentityNoveltyAssessor",
 ]

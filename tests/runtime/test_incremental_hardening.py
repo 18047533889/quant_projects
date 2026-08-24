@@ -7,14 +7,14 @@ from dataclasses import dataclass, field
 import pandas as pd
 import pytest
 
-from api.columns import col
-from api.factor import Factor
-from backend.pandas_backend import PandasBackend
-from runtime.engine import FactorEngine
-from runtime.incremental import build_incremental_plan
-from storage.cache import CacheManager
-from storage.kline_parquet_source import KlineParquetSource
-from storage.time_window import narrow_data_source_for_window
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.runtime.incremental import build_incremental_plan
+from factor_engine.storage.cache import CacheManager
+from factor_engine.storage.kline_parquet_source import KlineParquetSource
+from factor_engine.storage.time_window import narrow_data_source_for_window
 from tests.helpers import InMemorySeriesSource
 
 
@@ -104,7 +104,7 @@ def test_slice_series_time_window_respects_utc_index():
         names=["timestamp", "instrument"],
     )
     s = pd.Series([1.0, 2.0], index=idx)
-    from storage.time_window import slice_series_time_window
+    from factor_engine.storage.time_window import slice_series_time_window
 
     out = slice_series_time_window(s, start=pd.Timestamp("2024-01-03"))
     assert len(out) == 1

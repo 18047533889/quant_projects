@@ -28,7 +28,7 @@ def _load() -> None:
 
 def main() -> int:
     _load()
-    from fields.providers import PROVIDER_REGISTRY
+    from factor_engine.fields.providers import PROVIDER_REGISTRY
 
     problems: list[str] = []
     total = 0
@@ -48,7 +48,7 @@ def main() -> int:
     # Resolver sanity: every concept with a real binding resolves a provider
     # (production may fail-closed on coverage, but research must pick something
     # when an available marker exists).
-    from fields.providers import PROVIDER_RESOLVER
+    from factor_engine.fields.providers import PROVIDER_RESOLVER
 
     unresolved = 0
     for concept in sorted(PROVIDER_REGISTRY.concepts()):

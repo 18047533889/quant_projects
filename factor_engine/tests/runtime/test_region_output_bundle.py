@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from runtime.multibackend.parallel_region_scheduler import RegionOutputBundle
+from factor_engine.runtime.multibackend.parallel_region_scheduler import RegionOutputBundle
 
 
 # ---------------------------------------------------------------------------
@@ -182,7 +182,7 @@ def test_to_dict_empty_bundle() -> None:
 def test_scheduler_accepts_region_output_bundle() -> None:
     """Integration: execute_fn returns RegionOutputBundle and the scheduler
     passes it through in results."""
-    from runtime.multibackend.parallel_region_scheduler import (
+    from factor_engine.runtime.multibackend.parallel_region_scheduler import (
         ExecutionRegion,
         ParallelRegionScheduler,
     )

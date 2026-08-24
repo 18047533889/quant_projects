@@ -12,10 +12,10 @@ from tests.helpers import FE_ROOT as PROJECT_ROOT
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.pandas_backend import PandasBackend
-from runtime.engine import FactorEngine
-from runtime.real_data_factor_smoke import _build_factors
-from storage.datasource import DataSource
+from factor_engine.backend.pandas_backend import PandasBackend
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.runtime.real_data_factor_smoke import _build_factors
+from factor_engine.storage.datasource import DataSource
 
 
 @dataclass

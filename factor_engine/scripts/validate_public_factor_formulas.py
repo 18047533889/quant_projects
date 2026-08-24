@@ -15,7 +15,7 @@ for path in (ROOT, FE):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from api.dsl_parser import parse_expr  # noqa: E402
+from factor_engine.api.dsl_parser import parse_expr  # noqa: E402
 
 FORMULA_KEYS = {"expr", "formula", "dsl_formula", "expression"}
 SKIP_PARTS = {"archive", "output", "reports", ".git"}

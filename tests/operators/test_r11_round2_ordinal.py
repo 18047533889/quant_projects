@@ -26,14 +26,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 # Register the pandas + polars backends without a full load_all (the shared
 # tree's finalize-layer-governance is transiently broken by the concurrent
 # session editing the static operator surface; the operators under test are all
 # self-contained in complexity_ext / polars_geometry_math).
-import cleaned_operators.complexity_ext  # noqa: E402,F401
-import cleaned_operators.polars_geometry_math  # noqa: E402,F401
+import factor_engine.cleaned_operators.complexity_ext  # noqa: E402,F401
+import factor_engine.cleaned_operators.polars_geometry_math  # noqa: E402,F401
 
 _RATIO = "ts_forbidden_ordinal_pattern_ratio"
 _EXCESS = "ts_forbidden_ordinal_pattern_excess"
@@ -238,7 +238,7 @@ def test_polars_parity(name):
 def test_old_kernel_tie_exclusion_still_counted():
     # The direct kernel keeps its audit-#88 contract: tied embeddings are
     # dropped from the observed patterns AND excluded from the null baseline N.
-    from cleaned_operators.complexity_ext import _forbidden_ordinal_ratio_series
+    from factor_engine.cleaned_operators.complexity_ext import _forbidden_ordinal_ratio_series
 
     rng = np.random.default_rng(13)
     x2d = rng.normal(size=(200, 1))

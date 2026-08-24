@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from api.mining_integration import validate_production_dsl
+from factor_engine.api.mining_integration import validate_production_dsl
 
 
 def test_validator_accepts_simple_production_formula() -> None:

@@ -12,14 +12,14 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="legacy operator export inventory superseded by generated manifest convergence")
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.operator_spec import (
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.operator_spec import (
     PRODUCTION_CORE_CANONICALS,
     export_operator_manifest,
     spec_to_manifest_entry,
     build_operator_spec,
 )
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module")

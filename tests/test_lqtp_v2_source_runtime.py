@@ -9,7 +9,7 @@ import pytest
 
 
 def test_yaml_dialect_version_is_validated_and_bridged(tmp_path: Path) -> None:
-    from runtime.config import load_config
+    from factor_engine.runtime.config import load_config
     path = tmp_path / "factor.yaml"
     path.write_text(
         """
@@ -36,9 +36,9 @@ data_source:
 
 
 def test_source_ref_disables_full_sql_pushdown() -> None:
-    from api.source_ref import source_col
-    from planner.logical_plan import PlanNode
-    from planner.sql_lowerer import lower_to_physical_plan
+    from factor_engine.api.source_ref import source_col
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.planner.sql_lowerer import lower_to_physical_plan
 
     ref = source_col("BenchmarkIndexDailyBar", "Close", index="000985.SH")
     name = ref.name
@@ -55,7 +55,7 @@ def test_source_ref_disables_full_sql_pushdown() -> None:
 
 
 def test_financial_lag_updates_when_old_quarter_is_revised() -> None:
-    from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+    from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
 
     class DummyInner:
         start_date = None
@@ -88,8 +88,8 @@ def test_financial_lag_updates_when_old_quarter_is_revised() -> None:
 
 def test_load_source_refs_batch_coalesces_financial_fields() -> None:
     """#10：同表多个财务 SourceRef 合并成一次 store 读，逐字段 PIT join。"""
-    from api.source_ref import make_source_ref, encode_source_ref
-    from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+    from factor_engine.api.source_ref import make_source_ref, encode_source_ref
+    from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
 
     reads: list[list[str]] = []
 
@@ -130,8 +130,8 @@ def test_load_source_refs_batch_coalesces_financial_fields() -> None:
 
 
 def test_minute_resample_does_not_silently_collapse_to_daily() -> None:
-    from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
-    from storage.sources.data_access_source import MissingDataDependencyError
+    from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+    from factor_engine.storage.sources.data_access_source import MissingDataDependencyError
 
     class DailyInner:
         def load_column(self, name: str):
@@ -152,7 +152,7 @@ def test_minute_resample_does_not_silently_collapse_to_daily() -> None:
 
 
 def test_multiminute_vwap_is_amount_over_volume() -> None:
-    from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+    from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
 
     source = LQTPLogicalDataSource(object(), factor_freq="1d")
     amount = pd.Series([1000.0], index=pd.MultiIndex.from_tuples(
@@ -169,7 +169,7 @@ def test_multiminute_vwap_is_amount_over_volume() -> None:
 
 
 def test_blocked_lqtp_names_are_classified_not_unknown() -> None:
-    from api.dsl_parser import DSLParseError, parse_expr
+    from factor_engine.api.dsl_parser import DSLParseError, parse_expr
     for formula in [
         "l2_sum(close)",
         "l2_count(close)",
@@ -181,7 +181,7 @@ def test_blocked_lqtp_names_are_classified_not_unknown() -> None:
 
 
 def test_machine_readable_manifest_distinguishes_blocked_from_production() -> None:
-    from api.lqtp_capabilities import build_lqtp_capability_manifest
+    from factor_engine.api.lqtp_capabilities import build_lqtp_capability_manifest
     manifest = build_lqtp_capability_manifest()
     assert manifest["dialect_version"] == "2026-07-19"
     assert "ts_sumac" in manifest["recognized_blocked"]

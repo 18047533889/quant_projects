@@ -1,0 +1,30 @@
+# factor_engine DSL — 可比性 / 无量纲 / 语法有效性
+
+因子必须「可比」：截面 IC 要求表达式在截面上无量纲或可解释为相对强弱信号。
+语法必须是 **factor_engine DSL**（禁止 AlphaGen / qlib）。
+
+## 无量纲构造原则（Dim ≈ 0）
+1. rank / zscore / cs_mad_zscore / cs_pct_rank / ts_rank / ts_zscore / pct_change / ts_pct / ts_corr / sign / RSI/ADX 等 → 无量纲或近似无量纲
+2. 两个同量纲量相除 → 无量纲，例如 divide(close, ts_mean(close, 20)) 或 safe_div_null(...)
+3. 价差除以价格或振幅 → 无量纲，例如 divide(subtract(close, open), close) 或 safe_div_null(ATR_WILDER(...), close)
+4. 仅对 volume/amount 做 rank / ts_rank / ts_pct / log，不要裸用 volume 与 price 直接相减
+5. log 仅用于正量；对可能为负的差分先用 abs / signed_log / signed_sqrt
+6. 需要收益时用 ts_pct / ts_log_return / safe_div_null(close, pre_close)-1.0，不要裸写 ret
+
+## 语法检查清单
+- 每个算子名与参数个数必须与白名单一致（factor_engine）
+- 滚动算子的窗口必须是字面整数，不能是 %d；同一表达式内允许出现多个不同窗口（如 5 与 60）
+- 字段名只能是 open/high/low/close/volume/vwap/pre_close/amount/factor/pe/pb/turnover_ratio/market_cap/circulating_market_cap
+- 嵌套括号完整；逗号分隔参数
+- 逻辑用 and_ / or_，不要用 and / or
+- 技术指标名保持大小写：RSI_WILDER、ADX、ATR_WILDER、MACD_*
+
+## 无效示例
+multiply(close, volume)          — 量纲混杂
+subtract(close, volume)          — 价格与成交量不可直接相减
+TsMean(close, 5)                 — AlphaGen 旧语法（禁止）
+$close                           — AlphaGen 字段写法（禁止）
+Div(close, open)                 — AlphaGen 算子（禁止）
+and(gt(close, open), lt(low, high))  — 应用 and_(...)
+rank(close)                      — 可解析但对行业/市值敏感；优先收益率或归一化形式
+group_neutralize(close, industry) — 无行业字段，禁止

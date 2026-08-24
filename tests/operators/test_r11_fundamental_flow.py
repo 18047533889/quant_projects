@@ -26,9 +26,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.fundamental.accruals_scores import (
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.fundamental.accruals_scores import (
     ApplicableUniverse,
     _piotroski_observed_count,
     _piotroski_normalized_partial_score,
@@ -117,7 +117,7 @@ def test_ytd_cumulative_is_not_direct_period_growth():
         OperatorRegistry.get("fin_yoy").calculate(ytd, pid, flow_type="CumulativeYTDFlow")
 
     # Correct sequence: QuarterFromCumulative first, then growth.
-    from cleaned_operators.fundamental.flow_semantics_v2 import fin_quarter_from_cumulative
+    from factor_engine.cleaned_operators.fundamental.flow_semantics_v2 import fin_quarter_from_cumulative
     quarterly = fin_quarter_from_cumulative(ytd, pid, q)
     growth = OperatorRegistry.get("fin_growth").calculate(quarterly, pid, periods=1)
     # Q2 single-period revenue = 250 - 100 = 150; growth = 150/100 - 1 = +50%.
@@ -222,7 +222,7 @@ def test_altman_zmijewski_declare_applicable_universe():
 # ---------------------------------------------------------------------------
 
 def test_report_yoy_lag_matches_prior_year_same_fiscal_slot():
-    from cleaned_operators.alpha_language_events import _report_yoy_lag
+    from factor_engine.cleaned_operators.alpha_language_events import _report_yoy_lag
 
     # Semiannual: with the default (misleading) periods_per_year=4 hint, the
     # same-slot match must still return 2023H2 for 2024H2.

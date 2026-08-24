@@ -35,7 +35,7 @@ SCALAR_BROADCAST_OPS: dict[str, ScalarBroadcastSpec] = {
 
 
 def scalar_broadcast_spec_for(canon: str) -> ScalarBroadcastSpec | None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     return SCALAR_BROADCAST_OPS.get(name)

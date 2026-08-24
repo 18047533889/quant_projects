@@ -18,11 +18,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 
 ensure_cleaned_loaded()
 
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 
 def _date_index(n: int = 6) -> pd.DatetimeIndex:
@@ -34,8 +34,8 @@ def _date_index(n: int = 6) -> pd.DatetimeIndex:
 # ---------------------------------------------------------------------------
 
 def test_six_gate_is_the_single_production_authority() -> None:
-    from cleaned_operators.operator_surface import classify_canonical
-    from cleaned_operators.production_hardening import factor_production_targets
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.production_hardening import factor_production_targets
 
     # The invariant binds only the reviewed production targets: unsafe/internal/
     # non-factor canonicals keep a policy ``pit_safe`` flag but are never
@@ -59,10 +59,10 @@ def test_six_gate_is_the_single_production_authority() -> None:
 
 
 def test_allow_in_production_requires_full_six_gate() -> None:
-    from cleaned_operators.operator_spec import build_operator_spec
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
-    for spec in __import__("cleaned_operators.operator_spec", fromlist=["iter_operator_specs"]).iter_operator_specs():
+    for spec in __import__("factor_engine.cleaned_operators.operator_spec", fromlist=["iter_operator_specs"]).iter_operator_specs():
         if not spec.allow_in_production:
             continue
         catalog = OperatorRegistry._catalog.get(spec.canonical, {})
@@ -74,7 +74,7 @@ def test_allow_in_production_requires_full_six_gate() -> None:
 
 
 def test_compatibility_only_never_production() -> None:
-    from cleaned_operators.operator_spec import build_operator_spec
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec
 
     for name in ("ts_multi_regression_coeff", "intra_positive_jump_variation"):
         spec = build_operator_spec(name)
@@ -87,8 +87,8 @@ def test_compatibility_only_never_production() -> None:
 # ---------------------------------------------------------------------------
 
 def test_qualified_and_anchor_field_resolution() -> None:
-    from api.columns import field
-    from fields import FIELD_REGISTRY
+    from factor_engine.api.columns import field
+    from factor_engine.fields import FIELD_REGISTRY
 
     assert field("close").table == "StockDailyBar"
     assert field("volume").table == "StockDailyBar"
@@ -107,7 +107,7 @@ def test_qualified_and_anchor_field_resolution() -> None:
 
 
 def test_minute_source_contract_fields_registered() -> None:
-    from fields import FIELD_REGISTRY
+    from factor_engine.fields import FIELD_REGISTRY
 
     for name in ("quote_time", "minute_open", "minute_high", "minute_low",
                  "minute_close", "minute_volume", "minute_amount", "minute_vwap"):
@@ -120,7 +120,7 @@ def test_minute_source_contract_fields_registered() -> None:
 # ---------------------------------------------------------------------------
 
 def test_financial_grain_contract_rejects_qoq_on_cumulative() -> None:
-    from cleaned_operators.operator_spec import check_financial_grain_contract
+    from factor_engine.cleaned_operators.operator_spec import check_financial_grain_contract
 
     assert check_financial_grain_contract("fin_qoq(net_profit, period_id)")
     assert check_financial_grain_contract("fin_pct_change(net_profit, period_id)")

@@ -1,13 +1,13 @@
 import numpy as np
 import pytest
 
-from backend.numeric_policy import (
+from factor_engine.backend.numeric_policy import (
     NumericPolicy,
     QuantizationCertificate,
     ToleranceProfile,
     quantization_metrics,
 )
-from storage.materialize.materializer import storage_precision_policy_for
+from factor_engine.storage.materialize.materializer import storage_precision_policy_for
 
 
 def test_numeric_policy_separates_compute_accumulation_and_output():

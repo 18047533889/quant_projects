@@ -9,10 +9,10 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="legacy P2 rollout contract superseded by strict fiscal primitives")
 
-from api.mining_integration import validate_production_dsl
-from backend.cleaned_bridge import build_production_dsl_allowlist, ensure_cleaned_loaded
-from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS, build_operator_spec
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.api.mining_integration import validate_production_dsl
+from factor_engine.backend.cleaned_bridge import build_production_dsl_allowlist, ensure_cleaned_loaded
+from factor_engine.cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS, build_operator_spec
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module")

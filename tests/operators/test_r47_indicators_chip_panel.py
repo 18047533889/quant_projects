@@ -12,13 +12,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.technical.new_indicators  # noqa: F401
-import cleaned_operators.technical.chip_ops  # noqa: F401
-import cleaned_operators.intraday.limit_eod  # noqa: F401
-import cleaned_operators.cross_section.panel_gap  # noqa: F401
+import factor_engine.cleaned_operators.technical.new_indicators  # noqa: F401
+import factor_engine.cleaned_operators.technical.chip_ops  # noqa: F401
+import factor_engine.cleaned_operators.intraday.limit_eod  # noqa: F401
+import factor_engine.cleaned_operators.cross_section.panel_gap  # noqa: F401
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
@@ -84,7 +84,7 @@ def _all_nan(template: pd.DataFrame) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize("name", sorted(set(ALL)))
 def test_registered_and_classified(name: str) -> None:
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     assert OperatorRegistry.get(name) is not None, name
     assert classify_canonical(name) in ("daily", "extended", "research"), name

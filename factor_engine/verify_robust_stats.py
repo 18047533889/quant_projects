@@ -10,9 +10,9 @@ project_root = Path(__file__).resolve().parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.operator_surface import classify_canonical
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
 print("Loading operator registry...")
 ensure_cleaned_loaded()
@@ -47,7 +47,7 @@ print("\n" + "="*70)
 print("OPERATOR POLICY CHECK")
 print("="*70)
 
-from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
+from factor_engine.cleaned_operators.operator_policy import _EXPLICIT_POLICIES
 
 for name in operators:
     if name in _EXPLICIT_POLICIES:

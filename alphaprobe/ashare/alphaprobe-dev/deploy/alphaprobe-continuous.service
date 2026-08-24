@@ -1,0 +1,42 @@
+# AlphaPROBE 7×24 连续因子挖掘（systemd）
+#
+# 安装：
+#   1. 编辑下方 Environment（用户、路径、CUDA）
+#   2. sudo cp deploy/alphaprobe-continuous.service /etc/systemd/system/
+#   3. sudo systemctl daemon-reload
+#   4. sudo systemctl enable --now alphaprobe-continuous
+#
+# 查看日志：
+#   journalctl -u alphaprobe-continuous -f
+#   tail -f data/logs/continuous/continuous.log
+#
+# 额度耗尽后会写 data/logs/continuous/STOP_QUOTA 并以 exit 0 退出（不自动重启）。
+# 充值后删除 STOP_QUOTA，再 systemctl start。
+
+[Unit]
+Description=AlphaPROBE continuous factor mining (7x24)
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=hsunbj
+WorkingDirectory=/home/hsunbj/quant_projects/workspaces/sunhaiwei/alphaprobe/ashare/alphaprobe-dev
+Environment=PYTHONUNBUFFERED=1
+Environment=ALPHAPROBE_DATA_BACKEND=factor_engine
+Environment=ALPHAPROBE_PYTHON=/home/hsunbj/anaconda3/envs/rdagent4qlib/bin/python
+Environment=ALPHAPROBE_CUDA=0
+Environment=ALPHAPROBE_EXPERIMENT_CONFIG=configs/alphaprobe/experiment_ashare_pv_7x24.yaml
+# DeepSeek 官网 API（优先写在项目 .env，由 run_continuous.sh source）
+# Environment=OPENAI_API_KEY=sk-...
+# Environment=OPENAI_BASE_URL=https://api.deepseek.com
+# Environment=OPENAI_MODEL_NAME=deepseek-v4-flash
+# Environment=OPENAI_PROVIDER=deepseek
+
+ExecStart=/home/hsunbj/quant_projects/workspaces/sunhaiwei/alphaprobe/ashare/alphaprobe-dev/deploy/run_continuous.sh
+# 崩溃/非 0 退出才重启；额度耗尽或满 24h 干净退出(0) 不重启
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

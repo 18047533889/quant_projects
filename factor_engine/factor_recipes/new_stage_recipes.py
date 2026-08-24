@@ -7,7 +7,7 @@ marked ``experimental`` so they stay out of the default production expansion.
 """
 from __future__ import annotations
 
-from factor_recipes.registry import FactorRecipe, FactorRecipeRegistry
+from factor_engine.factor_recipes.registry import FactorRecipe, FactorRecipeRegistry
 
 _RECIPES: list[FactorRecipe] = []
 

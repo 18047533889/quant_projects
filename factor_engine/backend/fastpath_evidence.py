@@ -8,7 +8,7 @@ certified artifact contains final canonicals and provenance hashes.
 """
 from __future__ import annotations
 
-from backend.evidence_provenance import evidence_artifact_valid, load_verified_artifact
+from factor_engine.backend.evidence_provenance import evidence_artifact_valid, load_verified_artifact
 
 _META_OPS: frozenset[str] = frozenset(
     {"column", "literal", "materialized_series", "plan_ref", "if_else"}
@@ -42,7 +42,7 @@ def missing_polars_parity_evidence() -> list[str]:
     返回:
         按字母排序的缺失 canonical 名称列表。
     """
-    from backend.polars_long_production import POLARS_LONG_NATIVE_PRODUCTION_SAFE
+    from factor_engine.backend.polars_long_production import POLARS_LONG_NATIVE_PRODUCTION_SAFE
 
     required = POLARS_LONG_NATIVE_PRODUCTION_SAFE - _META_OPS
     have = polars_executed_parity_canonicals()
@@ -55,7 +55,7 @@ def missing_duckdb_parity_evidence() -> list[str]:
     返回:
         按字母排序的缺失 canonical 名称列表。
     """
-    from backend.sql_tiers import SQL_PRODUCTION_SAFE_CANONICALS
+    from factor_engine.backend.sql_tiers import SQL_PRODUCTION_SAFE_CANONICALS
 
     required = SQL_PRODUCTION_SAFE_CANONICALS - _META_OPS
     have = duckdb_executed_parity_canonicals()
@@ -68,8 +68,8 @@ def evidence_summary() -> dict[str, int | list[str]]:
     返回:
         含 required、evidence 计数及 missing 列表的摘要字典。
     """
-    from backend.polars_long_production import POLARS_LONG_NATIVE_PRODUCTION_SAFE
-    from backend.sql_tiers import SQL_PRODUCTION_SAFE_CANONICALS
+    from factor_engine.backend.polars_long_production import POLARS_LONG_NATIVE_PRODUCTION_SAFE
+    from factor_engine.backend.sql_tiers import SQL_PRODUCTION_SAFE_CANONICALS
 
     pol_req = POLARS_LONG_NATIVE_PRODUCTION_SAFE - _META_OPS
     duck_req = SQL_PRODUCTION_SAFE_CANONICALS - _META_OPS

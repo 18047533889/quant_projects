@@ -10,9 +10,9 @@ import json
 from pathlib import Path
 
 import pytest
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators import load_all
-from mining.direct_use import build_direct_use_operator
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.mining.direct_use import build_direct_use_operator
 
 FE_ROOT = Path(__file__).resolve().parents[2]
 

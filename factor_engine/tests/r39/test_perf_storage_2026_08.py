@@ -30,16 +30,16 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-from storage.catalog import FactorCatalog
-from storage.delta_store import (
+from factor_engine.storage.catalog import FactorCatalog
+from factor_engine.storage.delta_store import (
     DeltaManifest,
     compact_partition,
     read_delta_partition,
     should_compact,
 )
-from storage.materialize import ParquetMaterializer
-from storage.partition_policy import PartitionPolicy
-from storage.write_amplification import WriteAmplificationTracker
+from factor_engine.storage.materialize import ParquetMaterializer
+from factor_engine.storage.partition_policy import PartitionPolicy
+from factor_engine.storage.write_amplification import WriteAmplificationTracker
 
 
 # ---------------------------------------------------------------------------

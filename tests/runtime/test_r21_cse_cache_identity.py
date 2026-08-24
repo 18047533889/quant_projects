@@ -27,7 +27,7 @@ os.environ.setdefault("POLARS_MAX_THREADS", "1")
 
 import pytest
 
-from runtime.multibackend.cse_cache_optimizer import (
+from factor_engine.runtime.multibackend.cse_cache_optimizer import (
     CSECacheKey,
     CSECacheOptimizer,
     CacheCapacityExceeded,

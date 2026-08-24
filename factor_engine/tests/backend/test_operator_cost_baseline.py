@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 def test_benchmark_cost_ignores_seed_defaults():
-    import backend.operator_cost as oc
+    import factor_engine.backend.operator_cost as oc
 
     oc._BENCHMARK_CACHE = None
     # Round-8 #354: the loader now returns (table, status) and treats a
@@ -18,9 +18,9 @@ def test_benchmark_cost_ignores_seed_defaults():
 
 
 def test_benchmark_cost_affects_fastpath_coverage():
-    from cleaned_operators import load_all
-    from backend.fastpath_coverage import build_fastpath_coverage_row
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.fastpath_coverage import build_fastpath_coverage_row
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()

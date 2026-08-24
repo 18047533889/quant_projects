@@ -1,40 +1,40 @@
 {
   "schema_version": 1,
-  "manifest_id": "rel-v1:2026-08-23T11:48:44.768336+00:00",
-  "timestamp": "2026-08-23T11:48:44.768336+00:00",
+  "manifest_id": "rel-v1:2026-08-24T08:47:42.466609+00:00",
+  "timestamp": "2026-08-24T08:47:42.466609+00:00",
   "host": "qs-compute-gpu-hk-01",
   "source_snapshot": {
-    "git_sha": "ec4ef105f5613e0889575f4f362f38c86020d267",
-    "git_dirty": true,
-    "diff_hash": "6de7cda06c33792e8ce3d8eb1cb662287a27af73b583f8ae17c79df5ed0bffe1",
-    "cached_diff_hash": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
-    "untracked_source_hash": "eb44f43180c17262ffca327c6922e756ed74055440bb7f787aaf5b929f1dbd9f",
+    "git_sha": "97a4659a653cfb82e7fc40b655ffb1dcae3b6d86",
+    "git_dirty": false,
+    "diff_hash": null,
+    "cached_diff_hash": null,
+    "untracked_source_hash": null,
     "submodule_shas": {},
     "git_repo": true
   },
   "packages": {
     "factor_engine": {
-      "tree_sha256": "5a9f50d4c6bb3c8f1c4a6e58181a5630f38ffc4ca9373eb64b1bb86194e572af",
+      "tree_sha256": "7263e461010f9b431742f420d08e01c8a15ff08576b3dcaff6e10746bfc65439",
       "wheel_sha256": null
     },
     "quant_evaluator": {
-      "tree_sha256": "cd2cdbc17c461e62305f8130f7bafa772097e9c87871f213eff37e9a6c87f93c",
+      "tree_sha256": "668090569b223ed73c08be06a2ce5d3d1e2809ec69afafc7892f48b76ac5c3f3",
       "wheel_sha256": null
     },
     "factor_optimizer": {
-      "tree_sha256": "188c4e35038b7869251219dcded5d9b321a6680ae5503876e297d26e13faff52",
+      "tree_sha256": "affc7663029ee7a8c98efd76a4ee9147a5b52120cf7e1504da668b17e3ecb692",
       "wheel_sha256": null
     },
     "factor_assets": {
-      "tree_sha256": null,
+      "tree_sha256": "a9714dc2244361769d5813a5679efa4cf9be29e22ffb9a8c2f18431190b0f5e8",
       "wheel_sha256": null
     },
     "factor_preprocess": {
-      "tree_sha256": "105be04041e6fc3e372bef196d425fbbbd8c91fc852d27ae2ead69557eb3cde6",
+      "tree_sha256": "6f705133acbfbf78620981138b0e019c739d7f99bfebccc0c8cdd459e25c6b21",
       "wheel_sha256": null
     },
     "dataaccess": {
-      "tree_sha256": "4aad421e54f914062522096c6530ee09b6098c891db9e5b590bb26843841a717",
+      "tree_sha256": "bac27ad8e2c2b0d3edcacdbd74c3bb79bf745fe0a73f20c6eb63dc3acbe0c45d",
       "wheel_sha256": null
     }
   },
@@ -42,17 +42,17 @@
     "python_version": "3.12.3",
     "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.39",
     "dependencies": {
-      "numpy": "2.5.2",
-      "pandas": "3.0.5",
-      "polars": "1.43.2",
-      "pyarrow": "25.0.1",
-      "scipy": "1.18.1",
+      "numpy": "2.2.6",
+      "pandas": "2.3.3",
+      "polars": "1.42.1",
+      "pyarrow": "25.0.0",
+      "scipy": "1.15.3",
       "pytest": "9.1.1",
-      "duckdb": "1.5.5",
+      "duckdb": "1.5.4",
       "factor_engine": "0.3.1",
       "dataaccess": "NOT_INSTALLED"
     },
-    "hash": "9097a407115a2ffd8a33d93ee25a89c02c14002193309537a989d8674efda3fb"
+    "hash": "13d7654e94f9219375467ab39134a0eb52d48c67b1c97b42d79f379a809108aa"
   },
   "executed_commands": [
     {
@@ -94,29 +94,27 @@
       "evidence": [
         {
           "test": "factor_engine/tests/test_capability_registry.py",
-          "command_hash": "612f8886b4fe17d3d7b7f959a2304878d6ba33bc0e1c8582b2b71dc565403a50",
+          "command_hash": "e9ba661db85cdc79fbcb2c5f0723da29446b79c41b849a1d1f4f92cf7d9c9c10",
           "exit_code": 0,
           "passed": 23,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 23,
-          "duration_sec": 2.189,
-          "executed_at": "2026-08-22T16:40:19.488942+00:00",
-          "run_at": "2026-08-22T16:40:19.488942+00:00"
+          "executed_at": "2026-08-24T08:30:53.083245+00:00",
+          "run_at": "2026-08-24T08:30:53.083245+00:00"
         },
         {
           "test": "factor_engine/tests/test_concurrency_safety.py",
-          "command_hash": "6ea4ec07125189f8769a28e75e964a07873066af842f5705743ebd70e28bb78f",
+          "command_hash": "ef6d3efd313d9fab4f77d58302ef1353bd3b0fe23cb65ef472e08de3087d1edf",
           "exit_code": 0,
           "passed": 16,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 16,
-          "duration_sec": 104.062,
-          "executed_at": "2026-08-22T16:42:03.551325+00:00",
-          "run_at": "2026-08-22T16:42:03.551325+00:00"
+          "executed_at": "2026-08-24T08:32:02.201154+00:00",
+          "run_at": "2026-08-24T08:32:02.201154+00:00"
         }
       ]
     },
@@ -127,51 +125,23 @@
       "evidence": [
         {
           "test": "quant_evaluator/tests/test_numerical_oracle.py",
-          "command_hash": "bc51ef628c9f4b5dcb540f0bb72bed9afb4b909278b718f7dbadc0ab854fdba5",
+          "command_hash": "666a8a285874f1a602dd1259eb9858c505343c64582092a72c3fe83cb984172a",
           "exit_code": 0,
           "passed": 13,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 13,
-          "duration_sec": 5.37,
-          "executed_at": "2026-08-22T16:40:06.825749+00:00",
-          "run_at": "2026-08-22T16:40:06.825749+00:00"
+          "executed_at": "2026-08-24T08:30:40.473405+00:00",
+          "run_at": "2026-08-24T08:30:40.473405+00:00"
         }
       ]
     },
     {
       "name": "PROPERTY",
       "description": "Property/metamorphic invariants hold (idempotence, monotonicity, round-trip, shape preservation).",
-      "status": "PASS",
-      "evidence": [
-        {
-          "test": "quant_evaluator/tests/test_metamorphic.py",
-          "command_hash": "bc8fd6ac0b7424ec2f9724ad23b7c8df89d1c691426b7809f90e0974fa5843eb",
-          "exit_code": 0,
-          "passed": 18,
-          "failed": 0,
-          "errors": 0,
-          "skipped": 2,
-          "tests": 20,
-          "duration_sec": 1.383,
-          "executed_at": "2026-08-22T16:40:08.209401+00:00",
-          "run_at": "2026-08-22T16:40:08.209401+00:00"
-        },
-        {
-          "test": "quant_evaluator/tests/test_consistency.py",
-          "command_hash": "1f4e5e3d69d75d8c129a8250ebdbb2359b1814b1cade2007b4d016d96d681114",
-          "exit_code": 0,
-          "passed": 11,
-          "failed": 0,
-          "errors": 0,
-          "skipped": 0,
-          "tests": 11,
-          "duration_sec": 1.433,
-          "executed_at": "2026-08-22T16:40:09.642281+00:00",
-          "run_at": "2026-08-22T16:40:09.642281+00:00"
-        }
-      ]
+      "status": "NOT_RUN",
+      "evidence": []
     },
     {
       "name": "CROSS_PACKAGE",
@@ -180,16 +150,15 @@
       "evidence": [
         {
           "test": "integration_tests/test_cross_package_contracts.py",
-          "command_hash": "1941620d47609a0aa98d0ba3f333f4b5f230624b0841db1220b2b239f637bad7",
+          "command_hash": "b512eaba7f7a727fa319e03d342e887971ee6763f7984b92ac1fc0214cc407b6",
           "exit_code": 0,
           "passed": 4,
           "failed": 0,
           "errors": 0,
           "skipped": 2,
           "tests": 6,
-          "duration_sec": 1.435,
-          "executed_at": "2026-08-22T16:40:11.077520+00:00",
-          "run_at": "2026-08-22T16:40:11.077520+00:00"
+          "executed_at": "2026-08-24T08:30:44.577140+00:00",
+          "run_at": "2026-08-24T08:30:44.577140+00:00"
         }
       ]
     },
@@ -200,29 +169,27 @@
       "evidence": [
         {
           "test": "factor_engine/tests/modeling/test_evaluation_leakage_evidence.py",
-          "command_hash": "af84e2ad4669e1fc1e8751d52fd6e574864d6e79d14ce37a6b2bdcbfc1b38550",
+          "command_hash": "3c41370c2e3d771a8ec2e2d1e0e0fe8492e1a7a5ed5e373830e6d9bdceb85fd9",
           "exit_code": 0,
           "passed": 14,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 14,
-          "duration_sec": 82.23,
-          "executed_at": "2026-08-22T16:43:25.781584+00:00",
-          "run_at": "2026-08-22T16:43:25.781584+00:00"
+          "executed_at": "2026-08-24T08:32:50.562715+00:00",
+          "run_at": "2026-08-24T08:32:50.562715+00:00"
         },
         {
           "test": "factor_preprocess/tests/contracts/test_leakage_properties.py",
-          "command_hash": "d60c0b5c1d83e48a584f47022d0685fd3cd5f4676abb50d4cab52667d65852f4",
+          "command_hash": "042593708f303788f0a188db4efa194a6f69d1947158cbb48b51990c76ec0d42",
           "exit_code": 0,
           "passed": 4,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 4,
-          "duration_sec": 0.984,
-          "executed_at": "2026-08-22T16:43:26.766059+00:00",
-          "run_at": "2026-08-22T16:43:26.766059+00:00"
+          "executed_at": "2026-08-24T08:32:51.509631+00:00",
+          "run_at": "2026-08-24T08:32:51.509631+00:00"
         }
       ]
     },
@@ -233,42 +200,39 @@
       "evidence": [
         {
           "test": "factor_engine/tests/runtime/test_pit_audit.py",
-          "command_hash": "c805192189f28c1eb4c41b189bb538d58ff06cf7642177c1f827e51c22d601e7",
+          "command_hash": "05cf2b6794a20e3cb49eec1118f4a1206c18b33c05680c1c29d99f9cbf9bb049",
           "exit_code": 0,
           "passed": 3,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 3,
-          "duration_sec": 81.007,
-          "executed_at": "2026-08-22T16:44:47.773083+00:00",
-          "run_at": "2026-08-22T16:44:47.773083+00:00"
+          "executed_at": "2026-08-24T08:33:38.995014+00:00",
+          "run_at": "2026-08-24T08:33:38.995014+00:00"
         },
         {
           "test": "factor_engine/tests/runtime/test_label_pit.py",
-          "command_hash": "157cb6a3a918e0776760b5c613fa75302368fa182ee45d132e068615ceba2049",
+          "command_hash": "e079db3e633901796ac3ee6ac0d10f8564add173bac90dc1f8430d3027f11e6d",
           "exit_code": 0,
           "passed": 4,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 4,
-          "duration_sec": 1.448,
-          "executed_at": "2026-08-22T16:44:49.221622+00:00",
-          "run_at": "2026-08-22T16:44:49.221622+00:00"
+          "executed_at": "2026-08-24T08:33:40.506176+00:00",
+          "run_at": "2026-08-24T08:33:40.506176+00:00"
         },
         {
           "test": "factor_engine/tests/runtime/test_r10_pit_tristate.py",
-          "command_hash": "cb70bed8e1d86ea652ac878f527bfeda1c9bb566ca467139d98b9afad27c4278",
+          "command_hash": "6b35eb5fcc64aeb6a3bd7ecd31f675aea7adeaf0a0f028355b773195781a8b9d",
           "exit_code": 0,
           "passed": 5,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 5,
-          "duration_sec": 1.428,
-          "executed_at": "2026-08-22T16:44:50.650148+00:00",
-          "run_at": "2026-08-22T16:44:50.650148+00:00"
+          "executed_at": "2026-08-24T08:33:41.978249+00:00",
+          "run_at": "2026-08-24T08:33:41.978249+00:00"
         }
       ]
     },
@@ -279,29 +243,27 @@
       "evidence": [
         {
           "test": "factor_engine/tests/test_comprehensive_data_consistency.py",
-          "command_hash": "d353b1459709930b6d9f1389ca67edddb14e6c9d376a5b71f80468c8c7d6a33c",
+          "command_hash": "a9d945930554b6ccbb8c29e3d766ce0ecd9552f414366e89fe6e94c9bb43ed8a",
           "exit_code": 0,
           "passed": 12,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 12,
-          "duration_sec": 1.829,
-          "executed_at": "2026-08-22T16:44:52.479024+00:00",
-          "run_at": "2026-08-22T16:44:52.479024+00:00"
+          "executed_at": "2026-08-24T08:33:43.840690+00:00",
+          "run_at": "2026-08-24T08:33:43.840690+00:00"
         },
         {
           "test": "factor_engine/tests/backend/test_r21_def5_payload_hash.py",
-          "command_hash": "d3618cde701a0e6f091bd727ef6df5e20cc1307f5e07454ab025603bde5ca5c3",
+          "command_hash": "59f6b9013e0b066a8ce9e74c9533446833d91aaca99e056d9728611aebeedde9",
           "exit_code": 0,
           "passed": 7,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 7,
-          "duration_sec": 1.441,
-          "executed_at": "2026-08-22T16:44:53.919983+00:00",
-          "run_at": "2026-08-22T16:44:53.919983+00:00"
+          "executed_at": "2026-08-24T08:33:45.445510+00:00",
+          "run_at": "2026-08-24T08:33:45.445510+00:00"
         }
       ]
     },
@@ -312,29 +274,27 @@
       "evidence": [
         {
           "test": "quant_evaluator/tests/test_qe_serialization.py",
-          "command_hash": "15c9c93aafec6d7c6a8d7aae567fea950c1dc32cfa8ce820b5ceb5b0821f0ae6",
+          "command_hash": "c40939168c7aa7b95205cd3308878c93ba58439a31fadc45ed09e7f3599660bb",
           "exit_code": 0,
           "passed": 36,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 36,
-          "duration_sec": 1.006,
-          "executed_at": "2026-08-22T16:40:15.588862+00:00",
-          "run_at": "2026-08-22T16:40:15.588862+00:00"
+          "executed_at": "2026-08-24T08:30:49.016719+00:00",
+          "run_at": "2026-08-24T08:30:49.016719+00:00"
         },
         {
           "test": "factor_assets/tests/registry/test_serialization_codec.py",
-          "command_hash": "315c761df54045fa9c55910762bb43aee67e2307f51e80342ba2f30aa0947975",
+          "command_hash": "8d7b30d21cda84d8f7192431e990d9aaa0ad369339ddb3114ef563fb5befd353",
           "exit_code": 0,
           "passed": 17,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 17,
-          "duration_sec": 0.27,
-          "executed_at": "2026-08-22T16:40:15.858700+00:00",
-          "run_at": "2026-08-22T16:40:15.858700+00:00"
+          "executed_at": "2026-08-24T08:30:49.257297+00:00",
+          "run_at": "2026-08-24T08:30:49.257297+00:00"
         }
       ]
     },
@@ -345,16 +305,15 @@
       "evidence": [
         {
           "test": "factor_engine/tests/runtime/test_r10_stateful_checkpoint_2026_08.py",
-          "command_hash": "3ddf17942d9dab8a28cee2c34297d48ac36d8ecc22a063b3f4b812516aa9755f",
+          "command_hash": "1a823f6398cdb577489d2435d89c48f61d2a2d4ff92523e04e088d7d363e8cb0",
           "exit_code": 0,
           "passed": 3,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 3,
-          "duration_sec": 1.441,
-          "executed_at": "2026-08-22T16:40:17.299699+00:00",
-          "run_at": "2026-08-22T16:40:17.299699+00:00"
+          "executed_at": "2026-08-24T08:30:50.869955+00:00",
+          "run_at": "2026-08-24T08:30:50.869955+00:00"
         }
       ]
     },
@@ -365,16 +324,15 @@
       "evidence": [
         {
           "test": "factor_engine/scripts/wheel_clean_install_smoke.py",
-          "command_hash": "bde5f4935ae41d090141e32d5dac3a6ae7507873070aee0e4328cb1dac6bf880",
+          "command_hash": "bac270aab224f98b40cfcc1697b731e87787f5f451c155fc18d90643314ed052",
           "exit_code": 0,
           "passed": 1,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 1,
-          "duration_sec": 105.504,
-          "executed_at": "2026-08-22T16:46:39.424316+00:00",
-          "run_at": "2026-08-22T16:46:39.424316+00:00"
+          "executed_at": "2026-08-24T08:34:54.423972+00:00",
+          "run_at": "2026-08-24T08:34:54.423972+00:00"
         }
       ]
     },
@@ -385,16 +343,15 @@
       "evidence": [
         {
           "test": "quant_evaluator/tests/test_scale_gates.py",
-          "command_hash": "cb9cafa791121743cc91c95c589e6b5f3d56586666879a9c65e92d6ac6e29489",
+          "command_hash": "fd17dea780782778e3e166c49b6e6695ab75b0a8a0f49c99bb38beeb97a5a674",
           "exit_code": 0,
           "passed": 1,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 1,
-          "duration_sec": 1.049,
-          "executed_at": "2026-08-22T16:46:40.473673+00:00",
-          "run_at": "2026-08-22T16:46:40.473673+00:00"
+          "executed_at": "2026-08-24T08:34:55.474407+00:00",
+          "run_at": "2026-08-24T08:34:55.474407+00:00"
         }
       ]
     },
@@ -405,16 +362,15 @@
       "evidence": [
         {
           "test": "quant_evaluator/tests/test_scale_gates.py",
-          "command_hash": "8b812a248faa6b60762594f56343823865b922881554b83d6eeef9a5ba5862f5",
+          "command_hash": "1c5a1e426798a4ca2fb48daff507d550aded6a0a43393575c028e11739df9068",
           "exit_code": 0,
           "passed": 1,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 1,
-          "duration_sec": 1.052,
-          "executed_at": "2026-08-22T16:46:41.526497+00:00",
-          "run_at": "2026-08-22T16:46:41.526497+00:00"
+          "executed_at": "2026-08-24T08:34:56.459137+00:00",
+          "run_at": "2026-08-24T08:34:56.459137+00:00"
         }
       ]
     },
@@ -425,16 +381,15 @@
       "evidence": [
         {
           "test": "quant_evaluator/tests/test_scale_gates.py",
-          "command_hash": "4a0172718f03d9a2c773ee00b7999a0fee23268e9e8f5aae63eec7faa048e8e4",
+          "command_hash": "df596bbd527d1e8b2af35f7b56b0f686fc8864d71238f4b83009abc43d30c284",
           "exit_code": 0,
           "passed": 3,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 3,
-          "duration_sec": 1.134,
-          "executed_at": "2026-08-22T16:46:42.660993+00:00",
-          "run_at": "2026-08-22T16:46:42.660993+00:00"
+          "executed_at": "2026-08-24T08:34:57.511800+00:00",
+          "run_at": "2026-08-24T08:34:57.511800+00:00"
         }
       ]
     },
@@ -445,62 +400,91 @@
       "evidence": [
         {
           "test": "integration_tests/test_ashare_semantic_golden.py",
-          "command_hash": "7a371f829db0b321e123b7a6bb3217743eac27dcc61eb18b02e3a1e096c3deb4",
+          "command_hash": "160cf0c11027eeacbe6f9b7fcc974ce30666462e1091f1a2fa8d470d3266a592",
           "exit_code": 0,
           "passed": 8,
           "failed": 0,
           "errors": 0,
           "skipped": 0,
           "tests": 8,
-          "duration_sec": 1.701,
-          "executed_at": "2026-08-22T16:40:12.778422+00:00",
-          "run_at": "2026-08-22T16:40:12.778422+00:00"
+          "executed_at": "2026-08-24T08:30:46.291028+00:00",
+          "run_at": "2026-08-24T08:30:46.291028+00:00"
         }
       ]
     },
     {
       "name": "ASHARE_REAL_DATA_SHADOW",
       "description": "Real-data shadow: A-share semantics reproduced against REAL pinned parquet rows (data/a_share/lqtp_data mirror). Requires actual local A-share data; any skip/NEEDS-WIRING/synthetic-only evidence is NOT a pass.",
-      "status": "PASS",
-      "evidence": [
-        {
-          "test": "integration_tests/test_real_ashare_shadow.py",
-          "command_hash": "e374edb8279068b66d97b8a9ea82390c3b36d030f0867a2ac81ee24300bb7e6e",
-          "exit_code": 0,
-          "passed": 4,
-          "failed": 0,
-          "errors": 0,
-          "skipped": 0,
-          "tests": 4,
-          "duration_sec": 1.804,
-          "executed_at": "2026-08-22T16:40:14.582732+00:00",
-          "run_at": "2026-08-22T16:40:14.582732+00:00"
-        }
-      ]
+      "status": "NOT_RUN",
+      "evidence": []
     },
     {
       "name": "SOURCE_AUTHORITY",
       "description": "Every source snapshot / manifest input is bound to a verifiable authority (real git SHA, real artifact digest), never a fabricated string.",
-      "status": "NOT_RUN",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "",
+          "command_hash": "",
+          "exit_code": 0,
+          "passed": null,
+          "failed": null,
+          "errors": null,
+          "skipped": null,
+          "tests": null,
+          "executed_at": "2026-08-24T08:34:59.156576+00:00",
+          "run_at": "2026-08-24T08:34:59.156576+00:00"
+        }
+      ]
     },
     {
       "name": "SUPPLY_CHAIN",
       "description": "The dependency/install supply chain is pinned and reproducible (dependency lock hash, wheel provenance).",
-      "status": "NOT_RUN",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "",
+          "command_hash": "",
+          "exit_code": 0,
+          "passed": null,
+          "failed": null,
+          "errors": null,
+          "skipped": null,
+          "tests": null,
+          "executed_at": "2026-08-24T08:34:59.156746+00:00",
+          "run_at": "2026-08-24T08:34:59.156746+00:00"
+        }
+      ]
     },
     {
       "name": "SUBMODULE_REACHABILITY",
       "description": "Any declared submodule pin is reachable/present in this checkout. With no submodules declared there is nothing pinned to prove -> NOT_RUN (never PASS).",
-      "status": "NOT_RUN",
-      "evidence": []
+      "status": "NOT_APPLICABLE",
+      "evidence": [
+        {
+          "note": "no mode-160000 git index entries; nothing pinned to prove",
+          "reason": "no mode-160000 git index entries; nothing pinned to prove"
+        }
+      ]
     },
     {
       "name": "FRESH_WHEEL_MATRIX",
       "description": "Matrix of fresh-wheel clean-install smoke checks across the release packages (supersedes the single-package FRESH_WHEEL gate).",
-      "status": "NOT_RUN",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        {
+          "test": "",
+          "command_hash": "",
+          "exit_code": 0,
+          "passed": 6,
+          "failed": null,
+          "errors": null,
+          "skipped": null,
+          "tests": 6,
+          "executed_at": "2026-08-24T08:35:38.740717+00:00",
+          "run_at": "2026-08-24T08:35:38.740717+00:00"
+        }
+      ]
     },
     {
       "name": "EVIDENCE_CURRENT",
@@ -514,11 +498,6 @@
       "id": "REL-P0-02",
       "note": ".pytest_full.txt artifacts in the pushed snapshot are stale. They reference tests/test_operators_extension.py:148 test_neutralize_ols_residual, which no longer exists in the current tree (grep finds the string only inside the stale artifact itself, not in any source file). Recommendation: stop treating .pytest_full.txt as release truth. Checked at manifest generation: tests/test_operators_extension.py does not exist in the current tree.",
       "artifacts": [
-        {
-          "path": ".pytest_full.txt",
-          "bytes": 1867,
-          "mtime": "2026-08-22T19:53:23.883162+00:00"
-        },
         {
           "path": "factor_engine/.pytest_full.txt",
           "bytes": 1867,

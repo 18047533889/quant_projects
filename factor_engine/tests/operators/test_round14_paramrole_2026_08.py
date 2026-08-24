@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from cleaned_operators.base import (
+from factor_engine.cleaned_operators.base import (
     ParamRole,
     ParamSpec,
     effective_param_role,
@@ -92,7 +92,7 @@ def test_estimator_resolution_param_is_coarse_grade_not_full():
 
 
 def test_audit_reports_search_role_per_param():
-    from cleaned_operators import operator_audits as oa
+    from factor_engine.cleaned_operators import operator_audits as oa
 
     class _Op:
         class _Meta:

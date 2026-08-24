@@ -40,8 +40,8 @@ def _g(name: str) -> None:
 # ---------------------------------------------------------------------------
 
 def _probe_concurrency_and_decision() -> tuple[bool, bool]:
-    from runtime.resource_broker import ResourceBroker
-    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    from factor_engine.runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
 
     broker = ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=4)
     sched = AdaptiveBatchScheduler(broker=broker, max_concurrency=2)
@@ -64,7 +64,7 @@ gates["R36_BROKER_RECOMMENDATION_CONSUMED"] = _probe_concurrency_and_decision()[
 
 def _fake_controller_broker(cpu_slots: int = 8):
     """合成 broker（pressure_stage 恒 NORMAL + 可写 soft budget）——探针确定性。"""
-    from runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.resource_broker import ResourceBroker
 
     class _Cpu:
         def __init__(self):
@@ -90,8 +90,8 @@ def _fake_controller_broker(cpu_slots: int = 8):
 
 
 def _probe_recovery_upshift() -> bool:
-    from runtime.resource_autopilot import ResourceController
-    from runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
+    from factor_engine.runtime.resource_autopilot import ResourceController
+    from factor_engine.runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
 
     broker = _fake_controller_broker()
     ctl = ResourceController(broker, stable_samples_required=2, cooldown_ticks=0)
@@ -114,7 +114,7 @@ gates["R36_RESOURCE_RECOVERY_UPSHIFT"] = _probe_recovery_upshift()
 
 
 def _probe_bidirectional_cpu_budget() -> bool:
-    from runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.resource_broker import ResourceBroker
 
     broker = ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=8)
     broker.lower_soft_cpu_budget(factor=0.5)  # 4
@@ -134,7 +134,7 @@ gates["R36_DYNAMIC_CPU_BUDGET_BIDIRECTIONAL"] = _probe_bidirectional_cpu_budget(
 # ---------------------------------------------------------------------------
 
 def _probe_dynamic_wave() -> bool:
-    from runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.resource_broker import ResourceBroker
 
     b = ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=4)
     d = b.resource_decision()
@@ -146,7 +146,7 @@ gates["R36_DYNAMIC_READ_WAVE_BYTES"] = _probe_dynamic_wave()
 
 
 def _probe_dynamic_block() -> bool:
-    from runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.resource_broker import ResourceBroker
 
     b = ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=4)
     d = b.resource_decision()
@@ -159,8 +159,8 @@ gates["R36_DYNAMIC_FACTOR_BLOCK_BYTES"] = _probe_dynamic_block()
 
 
 def _probe_dynamic_sink_queue() -> bool:
-    from runtime.resource_broker import ResourceBroker
-    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    from factor_engine.runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
 
     b = ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=4)
     sched = AdaptiveBatchScheduler(broker=b)
@@ -185,8 +185,8 @@ gates["R36_DYNAMIC_SINK_QUEUE_BYTES"] = _probe_dynamic_sink_queue()
 # ---------------------------------------------------------------------------
 
 def _probe_backpressure_to_scheduler() -> bool:
-    from runtime.resource_broker import ResourceBroker
-    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    from factor_engine.runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
 
     b = ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=8)
     sched = AdaptiveBatchScheduler(broker=b, max_concurrency=8)
@@ -211,7 +211,7 @@ gates["R36_SINK_BACKPRESSURE_TO_SCHEDULER"] = _probe_backpressure_to_scheduler()
 # ---------------------------------------------------------------------------
 
 def _probe_writer_fatal() -> bool:
-    from runtime.streaming_result_sink import StreamingResultSink
+    from factor_engine.runtime.streaming_result_sink import StreamingResultSink
 
     def _boom(batch):
         raise OSError("disk full")
@@ -230,7 +230,7 @@ gates["R36_WRITER_FAILURE_FATAL"] = _probe_writer_fatal()
 
 
 def _probe_zero_silent_loss() -> bool:
-    from runtime.streaming_result_sink import StreamingResultSink
+    from factor_engine.runtime.streaming_result_sink import StreamingResultSink
 
     written: list[list] = []
 
@@ -254,8 +254,8 @@ gates["R36_ZERO_FINISH_SILENT_WRITE_LOSS"] = _probe_zero_silent_loss()
 # ---------------------------------------------------------------------------
 
 def _probe_family_pss() -> bool:
-    from runtime.resource_governor import process_family_memory_bytes
-    from runtime.resource_governor import MemoryGovernor
+    from factor_engine.runtime.resource_governor import process_family_memory_bytes
+    from factor_engine.runtime.resource_governor import MemoryGovernor
 
     v = process_family_memory_bytes(prefer_pss=True)
     if not v or v <= 0:
@@ -269,7 +269,7 @@ gates["R36_PROCESS_FAMILY_MEMORY_ACCOUNTED"] = _probe_family_pss()
 
 
 def _probe_true_run_peak() -> bool:
-    from runtime.run_peak_sampler import RunPeakSampler
+    from factor_engine.runtime.run_peak_sampler import RunPeakSampler
 
     s = RunPeakSampler(interval_s=0.02)
     s.start()
@@ -289,8 +289,8 @@ gates["R36_TRUE_RUN_PEAK"] = _probe_true_run_peak()
 # ---------------------------------------------------------------------------
 
 def _probe_p99_model() -> bool:
-    from runtime.resource_calibration_store import ResourceCalibrationStore
-    from runtime.resource_shape import ResourceShapeKey
+    from factor_engine.runtime.resource_calibration_store import ResourceCalibrationStore
+    from factor_engine.runtime.resource_shape import ResourceShapeKey
 
     store = ResourceCalibrationStore()
     key = ResourceShapeKey(canonical_family="ts_mean", backend="duckdb", rows_bucket=2, instruments_bucket=2, window_bucket=1)
@@ -310,8 +310,8 @@ gates["R36_P99_MEMORY_MODEL_ACTIVE"] = _probe_p99_model()
 
 
 def _probe_calibration_persisted() -> bool:
-    from runtime.resource_calibration_store import ResourceCalibrationStore
-    from runtime.resource_shape import ResourceShapeKey
+    from factor_engine.runtime.resource_calibration_store import ResourceCalibrationStore
+    from factor_engine.runtime.resource_shape import ResourceShapeKey
 
     key = ResourceShapeKey(canonical_family="ts_mean", backend="polars", rows_bucket=1, instruments_bucket=1, window_bucket=0)
     store = ResourceCalibrationStore()
@@ -334,9 +334,9 @@ gates["R36_RESOURCE_CALIBRATION_PERSISTED"] = _probe_calibration_persisted()
 # ---------------------------------------------------------------------------
 
 def _probe_psi_consumed() -> tuple[bool, bool, bool]:
-    from runtime.resource_autopilot import ResourceController
-    from runtime.resource_broker import STAGE_CRITICAL, STAGE_NORMAL
-    from runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
+    from factor_engine.runtime.resource_autopilot import ResourceController
+    from factor_engine.runtime.resource_broker import STAGE_CRITICAL, STAGE_NORMAL
+    from factor_engine.runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
 
     broker = type("B", (), {"pressure_stage": lambda self: "NORMAL", "hard_cpu_slots": 8, "cpu_budget": lambda self: 8, "_cpu": type("C", (), {"set_soft_budget": lambda self, v: None})()})()
     ctl = ResourceController(broker, stable_samples_required=2, cooldown_ticks=0)
@@ -362,8 +362,8 @@ gates["R36_PSI_IO_CONSUMED"] = _psi[2]
 
 
 def _probe_memory_slope() -> bool:
-    from runtime.resource_autopilot import ResourceController
-    from runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
+    from factor_engine.runtime.resource_autopilot import ResourceController
+    from factor_engine.runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
 
     broker = type("B", (), {"pressure_stage": lambda self: "NORMAL", "hard_cpu_slots": 8, "cpu_budget": lambda self: 8, "_cpu": type("C", (), {"set_soft_budget": lambda self, v: None})()})()
     ctl = ResourceController(broker, stable_samples_required=2, cooldown_ticks=0)
@@ -381,7 +381,7 @@ gates["R36_MEMORY_SLOPE_CONSUMED"] = _probe_memory_slope()
 # ---------------------------------------------------------------------------
 
 def _probe_one_host_authority() -> bool:
-    from runtime.host_resource_coordinator import get_host_coordinator, reset_host_coordinator
+    from factor_engine.runtime.host_resource_coordinator import get_host_coordinator, reset_host_coordinator
 
     reset_host_coordinator()
     c1 = get_host_coordinator()
@@ -393,7 +393,7 @@ gates["R36_ONE_HOST_RESOURCE_AUTHORITY"] = _probe_one_host_authority()
 
 
 def _probe_fe_da_no_double_admission() -> bool:
-    from runtime.host_resource_coordinator import get_host_coordinator
+    from factor_engine.runtime.host_resource_coordinator import get_host_coordinator
 
     c = get_host_coordinator()
     out = c.apply_da_envelope()
@@ -406,7 +406,7 @@ gates["R36_FE_DA_DOUBLE_ADMISSION_ZERO"] = _probe_fe_da_no_double_admission()
 def _probe_service_broker_race_zero() -> bool:
     """§58：每个 worker 线程通过 ContextVar 设置/恢复自己的 broker，互不覆盖——
     A restore 不会影响 B 仍在运行的任务；主线程始终看到 default=None。"""
-    from service import queue as sq
+    from factor_engine.service import queue as sq
 
     results: list[str] = []
     results_lock = threading.Lock()
@@ -433,8 +433,8 @@ gates["R36_SERVICE_BROKER_RACE_ZERO"] = _probe_service_broker_race_zero()
 
 
 def _probe_job_lease() -> bool:
-    from runtime.host_resource_coordinator import HostResourceCoordinator
-    from runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.host_resource_coordinator import HostResourceCoordinator
+    from factor_engine.runtime.resource_broker import ResourceBroker
 
     b = ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=4)
     c = HostResourceCoordinator(broker=b)
@@ -452,7 +452,7 @@ gates["R36_JOB_LEVEL_RESOURCE_LEASE"] = _probe_job_lease()
 
 def _probe_no_raw_cse_bypass() -> bool:
     import inspect
-    from runtime import batch_service
+    from factor_engine.runtime import batch_service
 
     src = inspect.getsource(batch_service._materialize_shared_subplan)
     # 主路径经 shared_buffers/expression_cache；raw dict 写入只在研究降级 fallback。
@@ -463,8 +463,8 @@ gates["R36_ZERO_RAW_CSE_CACHE_BYPASS"] = _probe_no_raw_cse_bypass()
 
 
 def _probe_cache_fail_closed() -> bool:
-    from cache.session import ExecutionCacheSession
-    import runtime.resource_governor as rg
+    from factor_engine.cache.session import ExecutionCacheSession
+    import factor_engine.runtime.resource_governor as rg
 
     real = rg.global_memory_governor
 
@@ -485,7 +485,7 @@ gates["R36_CACHE_GOVERNANCE_FAIL_CLOSED"] = _probe_cache_fail_closed()
 
 
 def _probe_cache_reconciles() -> bool:
-    from runtime.buffer_store import GovernedBufferStore
+    from factor_engine.runtime.buffer_store import GovernedBufferStore
 
     store = GovernedBufferStore({}, budget_bytes=1024 * 1024)
     store.put("a", "x" * 100, bytes_=100)
@@ -497,7 +497,7 @@ gates["R36_CACHE_ACCOUNTING_RECONCILES"] = _probe_cache_reconciles()
 
 
 def _probe_cache_release_ref_and_accounting() -> bool:
-    from runtime.buffer_store import GovernedBufferStore
+    from factor_engine.runtime.buffer_store import GovernedBufferStore
 
     store = GovernedBufferStore({}, budget_bytes=1024 * 1024)
     store.put("k", "v" * 50, bytes_=50)
@@ -514,8 +514,8 @@ gates["R36_CACHE_RELEASE_REF_AND_ACCOUNTING_MATCH"] = _probe_cache_release_ref_a
 # ---------------------------------------------------------------------------
 
 def _probe_auto_shard() -> bool:
-    from runtime.auto_shard_planner import AutoShardPlanner
-    from runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.runtime.auto_shard_planner import AutoShardPlanner
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
     class T:
         pass
@@ -532,8 +532,8 @@ gates["R36_AUTO_SHARD_WHEN_TASK_EXCEEDS_ENVELOPE"] = _probe_auto_shard()
 
 
 def _probe_zero_illegal_shard() -> bool:
-    from runtime.auto_shard_planner import AutoShardPlanner, legal_shard_dimensions
-    from runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.runtime.auto_shard_planner import AutoShardPlanner, legal_shard_dimensions
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
     class T:
         pass
@@ -558,7 +558,7 @@ gates["R36_ZERO_ILLEGAL_SHARD"] = _probe_zero_illegal_shard()
 
 
 def _probe_zero_same_shape_oom_retry() -> bool:
-    from runtime.adaptive_batch_scheduler import classify_error
+    from factor_engine.runtime.adaptive_batch_scheduler import classify_error
 
     return classify_error(MemoryError("out of memory")) == "permanent"
 
@@ -575,7 +575,7 @@ def _probe_duckdb_cpu_token_match() -> bool:
 
     _os.environ["DUCKDB_MAX_THREADS"] = "6"
     try:
-        from planner.physical_lowerer import _engine_threads_for
+        from factor_engine.planner.physical_lowerer import _engine_threads_for
 
         return _engine_threads_for("duckdb_sql") == 6
     finally:
@@ -586,7 +586,7 @@ gates["R36_DUCKDB_CPU_TOKEN_MATCH"] = _probe_duckdb_cpu_token_match()
 
 
 def _probe_duckdb_outside_buffer_reserve() -> bool:
-    from runtime.resource_monitor import compute_safe_envelope
+    from factor_engine.runtime.resource_monitor import compute_safe_envelope
 
     env = compute_safe_envelope(hard_memory_bytes=8 * 1024**3, live_headroom_bytes=6 * 1024**3)
     # safe = headroom - emergency - untracked(native) - writer burst（§19 DuckDB 外 reserve）
@@ -598,8 +598,8 @@ gates["R36_DUCKDB_OUTSIDE_BUFFER_RESERVE"] = _probe_duckdb_outside_buffer_reserv
 
 
 def _probe_duckdb_spill_quota() -> bool:
-    from runtime.resource_broker import ResourceBroker
-    from runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
     b = ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=4, spill_min_free_gb=20.0, spill_min_free_fraction=0.10)
     task = TaskResourceContract(peak_memory_bytes=1, spill_bytes=999 * 1024**3)
@@ -610,7 +610,7 @@ gates["R36_DUCKDB_SPILL_QUOTA"] = _probe_duckdb_spill_quota()
 
 
 def _probe_concurrent_scope_race() -> bool:
-    from runtime.resource_governor import ExecutionResourceScope, _ACTIVE_SCOPE_THREADS
+    from factor_engine.runtime.resource_governor import ExecutionResourceScope, _ACTIVE_SCOPE_THREADS
     import threading as _t
 
     _ACTIVE_SCOPE_THREADS.add(999999)  # 模拟另一线程已有 scope
@@ -636,7 +636,7 @@ def _probe_polars_thread_contract_honest() -> bool:
 
     _os.environ["POLARS_MAX_THREADS"] = "3"
     try:
-        from planner.physical_lowerer import _engine_threads_for
+        from factor_engine.planner.physical_lowerer import _engine_threads_for
 
         return _engine_threads_for("polars") == 3
     finally:
@@ -647,7 +647,7 @@ gates["R36_POLARS_THREAD_CONTRACT_HONEST"] = _probe_polars_thread_contract_hones
 
 
 def _probe_polars_streaming_memory_route() -> bool:
-    from runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.resource_broker import ResourceBroker
 
     b = ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=4)
     d1 = b.resource_decision()
@@ -667,7 +667,7 @@ def _probe_polars_streaming_fallback_guarded() -> bool:
     if "polars" not in _sys.modules:
         return True  # 未 import → 启动期设置生效（honest）
     try:
-        from runtime.resource_governor import ExecutionResourceScope
+        from factor_engine.runtime.resource_governor import ExecutionResourceScope
 
         scope = ExecutionResourceScope()
         scope.polars_live_effective = False
@@ -684,7 +684,7 @@ gates["R36_POLARS_STREAMING_FALLBACK_GUARDED"] = _probe_polars_streaming_fallbac
 # ---------------------------------------------------------------------------
 
 def _probe_blas_oversubscription() -> bool:
-    from runtime.resource_governor import check_nested_cpu_oversubscription
+    from factor_engine.runtime.resource_governor import check_nested_cpu_oversubscription
 
     return check_nested_cpu_oversubscription(8, 8, 16) is True
 
@@ -693,7 +693,7 @@ gates["R36_BLAS_NESTED_OVERSUBSCRIPTION_ZERO"] = _probe_blas_oversubscription()
 
 
 def _probe_numba_block_contract() -> bool:
-    from runtime.task_resource_contract import parallel_kernel_contract
+    from factor_engine.runtime.task_resource_contract import parallel_kernel_contract
 
     c = parallel_kernel_contract(numba_threads=8, peak_memory_bytes=1024)
     return c.cpu_tokens == 8 and c.backend_threads == 8
@@ -707,8 +707,8 @@ gates["R36_NUMBA_BLOCK_RESOURCE_CONTRACT"] = _probe_numba_block_contract()
 # ---------------------------------------------------------------------------
 
 def _probe_co_tenancy_memory_no_oom() -> bool:
-    from runtime.resource_broker import ResourceBroker
-    from runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
     b = ResourceBroker(hard_memory_limit=2 * 1024**3, cpu_slots=4, min_host_reserve_gb=0.0, min_host_reserve_fraction=0.0)
     # 大 task（远超 envelope）→ admission 拒绝，不执行、不 OOM。
@@ -720,8 +720,8 @@ gates["R36_CO_TENANCY_MEMORY_STRESS_NO_OOM"] = _probe_co_tenancy_memory_no_oom()
 
 
 def _probe_co_tenancy_cpu_no_starvation() -> bool:
-    from runtime.resource_autopilot import ResourceController
-    from runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
+    from factor_engine.runtime.resource_autopilot import ResourceController
+    from factor_engine.runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
 
     broker = type("B", (), {"pressure_stage": lambda self: "NORMAL", "hard_cpu_slots": 8, "cpu_budget": lambda self: 8, "_cpu": type("C", (), {"set_soft_budget": lambda self, v: None})()})()
     ctl = ResourceController(broker, stable_samples_required=2, cooldown_ticks=0)
@@ -735,8 +735,8 @@ gates["R36_CO_TENANCY_CPU_STRESS_NO_STARVATION"] = _probe_co_tenancy_cpu_no_star
 
 
 def _probe_co_tenancy_io_controlled() -> bool:
-    from runtime.resource_autopilot import ResourceController
-    from runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
+    from factor_engine.runtime.resource_autopilot import ResourceController
+    from factor_engine.runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
 
     broker = type("B", (), {"pressure_stage": lambda self: "NORMAL", "hard_cpu_slots": 8, "cpu_budget": lambda self: 8, "_cpu": type("C", (), {"set_soft_budget": lambda self, v: None})()})()
     ctl = ResourceController(broker, stable_samples_required=2, cooldown_ticks=0)
@@ -750,8 +750,8 @@ gates["R36_CO_TENANCY_IO_STRESS_CONTROLLED"] = _probe_co_tenancy_io_controlled()
 
 
 def _probe_recovery_to_full_speed() -> bool:
-    from runtime.resource_autopilot import ResourceController
-    from runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
+    from factor_engine.runtime.resource_autopilot import ResourceController
+    from factor_engine.runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
 
     broker = type("B", (), {"pressure_stage": lambda self: "NORMAL", "hard_cpu_slots": 8, "cpu_budget": lambda self: 8, "_cpu": type("C", (), {"set_soft_budget": lambda self, v: None})()})()
     ctl = ResourceController(broker, stable_samples_required=2, cooldown_ticks=0)
@@ -775,8 +775,8 @@ gates["R36_RECOVERY_TO_FULL_SPEED_AFTER_EXTERNAL_LOAD"] = _probe_recovery_to_ful
 
 def _probe_small_batch_no_regression() -> bool:
     import time as _t
-    from runtime.resource_broker import ResourceBroker
-    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    from factor_engine.runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
 
     b = ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=4)
     sched = AdaptiveBatchScheduler(broker=b)
@@ -784,7 +784,7 @@ def _probe_small_batch_no_regression() -> bool:
     # DIRECT_VECTOR 路径：极少量简单因子走 serial fused（scheduler 不建 future）。
     mode = None
     try:
-        from runtime.batch_service import choose_execution_mode
+        from factor_engine.runtime.batch_service import choose_execution_mode
 
         class _F:  # minimal factor stub
             pass
@@ -807,9 +807,9 @@ def _probe_1000_factor_tdc() -> bool:
     import time as _t
     import numpy as np
     import pandas as pd
-    from api.columns import col
-    from api.factor import Factor
-    from runtime.batch_service import choose_execution_mode
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.runtime.batch_service import choose_execution_mode
     from tests.helpers import InMemorySeriesSource
 
     dates = pd.bdate_range("2020-01-02", periods=500)
@@ -819,8 +819,8 @@ def _probe_1000_factor_tdc() -> bool:
     src = InMemorySeriesSource(data={"close": close})
     factors = [Factor(name=f"f{i}", expr=col("close")) for i in range(1000)]
     t0 = _t.monotonic()
-    from runtime.engine import FactorEngine
-    from backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.backend.pandas_backend import PandasBackend
 
     engine = FactorEngine(backend=PandasBackend(), data_source=src)
     dag, analyses = engine._dag_from_factors(factors, enable_cse=True)

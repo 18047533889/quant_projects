@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from planner.physical_factor_dag import (
+from factor_engine.planner.physical_factor_dag import (
     TASK_MERGE,
     TASK_ROOT,
     TASK_SHARD,
@@ -20,10 +20,10 @@ from planner.physical_factor_dag import (
     PhysicalFactorTask,
     rebase_task,
 )
-from runtime.adaptive_batch_scheduler import ERROR_OOM, AdaptiveBatchScheduler, classify_error
-from runtime.resource_broker import ResourceBroker
-from runtime.shard_execution_plan import shape_signature
-from runtime.task_resource_contract import TaskResourceContract
+from factor_engine.runtime.adaptive_batch_scheduler import ERROR_OOM, AdaptiveBatchScheduler, classify_error
+from factor_engine.runtime.resource_broker import ResourceBroker
+from factor_engine.runtime.shard_execution_plan import shape_signature
+from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
 
 def _contract(peak: int = 8 * 1024**3, dim: str = "time"):
@@ -85,7 +85,7 @@ def test_semantic_schema_not_oom():
 
 
 def test_replace_with_shard_plan_builds_shard_children_and_merge():
-    from runtime.auto_shard_planner import AutoShardPlanner
+    from factor_engine.runtime.auto_shard_planner import AutoShardPlanner
 
     dag = _dag_with_root()
     task = dag.tasks["root:f"]
@@ -124,7 +124,7 @@ def test_replace_with_shard_plan_builds_shard_children_and_merge():
 
 
 def test_handle_oom_replans_to_different_signature():
-    from runtime.auto_shard_planner import AutoShardPlanner
+    from factor_engine.runtime.auto_shard_planner import AutoShardPlanner
 
     dag = _dag_with_root()
     task = dag.tasks["root:f"]
@@ -158,7 +158,7 @@ def test_handle_oom_replans_to_different_signature():
 
 
 def test_same_shape_oom_retry_refused():
-    from runtime.auto_shard_planner import AutoShardPlanner
+    from factor_engine.runtime.auto_shard_planner import AutoShardPlanner
 
     dag = _dag_with_root()
     task = dag.tasks["root:f"]

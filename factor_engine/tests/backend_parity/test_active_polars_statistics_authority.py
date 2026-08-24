@@ -12,8 +12,8 @@ import pandas as pd
 import polars as pl
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -51,7 +51,7 @@ def test_selected_moment_is_window_local_and_requires_full_window() -> None:
     values = [1.0, 2.0, 10.0, 4.0, np.nan, 7.0]
     operator = _selected(
         "ts_moment",
-        module="cleaned_operators.research_polars",
+        module="factor_engine.cleaned_operators.research_polars",
         class_name="TSMomentNativePolars",
     )
     out = operator.calculate(_frame(values), d=4, k=2).to_pandas()["A"]
@@ -66,12 +66,12 @@ def test_selected_kurt_and_skew_match_pandas_authority() -> None:
     frame = _frame(values)
     kurt_operator = _selected(
         "ts_kurt",
-        module="cleaned_operators.common.time_series",
+        module="factor_engine.cleaned_operators.common.time_series",
         class_name="TSKurtosisPolars",
     )
     skew_operator = _selected(
         "ts_skew",
-        module="cleaned_operators.common.time_series",
+        module="factor_engine.cleaned_operators.common.time_series",
         class_name="TSSkewnessPolars",
     )
     out_kurt = kurt_operator.calculate(frame, d=4).to_pandas()["A"]
@@ -88,7 +88,7 @@ def test_selected_conditional_covariance_matches_pairwise_oracle() -> None:
     condition = [1.0, 0.0, 1.0, 1.0, 1.0, 1.0, np.nan, 1.0]
     operator = _selected(
         "ts_cov_if",
-        module="cleaned_operators.weighted_moment_ext",
+        module="factor_engine.cleaned_operators.weighted_moment_ext",
         class_name="_PolarsOp",
     )
     out = operator.calculate(

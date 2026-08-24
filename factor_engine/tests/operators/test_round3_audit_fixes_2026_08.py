@@ -31,8 +31,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _frame(values: np.ndarray, start: str = "2024-01-01") -> pd.DataFrame:
@@ -59,7 +59,7 @@ def _calc(name: str, *frames: pd.DataFrame, **params) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 def test_medrv_constant_is_standard_andersen_schaumburg():
-    from cleaned_operators.jump_robust import _MEDRV_CONST, _minrv, _medrv
+    from factor_engine.cleaned_operators.jump_robust import _MEDRV_CONST, _minrv, _medrv
     expected = np.pi / (6.0 - 4.0 * np.sqrt(3.0) + np.pi)
     assert abs(_MEDRV_CONST - expected) < 1e-12
     assert abs(_MEDRV_CONST - 1.4195) < 1e-3  # NOT the old 0.9016
@@ -75,7 +75,7 @@ def test_medrv_constant_is_standard_andersen_schaumburg():
 
 
 def test_jump_test_stat_is_standard_bns():
-    from cleaned_operators.jump_robust import _THETA_MINUS_2, _jump_z
+    from factor_engine.cleaned_operators.jump_robust import _THETA_MINUS_2, _jump_z
     expected_theta = (np.pi / 2.0) ** 2 + np.pi - 5.0
     assert abs(_THETA_MINUS_2 - expected_theta) < 1e-12
     r = np.array([0.3, -0.4, 0.2, 0.9, -0.1, 0.05, -0.3, 0.4])
@@ -92,7 +92,7 @@ def test_jump_test_stat_is_standard_bns():
 # ---------------------------------------------------------------------------
 
 def test_coexceedance_baseline_is_tail_probability_squared():
-    from cleaned_operators.cross_section_ext import _tail_coexceedance_series
+    from factor_engine.cleaned_operators.cross_section_ext import _tail_coexceedance_series
     rng = np.random.default_rng(7)
     # 60 rows x 4 names in one group, independent Gaussian -> excess ≈ 0
     x = rng.normal(size=(60, 4))
@@ -111,7 +111,7 @@ def test_coexceedance_baseline_is_tail_probability_squared():
 # ---------------------------------------------------------------------------
 
 def test_mst_counts_zero_length_edges():
-    from cleaned_operators.cross_section_ext import _prim_mean
+    from factor_engine.cleaned_operators.cross_section_ext import _prim_mean
     n = 4
     # complete correlation -> d_ij = 0 for every pair (legit MST edges)
     D = np.zeros((n, n))
@@ -134,7 +134,7 @@ def test_mst_identical_series_not_nan():
 # ---------------------------------------------------------------------------
 
 def test_piotroski_fiscal_period_comparison():
-    from cleaned_operators.fundamental.accruals_scores import (
+    from factor_engine.cleaned_operators.fundamental.accruals_scores import (
         _fin_piotroski_f_score,
         _piotroski_components,
     )
@@ -163,7 +163,7 @@ def test_piotroski_fiscal_period_comparison():
 
 
 def test_applicability_mask_never_promotes_nan():
-    from cleaned_operators.fundamental.accruals_scores import _masked
+    from factor_engine.cleaned_operators.fundamental.accruals_scores import _masked
     score = pd.DataFrame([[1.0], [2.0], [3.0]])
     mask = pd.DataFrame([[1.0], [np.nan], [0.0]])
     out = _masked(score, mask)
@@ -194,7 +194,7 @@ def _session_day(n: int):
 
 
 def test_recovery_excludes_censored_late_events():
-    from cleaned_operators.session_recovery import _recovery_day
+    from factor_engine.cleaned_operators.session_recovery import _recovery_day
     n = 12
     x = np.linspace(10.0, 10.6, n)          # slow drift
     event = np.zeros(n)
@@ -206,7 +206,7 @@ def test_recovery_excludes_censored_late_events():
 
 
 def test_recovery_censored_alone_not_failure():
-    from cleaned_operators.session_recovery import _recovery_day
+    from factor_engine.cleaned_operators.session_recovery import _recovery_day
     n = 10
     x = np.linspace(10.0, 11.0, n)
     event = np.zeros(n)
@@ -219,7 +219,7 @@ def test_recovery_censored_alone_not_failure():
 # ---------------------------------------------------------------------------
 
 def test_threshold_cycle_full_period():
-    from cleaned_operators.threshold_cycle import _state_series, _full_cycles
+    from factor_engine.cleaned_operators.threshold_cycle import _state_series, _full_cycles
     # crosses both bands: 5(deadband)->7(U)->2(L)->7(U)->2(L)->7(U)
     x = np.array([5.0, 7.0, 2.0, 7.0, 2.0, 7.0])
     s = _state_series(x, 2.0, 6.0)
@@ -248,7 +248,7 @@ def test_state_episode_efficiency_never_exceeds_one():
 
 
 def test_state_episode_entry_scale_no_fallback():
-    from cleaned_operators.state_episode_excursion import _episode_scale_entry
+    from factor_engine.cleaned_operators.state_episode_excursion import _episode_scale_entry
     scale = np.array([np.nan, 2.0, 3.0])
     # entry scale missing at e=0 -> NaN even though current row scale is finite
     assert np.isnan(_episode_scale_entry(scale, 0))
@@ -264,7 +264,7 @@ def test_state_episode_balance_has_no_scale_param():
 # ---------------------------------------------------------------------------
 
 def test_update_direction_persistence_is_sign_based():
-    from cleaned_operators.update_clock import _path_eff, _direction_persist
+    from factor_engine.cleaned_operators.update_clock import _path_eff, _direction_persist
     # Monotone path: path efficiency = 1, direction persistence should also be 1
     v = np.array([1.0, 2.0, 3.0, 4.0])
     assert _path_eff(v) == 1.0
@@ -279,7 +279,7 @@ def test_update_direction_persistence_is_sign_based():
 
 
 def test_update_clock_ordinal_lookback_no_hidden_window():
-    from cleaned_operators import update_clock as _uc
+    from factor_engine.cleaned_operators import update_clock as _uc
     # The kernel must locate the last ``n_updates`` *real* update nodes by
     # ordinal, with no hidden ``2*n_updates`` / ``max_lookback_rows`` horizon:
     # sparse annual reports at rows 0..4 must still feed row 59 (P0-11).
@@ -333,7 +333,7 @@ def test_run_strength_max_run_caps():
 # ---------------------------------------------------------------------------
 
 def test_best_lag_corr_zero_is_not_nan():
-    from cleaned_operators.downside_risk import _best_lag_corr
+    from factor_engine.cleaned_operators.downside_risk import _best_lag_corr
     # uncorrelated but valid series -> best absolute corr near 0 (finite)
     rng = np.random.default_rng(3)
     x = rng.normal(size=(60, 1))
@@ -373,7 +373,7 @@ def test_trimmed_mean_infeasible_trim_is_nan_not_plain_mean():
 
 
 def test_tail_fraction_invalid_raises():
-    from cleaned_operators.extreme_tail import _hill_series
+    from factor_engine.cleaned_operators.extreme_tail import _hill_series
     with pytest.raises(ValueError, match="tail_fraction"):
         _hill_series(np.linspace(1.0, 5.0, 30), window=20, side="upper",
                      tail_fraction=1.5, min_tail_count=3)
@@ -383,14 +383,14 @@ def test_tail_fraction_invalid_raises():
 
 
 def test_multiscale_duplicate_scales_rejected():
-    from cleaned_operators.multiscale_trend import _normalise_scales
+    from factor_engine.cleaned_operators.multiscale_trend import _normalise_scales
     with pytest.raises(ValueError, match="unique"):
         _normalise_scales([5, 10, 10, 20])
     assert _normalise_scales([5, 10, 20]) == [5, 10, 20]
 
 
 def test_state_density_has_1_over_h_normalization():
-    from cleaned_operators.state_geometry import _state_density_series
+    from factor_engine.cleaned_operators.state_geometry import _state_density_series
     series = np.concatenate([np.linspace(10.0, 11.0, 60), [10.5]])
     out = _state_density_series(series, window=60, bandwidth=1.0, min_periods=5)
     # Independent reference (NEW-P1-72): the operator emits a STANDARDIZED,

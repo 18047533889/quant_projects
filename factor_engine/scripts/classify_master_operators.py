@@ -8,7 +8,7 @@ operators from FactorEngine_全部新增算子_Master清单_20260812.md.
 import sys
 sys.path.insert(0, '/home/shw/quant_projects/factor_engine')
 
-from cleaned_operators.operator_surface import (
+from factor_engine.cleaned_operators.operator_surface import (
     DAILY_CANONICALS,
     extended_only_canonicals,
     RESEARCH_ONLY_CANONICALS,

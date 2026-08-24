@@ -13,7 +13,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from backend.fast_linear_window import (
+from factor_engine.backend.fast_linear_window import (
     rolling_ols_reference,
     rolling_ols_sufficient,
     rolling_ridge_sufficient,

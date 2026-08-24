@@ -26,17 +26,17 @@ import hashlib
 from dataclasses import dataclass
 from typing import Any
 
-from planner.fusion_size_model import (
+from factor_engine.planner.fusion_size_model import (
     FUSION_BLOCKS,
     MODEL_WEIGHTS,
     FusionSizeFeatures,
     choose_fusion_block_size,
 )
-from planner.negative_fusion_cache import (
+from factor_engine.planner.negative_fusion_cache import (
     NEGATIVE_FUSION_CACHE,
     NegativeFusionCacheKey,
 )
-from planner.physical_factor_dag import PhysicalFactorTask
+from factor_engine.planner.physical_factor_dag import PhysicalFactorTask
 
 #: 自适应 fusion block（R27-222 / R39-PERF-021：bucket 保留，选择模型驱动）。
 _FUSION_BLOCKS = FUSION_BLOCKS
@@ -117,7 +117,7 @@ def native_fusion_capability_map(ctx: Any | None) -> dict[str, bool]:
     # certification 证据：能拿到 certified capability 才算数（不靠名字猜）。
     certified = False
     try:
-        from backend.backend_certification import backend_certifies
+        from factor_engine.backend.backend_certification import backend_certifies
 
         certified = bool(backend_certifies(backend, "execute_multi_roots"))
     except Exception:
@@ -286,7 +286,7 @@ def adaptive_fusion_block_size(
     # 使用自适应配置作为默认预算
     if backend_compile_budget_bytes is None:
         try:
-            from runtime.adaptive_config import get_global_adaptive_config
+            from factor_engine.runtime.adaptive_config import get_global_adaptive_config
             backend_compile_budget_bytes = get_global_adaptive_config().compile_budget_bytes
         except ImportError:
             backend_compile_budget_bytes = 2 * 1024**3  # 回退默认值

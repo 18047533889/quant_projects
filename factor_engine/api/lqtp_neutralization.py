@@ -27,12 +27,12 @@ STABLE_NEUTRALIZE_NAMES: tuple[str, ...] = (
 
 
 def _factory(canonical: str) -> Callable[..., Any]:
-    from api.cleaned_ops import make_cleaned_call_factory
+    from factor_engine.api.cleaned_ops import make_cleaned_call_factory
     return make_cleaned_call_factory(canonical)
 
 
 def _industry_source():
-    from api.source_ref import source_col
+    from factor_engine.api.source_ref import source_col
     return source_col(
         "IndustryDaily",
         "IndustryCode",
@@ -42,7 +42,7 @@ def _industry_source():
 
 
 def _size_source():
-    from api.source_ref import source_col
+    from factor_engine.api.source_ref import source_col
     return source_col(
         "SizeDaily",
         "MarketCap",

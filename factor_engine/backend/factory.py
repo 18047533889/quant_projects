@@ -25,6 +25,7 @@ def build_backend(backend_type: str):
     - ``auto`` / ``hybrid``：SQL + Polars；数据源有 ``scan_polars_long`` 时自动走
       ``hybrid_long``（DuckDB long 物化 + 原生 Polars long），否则宽表 hybrid
     - ``debug``：只打印计划，不读数据
+    - ``q_kdb`` / ``q``：Q/KDB 物理执行后端（R21-Q-FACTORY-INTEGRATION）
 
     示例：
         >>> build_backend("auto")
@@ -58,21 +59,17 @@ def build_backend(backend_type: str):
 
         return DuckDBPushdownBackend()
     if normalized in {"clickhouse_sql", "ch_sql", "clickhouse_pushdown"}:
-        from .duckdb_pushdown_backend import DuckDBPushdownBackend
+        from .duckdb_pushdown_backend import ClickHousePushdownBackend
 
-        # SqlBackend 按 data_source 自动选 DuckDB / ClickHouse 方言。
-        # R40 #141: 显式记录 backend 选择链（requested_backend / resolved_dialect /
-        # datasource_identity），供 ProductionExecutionCertificate.build() 纳入
-        # certificate —— runtime backend 事件校验可证明实际方言。
-        backend = DuckDBPushdownBackend()
-        backend._requested_backend = "clickhouse_sql"
-        backend._resolved_dialect = "clickhouse"
-        backend._datasource_identity = ""
-        return backend
+        return ClickHousePushdownBackend()
     if normalized in {"auto", "hybrid"}:
         from .hybrid_backend import HybridBackend
 
         return HybridBackend()
+    if normalized in {"q_kdb", "q"}:
+        from .q_backend import QBackend
+
+        return QBackend(fallback_to_pandas=False, production_mode=True)
 
     raise ValueError(f"Unsupported backend type: {backend_type}")
 
@@ -93,7 +90,7 @@ def build_backend_execution_certificate(
     证书，使 runtime O(1) backend 事件校验能证明实际解析方言，而不是把
     clickhouse 路由静默落到无记录的 DuckDB 路径。
     """
-    from runtime.production_execution_certificate import ProductionExecutionCertificate
+    from factor_engine.runtime.production_execution_certificate import ProductionExecutionCertificate
 
     return ProductionExecutionCertificate.build(
         structural_hash=str(structural_hash or ""),

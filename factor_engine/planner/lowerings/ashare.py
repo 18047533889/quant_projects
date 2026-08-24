@@ -2,9 +2,9 @@
 """A 股与股东结构 composite lowerings。"""
 from __future__ import annotations
 
-from planner.composite_lowering import register_lowering
-from planner.logical_plan import PlanNode
-from planner.lowerings import _helpers as H
+from factor_engine.planner.composite_lowering import register_lowering
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.lowerings import _helpers as H
 
 
 def _ratio(node: PlanNode) -> PlanNode:
@@ -65,7 +65,7 @@ def _resolve_tolerance_unit(node: PlanNode) -> str:
     if explicit in ("price", "ratio"):
         return str(explicit)
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         op = OperatorRegistry.get(node.op)
         meta = getattr(op, "metadata", None)

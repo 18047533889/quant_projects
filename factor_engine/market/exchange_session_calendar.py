@@ -224,7 +224,7 @@ class ExchangeSessionCalendar:
 
     def to_session_spec(self) -> Any:
         """投影为 ``market.session.SessionSpec``（只读快照，无独立规则）。"""
-        from market.session import SessionSegment, SessionSpec
+        from factor_engine.market.session import SessionSegment, SessionSpec
 
         segments = tuple(
             SessionSegment(
@@ -255,7 +255,7 @@ class ExchangeSessionCalendar:
 
     def to_session_calendar(self) -> Any:
         """投影为 ``runtime.session_calendar.SessionCalendar``。"""
-        from runtime.session_calendar import SessionCalendar
+        from factor_engine.runtime.session_calendar import SessionCalendar
 
         return SessionCalendar(
             market=self.market.upper(),

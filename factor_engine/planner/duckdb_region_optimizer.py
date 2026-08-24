@@ -13,13 +13,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from planner.backend_region import (
+from factor_engine.planner.backend_region import (
     BackendRegion,
     PhysicalBackend,
     Representation,
     TransferEdge,
+    TransferTransform,
+    infer_transfer_transform,
 )
-from planner.transfer_cost import check_producer_ordering, estimate_transfer_edge_cost
+from factor_engine.planner.transfer_cost import check_producer_ordering, estimate_transfer_edge_cost
 
 
 @dataclass(frozen=True)
@@ -54,8 +56,10 @@ def infer_duckdb_region_output_properties(
     Returns:
         Properties including ordering guarantees and preferred boundary representation.
     """
-    guarantees_order = has_explicit_order_by and len(region.sorted_by) > 0
-    sorted_by = region.sorted_by if guarantees_order else ()
+    # R21-TRANSFER-BOUNDARIES: sorted_by is now in required_properties
+    sorted_by = region.required_properties.sorted_by if region.required_properties else ()
+    guarantees_order = has_explicit_order_by and len(sorted_by) > 0
+    sorted_by = sorted_by if guarantees_order else ()
 
     return DuckDBRegionProperties(
         region_id=region.region_id,
@@ -139,6 +143,13 @@ def optimize_duckdb_region_boundary(
     # Estimate bytes transferred (8 bytes per numeric cell)
     estimated_bytes = estimated_rows * 8 * 3  # timestamp, instrument, value
 
+    # R21-TRANSFER-BOUNDARIES: Infer formal transform type
+    transform = infer_transfer_transform(
+        source_repr, target_repr,
+        source_backend=producer_region.backend,
+        target_backend=consumer_region.backend,
+    )
+
     return TransferEdge(
         edge_id=f"{producer_region.region_id}→{consumer_region.region_id}",
         producer_region=producer_region.region_id,
@@ -147,6 +158,7 @@ def optimize_duckdb_region_boundary(
         target_backend=consumer_region.backend,
         source_representation=source_repr,
         target_representation=target_repr,
+        transform=transform,  # R21-TRANSFER-BOUNDARIES: formal transform type
         estimated_rows=estimated_rows,
         estimated_bytes=estimated_bytes,
         estimated_transfer_ms=cost_estimate.total_ms,

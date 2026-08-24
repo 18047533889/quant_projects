@@ -7,13 +7,13 @@ import pytest
 
 pytest.importorskip("polars")
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from backend.context import ExecutionContext
-from backend.polars_long_backend import PolarsLongBackend
-from backend.polars_expr_emitter import compile_polars_long_lazy
-from planner.logical_plan import PlanNode
-from runtime.engine import FactorEngine
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.backend.polars_long_backend import PolarsLongBackend
+from factor_engine.backend.polars_expr_emitter import compile_polars_long_lazy
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 

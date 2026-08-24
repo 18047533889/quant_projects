@@ -7,15 +7,15 @@ import pytest
 
 @pytest.fixture(scope="module")
 def _loaded():
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
 
 
 def test_phase1_scope_loaded(_loaded):
-    from backend.phase1_scope import phase1_summary
+    from factor_engine.backend.phase1_scope import phase1_summary
 
     s = phase1_summary()
     assert s["primitive_count"] >= 80
@@ -29,7 +29,7 @@ def test_phase1_scope_loaded(_loaded):
 
 
 def test_phase1_rank_six_way_certified(_loaded):
-    from backend.phase1_scope import get_phase1_entry, phase1_production_certified
+    from factor_engine.backend.phase1_scope import get_phase1_entry, phase1_production_certified
 
     assert phase1_production_certified("rank")
     assert phase1_production_certified("ts_mean")
@@ -38,8 +38,8 @@ def test_phase1_rank_six_way_certified(_loaded):
 
 
 def test_fillna_bfill_forbidden_capability(_loaded):
-    from backend.operator_call_capability import CapabilityLevel, check_operator_call_capability
-    from planner.logical_plan import PlanNode
+    from factor_engine.backend.operator_call_capability import CapabilityLevel, check_operator_call_capability
+    from factor_engine.planner.logical_plan import PlanNode
 
     plan = PlanNode(
         op="fillna",
@@ -53,8 +53,8 @@ def test_fillna_bfill_forbidden_capability(_loaded):
 
 
 def test_fillna_ffill_redirect(_loaded):
-    from backend.operator_call_capability import check_operator_call_capability
-    from planner.logical_plan import PlanNode
+    from factor_engine.backend.operator_call_capability import check_operator_call_capability
+    from factor_engine.planner.logical_plan import PlanNode
 
     plan = PlanNode(
         op="fillna",
@@ -68,9 +68,9 @@ def test_fillna_ffill_redirect(_loaded):
 
 
 def test_window_spec_rejects_float_window(_loaded):
-    from backend.plan_params import PlanParamError
-    from backend.window_spec import WindowSpec
-    from planner.logical_plan import PlanNode
+    from factor_engine.backend.plan_params import PlanParamError
+    from factor_engine.backend.window_spec import WindowSpec
+    from factor_engine.planner.logical_plan import PlanNode
 
     node = PlanNode(
         op="ts_mean",
@@ -84,7 +84,7 @@ def test_window_spec_rejects_float_window(_loaded):
 
 
 def test_explain_factor_rank(_loaded):
-    from api.factor_explain import explain_factor
+    from factor_engine.api.factor_explain import explain_factor
 
     exp = explain_factor("rank(col('close'))", mode="production")
     assert "rank" in exp.operators
@@ -92,7 +92,7 @@ def test_explain_factor_rank(_loaded):
 
 
 def test_validate_factor_dual_backend(_loaded):
-    from api.factor_explain import validate_factor
+    from factor_engine.api.factor_explain import validate_factor
 
     ok, exp = validate_factor("rank(col('close'))", target="dual_backend_production")
     assert ok
@@ -100,7 +100,7 @@ def test_validate_factor_dual_backend(_loaded):
 
 
 def test_certify_operator_ts_mean_dry_run(_loaded):
-    from backend.operator_certification import run_certification
+    from factor_engine.backend.operator_certification import run_certification
 
     report = run_certification("ts_mean", write_evidence=False, refresh_manifest=False)
     assert any(s.passed for s in report.stages)

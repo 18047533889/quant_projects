@@ -55,13 +55,13 @@ import pytest
 
 
 def _ensure_exself_chain() -> None:
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if OperatorRegistry.lifecycle() == "frozen":
         return
     if OperatorRegistry.get("ex_self_zscore", "pandas_numpy") is not None:
         return
-    from cleaned_operators.technical import exself_cs_v1  # noqa: F401
+    from factor_engine.cleaned_operators.technical import exself_cs_v1  # noqa: F401
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -70,7 +70,7 @@ def _bootstrap():
 
 
 def _op(name: str):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get(name, "pandas_numpy") or OperatorRegistry.get(name)
     assert op is not None, f"{name} not registered"
@@ -382,7 +382,7 @@ def test_neighbor_canonicals_untouched(name):
     # duplicate-skip assertions naming the audited neighbors: each neighbor
     # keeps its own registration; the landed names never shadow them and
     # the landed names were NOT any neighbor's canonical
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     for nb in _AUDITED_NEIGHBORS:
         # neighbor remains registered under some backend (registry-wide,
@@ -410,8 +410,8 @@ def test_group_zscore_zero_fill_separated():
     # neighbor side: group_zscore (polars native) zero-fills the same
     # degenerate group (group_batch1.py otherwise(0.0)) — genuinely a
     # different contract, not an untested assumption.
-    from cleaned_operators.registry import OperatorRegistry
-    from backend.panel_polars import panel_to_polars
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.panel_polars import panel_to_polars
 
     nb = OperatorRegistry.get("group_zscore", "polars")
     if nb is None:  # pragma: no cover - registry wiring regression guard

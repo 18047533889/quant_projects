@@ -12,12 +12,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 
 load_all()
 
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.operator_surface import classify_canonical
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
 P1 = {
     "ts_transfer_entropy", "ts_score_rank_weighted_mean",
@@ -322,7 +322,7 @@ def _brute_force_h1(points: np.ndarray) -> list[tuple[float, float]]:
 
 
 def test_rips_h1_matches_bruteforce():
-    from cleaned_operators.advanced_topology import _max_persistence, _rips_h1_pairs
+    from factor_engine.cleaned_operators.advanced_topology import _max_persistence, _rips_h1_pairs
 
     rng = np.random.default_rng(42)
     for _ in range(4):
@@ -341,7 +341,7 @@ def test_rips_h1_geometry_ground_truth():
     spurious cycles on collinear clouds; with the correct (highest-edge) pivot
     convention the same input correctly yields zero persistence.
     """
-    from cleaned_operators.advanced_topology import _max_persistence, _rips_h1_pairs
+    from factor_engine.cleaned_operators.advanced_topology import _max_persistence, _rips_h1_pairs
 
     th = np.linspace(0.0, 2.0 * np.pi, 10, endpoint=False)
     circle = np.column_stack([np.cos(th), np.sin(th)])
@@ -411,7 +411,7 @@ def test_quantile_pca_constant_returns_are_degenerate_nan():
 # ---------------------------------------------------------------------------
 
 def test_barrier_approach_acceleration_uses_real_limits():
-    from cleaned_operators.advanced_intraday import _barrier_approach
+    from factor_engine.cleaned_operators.advanced_intraday import _barrier_approach
 
     # Accelerating toward upper limit 11 from below: linear headroom
     # h = 1 - price/11, v = [.0182,.0273,.0364], a = [.0091,.0091] -> -mean(a) = 0.009091.
@@ -428,7 +428,7 @@ def test_barrier_approach_acceleration_uses_real_limits():
 
 
 def test_vpin_equal_volume_bucket_golden():
-    from cleaned_operators.microstructure.flow_impact import _equal_volume_vpin
+    from factor_engine.cleaned_operators.microstructure.flow_impact import _equal_volume_vpin
 
     vol = np.array([10.0, 30.0, 5.0, 40.0, 15.0])
     fl = np.array([10.0, -30.0, 5.0, 40.0, -15.0])
@@ -457,7 +457,7 @@ def test_holder_class_js_fixed_slots_no_compression():
 
 
 def test_fisher_information_shift_window_length_exact():
-    from cleaned_operators.advanced_topology import _fisher_shift_series
+    from factor_engine.cleaned_operators.advanced_topology import _fisher_shift_series
 
     rng = np.random.default_rng(27)
     vals = rng.normal(size=(100, 1))
@@ -518,7 +518,7 @@ def test_group_spd_complete_case_and_min_peers():
 
 
 def test_persistence_diagram_w1_golden():
-    from cleaned_operators.advanced_topology import _diagram_w1
+    from factor_engine.cleaned_operators.advanced_topology import _diagram_w1
 
     assert _diagram_w1([], []) == pytest.approx(0.0)
     assert _diagram_w1([], [(2.0, 3.0)]) == pytest.approx(0.5)  # diag cost (3-2)/2
@@ -527,7 +527,7 @@ def test_persistence_diagram_w1_golden():
 
 
 def test_takens_nan_vectors_filtered():
-    from cleaned_operators.advanced_topology import _takens_points
+    from factor_engine.cleaned_operators.advanced_topology import _takens_points
 
     vals = np.sin(np.arange(30.0) / 3.0)
     vals[5] = np.nan
@@ -538,7 +538,7 @@ def test_takens_nan_vectors_filtered():
 
 
 def test_pair_wasserstein_mad_zero_fails_closed():
-    from cleaned_operators.advanced_intraday import _pair_w1
+    from factor_engine.cleaned_operators.advanced_intraday import _pair_w1
 
     rng = np.random.default_rng(25)
     a = rng.normal(size=30)
@@ -562,7 +562,7 @@ def test_quantile_pca_rank_consistency():
 
 
 def test_pca_eigen_gap_guard():
-    from cleaned_operators.advanced_intraday import _eigen_gap_unstable
+    from factor_engine.cleaned_operators.advanced_intraday import _eigen_gap_unstable
 
     assert _eigen_gap_unstable(np.array([1.0, 0.995, 0.001]), 1) is True
     assert _eigen_gap_unstable(np.array([1.0, 0.5, 0.001]), 1) is False

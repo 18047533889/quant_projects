@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from backend.contracts import ExecutionKind, PhysicalImplementationID, PhysicalImplementationSpec
-from backend.duckdb_backend import (
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationID, PhysicalImplementationSpec
+from factor_engine.backend.duckdb_backend import (
     NullPolicy,
     ParameterDomainDigest,
     PerRowCertification,

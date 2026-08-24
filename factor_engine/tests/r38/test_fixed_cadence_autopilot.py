@@ -16,14 +16,14 @@ import time
 
 import pytest
 
-from runtime.memory_budget_allocator import MemoryBudgetAllocator
-from runtime.resource_autopilot_service import (
+from factor_engine.runtime.memory_budget_allocator import MemoryBudgetAllocator
+from factor_engine.runtime.resource_autopilot_service import (
     ResourceAutopilotService,
     reset_resource_autopilot,
     start_resource_autopilot,
 )
-from runtime.resource_broker import ResourceBroker
-from runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
+from factor_engine.runtime.resource_broker import ResourceBroker
+from factor_engine.runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
 
 
 @pytest.fixture(autouse=True)
@@ -68,7 +68,7 @@ def test_stale_decision_conservative_fallback():
     # 或旧 decision，但不自行 tick（tick_count 不增加）。
     from dataclasses import replace
 
-    from runtime.resource_autopilot_service import ResourceDecisionSnapshot
+    from factor_engine.runtime.resource_autopilot_service import ResourceDecisionSnapshot
 
     old = svc._snapshot
     svc._snapshot = ResourceDecisionSnapshot(
@@ -115,7 +115,7 @@ def test_budget_low_headroom_does_not_exceed_safe():
 
 def test_job_lease_caps_all_memory_budgets(monkeypatch):
     """A small job on a large host must not receive host-sized memory targets."""
-    from runtime.resource_autopilot import ResourceController
+    from factor_engine.runtime.resource_autopilot import ResourceController
 
     lease = 384 * 1024**2
     broker = ResourceBroker(

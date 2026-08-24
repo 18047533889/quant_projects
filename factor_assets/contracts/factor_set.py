@@ -16,7 +16,9 @@ class FactorMembership:
 
     Captures why and how a factor entered the set: the admission decision
     reference, evidence and novelty references, orientation relative to the
-    set, and the role assigned during assembly.
+    set, and the role assigned during assembly.  Every member is traceable
+    back to its factor version, family/cluster, representative status, and
+    the similarity/health/novelty evidence that justified admission.
     """
 
     factor_id: str
@@ -24,9 +26,15 @@ class FactorMembership:
     orientation: Optional[int] = None          # +1 / -1 relative to set convention
     family_id: Optional[str] = None
     cluster_id: Optional[int] = None
+    factor_version: Optional[str] = None       # version of the factor definition
+    representative_of: Optional[str] = None    # family/cluster this member represents
     selection_decision_ref: Optional[str] = None
     evidence_ref: Optional[str] = None
     novelty_ref: Optional[str] = None
+    similarity_ref: Optional[str] = None       # similarity evidence that justified admission
+    health_state_ref: Optional[str] = None     # health evidence at assembly time
+    assembly_score: Optional[float] = None     # policy score that ranked this member
+    selection_rank: Optional[int] = None       # 0-based rank within the assembled set
     reason: Optional[str] = None               # SelectionReason value
 
     def __post_init__(self):
@@ -34,6 +42,8 @@ class FactorMembership:
             raise ValueError("factor_id is required")
         if self.orientation is not None and self.orientation not in (-1, 1):
             raise ValueError("orientation must be -1, 1, or None")
+        if self.assembly_score is not None and self.assembly_score != self.assembly_score:
+            raise ValueError("assembly_score must be finite")
 
 
 @dataclass(frozen=True)
@@ -47,9 +57,9 @@ class FactorSetSpec:
     name: str
     selection_policy: str  # "family_robust", "pareto_front", "manual", etc.
     universe_ref: Optional[str] = None
-    # Provenance of the data snapshot the set was assembled against.  When
-    # None, ``universe_ref`` is used as the snapshot reference (legacy
-    # behaviour) so existing specs keep their meaning.
+    # Provenance of the data snapshot the set was assembled against.  This is
+    # REQUIRED: the universe must NOT impersonate the snapshot.  A set is only
+    # reproducible when it records the exact data snapshot it was built on.
     data_snapshot_ref: Optional[str] = None
     frequency: Optional[str] = None
     max_factors: Optional[int] = None
@@ -68,17 +78,28 @@ class FactorSetSpec:
             raise ValueError("name is required")
         if not self.selection_policy:
             raise ValueError("selection_policy is required")
+        if not self.data_snapshot_ref:
+            raise ValueError(
+                "data_snapshot_ref is required — the universe must not "
+                "impersonate the data snapshot"
+            )
 
 
 @dataclass(frozen=True)
 class FactorSetArtifact:
     """
-    Complete, hash-addressed assembly output.
+    Complete, hash-addressed assembly output — the CANONICAL authority.
 
     Wraps the factor ID list with full per-member provenance and the content
     hashes needed to verify reproducibility: what policy produced it
     (policy_hash), on what data snapshot (snapshot_ref), under which split
     (split_ref), and the content hash of the assembly itself (assembly_hash).
+
+    ``snapshot_ref``, ``universe_ref`` and ``split_ref`` are REQUIRED — a
+    reproducible artifact must record the exact data snapshot, universe and
+    split it was assembled against.  ``versions`` records the factor-version
+    of each member and ``evidence_refs`` the evidence that justified the
+    assembly, so every member is traceable.
     """
 
     set_id: str
@@ -87,9 +108,11 @@ class FactorSetArtifact:
     created_at: str  # ISO 8601
     policy_hash: str
     assembly_hash: str
-    universe_ref: Optional[str] = None
-    snapshot_ref: Optional[str] = None
-    split_ref: Optional[str] = None
+    snapshot_ref: str
+    universe_ref: str
+    split_ref: str
+    versions: tuple[str, ...] = ()
+    evidence_refs: tuple[str, ...] = ()
     spec: Optional[FactorSetSpec] = None
 
     def __post_init__(self):
@@ -105,6 +128,12 @@ class FactorSetArtifact:
             raise ValueError("assembly_hash is required")
         if not self.created_at:
             raise ValueError("created_at is required")
+        if not self.snapshot_ref:
+            raise ValueError("snapshot_ref is required")
+        if not self.universe_ref:
+            raise ValueError("universe_ref is required")
+        if not self.split_ref:
+            raise ValueError("split_ref is required")
         member_ids = [m.factor_id for m in self.members]
         if len(set(member_ids)) != len(member_ids):
             raise ValueError("duplicate factor_id in members")
@@ -114,15 +143,62 @@ class FactorSetArtifact:
         """Factor IDs of all members, in membership order."""
         return tuple(m.factor_id for m in self.members)
 
+    @property
+    def memberships(self) -> tuple[FactorMembership, ...]:
+        """Alias for ``members`` (legacy consumers read ``memberships``)."""
+        return self.members
+
+    @property
+    def size(self) -> int:
+        """Number of members in the artifact."""
+        return len(self.members)
+
+    @property
+    def families(self) -> tuple[str, ...]:
+        """Distinct family IDs among members, sorted."""
+        return tuple(sorted({m.family_id for m in self.members if m.family_id is not None}))
+
     def contains(self, factor_id: str) -> bool:
         """Check if factor_id is a member of this artifact."""
         return any(m.factor_id == factor_id for m in self.members)
+
+    def to_legacy_view(self) -> "FactorSet":
+        """
+        Produce the deprecated read-only :class:`FactorSet` compatibility view.
+
+        The legacy ``FactorSet`` is NOT a second authority — it is a
+        projection of this canonical artifact for consumers that predate the
+        artifact contract.  New consumers should use the artifact directly.
+        """
+        return FactorSet(
+            set_id=self.set_id,
+            name=self.name,
+            factor_ids=self.factor_ids,
+            created_at=self.created_at,
+            spec=self.spec,
+            universe_ref=self.universe_ref,
+            snapshot_ref=self.snapshot_ref,
+            split_ref=self.split_ref,
+            memberships=self.members,
+            assembly_hash=self.assembly_hash,
+            policy_hash=self.policy_hash,
+            families=tuple(sorted({m.family_id for m in self.members if m.family_id is not None})),
+            representatives=tuple(
+                m.factor_id for m in self.members if m.representative_of is not None
+            ),
+        )
 
 
 @dataclass(frozen=True)
 class FactorSet:
     """
-    A selected set of factor assets.
+    DEPRECATED — read-only compatibility view of a :class:`FactorSetArtifact`.
+
+    The canonical assembly authority is :class:`FactorSetArtifact`.  This
+    legacy type is retained only for consumers that predate the artifact
+    contract and is produced via ``FactorSetArtifact.to_legacy_view()``.  It
+    is NOT a second authority and should not be constructed directly for new
+    assemblies.
 
     Contains factor IDs and references only — no raw factor values.
     Used to pass selected factors to FactorPreprocess or other consumers.

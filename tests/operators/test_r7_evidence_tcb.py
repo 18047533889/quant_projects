@@ -32,7 +32,7 @@ def _full_evidence_for(*names: str) -> dict:
 
 def test_undeclared_operator_production_edge_gate_fails_closed():
     """review #250: undeclared == FAIL in production; no vacuous pass."""
-    from cleaned_operators.edge_requirements import (
+    from factor_engine.cleaned_operators.edge_requirements import (
         EdgeGateMode,
         edge_contract,
         production_edge_evidence_complete,
@@ -50,7 +50,7 @@ def test_undeclared_operator_production_edge_gate_fails_closed():
 
 def test_declared_with_evidence_is_complete_per_backend():
     """review #251 + #252: contract-driven, backend-specific completeness."""
-    from cleaned_operators.edge_requirements import (
+    from factor_engine.cleaned_operators.edge_requirements import (
         edge_contract,
         edge_evidence_status,
         missing_edge_dimensions,
@@ -108,7 +108,7 @@ def test_declared_with_evidence_is_complete_per_backend():
 
 def test_legacy_flat_edge_evidence_fallback_still_routes():
     """review #252: pre-regeneration flat duckdb lists keep working."""
-    from cleaned_operators.edge_requirements import (
+    from factor_engine.cleaned_operators.edge_requirements import (
         missing_edge_dimensions,
         production_edge_evidence_complete,
     )
@@ -124,7 +124,7 @@ def test_legacy_flat_edge_evidence_fallback_still_routes():
 
 
 def test_edge_immune_requires_no_evidence():
-    from cleaned_operators.edge_requirements import (
+    from factor_engine.cleaned_operators.edge_requirements import (
         edge_contract,
         production_edge_evidence_complete,
     )
@@ -141,7 +141,7 @@ def test_edge_immune_requires_no_evidence():
 
 def test_execution_tcb_hash_included_in_factor_hashes():
     """review #253: factor evidence hash carries the full Execution TCB."""
-    from backend.factor_operator_evidence import (
+    from factor_engine.backend.factor_operator_evidence import (
         ExecutionTCB,
         current_hashes,
         execution_tcb_hash,
@@ -159,7 +159,7 @@ def test_real_tcb_bridge_hash_is_present():
     """review #253: the real cleaned_bridge/panel_polars/backend_router sources
     are part of the execution TCB composite, so editing them invalidates
     factor evidence."""
-    from backend.factor_operator_evidence import _EXECUTION_TCB_SOURCES
+    from factor_engine.backend.factor_operator_evidence import _EXECUTION_TCB_SOURCES
 
     for component in ("backend_bridge", "backend_router", "panel_conversion"):
         spec = _EXECUTION_TCB_SOURCES[component]
@@ -168,8 +168,8 @@ def test_real_tcb_bridge_hash_is_present():
 
 def test_execution_tcb_hash_changes_when_bridge_source_changes(tmp_path):
     """review #253: editing a TCB source invalidates the composite hash."""
-    import backend.evidence_provenance as ep
-    import backend.factor_operator_evidence as foe
+    import factor_engine.backend.evidence_provenance as ep
+    import factor_engine.backend.factor_operator_evidence as foe
 
     bridge = tmp_path / "cleaned_bridge.py"
     bridge.write_text("CONST = 1\n")
@@ -189,8 +189,8 @@ def test_execution_tcb_hash_changes_when_bridge_source_changes(tmp_path):
 
 def test_invalidate_all_evidence_caches_actually_clears():
     """review #254: clearing must invalidate in-process caches."""
-    import backend.evidence_provenance as ep
-    import cleaned_operators.edge_requirements as er
+    import factor_engine.backend.evidence_provenance as ep
+    import factor_engine.cleaned_operators.edge_requirements as er
 
     er.load_primitive_evidence()
     assert er.load_primitive_evidence.cache_info().currsize == 1
@@ -205,7 +205,7 @@ def test_invalidate_all_evidence_caches_actually_clears():
 
 def test_collect_cache_clearers_registry_is_callable():
     """review #254: certify/sync/delta-install can call every clearer."""
-    from backend.evidence_provenance import collect_cache_clearers
+    from factor_engine.backend.evidence_provenance import collect_cache_clearers
 
     clearers = collect_cache_clearers()
     assert clearers

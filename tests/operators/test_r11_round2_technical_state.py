@@ -39,7 +39,7 @@ def _ensure_technical_chain() -> None:
     KAMA override pin (``expected_old_source="composite_fastpath_primitives"``)
     resolves.  No-op when the registry is already frozen or the chain is present.
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if OperatorRegistry.lifecycle() == "frozen":
         return
@@ -48,12 +48,12 @@ def _ensure_technical_chain() -> None:
         and OperatorRegistry.get("DMI_plus", "pandas_numpy") is not None
     ):
         return
-    from cleaned_operators.technical import signal  # noqa: F401
-    from cleaned_operators.technical import polars_signal  # noqa: F401
-    from cleaned_operators import composite_fastpath  # noqa: F401
-    from cleaned_operators.technical import indicators_v2  # noqa: F401
-    from cleaned_operators.technical import polars_indicators_v2  # noqa: F401
-    from cleaned_operators.technical import polars_tech_misc  # noqa: F401
+    from factor_engine.cleaned_operators.technical import signal  # noqa: F401
+    from factor_engine.cleaned_operators.technical import polars_signal  # noqa: F401
+    from factor_engine.cleaned_operators import composite_fastpath  # noqa: F401
+    from factor_engine.cleaned_operators.technical import indicators_v2  # noqa: F401
+    from factor_engine.cleaned_operators.technical import polars_indicators_v2  # noqa: F401
+    from factor_engine.cleaned_operators.technical import polars_tech_misc  # noqa: F401
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -72,7 +72,7 @@ def _ohlc_from_close(close: pd.DataFrame, spread: float = 1.0):
 
 
 def _op(name: str):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get(name, "pandas_numpy") or OperatorRegistry.get(name)
     assert op is not None, f"{name} not registered"
@@ -85,7 +85,7 @@ def _op(name: str):
 
 
 def test_kama_rewarm_requires_er_window_consecutive_values():
-    from cleaned_operators.technical.indicators_v2 import KAMA
+    from factor_engine.cleaned_operators.technical.indicators_v2 import KAMA
 
     # Gap at row 2; er_window=3 so the re-seed needs er_window+1 = 4 consecutive
     # finite prices AFTER the gap (rows 3,4,5,6 -> first legal seed at row 6).
@@ -106,7 +106,7 @@ def test_kama_rewarm_requires_er_window_consecutive_values():
 
 
 def test_kama_initial_warmup_emits_nan_not_frozen_seed():
-    from cleaned_operators.technical.indicators_v2 import KAMA
+    from factor_engine.cleaned_operators.technical.indicators_v2 import KAMA
 
     # Even at series start the first er_window bars must NOT be a flat frozen
     # seed line (that is the same "not a valid KAMA" pathology as post-gap).
@@ -123,7 +123,7 @@ def test_kama_initial_warmup_emits_nan_not_frozen_seed():
 
 
 def test_kama_rewarm_longer_gap_stays_nan_until_er_window():
-    from cleaned_operators.technical.indicators_v2 import KAMA
+    from factor_engine.cleaned_operators.technical.indicators_v2 import KAMA
 
     # Two missing bars, then only two finite bars before the series ends:
     # never enough contiguous history to re-seed -> all NaN after the gap.
@@ -139,7 +139,7 @@ def test_kama_rewarm_longer_gap_stays_nan_until_er_window():
 
 
 def test_supertrend_high_low_nan_with_finite_close_breaks_state():
-    from cleaned_operators.technical.indicators_v2 import Supertrend
+    from factor_engine.cleaned_operators.technical.indicators_v2 import Supertrend
 
     high = _frame(1.0, 2.0, 3.0, np.nan, 5.0, 6.0, 7.0)
     low = _frame(0.0, 1.0, 2.0, np.nan, 4.0, 5.0, 6.0)
@@ -158,7 +158,7 @@ def test_supertrend_high_low_nan_with_finite_close_breaks_state():
 
 
 def test_supertrend_stale_trend_not_carried_through_bad_bar():
-    from cleaned_operators.technical.indicators_v2 import Supertrend
+    from factor_engine.cleaned_operators.technical.indicators_v2 import Supertrend
 
     # Establish a clear up-trend through row 4, then a bar whose high/low are
     # NaN but whose close is finite.  The stale trend must NOT be carried.
@@ -175,7 +175,7 @@ def test_supertrend_stale_trend_not_carried_through_bad_bar():
 
 
 def test_supertrend_full_ohlc_gap_breaks_and_rewarms():
-    from cleaned_operators.technical.indicators_v2 import Supertrend
+    from factor_engine.cleaned_operators.technical.indicators_v2 import Supertrend
 
     high = _frame(1.0, 2.0, 3.0, np.nan, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0)
     low = _frame(0.0, 1.0, 2.0, np.nan, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0)
@@ -202,7 +202,7 @@ def test_supertrend_full_ohlc_gap_breaks_and_rewarms():
     ["KAMA", "Supertrend", "SupertrendDirection", "PSAR"],
 )
 def test_hidden_missing_state_knobs_removed(name):
-    from cleaned_operators.technical.indicators_v2 import KAMA, Supertrend, SupertrendDirection, PSAR
+    from factor_engine.cleaned_operators.technical.indicators_v2 import KAMA, Supertrend, SupertrendDirection, PSAR
 
     fn = {"KAMA": KAMA, "Supertrend": Supertrend, "SupertrendDirection": SupertrendDirection, "PSAR": PSAR}[name]
     sig = inspect.signature(fn)
@@ -220,7 +220,7 @@ def test_hidden_missing_state_knobs_removed(name):
 
 
 def test_supertrend_multiplier_zero_rejected_at_kernel():
-    from cleaned_operators.technical.indicators_v2 import Supertrend
+    from factor_engine.cleaned_operators.technical.indicators_v2 import Supertrend
 
     close = _frame(1.5, 2.5, 3.5, 4.5, 5.5)
     high, low = _ohlc_from_close(close)
@@ -363,8 +363,8 @@ def test_multiplier_param_spec_is_strict_positive():
 
 def test_kama_polars_parity_rewarm_semantics():
     pl = pytest.importorskip("polars")
-    from cleaned_operators.technical.indicators_v2 import KAMA
-    from cleaned_operators.technical.polars_signal import _kama_1d
+    from factor_engine.cleaned_operators.technical.indicators_v2 import KAMA
+    from factor_engine.cleaned_operators.technical.polars_signal import _kama_1d
 
     idx = pd.date_range("2024-01-01", periods=30, freq="B")
     rng = np.random.default_rng(5)

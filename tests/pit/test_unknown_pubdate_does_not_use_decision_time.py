@@ -7,7 +7,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from ir.types import NextTradingOpen
+from factor_engine.ir.types import NextTradingOpen
 
 
 class _FakeCalendar:

@@ -17,10 +17,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.model_timing import get_model_timing_contract, model_timing_contract_is_explicit
-from cleaned_operators.model_lane import assign_model_lane
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.model_timing import get_model_timing_contract, model_timing_contract_is_explicit
+from factor_engine.cleaned_operators.model_lane import assign_model_lane
 
 ensure_cleaned_loaded()
 

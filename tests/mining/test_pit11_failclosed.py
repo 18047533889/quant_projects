@@ -14,10 +14,10 @@ This test pins the fail-closed gate chain for all 7:
 """
 from __future__ import annotations
 
-from cleaned_operators import load_all
-from cleaned_operators.operator_spec import PRODUCTION_DENIED_CANONICALS
-from cleaned_operators.registry import OperatorRegistry
-from mining.direct_use import build_direct_use_operator, _is_production_denied
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.operator_spec import PRODUCTION_DENIED_CANONICALS
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.mining.direct_use import build_direct_use_operator, _is_production_denied
 
 # R23-P0-PIT11: the audit blocker reason shared by every canonical below.
 PIT11_EXPECTATION_POST_EVENT_LEAK = "PIT11_EXPECTATION_POST_EVENT_LEAK"

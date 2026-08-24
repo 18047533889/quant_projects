@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from storage.sources.relation import aggregate_holder_rows
+from factor_engine.storage.sources.relation import aggregate_holder_rows
 
 
 def _rows(ratios):

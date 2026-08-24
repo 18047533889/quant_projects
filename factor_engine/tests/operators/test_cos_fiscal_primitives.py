@@ -3,10 +3,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-from backend.sql_pushdown import compile_plan_to_sql
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from planner.logical_plan import PlanNode
+from factor_engine.backend.sql_pushdown import compile_plan_to_sql
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.planner.logical_plan import PlanNode
 
 @pytest.fixture(scope="module", autouse=True)
 def _load():
@@ -72,7 +72,7 @@ def test_weighted_cross_section_and_revision_primitives():
     assert delta.iloc[1, 0] == 2.0 and np.isnan(delta.iloc[2, 0])
 
 def test_new_polars_backends_are_real_registrations():
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     for name in ("fundamental_staleness", "revision_delta", "period_stability", "cs_weighted_mean", "cs_weighted_zscore", "group_weighted_mean", "ts_topk_mean", "ts_bottomk_std", "safe_div_null"):
         assert "pandas_numpy" in OperatorRegistry.backends_for(name)

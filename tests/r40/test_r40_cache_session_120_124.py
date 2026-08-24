@@ -6,7 +6,7 @@ from __future__ import annotations
 import threading
 
 import pytest
-from storage.sources.datasource import DataSource
+from factor_engine.storage.sources.datasource import DataSource
 
 
 class _MinimalSource(DataSource):
@@ -19,7 +19,7 @@ class _MinimalSource(DataSource):
 # ---------------------------------------------------------------------------
 class TestSaveLockRefcount:
     def test_save_lock_never_evicts_active_lock(self):
-        import storage.cache as cache
+        import factor_engine.storage.cache as cache
 
         # Clear module-level lock registry for a deterministic test.
         cache._SAVE_LOCKS.clear()
@@ -46,7 +46,7 @@ class TestSaveLockRefcount:
             cache._SAVE_LOCK_REFS.clear()
 
     def test_save_lock_wrapper_serializes_same_key(self):
-        import storage.cache as cache
+        import factor_engine.storage.cache as cache
 
         cache._SAVE_LOCKS.clear()
         cache._SAVE_LOCKS_ORDER.clear()
@@ -75,7 +75,7 @@ class TestSaveLockRefcount:
 
     def test_lock_registry_bounded_without_enter(self):
         # Existing r32 gate: calling _save_lock_for without entering must stay bounded.
-        import storage.cache as cache
+        import factor_engine.storage.cache as cache
 
         cache._SAVE_LOCKS.clear()
         cache._SAVE_LOCKS_ORDER.clear()
@@ -95,9 +95,9 @@ class TestSaveLockRefcount:
 # ---------------------------------------------------------------------------
 class TestWrapContext:
     def test_wrap_context_preserves_existing_runtime_stats(self):
-        from backend.context import ExecutionContext
-        from cache.layers import CacheHitStats
-        from cache.session import ExecutionCacheSession
+        from factor_engine.backend.context import ExecutionContext
+        from factor_engine.cache.layers import CacheHitStats
+        from factor_engine.cache.session import ExecutionCacheSession
 
         ds = _MinimalSource()
         ctx = ExecutionContext(data_source=ds)
@@ -114,7 +114,7 @@ class TestWrapContext:
 # ---------------------------------------------------------------------------
 class TestExecutionId:
     def test_default_execution_id_is_unique_per_session(self):
-        from cache.session import ExecutionCacheSession
+        from factor_engine.cache.session import ExecutionCacheSession
 
         s1 = ExecutionCacheSession()
         s2 = ExecutionCacheSession()
@@ -124,7 +124,7 @@ class TestExecutionId:
         assert s1._l0_layer != s2._l0_layer
 
     def test_explicit_execution_id_preserved(self):
-        from cache.session import ExecutionCacheSession
+        from factor_engine.cache.session import ExecutionCacheSession
 
         s = ExecutionCacheSession(execution_id="my-run-1")
         assert s.execution_id == "my-run-1"

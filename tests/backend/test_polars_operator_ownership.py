@@ -80,7 +80,7 @@ def test_ts_corr_is_quarantined_from_generated_polars_surface() -> None:
 
 def test_generated_module_import_blocker_is_unrelated_to_ts_corr() -> None:
     try:
-        importlib.import_module("cleaned_operators.auto_polars_all")
+        importlib.import_module("factor_engine.cleaned_operators.auto_polars_all")
     except TypeError as exc:
         assert "abstract class AcfPolars" in str(exc)
     else:

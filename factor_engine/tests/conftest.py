@@ -41,7 +41,7 @@ if "/home/shw/quant_projects" in sys.path:
     _root_pos = sys.path.index("/home/shw/quant_projects")
     sys.path.remove("/home/shw/quant_projects")
     try:
-        import mining  # noqa: F401
+        import factor_engine.mining  # noqa: F401
     finally:
         sys.path.insert(_root_pos, "/home/shw/quant_projects")
 
@@ -52,7 +52,7 @@ def pytest_sessionstart(session):
     使用 sessionstart 而非 configure，因为 configure 在某些 import 之前触发。
     """
     # 延迟导入，避免在 conftest 导入时触发副作用
-    from cleaned_operators.registry import OperatorRegistry, _BOOTSTRAP_TOKEN
+    from factor_engine.cleaned_operators.registry import OperatorRegistry, _BOOTSTRAP_TOKEN
 
     # 如果已冻结或已完成，解冻以允许测试模块注册算子
     lifecycle = OperatorRegistry.lifecycle()

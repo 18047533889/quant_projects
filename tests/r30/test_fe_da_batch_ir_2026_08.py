@@ -13,14 +13,14 @@
 """
 from __future__ import annotations
 
-from planner.factor_source_plan import FactorSourcePlan
-from planner.factor_batch_plan import (
+from factor_engine.planner.factor_source_plan import FactorSourcePlan
+from factor_engine.planner.factor_batch_plan import (
     FactorBatchDataPlan,
     SourceDemandGroup,
     batch_data_request,
     plan_from_factors,
 )
-from planner.field_request_coalescer import (
+from factor_engine.planner.field_request_coalescer import (
     FieldRequest,
     FieldRequestCoalescer,
     RequestCompatibilityKey,
@@ -133,7 +133,7 @@ def test_factor_source_plan_to_dict_roundtrip():
     assert d["price_basis"] == "raw"
     assert isinstance(d["leaf_concepts"], list)
     # to_dict 是稳定 digest 的唯一输入
-    from planner.factor_source_plan import stable_digest
+    from factor_engine.planner.factor_source_plan import stable_digest
 
     assert stable_digest(d) == p.identity()
 

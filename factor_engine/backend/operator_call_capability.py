@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Mapping, Sequence
 
-from backend.plan_params import int_mode_from_plan_node
-from planner.logical_plan import PlanNode
+from factor_engine.backend.plan_params import int_mode_from_plan_node
+from factor_engine.planner.logical_plan import PlanNode
 
 BackendName = str  # polars_long | duckdb_sql | pandas | any
 
@@ -34,7 +34,7 @@ def _resolve_canon(node: PlanNode | None, canonical: str | None) -> str:
         return canonical
     if node is None:
         return ""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     return OperatorRegistry._aliases.get(str(node.op or ""), str(node.op or ""))
 
@@ -100,7 +100,7 @@ def _cs_regression_capability(node: PlanNode, *, production: bool) -> Capability
     if mode not in {0, 1, 2}:
         return CapabilityResult(CapabilityLevel.FORBIDDEN, f"cs_regression mode={mode} 非法（须 0/1/2）")
     if production:
-        from backend.production_fastpath_tiers import P1_REGRESSION_PARITY_PENDING
+        from factor_engine.backend.production_fastpath_tiers import P1_REGRESSION_PARITY_PENDING
 
         if "cs_regression" in P1_REGRESSION_PARITY_PENDING:
             return CapabilityResult(
@@ -134,7 +134,7 @@ def _quantile_capability(node: PlanNode, *, production: bool) -> CapabilityResul
 
 
 def _scale_capability(node: PlanNode, *, backend: BackendName, production: bool) -> CapabilityResult:
-    from backend.operator_evidence_schema import operator_evidence_record, supported_calls_match
+    from factor_engine.backend.operator_evidence_schema import operator_evidence_record, supported_calls_match
 
     to_val = _literal_at(node, 1)
     if to_val is None:
@@ -161,7 +161,7 @@ def _scale_capability(node: PlanNode, *, backend: BackendName, production: bool)
 
 
 def _backend_evidence_ok(canon: str, backend: BackendName) -> bool:
-    from backend.primitive_evidence import (
+    from factor_engine.backend.primitive_evidence import (
         DUCKDB_REAL_SQL_VERIFIED,
         NO_FALLBACK_VERIFIED,
         POLARS_REFERENCE_PARITY_VERIFIED,
@@ -175,7 +175,7 @@ def _backend_evidence_ok(canon: str, backend: BackendName) -> bool:
 
 
 def _ffill_capability(node: PlanNode, *, production: bool) -> CapabilityResult:
-    from backend.production_signature import _ffill_has_limit
+    from factor_engine.backend.production_signature import _ffill_has_limit
 
     if production and not _ffill_has_limit(node):
         return CapabilityResult(
@@ -187,9 +187,9 @@ def _ffill_capability(node: PlanNode, *, production: bool) -> CapabilityResult:
 
 def _production_gate(canon: str, node: PlanNode | None, *, backend: BackendName) -> CapabilityResult | None:
     """通用 production gate：signature + parameter domain + backend evidence + artifact。"""
-    from backend.evidence_provenance import evidence_artifact_valid
-    from backend.operator_evidence_schema import parameter_domain_verified
-    from backend.production_signature import has_production_signature, verify_production_signature
+    from factor_engine.backend.evidence_provenance import evidence_artifact_valid
+    from factor_engine.backend.operator_evidence_schema import parameter_domain_verified
+    from factor_engine.backend.production_signature import has_production_signature, verify_production_signature
 
     if not evidence_artifact_valid():
         return CapabilityResult(
@@ -210,7 +210,7 @@ def _production_gate(canon: str, node: PlanNode | None, *, backend: BackendName)
         "ffill",
     }:
         rec = __import__(
-            "backend.operator_evidence_schema", fromlist=["operator_evidence_record"]
+            "factor_engine.backend.operator_evidence_schema", fromlist=["operator_evidence_record"]
         ).operator_evidence_record(canon)
         if rec is not None and rec.get("supported_calls"):
             if not parameter_domain_verified(canon, node, production=True):
@@ -273,7 +273,7 @@ def check_operator_call_capability(
             return CapabilityResult(CapabilityLevel.RESEARCH, "ffill 需要 plan 节点")
         return _ffill_capability(node, production=production)
     if production:
-        from backend.phase1_scope import phase1_production_certified
+        from factor_engine.backend.phase1_scope import phase1_production_certified
 
         if not phase1_production_certified(canon):
             return CapabilityResult(
@@ -306,7 +306,7 @@ def operator_call_violations(
 
 def check_plan_operator_calls(plan: Any, *, production: bool = False) -> list[str]:
     """深度遍历 plan，收集参数级 capability 违规。"""
-    from backend.operator_types import check_plan_types
+    from factor_engine.backend.operator_types import check_plan_types
 
     _SKIP = frozenset({"column", "literal", "materialized_series", "plan_ref"})
     violations: list[str] = []
@@ -320,7 +320,7 @@ def check_plan_operator_calls(plan: Any, *, production: bool = False) -> list[st
             for child in node.inputs or []:
                 walk(child)
             return
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         canon = OperatorRegistry._aliases.get(op, op)
         violations.extend(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 from .polars_registry_bridge import registry_op_long_capable
 
@@ -221,7 +221,7 @@ def get_polars_long_capable() -> frozenset[str]:
     global _POLARS_LONG_CAPABLE_CACHE
     if _POLARS_LONG_CAPABLE_CACHE is not None:
         return _POLARS_LONG_CAPABLE_CACHE
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
     from .polars_registry_bridge import polars_registry_long_capable
@@ -237,14 +237,14 @@ POLARS_LONG_CAPABLE: frozenset[str] = POLARS_LONG_COMPATIBLE
 
 def _resolve(op: str) -> str:
     """将算子别名解析为 canonical 名称。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     return OperatorRegistry._aliases.get(op, op)
 
 
 def classify_plan_op(op: str) -> str:
     """返回 ``native`` | ``python_rolling`` | ``map_groups`` | ``passthrough`` | ``registry`` | ``other`` | ``meta``。"""
-    from backend.production_fastpath_tiers import resolve_polars_native_canonical
+    from factor_engine.backend.production_fastpath_tiers import resolve_polars_native_canonical
 
     canon = resolve_polars_native_canonical(_resolve(op))
     if canon in {"column", "literal", "materialized_series", "plan_ref"}:
@@ -383,7 +383,7 @@ def strict_polars_long_fallback(ctx=None) -> bool:
     # ``FACTOR_ENGINE_STRICT_POLARS_LONG=0`` (or an env-var typo) make a
     # production process non-strict when the caller passed no ctx.  An env var
     # may make RESEARCH stricter (``=1``) but can never loosen production.
-    from runtime.production_policy import is_production_mode
+    from factor_engine.runtime.production_policy import is_production_mode
 
     if is_production_mode():
         return True
@@ -421,7 +421,7 @@ def require_polars_long_native_only(ctx=None) -> bool:
 
 def plan_contains_blocked_causal(plan) -> bool:
     """计划树是否含 ``bfill`` / ``causal_bfill``。"""
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     if not isinstance(plan, PlanNode):
         return False

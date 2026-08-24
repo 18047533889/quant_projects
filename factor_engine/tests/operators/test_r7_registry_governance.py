@@ -12,8 +12,8 @@ import hashlib
 
 import pytest
 
-from cleaned_operators.base import Operator, OperatorMetadata, SeriesOperator
-from cleaned_operators.registry import OperatorRegistry, _impl_source_hash
+from factor_engine.cleaned_operators.base import Operator, OperatorMetadata, SeriesOperator
+from factor_engine.cleaned_operators.registry import OperatorRegistry, _impl_source_hash
 
 
 class _KernelA(SeriesOperator):
@@ -126,7 +126,7 @@ def test_impl_hash_closure_stable_within_process():
 # ---------------------------------------------------------------------------
 
 def test_contract_hash_present_in_meta():
-    from cleaned_operators.registry import _contract_hash
+    from factor_engine.cleaned_operators.registry import _contract_hash
 
     h = _contract_hash(_KernelA())
     assert isinstance(h, str) and len(h) >= 8
@@ -143,7 +143,7 @@ def test_override_manifest_keyed_by_canonical_backend():
     # register_declared_override requires the registry to be writable; instead
     # we assert the MANIFEST KEY SHAPE by checking the registry's own
     # registration of declared overrides (the store is keyed by tuple).
-    from cleaned_operators.registry import OperatorRegistry as OR
+    from factor_engine.cleaned_operators.registry import OperatorRegistry as OR
 
     assert isinstance(OR._DECLARED_OVERRIDE_MANIFEST, dict)
     # Keys that exist are tuples of (canonical, backend).
@@ -187,7 +187,7 @@ def test_rename_migrates_governance_via_bootstrap():
     # the bootstrap token to thaw, rename a synthetic canonical, re-freeze.
     token = OperatorRegistry._BOOTSTRAP_TOKEN if hasattr(OperatorRegistry, "_BOOTSTRAP_TOKEN") else None
     if token is None:
-        import cleaned_operators.registry as _reg
+        import factor_engine.cleaned_operators.registry as _reg
 
         token = _reg._BOOTSTRAP_TOKEN
     # capture a real canonical to test the migration path in isolation is not

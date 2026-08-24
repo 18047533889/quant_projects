@@ -3,10 +3,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from api.dsl_parser import parse_factor
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
-from ir.analyzer import Analyzer
+from factor_engine.api.dsl_parser import parse_factor
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.ir.analyzer import Analyzer
 
 
 def _frame(values, *, columns=("A",)) -> pd.DataFrame:
@@ -117,7 +117,7 @@ def test_analyzer_accounts_for_hidden_technical_warmup() -> None:
 
 def test_extension_surface_has_no_unregistered_names() -> None:
     load_all()
-    from cleaned_operators.operator_surface import _TECHNICAL_EXTENSION_CANONICALS
+    from factor_engine.cleaned_operators.operator_surface import _TECHNICAL_EXTENSION_CANONICALS
 
     missing = sorted(name for name in _TECHNICAL_EXTENSION_CANONICALS if OperatorRegistry.get(name) is None)
     assert missing == []

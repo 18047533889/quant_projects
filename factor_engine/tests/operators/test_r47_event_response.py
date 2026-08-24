@@ -12,10 +12,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.intraday.event_response  # noqa: F401  (registers operators at import time)
+import factor_engine.cleaned_operators.intraday.event_response  # noqa: F401  (registers operators at import time)
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
@@ -84,7 +84,7 @@ def _event_mask(n: int, *positions: int) -> np.ndarray:
 
 @pytest.mark.parametrize("name", _ALL)
 def test_registered_and_classified(name: str) -> None:
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     assert OperatorRegistry.get(name) is not None, name
     assert classify_canonical(name) in ("daily", "extended", "research"), name

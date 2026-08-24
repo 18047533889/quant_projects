@@ -12,12 +12,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 def test_adaptive_constants():
     """Test that constants adapt to host memory."""
-    from planner.physical_lowerer import (
+    from factor_engine.planner.physical_lowerer import (
         _get_adaptive_dag_width_limit,
         _get_expression_depth_limit,
         _get_adaptive_chunk_size,
     )
-    from runtime.adaptive_config import get_adaptive_config
+    from factor_engine.runtime.adaptive_config import get_adaptive_config
 
     print("Test 1: Adaptive constants scale with memory")
 
@@ -48,8 +48,8 @@ def test_adaptive_constants():
 
 def test_expression_depth_validation():
     """Test expression depth validation."""
-    from planner.physical_lowerer import validate_expression_depth
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.physical_lowerer import validate_expression_depth
+    from factor_engine.planner.logical_plan import PlanNode
 
     print("\nTest 2: Expression depth validation")
 
@@ -79,7 +79,7 @@ def test_expression_depth_validation():
 
 def test_chunked_compilation_adaptive():
     """Test that compile_many_chunked uses adaptive chunk size."""
-    from planner.physical_lowerer import compile_many_chunked, _get_adaptive_chunk_size
+    from factor_engine.planner.physical_lowerer import compile_many_chunked, _get_adaptive_chunk_size
     import inspect
 
     print("\nTest 3: Chunked compilation with adaptive sizing")
@@ -104,7 +104,7 @@ def test_chunked_compilation_adaptive():
 
 def test_batch_dag_validation_adaptive():
     """Test that lower_batch_dag validates with adaptive limit."""
-    from planner.physical_lowerer import lower_batch_dag, _get_adaptive_dag_width_limit
+    from factor_engine.planner.physical_lowerer import lower_batch_dag, _get_adaptive_dag_width_limit
     from dataclasses import dataclass
 
     print("\nTest 4: Batch DAG validation (adaptive limit)")
@@ -124,7 +124,7 @@ def test_batch_dag_validation_adaptive():
     print(f"  • Current adaptive limit: {max_width} factors")
 
     # Test with oversized DAG
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
     leaf = PlanNode(op="column", attrs={"name": "close"}, inputs=())
     large_dag = MockDAG(
         roots=[MockFactorPlan(f"f{i}", leaf) for i in range(max_width + 100)]
@@ -155,7 +155,7 @@ def test_batch_dag_validation_adaptive():
 def test_env_var_override():
     """Test that environment variables can override adaptive limits."""
     import os
-    from planner.physical_lowerer import _get_adaptive_dag_width_limit
+    from factor_engine.planner.physical_lowerer import _get_adaptive_dag_width_limit
 
     print("\nTest 5: Environment variable override")
 
@@ -177,7 +177,7 @@ def test_imports():
     """Test that all exports are accessible."""
     print("\nTest 6: Public API imports")
 
-    from planner import (
+    from factor_engine.planner import (
         compile_many_chunked,
         validate_expression_depth,
         MAX_DAG_WIDTH,

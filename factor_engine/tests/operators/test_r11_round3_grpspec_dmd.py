@@ -22,10 +22,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cleaned_operators.dmd  # noqa: F401  (registers on import)
-import cleaned_operators.group_spectrum  # noqa: F401  (registers on import)
-from cleaned_operators.operator_surface import classify_canonical
-from cleaned_operators.registry import OperatorRegistry
+import factor_engine.cleaned_operators.dmd  # noqa: F401  (registers on import)
+import factor_engine.cleaned_operators.group_spectrum  # noqa: F401  (registers on import)
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 SPECTRUM_OPS = [
     "group_feature_mode_share",
@@ -205,7 +205,7 @@ def test_eigen_gap_gates_localization_readout():
 # ---------------------------------------------------------------------------
 
 def test_dmd_log_finite_horizon_sum_stable():
-    from cleaned_operators.dmd import _log_finite_horizon_sum
+    from factor_engine.cleaned_operators.dmd import _log_finite_horizon_sum
 
     # R26-123/124: the kernel takes ``log_rho = log(rho)`` so ``rho = |λ|²`` is
     # never materialised (a huge lambda's rho overflows float64; the log-space

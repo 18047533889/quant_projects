@@ -23,14 +23,14 @@ def _events() -> pd.DataFrame:
 
 
 def test_asof_requires_instrument_column_when_mixed() -> None:
-    from fields.providers import FinancialPeriodAdapter
+    from factor_engine.fields.providers import FinancialPeriodAdapter
 
     with pytest.raises(ValueError):
         FinancialPeriodAdapter.asof(_events(), pd.Series(["2024-04-30"]), market="us")
 
 
 def test_asof_by_instrument_never_crosses_stocks() -> None:
-    from fields.providers import FinancialPeriodAdapter
+    from factor_engine.fields.providers import FinancialPeriodAdapter
 
     signals = pd.DataFrame(
         {
@@ -57,7 +57,7 @@ def test_asof_by_instrument_never_crosses_stocks() -> None:
 def test_derived_provider_executes_real_multiplication() -> None:
     import numpy as np
 
-    from fields.providers import PROVIDER_REGISTRY, apply_binding_transform
+    from factor_engine.fields.providers import PROVIDER_REGISTRY, apply_binding_transform
 
     b = PROVIDER_REGISTRY.require_binding("continuous_close", "ashare")
     out = apply_binding_transform(
@@ -72,7 +72,7 @@ def test_derived_provider_executes_real_multiplication() -> None:
 
 
 def test_financial_bindings_point_at_statement_datasets() -> None:
-    from fields.providers import PROVIDER_REGISTRY
+    from factor_engine.fields.providers import PROVIDER_REGISTRY
 
     assert PROVIDER_REGISTRY.require_binding("operating_revenue", "ashare").dataset == "ashare_stock_income"
     assert PROVIDER_REGISTRY.require_binding("total_assets", "ashare").dataset == "ashare_stock_balance"

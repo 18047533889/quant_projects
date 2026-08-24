@@ -12,8 +12,8 @@ import pytest
 pytest.importorskip("polars")
 import polars as pl
 
-from api.cleaned_ops import make_cleaned_call_factory
-from cleaned_operators import load_all
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.cleaned_operators import load_all
 
 
 @pytest.fixture(scope="module")
@@ -25,7 +25,7 @@ def setup_operators():
 def _pandas_ts_cov(x: pd.DataFrame, y: pd.DataFrame, window: int,
                    ddof: int = 1, min_periods: int | None = None) -> pd.DataFrame:
     """Call Pandas backend ts_cov."""
-    from cleaned_operators.common.time_series import TSCov
+    from factor_engine.cleaned_operators.common.time_series import TSCov
     op = TSCov()
     return op._calculate_series(x, y, window=window, ddof=ddof, min_periods=min_periods)
 
@@ -33,7 +33,7 @@ def _pandas_ts_cov(x: pd.DataFrame, y: pd.DataFrame, window: int,
 def _polars_ts_cov(x: pd.DataFrame, y: pd.DataFrame, window: int,
                    ddof: int = 1, min_periods: int | None = None) -> pd.DataFrame:
     """Call Polars backend ts_cov and convert back to pandas."""
-    from cleaned_operators.common.polars_ts_rolling import TSCovNative
+    from factor_engine.cleaned_operators.common.polars_ts_rolling import TSCovNative
 
     x_pl = pl.from_pandas(x.reset_index(drop=True))
     y_pl = pl.from_pandas(y.reset_index(drop=True))

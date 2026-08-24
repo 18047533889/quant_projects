@@ -350,7 +350,7 @@ def _load_calendar_from_data_access(market: str) -> TradingCalendar | None:
     except CalendarUnavailableError:
         raise
     except Exception as exc:
-        from runtime.production_policy import is_production_mode
+        from factor_engine.runtime.production_policy import is_production_mode
 
         if is_production_mode():
             raise CalendarUnavailableError(
@@ -388,7 +388,7 @@ def get_trading_calendar(
     if loaded is not None:
         _CALENDAR_CACHE[key] = loaded
     elif loaded is None and not allow_approximate_calendar:
-        from runtime.production_policy import is_production_mode
+        from factor_engine.runtime.production_policy import is_production_mode
 
         if is_production_mode():
             raise CalendarUnavailableError(
@@ -428,7 +428,7 @@ def trading_day_offset(
     ts = pd.Timestamp(base).normalize()
     if n == 0:
         return ts
-    from runtime.production_policy import is_production_mode
+    from factor_engine.runtime.production_policy import is_production_mode
 
     if is_production_mode() and not allow_approximate_calendar:
         raise CalendarUnavailableError(

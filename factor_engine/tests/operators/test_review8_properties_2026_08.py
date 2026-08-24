@@ -18,8 +18,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 load_all()
 
@@ -50,8 +50,8 @@ def _run(canon: str, panel: pd.DataFrame, *args, **kwargs) -> pd.DataFrame:
 
 def test_same_column_distinguishes_source_identity():
     """sourceA.Close vs sourceB.Close (same display name, different source)."""
-    from planner.logical_plan import PlanNode
-    from planner.rewrite_fastpath import _same_column
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.planner.rewrite_fastpath import _same_column
 
     col_a = PlanNode(op="column", attrs={
         "name": "Close", "field_id": "fa", "source_table": "sourceA",
@@ -76,8 +76,8 @@ def test_same_column_distinguishes_source_identity():
 
 def test_rolling_cse_semantic_key_distinguishes_sources():
     """CSE must not reuse sourceA's rolling result for sourceB."""
-    from planner.logical_plan import PlanNode
-    from planner.rolling_cse import rolling_semantic_key
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.planner.rolling_cse import rolling_semantic_key
 
     def _ts_mean(name, source_table, field_id):
         return PlanNode(op="ts_mean", attrs={"d": 20}, inputs=[

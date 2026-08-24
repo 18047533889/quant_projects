@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from planner.backend_region import (
+from factor_engine.planner.backend_region import (
     PhysicalBackend,
     Representation,
     BackendRegion,

@@ -29,7 +29,7 @@ def _panel(values):
 # 8.1 A/US units
 # ---------------------------------------------------------------------------
 def test_ashare_return_bp_is_hundredth():
-    from fields.providers import binding, apply_binding_transform
+    from factor_engine.fields.providers import binding, apply_binding_transform
 
     b = binding("return_decimal", "ashare")
     assert b is not None
@@ -38,7 +38,7 @@ def test_ashare_return_bp_is_hundredth():
 
 
 def test_us_return_is_identity():
-    from fields.providers import binding, apply_binding_transform
+    from factor_engine.fields.providers import binding, apply_binding_transform
 
     b = binding("return_decimal", "us")
     assert b is not None
@@ -47,7 +47,7 @@ def test_us_return_is_identity():
 
 
 def test_ashare_turnover_percent_to_decimal():
-    from fields.providers import binding, apply_binding_transform
+    from factor_engine.fields.providers import binding, apply_binding_transform
 
     b = binding("turnover_ratio_decimal", "ashare")
     out = apply_binding_transform(b, np.array([2.5]))
@@ -55,7 +55,7 @@ def test_ashare_turnover_percent_to_decimal():
 
 
 def test_us_roe_decimal_identity():
-    from fields.providers import binding, apply_binding_transform
+    from factor_engine.fields.providers import binding, apply_binding_transform
 
     b = binding("roe_decimal", "us")
     out = apply_binding_transform(b, np.array([0.10]))
@@ -66,7 +66,7 @@ def test_us_roe_decimal_identity():
 # 8.2 Factor / AdjFactor backward multipliers
 # ---------------------------------------------------------------------------
 def test_continuous_close_mul_transform():
-    from fields.providers import binding, apply_binding_transform
+    from factor_engine.fields.providers import binding, apply_binding_transform
 
     a = binding("continuous_close", "ashare")
     u = binding("continuous_close", "us")
@@ -87,7 +87,7 @@ def test_continuous_close_mul_transform():
 # 8.3 reference_pre_close vs raw_pre_close
 # ---------------------------------------------------------------------------
 def test_reference_pre_close_is_official_basis():
-    from fields.concepts import get_concept, concept_alias_map
+    from factor_engine.fields.concepts import get_concept, concept_alias_map
 
     assert concept_alias_map().get("pre_close") == "reference_pre_close"
     c = get_concept("reference_pre_close")
@@ -102,7 +102,7 @@ def test_reference_pre_close_is_official_basis():
 # 8.8 industry source exactly-one + factor identity
 # ---------------------------------------------------------------------------
 def test_industry_requires_source_filter():
-    from fields import FIELD_REGISTRY
+    from factor_engine.fields import FIELD_REGISTRY
 
     spec = FIELD_REGISTRY.get("industry_code", table="StockIndustry")
     assert spec is not None
@@ -110,7 +110,7 @@ def test_industry_requires_source_filter():
 
 
 def test_index_requires_symbol_filter():
-    from fields import FIELD_REGISTRY
+    from factor_engine.fields import FIELD_REGISTRY
 
     spec = FIELD_REGISTRY.get("index_weight", table="IndexConstituent")
     assert spec is not None
@@ -121,7 +121,7 @@ def test_index_requires_symbol_filter():
 # 8.13 cross-market same-named tables are separate objects
 # ---------------------------------------------------------------------------
 def test_same_named_tables_are_market_separate():
-    from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+    from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
     for table in ("StockValuationDaily", "StockIndicator", "StockCapitalDaily"):
         a = MULTI_MARKET_FIELD_REGISTRY.registry_for("ashare").resolve_table(table)
@@ -140,7 +140,7 @@ def test_same_named_tables_are_market_separate():
 # R17-065 / R17-066 comparability split
 # ---------------------------------------------------------------------------
 def test_turnover_not_cross_market_rankable():
-    from fields.concepts import get_concept
+    from factor_engine.fields.concepts import get_concept
 
     c = get_concept("turnover_ratio_decimal")
     assert c is not None
@@ -151,7 +151,7 @@ def test_turnover_not_cross_market_rankable():
 
 
 def test_roe_unit_but_not_definition_comparable():
-    from fields.concepts import get_concept
+    from factor_engine.fields.concepts import get_concept
 
     c = get_concept("roe_decimal")
     assert c.unit_comparable is True
@@ -163,7 +163,7 @@ def test_roe_unit_but_not_definition_comparable():
 # R17-067 index_weight role is a continuous weight, not a group key
 # ---------------------------------------------------------------------------
 def test_index_weight_role_is_weight():
-    from fields.concepts import get_concept
+    from factor_engine.fields.concepts import get_concept
 
     c = get_concept("index_weight")
     assert c is not None
@@ -174,7 +174,7 @@ def test_index_weight_role_is_weight():
 # R17-050 research does not auto-open effective-time-only
 # ---------------------------------------------------------------------------
 def test_research_does_not_auto_enable_effective_time_only():
-    from market.context import ASHARE_CONTEXT
+    from factor_engine.market.context import ASHARE_CONTEXT
 
     research = ASHARE_CONTEXT.as_research()
     assert research.allow_effective_time_only is False
@@ -186,8 +186,8 @@ def test_research_does_not_auto_enable_effective_time_only():
 # R17-013 every production table declares strict_pit_allowed
 # ---------------------------------------------------------------------------
 def test_all_tables_declare_pit():
-    from fields.catalog import ASHARE_TABLE_SPECS
-    from fields.catalog_us import US_TABLE_SPECS
+    from factor_engine.fields.catalog import ASHARE_TABLE_SPECS
+    from factor_engine.fields.catalog_us import US_TABLE_SPECS
 
     for t in list(ASHARE_TABLE_SPECS) + list(US_TABLE_SPECS):
         assert t.strict_pit_allowed is not None, f"{t.name} has UNKNOWN strict_pit_allowed"
@@ -197,8 +197,8 @@ def test_all_tables_declare_pit():
 # R17-001 market-aware resolver: A vs US unit separation
 # ---------------------------------------------------------------------------
 def test_resolve_market_field_a_vs_us_units():
-    from fields.resolver import resolve_market_field
-    from market.context import ASHARE_CONTEXT, US_CONTEXT
+    from factor_engine.fields.resolver import resolve_market_field
+    from factor_engine.market.context import ASHARE_CONTEXT, US_CONTEXT
 
     a = resolve_market_field("StockDailyBar.close", ASHARE_CONTEXT)
     u = resolve_market_field("StockDailyBar.close", US_CONTEXT)

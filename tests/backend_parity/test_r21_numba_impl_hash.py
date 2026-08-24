@@ -21,7 +21,7 @@ import pytest
 # Ensure backend is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from backend.numba_kernel_registry import (
+from factor_engine.backend.numba_kernel_registry import (
     DuplicateKernelRegistrationError,
     DuplicateSpecMismatchError,
     NumbaKernelRegistry,

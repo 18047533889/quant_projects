@@ -37,7 +37,7 @@ import pyarrow.ipc
 # 代码直接传一个稳定字符串即可，``runtime.stateful_incremental`` 若引入
 # ``StateNodeIdentity`` 也以同样的字符串键进入本模块（不在此强依赖）。
 try:  # pragma: no cover - 仅当 runtime 侧已有类型定义时启用
-    from runtime.stateful_incremental import StateNodeIdentity  # type: ignore
+    from factor_engine.runtime.stateful_incremental import StateNodeIdentity  # type: ignore
 
     _HAS_STATE_NODE_IDENTITY = True
 except Exception:  # pragma: no cover - 没有类型定义时退回纯字符串键

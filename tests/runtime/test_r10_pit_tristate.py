@@ -4,7 +4,7 @@ None=UNKNOWN) everywhere; UNKNOWN propagates through the semantic lattice and
 rejects in production (never silently treated as safe)."""
 from __future__ import annotations
 
-from ir.types import lattice_join_semantic_attrs
+from factor_engine.ir.types import lattice_join_semantic_attrs
 
 
 def _attrs(pit: object | None) -> dict:

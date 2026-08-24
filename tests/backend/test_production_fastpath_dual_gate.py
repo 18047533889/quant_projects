@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from backend.production_fastpath_gate import check_production_fastpath_plan_ops
-from backend.sql_pushdown.plan_fixtures import minimal_plan
+from factor_engine.backend.production_fastpath_gate import check_production_fastpath_plan_ops
+from factor_engine.backend.sql_pushdown.plan_fixtures import minimal_plan
 
 
 @pytest.fixture(scope="module")
 def _loaded():
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
@@ -20,11 +20,11 @@ def _loaded():
 def test_require_mode_all_blocks_single_backend_only(_loaded, monkeypatch):
     plan = minimal_plan("ts_mean")
     monkeypatch.setattr(
-        "backend.production_fastpath_gate._duckdb_fastpath_ok",
+        "factor_engine.backend.production_fastpath_gate._duckdb_fastpath_ok",
         lambda _c: False,
     )
     monkeypatch.setattr(
-        "backend.production_fastpath_gate._polars_native_fastpath_ok",
+        "factor_engine.backend.production_fastpath_gate._polars_native_fastpath_ok",
         lambda _c: True,
     )
     any_mode = check_production_fastpath_plan_ops(
@@ -41,11 +41,11 @@ def test_dual_backend_env_forces_all_mode(_loaded, monkeypatch):
     plan = minimal_plan("ts_mean")
     monkeypatch.setenv("FACTOR_ENGINE_PRODUCTION_REQUIRE_DUAL_BACKEND", "1")
     monkeypatch.setattr(
-        "backend.production_fastpath_gate._duckdb_fastpath_ok",
+        "factor_engine.backend.production_fastpath_gate._duckdb_fastpath_ok",
         lambda _c: True,
     )
     monkeypatch.setattr(
-        "backend.production_fastpath_gate._polars_native_fastpath_ok",
+        "factor_engine.backend.production_fastpath_gate._polars_native_fastpath_ok",
         lambda _c: False,
     )
     result = check_production_fastpath_plan_ops(plan, require_mode="any", strict=True, check_full_plan=False)
@@ -53,7 +53,7 @@ def test_dual_backend_env_forces_all_mode(_loaded, monkeypatch):
 
 
 def test_bfill_blocked_causal_strict_gate(_loaded):
-    from planner.logical_plan import PlanNode
+    from factor_engine.planner.logical_plan import PlanNode
 
     plan = PlanNode(op="bfill", inputs=[PlanNode(op="column", attrs={"name": "close"})])
     result = check_production_fastpath_plan_ops(plan, strict=True, check_full_plan=False)

@@ -10,7 +10,7 @@ leaf operators and Phase 0 catalog fields.
 """
 from __future__ import annotations
 
-from factor_recipes.registry import FactorRecipe, FactorRecipeRegistry
+from factor_engine.factor_recipes.registry import FactorRecipe, FactorRecipeRegistry
 
 
 def _recipe(

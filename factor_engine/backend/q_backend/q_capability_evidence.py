@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
-from backend.q_backend.q_physical_implementation_registry import (
+from factor_engine.backend.q_backend.q_physical_implementation_registry import (
     QPhysicalImplementationRegistry,
     get_q_physical_implementation_registry,
 )
@@ -137,7 +137,7 @@ class QCapabilityGate:
     def gate_q_manual_authority_removed():
         # A compatibility declaration may exist, but must not be imported by admission code.
         import inspect
-        from backend.q_backend import q_capability
+        from factor_engine.backend.q_backend import q_capability
         source = inspect.getsource(q_capability.QBackendCapability)
         ok = "_PHASE1_NATIVE_OPS" not in source
         return (ok, "PASS: declarations are not admission authority" if ok else "FAIL: legacy declaration used in admission")
@@ -168,7 +168,7 @@ class QCapabilityGate:
         operators = set(get_lowering_exists_ops()) | set(get_declared_native_ops())
         if not operators:
             return False, "FAIL: q capability authority has no operators to verify"
-        from backend.q_backend.q_compiler import get_q_compiler
+        from factor_engine.backend.q_backend.q_compiler import get_q_compiler
         compiler = get_q_compiler()
         lowering_agrees = all(
             compiler.has_lowering(op) == (op in get_lowering_exists_ops())

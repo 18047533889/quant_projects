@@ -58,7 +58,7 @@ class LocalParquetWriteTarget:
         返回:
             无
         """
-        from storage.materializer import ParquetMaterializer
+        from factor_engine.storage.materializer import ParquetMaterializer
 
         self._materializer = ParquetMaterializer(lake_root=lake_root)
 
@@ -100,7 +100,7 @@ class LocalParquetWriteTarget:
         审批发布。research 保留（legacy 快速落盘路径）。
         """
         try:
-            from runtime.production_policy import is_production_mode
+            from factor_engine.runtime.production_policy import is_production_mode
 
             if is_production_mode():
                 raise ValueError(
@@ -113,7 +113,7 @@ class LocalParquetWriteTarget:
         except Exception:
             pass
         del upsert_on, params
-        from storage.partition_policy import PartitionPolicy, attach_partition_columns, iter_partition_groups
+        from factor_engine.storage.partition_policy import PartitionPolicy, attach_partition_columns, iter_partition_groups
 
         df = frame.copy()
         if df.empty:
@@ -282,7 +282,7 @@ class ClickHouseWriteTarget:
             dict[str, Any]
         """
         del upsert_on, partition_by, params
-        from storage.clickhouse_materializer import ClickHouseMaterializer
+        from factor_engine.storage.clickhouse_materializer import ClickHouseMaterializer
 
         if frame.empty:
             return {"factor_id": factor_id, "rows_written": 0, "target": self.name}
@@ -341,7 +341,7 @@ class ClickHouseWriteTarget:
             dict[str, Any]
         """
         del params
-        from storage.clickhouse_materializer import ClickHouseMaterializer
+        from factor_engine.storage.clickhouse_materializer import ClickHouseMaterializer
 
         if getattr(result, "empty", False):
             return {"factor_id": factor_id, "rows_written": 0, "target": self.name}

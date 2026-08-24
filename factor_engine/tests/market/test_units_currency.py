@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from fields.units_v2 import (
+from factor_engine.fields.units_v2 import (
     CNY,
     CNY_PER_SHARE,
     RATIO,

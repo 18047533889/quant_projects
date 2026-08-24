@@ -14,7 +14,7 @@ class LQTPDialectSpec:
     name:str="lqtp"; version:str=DEFAULT_LQTP_DIALECT_VERSION; strict_case:bool=True
 
 def _factory(canonical:str)->Callable[...,Any]:
-    from api.cleaned_ops import make_cleaned_call_factory
+    from factor_engine.api.cleaned_ops import make_cleaned_call_factory
     return make_cleaned_call_factory(canonical)
 def _null_like(x:Any):
     z=_factory("subtract")(x,x); return _factory("safe_div_null")(z,z)
@@ -31,7 +31,7 @@ def _nullif_zero_dispatch(x:Any):return _factory("where")(_factory("eq")(x,0.0),
 def _clean_dispatch(x:Any,replacement:Any=0.0):return _factory("coalesce")(x,replacement)
 def _momentum_dispatch(x:Any,window:Any):return _factory("ts_delta")(x,window)
 def _source_col(table:str,field:str,**params:Any):
-    from api.source_ref import source_col
+    from factor_engine.api.source_ref import source_col
     return source_col(table,field,dialect="lqtp",dialect_version=DEFAULT_LQTP_DIALECT_VERSION,**params)
 def _benchmark_return(index:str=DEFAULT_MARKET_INDEX):
     c=_source_col("BenchmarkIndexDailyBar","Close",index=str(index));p=_source_col("BenchmarkIndexDailyBar","PreClose",index=str(index))
@@ -68,32 +68,32 @@ def _historical_var_dispatch(ret:Any,window:Any,q:Any):return _factory("neg")(_f
 def _historical_cvar_dispatch(ret:Any,window:Any,q:Any):return _factory("lqtp_historical_cvar")(ret,window,q)
 def _real_turnover_rate_dispatch(*args:Any):
     if len(args)==0:
-        from api.columns import col
+        from factor_engine.api.columns import col
         return _factory("real_turnover_rate")(col("volume"),_source_col("TurnoverBaseDaily","TurnoverBase"))
     if len(args)==2:return _factory("real_turnover_rate")(*args)
     raise LQTPCompatibilityError("real_turnover_rate accepts () or (volume, turnover_base)")
 def _asof_dispatch(x:Any):
-    from api.source_ref import transform_source_col
+    from factor_engine.api.source_ref import transform_source_col
     return transform_source_col(x,"financial_asof")
 def _financial_lag_dispatch(x:Any,quarters:Any):
-    from api.source_ref import transform_source_col
+    from factor_engine.api.source_ref import transform_source_col
     return transform_source_col(x,"financial_lag",quarters=quarters)
 def _intermediate_dispatch(name:Any,version:Any):
-    from api.source_ref import intermediate_col
+    from factor_engine.api.source_ref import intermediate_col
     # Review-8 #469: no int() coercion here — intermediate_col/_strict_int owns
     # the strict integer verdict (True/1.9/"2"/NaN are all rejected).
     return intermediate_col(str(name), version)
 def _minute_at_dispatch(field:Any,hhmm:Any):
-    from api.source_ref import transform_source_col
+    from factor_engine.api.source_ref import transform_source_col
     return transform_source_col(field,"minute_at",hhmm=str(hhmm))
 def _minute_range_dispatch(field:Any,start:Any,end:Any):
-    from api.source_ref import transform_source_col
+    from factor_engine.api.source_ref import transform_source_col
     return transform_source_col(field,"minute_range",start=str(start),end=str(end))
 def _minute_resample_dispatch(field:Any,period:Any):
-    from api.source_ref import transform_source_col
+    from factor_engine.api.source_ref import transform_source_col
     return transform_source_col(field,"minute_resample",period=period)
 def _minute_bar_dispatch(field:Any,period:Any,index:Any):
-    from api.source_ref import transform_source_col
+    from factor_engine.api.source_ref import transform_source_col
     return transform_source_col(field,"minute_bar",period=period,index=index)
 
 _EXACT_COMPAT={"decay_linear":"ts_decay_linear","ts_rank_pct":"ts_rank","ts_ewm_mean":"ts_ema","ts_expanding_rank":"expanding_rank","ts_hump_decay":"hump_decay"}
@@ -113,9 +113,9 @@ def _blocked_dispatch(name:str,reason:str,source:bool)->Callable[...,Any]:
 
 def augment_dsl_allowlist(allow:dict[str,Callable[...,Any]],*,surface:str)->dict[str,Callable[...,Any]]:
     if surface not in {"daily","compat","compat_research","research","all","lqtp"}:return allow
-    from cleaned_operators.production_tiers import LQTP_COMPAT_PARSE_CANONICALS
-    from cleaned_operators.registry import OperatorRegistry
-    from api.source_ref import source_col
+    from factor_engine.cleaned_operators.production_tiers import LQTP_COMPAT_PARSE_CANONICALS
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.api.source_ref import source_col
     out=dict(allow);out.update({"source_col":source_col,"sma":_sma_dispatch,"safe_log":_safe_log_dispatch,"nullif_zero":_nullif_zero_dispatch,"clean":_clean_dispatch,"momentum":_momentum_dispatch,"market_ret":_market_ret_dispatch,"historical_var":_historical_var_dispatch,"historical_cvar":_historical_cvar_dispatch,"rolling_beta_to_market":_rolling_beta_dispatch,"fp_beta":_rolling_beta_dispatch,"downside_beta":_downside_beta_dispatch,"tail_beta":_tail_beta_dispatch,"residual_momentum_capm":_residual_momentum_dispatch,"coskewness_to_market":_market_three_arg_dispatch("coskewness_to_market"),"idio_vol":_market_three_arg_dispatch("idio_vol"),"idio_skew":_market_three_arg_dispatch("idio_skew"),"real_turnover_rate":_real_turnover_rate_dispatch,"asof":_asof_dispatch,"financial_lag":_financial_lag_dispatch,"lag":_financial_lag_dispatch,"intermediate":_intermediate_dispatch,"minute_at":_minute_at_dispatch,"minute_range":_minute_range_dispatch,"minute_resample":_minute_resample_dispatch,"minute_bar":_minute_bar_dispatch})
     for external,canonical in _EXACT_COMPAT.items():
         if OperatorRegistry.get(canonical) is not None:out.setdefault(external,_factory(canonical))

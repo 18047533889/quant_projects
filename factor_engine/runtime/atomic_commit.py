@@ -402,7 +402,7 @@ class IncrementalCommitTransaction:
         # 跨命名空间同名互相覆盖）。
         conflict = set(factor_parts) & set(state_parts)
         if conflict:
-            from runtime.generation_store import NamespaceConflictError
+            from factor_engine.runtime.generation_store import NamespaceConflictError
 
             raise NamespaceConflictError(
                 f"同一 part 名同时注册为 factor 与 state（跨命名空间同名冲突）: "

@@ -38,7 +38,7 @@ def _clear_ch_probe_env(monkeypatch: pytest.MonkeyPatch):
 
 def test_cert_harness_detects_no_server_and_marks_not_run() -> None:
     """无 live 服务器 → 整体 NOT_RUN 且每个 canonical 均 NOT_RUN。"""
-    from backend.clickhouse_runtime_cert import (
+    from factor_engine.backend.clickhouse_runtime_cert import (
         CLICKHOUSE_RUNTIME_CANONICALS,
         run_clickhouse_runtime_cert,
     )
@@ -58,8 +58,8 @@ def test_cert_harness_never_inherits_duckdb_pass() -> None:
     证明 harness 的认证面独立于 DuckDB：不读取 DuckDB 证据集合，
     也不把 DuckDB 的 PASS 映射为 ClickHouse 的 PASS。
     """
-    import backend.primitive_evidence as primitive_evidence
-    from backend.clickhouse_runtime_cert import (
+    import factor_engine.backend.primitive_evidence as primitive_evidence
+    from factor_engine.backend.clickhouse_runtime_cert import (
         CLICKHOUSE_RUNTIME_CANONICALS,
         run_clickhouse_runtime_cert,
     )
@@ -84,14 +84,14 @@ def test_probe_client_returns_none_without_live_server() -> None:
 
     不依赖任何环境：即使存在 CH 配置，只要未显式开启连接探测，就 fail-closed。
     """
-    from backend.clickhouse_runtime_cert import probe_client
+    from factor_engine.backend.clickhouse_runtime_cert import probe_client
 
     assert probe_client() is None
 
 
 def test_cert_canonicals_cover_required_semantics() -> None:
     """canonical 集覆盖任务要求的语义维度（NULL/NaN/Inf、frame、tie、quantile、DateTime64、decimal、分组排序）。"""
-    from backend.clickhouse_runtime_cert import CLICKHOUSE_RUNTIME_CANONICALS
+    from factor_engine.backend.clickhouse_runtime_cert import CLICKHOUSE_RUNTIME_CANONICALS
 
     required = {
         "is_nan",        # NaN

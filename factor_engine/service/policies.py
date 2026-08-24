@@ -22,7 +22,7 @@ from typing import Any
 
 # Re-exported from the neutral runtime module so the engine can enforce the
 # same policy object without importing the service package.
-from runtime.endpoint_policy import (
+from factor_engine.runtime.endpoint_policy import (
     EndpointExecutionPolicy,
     ProductionPolicyConflictError,
     collect_config_policy_conflicts,

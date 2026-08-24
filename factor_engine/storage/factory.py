@@ -44,7 +44,7 @@ class DataSourceBuildContext:
     @property
     def production(self) -> bool:
         if self.run_mode:
-            from runtime.production_policy import is_production_mode
+            from factor_engine.runtime.production_policy import is_production_mode
 
             return bool(is_production_mode(self.run_mode))
         return False
@@ -449,7 +449,7 @@ def build_data_source(config: Any, *, build_context: DataSourceBuildContext | No
         )
         features = tuple(str(x) for x in raw_features)
         inner = build_data_source(inner_cfg, build_context=ctx)
-        from runtime.intraday_aggregator import IntradayAggregatedDataSource
+        from factor_engine.runtime.intraday_aggregator import IntradayAggregatedDataSource
 
         source = IntradayAggregatedDataSource(inner=inner, features=features)
         _ensure_no_extra_options(source_type, options)

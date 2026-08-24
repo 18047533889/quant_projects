@@ -10,12 +10,12 @@ pytestmark = pytest.mark.skip(reason="cs_regression is extended and not part of 
 
 pytest.importorskip("polars")
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from cleaned_operators import load_all
-from runtime.engine import FactorEngine
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.cleaned_operators import load_all
+from factor_engine.runtime.engine import FactorEngine
 from tests.backend_parity.duckdb_parity_helpers import assert_duckdb_real_sql_execution
 from tests.helpers import InMemorySeriesSource
 
@@ -62,7 +62,7 @@ def test_cs_regression_modes_polars_match_pandas(ols_source, mode):
 @pytest.mark.parametrize("mode", [0, 1, 2])
 def test_cs_regression_modes_duckdb_matches_pandas(ols_source, mode, tmp_path, monkeypatch):
     from pathlib import Path
-    from storage.factory import build_data_source
+    from factor_engine.storage.factory import build_data_source
 
     def _write_registry(root: Path) -> Path:
         content = f"""

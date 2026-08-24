@@ -24,14 +24,14 @@ def _load():
     # (observed for ts_quantile_beta_spread / ts_variance_ratio_slope).  The
     # manifest generator imports load_all first, so both manifests must observe
     # the identical post-load ``infer_operator_policy`` state.
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()  # includes apply_operator_deduplication()
 
-    from cleaned_operators.operator_policy import infer_operator_policy
-    from cleaned_operators.operator_surface import classify_canonical, surface_summary
-    from cleaned_operators.registry import OperatorRegistry
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical, surface_summary
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     register_sql_backends()
     return OperatorRegistry, infer_operator_policy, classify_canonical, surface_summary

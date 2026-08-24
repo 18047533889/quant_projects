@@ -11,7 +11,7 @@ different node IDs collided.
 """
 import copy
 
-from planner.backend_region import (
+from factor_engine.planner.backend_region import (
     BackendRegion,
     ExecutionAxis,
     PhysicalBackend,

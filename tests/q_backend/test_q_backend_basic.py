@@ -11,10 +11,10 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from backend.q_backend.q_backend import QBackend
-from backend.q_backend.q_process_manager import get_q_process_manager
-from backend.context import ExecutionContext
-from planner.logical_plan import PlanNode
+from factor_engine.backend.q_backend.q_backend import QBackend
+from factor_engine.backend.q_backend.q_process_manager import get_q_process_manager
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.planner.logical_plan import PlanNode
 
 
 @pytest.fixture
@@ -96,7 +96,7 @@ class TestQBackendCapabilities:
 
     def test_capability_query(self):
         """测试能力查询。"""
-        from backend.q_backend.q_capability import get_q_capability
+        from factor_engine.backend.q_backend.q_capability import get_q_capability
 
         cap = get_q_capability()
 
@@ -112,7 +112,7 @@ class TestQBackendCapabilities:
 
     def test_streaming_safe_detection(self):
         """测试 streaming-safe 检测。"""
-        from backend.q_backend.q_capability import get_q_capability
+        from factor_engine.backend.q_backend.q_capability import get_q_capability
 
         cap = get_q_capability()
 
@@ -131,7 +131,7 @@ class TestQBackendIntegration:
 
     def test_factory_integration(self):
         """测试 factory 集成。"""
-        from backend.factory import build_backend
+        from factor_engine.backend.factory import build_backend
 
         backend = build_backend("q_kdb")
         assert isinstance(backend, QBackend)
@@ -142,7 +142,7 @@ class TestQBackendIntegration:
 
     def test_capability_registry_integration(self):
         """测试 capability registry 集成。"""
-        from backend.capability_registry import BackendKind
+        from factor_engine.backend.capability_registry import BackendKind
 
         assert hasattr(BackendKind, "Q_KDB")
         assert BackendKind.Q_KDB == "q_kdb"

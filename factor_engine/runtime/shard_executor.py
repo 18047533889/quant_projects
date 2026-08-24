@@ -23,14 +23,14 @@ from typing import Any
 
 import numpy as np
 
-from runtime.shard_execution_plan import (
+from factor_engine.runtime.shard_execution_plan import (
     SHARD_ASSET,
     SHARD_TIME,
     ShardExecutionPlan,
     ShardMergeContract,
     ShardMergeMode,
 )
-from runtime.spool_policy import (
+from factor_engine.runtime.spool_policy import (
     DECISION_KEEP,
     SpoolDecision,
     default_spool_policy_factory,
@@ -916,7 +916,7 @@ def _trim_output(result: Any, block_start: Any, block_end: Any, ctx: Any) -> Any
 
 def _estimate_bytes(value: Any) -> int:
     try:
-        from runtime.resource_governor import estimate_object_bytes
+        from factor_engine.runtime.resource_governor import estimate_object_bytes
 
         return max(0, int(estimate_object_bytes(value)))
     except Exception:

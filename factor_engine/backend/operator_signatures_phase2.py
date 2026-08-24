@@ -7,7 +7,7 @@ limit behavior.  Merged into ``OPERATOR_SIGNATURES`` from ``operator_types.py``.
 """
 from __future__ import annotations
 
-from backend.operator_types import ArgSpec, OperatorSignature, TypeKind
+from factor_engine.backend.operator_types import ArgSpec, OperatorSignature, TypeKind
 
 _F = TypeKind.SERIES_FLOAT
 _B = TypeKind.SERIES_BOOL

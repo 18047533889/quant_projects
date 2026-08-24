@@ -27,7 +27,7 @@ def _bootstrap() -> None:
     for p in (root, fe):
         if p not in sys.path:
             sys.path.insert(0, p)
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
 

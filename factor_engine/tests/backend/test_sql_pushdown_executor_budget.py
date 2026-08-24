@@ -7,13 +7,13 @@ from dataclasses import dataclass, field
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from backend.sql_pushdown.emitter import CompiledSql, SqlDialect
-from backend.sql_pushdown.executor import (
+from factor_engine.backend.sql_pushdown.emitter import CompiledSql, SqlDialect
+from factor_engine.backend.sql_pushdown.executor import (
     PushdownContext,
     _build_duckdb_store_kwargs,
     _execute_duckdb_table,
 )
-from storage.datasource import DataSource
+from factor_engine.storage.datasource import DataSource
 
 
 @dataclass

@@ -32,8 +32,10 @@ from data_access.core.exceptions import (
 from data_access.registry import load_registry
 from data_access.store import DataAccessStore
 
-_PKG = "/home/shw/quant_projects/dataaccess"
-_DATA = Path("/home/shw/quant_projects/data")
+# ``data_access`` is a repo-root shim forwarding to ``dataaccess/`` source root;
+# subprocess workers must have the repo root on sys.path to resolve it.
+_PKG = str(Path(__file__).resolve().parents[3])  # quant_projects/ repo root
+_DATA = Path(_PKG) / "data"
 _ASHARE = _DATA / "a_share/lqtp_data/StockDailyBar"
 HAS_REAL_DATA = _ASHARE.is_dir() and any(_ASHARE.glob("2019-*.parquet"))
 
@@ -101,7 +103,7 @@ def test_atomic_writer_multiprocess_no_corruption(tmp_path):
         "for i in range(25):\n"
         "  atomic_write_bytes(t, json.dumps({'i':i,'pad':'x'*400}).encode(), durable=True)\n"
         "  time.sleep(0.002)\n"
-    ) % ("/home/shw/quant_projects/dataaccess", str(target))
+    ) % (_PKG, str(target))
     procs = [
         subprocess.Popen([sys.executable, "-c", worker]) for _ in range(3)
     ]

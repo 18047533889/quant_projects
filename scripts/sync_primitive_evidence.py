@@ -16,8 +16,8 @@ def _bootstrap() -> None:
     for p in (root, fe):
         if p not in sys.path:
             sys.path.insert(0, p)
-    from cleaned_operators import load_all
-    from backend.sql_pushdown.sql_registry import register_sql_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
     register_sql_backends()
@@ -31,8 +31,8 @@ def _collect_cases() -> dict:
     from tests.backend_parity.test_production_core_triple_parity import DUCKDB_CASES, MEMORY_CASES
     from tests.backend_parity.test_production_safe_bulk_parity import DUCKDB_BULK_CASES, POLARS_BULK_CASES
     from tests.operators.test_production_convergence import STRICT_PERIOD_CASES
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     evidence_canonicals = set(DAILY_CANONICALS) | {"protected_div"}
 

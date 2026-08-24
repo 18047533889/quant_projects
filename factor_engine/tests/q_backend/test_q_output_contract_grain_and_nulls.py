@@ -8,8 +8,8 @@ from typing import Any, Mapping
 import numpy as np
 import pandas as pd
 
-from backend.q_backend.q_errors import QOutputContract, QOutputContractViolation
-from backend.q_backend.q_backend import QBackend
+from factor_engine.backend.q_backend.q_errors import QOutputContract, QOutputContractViolation
+from factor_engine.backend.q_backend.q_backend import QBackend
 
 
 @dataclass

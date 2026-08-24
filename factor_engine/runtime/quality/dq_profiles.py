@@ -9,8 +9,8 @@ from typing import Any
 
 import yaml
 
-from runtime.quality.dq_gates import DQThresholds
-from runtime.quality.input_dq import InputDQThresholds
+from factor_engine.runtime.quality.dq_gates import DQThresholds
+from factor_engine.runtime.quality.input_dq import InputDQThresholds
 
 _PROFILES_PATH = Path(__file__).resolve().parent / "dq_profiles.yaml"
 

@@ -10,9 +10,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from cleaned_operators.registry import OperatorRegistry
-from factor_recipes.compiler import RecipeCompiler, RecipeExpansionError
-from factor_recipes.registry import FactorRecipeRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.factor_recipes.compiler import RecipeCompiler, RecipeExpansionError
+from factor_engine.factor_recipes.registry import FactorRecipeRegistry
 
 FUSED_COMPOSITES = frozenset({"MACD_line", "MACD_signal", "MACD_hist", "RSI_WILDER", "ATR_WILDER", "ADX"})
 

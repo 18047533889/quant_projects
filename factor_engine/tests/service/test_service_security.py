@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 def test_service_requires_configured_api_key(monkeypatch, tmp_path):
     monkeypatch.setenv("FACTOR_ENGINE_SERVICE_ROOT", str(tmp_path))
     monkeypatch.setenv("FACTOR_ENGINE_SERVICE_API_KEY", "test-secret")
-    from service.app import create_app
+    from factor_engine.service.app import create_app
 
     client = TestClient(create_app())
     assert client.get("/factor-engine/operators").status_code == 401
@@ -26,7 +26,7 @@ def test_service_rejects_config_path_escape(monkeypatch, tmp_path):
     monkeypatch.setenv("FACTOR_ENGINE_SERVICE_ROOT", str(tmp_path / "service"))
     monkeypatch.setenv("FACTOR_ENGINE_CONFIG_ROOT", str(tmp_path / "configs"))
     monkeypatch.setenv("FACTOR_ENGINE_SERVICE_API_KEY", "test-secret")
-    from service.app import STORE, create_app
+    from factor_engine.service.app import STORE, create_app
 
     client = TestClient(create_app())
     response = client.post(
@@ -47,8 +47,8 @@ def test_service_idempotency_and_identity(monkeypatch, tmp_path):
         "FACTOR_ENGINE_SERVICE_API_KEY_MAPPING",
         json.dumps({"test-secret": {"identity": "alice", "roles": ["ADMIN"]}}),
     )
-    from service import app as service_app
-    from service.security import reset_principal_registry
+    from factor_engine.service import app as service_app
+    from factor_engine.service.security import reset_principal_registry
 
     reset_principal_registry()
     monkeypatch.setattr(service_app, "STORE", service_app.JobStore(tmp_path))
@@ -70,7 +70,7 @@ def test_request_identity_header_is_not_trusted(monkeypatch, tmp_path):
     monkeypatch.setenv("FACTOR_ENGINE_SERVICE_API_KEY", "test-secret")
     monkeypatch.setenv("FACTOR_ENGINE_SERVICE_SINGLE_PRINCIPAL", "1")
     monkeypatch.setenv("FACTOR_ENGINE_SERVICE_PRINCIPAL", "service-account")
-    from service import app as service_app
+    from factor_engine.service import app as service_app
 
     monkeypatch.setattr(service_app, "STORE", service_app.JobStore(tmp_path))
     client = TestClient(service_app.create_app())
@@ -89,7 +89,7 @@ def test_request_identity_header_is_not_trusted(monkeypatch, tmp_path):
 def test_production_endpoint_rejects_research_only_formula(monkeypatch, tmp_path):
     monkeypatch.setenv("FACTOR_ENGINE_SERVICE_ROOT", str(tmp_path))
     monkeypatch.setenv("FACTOR_ENGINE_SERVICE_API_KEY", "test-secret")
-    from service.app import create_app
+    from factor_engine.service.app import create_app
 
     client = TestClient(create_app())
     response = client.post(
@@ -101,7 +101,7 @@ def test_production_endpoint_rejects_research_only_formula(monkeypatch, tmp_path
 
 
 def test_job_store_restores_manifests(tmp_path):
-    from service.app import JobRecord, JobStore
+    from factor_engine.service.app import JobRecord, JobStore
 
     first = JobStore(tmp_path)
     first.create(JobRecord(run_id="restored", status="succeeded"))
@@ -111,7 +111,7 @@ def test_job_store_restores_manifests(tmp_path):
 
 
 def test_validate_spec_uses_requested_surface():
-    from service.app import validate_spec
+    from factor_engine.service.app import validate_spec
 
     result = validate_spec({"formula": "rank(close)", "surface": "daily"})
     assert result["ok"] is True

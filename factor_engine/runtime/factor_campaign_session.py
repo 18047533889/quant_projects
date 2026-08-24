@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from runtime.execution_identity import ExecutionIdentity
+from factor_engine.runtime.execution_identity import ExecutionIdentity
 
 
 @dataclass

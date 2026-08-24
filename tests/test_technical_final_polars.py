@@ -12,7 +12,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load_module(name: str):
-    import cleaned_operators.base_polars as base_polars
+    import factor_engine.cleaned_operators.base_polars as base_polars
 
     base_polars.register_operator = lambda **_kwargs: lambda cls: cls
     spec = importlib.util.spec_from_file_location(

@@ -8,18 +8,18 @@ import sys
 import json
 
 sys.path.insert(0, ".")
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 load_all()
 
-from cleaned_operators.registry import OperatorRegistry as R
-from cleaned_operators.operator_surface import classify_canonical
-from cleaned_operators.tombstones import (
+from factor_engine.cleaned_operators.registry import OperatorRegistry as R
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
+from factor_engine.cleaned_operators.tombstones import (
     ALL_TOMBSTONED_NAMES, RANDOM_TOMBSTONED_NAMES,
     FUTURE_TOMBSTONED_NAMES, NONCAUSAL_FILL_TOMBSTONED_NAMES,
 )
-from cleaned_operators.base import missing_role_defaults_to_searchable
-from cleaned_operators.operator_spec import _infer_panel_params
-from runtime.execution_contract import (
+from factor_engine.cleaned_operators.base import missing_role_defaults_to_searchable
+from factor_engine.cleaned_operators.operator_spec import _infer_panel_params
+from factor_engine.runtime.execution_contract import (
     _STATEFUL_CANONICALS, _DECLARED_STATEFUL, execution_contract,
 )
 
@@ -40,7 +40,7 @@ gates["R30_ACTIVE_NONCAUSAL_FILL_PRIMITIVES_ZERO"] = all(
 )
 
 # --- Phase 3: default production loader research zero -----------------------
-from cleaned_operators import RESEARCH_LOAD_MODULES, INTERNAL_KERNEL_MODULES, PRODUCTION_LOAD_MODULES, _LOAD_MODULES
+from factor_engine.cleaned_operators import RESEARCH_LOAD_MODULES, INTERNAL_KERNEL_MODULES, PRODUCTION_LOAD_MODULES, _LOAD_MODULES
 gates["R30_LOADER_SPLIT_DECLARED"] = bool(
     RESEARCH_LOAD_MODULES and INTERNAL_KERNEL_MODULES and PRODUCTION_LOAD_MODULES
     and set(RESEARCH_LOAD_MODULES) <= set(_LOAD_MODULES)
@@ -61,8 +61,8 @@ gates["R30_RAW_REGISTRY_PRODUCTION_BYPASS_ZERO"] = all(
 )
 
 # --- Phase 5: production admission requires pit_safe ------------------------
-from cleaned_operators.operator_spec import _compute_allow_in_production, _infer_status
-from cleaned_operators.operator_policy import infer_operator_policy
+from factor_engine.cleaned_operators.operator_spec import _compute_allow_in_production, _infer_status
+from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
 gates["R30_PRODUCTION_ADMISSION_REQUIRES_PIT_SAFE"] = (
     _compute_allow_in_production("x", status="production", pit_safe=False) is False
 )
@@ -96,18 +96,18 @@ for c in R.list_canonical():
 gates["R30_ALL_PRODUCTION_SCALAR_PARAM_ROLES_EXPLICIT"] = viol_roles == 0
 
 # --- Phase 9: concrete bugs closed ------------------------------------------
-from cleaned_operators.dmd import _log_finite_horizon_sum
+from factor_engine.cleaned_operators.dmd import _log_finite_horizon_sum
 import numpy as np
 gates["R30_DMD_GEOMETRIC_LOGSUM_OVERFLOW_ZERO"] = all(
     np.isfinite(_log_finite_horizon_sum(lr, 50)) for lr in (100.0, 1000.0, 10000.0)
 )
 
-from cleaned_operators.stateful.survival import _survival_kernel
+from factor_engine.cleaned_operators.stateful.survival import _survival_kernel
 ages = _survival_kernel(np.array([0.0, 1.0, np.nan, 1.0, 0.0]), 60, 1, 1, 1, 1.0,
                         inactive_policy="zero", gap_policy="lower_bound")[0]
 gates["R30_SURVIVAL_GAP_STATE_BUG_CLOSED"] = ages[3] == 1.0
 
-from runtime.execution_contract import minimum_effective_samples
+from factor_engine.runtime.execution_contract import minimum_effective_samples
 gates["R30_REGRESSION_SUPPORT_FLOOR_PARAMETER_AWARE"] = all(
     minimum_effective_samples("ts_regression", {"n_regressors": n}) == n + 1
     for n in (1, 2, 5, 10)
@@ -126,7 +126,7 @@ gates["R30_PRODUCTION_LEGACY_STATEFUL_SEED_FALLBACK_ZERO"] = not fallback_prod
 # 每个 current production canonical 都必须在 reviewed migration manifest 里有
 # review_id（版本绑定）。manifest 里 semantic_hash 为空的情况由 R34 P0-013
 # 单独暴露，这里只做 review_id 的真实存在性检查。
-from cleaned_operators.operator_surface import DAILY_CANONICALS, REVIEWED_MIGRATION_MANIFEST  # noqa: E402
+from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS, REVIEWED_MIGRATION_MANIFEST  # noqa: E402
 
 # R34 P0-002：review 机制的语义范围是 daily 迁移表面（manifest 只登记 daily）。
 # 逐 daily canonical 检查 review_id 真实存在；extended/research 走 semantic

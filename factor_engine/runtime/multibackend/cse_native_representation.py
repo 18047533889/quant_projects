@@ -76,7 +76,7 @@ class NativeCSECache:
             max_size_bytes: Maximum cache size (bytes). If None, uses adaptive config.
         """
         if max_size_bytes is None:
-            from runtime.adaptive_config import get_global_adaptive_config
+            from factor_engine.runtime.adaptive_config import get_global_adaptive_config
             max_size_bytes = get_global_adaptive_config().cache_size_bytes
         self._cache: dict[NativeCSEKey, CSEEntry] = {}
         self._max_size_bytes = max_size_bytes
@@ -351,7 +351,7 @@ class NativeCSEManager:
             cache_size_bytes: Maximum cache size. If None, uses adaptive config.
         """
         if cache_size_bytes is None:
-            from runtime.adaptive_config import get_global_adaptive_config
+            from factor_engine.runtime.adaptive_config import get_global_adaptive_config
             cache_size_bytes = get_global_adaptive_config().cache_size_bytes
         self._cache = NativeCSECache(max_size_bytes=cache_size_bytes)
         self._pending_computations: dict[str, threading.Event] = {}

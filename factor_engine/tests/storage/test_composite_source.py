@@ -4,8 +4,8 @@ import pytest
 
 pd = pytest.importorskip("pandas")
 
-from storage.composite_source import CompositeDataSource
-from storage.datasource import DataSource
+from factor_engine.storage.composite_source import CompositeDataSource
+from factor_engine.storage.datasource import DataSource
 
 
 def _build_series(rows: list[tuple[str, str, float]]) -> "pd.Series":
@@ -32,7 +32,7 @@ class CountingSeriesSource(DataSource):
     def temporal_contract(self):
         # R24-084..087: a plain panel with no knowledge-time is safe for generic
         # asof — declared, never inferred from the (absent) dataset name.
-        from storage.datasource import TemporalContract
+        from factor_engine.storage.datasource import TemporalContract
 
         return TemporalContract(
             temporal_sensitivity="none",

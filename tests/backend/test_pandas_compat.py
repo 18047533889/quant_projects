@@ -1,6 +1,6 @@
 """``pandas_compat``：默认解析为 pandas；缓存可重置。"""
 
-from backend.pandas_compat import reset_pandas_module_cache_for_tests, resolve_pandas_module
+from factor_engine.backend.pandas_compat import reset_pandas_module_cache_for_tests, resolve_pandas_module
 
 
 def test_resolve_pandas_defaults_to_real_pandas():
@@ -12,8 +12,8 @@ def test_resolve_pandas_defaults_to_real_pandas():
 def test_build_backend_pandas_modin_sets_env(monkeypatch):
     import os
 
-    from backend.factory import build_backend
-    from backend.pandas_compat import reset_pandas_module_cache_for_tests
+    from factor_engine.backend.factory import build_backend
+    from factor_engine.backend.pandas_compat import reset_pandas_module_cache_for_tests
 
     reset_pandas_module_cache_for_tests()
     monkeypatch.delenv("FACTOR_ENGINE_USE_MODIN", raising=False)

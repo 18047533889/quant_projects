@@ -96,8 +96,8 @@ def test_stateful_discovery_uses_trailing_half(monkeypatch) -> None:
                 return args[0][0]
             return args[0]
 
-    import cleaned_operators as co
-    import cleaned_operators.registry as reg
+    import factor_engine.cleaned_operators as co
+    import factor_engine.cleaned_operators.registry as reg
 
     monkeypatch.setattr(co, "load_all", lambda: None)
     monkeypatch.setattr(reg.OperatorRegistry, "get", lambda canonical, *a, **k: _IdentityOp())
@@ -127,10 +127,10 @@ class _UnderDeclaredOp:
 def test_default_history_flags_underdeclared(monkeypatch) -> None:
     """When ``history_requirement`` declares 1 row but the kernel matures at
     row 3, the auditor must FAIL (declared < mature + 1)."""
-    import cleaned_operators as co
-    import cleaned_operators.registry as reg
-    import runtime.execution_contract as ec
-    from runtime.execution_contract import HistoryRequirement
+    import factor_engine.cleaned_operators as co
+    import factor_engine.cleaned_operators.registry as reg
+    import factor_engine.runtime.execution_contract as ec
+    from factor_engine.runtime.execution_contract import HistoryRequirement
 
     monkeypatch.setattr(co, "load_all", lambda: None)
     monkeypatch.setattr(reg.OperatorRegistry, "get", lambda canonical, *a, **k: _UnderDeclaredOp())
@@ -147,10 +147,10 @@ def test_default_history_flags_underdeclared(monkeypatch) -> None:
 
 def test_default_history_pass_when_declared_covers_warmup(monkeypatch) -> None:
     """An operator whose declared history covers the real warmup is not flagged."""
-    import cleaned_operators as co
-    import cleaned_operators.registry as reg
-    import runtime.execution_contract as ec
-    from runtime.execution_contract import HistoryRequirement
+    import factor_engine.cleaned_operators as co
+    import factor_engine.cleaned_operators.registry as reg
+    import factor_engine.runtime.execution_contract as ec
+    from factor_engine.runtime.execution_contract import HistoryRequirement
 
     monkeypatch.setattr(co, "load_all", lambda: None)
     monkeypatch.setattr(reg.OperatorRegistry, "get", lambda canonical, *a, **k: _UnderDeclaredOp())

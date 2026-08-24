@@ -2,9 +2,9 @@ from __future__ import annotations
 
 
 def test_average_volume_field_and_operator_are_unambiguous():
-    from cleaned_operators import load_all
-    from cleaned_operators.layer_governance import formula_field_names
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.layer_governance import formula_field_names
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     fields = formula_field_names()
@@ -18,10 +18,10 @@ def test_collision_free_average_volume_operator_parses_and_executes():
     import numpy as np
     import pandas as pd
 
-    from api.dsl_parser import parse_factor
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
-    from ir.analyzer import Analyzer
+    from factor_engine.api.dsl_parser import parse_factor
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.ir.analyzer import Analyzer
 
     load_all()
     factor = parse_factor(

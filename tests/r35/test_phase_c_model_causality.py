@@ -19,8 +19,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from cleaned_operators import load_all  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators import load_all  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 
 def _load():
@@ -114,7 +114,7 @@ def test_pca_loading_future_poison():
     row never in its own loading); perturbing rows at/after t must not change
     the loading at t.  We replicate the rolling slicing: fit window
     ``X[t-w : t]``, current row ``X[t]``."""
-    from cleaned_operators.cross_section.panel_model import _pca_loading
+    from factor_engine.cleaned_operators.cross_section.panel_model import _pca_loading
 
     rng = np.random.default_rng(21)
     n = 200
@@ -134,7 +134,7 @@ def test_kalman_future_poison():
     """One-pass causal filter: output at row t depends only on rows <= t, so
     poisoning rows after the first half must leave the first half unchanged and
     only corrupt from the poison point onward."""
-    from cleaned_operators.ts_model.state_space import _kalman_level
+    from factor_engine.cleaned_operators.ts_model.state_space import _kalman_level
 
     rng = np.random.default_rng(22)
     n = 120
@@ -159,7 +159,7 @@ def test_panel_forecast_label_poison():
     training windows only contain matured labels — must be identical.  A
     prediction at row t trains on labels through ``t - label_horizon``, so the
     poison at row 120 first reaches predictions around row 121."""
-    from cleaned_operators.cross_section.panel_model import _forecast_generic
+    from factor_engine.cleaned_operators.cross_section.panel_model import _forecast_generic
 
     rng = np.random.default_rng(23)
     n = 140
@@ -189,7 +189,7 @@ def test_panel_forecast_label_poison():
 def test_har_future_label_poison():
     """HAR trains on label RV_{s+1}; a future label beyond the decision row must
     not move the current forecast (prefix invariance under label poisoning)."""
-    from cleaned_operators.ts_model.volatility import _har_rv
+    from factor_engine.cleaned_operators.ts_model.volatility import _har_rv
 
     rng = np.random.default_rng(24)
     rv = np.abs(rng.standard_normal(300)) + 1.0
@@ -215,7 +215,7 @@ def test_har_future_label_poison():
 def test_panel_forecast_multi_horizon(h):
     """label_horizon must be enforced: outputs finite, and a horizon-h label is
     excluded until it matures."""
-    from cleaned_operators.cross_section.panel_model import _forecast_generic
+    from factor_engine.cleaned_operators.cross_section.panel_model import _forecast_generic
 
     rng = np.random.default_rng(25)
     n = 160

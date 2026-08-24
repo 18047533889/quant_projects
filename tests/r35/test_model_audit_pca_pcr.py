@@ -24,8 +24,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from cleaned_operators import load_all  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators import load_all  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
 
 
 def _load():
@@ -44,7 +44,7 @@ def _panel(n: int, cols: int = 4, seed: int = 0) -> pd.DataFrame:
 def test_m020_rolling_pca_full_history_floor():
     """window=120 -> rows with fit_end < 119 are NaN; row 120 (fit_end=119) is
     the first eligible.  ``warmup_policy="expanding"`` opts in to early output."""
-    from cleaned_operators.cross_section.panel_model import _rolling_pca
+    from factor_engine.cleaned_operators.cross_section.panel_model import _rolling_pca
 
     rng = np.random.default_rng(1)
     X = pd.DataFrame(rng.standard_normal((200, 5)), columns=list("ABCDE"))
@@ -77,8 +77,8 @@ def test_m020_pca_resid_operator_full_history_floor():
 # --------------------------------------------------------------------------
 
 def test_m021_rank_policy_split():
-    from cleaned_operators.cross_section.panel_model import _pca_svd
-    from cleaned_operators.cross_section.pca_state import _fit
+    from factor_engine.cleaned_operators.cross_section.panel_model import _pca_svd
+    from factor_engine.cleaned_operators.cross_section.pca_state import _fit
 
     rng = np.random.default_rng(3)
     X = rng.standard_normal((60, 5))
@@ -96,7 +96,7 @@ def test_m021_rank_policy_split():
 def test_m021_pcr_uses_regression_policy_full_rank():
     """PCR with n_components == p (full rank) must equal OLS on the
     standardized features — this only holds if the PCR path allows k == p."""
-    from cleaned_operators.cross_section.panel_model import _model_predict
+    from factor_engine.cleaned_operators.cross_section.panel_model import _model_predict
 
     rng = np.random.default_rng(4)
     n = 80
@@ -120,7 +120,7 @@ def test_m021_pcr_uses_regression_policy_full_rank():
 # --------------------------------------------------------------------------
 
 def test_m022_pcr_single_feature_finite_for_mature_rows():
-    from cleaned_operators.cross_section.panel_model import _forecast_generic
+    from factor_engine.cleaned_operators.cross_section.panel_model import _forecast_generic
 
     rng = np.random.default_rng(5)
     n = 140
@@ -137,7 +137,7 @@ def test_m022_pcr_single_feature_finite_for_mature_rows():
 
 def test_m022_pcr_single_feature_equals_ols():
     """p=1 PCR degrades to a legal standardized linear regression."""
-    from cleaned_operators.cross_section.panel_model import _model_predict
+    from factor_engine.cleaned_operators.cross_section.panel_model import _model_predict
 
     rng = np.random.default_rng(6)
     n = 60
@@ -160,7 +160,7 @@ def test_m022_pcr_single_feature_equals_ols():
 
 def _naive_industry_pca_loading(ret, group, window, component):
     """Reference per-(row, col) implementation (pre-M-026 behaviour)."""
-    from cleaned_operators.cross_section.panel_model import _pca_loading
+    from factor_engine.cleaned_operators.cross_section.panel_model import _pca_loading
 
     rv = ret.to_numpy(dtype=float)
     gv = group.to_numpy()
@@ -189,7 +189,7 @@ def _naive_industry_pca_loading(ret, group, window, component):
 def test_m026_industry_pca_fit_once_per_date_industry():
     """The M-026 cache must fit the SVD exactly once per (date, industry) —
     not once per (row, col)."""
-    import cleaned_operators.cross_section.panel_model as pm
+    import factor_engine.cleaned_operators.cross_section.panel_model as pm
 
     rng = np.random.default_rng(7)
     rows, cols = 50, 8
@@ -219,7 +219,7 @@ def test_m026_industry_pca_fit_once_per_date_industry():
 def test_m026_industry_pca_cached_matches_naive():
     """The cached (date x industry) broadcast must be bit-identical to the old
     per-(row, col) refit."""
-    import cleaned_operators.cross_section.panel_model as pm
+    import factor_engine.cleaned_operators.cross_section.panel_model as pm
 
     rng = np.random.default_rng(8)
     rows, cols = 50, 8
@@ -244,7 +244,7 @@ def test_m027_downstream_first_output_timing(fn_name):
     """First output of the downstream rolling stat must be at
     (PCA full-history floor) + (downstream min_periods=10), not a short-window
     stat from the first few residual observations."""
-    import cleaned_operators.cross_section.panel_model as pm
+    import factor_engine.cleaned_operators.cross_section.panel_model as pm
 
     rng = np.random.default_rng(9)
     n = 300
@@ -276,7 +276,7 @@ def test_m027_resid_vol_description_documents_two_stage():
 # --------------------------------------------------------------------------
 
 def test_m030_module_docstring_is_per_symbol():
-    import cleaned_operators.cross_section.panel_model as pm
+    import factor_engine.cleaned_operators.cross_section.panel_model as pm
 
     assert "per-symbol" in pm.__doc__ and "not pooled" in pm.__doc__
 
@@ -300,7 +300,7 @@ def test_m030_supervised_operator_descriptions_are_per_symbol():
 # --------------------------------------------------------------------------
 
 def test_m033_regime_moe_require_true_predictor():
-    from cleaned_operators.cross_section.panel_model import _moe_forecast, _regime_forecast
+    from factor_engine.cleaned_operators.cross_section.panel_model import _moe_forecast, _regime_forecast
 
     rng = np.random.default_rng(10)
     n = 40
@@ -331,7 +331,7 @@ def test_m035_regime_description_documents_current_state_routing():
 # --------------------------------------------------------------------------
 
 def test_m036_regime_telemetry():
-    from cleaned_operators.cross_section.panel_model import _regime_forecast, last_fit_telemetry
+    from factor_engine.cleaned_operators.cross_section.panel_model import _regime_forecast, last_fit_telemetry
 
     rng = np.random.default_rng(11)
     n = 140
@@ -354,7 +354,7 @@ def test_m036_regime_telemetry():
 
 
 def test_m036_moe_telemetry():
-    from cleaned_operators.cross_section.panel_model import _moe_forecast, last_fit_telemetry
+    from factor_engine.cleaned_operators.cross_section.panel_model import _moe_forecast, last_fit_telemetry
 
     rng = np.random.default_rng(12)
     n = 140

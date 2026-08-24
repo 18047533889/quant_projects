@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from api.columns import col
-from api.factor import Factor
-from planner.dependency_graph import build_factor_batch_graph
-from runtime.shard_materialize import shard_by_hash, shard_factor_ids
-from runtime.task_queue import shard_config_paths
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.planner.dependency_graph import build_factor_batch_graph
+from factor_engine.runtime.shard_materialize import shard_by_hash, shard_factor_ids
+from factor_engine.runtime.task_queue import shard_config_paths
 
 
 def _analysis(name: str, cols: set[str], lookback: int = 0):
-    from ir.analyzer import AnalysisResult
-    from ir.nodes import IRNode
+    from factor_engine.ir.analyzer import AnalysisResult
+    from factor_engine.ir.nodes import IRNode
 
     return AnalysisResult(
         ir=IRNode(op="column", attrs={"name": next(iter(cols))}),

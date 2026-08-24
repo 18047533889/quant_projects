@@ -17,13 +17,13 @@ from typing import Any
 
 import pytest
 
-from runtime.multibackend.parallel_region_scheduler import (
+from factor_engine.runtime.multibackend.parallel_region_scheduler import (
     ExecutionRegion,
     ParallelRegionScheduler,
     PhysicalPlanCycleError,
 )
-from runtime.resource_broker import ResourceBroker
-from runtime.task_resource_contract import TaskResourceContract
+from factor_engine.runtime.resource_broker import ResourceBroker
+from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
 
 def _region(

@@ -434,7 +434,7 @@ class EnhancedFixer(OperatorFixer):
 """Auto-generated operator policies."""
 from __future__ import annotations
 
-from mining.operator_catalog import TimingKind, Lane, State
+from factor_engine.mining.operator_catalog import TimingKind, Lane, State
 
 # Auto-generated policies
 OPERATOR_POLICIES = {

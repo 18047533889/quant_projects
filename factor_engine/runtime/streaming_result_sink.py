@@ -53,7 +53,7 @@ _PER_ITEM_JOIN_BUDGET_S = 2.0
 
 def _bytes_of(value: Any) -> int:
     try:
-        from runtime.resource_governor import estimate_object_bytes
+        from factor_engine.runtime.resource_governor import estimate_object_bytes
 
         return estimate_object_bytes(value)
     except Exception:

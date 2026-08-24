@@ -25,13 +25,13 @@ pd = pytest.importorskip("pandas")
 pytest.importorskip("polars")
 import numpy as np
 
-from planner.logical_plan import PlanNode
-from runtime.perf_config import PerfConfig
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.runtime.perf_config import PerfConfig
 
 
 @pytest.fixture(scope="module")
 def loaded():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
     yield
@@ -43,12 +43,12 @@ def loaded():
 
 
 def test_polars_backend_kind_classifies_gap_coverage_as_delegate(loaded):
-    from backend.polars_backend_kind import (
+    from factor_engine.backend.polars_backend_kind import (
         PolarsImplementationKind,
         canonical_polars_is_delegate,
         canonical_polars_kind,
     )
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     # Every polars slot registered by the gap-coverage UDF layer (source
     # ``polars_udf``) must classify as a pandas delegate, never native.
@@ -67,8 +67,8 @@ def test_polars_backend_kind_classifies_gap_coverage_as_delegate(loaded):
 
 
 def test_polars_backend_kind_native_not_delegate(loaded):
-    from backend.polars_backend_kind import canonical_polars_is_delegate
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.polars_backend_kind import canonical_polars_is_delegate
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     # A genuinely native canonical (ts_mean has a real polars kernel) must NOT be
     # classified as a delegate.
@@ -76,14 +76,14 @@ def test_polars_backend_kind_native_not_delegate(loaded):
 
 
 def test_capability_quality_labels_delegate(loaded):
-    from backend.polars_backend_kind import capability_quality
+    from factor_engine.backend.polars_backend_kind import capability_quality
 
     assert capability_quality("ts_mean", "pandas_numpy") == "pandas_native"
     assert capability_quality("ts_mean", "duckdb_sql") == "duckdb_native_sql"
     assert capability_quality("ts_mean", "clickhouse_sql") == "clickhouse_native_sql"
     # A delegate-only canonical reports delegate, never "native".
-    from backend.polars_backend_kind import canonical_polars_is_delegate
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.polars_backend_kind import canonical_polars_is_delegate
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     delegates = [
         c
@@ -100,8 +100,8 @@ def test_capability_quality_labels_delegate(loaded):
 
 
 def test_gap_coverage_registers_labeled_delegation_layer(loaded):
-    from cleaned_operators.polars_gap_coverage import register_polars_gap_coverage
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.polars_gap_coverage import register_polars_gap_coverage
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     n = register_polars_gap_coverage()
     # Idempotent: re-running adds nothing new (all polars slots already exist).
@@ -126,9 +126,9 @@ def test_gap_coverage_registers_labeled_delegation_layer(loaded):
 
 
 def test_router_cost_delegate_never_beats_pandas(loaded):
-    from backend.polars_backend_kind import canonical_polars_is_delegate
-    from backend.plan_cost_router import _cost
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.polars_backend_kind import canonical_polars_is_delegate
+    from factor_engine.backend.plan_cost_router import _cost
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     delegates = [
         c
@@ -154,10 +154,10 @@ def test_router_cost_delegate_never_beats_pandas(loaded):
 
 
 def test_router_ranks_pandas_over_delegate_plan(loaded):
-    from backend.plan_cost_router import choose_plan_route
-    from backend.polars_backend_kind import canonical_polars_is_delegate
-    from backend.context import ExecutionContext
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.plan_cost_router import choose_plan_route
+    from factor_engine.backend.polars_backend_kind import canonical_polars_is_delegate
+    from factor_engine.backend.context import ExecutionContext
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
     from tests.helpers import InMemorySeriesSource
 
     delegates = [
@@ -195,9 +195,9 @@ def test_router_ranks_pandas_over_delegate_plan(loaded):
 def test_execute_lazy_does_not_mutate_backend(loaded):
     from unittest.mock import MagicMock, patch
 
-    from backend.polars_backend import PolarsBackend
-    from backend.pandas_backend import PandasBackend
-    from backend.context import ExecutionContext
+    from factor_engine.backend.polars_backend import PolarsBackend
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.backend.context import ExecutionContext
 
     backend = PolarsBackend(use_lazy=False)
     src = MagicMock()
@@ -223,7 +223,7 @@ class _FakeLazySource:
 
 
 def test_lazy_apply_restores_source(loaded):
-    from backend.polars_backend import PolarsBackend
+    from factor_engine.backend.polars_backend import PolarsBackend
 
     src = _FakeLazySource()
     restore: list = []
@@ -239,9 +239,9 @@ def test_lazy_apply_restores_source(loaded):
 def test_lazy_then_normal_same_backend_identical_read_semantics(loaded):
     from unittest.mock import MagicMock, patch
 
-    from backend.polars_backend import PolarsBackend
-    from backend.pandas_backend import PandasBackend
-    from backend.context import ExecutionContext
+    from factor_engine.backend.polars_backend import PolarsBackend
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.backend.context import ExecutionContext
 
     backend = PolarsBackend(use_lazy=False)
     src = _FakeLazySource()
@@ -267,9 +267,9 @@ def test_lazy_then_normal_same_backend_identical_read_semantics(loaded):
 
 
 def test_explicit_pandas_numpy_operator_backend_respected(loaded):
-    from backend.polars_backend import PolarsBackend
-    from backend.context import ExecutionContext
-    from backend.cleaned_bridge import _operator_backend_preference
+    from factor_engine.backend.polars_backend import PolarsBackend
+    from factor_engine.backend.context import ExecutionContext
+    from factor_engine.backend.cleaned_bridge import _operator_backend_preference
 
     backend = PolarsBackend()
     ctx = ExecutionContext(
@@ -286,8 +286,8 @@ def test_explicit_pandas_numpy_operator_backend_respected(loaded):
 
 
 def test_auto_operator_backend_stays_auto(loaded):
-    from backend.polars_backend import PolarsBackend
-    from backend.context import ExecutionContext
+    from factor_engine.backend.polars_backend import PolarsBackend
+    from factor_engine.backend.context import ExecutionContext
 
     backend = PolarsBackend()
     ctx = ExecutionContext(
@@ -305,7 +305,7 @@ def test_auto_operator_backend_stays_auto(loaded):
 
 
 def test_sql_pushdown_filter_empty_vs_all(loaded):
-    from backend.sql_pushdown.emitter import (
+    from factor_engine.backend.sql_pushdown.emitter import (
         InstrumentFilterKind,
         SqlDialect,
         SqlPushdownFilter,
@@ -339,8 +339,8 @@ def test_sql_pushdown_filter_empty_vs_all(loaded):
 
 
 def test_instrument_filter_kind_mapping(loaded):
-    from backend.sql_pushdown.executor import _instrument_filter_kind
-    from backend.sql_pushdown.emitter import InstrumentFilterKind
+    from factor_engine.backend.sql_pushdown.executor import _instrument_filter_kind
+    from factor_engine.backend.sql_pushdown.emitter import InstrumentFilterKind
 
     assert _instrument_filter_kind(None) == (InstrumentFilterKind.ALL, ())
     assert _instrument_filter_kind([]) == (InstrumentFilterKind.EMPTY, ())
@@ -357,8 +357,8 @@ def test_instrument_filter_kind_mapping(loaded):
 def test_gap_coverage_count_equals_real_registrations(loaded, monkeypatch):
     from unittest.mock import patch
 
-    from cleaned_operators.polars_gap_coverage import register_polars_gap_coverage
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.polars_gap_coverage import register_polars_gap_coverage
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     # The registry is frozen after load_all(), so verify the counting logic with
     # mocks: ``register_polars_udf`` only counts when a polars slot actually
@@ -382,13 +382,13 @@ def test_gap_coverage_count_equals_real_registrations(loaded, monkeypatch):
         state[canonical] = list(state.get(canonical, [])) + ["polars"]
         registered.add(canonical)
 
-    with patch("cleaned_operators.polars_gap_coverage.register_polars_udf", side_effect=_real_udf):
+    with patch("factor_engine.cleaned_operators.polars_gap_coverage.register_polars_udf", side_effect=_real_udf):
         n = register_polars_gap_coverage()
     assert n == 3, n  # alpha/beta/gamma registered; delta already had polars
     assert registered == {"alpha_op", "beta_op", "gamma_op"}
 
     # Idempotent: after real registration, re-running registers nothing new.
-    with patch("cleaned_operators.polars_gap_coverage.register_polars_udf", side_effect=_real_udf):
+    with patch("factor_engine.cleaned_operators.polars_gap_coverage.register_polars_udf", side_effect=_real_udf):
         assert register_polars_gap_coverage() == 0
 
     # Simulate a polars-unavailable environment: ``register_polars_udf`` no-ops
@@ -402,7 +402,7 @@ def test_gap_coverage_count_equals_real_registrations(loaded, monkeypatch):
     def _noop_udf(canonical):
         pass  # polars runtime missing -> nothing registered
 
-    with patch("cleaned_operators.polars_gap_coverage.register_polars_udf", side_effect=_noop_udf):
+    with patch("factor_engine.cleaned_operators.polars_gap_coverage.register_polars_udf", side_effect=_noop_udf):
         assert register_polars_gap_coverage() == 0
 
 
@@ -412,12 +412,12 @@ def test_gap_coverage_count_equals_real_registrations(loaded, monkeypatch):
 
 
 def test_with_scope_memory_accounting_matches_resident_bytes(loaded):
-    from runtime.resource_governor import (
+    from factor_engine.runtime.resource_governor import (
         reset_global_governor,
         global_memory_governor,
         estimate_object_bytes,
     )
-    from storage.cache import CacheManager
+    from factor_engine.storage.cache import CacheManager
 
     reset_global_governor()
     gov = global_memory_governor()

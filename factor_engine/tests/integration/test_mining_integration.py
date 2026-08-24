@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from api.mining_integration import (
+from factor_engine.api.mining_integration import (
     export_dsl_allowlist_json,
     validate_manifest_for_execution,
     validate_us_dsl,
@@ -55,7 +55,7 @@ def test_export_dsl_allowlist_ashare_policy():
 
 
 def test_default_ashare_pv_data_source_uses_data_access_without_max_files():
-    from api.mining_integration import default_ashare_pv_data_source_config
+    from factor_engine.api.mining_integration import default_ashare_pv_data_source_config
 
     cfg = default_ashare_pv_data_source_config()
     assert cfg["type"] == "data_access"
@@ -63,7 +63,7 @@ def test_default_ashare_pv_data_source_uses_data_access_without_max_files():
 
 
 def test_default_us_pv_valuation_composite():
-    from api.mining_integration import default_us_pv_valuation_data_source_config
+    from factor_engine.api.mining_integration import default_us_pv_valuation_data_source_config
 
     cfg = default_us_pv_valuation_data_source_config()
     assert cfg["type"] == "composite"
@@ -78,7 +78,7 @@ def test_default_us_pv_valuation_composite():
 
 
 def test_default_us_stocks_sip_day_aggs_uses_data_access():
-    from api.mining_integration import default_us_stocks_sip_day_aggs_data_source_config
+    from factor_engine.api.mining_integration import default_us_stocks_sip_day_aggs_data_source_config
 
     cfg = default_us_stocks_sip_day_aggs_data_source_config()
     assert cfg["type"] == "data_access"
@@ -92,14 +92,14 @@ def test_default_us_stocks_sip_day_aggs_uses_data_access():
 
 
 def test_default_ashare_pv_valuation_has_pe_alias():
-    from api.mining_integration import default_ashare_pv_valuation_data_source_config
+    from factor_engine.api.mining_integration import default_ashare_pv_valuation_data_source_config
 
     cfg = default_ashare_pv_valuation_data_source_config()
     assert cfg["aliases"]["pe"] == "valuation.pe"
 
 
 def test_default_us_pv_data_source_uses_data_access():
-    from api.mining_integration import default_us_pv_data_source_config
+    from factor_engine.api.mining_integration import default_us_pv_data_source_config
 
     cfg = default_us_pv_data_source_config()
     assert cfg["type"] == "data_access"
@@ -112,7 +112,7 @@ def test_default_us_pv_data_source_uses_data_access():
 
 
 def test_default_ashare_pv_data_source():
-    from api.mining_integration import default_ashare_pv_data_source_config
+    from factor_engine.api.mining_integration import default_ashare_pv_data_source_config
 
     cfg = default_ashare_pv_data_source_config(
         max_files=5,
@@ -127,7 +127,7 @@ def test_default_ashare_pv_data_source():
 
 
 def test_default_ashare_pv_universe_composite():
-    from api.mining_integration import default_ashare_pv_universe_data_source_config
+    from factor_engine.api.mining_integration import default_ashare_pv_universe_data_source_config
 
     cfg = default_ashare_pv_universe_data_source_config(index_symbol="000300.SH")
     assert cfg["type"] == "composite"
@@ -139,7 +139,7 @@ def test_default_ashare_pv_universe_composite():
 
 
 def test_default_us_sip_day_ratios_composite():
-    from api.mining_integration import default_us_sip_day_ratios_composite_config
+    from factor_engine.api.mining_integration import default_us_sip_day_ratios_composite_config
 
     cfg = default_us_sip_day_ratios_composite_config()
     assert cfg["type"] == "composite"
@@ -150,7 +150,7 @@ def test_default_us_sip_day_ratios_composite():
 
 
 def test_default_us_sip_cash_flow_composite():
-    from api.mining_integration import default_us_sip_cash_flow_composite_config
+    from factor_engine.api.mining_integration import default_us_sip_cash_flow_composite_config
 
     cfg = default_us_sip_cash_flow_composite_config()
     assert cfg["joins"]["cash_flow"] == "asof_backward"
@@ -158,7 +158,7 @@ def test_default_us_sip_cash_flow_composite():
 
 
 def test_default_financials_ratios_uses_data_access():
-    from api.mining_integration import default_financials_ratios_data_source_config
+    from factor_engine.api.mining_integration import default_financials_ratios_data_source_config
 
     cfg = default_financials_ratios_data_source_config()
     assert cfg["type"] == "data_access"
@@ -167,7 +167,7 @@ def test_default_financials_ratios_uses_data_access():
 
 
 def test_default_us_pv_universe_composite():
-    from api.mining_integration import default_us_pv_universe_data_source_config
+    from factor_engine.api.mining_integration import default_us_pv_universe_data_source_config
 
     cfg = default_us_pv_universe_data_source_config()
     assert cfg["type"] == "composite"
@@ -176,7 +176,7 @@ def test_default_us_pv_universe_composite():
 
 
 def test_default_us_stocks_sip_quotes_uses_data_access():
-    from api.mining_integration import default_us_stocks_sip_quotes_data_source_config
+    from factor_engine.api.mining_integration import default_us_stocks_sip_quotes_data_source_config
 
     cfg = default_us_stocks_sip_quotes_data_source_config()
     assert cfg["type"] == "data_access"
@@ -186,7 +186,7 @@ def test_default_us_stocks_sip_quotes_uses_data_access():
 
 
 def test_default_massive_ticks_parametric_kind():
-    from api.mining_integration import default_massive_ticks_data_source_config
+    from factor_engine.api.mining_integration import default_massive_ticks_data_source_config
 
     cfg = default_massive_ticks_data_source_config(kind="quotes_v1")
     assert cfg["dataset"] == "massive_ticks"

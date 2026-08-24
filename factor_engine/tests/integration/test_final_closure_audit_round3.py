@@ -29,23 +29,23 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from api import col, ts_mean
-from api.factor import Factor
-from ir.nodes import IRNode
-from runtime import materialize_service
-from runtime.factor_identity import compute_identity_from_materialize_ctx
-from runtime.incremental_scheduler import _edges_from_analysis
-from runtime.lineage import RunLineage
-from storage.catalog import FactorCatalog
-from storage.exceptions import (
+from factor_engine.api import col, ts_mean
+from factor_engine.api.factor import Factor
+from factor_engine.ir.nodes import IRNode
+from factor_engine.runtime import materialize_service
+from factor_engine.runtime.factor_identity import compute_identity_from_materialize_ctx
+from factor_engine.runtime.incremental_scheduler import _edges_from_analysis
+from factor_engine.runtime.lineage import RunLineage
+from factor_engine.storage.catalog import FactorCatalog
+from factor_engine.storage.exceptions import (
     FactorSemanticIdentityMismatchError,
     MaterializedButCatalogCommitFailed,
 )
-from storage.materialize.factor_matrix_materializer import (
+from factor_engine.storage.materialize.factor_matrix_materializer import (
     FactorMatrixMaterializer,
     FactorMatrixReadError,
 )
-from storage.materializer import ParquetMaterializer
+from factor_engine.storage.materializer import ParquetMaterializer
 
 pytest.importorskip("pandas")
 
@@ -363,7 +363,7 @@ def test_semantic_version_change_production_rejects_same_factor_id(tmp_path):
 
 
 def test_catalog_commit_failure_fail_closed_in_production(tmp_path, monkeypatch):
-    import runtime.incremental_scheduler as isch
+    import factor_engine.runtime.incremental_scheduler as isch
 
     def _boom(*a, **k):
         raise RuntimeError("sqlite full")
@@ -376,7 +376,7 @@ def test_catalog_commit_failure_fail_closed_in_production(tmp_path, monkeypatch)
 
 
 def test_catalog_commit_failure_research_only_warns(tmp_path, monkeypatch):
-    import runtime.incremental_scheduler as isch
+    import factor_engine.runtime.incremental_scheduler as isch
 
     def _boom(*a, **k):
         raise RuntimeError("sqlite full")
@@ -442,7 +442,7 @@ def test_edges_fallback_unknown_table_no_anchor_skips_or_fails():
     不了因子（增量重算静默失效）。新行为：research 跳过该 edge（warning），
     production fail-closed 抛 ``DependencyDatasetResolutionError``。
     """
-    from runtime.incremental_scheduler import DependencyDatasetResolutionError
+    from factor_engine.runtime.incremental_scheduler import DependencyDatasetResolutionError
 
     spec = SimpleNamespace(
         dataset=None,

@@ -1,0 +1,404 @@
+# -*- coding: utf-8 -*-
+"""Final operator-contract convergence.
+
+This layer does not register numerical kernels.  It normalises runtime
+validation and derives one machine-readable contract from the final registry,
+policy and evidence state after all backends have been registered.
+"""
+from __future__ import annotations
+
+from typing import Any
+
+import numpy as np
+
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+_APPLIED = False
+
+# The final contract layer may derive lookback / parameter / shape contracts but
+# must never alter these evidence-converged certification fields (review §2.7).
+IMMUTABLE_CERTIFICATION_FIELDS = frozenset(
+    {
+        "production_certified",
+        "operator_certification",
+        "pit_safe",
+        "status",
+        "lifecycle_status",
+        "semantic_pit_review_passed",
+        "implementation_certified",
+        "semantic_certified",
+        "temporal_certified",
+        "source_contract_certified",
+        "edge_case_passed",
+        "backend_passed",
+    }
+)
+
+_STATEFUL_CANONICALS = frozenset(
+    {
+        "ts_ema",
+        "ts_ewm_std",
+        "ts_ewm_var",
+        "ts_ewm_cov",
+        "ts_ewm_corr",
+        "RSI_WILDER",
+        "ATR_WILDER",
+        "ADX",
+        "MACD_line",
+        "MACD_signal",
+        "MACD_hist",
+        "ts_sma_cn",
+    }
+)
+
+# ``pit_safe`` is deliberately NOT corrected here: the final contract layer may
+# derive lookback / parameter / shape contracts but must never overwrite the
+# evidence-converged certification fields (review §2.7).
+_POLICY_CORRECTIONS = {
+    "ADX": {"scope": "ts", "min_periods": 2},
+    "MACD_line": {"scope": "ts", "min_periods": 1},
+    "MACD_signal": {"scope": "ts", "min_periods": 1},
+    "MACD_hist": {"scope": "ts", "min_periods": 1},
+    "lqtp_historical_cvar": {"scope": "ts", "min_periods": 1},
+    "ts_sma_cn": {"scope": "ts", "min_periods": 1},
+}
+
+_MIN_PERIODS_FLOORS = {
+    "ts_std": 2,
+    "ts_var": 2,
+    "ts_cov": 2,
+    "ts_corr": 2,
+    "ts_beta": 2,
+    "ts_autocorr": 2,
+    "ts_skew": 3,
+    "ts_kurt": 4,
+    "ts_regression_slope": 3,
+    "ts_regression_intercept": 3,
+    "ts_regression_resid": 3,
+    "ts_regression_r2": 3,
+    "ts_regression_tstat": 3,
+    "ts_partial_corr": 3,
+    "ts_topk_std": 2,
+    "ts_bottomk_std": 2,
+    # R20 pairwise ParamSpec repair: pairwise EWM needs >= 2 finite points.
+    "ts_ewm_corr": 2,
+    "ts_ewm_cov": 2,
+}
+
+_LOOKBACK_PARAM_PRIORITY = (
+    "window",
+    "periods",
+    "d",
+    "lag",
+    "n",
+    "max_lookback",
+    "slow_period",
+    "fast_period",
+    "signal_period",
+)
+
+
+def _correct_policy_metadata() -> None:
+    from factor_engine.cleaned_operators import operator_policy
+
+    explicit = operator_policy._EXPLICIT_POLICIES
+    for canonical, correction in _POLICY_CORRECTIONS.items():
+        current = dict(explicit.get(canonical) or {})
+        current.update(correction)
+        explicit[canonical] = current
+        catalog = OperatorRegistry._catalog.get(canonical)
+        if catalog is None:
+            continue
+        catalog["scope"] = {
+            "ts": "time_series",
+            "cs": "cross_sectional",
+        }.get(correction["scope"], correction["scope"])
+        catalog["min_periods"] = correction.get("min_periods")
+
+    for canonical, minimum in _MIN_PERIODS_FLOORS.items():
+        catalog = OperatorRegistry._catalog.get(canonical)
+        if catalog is None:
+            continue
+        previous = catalog.get("min_periods")
+        catalog["min_periods"] = max(
+            minimum,
+            int(previous) if isinstance(previous, (int, np.integer)) else minimum,
+        )
+
+
+def _declared_stateful_contract(canonical: str) -> dict[str, Any] | None:
+    """Operator-declared stateful contract (round-11 #12), if any."""
+    from factor_engine.runtime.execution_contract import execution_contract_overrides
+
+    declared = execution_contract_overrides().get(canonical)
+    if declared is None:
+        return None
+    catalog = OperatorRegistry._catalog.get(canonical) or {}
+    return {
+        "kind": "recursive_state",
+        "parameters": [
+            name for name in _LOOKBACK_PARAM_PRIORITY
+            if name in (catalog.get("param_names") or ())
+        ],
+        "state_model": declared.get("state_model"),
+        "chunking": declared.get("chunking"),
+        "history_kind": declared.get("history_kind"),
+        "requires_checkpoint_for_segments": declared.get("chunking") == "checkpoint",
+        "finite_warmup_is_approximation": True,
+    }
+
+
+def _lookback_contract(canonical: str, catalog: dict[str, Any]) -> dict[str, Any]:
+    params = tuple(catalog.get("param_names") or ())
+    scope = str(catalog.get("scope") or "unknown")
+    if scope == "fundamental_period":
+        return {
+            "kind": "fiscal_period",
+            "parameter": "periods" if "periods" in params else None,
+            "requires_period_id": True,
+            "revision_aware": True,
+        }
+    declared = _declared_stateful_contract(canonical)
+    if declared is not None:
+        return declared
+    if canonical in _STATEFUL_CANONICALS:
+        controlling = [name for name in _LOOKBACK_PARAM_PRIORITY if name in params]
+        return {
+            "kind": "recursive_state",
+            "parameters": controlling,
+            "requires_checkpoint_for_segments": True,
+            "finite_warmup_is_approximation": True,
+        }
+    if scope in {"time_series", "ts", "session_intraday"}:
+        controlling = [name for name in _LOOKBACK_PARAM_PRIORITY if name in params]
+        if canonical == "ts_days_since":
+            return {
+                "kind": "parameterized_rows",
+                "parameters": ["max_lookback"],
+                "inclusive_max_distance": True,
+                "unbounded_when_null": True,
+            }
+        expr = _ts_lookback_expression(controlling)
+        return {
+            "kind": "parameterized_rows" if controlling else "causal_unbounded",
+            "parameters": controlling,
+            "includes_current_bar": True,
+            # R11 P1-13: a RECOVERABLE formula, not just a param-name list.  The
+            # planner / evidence / incremental runtime can reconstruct the exact
+            # warm-up rows from ``expression`` + ``semantics`` without re-deriving
+            # the operator's per-op formula table.
+            "expression": expr,
+            "semantics": "exact_rows" if expr else "causal_unbounded",
+        }
+    return {"kind": "zero", "rows": 0}
+
+
+def _ts_lookback_expression(controlling: list[str]) -> str | None:
+    """Best-effort recoverable warm-up formula for a trailing-window operator.
+
+    R11 P1-13: ``window`` consumes ``window-1`` prior rows; an additional ``lag``
+    (or ``min_periods``-style lookback) adds its offset on top.  Only the
+    canonical trailing params map to a closed-form bar count — anything else
+    stays ``None`` (the declared ``rows`` floor / analyzer formula is authoritative).
+    """
+    if not controlling:
+        return None
+    if "window" in controlling:
+        extra = [p for p in ("lag", "delay", "horizon") if p in controlling]
+        if extra:
+            return f"window - 1 + {extra[0]}"
+        return "window - 1"
+    if len(controlling) == 1:
+        return f"{controlling[0]}"
+    return " + ".join(controlling)
+
+
+def _parameter_constraints(canonical: str) -> dict[str, Any]:
+    if canonical in {"ts_topk_std", "ts_bottomk_std"}:
+        return {"k": {"type": "integer", "minimum": 2}, "ddof": 1}
+    if canonical == "ts_days_since":
+        return {"max_lookback": {"type": "positive_integer_or_null", "inclusive": True}}
+    if canonical in {
+        "period_lag",
+        "period_change",
+        "period_average",
+        "period_cagr",
+        "quarter_from_cumulative",
+        "ttm_from_quarterly",
+        "ttm_from_cumulative",
+        "yoy_by_period",
+    }:
+        return {
+            "revision_policy": ["first_available", "latest_available"],
+            "require_consecutive": [False, True],
+        }
+    return {}
+
+
+def _derive_contracts() -> None:
+    from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
+    from factor_engine.cleaned_operators.operator_spec import infer_production_policy
+    from factor_engine.backend.primitive_evidence import POLARS_NO_FALLBACK_VERIFIED
+
+    scope_map = {"ts": "time_series", "cs": "cross_sectional"}
+    for canonical, implementations in OperatorRegistry._operators.items():
+        catalog = OperatorRegistry._catalog.setdefault(canonical, {})
+        preferred = implementations.get("pandas_numpy") or next(iter(implementations.values()))
+        policy = infer_operator_policy(preferred, canonical=canonical)
+        policy_scope = scope_map.get(policy.scope, policy.scope)
+        if policy_scope != "unknown":
+            catalog["scope"] = policy_scope
+        # Certification fields are immutable here: never overwrite the value
+        # converged by ``reconcile_operator_certification`` (review §2.7).
+        catalog.setdefault("pit_safe", bool(policy.pit_safe))
+        # Round-11 #12: statefulness comes from the operator's declared contract
+        # (or its checkpoint spec), NOT the hand-maintained name set alone.
+        catalog["stateful"] = bool(catalog.get("stateful")) or (
+            canonical in _STATEFUL_CANONICALS
+            or _declared_stateful_contract(canonical) is not None
+        )
+        lookback = _lookback_contract(canonical, catalog)
+        catalog["lookback_contract"] = lookback
+        catalog["lookback_param_names"] = list(lookback.get("parameters") or ())
+        catalog["parameter_constraints"] = _parameter_constraints(canonical)
+        catalog["contract_version"] = "2.1"
+
+        backend_meta = dict(catalog.get("backend_meta") or {})
+        signatures = {}
+        for backend, operator in implementations.items():
+            params = list(getattr(getattr(operator, "metadata", None), "param_names", None) or ())
+            signatures[backend] = params
+            meta = dict(backend_meta.get(backend) or {})
+            meta["param_names"] = params
+            if backend == "polars":
+                meta["no_fallback_runtime_verified"] = canonical in POLARS_NO_FALLBACK_VERIFIED
+                meta["production_native_source_of_truth"] = "verified_runtime_evidence"
+            backend_meta[backend] = meta
+        catalog["backend_meta"] = backend_meta
+        catalog["backend_signatures"] = signatures
+
+        production_policy = infer_production_policy(canonical)
+        contract = {
+            "version": "2.1",
+            "canonical": canonical,
+            "surface": catalog.get("surface", "unknown"),
+            "lifecycle_status": catalog.get("lifecycle_status", catalog.get("status", "research")),
+            "production_policy": production_policy,
+            "scope": catalog.get("scope", policy_scope),
+            "pit_safe": bool(catalog.get("pit_safe")),
+            "stateful": bool(catalog.get("stateful")),
+            "shape_preserving": bool(getattr(policy, "shape_preserving", True)),
+            "param_names": list(catalog.get("param_names") or ()),
+            "backend_signatures": signatures,
+            "backends": sorted(implementations),
+            "lookback": lookback,
+            "parameter_constraints": catalog["parameter_constraints"],
+            # R7-230/255/258: the unified logical contract is COMPLETE — it
+            # carries every contract field the registry persists so a serialised
+            # contract fully describes the canonical's logical semantics without
+            # consulting any separate catalog/manifest/backend source.  This is
+            # the single source both hardening layers and late sync consume.
+            "param_specs": dict(catalog.get("param_specs") or {}),
+            "panel_params": tuple(catalog.get("panel_params") or ()),
+            "scalar_params": tuple(catalog.get("scalar_params") or ()),
+            "param_aliases": dict(catalog.get("param_aliases") or {}),
+            "input_units": dict(catalog.get("input_units") or {}),
+            "output_unit": catalog.get("output_unit"),
+            "input_grain": catalog.get("input_grain"),
+            "output_grain": catalog.get("output_grain"),
+            "available_at": catalog.get("available_at"),
+            "same_session_usable": catalog.get("same_session_usable"),
+            "input_fields": list(catalog.get("input_fields") or ()),
+            "window_semantics": catalog.get("window_semantics"),
+            "relational_specs": [
+                {
+                    "expression": getattr(spec, "expression", ""),
+                    "message": getattr(spec, "message", None),
+                }
+                for spec in (catalog.get("relational_specs") or [])
+            ],
+        }
+        catalog["contract"] = contract
+        catalog["production_policy"] = production_policy
+
+
+def _validate_final_contracts() -> None:
+    errors: list[str] = []
+    for canonical, catalog in OperatorRegistry._catalog.items():
+        if canonical not in OperatorRegistry._operators:
+            continue
+        contract = catalog.get("contract") or {}
+        if not contract:
+            errors.append(f"{canonical}: missing unified contract")
+            continue
+        if contract.get("scope") == "unknown" and contract.get("surface") == "daily":
+            errors.append(f"{canonical}: daily operator has unknown scope")
+        if not contract.get("param_names") and canonical not in {"constant"}:
+            errors.append(f"{canonical}: missing parameter contract")
+        if not contract.get("lookback"):
+            errors.append(f"{canonical}: missing lookback contract")
+        # R7-258: catalog/policy min_periods split-brain.  The operator_policy
+        # ``_EXPLICIT_POLICIES`` and the registry catalog's ``min_periods`` (the
+        # value derived from ``_MIN_PERIODS_FLOORS`` / ``_policy_patch``) must
+        # agree on the warmup floor — a "catalog says 4, policy says 1" split
+        # makes kernel warmup != analyzer history.  Only check operators where
+        # BOTH declare a value; an undeclared policy is not a conflict.
+        try:
+            from factor_engine.cleaned_operators.operator_policy import _EXPLICIT_POLICIES
+
+            policy_floor = (_EXPLICIT_POLICIES.get(canonical) or {}).get("min_periods")
+            catalog_floor = catalog.get("min_periods")
+        except ImportError:  # pragma: no cover - operator_policy always importable
+            policy_floor = catalog_floor = None
+        if (
+            policy_floor is not None
+            and catalog_floor is not None
+            and int(policy_floor) != int(catalog_floor)
+        ):
+            errors.append(
+                f"{canonical}: min_periods split-brain — policy says "
+                f"{policy_floor} but catalog contract says {catalog_floor}"
+            )
+    if errors:
+        raise RuntimeError("operator contract convergence failed: " + "; ".join(errors[:20]))
+
+
+def _snapshot_certification_state() -> dict[str, dict[str, Any]]:
+    snapshot: dict[str, dict[str, Any]] = {}
+    for canonical, catalog in OperatorRegistry._catalog.items():
+        preserved = {
+            field: catalog.get(field)
+            for field in IMMUTABLE_CERTIFICATION_FIELDS
+            if field in catalog
+        }
+        if preserved:
+            snapshot[canonical] = preserved
+    return snapshot
+
+
+def _restore_certification_state(snapshot: dict[str, dict[str, Any]]) -> None:
+    for canonical, preserved in snapshot.items():
+        catalog = OperatorRegistry._catalog.get(canonical)
+        if catalog is None:
+            continue
+        for field, value in preserved.items():
+            catalog[field] = value
+
+
+def apply_final_contract_hardening() -> None:
+    global _APPLIED
+    if _APPLIED:
+        return
+    # Write-protect the evidence-converged certification fields across every
+    # contract-derivation code path (review §2.7).
+    snapshot = _snapshot_certification_state()
+    # R7-240: the late ``_install_polars_validation`` override is GONE.  Polars
+    # operators already route ``_prepare_call`` through the single central
+    # ``validate_operator_call`` (base_polars.py); installing a second, weaker
+    # per-file validator at the end of registry load re-weakened ParamSpec /
+    # typed-broadcast / active_when / axis validation for the Polars backend.
+    _correct_policy_metadata()
+    _derive_contracts()
+    _validate_final_contracts()
+    _restore_certification_state(snapshot)
+    _APPLIED = True

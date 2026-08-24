@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.capability_registry import (
+from factor_engine.backend.capability_registry import (
     BackendCapabilityRegistry,
     BackendKind,
     CapabilityLevel,
@@ -198,7 +198,7 @@ class TestUnifiedAuthority:
         )
 
         # Query through old interface
-        from backend.operator_capability import supports_polars as old_supports_polars
+        from factor_engine.backend.operator_capability import supports_polars as old_supports_polars
 
         old_result = old_supports_polars("add", mode="research")
 

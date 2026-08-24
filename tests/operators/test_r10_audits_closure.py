@@ -30,7 +30,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.operator_audits import (
+from factor_engine.cleaned_operators.operator_audits import (
     AuditResult,
     MetamorphicContract,
     audit_column_permutation,

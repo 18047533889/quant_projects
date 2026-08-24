@@ -514,6 +514,11 @@ def _build_gate_expectations() -> tuple[dict[str, set[str]], dict[str, str], dic
 # ---------------------------------------------------------------------------
 # R46 P0-X — consume the SINGLE authoritative gate truth verifier.
 # ---------------------------------------------------------------------------
+# R46 P0-X — authoritative status constants (module scope, refreshed lazily).
+_PASS: str = "PASS"
+_NA: str = "NOT_APPLICABLE"
+
+
 def _GateEvidenceVerifier():
     """Lazily import scripts.gate_evidence_verifier.GateEvidenceVerifier.
 
@@ -521,7 +526,12 @@ def _GateEvidenceVerifier():
     SUBMODULE_REACHABILITY can be judged NOT_APPLICABLE when the monorepo
     declares no gitlinks (R46 P0-29).
     """
-    from scripts.gate_evidence_verifier import GateEvidenceVerifier
+    global _PASS, _NA
+    from scripts.gate_evidence_verifier import (  # noqa: PLC0415
+        GateEvidenceVerifier,
+        PASS as _PASS,
+        NOT_APPLICABLE as _NA,
+    )
     n_gitlinks = len(_gitlinks_from_index(REPO_ROOT))
     return GateEvidenceVerifier(
         source_sha=None,
@@ -612,7 +622,7 @@ def apply_verified_evidence(gates: list[dict], verbose: bool = True) -> list[dic
     entries = _load_verified_evidence()
     if entries is None:
         return gates
-    expected_commands, _, _ = _build_gate_expectations()
+    expected_commands, skip_policies, allowed_skips = _build_gate_expectations()
     verifier = _GateEvidenceVerifier()
 
     # spec lookup for per-gate skip policy / commands.
@@ -642,10 +652,12 @@ def apply_verified_evidence(gates: list[dict], verbose: bool = True) -> list[dic
             spec=spec,
             entries=ev_items,
             live_command_hashes=live_hashes,
+            skip_policy=skip_policies.get(name),
+            allowed_skip_inventory=allowed_skips.get(name),
         )
         # R46 P0-29: a legitimate NOT_APPLICABLE satisfies the gate the same as
         # a PASS (the manifest records it with the reason as evidence).
-        if verdict.status == PASS or verdict.status == NOT_APPLICABLE:
+        if verdict.status == _PASS or verdict.status == _NA:
             g["status"] = verdict.status
             g["evidence"] = [
                 {"test": e.get("test") or "", "command_hash": str(e.get("command_hash") or ""),
@@ -655,7 +667,7 @@ def apply_verified_evidence(gates: list[dict], verbose: bool = True) -> list[dic
                  "executed_at": e.get("executed_at") or "", "run_at": e.get("run_at") or ""}
                 for e in ev_items
             ] or [{"note": verdict.reason_text()}]
-            if verdict.status == NOT_APPLICABLE:
+            if verdict.status == _NA:
                 g["evidence"] = [{"note": verdict.reason_text(),
                                   "reason": verdict.reason_text()}]
             applied.append(f"{name}({verdict.status})")

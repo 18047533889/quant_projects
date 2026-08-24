@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from backend.sql_pushdown.duckdb_performance import DuckDBParallelConfig
+from factor_engine.backend.sql_pushdown.duckdb_performance import DuckDBParallelConfig
 
 
 class QueryComplexity(Enum):

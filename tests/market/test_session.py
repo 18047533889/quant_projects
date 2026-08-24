@@ -6,7 +6,7 @@ from datetime import datetime
 
 import pytest
 
-from market import ASHARE_SESSION, US_SESSION, session_for
+from factor_engine.market import ASHARE_SESSION, US_SESSION, session_for
 
 
 def test_ashare_240_bar_session() -> None:
@@ -43,7 +43,7 @@ def test_session_serialization() -> None:
 
 
 def test_session_contracts_align_with_context() -> None:
-    from market import ASHARE_CONTEXT, US_CONTEXT
+    from factor_engine.market import ASHARE_CONTEXT, US_CONTEXT
 
     assert ASHARE_CONTEXT.session_id == ASHARE_SESSION.session_id
     assert US_CONTEXT.session_id == US_SESSION.session_id
@@ -64,7 +64,7 @@ def test_slot_for_timestamp_tz_aware_required() -> None:
 
 
 def test_session_for_date_early_close_aware() -> None:
-    from market import session_for_date
+    from factor_engine.market import session_for_date
 
     spec = session_for_date("us", "2024-01-02")
     assert spec.session_id == "US_REGULAR"

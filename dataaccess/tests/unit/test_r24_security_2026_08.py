@@ -399,7 +399,7 @@ def test_ts13_derived_factor_denied(tmp_path):
     # 给 store 挂一个带 namespace 限制的 policy
     policy = AccessPolicy(
         allowed_datasets=frozenset({"factor_lake"}),
-        allowed_factor_namespaces=frozenset({"market.basic"}),
+        allowed_factor_namespaces=frozenset({"factor_engine.market.basic"}),
         allowed_actions=frozenset({"factor:list", "factor:read"}),
     )
     principal = DataPrincipal(principal_id="basic", server_id="basic")

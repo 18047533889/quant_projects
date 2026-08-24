@@ -5,13 +5,13 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from api import ts_mean
-from api.columns import col
-from api.factor import Factor
-from backend.context import ExecutionContext
-from backend.panel_polars import is_polars_frame, panel_to_polars
-from backend.polars_backend import PolarsBackend
-from runtime.engine import FactorEngine
+from factor_engine.api import ts_mean
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.backend.panel_polars import is_polars_frame, panel_to_polars
+from factor_engine.backend.polars_backend import PolarsBackend
+from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 

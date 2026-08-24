@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.fundamental.fiscal_batch1 import (
+from factor_engine.cleaned_operators.fundamental.fiscal_batch1 import (
     pd_fiscal_acceleration,
     pd_fiscal_pct_change,
     pd_fiscal_rolling_std,
@@ -397,7 +397,7 @@ def test_polars_backend_availability():
     """Test that Polars backend is registered when available."""
     try:
         import polars as pl
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         # Check that polars backend exists
         backends = OperatorRegistry.list_backends("fiscal_acceleration")
@@ -410,7 +410,7 @@ def test_polars_backend_availability():
 
 def test_operator_registration():
     """Test that operators are registered correctly."""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     operators = [
         "fiscal_acceleration",
@@ -429,7 +429,7 @@ def test_operator_registration():
 
 def test_extended_surface_registration():
     """Test that operators are on the extended surface."""
-    from cleaned_operators import operator_surface
+    from factor_engine.cleaned_operators import operator_surface
 
     extended = operator_surface.extended_only_canonicals()
 
@@ -447,7 +447,7 @@ def test_extended_surface_registration():
 
 def test_explicit_policies():
     """Test that explicit policies are declared."""
-    from cleaned_operators.fundamental.fiscal_batch1 import _EXPLICIT_POLICIES
+    from factor_engine.cleaned_operators.fundamental.fiscal_batch1 import _EXPLICIT_POLICIES
 
     operators = [
         "fiscal_acceleration",

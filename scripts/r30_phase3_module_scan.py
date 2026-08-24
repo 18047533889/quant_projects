@@ -16,9 +16,9 @@ sys.path.insert(0, ".")
 
 # Import in the same order as the loader but STOP before the promotion layers
 # mutate statuses, so we observe the RAW registered lifecycle.
-import cleaned_operators as co
+import factor_engine.cleaned_operators as co
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 # Snapshot raw registered statuses the same way _load_all_impl does (the loader
 # snapshots BEFORE dedupe/hardening rewrite statuses).

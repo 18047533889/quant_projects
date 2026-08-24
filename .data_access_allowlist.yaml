@@ -1,0 +1,388 @@
+# ============================================================================
+# data_access 禁用例外清单
+# ----------------------------------------------------------------------------
+# 团队规范：业务代码一律走 data_access.store，不得直接 import duckdb /
+# pd.read_parquet / pyarrow.parquet.read_table。
+#
+# 但是有一批文件必须豁免，要么是 data_access 自己的实现，要么是真有
+# 「按文件逐个读」的 pipeline 语义，走 data_access 会引入无谓的抽象开销。
+# 这份清单就是把这些例外显式登记下来；PR6 的静态检查（scripts/check_data_access_allowlist.py
+# + pre-commit hook）把「import duckdb」「pd.read_parquet」「pq.read_table」
+# 都列为禁用 API，豁免靠本文件。
+#
+# 新增豁免 = 提 PR，在本清单补一行 + 说明理由。评审人要把关，尽量不开口子。
+# 规划路径：
+#   - PR4 ✅：先把 streaming/raw 数据源登记到 datasets.yaml
+#   - PR5 ✅：登记 daily_market_summary / stocks_floats；能迁的（factor_evaluation/io.py、
+#            multiple_factor_composite/factor_reader.py、factor_panel.py）迁到 store；
+#            明确不能迁的（业务自定义路径、中间产物、NQ 期货、demo 自造数据）永久豁免
+#   - PR6 ✅：开启静态检查，拒绝清单外的直读 + per-operator 查询配额和慢查询告警
+#   - PR7+：factor_engine 下线 → data_access；Polars lazy；read_arrow_stream 迭代
+# ============================================================================
+
+
+# ============================================================================
+# A. data_access 自己的实现：不迁（自循环）
+# ============================================================================
+- path: data_access/core/engine.py
+  reason: "DuckDB 引擎封装本体，`import duckdb` + `duckdb.connect` 的唯一合法落点"
+- path: data_access/core/duckdb_config.py
+  reason: "DuckDB PRAGMA 配置模块，供 engine 与 isolated connection 复用"
+- path: data_access/store.py
+  reason: "data_access 实现本体，内部 build SQL + 调 DuckDB"
+- path: data_access/write/publish.py
+  reason: "publish 流程要直读 parquet 做行数校验，不能递归自己调 read_arrow"
+- path: data_access/read/stats.py
+  reason: "dataset footer 行数估算需 pq.read_metadata，与 publish 同类只读 footer"
+- path: data_access/r30/lineage.py
+  reason: "R30-P1-019 LineageStore：可查询 lineage 的 DuckDB 索引本体（R30 明示允许 DuckDB/SQLite/Parquet index），与 store.py 同类不自循环"
+- path: data_access/write/upsert.py
+  reason: "upsert 需要读已有 partition 做 merge，调 store.read_arrow 会绕一大圈"
+- path: data_access/write/generation.py
+  reason: "R27-G generation 原子代写本体：hive 分区 data.parquet 直写 + manifest.json 单指针 flip（与 publish 同类，不能递归调自己）"
+- path: data_access/read/sql_escape.py
+  reason: "有限 SQL 逃生口的实现本体"
+- path: data_access/cos/remote.py
+  reason: "COS remote 模式用 isolated DuckDB 连接做 S3 路径探测，不走 store 读路径"
+- path: data_access/service/app.py
+  reason: "HTTP 读数服务：Arrow IPC / Parquet 序列化响应体"
+- path: data_access/service/client.py
+  reason: "HTTP 客户端：解析远程 Parquet 响应为 Arrow Table"
+- path: data_access/__init__.py
+  reason: "docstring 里解释禁令本身"
+- path: data_access/tests/**
+  reason: "测试需要直接构造 parquet 作为 fixture"
+
+
+# ============================================================================
+# B. 流式写：各自原子协议（append-only/tmp+rename），不走 write_arrow
+# ============================================================================
+- path: streaming/persistence/bar_writer.py
+  reason: "BarWriter 自己的 tmp+rename + pd.read_parquet 做去重 merge"
+- path: streaming/persistence/factor_writer.py
+  reason: "FactorWriter 自己的 merge 协议，streaming 场景调度更严格"
+- path: streaming/data/tick_writer.py
+  reason: "TickWriter append + dedup，高频写路径"
+- path: streaming/data/massive_tick_writer.py
+  reason: "历史 tick 的镜像写入，按 massive_parquet 路径 1:1 对齐"
+- path: streaming/data/direct_tick_writer.py
+  reason: "最精简的写入器，给 backfill 用"
+- path: streaming/data/historical_data.py
+  reason: "回填时读原始 parquet，需要精细化按 symbol/日期读"
+- path: streaming/factors/factor_stream_manager.py
+  reason: "append-only 因子流落盘；读侧下游走 data_access.factor_values_stream"
+- path: streaming/core/backfill.py
+  reason: "回填过程中的直接读"
+
+
+# ============================================================================
+# C. raw 层清洗：per-file 遍历是设计，data_access 是 glob 聚合，不匹配
+# ============================================================================
+- path: raw_data_layer/raw_data_cleaning/massive_cleaning_framework.py
+  reason: "清洗框架逐文件 read→clean→write，data_access 的 glob 语义不适用"
+- path: raw_data_layer/raw_data_fetching/validate_parquet.py
+  reason: "校验单文件 schema/行数，必须能指定具体文件"
+- path: raw_data_layer/raw_data_fetching/download_all_history.py
+  reason: "下载工具的本地校验步骤"
+- path: raw_data_layer/raw_data_fetching/download_history.py
+  reason: "下载工具的本地校验步骤"
+- path: raw_data_layer/data_daily_update/**
+  reason: "日更 pipeline 直读直写 parquet，上游数据入口层"
+
+
+# ============================================================================
+# C2. factor_evaluation_alphapurify：历史评估模块，内部 DuckDB/Parquet IO
+# ============================================================================
+- path: factor_layer/factor_evaluation_alphapurify/**
+  reason: "AlphaPurify 评估栈本体，含 DuckDB 缓存与 parquet 物化"
+
+
+# ============================================================================
+# D. factor_engine 内部存储层：materializer / ParquetSource 是 data_access 的底层
+#    PR7+ 会把 factor_engine 整体改造成 store 的 thin wrapper，这批随之下线
+# ============================================================================
+- path: factor_layer/factor_engine/storage/materializer.py
+  reason: "因子物化的底层，PR3 起 upsert 已抽到 data_access.upsert，下一步移除"
+- path: factor_layer/factor_engine/storage/kline_parquet_source.py
+  reason: "PR1 之前的读取层，切到 store.read_arrow 后移除"
+- path: factor_layer/factor_engine/tests/**
+  reason: "测试 fixture 需要构造 parquet"
+# quant_projects 扁平布局（factor_engine 在仓库根下，非 factor_layer/ 内）
+- path: factor_engine/storage/materializer.py
+  reason: "因子物化底层；quant_projects 布局"
+- path: factor_engine/storage/kline_parquet_source.py
+  reason: "Parquet 读取层；quant_projects 布局"
+- path: factor_engine/storage/parquet_source.py
+  reason: "DuckDB 批量读 parquet；DataAccessSource 的底层实现之一"
+- path: factor_engine/storage/result_store.py
+  reason: "读因子 lake 落盘结果；物化输出非 registry dataset"
+- path: factor_engine/tests/**
+  reason: "测试 fixture 需要构造 parquet"
+- path: factor_engine/storage/cache.py
+  reason: "PersistentPlanCache 磁盘层读写 plan 子树 parquet；执行期缓存非 registry dataset"
+- path: factor_engine/runtime/snapshot_reconcile.py
+  reason: "data_snapshot_id 对账读 materializer 本地 lake 分区 parquet；物化输出非 registry dataset"
+- path: factor_engine/storage/lake_version.py
+  reason: "因子湖版本 diff/回滚读本地 factors/<id>/year=*/data.parquet；与 materializer 落盘路径一致"
+- path: factor_engine/storage/lake_publish.py
+  reason: "发布前同步本地 materializer 目录到 staging；读 parquet footer 统计行数"
+- path: factor_engine/storage/staging_loader.py
+  reason: "staging 行级补偿删除：按 materializer 落盘分区读改写 parquet；非 registry dataset"
+- path: factor_engine/storage/schema_migration.py
+  reason: "因子湖 metadata 列迁移 CLI；读写 materializer 落盘路径 factors/<id>/year=*/data.parquet，非 registry dataset"
+- path: factor_engine/scripts/migrate_factor_lake_schema.py
+  reason: "因子湖 schema 迁移 CLI 入口；委托 schema_migration 读改写本地 lake 分区"
+- path: data_access/clickhouse/write.py
+  reason: "ClickHouse 物化读本地 parquet 单文件；CH ETL 专用路径，非 registry dataset"
+- path: dataaccess/clickhouse/write.py
+  reason: "ClickHouse 物化读本地 parquet 单文件；CH ETL 专用路径，非 registry dataset"
+- path: dataaccess/scripts/compact_dataset.py
+  reason: "小文件 compaction 维护工具：读本地 parquet 重写成大文件（非读路径 consumer）"
+- path: dataaccess/core/duckdb_config.py
+  reason: "DuckDB PRAGMA 配置模块，供 dataaccess engine 复用"
+- path: dataaccess/core/engine.py
+  reason: "DuckDB 引擎封装本体，import/connect 是唯一合法落点"
+- path: dataaccess/cos/remote.py
+  reason: "COS remote 模式使用隔离 DuckDB 连接探测 S3 路径"
+- path: dataaccess/quality/cli.py
+  reason: "质量 CLI 直接读取待检查 parquet 文件"
+- path: dataaccess/read/stats.py
+  reason: "dataset footer 行数估算需要 pq.read_table"
+- path: dataaccess/r30/lineage.py
+  reason: "R30-P1-019 LineageStore 可查询 lineage 的 DuckDB 索引本体（R30 明示允许 DuckDB/SQLite/Parquet index），不自循环"
+- path: dataaccess/service/app.py
+  reason: "HTTP 服务序列化 Arrow/Parquet 响应"
+- path: dataaccess/service/client.py
+  reason: "HTTP 客户端解析远程 Parquet 响应"
+- path: dataaccess/store.py
+  reason: "dataaccess 实现本体，内部原子写入 parquet"
+- path: dataaccess/write/upsert.py
+  reason: "upsert 读取已有分区并原子写回"
+- path: dataaccess/write/publish.py
+  reason: "publish 校验 unique_key / 行数需直读 parquet + DuckDB（_validate_unique_key），不能递归调 read_arrow"
+- path: dataaccess/write/generation.py
+  reason: "R27-G generation 原子代写本体：hive 分区 data.parquet 直写 + manifest.json 单指针 flip（与 publish/upsert 同类，不能递归调自己）"
+- path: dataaccess/core/duckdb_capabilities.py
+  reason: "dataaccess 自身实现：DuckDB 版本能力探测（import duckdb 读版本）"
+- path: dataaccess/core/retry.py
+  reason: "dataaccess 自身实现：ExceptionClassifier 需要 duckdb.Error 判断瞬时/致命错误是否可重试"
+- path: dataaccess/read/formats.py
+  reason: "dataaccess 自身实现：格式适配层，arrow/feather 直读（pyarrow feather/ipc）"
+- path: dataaccess/read/manifest.py
+  reason: "dataaccess 自身实现：数据集 manifest 读写 parquet footer（pq.read_table/read_metadata）"
+- path: dataaccess/read/read_handle.py
+  reason: "dataaccess 自身实现：统一读句柄（无禁用 API，登记以防误报）"
+- path: dataaccess/read/scan_cost.py
+  reason: "dataaccess 自身实现：读路径成本估算（无禁用 API）"
+- path: dataaccess/read/session_calendar.py
+  reason: "dataaccess 自身实现：交易所 session/交易日历（#46），仅导入标准库与 pandas"
+- path: dataaccess/read/physical_plan.py
+  reason: "dataaccess 自身实现：物理计划 DAG（#4），纯编译不读文件"
+- path: dataaccess/read/pit_event_index.py
+  reason: "dataaccess 自身实现：美股财务 PIT 物理索引（#8），构建时 pq.read_table 读取列"
+- path: dataaccess/read/contract_ir.py
+  reason: "dataaccess 自身实现：Contract IR 编译器（#12），只编译不读文件"
+- path: dataaccess/read/coverage.py
+  reason: "dataaccess 自身实现：覆盖/完整性报告（#14），glob() 枚举文件"
+- path: dataaccess/read/sql_escape.py
+  reason: "SQL 逃生口实现本体（有限只读沙箱）：#P1-final closure 23 parser 级函数 allowlist 用隔离 :memory: DuckDB 连接读 duckdb_functions() 注册表（只读 introspection，不读数据）"
+- path: dataaccess/cos/serving.py
+  reason: "dataaccess 自身实现：serving 层预聚合（#30），read_parquet + groupby 聚合"
+- path: dataaccess/read/query_cache.py
+  reason: "dataaccess 自身实现：查询结果缓存（#25），无禁用 API"
+- path: dataaccess/scripts/audit_contract_ir.py
+  reason: "dataaccess 自身实现：Contract IR 审计脚本（#12），只编译不读文件"
+- path: factor_engine/runtime/intermediate_registry.py
+  reason: "factor_engine 独立下线计划（PR7 factor_engine→data_access）；迁移完成前暂豁免"
+- path: factor_engine/scripts/calibrate_backend_costs.py
+  reason: "factor_engine 校准脚本，独立 DuckDB 会话基准测试；迁移前暂豁免"
+- path: factor_engine/scripts/certify_intraday_parity.py
+  reason: "factor_engine 校验脚本，独立 DuckDB 会话；迁移前暂豁免"
+- path: factor_engine/scripts/compare_lqtp_golden.py
+  reason: "factor_engine golden 对比脚本；迁移前暂豁免"
+- path: factor_engine/storage/sources/lqtp_logical_source.py
+  reason: "factor_engine 数据源层；迁移前暂豁免"
+- path: ".replace_backup_20260802_181017/**"
+  reason: "临时备份目录，不参与检查"
+- path: dataaccess/benchmarks/**
+  reason: "基准脚本：对比各基础引擎（duckdb/polars/pyarrow），直读 parquet 是 benchmark 本身语义"
+- path: scripts/verify_gtja191_factor_lake.py
+  reason: "GTJA191 factor lake 结构审计 + 重算对比；按 factors/<id>/year=*/data.parquet 逐分区读，非 registry dataset"
+- path: factor_engine/backend/fastpath_plan_probe.py
+  reason: "执行计划探测工具；隔离 DuckDB 探测 fastpath 能力，非生产读路径"
+- path: factor_engine/backend/sql_pushdown/duckdb_capabilities.py
+  reason: "SQL 下推能力探测；进程内 :memory: DuckDB 探针，非 data_access 读路径"
+- path: factor_engine/benchmarks/**
+  reason: "算子 benchmark 自造 panel parquet fixture，非 registry dataset"
+- path: factor_engine/runtime/reconcile/snapshot_reconcile.py
+  reason: "data_snapshot_id 对账读 materializer 本地 lake 分区 parquet；物化输出非 registry dataset"
+- path: factor_engine/storage/materialize/**
+  reason: "因子物化落盘读写本地 factors/<id>/ 分区；materializer 底层 IO，非 registry dataset"
+- path: factor_engine/storage/sources/kline_parquet_source.py
+  reason: "legacy K 线按文件读；PR7+ 切 DataAccessSource 后下线"
+- path: factor_engine/storage/sources/parquet_source.py
+  reason: "legacy DuckDB 批量读 parquet；DataAccessSource 底层实现之一"
+- path: factor_engine/storage/sources/staging_loader.py
+  reason: "staging 行级补偿删除：按 materializer 落盘分区读改写 parquet；非 registry dataset"
+
+
+# ============================================================================
+# E. 业务方自定义路径 / 中间产物：用户传任意路径，不适合按 dataset 登记
+# ----------------------------------------------------------------------------
+# 这批文件的共同特点：调用方传 config.path / config.data_root（而不是 dataset 名），
+# 或读的是自身 pipeline 上一步产出的中间文件（signal、holdings、backtest 输出、
+# barra_model 中间产物）。这些东西**不是数据湖数据**，不应强行登记；
+# 保留任意文件路径 + pd.read_parquet 是正确的语义。
+# ============================================================================
+- path: strategy_layer/portfolio_alpha/transformer_demo/io_utils.py
+  reason: "KlineInputConfig.path 由用户传任意 K 线目录/文件，不是固定 dataset"
+- path: strategy_layer/portfolio_alpha/holdings_gen/pipeline.py
+  reason: "读上游 composite pipeline 产的 signal 中间产物"
+- path: strategy_layer/portfolio_alpha/holdings_gen/optimizer.py
+  reason: "读 barra_model 落盘的中间产物（factor_covariance/specific_risk/...）"
+- path: strategy_layer/portfolio_alpha/risk/barra_model/barra_data.py
+  reason: "CLI 驱动，读 factor/market/cap 任意 parquet 路径做 cleaning"
+- path: strategy_layer/portfolio_alpha/risk/barra_model/barra_risk.py
+  reason: "读上一步 barra_data 清洗后的中间产物做协方差/特异风险拟合"
+- path: strategy_layer/portfolio_alpha/risk/barra_model/benchmark_total_risk.py
+  reason: "benchmark 脚本，读 barra 中间产物（含硬编码 Windows 路径）"
+- path: strategy_layer/portfolio_alpha/risk/barra_model/Mock_generator/alpha_generate.py
+  reason: "mock 脚本，读 cleaned_factors 中间产物造 alpha_vector"
+- path: strategy_layer/portfolio_alpha/risk/barra_model/Mock_generator/factor_generate.py
+  reason: "mock 脚本，读 daily_market_summary 造 mock 因子"
+- path: strategy_layer/portfolio_alpha/risk/barra_model/Mock_generator/optimization.py
+  reason: "mock 脚本，读 barra 中间产物跑 cvxpy"
+- path: strategy_layer/portfolio_alpha/risk/barra_model/test/test_project_inputs.py
+  reason: "测试 fixture 需要 tmp_path 构造 parquet"
+- path: factor_layer/factor_evaluation/io.py
+  reason: "factor_lake 读已走 strategy_layer.data.load_factor_long（PR5 迁完）；market/universe 读用户任意路径（SourceConfig.market_data_path / universe_path）保留直读"
+- path: strategy_layer/portfolio_alpha/multiple_factor_composite/factor_reader.py
+  reason: "factor_lake 读已走 load_factor_long/build_factor_panel（PR5 迁完）；AuxiliaryParquetLoader 读用户任意路径（AuxiliarySourceConfig.path）保留直读"
+- path: strategy_layer/data/market_data.py
+  reason: "aggregate_bars 模式已走 get_shared_engine（PR5）；_read_table 支持用户任意 OHLCV 路径（source_path/data_root 模式，CSV 或 parquet），本地缓存也直写 parquet——保留直读/直写"
+- path: strategy_layer/portfolio_alpha/transformer_demo/dataset.py
+  reason: "Transformer demo 自造数据集中间产物（用户任意 dataset_path），非数据湖"
+- path: strategy_layer/portfolio_alpha/transformer_demo/workflow.py
+  reason: "Transformer demo 写 summary / leaderboard / 中间 parquet 到用户自选目录"
+- path: strategy_layer/single_asset_alpha/pipeline.py
+  reason: "单标的 alpha pipeline 中间产物落盘（用户自选路径，不是数据湖 dataset）"
+- path: strategy_layer/single_asset_alpha/mock_delivery.py
+  reason: "Mock 交付脚本，自造 parquet 用于下游 demo"
+- path: strategy_layer/single_asset_alpha/examples/**
+  reason: "single_asset_alpha 示例脚本：构造 factor_lake mock 目录给 demo 用"
+
+
+# ============================================================================
+# J. pipeline 中间产物输出：用户自选 output_dir，不是数据湖登记对象
+# ----------------------------------------------------------------------------
+# 这批和 E 性质类似，但主要是「写中间结果给下游读」。它们写出去的 parquet 不进
+# factor_lake，而是 pipeline 自己的 output 目录——用户自选路径，不登记为 dataset。
+# ============================================================================
+- path: factor_layer/factor_evaluation/pipeline.py
+  reason: "factor_evaluation pipeline 把 IC / 分位 / 回测 结果写到 output_dir（用户任意）"
+- path: strategy_layer/portfolio_alpha/multiple_factor_composite/pipeline.py
+  reason: "composite pipeline 写 signal 中间产物到用户自选目录"
+
+
+# ============================================================================
+# K. 测试夹具：所有 tests/ 下的文件构造 parquet fixture
+# ----------------------------------------------------------------------------
+# 业务代码层面的测试需要写 parquet 到 tmp_path 做 fixture。测试里直接用
+# `frame.to_parquet(...)` 是预期行为，不走 data_access。
+# 用 glob 一次覆盖，避免为每个测试文件单独登记。
+# ============================================================================
+- path: "**/tests/**"
+  reason: "所有测试目录：tmp_path fixture 构造 parquet，不走 data_access"
+- path: "**/test/**"
+  reason: "某些模块的测试目录叫 test（单数），同上"
+
+
+# ============================================================================
+# F. 期货/非主流数据源：datasets.yaml 未登记，业务方法未收敛
+# ============================================================================
+- path: factor_layer/factor_indicators_lysj/factor_evaluation_framework.py
+  reason: "本地实验：读同目录 NQ 期货分钟线 + factor_output，不属于数据湖登记对象"
+- path: factor_layer/factor_indicators_lysj/factor_vwap_reversion.py
+  reason: "本地实验：读 NQ 期货分钟线，未登记为标准 dataset"
+
+
+# ============================================================================
+# G. demo 脚本：自己造 mock 数据再读回来校验
+# ----------------------------------------------------------------------------
+# demo 的本质是 "造数据 → 跑 pipeline → 读回来看结果"。造的数据不进数据湖，
+# 读端也就只能拼路径读回来。这类脚本保持直读是合理的。
+# ============================================================================
+- path: demo/all_pipeline_demo/run_all_pipeline_demo.py
+  reason: "demo 自造 mock K 线 + 读 pipeline 中间产物"
+- path: demo/all_pipeline_single_asset_demo/run_single_asset_pipeline_demo.py
+  reason: "demo 自造 mock K 线 + 读 pipeline 中间产物"
+- path: demo/portfolio_demo/portfolio_end_to_end_demo.py
+  reason: "portfolio demo 自造 mock factor_lake + mock K 线"
+
+
+# ============================================================================
+# H. 尚未评估 / 待 PR7+ 迁移（短期保留直读，长期目标是迁 store）
+# ----------------------------------------------------------------------------
+# 这批属于「应该迁但迁移成本大于 PR5 预算」。PR7+ 规划里再集中处理。
+# ============================================================================
+- path: strategy_layer/single_asset_alpha/data_loader/fetcher.py
+  reason: "K线 + 因子读取混合；含 row-group pushdown 过滤，待 store 端支持按 symbol 精筛后再迁"
+- path: strategy_layer/portfolio_alpha/risk/barra_model/barra_model_run.py
+  reason: "编排器，自身无 IO；但依赖 project_inputs / barra_data 先迁完"
+- path: strategy_layer/portfolio_alpha/risk/barra_model/project_inputs.py
+  reason: "读 factor_lake + daily_market_summary + stocks_floats；PR5 登记了后两个 dataset，具体迁移留到 PR7"
+- path: backtest_layer/single_asset_backtest/io.py
+  reason: "读 target_position（任意路径）+ OHLCV（走 strategy_layer.data），待 strategy_layer.data 内部迁完"
+- path: backtest_layer/portfolio_backtest/config_runner.py
+  reason: "读 config.inputs 里 4 个 table（holdings/kline/tradable/benchmark），kline 可迁，其余是任意路径"
+
+
+# ============================================================================
+# I. PR5 已完成迁移：这些文件已切到 data_access.get_shared_engine()
+# ----------------------------------------------------------------------------
+# 此节只是元信息，便于 code review 追溯。静态检查（PR6）只识别 `- path: xxx`
+# 条目；下面的 pr5_migrated 是 list-of-strings，check 脚本会忽略。
+# 注：factor_evaluation/io.py 与 factor_reader.py 的 factor_lake 读已走 store，
+# 但两者还保留用户任意路径的 pd.read_parquet（market/universe/auxiliary），
+# 因此仍需在上面的 E 节登记豁免。这里记录的是「核心读路径已迁」这个事实。
+# ============================================================================
+# pr5_migrated:
+#   - factor_layer/factor_evaluation/io.py          # factor_lake → load_factor_long（走 shared engine）
+#   - strategy_layer/portfolio_alpha/multiple_factor_composite/factor_reader.py  # 同上
+#   - strategy_layer/data/factor_panel.py           # load_factor_long 本体 → get_shared_engine()
+#   - strategy_layer/data/market_data.py            # aggregate_bars_daily_summary → get_shared_engine()
+
+
+# ============================================================================
+# L. cogalpha_lqtp 生产脚本：读写 pipeline 中间产物 / 本地 cache，非 registry dataset
+# ============================================================================
+- path: scripts/cogalpha_lqtp/**
+  reason: "LQTP 生产 pipeline：物化 long parquet、eval cache、bootstrap mock 数据到用户自选 output_dir；中间产物不进 data_access registry"
+
+
+# ============================================================================
+# M. AutoFactorEvaluation-RECONSTRUCT：独立评估栈，staging/worker 直读写中间 parquet
+# ============================================================================
+- path: AutoFactorEvaluation-RECONSTRUCT/**
+  reason: "因子评估重构实验栈：assetization/evaluation/purification worker 按任务目录读写 staging parquet，非 data_access registry dataset"
+
+
+# ============================================================================
+# N. FactorEngine 证据/校准/评估脚本（R25 §49：禁生产 source path 裸读；独立
+#    评估脚本按文件读原始证据 parquet，非 FactorEngine DataAccessSource 生产路径）
+# ============================================================================
+- path: factor_engine/runtime/runtime_calibration.py
+  reason: "运行时校准：直读证据 parquet 做基准对齐，非生产 DataAccessSource 路径"
+- path: factor_engine/scripts/certify_factor_operator_evidence.py
+  reason: "算子证据认证脚本：按文件读证据 parquet 核验（R25 §49 豁免——独立认证流程）"
+- path: factor_engine/scripts/certify_primitive_evidence.py
+  reason: "原语证据认证脚本：按文件读证据 parquet 核验（R25 §49 豁免——独立认证流程）"
+
+
+# ============================================================================
+# O. R26 DataAccess 内部 runtime gate（R26-P0-022：跨 epoch schema evolution）
+#    读 parquet footer 元数据（不读数据）做跨 epoch schema 契约校验，是
+#    DataAccess 正式读路径的一部分，不是裸读旁路。
+# ============================================================================
+- path: dataaccess/read/schema_epoch.py
+  reason: "R26-P0-022 跨 epoch schema gate：pq.ParquetFile 读 footer 元数据校验字段存在性/dtype 兼容，属 DataAccess 内部运行时门禁"

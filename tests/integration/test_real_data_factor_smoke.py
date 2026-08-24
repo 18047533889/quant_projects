@@ -12,7 +12,7 @@ from tests.helpers import FE_ROOT as PROJECT_ROOT
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from runtime.real_data_factor_smoke import DATASET_SPECS, run_dataset_factor_smoke
+from factor_engine.runtime.real_data_factor_smoke import DATASET_SPECS, run_dataset_factor_smoke
 from workspace_paths import resolve_path
 
 MASSIVE_ROOT = resolve_path(

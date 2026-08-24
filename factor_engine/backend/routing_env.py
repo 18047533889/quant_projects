@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from runtime.perf_config import PerfConfig
+    from factor_engine.runtime.perf_config import PerfConfig
 
 
 @contextmanager

@@ -26,7 +26,7 @@ from typing import Any
 
 import numpy as np
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 from .long_frame import (
     LongFrameResult,
@@ -193,7 +193,7 @@ _EXPANDING_WINDOW = 100_000
 
 def _resolve(op: str) -> str:
     """解析算子别名至 canonical 名称。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     return OperatorRegistry._aliases.get(op, op)
 
@@ -205,19 +205,19 @@ def _window_int(node: PlanNode, default: int = 3) -> int:
 
 def _window_spec(node: PlanNode, default: int = 3):
     """完整 WindowSpec（min_periods / ddof / closed）。"""
-    from backend.plan_params import window_spec_from_plan_node
-    from backend.window_spec import WindowSpec
+    from factor_engine.backend.plan_params import window_spec_from_plan_node
+    from factor_engine.backend.window_spec import WindowSpec
 
     spec = window_spec_from_plan_node(node, default=default)
     if spec.closed != "right":
-        from backend.plan_params import PlanParamError
+        from factor_engine.backend.plan_params import PlanParamError
 
         raise PlanParamError(f"closed={spec.closed!r} 暂未支持，仅 right")
     return spec
 
 
 def _ewm_alpha(node: PlanNode, default_span: int = 20) -> float:
-    from backend.ewm_spec import EwmSpec
+    from factor_engine.backend.ewm_spec import EwmSpec
 
     return EwmSpec.from_plan_node(node, default_span=default_span).alpha
 
@@ -286,7 +286,7 @@ def _scale_to_value(node: PlanNode, default: float = 1.0) -> float:
 
 def _float_attr(node: PlanNode, *keys: str, default: float) -> float:
     """按 keys 顺序从 node.attrs 读取首个有限 float 属性。"""
-    from backend.plan_params import PlanParamError, parse_finite_float, parse_unit_interval
+    from factor_engine.backend.plan_params import PlanParamError, parse_finite_float, parse_unit_interval
 
     for key in keys:
         if key in (node.attrs or {}) and node.attrs[key] is not None:
@@ -526,7 +526,7 @@ def _rolling_time_slope_expr(w: int, *, min_periods: int = 2) -> pl.Expr:
 
 def _rolling_argext_expr(w: int, *, pick: str) -> pl.Expr:
     """滚动极值距当前 bar 的距离（0=当前；并列取最近）。"""
-    from backend.numeric_semantics import ts_argmax_empty_window_is_null
+    from factor_engine.backend.numeric_semantics import ts_argmax_empty_window_is_null
 
     def _fn(arr: np.ndarray) -> float:
         arr = np.asarray(arr, dtype=np.float64)
@@ -618,7 +618,7 @@ def _pandas_aligned_cum_prod_expr() -> pl.Expr:
 
 def _valid_obs_expr(col: str = _VAL) -> pl.Expr:
     """Pandas ``notna`` 对齐：非 NULL 且非 IEEE NaN。"""
-    from backend.logical_semantics import is_null_polars_expr
+    from factor_engine.backend.logical_semantics import is_null_polars_expr
 
     return pl.when(is_null_polars_expr(col) > 0).then(0.0).otherwise(1.0)
 
@@ -866,7 +866,7 @@ def plan_is_polars_expr_capable(plan: PlanNode) -> bool:
 
 def _join_binary(left: pl.LazyFrame, right: pl.LazyFrame) -> pl.LazyFrame:
     """按 (ts, inst) anchor LEFT JOIN（左操作数保留全部 key）。"""
-    from backend.long_alignment import anchor_left_join_binary
+    from factor_engine.backend.long_alignment import anchor_left_join_binary
 
     return anchor_left_join_binary(left, right, right_col="_y")
 
@@ -877,7 +877,7 @@ def _join_triple(
     right: pl.LazyFrame,
 ) -> pl.LazyFrame:
     """按 (ts, inst) anchor 串联 LEFT JOIN。"""
-    from backend.long_alignment import anchor_left_join_triple
+    from factor_engine.backend.long_alignment import anchor_left_join_triple
 
     return anchor_left_join_triple(left, mid, right)
 
@@ -892,7 +892,7 @@ def _column_ref_name(node: PlanNode) -> str | None:
 
 def _safe_div_null_expr(numer: pl.Expr, denom: pl.Expr, node: PlanNode) -> pl.Expr:
     """零/NULL 分母 → NULL（比率语义，不填 default）。"""
-    from backend.numeric_semantics import protected_epsilon_default
+    from factor_engine.backend.numeric_semantics import protected_epsilon_default
 
     eps = _float_attr(node, "epsilon", "eps", default=protected_epsilon_default())
     return (
@@ -905,8 +905,8 @@ def _safe_div_null_expr(numer: pl.Expr, denom: pl.Expr, node: PlanNode) -> pl.Ex
 
 
 def _protected_div_expr(numer: pl.Expr, denom: pl.Expr, node: PlanNode) -> pl.Expr:
-    from backend.elementwise_semantics import protected_div_polars
-    from backend.numeric_semantics import protected_div_default, protected_epsilon_default
+    from factor_engine.backend.elementwise_semantics import protected_div_polars
+    from factor_engine.backend.numeric_semantics import protected_div_default, protected_epsilon_default
 
     eps = _float_attr(node, "epsilon", "eps", default=protected_epsilon_default())
     default = _float_attr(node, "default", default=protected_div_default())
@@ -914,16 +914,16 @@ def _protected_div_expr(numer: pl.Expr, denom: pl.Expr, node: PlanNode) -> pl.Ex
 
 
 def _protected_log_expr(val: pl.Expr, node: PlanNode) -> pl.Expr:
-    from backend.elementwise_semantics import protected_log_polars
-    from backend.numeric_semantics import protected_epsilon_default
+    from factor_engine.backend.elementwise_semantics import protected_log_polars
+    from factor_engine.backend.numeric_semantics import protected_epsilon_default
 
     eps = _float_attr(node, "epsilon", "eps", default=protected_epsilon_default())
     return protected_log_polars(val, eps=eps)
 
 
 def _div_or_default_expr(numer: pl.Expr, denom: pl.Expr, node: PlanNode) -> pl.Expr:
-    from backend.elementwise_semantics import div_or_default_polars
-    from backend.numeric_semantics import protected_div_default, protected_epsilon_default
+    from factor_engine.backend.elementwise_semantics import div_or_default_polars
+    from factor_engine.backend.numeric_semantics import protected_div_default, protected_epsilon_default
 
     eps = _float_attr(node, "epsilon", "eps", default=protected_epsilon_default())
     default = _float_attr(node, "default", default=protected_div_default())
@@ -931,8 +931,8 @@ def _div_or_default_expr(numer: pl.Expr, denom: pl.Expr, node: PlanNode) -> pl.E
 
 
 def _log_fill_invalid_expr(val: pl.Expr, node: PlanNode) -> pl.Expr:
-    from backend.elementwise_semantics import log_fill_invalid_polars
-    from backend.numeric_semantics import protected_epsilon_default
+    from factor_engine.backend.elementwise_semantics import log_fill_invalid_polars
+    from factor_engine.backend.numeric_semantics import protected_epsilon_default
 
     eps = _float_attr(node, "epsilon", "eps", default=protected_epsilon_default())
     return log_fill_invalid_polars(val, eps=eps)
@@ -940,7 +940,7 @@ def _log_fill_invalid_expr(val: pl.Expr, node: PlanNode) -> pl.Expr:
 
 def _truthy_expr(expr: pl.Expr) -> pl.Expr:
     """将 expr 转为布尔：NULL/NaN/0 → false。"""
-    from backend.logical_semantics import truthy_polars_expr
+    from factor_engine.backend.logical_semantics import truthy_polars_expr
 
     return truthy_polars_expr(expr)
 
@@ -971,7 +971,7 @@ _FUSABLE_TS_ON_COLUMN: frozenset[str] = frozenset(
 
 def _parse_ts_op_on_column(node: PlanNode):
     """识别 ``ts_*(column(x), window, ...)``，返回 (op, col, WindowSpec)。"""
-    from backend.window_spec import WindowSpec
+    from factor_engine.backend.window_spec import WindowSpec
 
     op = _resolve(node.op)
     if op not in _FUSABLE_TS_ON_COLUMN:
@@ -987,7 +987,7 @@ def _parse_ts_op_on_column(node: PlanNode):
 
 def _ts_rolling_expr_on_column(op: str, col_name: str, spec) -> pl.Expr:
     """在宽表 base 列上直接构造 ts 窗口 expr（用于 DAG fusion，完整 WindowSpec）。"""
-    from backend.numeric_semantics import std_ddof_value
+    from factor_engine.backend.numeric_semantics import std_ddof_value
 
     if op in _PANDAS_ROLLING_DROP_INF_OPS:
         # pandas rolling machinery treats ±Inf as missing; drop it so the
@@ -1032,11 +1032,11 @@ def _binary_fused_expr(op: str, left: pl.Expr, right: pl.Expr, node: PlanNode) -
     if op == "multiply":
         return left * right
     if op == "maximum":
-        from backend.elementwise_semantics import max_horizontal_polars
+        from factor_engine.backend.elementwise_semantics import max_horizontal_polars
 
         return max_horizontal_polars(left, right)
     if op == "minimum":
-        from backend.elementwise_semantics import min_horizontal_polars
+        from factor_engine.backend.elementwise_semantics import min_horizontal_polars
 
         return min_horizontal_polars(left, right)
     if op == "protected_div":
@@ -1046,33 +1046,33 @@ def _binary_fused_expr(op: str, left: pl.Expr, right: pl.Expr, node: PlanNode) -
     if op in {"safe_div_null", "safe_div"}:
         return _safe_div_null_expr(left, right, node)
     if op == "divide":
-        from backend.inf_sanitize import apply_inf_policy_polars_fast
+        from factor_engine.backend.inf_sanitize import apply_inf_policy_polars_fast
 
         return apply_inf_policy_polars_fast(left / right, "divide")
     if op == "power":
         return _safe_pow_expr(left, right)
     if op == "gt":
-        from backend.elementwise_semantics import compare_polars
+        from factor_engine.backend.elementwise_semantics import compare_polars
 
         return compare_polars("gt", left, right)
     if op == "lt":
-        from backend.elementwise_semantics import compare_polars
+        from factor_engine.backend.elementwise_semantics import compare_polars
 
         return compare_polars("lt", left, right)
     if op == "eq":
-        from backend.elementwise_semantics import compare_polars
+        from factor_engine.backend.elementwise_semantics import compare_polars
 
         return compare_polars("eq", left, right)
     if op == "ge":
-        from backend.elementwise_semantics import compare_polars
+        from factor_engine.backend.elementwise_semantics import compare_polars
 
         return compare_polars("ge", left, right)
     if op == "le":
-        from backend.elementwise_semantics import compare_polars
+        from factor_engine.backend.elementwise_semantics import compare_polars
 
         return compare_polars("le", left, right)
     if op == "ne":
-        from backend.elementwise_semantics import compare_polars
+        from factor_engine.backend.elementwise_semantics import compare_polars
 
         return compare_polars("ne", left, right)
     if op == "and_":
@@ -1187,11 +1187,11 @@ def _try_binary_from_base_columns(
     elif op == "multiply":
         expr = lcol * rcol
     elif op == "maximum":
-        from backend.elementwise_semantics import max_horizontal_polars
+        from factor_engine.backend.elementwise_semantics import max_horizontal_polars
 
         expr = max_horizontal_polars(lcol, rcol)
     elif op == "minimum":
-        from backend.elementwise_semantics import min_horizontal_polars
+        from factor_engine.backend.elementwise_semantics import min_horizontal_polars
 
         expr = min_horizontal_polars(lcol, rcol)
     elif op == "protected_div":
@@ -1201,33 +1201,33 @@ def _try_binary_from_base_columns(
     elif op in {"safe_div_null", "safe_div"}:
         expr = _safe_div_null_expr(lcol, rcol, node)
     elif op == "divide":
-        from backend.inf_sanitize import apply_inf_policy_polars_fast
+        from factor_engine.backend.inf_sanitize import apply_inf_policy_polars_fast
 
         expr = apply_inf_policy_polars_fast(lcol / rcol, "divide")
     elif op == "power":
         expr = _safe_pow_expr(lcol, rcol)
     elif op == "gt":
-        from backend.elementwise_semantics import compare_polars
+        from factor_engine.backend.elementwise_semantics import compare_polars
 
         expr = compare_polars("gt", lcol, rcol)
     elif op == "lt":
-        from backend.elementwise_semantics import compare_polars
+        from factor_engine.backend.elementwise_semantics import compare_polars
 
         expr = compare_polars("lt", lcol, rcol)
     elif op == "eq":
-        from backend.elementwise_semantics import compare_polars
+        from factor_engine.backend.elementwise_semantics import compare_polars
 
         expr = compare_polars("eq", lcol, rcol)
     elif op == "ge":
-        from backend.elementwise_semantics import compare_polars
+        from factor_engine.backend.elementwise_semantics import compare_polars
 
         expr = compare_polars("ge", lcol, rcol)
     elif op == "le":
-        from backend.elementwise_semantics import compare_polars
+        from factor_engine.backend.elementwise_semantics import compare_polars
 
         expr = compare_polars("le", lcol, rcol)
     elif op == "ne":
-        from backend.elementwise_semantics import compare_polars
+        from factor_engine.backend.elementwise_semantics import compare_polars
 
         expr = compare_polars("ne", lcol, rcol)
     elif op == "and_":
@@ -1310,8 +1310,8 @@ def _try_ts_pair_from_base_columns(
     if op in {"ts_corr", "ts_cov", "ts_beta", "vwap"}:
         lcol = pl.when(lcol.is_nan() | lcol.is_infinite()).then(None).otherwise(lcol)
         rcol = pl.when(rcol.is_nan() | rcol.is_infinite()).then(None).otherwise(rcol)
-    from backend.pair_window_spec import PairWindowSpec
-    from backend.pairwise_rolling import polars_pairwise_output_guard, polars_ts_beta_expr, polars_vwap_expr
+    from factor_engine.backend.pair_window_spec import PairWindowSpec
+    from factor_engine.backend.pairwise_rolling import polars_pairwise_output_guard, polars_ts_beta_expr, polars_vwap_expr
 
     # ts_beta production default is min_periods=5 (NEW-024 / rolling_beta); corr/cov stay at 2.
     default_mp = 5 if op == "ts_beta" else 2
@@ -1369,7 +1369,7 @@ _BINARY_FUSION_OPS = frozenset(
 
 def _safe_pow_expr(base: pl.Expr, exp: pl.Expr) -> pl.Expr:
     """非法定义域返回 NULL（对齐 SQL emitter）；溢出 ±Inf → NULL（power semantics）。"""
-    from backend.inf_sanitize import apply_inf_policy_polars_fast
+    from factor_engine.backend.inf_sanitize import apply_inf_policy_polars_fast
 
     raw = (
         pl.when(base.is_null() | exp.is_null())
@@ -1386,21 +1386,21 @@ def _safe_pow_expr(base: pl.Expr, exp: pl.Expr) -> pl.Expr:
 
 def _truthy(col: str) -> pl.Expr:
     """列名版 truthy。"""
-    from backend.logical_semantics import truthy_polars_expr
+    from factor_engine.backend.logical_semantics import truthy_polars_expr
 
     return truthy_polars_expr(pl.col(col))
 
 
 def _cs_rank_01_on(value_col: str) -> pl.Expr:
     """截面 0-1 rank，指定列名（DAG fusion 用）。"""
-    from backend.rank_spec import polars_cs_rank_expr
+    from factor_engine.backend.rank_spec import polars_cs_rank_expr
 
     return polars_cs_rank_expr(value_col, partition_cols=(_TS,), order_by=_INST, canon="rank")
 
 
 def _zscore_on(value_col: str, *, canon: str = "zscore") -> pl.Expr:
     """指定列名的截面 zscore expr（按 ts 分区，语义见 numeric_semantics）。"""
-    from backend.numeric_semantics import std_ddof_value, zscore_zero_std_fill
+    from factor_engine.backend.numeric_semantics import std_ddof_value, zscore_zero_std_fill
 
     ddof = std_ddof_value(canon)
     zero_fill = zscore_zero_std_fill(canon)
@@ -1471,7 +1471,7 @@ def _try_fuse_unary_over_ts(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame 
     if op == "rank":
         out_expr = _cs_rank_01_on(tmp)
     elif op in {"rank_pct", "cs_pct_rank"}:
-        from backend.rank_spec import polars_cs_rank_expr
+        from factor_engine.backend.rank_spec import polars_cs_rank_expr
 
         out_expr = polars_cs_rank_expr(tmp, partition_cols=(_TS,), order_by=_INST, canon=op)
     elif op == "zscore":
@@ -1482,7 +1482,7 @@ def _try_fuse_unary_over_ts(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame 
         out_expr = pl.col(tmp).abs()
     elif op == "scale":
         to_val = _scale_to_value(node)
-        from backend.cross_section_spec import polars_scale_expr
+        from factor_engine.backend.cross_section_spec import polars_scale_expr
 
         out_expr = polars_scale_expr(tmp, to_val, partition_cols=(_TS,), order_by=_INST)
     elif op == "normalize":
@@ -1503,14 +1503,14 @@ def _apply_compiled_long_expr(base: pl.LazyFrame, compiled: CompiledLongExpr) ->
 
 def _cs_rank_01(*, canon: str = "rank") -> pl.Expr:
     """截面 0-1 rank；语义见 ``rank_spec.rank_spec_for``。"""
-    from backend.rank_spec import polars_cs_rank_expr
+    from factor_engine.backend.rank_spec import polars_cs_rank_expr
 
     return polars_cs_rank_expr(_VAL, partition_cols=(_TS,), order_by=_INST, canon=canon)
 
 
 def _cs_rank_pct(*, canon: str = "rank_pct") -> pl.Expr:
     """截面百分位 rank expr（rank/n，语义见 rank_spec）。"""
-    from backend.rank_spec import polars_cs_rank_expr
+    from factor_engine.backend.rank_spec import polars_cs_rank_expr
 
     return polars_cs_rank_expr(_VAL, partition_cols=(_TS,), order_by=_INST, canon=canon)
 
@@ -1615,11 +1615,11 @@ def _compile_polars_impl(
         elif op == "multiply":
             expr = pl.col(_VAL) * pl.col("_y")
         elif op == "maximum":
-            from backend.elementwise_semantics import max_horizontal_polars
+            from factor_engine.backend.elementwise_semantics import max_horizontal_polars
 
             expr = max_horizontal_polars(pl.col(_VAL), pl.col("_y"))
         elif op == "minimum":
-            from backend.elementwise_semantics import min_horizontal_polars
+            from factor_engine.backend.elementwise_semantics import min_horizontal_polars
 
             expr = min_horizontal_polars(pl.col(_VAL), pl.col("_y"))
         elif op == "protected_div":
@@ -1629,13 +1629,13 @@ def _compile_polars_impl(
         elif op in {"safe_div_null", "safe_div"}:
             expr = _safe_div_null_expr(pl.col(_VAL), pl.col("_y"), node)
         elif op == "divide":
-            from backend.inf_sanitize import apply_inf_policy_polars_fast
+            from factor_engine.backend.inf_sanitize import apply_inf_policy_polars_fast
 
             expr = apply_inf_policy_polars_fast(pl.col(_VAL) / pl.col("_y"), "divide")
         elif op == "power":
             expr = _safe_pow_expr(pl.col(_VAL), pl.col("_y"))
         elif op in {"gt", "lt", "eq", "ge", "le", "ne"}:
-            from backend.elementwise_semantics import compare_polars
+            from factor_engine.backend.elementwise_semantics import compare_polars
 
             expr = compare_polars(op, pl.col(_VAL), pl.col("_y"))
         elif op == "and_":
@@ -1661,7 +1661,7 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        from backend.elementwise_semantics import is_finite_polars_expr
+        from factor_engine.backend.elementwise_semantics import is_finite_polars_expr
 
         return inner.with_columns(is_finite_polars_expr(_VAL).alias(_VAL))
 
@@ -1669,7 +1669,7 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        from backend.elementwise_semantics import is_infinite_polars_expr
+        from factor_engine.backend.elementwise_semantics import is_infinite_polars_expr
 
         return inner.with_columns(is_infinite_polars_expr(_VAL).alias(_VAL))
 
@@ -1677,7 +1677,7 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        from backend.logical_semantics import is_null_polars_expr
+        from factor_engine.backend.logical_semantics import is_null_polars_expr
 
         return inner.with_columns(is_null_polars_expr(_VAL).alias(_VAL))
 
@@ -1685,7 +1685,7 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        from backend.logical_semantics import is_not_null_polars_expr
+        from factor_engine.backend.logical_semantics import is_not_null_polars_expr
 
         return inner.with_columns(is_not_null_polars_expr(_VAL).alias(_VAL))
 
@@ -1693,7 +1693,7 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        from backend.logical_semantics import is_nan_polars_expr
+        from factor_engine.backend.logical_semantics import is_nan_polars_expr
 
         return inner.with_columns(is_nan_polars_expr(_VAL).alias(_VAL))
 
@@ -1724,7 +1724,7 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        from backend.inf_sanitize import apply_inf_policy_polars_fast
+        from factor_engine.backend.inf_sanitize import apply_inf_policy_polars_fast
 
         return inner.with_columns(
             apply_inf_policy_polars_fast(pl.col(_VAL).exp(), "exp").alias(_VAL)
@@ -1801,7 +1801,7 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        from backend.numeric_semantics import std_ddof_value
+        from factor_engine.backend.numeric_semantics import std_ddof_value
 
         spec = _window_spec(node)
         w = spec.size
@@ -1833,7 +1833,7 @@ def _compile_polars_impl(
         spec = _window_spec(node)
         w = spec.size
         mp = spec.min_periods
-        from backend.numeric_semantics import std_ddof_value, zscore_zero_std_fill
+        from factor_engine.backend.numeric_semantics import std_ddof_value, zscore_zero_std_fill
 
         ddof = spec.ddof if "ddof" in (node.attrs or {}) else std_ddof_value("ts_zscore")
         zero_fill = zscore_zero_std_fill("ts_zscore")
@@ -1856,8 +1856,8 @@ def _compile_polars_impl(
         fused = _try_ts_pair_from_base_columns(node, base, op)
         if fused is not None:
             return fused
-        from backend.pair_window_spec import PairWindowSpec
-        from backend.pairwise_rolling import polars_pairwise_output_guard
+        from factor_engine.backend.pair_window_spec import PairWindowSpec
+        from factor_engine.backend.pairwise_rolling import polars_pairwise_output_guard
 
         pspec = PairWindowSpec.from_plan_node(node)
         left = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
@@ -1889,8 +1889,8 @@ def _compile_polars_impl(
         fused = _try_ts_pair_from_base_columns(node, base, op)
         if fused is not None:
             return fused
-        from backend.pair_window_spec import PairWindowSpec
-        from backend.pairwise_rolling import polars_pairwise_output_guard
+        from factor_engine.backend.pair_window_spec import PairWindowSpec
+        from factor_engine.backend.pairwise_rolling import polars_pairwise_output_guard
 
         pspec = PairWindowSpec.from_plan_node(node)
         left = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
@@ -1925,8 +1925,8 @@ def _compile_polars_impl(
         fused = _try_ts_pair_from_base_columns(node, base, op)
         if fused is not None:
             return fused
-        from backend.pair_window_spec import PairWindowSpec
-        from backend.pairwise_rolling import polars_ts_beta_expr
+        from factor_engine.backend.pair_window_spec import PairWindowSpec
+        from factor_engine.backend.pairwise_rolling import polars_ts_beta_expr
 
         pspec = PairWindowSpec.from_plan_node(node, default_min_periods=5)
         left = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
@@ -1949,7 +1949,7 @@ def _compile_polars_impl(
         fused = _try_ts_pair_from_base_columns(node, base, op)
         if fused is not None:
             return fused
-        from backend.pairwise_rolling import polars_vwap_expr
+        from factor_engine.backend.pairwise_rolling import polars_vwap_expr
 
         spec = _window_spec(node, default=20)
         price = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
@@ -1994,7 +1994,7 @@ def _compile_polars_impl(
         if inner is None:
             return None
         spec = _window_spec(node)
-        from backend.rank_spec import polars_ts_rank_expr
+        from factor_engine.backend.rank_spec import polars_ts_rank_expr
 
         return inner.with_columns(
             polars_ts_rank_expr(
@@ -2182,7 +2182,7 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        from backend.stat_valid import polars_rank_input
+        from factor_engine.backend.stat_valid import polars_rank_input
 
         p = _float_attr(node, "p", default=0.5)
         pos_p = _literal_value(node, 0)
@@ -2193,7 +2193,7 @@ def _compile_polars_impl(
         return inner.with_columns(q.alias(_VAL))
 
     if op == "winsorize":
-        from backend.plan_params import parse_winsorize_quantiles
+        from factor_engine.backend.plan_params import parse_winsorize_quantiles
 
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
@@ -2203,13 +2203,13 @@ def _compile_polars_impl(
         hi = pl.col(_VAL).quantile(quantile=hi_p, interpolation="linear").over(_TS, order_by=_INST)
         # pandas winsorize ends with ``.replace([inf, -inf], nan)`` — an Inf
         # input never survives as a clipped extreme.
-        from backend.inf_sanitize import apply_inf_policy_polars_fast
+        from factor_engine.backend.inf_sanitize import apply_inf_policy_polars_fast
         return inner.with_columns(
             apply_inf_policy_polars_fast(pl.col(_VAL).clip(lo, hi), "winsorize").alias(_VAL)
         )
 
     if op in {"cs_resid", "cs_regression"}:
-        from backend.plan_params import int_mode_from_plan_node
+        from factor_engine.backend.plan_params import int_mode_from_plan_node
         if len(node.inputs) < 2:
             return None
         y_layer = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
@@ -2425,7 +2425,7 @@ def _compile_polars_impl(
                 )
             )
         elif op == "group_std":
-            from backend.numeric_semantics import std_ddof_value
+            from factor_engine.backend.numeric_semantics import std_ddof_value
 
             # pandas GroupStd uses ``notna`` (Inf included); Inf→std NaN→0 fill.
             cnt = pl.col(_VAL).count().over(*over_keys, order_by=_INST)
@@ -2440,7 +2440,7 @@ def _compile_polars_impl(
                 .otherwise(std_expr)
             )
         elif op in {"group_zscore", "group_neutralize"}:
-            from backend.numeric_semantics import std_ddof_value, zscore_zero_std_fill
+            from factor_engine.backend.numeric_semantics import std_ddof_value, zscore_zero_std_fill
 
             mean = pl.col(_VAL).mean().over(*over_keys, order_by=_INST)
             if op == "group_neutralize":
@@ -2462,7 +2462,7 @@ def _compile_polars_impl(
         elif op == "group_normalize":
             expr = _group_normalize_on(_VAL, over_keys)
         else:
-            from backend.rank_spec import polars_cs_rank_expr
+            from factor_engine.backend.rank_spec import polars_cs_rank_expr
 
             expr = polars_cs_rank_expr(_VAL, partition_cols=over_keys, order_by=_INST, canon="group_rank")
         return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
@@ -2471,7 +2471,7 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        from backend.stat_valid import polars_rank_input
+        from factor_engine.backend.stat_valid import polars_rank_input
 
         value = polars_rank_input(_VAL, exclude_nan=True)
         med = value.median().over(_TS, order_by=_INST)
@@ -2482,7 +2482,7 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        from backend.stat_valid import polars_rank_input, polars_row_stat_invalid
+        from factor_engine.backend.stat_valid import polars_rank_input, polars_row_stat_invalid
 
         value = polars_rank_input(_VAL, exclude_nan=True)
         med = value.median().over(_TS, order_by=_INST)
@@ -2531,14 +2531,14 @@ def _compile_polars_impl(
         return inner.with_columns(pl.col(_VAL).forward_fill().over(_INST, order_by=_TS).alias(_VAL))
 
     if op == "bfill":
-        from backend.polars_long_policy import UnsupportedCausalOperatorError
+        from factor_engine.backend.polars_long_policy import UnsupportedCausalOperatorError
 
         raise UnsupportedCausalOperatorError(
             "polars_long 不支持 bfill/causal_bfill（因果占位，非传统 backward fill）；请改用 ffill 或 pandas 研究路径"
         )
 
     if op == "causal_bfill":
-        from backend.polars_long_policy import UnsupportedCausalOperatorError
+        from factor_engine.backend.polars_long_policy import UnsupportedCausalOperatorError
 
         raise UnsupportedCausalOperatorError(
             "polars_long 不支持 bfill/causal_bfill（因果占位，非传统 backward fill）；请改用 ffill 或 pandas 研究路径"
@@ -2569,7 +2569,7 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        from backend.numeric_semantics import std_ddof_value, zscore_zero_std_fill
+        from factor_engine.backend.numeric_semantics import std_ddof_value, zscore_zero_std_fill
 
         ddof = std_ddof_value("zscore")
         zero_fill = zscore_zero_std_fill("zscore")
@@ -2604,7 +2604,7 @@ def _compile_polars_impl(
         if inner is None:
             return None
         to_val = _scale_to_value(node)
-        from backend.cross_section_spec import polars_scale_expr
+        from factor_engine.backend.cross_section_spec import polars_scale_expr
 
         return inner.with_columns(
             polars_scale_expr(_VAL, to_val, partition_cols=(_TS,), order_by=_INST).alias(_VAL)
@@ -2620,7 +2620,7 @@ def _compile_polars_impl(
         # pandas reference: ``np.log(ratio.replace([inf,-inf], nan))`` — an Inf
         # ratio (Inf price, or an Inf prev) is censored to missing BEFORE log;
         # a residual -Inf output (log of a ~0 ratio) is NaN at the engine level.
-        from backend.inf_sanitize import apply_inf_policy_polars_fast
+        from factor_engine.backend.inf_sanitize import apply_inf_policy_polars_fast
 
         return inner.with_columns(
             apply_inf_policy_polars_fast(
@@ -2665,7 +2665,7 @@ def _compile_polars_impl(
             return None
         # R19-027..029: sample_validity=finite — ±Inf excluded like pandas
         # CrossSectionSampleMask.
-        from backend.stat_valid import polars_rank_input, polars_row_stat_invalid
+        from factor_engine.backend.stat_valid import polars_rank_input, polars_row_stat_invalid
 
         value = polars_rank_input(_VAL, exclude_nan=True)
         valid = value.count().over(_TS, order_by=_INST)
@@ -2834,7 +2834,7 @@ def _compile_polars_impl(
         sqrt_af = ann**0.5
         mean = pl.col(_VAL).rolling_mean(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
         std = pl.col(_VAL).rolling_std(window_size=w, min_samples=mp, ddof=1).over(_INST, order_by=_TS)
-        from backend.numeric_semantics import ts_sharpe_zero_std_is_null
+        from factor_engine.backend.numeric_semantics import ts_sharpe_zero_std_is_null
 
         expr = (
             pl.when(std.is_null() | (std == 0))
@@ -2842,7 +2842,7 @@ def _compile_polars_impl(
             .otherwise(mean / std)
             * sqrt_af
         )
-        from backend.inf_sanitize import apply_inf_policy_polars_fast
+        from factor_engine.backend.inf_sanitize import apply_inf_policy_polars_fast
 
         return inner.with_columns(apply_inf_policy_polars_fast(expr, "ts_sharpe").alias(_VAL))
 
@@ -2965,7 +2965,7 @@ def _compile_polars_impl(
             return None
         w = max(_int_attr(node, "d", "window", input_index=0, default=3), 1)
         k = max(_int_attr(node, "k", "order", input_index=1, default=2), 1)
-        from cleaned_operators._numpy_kernels import ts_moment_
+        from factor_engine.cleaned_operators._numpy_kernels import ts_moment_
 
         return _unary_inst_map_groups(inner, lambda arr: ts_moment_(arr, w, k))
 
@@ -3012,7 +3012,7 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        from cleaned_operators._causal import causal_linear_extrapolate_panel
+        from factor_engine.cleaned_operators._causal import causal_linear_extrapolate_panel
 
         def _extrapolate(arr: np.ndarray) -> np.ndarray:
             pdf = pd.DataFrame({"v": arr.astype(float, copy=False)})
@@ -3188,7 +3188,7 @@ def _build_base_lazy_from_series(ctx: Any, columns: set[str]) -> pl.LazyFrame:
     """无 scan_polars_long 时，逐列 load_column 并 merge 为宽表 LazyFrame。"""
     if pl is None:
         raise ImportError("polars is required for polars long-table backend")
-    from storage.factor_format import series_to_long_table
+    from factor_engine.storage.factor_format import series_to_long_table
 
     tcol = ctx.timestamp_col
     icol = ctx.instrument_col
@@ -3209,7 +3209,7 @@ def _build_base_lazy_from_series(ctx: Any, columns: set[str]) -> pl.LazyFrame:
     if merged is None:
         raise ValueError("polars long: no columns referenced")
     renamed = merged.rename(columns={tcol: _TS, icol: _INST})
-    from backend.long_frame import long_table_to_polars_lazy
+    from factor_engine.backend.long_frame import long_table_to_polars_lazy
 
     return long_table_to_polars_lazy(renamed, float_cols=sorted(columns))
 

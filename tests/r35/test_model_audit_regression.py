@@ -19,14 +19,14 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from cleaned_operators import load_all  # noqa: E402
-from cleaned_operators.registry import OperatorRegistry  # noqa: E402
-from cleaned_operators.regression_models import (  # noqa: E402
+from factor_engine.cleaned_operators import load_all  # noqa: E402
+from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_engine.cleaned_operators.regression_models import (  # noqa: E402
     TsLoMackinlayVr,
     TsLoMackinlayZ,
     TsVarianceRatioProxy,
 )
-from cleaned_operators.ts_model import _rolling_core as _rc  # noqa: E402
+from factor_engine.cleaned_operators.ts_model import _rolling_core as _rc  # noqa: E402
 
 
 def _load():

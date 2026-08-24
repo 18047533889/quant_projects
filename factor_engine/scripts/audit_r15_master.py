@@ -40,19 +40,19 @@ OUT = REPO / "build" / "r15_audit"
 
 def _load() -> None:
     sys.path.insert(0, str(REPO))
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
 
 
 def _registry():
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     return OperatorRegistry
 
 
 def _surface_classification(canonical: str) -> str:
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     try:
         return classify_canonical(canonical)
@@ -100,8 +100,8 @@ def build_all() -> None:
     canonicals = sorted(reg._catalog.keys())
 
     # ---------------------------------------------------------------- row base
-    from cleaned_operators.base import effective_param_role, param_role_declared
-    from cleaned_operators.operator_spec import build_operator_spec
+    from factor_engine.cleaned_operators.base import effective_param_role, param_role_declared
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec
 
     rows: list[dict[str, object]] = []
     param_surface: list[dict[str, object]] = []
@@ -295,7 +295,7 @@ def _golden_null_runner(canonicals: list[str], reg) -> list[dict[str, object]]:
     existence no longer stands in for the battery running, and a NOT_RUN /
     AUDIT_ERROR outcome never counts as certified.
     """
-    from cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     panel = _synthetic_panel(n_rows=60, n_cols=3, seed=7)
     constant = pd.DataFrame(

@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 import types
 
-from runtime.buffer_ref import SourceWaveExecutor
+from factor_engine.runtime.buffer_ref import SourceWaveExecutor
 
 
 def test_source_wave_executor_serializes_concurrent_duplicate_reads():

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from runtime.config import load_config, load_profile
+from factor_engine.runtime.config import load_config, load_profile
 
 
 def test_load_profile_prod_exists():

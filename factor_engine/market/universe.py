@@ -41,7 +41,7 @@ from typing import Any, Mapping
 
 import numpy as np
 
-from backend.universe_spec import UNIVERSE_SPEC, cross_section_shape_preserving
+from factor_engine.backend.universe_spec import UNIVERSE_SPEC, cross_section_shape_preserving
 
 
 class UniverseContractError(Exception):

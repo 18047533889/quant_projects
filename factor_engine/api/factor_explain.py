@@ -43,10 +43,10 @@ class FactorExplanation:
 
 
 def _compile_plan(formula: str):
-    from api.dsl_parser import parse_expr
-    from ir.analyzer import Analyzer
-    from planner.lowerer import Lowerer
-    from planner.optimizer import Optimizer
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.ir.analyzer import Analyzer
+    from factor_engine.planner.lowerer import Lowerer
+    from factor_engine.planner.optimizer import Optimizer
 
     expr = parse_expr(str(formula or ""))
     analysis = Analyzer().lower(expr)
@@ -57,9 +57,9 @@ def _compile_plan(formula: str):
 
 def explain_factor(formula: str, *, mode: str = "research") -> FactorExplanation:
     """解释因子表达式的 production / 双后端 / fallback 风险。"""
-    from backend.production_fastpath_gate import check_production_fastpath_plan_ops
-    from backend.production_fastpath_tiers import FASTPATH_DEFERRED_CANONICALS
-    from planner.composite_lowering import has_composite_lowering
+    from factor_engine.backend.production_fastpath_gate import check_production_fastpath_plan_ops
+    from factor_engine.backend.production_fastpath_tiers import FASTPATH_DEFERRED_CANONICALS
+    from factor_engine.planner.composite_lowering import has_composite_lowering
 
     optimized, pre_lowering = _compile_plan(formula)
     prod = check_production_fastpath_plan_ops(

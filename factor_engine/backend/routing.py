@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from backend.operator_cost import OperatorCost, get_operator_cost
+from factor_engine.backend.operator_cost import OperatorCost, get_operator_cost
 
 
 def resolve_execution_tier(

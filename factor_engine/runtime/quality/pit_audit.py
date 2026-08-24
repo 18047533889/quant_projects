@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from ir.nodes import IRNode
+from factor_engine.ir.nodes import IRNode
 
 
 class PitSafetyError(RuntimeError):
@@ -137,9 +137,9 @@ def _audit_derived_field(
         return
     source_guard.add(key)
     try:
-        from runtime.derived_field_registry import load_derived_field_definition
-        from api.dsl_parser import parse_factor
-        from ir.analyzer import Analyzer
+        from factor_engine.runtime.derived_field_registry import load_derived_field_definition
+        from factor_engine.api.dsl_parser import parse_factor
+        from factor_engine.ir.analyzer import Analyzer
 
         definition = load_derived_field_definition(field)
         factor = parse_factor(
@@ -263,7 +263,7 @@ def _resolve_table_contract(table: str) -> LogicalTableContract | None | object:
           imported; callers fall back to the hardcoded classification.
     """
     try:
-        from storage.sources.logical_tables import logical_table_contract
+        from factor_engine.storage.sources.logical_tables import logical_table_contract
     except Exception:
         return _CONTRACT_LAYER_UNAVAILABLE
     try:
@@ -297,7 +297,7 @@ def _audit_source_ref_by_contract(
     if join_policy == "special":
         if specification.table == "Intermediate":
             try:
-                from runtime.intermediate_registry import intermediate_dependency_lineage
+                from factor_engine.runtime.intermediate_registry import intermediate_dependency_lineage
 
                 intermediate_dependency_lineage(
                     str(params.get("name", "")), int(params.get("version", 0))
@@ -478,7 +478,7 @@ def _audit_source_ref_hardcoded(
 
     if specification.table == "Intermediate":
         try:
-            from runtime.intermediate_registry import intermediate_dependency_lineage
+            from factor_engine.runtime.intermediate_registry import intermediate_dependency_lineage
 
             intermediate_dependency_lineage(
                 str(params.get("name", "")), int(params.get("version", 0))
@@ -518,7 +518,7 @@ def _audit_source_ref(
     checked,
     source_guard,
 ) -> bool:
-    from api.source_ref import decode_source_ref
+    from factor_engine.api.source_ref import decode_source_ref
 
     specification = decode_source_ref(name)
     if specification is None:
@@ -574,9 +574,9 @@ def audit_ir(
     fail_on_missing: bool = True,
     _source_guard: set[str] | None = None,
 ) -> PitAuditReport:
-    from backend.cleaned_bridge import ensure_cleaned_loaded
-    from cleaned_operators.operator_policy import infer_operator_policy
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     ensure_cleaned_loaded()
     violations: list[str] = []

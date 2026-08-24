@@ -24,11 +24,11 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any
 
-from runtime.task_resource_contract import DEFAULT_UNCERTAINTY, TaskResourceContract
+from factor_engine.runtime.task_resource_contract import DEFAULT_UNCERTAINTY, TaskResourceContract
 
 # R36：PSI / memory slope / swap 信号（§28/29/154）。resource_broker 只采集，
 # 判定在 resource_autopilot（惰性 import 避免循环依赖）。
-from runtime.resource_monitor import MemorySlopeTracker  # noqa: E402
+from factor_engine.runtime.resource_monitor import MemorySlopeTracker  # noqa: E402
 
 _logger = logging.getLogger(__name__)
 
@@ -193,7 +193,7 @@ def _loadavg() -> float:
 def _psi(namespace: str) -> tuple[float, float]:
     """PSI ``(some_avg10, full_avg10)``；不可读返回 ``(0.0, 0.0)``（R36 §28）。"""
     try:
-        from runtime.resource_monitor import psi_cpu, psi_io, psi_memory
+        from factor_engine.runtime.resource_monitor import psi_cpu, psi_io, psi_memory
 
         reader = {"cpu": psi_cpu, "memory": psi_memory, "io": psi_io}[namespace]
         out = reader()
@@ -206,7 +206,7 @@ def _psi(namespace: str) -> tuple[float, float]:
 
 def _swap() -> tuple[int | None, int | None]:
     try:
-        from runtime.resource_monitor import swap_usage
+        from factor_engine.runtime.resource_monitor import swap_usage
 
         return swap_usage()
     except Exception:
@@ -215,7 +215,7 @@ def _swap() -> tuple[int | None, int | None]:
 
 def _memory_events() -> dict:
     try:
-        from runtime.resource_monitor import read_memory_events
+        from factor_engine.runtime.resource_monitor import read_memory_events
 
         return read_memory_events()
     except Exception:
@@ -464,7 +464,7 @@ class ResourceBroker:
         sample_interval_seconds: float = DEFAULT_SAMPLE_INTERVAL_SECONDS,
         base_uncertainty: float = DEFAULT_UNCERTAINTY,
     ) -> None:
-        from runtime.resource_governor import (
+        from factor_engine.runtime.resource_governor import (
             effective_cpu_slots,
             effective_memory_limit_bytes,
         )
@@ -583,7 +583,7 @@ class ResourceBroker:
 
     def _spill_free(self) -> int:
         try:
-            from runtime.resource_governor import spill_disk_available, tempfile_dir
+            from factor_engine.runtime.resource_governor import spill_disk_available, tempfile_dir
 
             return spill_disk_available(tempfile_dir()) or 0
         except Exception:
@@ -591,7 +591,7 @@ class ResourceBroker:
 
     def _spill_total(self) -> int:
         try:
-            from runtime.resource_governor import spill_disk_total, tempfile_dir
+            from factor_engine.runtime.resource_governor import spill_disk_total, tempfile_dir
 
             return spill_disk_total(tempfile_dir()) or 0
         except Exception:
@@ -788,7 +788,7 @@ class ResourceBroker:
         by_cpu = self.hard_cpu_slots
         # 使用自适应配置的 block_abs_max
         try:
-            from runtime.adaptive_config import get_global_adaptive_config
+            from factor_engine.runtime.adaptive_config import get_global_adaptive_config
             block_size = get_global_adaptive_config().block_abs_max_bytes
         except ImportError:
             block_size = 2 * 1024**3  # 回退默认值
@@ -832,14 +832,14 @@ class ResourceBroker:
 
     def _resource_controller(self) -> Any:
         if self._controller is None:
-            from runtime.resource_autopilot import ResourceController
+            from factor_engine.runtime.resource_autopilot import ResourceController
 
             self._controller = ResourceController(self)
         return self._controller
 
     def _signals_from_snapshot(self, snap: ResourceSnapshot) -> Any:
         """从单个采样构造 ResourceSignals（避免一个 tick 内多次 force 采样）。"""
-        from runtime.resource_monitor import ResourceSignals
+        from factor_engine.runtime.resource_monitor import ResourceSignals
 
         return ResourceSignals(
             host_mem_available=snap.host_mem_available,
@@ -862,7 +862,7 @@ class ResourceBroker:
 
     def _envelope_from_snapshot(self, snap: ResourceSnapshot) -> Any:
         """从单个采样构造 Safe Envelope（§303/17）。"""
-        from runtime.resource_monitor import compute_safe_envelope
+        from factor_engine.runtime.resource_monitor import compute_safe_envelope
 
         env = compute_safe_envelope(
             hard_memory_bytes=self.hard_memory_limit,
@@ -913,7 +913,7 @@ class ResourceBroker:
             job_memory_lease_bytes=job_memory_lease_bytes,
         )
         try:
-            from runtime.resource_autopilot_service import get_resource_autopilot
+            from factor_engine.runtime.resource_autopilot_service import get_resource_autopilot
 
             # 优先 broker 自己绑定的 autopilot service（R39：测试/部署常用本地
             # service 而非全局单例；若只查全局单例，未注册时每次调用都 fall
@@ -955,7 +955,7 @@ class ResourceBroker:
 
     def _conservative_decision(self) -> Any:
         """decision 过期时的保守回退（§P0-012：不自行创建第二套 decision）。"""
-        from runtime.resource_autopilot import ResourceDecision
+        from factor_engine.runtime.resource_autopilot import ResourceDecision
 
         env = self.resource_envelope()
         return ResourceDecision(

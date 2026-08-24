@@ -26,8 +26,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from runtime import factor_block_ref as fbr
-from runtime.buffer_ref import BufferRef
+from factor_engine.runtime import factor_block_ref as fbr
+from factor_engine.runtime.buffer_ref import BufferRef
 
 
 def _idx(dates=("2024-01-01", "2024-01-02"), assets=("A", "B")):
@@ -43,11 +43,11 @@ def _ser(data, name="instrument"):
 
 
 def _engine(dates: int = 8):
-    from api import rank, ts_mean, ts_std
-    from api.columns import col
-    from api.factor import Factor
-    from backend.pandas_backend import PandasBackend
-    from runtime.engine import FactorEngine
+    from factor_engine.api import rank, ts_mean, ts_std
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
     from tests.helpers import InMemorySeriesSource
 
     dts = pd.bdate_range("2024-01-02", periods=dates)
@@ -90,7 +90,7 @@ def test_r39_030_factor_block_ref_fields_frozen():
     with pytest.raises(FrozenInstanceError):
         ref.factor_ids = ("x",)  # type: ignore[misc]
     # AxisBufferRef 在 runtime.buffer_ref 中不存在（本模块定义极简形态）
-    assert not hasattr(__import__("runtime.buffer_ref", fromlist=["x"]), "AxisBufferRef")
+    assert not hasattr(__import__("factor_engine.runtime.buffer_ref", fromlist=["x"]), "AxisBufferRef")
 
 
 def test_r39_030_values_and_validity_reuse_bufferref():
@@ -261,7 +261,7 @@ def test_r39_030_to_parquet_roundtrip_values(tmp_path):
 
 
 def test_r39_030_matrix_block_path_records_factor_block_ref(tmp_path, monkeypatch):
-    from storage.materialize.factor_matrix_materializer import (
+    from factor_engine.storage.materialize.factor_matrix_materializer import (
         FactorMatrixMaterializer,
         _read_manifest,
     )
@@ -300,7 +300,7 @@ def test_r39_030_matrix_block_path_records_factor_block_ref(tmp_path, monkeypatc
 
 def test_r39_030_matrix_legacy_path_not_recording(tmp_path):
     """legacy（非 block）路径不构造 FactorBlockRef（默认路径行为不变）。"""
-    from storage.materialize.factor_matrix_materializer import FactorMatrixMaterializer
+    from factor_engine.storage.materialize.factor_matrix_materializer import FactorMatrixMaterializer
 
     fbr.reset_counters()
     d1, d2 = pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")
@@ -323,7 +323,7 @@ def test_r39_030_matrix_legacy_path_not_recording(tmp_path):
 
 
 def test_r39_030_materialize_batch_shared_axis_count_dedup(tmp_path):
-    from runtime.materialize_batch import (
+    from factor_engine.runtime.materialize_batch import (
         MaterializeItem,
         execute_materialize_batch,
     )
@@ -365,7 +365,7 @@ def test_r39_030_materialize_batch_shared_axis_count_dedup(tmp_path):
 
 def test_r39_030_record_shared_axes_different_axis_zero():
     """异 axis batch → 共享 axis 计数 0。"""
-    from runtime.materialize_batch import _record_shared_axes
+    from factor_engine.runtime.materialize_batch import _record_shared_axes
 
     idx1 = _idx()
     idx2 = _idx(dates=("2024-02-01", "2024-02-02"))

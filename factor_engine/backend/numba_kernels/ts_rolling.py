@@ -24,7 +24,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from backend.numba_kernel_registry import (  # noqa: E402
+from factor_engine.backend.numba_kernel_registry import (  # noqa: E402
     NUMBA_AVAILABLE,
     NumbaKernelRegistry,
 )

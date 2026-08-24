@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from service.observability import info
+from factor_engine.service.observability import info
 
 
 def production_preflight() -> dict[str, Any]:
@@ -20,7 +20,7 @@ def production_preflight() -> dict[str, Any]:
 
     # 1. ambient run mode is valid (R21-144..146).
     try:
-        from service.policies import resolve_ambient_run_mode
+        from factor_engine.service.policies import resolve_ambient_run_mode
 
         checks["ambient_run_mode"] = {"ok": True, "value": resolve_ambient_run_mode()}
     except ValueError as exc:
@@ -28,7 +28,7 @@ def production_preflight() -> dict[str, Any]:
 
     # 2. data_access is installed as a normal package (R21-130..133).
     try:
-        from storage.data_access_loader import data_access_identity
+        from factor_engine.storage.data_access_loader import data_access_identity
 
         path, version, build_hash = data_access_identity()
         checks["data_access"] = {"ok": True, "path": path, "version": version, "build_hash": build_hash}
@@ -37,7 +37,7 @@ def production_preflight() -> dict[str, Any]:
 
     # 3. operator registry / evidence artifact generation (R21-084).
     try:
-        from backend.evidence_provenance import compute_payload_hash, load_verified_artifact
+        from factor_engine.backend.evidence_provenance import compute_payload_hash, load_verified_artifact
 
         evidence = load_verified_artifact()
         ev_version = compute_payload_hash((evidence or {}).get("provenance") or {})
@@ -69,8 +69,8 @@ def production_preflight() -> dict[str, Any]:
 
     ok = all(entry.get("ok") for entry in checks.values())
     if ok:
-        info("service.preflight.ok", checks={k: "ok" for k in checks})
+        info("factor_engine.service.preflight.ok", checks={k: "ok" for k in checks})
     else:
         failed = {k: v for k, v in checks.items() if not v.get("ok")}
-        info("service.preflight.failed", failed=failed)
+        info("factor_engine.service.preflight.failed", failed=failed)
     return {"ok": ok, "checks": checks}

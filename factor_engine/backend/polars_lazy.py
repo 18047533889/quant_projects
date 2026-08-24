@@ -127,20 +127,20 @@ class LazyColumnBundle:
         if self._materialized_budget > 0:
             return self._materialized_budget
         try:
-            from runtime.resource_governor import ExecutionResourcePlan
+            from factor_engine.runtime.resource_governor import ExecutionResourcePlan
 
             return int(ExecutionResourcePlan.auto().process_budget_bytes * 0.08)
         except Exception:
             return 512 * 1024 * 1024
 
     def _cache_bytes(self) -> int:
-        from runtime.resource_governor import estimate_object_bytes
+        from factor_engine.runtime.resource_governor import estimate_object_bytes
 
         return sum(estimate_object_bytes(v) for v in self._materialized.values())
 
     def _evict_to(self, target: int) -> None:
         """有界 LRU：超出预算时逐出最早物化的列。"""
-        from runtime.resource_governor import estimate_object_bytes
+        from factor_engine.runtime.resource_governor import estimate_object_bytes
 
         if not isinstance(self._materialized, OrderedDict):
             self._materialized = OrderedDict(self._materialized)
@@ -165,7 +165,7 @@ class LazyColumnBundle:
         约束的有界 LRU——DataAccessSource 把列逐出后，这里不会留下第二份常驻
         Series 让内存实际不释放。
         """
-        from runtime.resource_governor import estimate_object_bytes
+        from factor_engine.runtime.resource_governor import estimate_object_bytes
 
         from data_access.read.adapters import arrow_table_to_multiindex_columns
 

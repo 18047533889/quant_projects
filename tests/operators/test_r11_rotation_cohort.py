@@ -21,8 +21,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.stateful.rotation import CsRankCompositionChurn
-from cleaned_operators.stateful.rotation import CsTailRetention
+from factor_engine.cleaned_operators.stateful.rotation import CsRankCompositionChurn
+from factor_engine.cleaned_operators.stateful.rotation import CsTailRetention
 
 
 def _panel(values, groups, cols=None):

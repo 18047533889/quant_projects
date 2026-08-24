@@ -22,11 +22,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
+from factor_engine.cleaned_operators import load_all
 
 load_all()
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 def _col(data: list[float]) -> pd.DataFrame:
@@ -47,7 +47,7 @@ def _get(name: str):
 # #29  robust correlation must genuinely differ from Pearson
 # ---------------------------------------------------------------------------
 def test_robust_correlation_differs_from_pearson_on_outlier():
-    from cleaned_operators.feature_geometry import _biweight_midcorr
+    from factor_engine.cleaned_operators.feature_geometry import _biweight_midcorr
 
     x = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 100.0])
     y = np.array([2.0, 4.0, 6.0, 8.0, 10.0, 0.01])
@@ -86,7 +86,7 @@ def test_feature_mode_share_robust_band_differs_from_pearson_band():
 # #30  beta break is the true beta, not a correlation
 # ---------------------------------------------------------------------------
 def test_beta_break_uses_true_cov_var_slope():
-    from cleaned_operators.feature_geometry import _true_beta
+    from factor_engine.cleaned_operators.feature_geometry import _true_beta
 
     # y = 3x + noise-free: true beta = 3, correlation = 1.
     x = np.arange(1.0, 61.0)
@@ -154,7 +154,7 @@ def test_dc_scale_missing_breaks_episode():
 # #35  group_tail_lead baseline uses the common observation cohort
 # ---------------------------------------------------------------------------
 def test_group_tail_lead_common_cohort_reduces_counts_for_others():
-    from cleaned_operators.tail_systemic import _tail_lead_effective_n_series
+    from factor_engine.cleaned_operators.tail_systemic import _tail_lead_effective_n_series
 
     rng = np.random.default_rng(5)
     rows, cols = 40, 3
@@ -186,7 +186,7 @@ def test_group_tail_lead_common_cohort_reduces_counts_for_others():
 # #36  tail lead requires a minimum conditioning-event count + effective_event_n
 # ---------------------------------------------------------------------------
 def test_group_tail_lead_min_conditioning_events_and_effective_n():
-    from cleaned_operators.tail_systemic import _tail_lead_effective_n_series, _tail_lead_series
+    from factor_engine.cleaned_operators.tail_systemic import _tail_lead_effective_n_series, _tail_lead_series
 
     rng = np.random.default_rng(6)
     rows, cols = 60, 2
@@ -340,7 +340,7 @@ def test_mark_missing_policy_censor_vs_drop():
 
 
 def test_event_states_three_way_classification():
-    from cleaned_operators.marked_event import _event_states
+    from factor_engine.cleaned_operators.marked_event import _event_states
 
     ev = np.array([1.0, 0.0, 1.0, np.nan, 1.0])
     mk = np.array([1.5, 0.0, np.nan, 0.0, 3.0])

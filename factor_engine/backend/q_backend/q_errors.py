@@ -14,14 +14,100 @@ Hard Gates (文档 §85):
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Mapping
 
-from runtime.exceptions import (
+from factor_engine.runtime.exceptions import (
     DataQualityError,
     FactorEngineError,
     SchemaError,
     SemanticError,
 )
+
+
+# ---------------------------------------------------------------------------
+# Q2-P0-017: Semantic-kind → q output dtype / null policy derivation.
+#
+# The ``value`` column dtype is derived from the canonical semantic contract
+# (``IRNode.semantic_attrs["semantic_kind"]`` — vocabulary in
+# ``ir.types.SemanticType``), never hardcoded to float64.  A Condition /
+# Event / Mask output is bool, a State / Group / Period / Status output is an
+# integer categorical code, and a timestamp-role output is datetime — only
+# numeric-derived series fall back to float64.
+# ---------------------------------------------------------------------------
+
+# Canonical semantic kind -> q ``value`` output dtype.  Kinds absent here are
+# numeric-derived / generic and default to float64.
+_SEMANTIC_KIND_TO_DTYPE: Mapping[str, str] = {
+    # Condition / Event / Mask outputs are boolean.
+    "EventBool": "bool",
+    "MaskBool": "bool",
+    "ConditionBool": "bool",
+    # State / categorical / group / period / status outputs are int category
+    # codes (the integer backing is the canonical storage dtype).
+    "StateSigned": "int64",
+    "GroupKey": "int64",
+    "FiscalPeriodId": "int64",
+    "StatusCode": "int64",
+    "CategoryCode": "int64",
+    # Timestamp-role outputs.
+    "KnowledgeTimestamp": "datetime64[ns]",
+    "EffectiveTimestamp": "datetime64[ns]",
+    "RevisionTimestamp": "datetime64[ns]",
+}
+
+
+def semantic_kind_to_output_dtype(semantic_kind: str | None) -> str:
+    """Derive the q ``value`` output dtype from a canonical semantic kind.
+
+    ``None`` / unknown kinds are numeric-derived and return ``float64``.  The
+    call site never hardcodes the dtype; it always goes through this authority.
+    """
+    if semantic_kind is None:
+        return "float64"
+    return _SEMANTIC_KIND_TO_DTYPE.get(semantic_kind, "float64")
+
+
+# output_null_policy values
+NULL_POLICY_ANY_ALLOWED = "any_allowed"    # sparse condition/event/mask panel: NaN == absent
+NULL_POLICY_WARMUP_OK = "warmup_ok"        # numeric/categorical: rolling-warmup NaN legal
+NULL_POLICY_STRICT = "strict"              # timestamp-role: no nulls permitted
+
+
+def semantic_null_policy(
+    semantic_kind: str | None,
+) -> tuple[bool, bool, str]:
+    """Derive null policy from the canonical semantic kind.
+
+    Returns ``(warmup_nulls_allowed, structural_nulls_allowed,
+    output_null_policy)``.  This replaces the blanket ``allow_nulls=True``: a
+    sparse event/mask panel is structurally nullable, a numeric series only
+    permits rolling-warmup NaN, and a timestamp role forbids nulls entirely.
+    """
+    if semantic_kind in {"EventBool", "MaskBool", "ConditionBool"}:
+        return True, True, NULL_POLICY_ANY_ALLOWED
+    if semantic_kind in {
+        "KnowledgeTimestamp",
+        "EffectiveTimestamp",
+        "RevisionTimestamp",
+    }:
+        return False, False, NULL_POLICY_STRICT
+    # numeric / categorical / state outputs: rolling-warmup NaN allowed, but a
+    # structural (interior) null is not silently waved through.
+    return True, False, NULL_POLICY_WARMUP_OK
+
+
+def semantic_null_policy_of_contract(
+    semantic_kind: str | None,
+) -> dict[str, object]:
+    """Full derived null-policy dict for QOutputContract construction."""
+    warmup, structural, policy = semantic_null_policy(semantic_kind)
+    return {
+        "warmup_nulls_allowed": warmup,
+        "structural_nulls_allowed": structural,
+        "output_null_policy": policy,
+        "allow_nulls": policy != NULL_POLICY_STRICT,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -92,6 +178,10 @@ class QOutputContract:
     grain: str | None = None
     min_rows: int | None = None
     max_rows: int | None = None
+    # Derived from the canonical semantic kind (not blanket allow_nulls).
+    warmup_nulls_allowed: bool = True
+    structural_nulls_allowed: bool = True
+    output_null_policy: str = NULL_POLICY_WARMUP_OK
 
 
 # ---------------------------------------------------------------------------

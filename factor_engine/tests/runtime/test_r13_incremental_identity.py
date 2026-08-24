@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import pytest
 
-from ir.nodes import IRNode
+from factor_engine.ir.nodes import IRNode
 
 
 # ---------------------------------------------------------------------------
@@ -55,7 +55,7 @@ def _ir_node(op: str = "ts_mean", **attrs):
 
 @pytest.fixture(scope="module")
 def _loaded_registry():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
     return True
@@ -68,9 +68,9 @@ class TestImplementationDigest:
 
         这里 monkeypatch ``_fn``（kernel），绝不去改真实源码文件。
         """
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
-        from runtime.incremental_scheduler import _implementation_digest
+        from factor_engine.runtime.incremental_scheduler import _implementation_digest
 
         op = OperatorRegistry.get("MACD")  # PandasFunctionOperator, _fn=pd_macd_line
         assert op is not None and callable(getattr(op, "_fn", None))
@@ -83,11 +83,11 @@ class TestImplementationDigest:
 
     def test_digest_unchanged_when_wrapper_base_changes(self):
         """P0-35: 只改 wrapper 基类（calculate）→ 无关算子的 hash 必须不变。"""
-        import cleaned_operators.overhaul.base as ob
+        import factor_engine.cleaned_operators.overhaul.base as ob
 
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
-        from runtime.incremental_scheduler import _implementation_digest
+        from factor_engine.runtime.incremental_scheduler import _implementation_digest
 
         op = OperatorRegistry.get("MACD")
         original_calc = ob.PandasFunctionOperator.calculate
@@ -111,9 +111,9 @@ class TestImplementationDigest:
         digest 绑定到 kernel 代码对象（bytecode/closure），而非 ``type`` 的源码
         文件。
         """
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
-        from runtime.incremental_scheduler import _implementation_digest
+        from factor_engine.runtime.incremental_scheduler import _implementation_digest
 
         op = OperatorRegistry.get("ts_mean")
         assert not callable(getattr(op, "_fn", None))
@@ -137,9 +137,9 @@ class TestImplementationDigest:
 
     def test_manifest_uses_implementation_digest(self):
         """P0-35 集成：manifest 的 implementation_hash 随 kernel 变化而变化。"""
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
-        from runtime.incremental_scheduler import _operator_manifest_from_ir
+        from factor_engine.runtime.incremental_scheduler import _operator_manifest_from_ir
 
         ir = _ir_node("ts_mean", d=20)
         m1 = _operator_manifest_from_ir(ir)
@@ -171,7 +171,7 @@ class TestOperatorManifestFailure:
     @pytest.fixture(autouse=True)
     def _no_registry_load(self, monkeypatch):
         monkeypatch.setattr(
-            "backend.cleaned_bridge.ensure_cleaned_loaded", lambda: None
+            "factor_engine.backend.cleaned_bridge.ensure_cleaned_loaded", lambda: None
         )
         yield
 
@@ -180,7 +180,7 @@ class TestOperatorManifestFailure:
 
     def test_production_no_implementation_raises(self, monkeypatch):
         """production：canonical 无实现（registry 未加载/缺失）→ 硬失败。"""
-        from runtime import incremental_scheduler as isch
+        from factor_engine.runtime import incremental_scheduler as isch
 
         with pytest.raises(isch.OperatorManifestUnavailable):
             isch._operator_manifest_from_ir(self._ir("no_such_op_xyz"), production=True)
@@ -189,9 +189,9 @@ class TestOperatorManifestFailure:
         """production：实现存在但 digest 算不出来 → 硬失败。"""
         from types import SimpleNamespace
 
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
-        from runtime import incremental_scheduler as isch
+        from factor_engine.runtime import incremental_scheduler as isch
 
         fake_impl = SimpleNamespace(metadata=SimpleNamespace(semantic_version="1.0"))
         monkeypatch.setattr(
@@ -205,9 +205,9 @@ class TestOperatorManifestFailure:
         """P0-37: research 下构建失败只 warning 跳过（仍记录 canonical），绝不抛。"""
         from types import SimpleNamespace
 
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
-        from runtime import incremental_scheduler as isch
+        from factor_engine.runtime import incremental_scheduler as isch
 
         fake_impl = SimpleNamespace(metadata=SimpleNamespace(semantic_version="1.0"))
         monkeypatch.setattr(
@@ -222,9 +222,9 @@ class TestOperatorManifestFailure:
         """P0-37: 构建过程直接 raise（非 digest=None）也 propagate。"""
         from types import SimpleNamespace
 
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
-        from runtime import incremental_scheduler as isch
+        from factor_engine.runtime import incremental_scheduler as isch
 
         fake_impl = SimpleNamespace(metadata=SimpleNamespace(semantic_version="1.0"))
         monkeypatch.setattr(
@@ -252,12 +252,12 @@ class TestCalendarFingerprint:
 
     def test_interior_holiday_swap_changes_digest(self):
         """P0-38: 同 len/first/last、内部交易日不同 → digest 必须不同。"""
-        from storage.trading_calendar import (
+        from factor_engine.storage.trading_calendar import (
             TradingCalendar,
             register_trading_calendar,
         )
 
-        from runtime.incremental_scheduler import _calendar_version
+        from factor_engine.runtime.incremental_scheduler import _calendar_version
 
         c1 = TradingCalendar(
             ["2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05", "2024-01-08"]
@@ -277,12 +277,12 @@ class TestCalendarFingerprint:
         assert str(c1.days[-1].date()) == str(c2.days[-1].date()) == "2024-01-08"
 
     def test_same_calendar_deterministic(self):
-        from storage.trading_calendar import (
+        from factor_engine.storage.trading_calendar import (
             TradingCalendar,
             register_trading_calendar,
         )
 
-        from runtime.incremental_scheduler import _calendar_version
+        from factor_engine.runtime.incremental_scheduler import _calendar_version
 
         register_trading_calendar(
             "test_det",
@@ -294,22 +294,22 @@ class TestCalendarFingerprint:
 
     def test_production_fingerprint_failure_raises(self, monkeypatch):
         """P0-39: 有市场但日历不可解析 → production fail-closed。"""
-        from runtime import incremental_scheduler as isch
+        from factor_engine.runtime import incremental_scheduler as isch
 
         src = self._source("no_such_market")
         # 让 get_trading_calendar 返回 None（模拟解析失败）
         monkeypatch.setattr(
-            "storage.trading_calendar.get_trading_calendar", lambda m: None
+            "factor_engine.storage.trading_calendar.get_trading_calendar", lambda m: None
         )
         with pytest.raises(isch.CalendarFingerprintUnavailable):
             isch._calendar_version(src, production=True)
 
     def test_research_fingerprint_failure_returns_none(self, monkeypatch):
         """P0-39: research 下构建失败返回 None（不静默当 success，只跳过）。"""
-        from runtime import incremental_scheduler as isch
+        from factor_engine.runtime import incremental_scheduler as isch
 
         monkeypatch.setattr(
-            "storage.trading_calendar.get_trading_calendar", lambda m: None
+            "factor_engine.storage.trading_calendar.get_trading_calendar", lambda m: None
         )
         assert isch._calendar_version(self._source("no_such_market")) is None
 
@@ -317,7 +317,7 @@ class TestCalendarFingerprint:
         """无市场/无日历依赖的数据源 → 无需指纹（返回 None，不失败）。"""
         from types import SimpleNamespace
 
-        from runtime.incremental_scheduler import _calendar_version
+        from factor_engine.runtime.incremental_scheduler import _calendar_version
 
         assert _calendar_version(SimpleNamespace(dataset="mock_ds")) is None
         assert (
@@ -349,7 +349,7 @@ class TestDependencyDatasetResolution:
     def test_research_skips_unresolved_edge(self):
         from types import SimpleNamespace
 
-        from runtime.incremental_scheduler import _edges_from_analysis
+        from factor_engine.runtime.incremental_scheduler import _edges_from_analysis
 
         edges = _edges_from_analysis(
             "f", self._analysis(), SimpleNamespace(dataset="ashare_stock_daily")
@@ -359,7 +359,7 @@ class TestDependencyDatasetResolution:
     def test_production_raises_on_unresolved_edge(self):
         from types import SimpleNamespace
 
-        from runtime.incremental_scheduler import (
+        from factor_engine.runtime.incremental_scheduler import (
             DependencyDatasetResolutionError,
             _edges_from_analysis,
         )
@@ -375,7 +375,7 @@ class TestDependencyDatasetResolution:
     def test_spec_dataset_wins_over_anchor(self):
         from types import SimpleNamespace
 
-        from runtime.incremental_scheduler import _edges_from_analysis
+        from factor_engine.runtime.incremental_scheduler import _edges_from_analysis
 
         analysis = SimpleNamespace(
             referenced_fields={
@@ -404,10 +404,10 @@ class TestExtendDateForward:
         def _raise(*a, **k):
             raise RuntimeError("calendar broke")
 
-        monkeypatch.setattr("storage.trading_calendar.trading_day_offset", _raise)
+        monkeypatch.setattr("factor_engine.storage.trading_calendar.trading_day_offset", _raise)
 
     def test_production_raises_on_calendar_error(self, monkeypatch):
-        from runtime import incremental_scheduler as isch
+        from factor_engine.runtime import incremental_scheduler as isch
 
         self._monkeypatch_offset_fail(monkeypatch)
         with pytest.raises(isch.CalendarOffsetError):
@@ -417,7 +417,7 @@ class TestExtendDateForward:
 
     def test_research_over_extends_never_zero(self, monkeypatch):
         """research: 日历错误时按自然日过扩（>= bars 个自然日），绝不停在 t0。"""
-        from runtime import incremental_scheduler as isch
+        from factor_engine.runtime import incremental_scheduler as isch
 
         self._monkeypatch_offset_fail(monkeypatch)
         out = isch._extend_date_forward(
@@ -432,7 +432,7 @@ class TestExtendDateForward:
         assert out >= expected.isoformat()
 
     def test_bars_none_returns_cap(self):
-        from runtime import incremental_scheduler as isch
+        from factor_engine.runtime import incremental_scheduler as isch
 
         assert (
             isch._extend_date_forward("2024-06-01", None, market="A", cap="2026-01-01")
@@ -440,7 +440,7 @@ class TestExtendDateForward:
         )
 
     def test_bars_zero_returns_end_date(self):
-        from runtime import incremental_scheduler as isch
+        from factor_engine.runtime import incremental_scheduler as isch
 
         assert (
             isch._extend_date_forward("2024-06-01", 0, market="A") == "2024-06-01"
@@ -454,7 +454,7 @@ class TestExtendDateForward:
 
 class TestForwardImpactRequirement:
     def test_stored_conversion(self):
-        from runtime.dependency_catalog import (
+        from factor_engine.runtime.dependency_catalog import (
             UNBOUNDED_FORWARD_IMPACT,
             ForwardImpactRequirement,
             forward_impact_from_stored,
@@ -474,7 +474,7 @@ class TestForwardImpactRequirement:
         assert stored_from_forward_impact(ForwardImpactRequirement.unknown()) is None
 
     def test_effective_forward_bars(self):
-        from runtime.dependency_catalog import (
+        from factor_engine.runtime.dependency_catalog import (
             ForwardImpactRequirement,
             effective_forward_bars,
         )
@@ -493,13 +493,13 @@ class TestForwardImpactRequirement:
 
     def test_factors_for_event_carries_requirement(self, tmp_path):
         """catalog read path 现在返回 ForwardImpactRequirement（P0-43 迁移）。"""
-        from runtime.dependency_catalog import (
+        from factor_engine.runtime.dependency_catalog import (
             DependencyCatalog,
             FactorDependencyEdge,
             ForwardImpactRequirement,
         )
-        from runtime.incremental_scheduler import DataEvent
-        from storage.catalog import FactorCatalog
+        from factor_engine.runtime.incremental_scheduler import DataEvent
+        from factor_engine.storage.catalog import FactorCatalog
 
         catalog = FactorCatalog(tmp_path / "_catalog.sqlite")
         dep = DependencyCatalog(catalog)
@@ -529,7 +529,7 @@ class TestForwardImpactRequirement:
 
 class TestNormalizeDataEventStrictInt:
     def test_integral_int_ok(self):
-        from runtime.incremental_scheduler import normalize_data_event
+        from factor_engine.runtime.incremental_scheduler import normalize_data_event
 
         ev = normalize_data_event(
             {"dataset": "d", "column": "c", "updated_date": "2026-01-01", "sequence": 3}
@@ -537,7 +537,7 @@ class TestNormalizeDataEventStrictInt:
         assert ev.sequence == 3
 
     def test_integral_float_ok(self):
-        from runtime.incremental_scheduler import normalize_data_event
+        from factor_engine.runtime.incremental_scheduler import normalize_data_event
 
         ev = normalize_data_event(
             {"dataset": "d", "column": "c", "updated_date": "2026-01-01", "sequence": 3.0}
@@ -546,7 +546,7 @@ class TestNormalizeDataEventStrictInt:
 
     def test_fractional_float_rejected(self):
         """2.9 绝不截断成 2——强一致性排序字段必须严格整数。"""
-        from runtime.incremental_scheduler import normalize_data_event
+        from factor_engine.runtime.incremental_scheduler import normalize_data_event
 
         with pytest.raises(ValueError):
             normalize_data_event(
@@ -554,7 +554,7 @@ class TestNormalizeDataEventStrictInt:
             )
 
     def test_fractional_string_rejected(self):
-        from runtime.incremental_scheduler import normalize_data_event
+        from factor_engine.runtime.incremental_scheduler import normalize_data_event
 
         with pytest.raises(ValueError):
             normalize_data_event(
@@ -562,7 +562,7 @@ class TestNormalizeDataEventStrictInt:
             )
 
     def test_bool_rejected(self):
-        from runtime.incremental_scheduler import normalize_data_event
+        from factor_engine.runtime.incremental_scheduler import normalize_data_event
 
         with pytest.raises(ValueError):
             normalize_data_event(
@@ -577,7 +577,7 @@ class TestNormalizeDataEventStrictInt:
 
 class TestFactorExecutionScopeHint:
     def test_api_renamed_and_alias_kept(self):
-        import api.factor as af
+        import factor_engine.api.factor as af
 
         assert af.FactorExecutionScopeHint is not None
         # 别名保留，兼容既有导入（test_round13_execution_scope 用了它）。
@@ -588,7 +588,7 @@ class TestFactorExecutionScopeHint:
 
     def test_semantic_identity_is_single_runtime_identity(self):
         """runtime.factor_identity.FactorSemanticIdentity 是单一定义身份。"""
-        import runtime.factor_identity as fi
+        import factor_engine.runtime.factor_identity as fi
 
         ident = fi.FactorSemanticIdentity(
             ir_hash="i", operator_contract_hash="o", field_contract_hash="f",
@@ -598,8 +598,8 @@ class TestFactorExecutionScopeHint:
         assert "source_scope_hash" in fi.FactorSemanticIdentity.__dataclass_fields__
 
     def _factor_with_scope(self, **scope_overrides):
-        from api.factor import Factor, FactorExecutionScopeHint
-        from expr.base import Expr
+        from factor_engine.api.factor import Factor, FactorExecutionScopeHint
+        from factor_engine.expr.base import Expr
 
         scope = dict(
             market="A",
@@ -618,7 +618,7 @@ class TestFactorExecutionScopeHint:
         )
 
     def _digest_for(self, factor):
-        from runtime.factor_identity import compute_factor_identity
+        from factor_engine.runtime.factor_identity import compute_factor_identity
 
         ident = compute_factor_identity(
             _ir_node(),
@@ -676,7 +676,7 @@ class TestIdentityNamingDocs:
     def test_compute_factor_identity_docstring_distinguishes_levels(self):
         import inspect
 
-        import runtime.factor_identity as fi
+        import factor_engine.runtime.factor_identity as fi
 
         doc = inspect.getdoc(fi.compute_factor_identity)
         assert "SourceExpressionIdentity" in doc
@@ -687,7 +687,7 @@ class TestIdentityNamingDocs:
     def test_materialize_ctx_docstring_distinguishes_levels(self):
         import inspect
 
-        import runtime.factor_identity as fi
+        import factor_engine.runtime.factor_identity as fi
 
         doc = inspect.getdoc(fi.compute_identity_from_materialize_ctx)
         assert "SourceExpressionIdentity" in doc

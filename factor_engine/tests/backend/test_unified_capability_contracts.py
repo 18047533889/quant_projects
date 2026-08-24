@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import pytest
 
-from backend.contracts import (
+from factor_engine.backend.contracts import (
     BackendKind,
     CapabilityLevel,
     ExecutionKind,
     PhysicalImplementationSpec,
 )
-from backend.operator_capability import (
+from factor_engine.backend.operator_capability import (
     BackendCapability,
     BackendCapabilityRecord,
     backend_status,
@@ -27,7 +27,7 @@ from backend.operator_capability import (
 
 def test_single_authority_enums():
     """FE-BE-P0-001: Verify single authority for enums across modules."""
-    from backend.polars_backend_kind import (
+    from factor_engine.backend.polars_backend_kind import (
         ExecutionKind as PolarsExecutionKind,
         PhysicalImplementationSpec as PolarsPhysicalSpec,
     )
@@ -70,7 +70,7 @@ def test_merged_capability_record():
 
 def test_capability_for_returns_unified_type():
     """FE-BE-P0-002: capability_for returns BackendCapability with enum types."""
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
 
@@ -91,7 +91,7 @@ def test_capability_for_returns_unified_type():
 
 def test_production_mode_requires_explicit_spec():
     """FE-BE-P0-003: Production mode requires explicit PhysicalImplementationSpec."""
-    from backend.polars_backend_kind import (
+    from factor_engine.backend.polars_backend_kind import (
         PolarsImplementationKind,
         polars_backend_kind,
     )
@@ -116,7 +116,7 @@ def test_production_mode_requires_explicit_spec():
 
 def test_explicit_spec_overrides_heuristics():
     """FE-BE-P0-003: Explicit spec takes precedence over source inspection."""
-    from backend.polars_backend_kind import (
+    from factor_engine.backend.polars_backend_kind import (
         PolarsImplementationKind,
         polars_backend_kind,
     )
@@ -171,7 +171,7 @@ def test_physical_spec_production_eligibility():
 
 def test_capability_quality_marked_research_only():
     """FE-BE-P0-003: capability_quality is marked as research/diagnostic only."""
-    from backend.polars_backend_kind import capability_quality
+    from factor_engine.backend.polars_backend_kind import capability_quality
     import inspect
 
     # Check docstring contains warning
@@ -183,7 +183,7 @@ def test_capability_quality_marked_research_only():
 
 def test_backend_status_production_mode_default():
     """FE-BE-P0-003: backend_status defaults to production_mode=True."""
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
     import inspect
 
     load_all()

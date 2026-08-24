@@ -2,8 +2,8 @@
 
 from typing import Any
 
-from expr.column import ColumnRef
-from expr.field import FieldRef
+from factor_engine.expr.column import ColumnRef
+from factor_engine.expr.field import FieldRef
 
 #: Contract attributes embedded on a resolved :class:`~expr.field.FieldRef`
 #: (round-7 WS-E #281).  ``FieldRef`` is a frozen dataclass; the enrichment is
@@ -55,7 +55,7 @@ def _embed_field_contract(ref: FieldRef, spec: Any) -> FieldRef:
         if table_name:
             try:
                 # R17-001: resolve the table in the DSL's explicit A-share context.
-                from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+                from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
                 table_spec = MULTI_MARKET_FIELD_REGISTRY.registry_for("ashare").resolve_table(
                     str(table_name)
@@ -118,8 +118,8 @@ def field(
     # R17-001: the DSL ``field()`` API resolves through the market-aware resolver
     # with an EXPLICIT A-share context (the current single-market DSL default) —
     # never the implicit legacy fallback.
-    from fields.resolver import resolve_market_field
-    from market.context import ASHARE_CONTEXT
+    from factor_engine.fields.resolver import resolve_market_field
+    from factor_engine.market.context import ASHARE_CONTEXT
 
     resolved = resolve_market_field(name, ASHARE_CONTEXT, table=table, strict=False)
     spec = resolved.spec if resolved is not None else None
@@ -137,10 +137,10 @@ def field(
     if table is None and spec.table == "StockDailyBar":
         transport = spec.name
     else:
-        from api.source_ref import source_col
+        from factor_engine.api.source_ref import source_col
 
         transport = source_col(spec.table, spec.source_name).name
-    from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+    from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
     return _embed_field_contract(
         FieldRef(

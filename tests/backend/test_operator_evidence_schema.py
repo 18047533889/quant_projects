@@ -2,13 +2,13 @@
 """Evidence schema v2：参数域 supported_calls。"""
 from __future__ import annotations
 
-from backend.operator_evidence_schema import (
+from factor_engine.backend.operator_evidence_schema import (
     evidence_schema_version,
     operator_evidence_record,
     parameter_domain_verified,
     supported_calls_match,
 )
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 
 def test_evidence_schema_version_is_v2():

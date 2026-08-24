@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
-from planner.logical_plan import PlanNode
+from factor_engine.planner.logical_plan import PlanNode
 
 from .context import ExecutionContext
 from .polars_long_backend import PolarsLongBackend

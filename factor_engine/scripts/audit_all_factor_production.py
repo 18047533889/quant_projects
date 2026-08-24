@@ -943,7 +943,7 @@ def _minute_source(canonical: str) -> bool:
     """Return True for minute-frequency-source canonicals."""
     if canonical.startswith("intra_") or canonical in _MINUTE_SOURCE_EXTRA:
         return True
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     operator = OperatorRegistry.get(canonical, "pandas_numpy")
     if operator is None:
@@ -1378,7 +1378,7 @@ def _value(canonical: str, name: str, panels: dict[str, pd.DataFrame], *, operat
 
 
 def _build_call(canonical: str, operator: Any, panels: dict[str, pd.DataFrame]):
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     names = tuple(
         str(value)
@@ -1483,12 +1483,12 @@ def _implementation_label(operator: Any) -> str:
 
 
 def audit(*, require_admission: bool = True) -> list[str]:
-    from backend.operator_capability import production_eligible_backends
-    from cleaned_operators import load_all
-    from cleaned_operators.operator_policy import infer_operator_policy
-    from cleaned_operators.operator_spec import build_operator_spec
-    from cleaned_operators.production_hardening import factor_production_targets
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.operator_capability import production_eligible_backends
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
+    from factor_engine.cleaned_operators.operator_spec import build_operator_spec
+    from factor_engine.cleaned_operators.production_hardening import factor_production_targets
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     errors: list[str] = []
@@ -1496,7 +1496,7 @@ def audit(*, require_admission: bool = True) -> list[str]:
     template = panels["x"]
     prefix_rows = 160
 
-    from cleaned_operators.semantic_certification import should_fail_closed
+    from factor_engine.cleaned_operators.semantic_certification import should_fail_closed
 
     for canonical in sorted(factor_production_targets()):
         if should_fail_closed(canonical):
@@ -1620,7 +1620,7 @@ def main() -> int:
         for error in errors:
             print(f"- {error}", file=sys.stderr)
         return 1
-    from cleaned_operators.production_hardening import factor_production_targets
+    from factor_engine.cleaned_operators.production_hardening import factor_production_targets
 
     phase = "runtime" if arguments.runtime_only else "admission"
     print(

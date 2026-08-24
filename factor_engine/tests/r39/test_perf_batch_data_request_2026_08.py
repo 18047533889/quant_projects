@@ -13,19 +13,19 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from planner.batch_data_request import (
+from factor_engine.planner.batch_data_request import (
     BatchSourceResolver,
     ScanCostUnavailable,
     build_batch_data_request,
 )
-from planner.logical_plan import PlanNode
-from planner.physical_factor_dag import SourceScopeId
-from planner.source_binding import (
+from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.planner.physical_factor_dag import SourceScopeId
+from factor_engine.planner.source_binding import (
     ColumnSourceBinding,
     TimeRange,
     discover_column_source_bindings,
 )
-from api.source_ref import (
+from factor_engine.api.source_ref import (
     encode_source_ref,
     make_source_ref,
 )

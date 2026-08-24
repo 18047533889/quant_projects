@@ -10,15 +10,15 @@ import pytest
 
 pytest.importorskip("polars")
 
-from api.cleaned_ops import make_cleaned_call_factory
-from api.columns import col
-from api.factor import Factor
-from backend.factory import build_backend
-from backend.rank_spec import polars_cs_rank_expr
-from cleaned_operators import load_all
-from cleaned_operators.common.cs_broadcast import cs_rank_01
-from runtime.engine import FactorEngine
-from storage.factory import build_data_source
+from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+from factor_engine.api.columns import col
+from factor_engine.api.factor import Factor
+from factor_engine.backend.factory import build_backend
+from factor_engine.backend.rank_spec import polars_cs_rank_expr
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.common.cs_broadcast import cs_rank_01
+from factor_engine.runtime.engine import FactorEngine
+from factor_engine.storage.factory import build_data_source
 from tests.backend_parity.duckdb_ieee_fixture import seed_duckdb_ieee_panel, write_duckdb_registry
 from tests.helpers import InMemorySeriesSource
 
@@ -141,7 +141,7 @@ def test_rank_duckdb_all_null_cross_section(duckdb_ieee_source):
 
 def test_is_nan_duckdb_detects_ieee_nan(duckdb_ieee_source):
     """DuckDB 原生 NaN fixture：is_nan 须识别 IEEE NaN（非 SQL NULL）。"""
-    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
     if "is_nan" not in DAILY_CANONICALS:
         pytest.skip("is_nan is not production-certified")
     load_all()

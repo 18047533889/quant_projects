@@ -13,13 +13,13 @@ from __future__ import annotations
 
 import pytest
 
-from fields.registry import (
+from factor_engine.fields.registry import (
     AmbiguousField,
     FieldRegistry,
     ResolvedField,
     UnknownField,
 )
-from fields.spec import FieldSpec, TableSpec
+from factor_engine.fields.spec import FieldSpec, TableSpec
 
 
 # ---------------------------------------------------------------------------

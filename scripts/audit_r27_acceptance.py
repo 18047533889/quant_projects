@@ -57,12 +57,12 @@ def _src_contains(path: str, needle: str) -> bool:
 def _source_gates() -> dict[str, tuple[bool, str]]:
     return {
         "R27_TRUE_DAG_NODE_SCHEDULER": (
-            _has("planner.physical_factor_dag", "PhysicalFactorDAG")
-            and _has("runtime.adaptive_batch_scheduler", "AdaptiveBatchScheduler"),
+            _has("factor_engine.planner.physical_factor_dag", "PhysicalFactorDAG")
+            and _has("factor_engine.runtime.adaptive_batch_scheduler", "AdaptiveBatchScheduler"),
             "PhysicalFactorDAG + AdaptiveBatchScheduler present",
         ),
         "R27_SHARED_NODES_PARALLELIZED": (
-            _has("runtime.batch_service", "materialize_shared_nodes_parallel"),
+            _has("factor_engine.runtime.batch_service", "materialize_shared_nodes_parallel"),
             "shared nodes parallel materialization present",
         ),
         "R27_COLUMN_OVERLAP_NOT_FALSE_DEPENDENCY": (
@@ -70,53 +70,53 @@ def _source_gates() -> dict[str, tuple[bool, str]]:
                 "planner/dependency_graph.py",
                 "共享只读 close 必须不拆层",
             )
-            or _has("planner.dependency_graph", "_dependency_layers"),
+            or _has("factor_engine.planner.dependency_graph", "_dependency_layers"),
             "column overlap no longer blocks parallelism",
         ),
         "R27_NATIVE_MULTI_ROOT_FUSION": (
-            _has("planner.native_fusion", "plan_native_fusion_groups"),
+            _has("factor_engine.planner.native_fusion", "plan_native_fusion_groups"),
             "native fusion grouping present",
         ),
         "R27_HYBRID_THREAD_PROCESS_EXECUTOR": (
-            _has("runtime.hybrid_executor", "HybridExecutor"),
+            _has("factor_engine.runtime.hybrid_executor", "HybridExecutor"),
             "hybrid executor present",
         ),
         "R27_NESTED_PARALLELISM_CLOSED": (
-            _has("runtime.hybrid_executor", "set_worker_thread_env"),
+            _has("factor_engine.runtime.hybrid_executor", "set_worker_thread_env"),
             "nested parallelism env closure present",
         ),
         "R27_DYNAMIC_MEMORY_HEADROOM": (
-            _has("runtime.resource_governor", "live_memory_headroom_bytes"),
+            _has("factor_engine.runtime.resource_governor", "live_memory_headroom_bytes"),
             "live memory headroom present",
         ),
         "R27_EXTERNAL_WORKLOAD_AWARE": (
-            _class_has("runtime.resource_governor", "MemoryGovernor", "external_pressure_stage")
-            or _has("runtime.resource_broker", "pressure_stage"),
+            _class_has("factor_engine.runtime.resource_governor", "MemoryGovernor", "external_pressure_stage")
+            or _has("factor_engine.runtime.resource_broker", "pressure_stage"),
             "external workload aware pressure stage present",
         ),
         "R27_PROCESS_FAMILY_MEMORY_ACCOUNTED": (
-            _has("runtime.resource_governor", "process_family_rss_bytes"),
+            _has("factor_engine.runtime.resource_governor", "process_family_rss_bytes"),
             "process family RSS accounted",
         ),
         "R27_DATAACCESS_SCAN_COST_INTEGRATED": (
-            _class_has("storage.sources.data_access_source", "DataAccessSource",
+            _class_has("factor_engine.storage.sources.data_access_source", "DataAccessSource",
                        "estimate_scan_cost"),
             "DataAccess ScanCost public API bridge present",
         ),
         "R27_OPERATOR_COST_CALIBRATED": (
-            _has("backend.operator_cost", "calibrated_plan_peak_bytes"),
+            _has("factor_engine.backend.operator_cost", "calibrated_plan_peak_bytes"),
             "operator cost calibrated peak present",
         ),
         "R27_MEMORY_TOKEN_ADMISSION": (
-            _has("runtime.resource_broker", "ResourceBroker"),
+            _has("factor_engine.runtime.resource_broker", "ResourceBroker"),
             "memory token admission (ResourceBroker) present",
         ),
         "R27_CPU_TOKEN_ADMISSION": (
-            _has("runtime.resource_broker", "_CpuTokenAllocator"),
+            _has("factor_engine.runtime.resource_broker", "_CpuTokenAllocator"),
             "cpu token allocator present",
         ),
         "R27_IO_TOKEN_ADMISSION": (
-            _has("runtime.resource_broker", "_IoTokenAllocator"),
+            _has("factor_engine.runtime.resource_broker", "_IoTokenAllocator"),
             "io token allocator present",
         ),
         "R27_SPILL_TOKEN_ADMISSION": (
@@ -124,19 +124,19 @@ def _source_gates() -> dict[str, tuple[bool, str]]:
             "spill token admission present",
         ),
         "R27_AUTO_SHARD_SEMANTIC_SAFE": (
-            _has("runtime.adaptive_sharding", "classify_shard_legality"),
+            _has("factor_engine.runtime.adaptive_sharding", "classify_shard_legality"),
             "semantic shard legality present",
         ),
         "R27_ADAPTIVE_SHARD_SIZE": (
-            _has("runtime.adaptive_sharding", "adaptive_shard_size"),
+            _has("factor_engine.runtime.adaptive_sharding", "adaptive_shard_size"),
             "adaptive shard size present",
         ),
         "R27_READ_WAVE_MEMORY_BOUNDED": (
-            _has("planner.read_wave_planner", "ReadWavePlanner"),
+            _has("factor_engine.planner.read_wave_planner", "ReadWavePlanner"),
             "read wave planner present",
         ),
         "R27_GLOBAL_PREFETCH_UNION_REMOVED": (
-            _class_has("storage.sources.read_session", "DataSourceReadSession",
+            _class_has("factor_engine.storage.sources.read_session", "DataSourceReadSession",
                        "prepare_waves"),
             "wave-based prepare (no full-batch union) present",
         ),
@@ -146,11 +146,11 @@ def _source_gates() -> dict[str, tuple[bool, str]]:
             "as_completed streaming present",
         ),
         "R27_BOUNDED_WRITE_BACKPRESSURE": (
-            _has("runtime.streaming_result_sink", "BoundedResultQueue"),
+            _has("factor_engine.runtime.streaming_result_sink", "BoundedResultQueue"),
             "bounded write queue + backpressure present",
         ),
         "R27_COMPUTE_WRITE_OVERLAP": (
-            _has("runtime.streaming_result_sink", "StreamingResultSink"),
+            _has("factor_engine.runtime.streaming_result_sink", "StreamingResultSink"),
             "compute/write pipeline overlap present",
         ),
         "R27_CACHE_BENEFIT_DENSITY": (
@@ -158,16 +158,16 @@ def _source_gates() -> dict[str, tuple[bool, str]]:
             "benefit-density style reuse scoring present",
         ),
         "R27_DOUBLE_CACHE_BUDGET_CLOSED": (
-            _has("runtime.resource_broker", "ResourceBroker"),
+            _has("factor_engine.runtime.resource_broker", "ResourceBroker"),
             "global resource broker budgets cache layers",
         ),
         "R27_SPILL_VS_RECOMPUTE_DECISION": (
-            _has("runtime.runtime_calibration", "record_task_actual")
+            _has("factor_engine.runtime.runtime_calibration", "record_task_actual")
             and _src_contains("runtime/task_resource_contract.py", "cheap_operator_contract"),
             "spill-vs-recompute calibration + cheap-operator contract present",
         ),
         "R27_PIT_SEMANTICS_PRESERVED": (
-            _has("runtime.adaptive_batch_scheduler", "AdaptiveBatchScheduler"),
+            _has("factor_engine.runtime.adaptive_batch_scheduler", "AdaptiveBatchScheduler"),
             "fast path reuses same compile→execute→materialize chain",
         ),
         "R27_SHARD_FULLRUN_EQUIVALENCE": (
@@ -179,11 +179,11 @@ def _source_gates() -> dict[str, tuple[bool, str]]:
             "fast-vs-serial equivalence test present",
         ),
         "R27_OOM_ZERO": (
-            _has("runtime.resource_broker", "ResourceBroker"),
+            _has("factor_engine.runtime.resource_broker", "ResourceBroker"),
             "memory token admission prevents OOM",
         ),
         "R27_DISK_FULL_ZERO": (
-            _has("runtime.resource_governor", "spill_disk_available")
+            _has("factor_engine.runtime.resource_governor", "spill_disk_available")
             and _src_contains("runtime/resource_broker.py", "usable_spill"),
             "spill free-disk guard prevents disk-full",
         ),
@@ -207,11 +207,11 @@ def probe_scheduler_runs() -> dict[str, object]:
     try:
         import pandas as pd
 
-        from api import rank, ts_mean, ts_std
-        from api.columns import col
-        from api.factor import Factor
-        from backend.pandas_backend import PandasBackend
-        from runtime.engine import FactorEngine
+        from factor_engine.api import rank, ts_mean, ts_std
+        from factor_engine.api.columns import col
+        from factor_engine.api.factor import Factor
+        from factor_engine.backend.pandas_backend import PandasBackend
+        from factor_engine.runtime.engine import FactorEngine
         from tests.helpers import InMemorySeriesSource
 
         dates = pd.bdate_range("2024-01-02", periods=20)
@@ -248,9 +248,9 @@ def probe_scheduler_runs() -> dict[str, object]:
 
 
 def probe_resource_broker() -> dict[str, object]:
-    from runtime.resource_broker import ResourceBroker
-    from runtime.resource_governor import live_memory_headroom_bytes
-    from runtime.task_resource_contract import TaskResourceContract
+    from factor_engine.runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime.resource_governor import live_memory_headroom_bytes
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
     broker = ResourceBroker()
     snap = broker.snapshot()
@@ -274,7 +274,7 @@ def probe_resource_broker() -> dict[str, object]:
 
 
 def probe_dag_parallelism() -> dict[str, object]:
-    from planner.physical_factor_dag import (
+    from factor_engine.planner.physical_factor_dag import (
         TASK_CSE_SHARED,
         TASK_ROOT,
         PhysicalFactorDAG,
@@ -301,12 +301,12 @@ def probe_dag_parallelism() -> dict[str, object]:
 
 
 def probe_native_fusion() -> dict[str, object]:
-    from planner.native_fusion import (
+    from factor_engine.planner.native_fusion import (
         adaptive_fusion_block_size,
         can_fuse_roots,
         plan_native_fusion_groups,
     )
-    from planner.physical_factor_dag import PhysicalFactorTask
+    from factor_engine.planner.physical_factor_dag import PhysicalFactorTask
 
     class C:
         output_bytes = 64 * 1024**2
@@ -330,8 +330,8 @@ def probe_native_fusion() -> dict[str, object]:
 
 
 def server_calibration() -> dict[str, object]:
-    from runtime.runtime_calibration import _server_fingerprint, calibration_summary
-    from runtime.resource_governor import (
+    from factor_engine.runtime.runtime_calibration import _server_fingerprint, calibration_summary
+    from factor_engine.runtime.resource_governor import (
         effective_cpu_slots,
         effective_memory_limit_bytes,
         spill_disk_available,
@@ -417,11 +417,11 @@ def benchmark_light() -> dict[str, object]:
     try:
         import pandas as pd
 
-        from api import ts_mean, ts_std
-        from api.columns import col
-        from api.factor import Factor
-        from backend.pandas_backend import PandasBackend
-        from runtime.engine import FactorEngine
+        from factor_engine.api import ts_mean, ts_std
+        from factor_engine.api.columns import col
+        from factor_engine.api.factor import Factor
+        from factor_engine.backend.pandas_backend import PandasBackend
+        from factor_engine.runtime.engine import FactorEngine
         from tests.helpers import InMemorySeriesSource
 
         dates = pd.bdate_range("2024-01-02", periods=60)

@@ -23,8 +23,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.operator_surface import classify_canonical
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
 try:
     import polars as pl
@@ -83,7 +83,7 @@ _ALL_OPS = _DAILY_OPS + _EXTENDED_OPS + _RESEARCH_OPS
 
 @pytest.fixture(scope="module")
 def _loaded():
-    from cleaned_operators import load_all
+    from factor_engine.cleaned_operators import load_all
 
     load_all()
 
@@ -279,7 +279,7 @@ def test_hartigan_dip_golden(_loaded):
 # semantic pinned references
 # ---------------------------------------------------------------------------
 def test_hvg_reversibility_symmetry(_loaded):
-    from cleaned_operators.hvg_ext import _hvg_stats
+    from factor_engine.cleaned_operators.hvg_ext import _hvg_stats
 
     rng = np.random.default_rng(2)
     wn = rng.standard_normal(200)

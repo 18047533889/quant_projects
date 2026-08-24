@@ -138,7 +138,7 @@ class LQTPLogicalDataSource(DataSource):
         # #11 走 DataAccess 因子湖（factor_lake 参数化数据集），不再 pd.read_parquet。
         from .data_access_source import _get_store
 
-        from api.source_ref import _strict_int
+        from factor_engine.api.source_ref import _strict_int
 
         store = _get_store()
         factor_id = str(spec.params_dict().get("name", ""))
@@ -181,7 +181,7 @@ class LQTPLogicalDataSource(DataSource):
                                     "PubDate":"available_at", field:"value"})
         events = events[["instrument","period_end","available_at","value"]].dropna(subset=["available_at","period_end"])
         if transform == "financial_lag":
-            from api.source_ref import _strict_int
+            from factor_engine.api.source_ref import _strict_int
 
             quarters = _strict_int(params.get("quarters", 1), name="financial_lag.quarters")
             if quarters <= 0:
@@ -242,7 +242,7 @@ class LQTPLogicalDataSource(DataSource):
                 rows.append((date,inst,self._minute_semantic_aggregate(grp, field)))
             agg = pd.DataFrame(rows, columns=["date","instrument","value"])
         elif transform in {"minute_bar","minute_resample"}:
-            from api.source_ref import _strict_int
+            from factor_engine.api.source_ref import _strict_int
 
             period = _strict_int(params.get("period", 1), name="minute period")
             offset = _strict_int(params.get("index", 0), name="minute index")
@@ -296,7 +296,7 @@ class LQTPLogicalDataSource(DataSource):
         return self._align_by_instrument(self._anchor_index(), series)
 
     def load_column(self, name: str):
-        from api.source_ref import decode_source_ref
+        from factor_engine.api.source_ref import decode_source_ref
         spec = decode_source_ref(name)
         if spec is None:
             return self.inner.load_column(name)
@@ -318,7 +318,7 @@ class LQTPLogicalDataSource(DataSource):
         return series.unstack(level=series.index.names[-1] or "instrument")
 
     def scan_polars_long(self, columns: list[str]):
-        from api.source_ref import decode_source_ref
+        from factor_engine.api.source_ref import decode_source_ref
         if any(decode_source_ref(name) is not None for name in columns):
             raise NotImplementedError("SourceRef columns currently execute through the certified Pandas/Arrow path")
         return self.inner.scan_polars_long(columns)

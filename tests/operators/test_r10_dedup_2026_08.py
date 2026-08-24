@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators.search.factor_dedup import (
+from factor_engine.cleaned_operators.search.factor_dedup import (
     FactorBehaviorSignature,
     DedupPolicy,
     _per_date_duplicates,
@@ -29,7 +29,7 @@ from cleaned_operators.search.factor_dedup import (
     probe_panel,
     signature_for,
 )
-from cleaned_operators.search.factor_dedup import FactorKind
+from factor_engine.cleaned_operators.search.factor_dedup import FactorKind
 
 
 # ---------------------------------------------------------------------------

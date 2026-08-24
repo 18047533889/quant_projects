@@ -22,14 +22,14 @@ from __future__ import annotations
 
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.production_hardening import factor_production_targets
-from cleaned_operators.operator_policy import (
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.production_hardening import factor_production_targets
+from factor_engine.cleaned_operators.operator_policy import (
     PIT_UNSAFE_CANONICALS,
     infer_operator_policy,
 )
-from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators.semantic_certification import should_fail_closed
+from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.semantic_certification import should_fail_closed
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -63,7 +63,7 @@ def test_newly_registered_stats_ops_are_surface_classified() -> None:
     ``ts_mean_abs_deviation`` / ``ts_median_abs_deviation`` were registered but
     left out of every surface — layer_governance failed the whole load.  They
     are now classified extended (stats MAD family, alongside ``ts_mad``)."""
-    from cleaned_operators.operator_surface import EXTENDED_ONLY_CANONICALS
+    from factor_engine.cleaned_operators.operator_surface import EXTENDED_ONLY_CANONICALS
 
     for canonical in ("ts_mean_abs_deviation", "ts_median_abs_deviation"):
         assert canonical in OperatorRegistry._operators, canonical

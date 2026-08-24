@@ -69,7 +69,7 @@ RANK_SPECS: dict[str, RankSpec] = {
 
 def rank_spec_for(canon: str) -> RankSpec:
     """查询算子 rank 契约；未知算子回退 average + rank_over_n。"""
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     return RANK_SPECS.get(name, RankSpec())
@@ -96,7 +96,7 @@ def polars_cs_rank_expr(
     """截面/组内 rank expr；``partition_cols`` 如 ``(_TS,)`` 或 ``(_TS, _GRP)``。"""
     import polars as pl
 
-    from backend.stat_valid import polars_rank_input, polars_row_stat_invalid, rank_excludes_nan
+    from factor_engine.backend.stat_valid import polars_rank_input, polars_row_stat_invalid, rank_excludes_nan
 
     sp = spec or rank_spec_for(canon)
     exclude_nan = rank_excludes_nan(canon)
@@ -132,7 +132,7 @@ def polars_ts_rank_expr(
     """滚动百分位 rank：窗口内 average rank / 非 NULL 计数；``min_periods`` 不足 → NULL。"""
     import polars as pl
 
-    from backend.stat_valid import polars_rank_input, polars_row_stat_invalid, rank_excludes_nan
+    from factor_engine.backend.stat_valid import polars_rank_input, polars_row_stat_invalid, rank_excludes_nan
 
     sp = spec or rank_spec_for(canon)
     exclude_nan = rank_excludes_nan(canon)

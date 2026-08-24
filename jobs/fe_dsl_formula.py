@@ -24,7 +24,7 @@ sys.path.insert(0, str(FE_DIR))
 sys.path.insert(0, str(PROJECT / "factor_delivery_converted"))
 
 try:
-    from api.dsl_parser import parse_expr  # noqa
+    from factor_engine.api.dsl_parser import parse_expr  # noqa
     _HAS_FE_PARSER = True
 except Exception:  # pragma: no cover
     _HAS_FE_PARSER = False

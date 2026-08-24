@@ -18,8 +18,8 @@ import pytest
 
 pd = pytest.importorskip("pandas")
 
-from storage.composite_source import CompositeDataSource
-from storage.datasource import DataSource
+from factor_engine.storage.composite_source import CompositeDataSource
+from factor_engine.storage.datasource import DataSource
 
 
 def _build_series(rows: list[tuple[str, str, float]]) -> "pd.Series":
@@ -256,7 +256,7 @@ def test_composite_cache_hit_without_snapshot_change_does_not_reread():
 # ---------------------------------------------------------------------------
 
 def test_source_ref_transform_param_out_of_range_raises():
-    from api.source_ref import make_source_ref
+    from factor_engine.api.source_ref import make_source_ref
 
     with pytest.raises(ValueError, match=">= 1"):
         make_source_ref(
@@ -276,7 +276,7 @@ def test_source_ref_transform_param_out_of_range_raises():
 
 
 def test_source_ref_transform_param_wrong_dtype_raises():
-    from api.source_ref import make_source_ref
+    from factor_engine.api.source_ref import make_source_ref
 
     with pytest.raises(ValueError, match="integer"):
         make_source_ref(
@@ -302,7 +302,7 @@ def test_source_ref_transform_param_wrong_dtype_raises():
 
 
 def test_source_ref_transform_valid_params_accepted():
-    from api.source_ref import make_source_ref
+    from factor_engine.api.source_ref import make_source_ref
 
     spec = make_source_ref(
         "StockMinuteBar", "Close",
@@ -318,7 +318,7 @@ def test_source_ref_transform_valid_params_accepted():
 
 
 def test_source_transform_param_spec_choices_validation():
-    from api.source_ref import SourceTransformParamSpec
+    from factor_engine.api.source_ref import SourceTransformParamSpec
 
     spec = SourceTransformParamSpec(dtype=str, choices=("open", "close"))
     spec.validate("side", "open")  # 合法白名单值不抛
@@ -331,7 +331,7 @@ def test_source_transform_param_spec_choices_validation():
 # ---------------------------------------------------------------------------
 
 def test_unknown_transform_constructible_in_research():
-    from api.source_ref import make_source_ref
+    from factor_engine.api.source_ref import make_source_ref
 
     # research / compat 保持现状：未知变换可构造（opt-in strictness）。
     spec = make_source_ref(
@@ -343,7 +343,7 @@ def test_unknown_transform_constructible_in_research():
 
 
 def test_unknown_transform_rejected_in_production():
-    from api.source_ref import make_source_ref
+    from factor_engine.api.source_ref import make_source_ref
 
     with pytest.raises(ValueError, match="not a declared production transform"):
         make_source_ref(
@@ -358,7 +358,7 @@ def test_unknown_transform_rejected_in_production():
 
 
 def test_known_transform_bad_param_rejected_in_production():
-    from api.source_ref import make_source_ref
+    from factor_engine.api.source_ref import make_source_ref
 
     with pytest.raises(ValueError, match=">= 1"):
         make_source_ref(
@@ -369,8 +369,8 @@ def test_known_transform_bad_param_rejected_in_production():
 
 
 def test_transform_source_col_production_rejects_unknown_transform():
-    from api.columns import col
-    from api.source_ref import encode_source_ref, make_source_ref, transform_source_col
+    from factor_engine.api.columns import col
+    from factor_engine.api.source_ref import encode_source_ref, make_source_ref, transform_source_col
 
     ref = col(encode_source_ref(make_source_ref("StockMinuteBar", "Close")))
     with pytest.raises(ValueError, match="not a declared production transform"):

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from runtime.execution_contract import (
+from factor_engine.runtime.execution_contract import (
     ExecutionContractResolutionError,
     execution_contract,
     history_requirement,

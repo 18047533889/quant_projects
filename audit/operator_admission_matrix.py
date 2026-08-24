@@ -47,7 +47,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from mining.operator_catalog import (
+from factor_engine.mining.operator_catalog import (
     AdmissionState,
     MiningRole,
     RoleSource,
@@ -232,8 +232,8 @@ class AdmissionRecord:
 
 def generate_admission_matrix() -> list[AdmissionRecord]:
     """Generate the full admission matrix for every registered canonical."""
-    from cleaned_operators import load_all
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     load_all()
     from research_tools.registry import ResearchToolRegistry
@@ -282,7 +282,7 @@ def _artifact_fingerprint() -> dict[str, Any]:
         except Exception:
             return ""
 
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     registry_digest = ""
     try:
@@ -298,7 +298,7 @@ def _artifact_fingerprint() -> dict[str, Any]:
         pass
     evidence_digest = ""
     try:
-        from backend.factor_operator_evidence import load_factor_operator_evidence
+        from factor_engine.backend.factor_operator_evidence import load_factor_operator_evidence
 
         payload = load_factor_operator_evidence() or {}
         evidence_digest = hashlib.sha256(
@@ -437,16 +437,16 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _record(canonical: str, catalog: dict[str, Any]) -> AdmissionRecord:
-    from cleaned_operators.operator_spec import (
+    from factor_engine.cleaned_operators.operator_spec import (
         PERMANENTLY_FORBIDDEN_CANONICALS,
         PRODUCTION_DENIED_CANONICALS,
     )
-    from cleaned_operators.production_hardening import (
+    from factor_engine.cleaned_operators.production_hardening import (
         NON_FACTOR_PRODUCTION_CANONICALS,
         SOURCE_BLOCKED_CANONICALS,
     )
-    from cleaned_operators.operator_surface import classify_canonical
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     rec = AdmissionRecord(canonical=canonical)
     rec.aliases = sorted(str(a) for a in (catalog.get("aliases") or ()))
@@ -482,7 +482,7 @@ def _record(canonical: str, catalog: dict[str, Any]) -> AdmissionRecord:
     rec.input_semantic_types = sorted(str(f) for f in (fields or ()))
     rec.output_unit = catalog.get("output_unit")
 
-    from mining.operator_catalog import _execution_flags, _missing_policy, _output_grain
+    from factor_engine.mining.operator_catalog import _execution_flags, _missing_policy, _output_grain
 
     stateful, execution_model, checkpoint, full_replay = _execution_flags(canonical)
     rec.stateful = stateful
@@ -508,7 +508,7 @@ def _record(canonical: str, catalog: dict[str, Any]) -> AdmissionRecord:
 
     policy = None
     try:
-        from cleaned_operators.operator_policy import infer_operator_policy
+        from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
 
         operator = OperatorRegistry.get(canonical, "pandas_numpy")
         policy = infer_operator_policy(operator, canonical=canonical)
@@ -527,7 +527,7 @@ def _record(canonical: str, catalog: dict[str, Any]) -> AdmissionRecord:
         )
     # R15-INC-036/252: window semantics from the resolved contract when declared.
     try:
-        from cleaned_operators.closure.window_semantics import window_semantics_for
+        from factor_engine.cleaned_operators.closure.window_semantics import window_semantics_for
 
         ws = window_semantics_for(canonical)
         if ws is not None:
@@ -545,7 +545,7 @@ def _record(canonical: str, catalog: dict[str, Any]) -> AdmissionRecord:
     rec.role_source = role_source.value
     rec.cost_tier = cost_tier(canonical, catalog)
     rec.cost_contract_declared = catalog.get("cost_contract_declared", False)
-    from mining.operator_catalog import cost_contract_declared as _cost_declared
+    from factor_engine.mining.operator_catalog import cost_contract_declared as _cost_declared
 
     rec.cost_contract_declared = _cost_declared(canonical, catalog)
     rec.cost_lane = "direct_high_cost" if rec.cost_tier >= 5 else "direct"
@@ -555,7 +555,7 @@ def _record(canonical: str, catalog: dict[str, Any]) -> AdmissionRecord:
     rec.benchmark_only = bool(catalog.get("benchmark_only"))
     rec.hidden_from_default_mining = bool(catalog.get("hidden_from_default_mining"))
 
-    from mining.operator_catalog import _required_sources as _req
+    from factor_engine.mining.operator_catalog import _required_sources as _req
 
     sstatus = source_status(canonical, catalog, None)  # no context → unknown
     rec.source_required = list(sstatus.required)

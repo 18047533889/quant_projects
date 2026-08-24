@@ -26,9 +26,9 @@ def _make_series(dates: list[str], assets: list[str]) -> pd.Series:
 
 
 def _engine():
-    from runtime.engine import FactorEngine
+    from factor_engine.runtime.engine import FactorEngine
 
-    from backend.pandas_backend import PandasBackend
+    from factor_engine.backend.pandas_backend import PandasBackend
 
     dates = pd.bdate_range("2026-01-05", "2026-03-27").strftime("%Y-%m-%d").tolist()
     assets = ["A", "B", "C"]
@@ -37,10 +37,10 @@ def _engine():
 
 
 def _assert_staged_equals_full(node, ctx):
-    from planner.physical_lowerer import extract_stage_subplans
+    from factor_engine.planner.physical_lowerer import extract_stage_subplans
 
-    from backend.context import ExecutionContext
-    from runtime.buffer_store import GovernedBufferStore
+    from factor_engine.backend.context import ExecutionContext
+    from factor_engine.runtime.buffer_store import GovernedBufferStore
 
     ref_plan, stages = extract_stage_subplans(node, factor_name="f")
     assert stages, "期望至少一个 barrier stage"
@@ -54,7 +54,7 @@ def _assert_staged_equals_full(node, ctx):
             shared_buffers=store,
         )
     backend = ctx.backend if hasattr(ctx, "backend") else None
-    from backend.pandas_backend import PandasBackend
+    from factor_engine.backend.pandas_backend import PandasBackend
 
     backend = backend or PandasBackend()
     # stage 逐棵执行（先叶后根：extract 顺序保证依赖已物化）。
@@ -69,10 +69,10 @@ def _assert_staged_equals_full(node, ctx):
 
 
 def test_stage_by_stage_nested_rolling_cs():
-    from api import col, cs_rank, ts_mean
+    from factor_engine.api import col, cs_rank, ts_mean
 
     engine, _dates, _assets = _engine()
-    f = __import__("api.factor", fromlist=["Factor"]).Factor(
+    f = __import__("factor_engine.api.factor", fromlist=["Factor"]).Factor(
         name="nested", expr=cs_rank(ts_mean(col("close"), 10))
     )
     node, _analysis = engine.compile(f)
@@ -82,10 +82,10 @@ def test_stage_by_stage_nested_rolling_cs():
 
 
 def test_stage_by_stage_elementwise_wrapper():
-    from api import add, col, cs_rank, ts_mean
+    from factor_engine.api import add, col, cs_rank, ts_mean
 
     engine, _dates, _assets = _engine()
-    f = __import__("api.factor", fromlist=["Factor"]).Factor(
+    f = __import__("factor_engine.api.factor", fromlist=["Factor"]).Factor(
         name="wrap", expr=add(cs_rank(ts_mean(col("close"), 10)), col("close"))
     )
     node, _analysis = engine.compile(f)
@@ -95,10 +95,10 @@ def test_stage_by_stage_elementwise_wrapper():
 
 
 def test_stage_by_stage_plain_rolling_single_stage():
-    from api import col, ts_mean
+    from factor_engine.api import col, ts_mean
 
     engine, _dates, _assets = _engine()
-    f = __import__("api.factor", fromlist=["Factor"]).Factor(
+    f = __import__("factor_engine.api.factor", fromlist=["Factor"]).Factor(
         name="plain", expr=ts_mean(col("close"), 5)
     )
     node, _analysis = engine.compile(f)

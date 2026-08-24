@@ -103,6 +103,11 @@ us_stock_daily:
     pytest.importorskip("polars")
     store = DataAccessStore(load_registry(cfg), DuckDBEngine())
     lf = store.scan_polars("us_stock_daily", columns=["Close"])
-    assert calls == ["us_stock_daily"]
+    # scan_polars 必须触发 COS 镜像。mirror 会被主路径解析调用一次，并可能被
+    # prepare_read 内 _estimate_read_memory 的成本估算路径（estimate_scan_cost
+    # 内部 load_manifest / dataset_read_stats 各自 _resolve_raw_paths）再次触发
+    # ——这是幂等重入（文件已就绪即 no-op），不是缺失。验证目标是「被触发」，
+    # 而不是计数恰好为 1。
+    assert calls and all(c == "us_stock_daily" for c in calls)
     df = lf.collect()
     assert df.height == 1

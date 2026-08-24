@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from storage.composite_source import CompositeDataSource
+from factor_engine.storage.composite_source import CompositeDataSource
 from tests.storage.test_composite_source import CountingSeriesSource, _build_series
 
 

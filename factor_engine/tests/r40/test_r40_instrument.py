@@ -6,21 +6,21 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from market.adjustment_policy import (
+from factor_engine.market.adjustment_policy import (
     AdjustmentPolicy,
     AdjustmentPolicyViolation,
     AdjustmentVintage,
     validate_adjustment_policy_for_production,
 )
-from market.instrument import InstrumentKey, InstrumentNormalizer
-from market.price_basis import PriceBasis, PriceBasisMismatchError, validate_limit_ops_price_basis
-from market.price_grid import PriceGridContract, price_grid_for_market
-from market.return_semantic import (
+from factor_engine.market.instrument import InstrumentKey, InstrumentNormalizer
+from factor_engine.market.price_basis import PriceBasis, PriceBasisMismatchError, validate_limit_ops_price_basis
+from factor_engine.market.price_grid import PriceGridContract, price_grid_for_market
+from factor_engine.market.return_semantic import (
     CorporateActionAdjustment,
     ReturnInterval,
     ReturnSemantic,
 )
-from market.security_master import SecurityMaster, SecurityMasterId, SymbolValidityInterval
+from factor_engine.market.security_master import SecurityMaster, SecurityMasterId, SymbolValidityInterval
 
 
 def test_instrument_normalizer_ashare() -> None:

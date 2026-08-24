@@ -73,7 +73,7 @@ def _metadata_aliases_for(canonical: str) -> dict[str, str] | None:
     applies for legacy support).
     """
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
     except Exception:  # pragma: no cover - import fallback
         return None
     try:
@@ -103,7 +103,7 @@ def derive_alias_map_from_metadata() -> dict[str, dict[str, str]]:
     appear — an operator that declares no aliases is not an alias authority.
     """
     try:
-        from cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
     except Exception:  # pragma: no cover - import fallback
         return {}
     try:

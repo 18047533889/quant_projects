@@ -22,8 +22,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleaned_operators import load_all
-from cleaned_operators.alignment import (
+from factor_engine.cleaned_operators import load_all
+from factor_engine.cleaned_operators.alignment import (
     AlignmentPlan,
     PanelAxisMismatch,
     align_panel_inputs,
@@ -31,7 +31,7 @@ from cleaned_operators.alignment import (
     assert_axes_aligned,
     panel_arrays,
 )
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 load_all()
 
@@ -149,7 +149,7 @@ def test_financial_period_adapter_defaults_to_no_same_day():
     """A signal dated exactly on the knowledge-time date must NOT see that day's
     filing (round-6 P0-02): an after-close PubDate/filing must not drive the
     same-day bar."""
-    from fields.providers import FinancialPeriodAdapter
+    from factor_engine.fields.providers import FinancialPeriodAdapter
 
     ev = pd.DataFrame(
         {"Symbol": ["AAA"], "filing_date": pd.to_datetime(["2024-04-20"]), "value": [1.0]}
@@ -163,7 +163,7 @@ def test_financial_period_adapter_defaults_to_no_same_day():
 
 
 def test_financial_period_adapter_same_day_is_explicit_opt_in():
-    from fields.providers import FinancialPeriodAdapter
+    from factor_engine.fields.providers import FinancialPeriodAdapter
 
     ev = pd.DataFrame(
         {"Symbol": ["AAA"], "filing_date": pd.to_datetime(["2024-04-20"]), "value": [1.0]}
@@ -317,7 +317,7 @@ def test_label_horizon_excludes_unmatured_labels():
 def test_purged_time_split_never_straddles_boundary():
     """P0-34/35: the chronological split purges horizon rows on both sides and
     applies an embargo, so no forward-H train label reaches validation."""
-    from api.label_spec import assert_no_label_overlap, purged_time_split
+    from factor_engine.api.label_spec import assert_no_label_overlap, purged_time_split
 
     dates = pd.date_range("2024-01-01", periods=120, freq="B")
     train, valid = purged_time_split(dates, train_frac=0.7, horizon=10, embargo=5)
@@ -332,7 +332,7 @@ def test_purged_time_split_never_straddles_boundary():
 def test_pls_multicomponent_new_sample_deflation():
     """P0-37: with 2+ components the new sample must be deflated in lockstep
     with the training X/y (matches the NIPALS prediction rule)."""
-    from cleaned_operators.cross_section.panel_model import _pls1_predict
+    from factor_engine.cleaned_operators.cross_section.panel_model import _pls1_predict
 
     rng = np.random.default_rng(42)
     X = rng.standard_normal((60, 5))
@@ -399,9 +399,9 @@ def test_available_at_propagates_max_of_inputs():
     """P0-51: factor.available_at = max(all_input.available_at).  A formula
     mixing a session_close price and a PubDate fundamental is only usable after
     the filing."""
-    from api import rank, ts_delay, ts_mean
-    from api.columns import col
-    from ir.analyzer import Analyzer
+    from factor_engine.api import rank, ts_delay, ts_mean
+    from factor_engine.api.columns import col
+    from factor_engine.ir.analyzer import Analyzer
 
     price_only = Analyzer().lower(ts_mean(col("close"), 10))
     assert price_only.ir.semantic_attrs.get("available_at") == "session_close"
@@ -416,9 +416,9 @@ def test_available_at_propagates_max_of_inputs():
 
 
 def test_available_at_open_vs_close():
-    from api.columns import col
-    from api import ts_mean
-    from ir.analyzer import Analyzer
+    from factor_engine.api.columns import col
+    from factor_engine.api import ts_mean
+    from factor_engine.ir.analyzer import Analyzer
 
     o = Analyzer().lower(ts_mean(col("open"), 10))
     assert o.ir.semantic_attrs.get("available_at") == "session_open"

@@ -9,7 +9,7 @@ canonical and be silently overridden.
 """
 from __future__ import annotations
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 _PERIOD_CANONICALS = (
     "period_lag",

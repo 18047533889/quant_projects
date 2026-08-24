@@ -31,9 +31,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from storage.exceptions import MaterializePartitionError
-from storage.materializer import ParquetMaterializer
-from storage.partition_policy import partition_key
+from factor_engine.storage.exceptions import MaterializePartitionError
+from factor_engine.storage.materializer import ParquetMaterializer
+from factor_engine.storage.partition_policy import partition_key
 
 
 def _series(rows):

@@ -6,8 +6,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 from tests.operators.test_causal_operators import assert_bivariate_prefix_invariant, assert_prefix_invariant
 
 pd = pytest.importorskip("pandas")

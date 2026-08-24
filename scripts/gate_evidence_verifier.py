@@ -119,6 +119,8 @@ class GateEvidenceVerifier:
         spec: Any | None,
         entries: list[dict],
         live_command_hashes: set[str] | None = None,
+        skip_policy: str | None = None,
+        allowed_skip_inventory: Any = None,
     ) -> Verdict:
         """Return the authoritative verdict for one gate's evidence entries.
 
@@ -126,6 +128,10 @@ class GateEvidenceVerifier:
         from the GateSpec at consume time); when omitted it is recomputed from
         ``spec`` here.  Passing it in lets the caller bind the check to the live
         spec it is rendering.
+
+        ``skip_policy`` / ``allowed_skip_inventory`` optionally OVERRIDE the
+        values read from ``spec`` (used by the VerificationManifest, which
+        derives them from its expectation map).
         """
         # 1) NOT_APPLICABLE — legitimate "nothing to prove" (P0-29).
         if gate_name == "SUBMODULE_REACHABILITY" and self.gitlinks_count == 0:
@@ -161,7 +167,8 @@ class GateEvidenceVerifier:
 
         # 5) Pytest gates: machine fields + exact command identity.
         return self._verify_pytest(
-            gate_name, spec, entries, live_command_hashes
+            gate_name, spec, entries, live_command_hashes,
+            skip_policy=skip_policy, allowed_skip_inventory=allowed_skip_inventory,
         )
 
     # -- verifier-backed gates ---------------------------------------------------
@@ -189,7 +196,19 @@ class GateEvidenceVerifier:
         spec: Any | None,
         entries: list[dict],
         live_command_hashes: set[str] | None,
+        skip_policy: str | None = None,
+        allowed_skip_inventory: Any = None,
     ) -> Verdict:
+        # An unknown gate (no live spec, no expectation-map entry) can never be
+        # proven by exact command identity — it stays NOT_RUN (VER-P0-02).
+        if live_command_hashes is None and spec is None:
+            return Verdict(
+                NOT_RUN,
+                reasons=[
+                    f"{gate_name}: no expectation-map entry; exact identity "
+                    "cannot be proven",
+                ],
+            )
         expected = (
             live_command_hashes
             if live_command_hashes is not None
@@ -243,7 +262,30 @@ class GateEvidenceVerifier:
         timestamp = timestamps[0] if timestamps else "—"
 
         # Exact command identity (P0-Y): Observed == Expected.
-        if expected:
+        # When the expected set holds non-hash values (a legacy test-path
+        # expectation, e.g. from a fallback spec without ``commands``), compare
+        # by test path instead — the strictness (no missing/extra/duplicate)
+        # is identical, only the identity unit differs.
+        _is_hash = lambda v: isinstance(v, str) and len(v) == 64 and v.isalnum()  # noqa: E731
+        if expected and not all(_is_hash(x) for x in expected):
+            # Legacy path-identity expectation.
+            ok_paths = {str(o.get("test")) for o in ok}
+            if len(ok) != len(ok_paths):
+                return Verdict(
+                    NOT_RUN, tests=total_tests, timestamp=timestamp,
+                    reasons=[f"{gate_name}: DUPLICATE evidence"],
+                )
+            missing = expected - ok_paths
+            extra = ok_paths - expected
+            if missing or extra:
+                return Verdict(
+                    NOT_RUN, tests=total_tests, timestamp=timestamp,
+                    reasons=[
+                        f"{gate_name}: exact test identity mismatch "
+                        f"(missing={sorted(missing)}, extra={sorted(extra)})",
+                    ],
+                )
+        elif expected:
             observed = self.observed_command_identity_set(ok)
             if len(ok) != len(observed):
                 return Verdict(
@@ -271,29 +313,32 @@ class GateEvidenceVerifier:
 
         # Skip policy (P0-27/28): a registered allowed-skip inventory is the
         # authoritative mechanism for declaring which skips are legitimate.
-        if spec is not None:
-            policy = getattr(spec, "skip_policy", "allowed")
+        policy = skip_policy if skip_policy is not None else (
+            getattr(spec, "skip_policy", "allowed") if spec is not None else "allowed"
+        )
+        inv = allowed_skip_inventory
+        if inv is None and spec is not None:
             inv = getattr(spec, "allowed_skip_inventory", None)
-            for o in ok:
-                skipped = o.get("skipped") or 0
-                if skipped <= 0:
-                    continue
-                if inv is not None:
-                    # A per-test inventory was declared: a skip is legitimate only
-                    # if this test path is registered in it.
-                    if o.get("test") not in inv:
-                        return Verdict(
-                            NOT_RUN, tests=total_tests, timestamp=timestamp,
-                            reasons=[
-                                f"{gate_name}: skip on {o.get('test')} not in "
-                                "allowed_skip_inventory",
-                            ],
-                        )
-                elif policy == "fail_on_skip":
+        for o in ok:
+            skipped = o.get("skipped") or 0
+            if skipped <= 0:
+                continue
+            if inv is not None:
+                # A per-test inventory was declared: a skip is legitimate only
+                # if this test path is registered in it.
+                if o.get("test") not in inv:
                     return Verdict(
                         NOT_RUN, tests=total_tests, timestamp=timestamp,
-                        reasons=[f"{gate_name}: fail_on_skip with skipped>0"],
+                        reasons=[
+                            f"{gate_name}: skip on {o.get('test')} not in "
+                            "allowed_skip_inventory",
+                        ],
                     )
+            elif policy == "fail_on_skip":
+                return Verdict(
+                    NOT_RUN, tests=total_tests, timestamp=timestamp,
+                    reasons=[f"{gate_name}: fail_on_skip with skipped>0"],
+                )
 
         return Verdict(
             PASS, tests=total_tests, timestamp=timestamp,

@@ -11,7 +11,7 @@ import pytest
 def test_prefetch_lazy_bundle_single_collect():
     pytest.importorskip("polars")
 
-    from storage.sources.data_access_source import DataAccessSource
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
 
     src = DataAccessSource(
         dataset="test_ds",
@@ -48,7 +48,7 @@ def test_prefetch_lazy_bundle_single_collect():
         return out
 
     with patch(
-        "storage.sources.data_access_source._get_store",
+        "factor_engine.storage.sources.data_access_source._get_store",
         return_value=mock_store,
     ):
         with patch(
@@ -56,7 +56,7 @@ def test_prefetch_lazy_bundle_single_collect():
             return_value={"normalize_timestamp": False},
         ):
             with patch(
-                "backend.polars_lazy.build_lazy_column_bundle",
+                "factor_engine.backend.polars_lazy.build_lazy_column_bundle",
             ) as build_bundle:
                 bundle = MagicMock()
                 bundle.snapshot_id = "snap_lazy"

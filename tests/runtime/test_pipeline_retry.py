@@ -11,11 +11,11 @@ pd = pytest.importorskip("pandas")
 yaml = pytest.importorskip("yaml")
 
 from pipeline import _execute_config_with_retries, run_from_config
-from runtime.config import FactorEngineConfig
+from factor_engine.runtime.config import FactorEngineConfig
 
 
 def _minimal_config() -> FactorEngineConfig:
-    from runtime.config import (
+    from factor_engine.runtime.config import (
         BackendConfig,
         DataSourceConfig,
         EngineConfig,

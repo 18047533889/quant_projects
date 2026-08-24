@@ -12,18 +12,18 @@ from typing import Any
 
 import pandas as pd
 
-from api.factor import Factor
+from factor_engine.api.factor import Factor
 from logging_utils import get_logger
-from runtime import dual_write_service, lineage_service
-from runtime.production_policy import is_production_mode
-from storage.catalog import compute_ir_hash
-from storage.exceptions import (
+from factor_engine.runtime import dual_write_service, lineage_service
+from factor_engine.runtime.production_policy import is_production_mode
+from factor_engine.storage.catalog import compute_ir_hash
+from factor_engine.storage.exceptions import (
     MaterializedButCatalogCommitFailed,
     UnreconstructableDataSource,
 )
-from storage.materializer import ParquetMaterializer
+from factor_engine.storage.materializer import ParquetMaterializer
 
-logger = get_logger("runtime.materialize_service")
+logger = get_logger("factor_engine.runtime.materialize_service")
 
 
 def _backend_kind(backend: Any) -> str | None:
@@ -171,7 +171,7 @@ def _build_semantic_identity(
     """
     if ir_node is None and not ast_hash:
         return None
-    from runtime.factor_identity import compute_factor_identity
+    from factor_engine.runtime.factor_identity import compute_factor_identity
 
     ds = getattr(engine, "data_source", None)
     lineage_extra = (run_lineage or {}).get("extra") or {}
@@ -339,7 +339,7 @@ def execute_materialize(
     # lineage extra，让 identity ctx / catalog / 事件 rebuild 消费同一份精度契约。
     # 显式 ``value_dtype=None`` 时 production 默认 float64；float32 需 quantization
     # certificate（否则记录 ``float32_legacy`` 诚实标记）。
-    from storage.materialize.materializer import storage_precision_policy_for
+    from factor_engine.storage.materialize.materializer import storage_precision_policy_for
 
     _eff_dtype, _precision_policy = storage_precision_policy_for(
         value_dtype,
@@ -355,7 +355,7 @@ def execute_materialize(
     # ``_scope_from_factor``（优先 ``factor.semantic_identity``）——cache scope、
     # factor_version、full definition、事件 rebuild 全部消费它，杜绝
     # 「执行 5m / 落库 1d」的语义分裂。
-    from runtime.engine import _scope_from_factor
+    from factor_engine.runtime.engine import _scope_from_factor
 
     scope = _scope_from_factor(factor, data_source=engine.data_source)
     frequency_effective = frequency or getattr(scope, "frequency", None) or factor.freq
@@ -401,7 +401,7 @@ def execute_materialize(
         semantic_identity=semantic_identity,
     )
 
-    from runtime.incremental_scheduler import record_factor_dependency_from_analysis
+    from factor_engine.runtime.incremental_scheduler import record_factor_dependency_from_analysis
 
     try:
         record_factor_dependency_from_analysis(
@@ -459,7 +459,7 @@ def execute_materialize(
         snapshot_id = lineage_service.resolve_data_snapshot_id(
             engine.data_source, effective_data_source_config
         )
-        from runtime.dual_write_service import MaterializationDelta
+        from factor_engine.runtime.dual_write_service import MaterializationDelta
 
         delta = MaterializationDelta(
             upserts=output["result"],
@@ -572,7 +572,7 @@ def can_batch_materialize_compute(opts: Any) -> bool:
 # 把共享工作 hoist 出 per-item 循环 + 依赖 manifest 单事务目录提交。
 def execute_materialize_batch(engine, items, generation=None, **kwargs):
     """R39-PERF-039: 批量物化（见 ``runtime.materialize_batch``）。"""
-    from runtime.materialize_batch import execute_materialize_batch as _impl
+    from factor_engine.runtime.materialize_batch import execute_materialize_batch as _impl
 
     return _impl(engine, items, generation=generation, **kwargs)
 
@@ -615,11 +615,11 @@ def execute_materialize_incremental_generation(
         ``{"materializations": {factor_name: summary}, "per_item": [...],
           "generation": generation_id|None, "atomic": bool}``。
     """
-    from runtime.atomic_commit import (
+    from factor_engine.runtime.atomic_commit import (
         IncrementalCommitTransaction,
         WatermarkSet,
     )
-    from runtime.materialize_batch import MaterializeItem
+    from factor_engine.runtime.materialize_batch import MaterializeItem
 
     items = list(items)
     per_item: list[dict[str, Any]] = []

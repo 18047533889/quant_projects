@@ -5,9 +5,9 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from backend.context import ExecutionContext
-from backend.panel_native import panel_native_enabled
-from storage.long_table_source import LongTableDataSource
+from factor_engine.backend.context import ExecutionContext
+from factor_engine.backend.panel_native import panel_native_enabled
+from factor_engine.storage.long_table_source import LongTableDataSource
 from tests.helpers import InMemorySeriesSource
 
 

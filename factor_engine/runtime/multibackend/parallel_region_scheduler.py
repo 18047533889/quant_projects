@@ -135,7 +135,7 @@ def _derive_default_parallelism() -> int:
     cpu_slots = 0
     mem_limit = 0
     try:
-        from runtime.resource_governor import (
+        from factor_engine.runtime.resource_governor import (
             effective_cpu_slots,
             effective_memory_limit_bytes,
         )
@@ -307,7 +307,7 @@ class ParallelRegionScheduler:
 
         def _build_contract(region: ExecutionRegion) -> Any:
             """把 region 映射为 TaskResourceContract（供 broker admission）。"""
-            from runtime.task_resource_contract import TaskResourceContract
+            from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
             return TaskResourceContract(
                 predicted_elapsed_ms=region.estimated_cost_ms,

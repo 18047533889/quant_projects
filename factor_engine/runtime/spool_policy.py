@@ -234,7 +234,7 @@ def _resolve_live_headroom(broker: Any, explicit: int | None) -> int | None:
             pass
     # broker 缺省时的兜底：governor 探测。返回 0（探测失败）→ 视为未知。
     try:
-        from runtime.resource_governor import live_memory_headroom_bytes
+        from factor_engine.runtime.resource_governor import live_memory_headroom_bytes
 
         v = live_memory_headroom_bytes()
         if v is not None and v > 0:
@@ -269,7 +269,7 @@ def _resolve_disk_throughput(broker: Any, explicit: int | None) -> int | None:
         return int(explicit)
     capacity: int | None = None
     try:
-        from runtime.resource_governor import spill_disk_speed_class
+        from factor_engine.runtime.resource_governor import spill_disk_speed_class
 
         cls = spill_disk_speed_class()
         capacity = {

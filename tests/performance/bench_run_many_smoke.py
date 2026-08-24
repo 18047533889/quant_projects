@@ -33,11 +33,11 @@ def bench_run_many(*, n_days: int, n_inst: int, n_factors: int) -> dict:
     if qp not in sys.path:
         sys.path.insert(0, qp)
 
-    from api import rank, ts_mean
-    from api.columns import col
-    from api.factor import Factor
-    from backend.factory import build_backend
-    from runtime.engine import FactorEngine
+    from factor_engine.api import rank, ts_mean
+    from factor_engine.api.columns import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.factory import build_backend
+    from factor_engine.runtime.engine import FactorEngine
     from tests.helpers import InMemorySeriesSource
 
     os.environ.setdefault("FACTOR_ENGINE_DISABLE_BOTTLENECK", "1")

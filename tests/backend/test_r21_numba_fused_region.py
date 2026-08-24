@@ -24,8 +24,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.numba_kernel_registry import NUMBA_AVAILABLE
-from backend.numba_region import (
+from factor_engine.backend.numba_kernel_registry import NUMBA_AVAILABLE
+from factor_engine.backend.numba_region import (
     BufferResidency,
     NumbaFusedRegion,
     NumbaRegionADCounter,
@@ -156,7 +156,7 @@ def test_numba_eligible_only_when_requested_and_certified():
 
     os.environ.setdefault("FACTOR_ENGINE_USE_NUMBA", "0")
     # no certified-region claim is made when numba is not in play:
-    from backend.numba_kernel_registry import NumbaKernelRegistry
+    from factor_engine.backend.numba_kernel_registry import NumbaKernelRegistry
 
     assert NumbaKernelRegistry is not None
     # counter surface exists (evidence) though unfilled in reference mode.

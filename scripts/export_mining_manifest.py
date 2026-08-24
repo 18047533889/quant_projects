@@ -38,7 +38,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from mining.operator_catalog import (
+from factor_engine.mining.operator_catalog import (
     MiningOperator,
     MiningRole,
     get_mining_operators,
@@ -60,13 +60,13 @@ def _searchable_schema(canonical: str) -> dict[str, dict[str, Any]]:
     R16-026: a schema build error on a MINEABLE operator ABORTS the manifest
     instead of silently emitting an empty schema dict.
     """
-    from cleaned_operators.base import (
+    from factor_engine.cleaned_operators.base import (
         MISSING,
         effective_param_role,
         param_search_grade,
         searchable_param_names,
     )
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     operator = OperatorRegistry.get(canonical, "pandas_numpy")
     metadata = getattr(operator, "metadata", None)
@@ -159,7 +159,7 @@ def _query_fingerprint() -> dict[str, str]:
         except Exception:
             return ""
 
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     def _canonicalize(value: Any) -> Any:
         """JSON-canonicalize a catalog value (R16-027): enums/sets/frozensets/
@@ -205,7 +205,7 @@ def _query_fingerprint() -> dict[str, str]:
         ) from exc
     evidence_digest = ""
     try:
-        from backend.factor_operator_evidence import load_factor_operator_evidence
+        from factor_engine.backend.factor_operator_evidence import load_factor_operator_evidence
 
         payload = load_factor_operator_evidence() or {}
         evidence_digest = hashlib.sha256(
@@ -382,7 +382,7 @@ def validate_cold_start(out_dir: Path, seed_source: str | Path | None = None) ->
     if fp.get("evidence_fingerprint") and fp["evidence_fingerprint"] != current["evidence_fingerprint"]:
         violations.append("STALE manifest: evidence fingerprint does not match current tree")
 
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     # ---- Phase 2 (R15-INC-051): certified factor + alias membership. ----
     for name in sorted(OperatorRegistry._catalog):
@@ -390,7 +390,7 @@ def validate_cold_start(out_dir: Path, seed_source: str | Path | None = None) ->
         if not entry.get("production_certified"):
             continue
         try:
-            from mining.operator_catalog import assign_mining_role
+            from factor_engine.mining.operator_catalog import assign_mining_role
 
             role = assign_mining_role(name, entry)
         except Exception:
@@ -414,7 +414,7 @@ def validate_cold_start(out_dir: Path, seed_source: str | Path | None = None) ->
             if canonical is None or canonical not in in_manifest:
                 target = aliases[alias]
                 if target in OperatorRegistry._catalog:
-                    from mining.operator_catalog import assign_mining_role
+                    from factor_engine.mining.operator_catalog import assign_mining_role
 
                     try:
                         role = assign_mining_role(target, OperatorRegistry._catalog[target])
@@ -447,8 +447,8 @@ def validate_cold_start(out_dir: Path, seed_source: str | Path | None = None) ->
     if not seeds:
         return violations
 
-    from api.dsl_parser import parse_expr
-    from cleaned_operators.registry import OperatorRegistry
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     synthetic = pd.DataFrame(
         np.random.default_rng(7).normal(size=(60, 5)),
@@ -492,7 +492,7 @@ def validate_cold_start(out_dir: Path, seed_source: str | Path | None = None) ->
                 # R22: bind EVERY declared data input, not just ``panel_params``
                 # (defaulting to a single "x" broke two-input kernels like
                 # safe_div_null(x, y)).
-                from mining.direct_use import _authoritative_param_split, input_slot_specs, split_input_slots
+                from factor_engine.mining.direct_use import _authoritative_param_split, input_slot_specs, split_input_slots
 
                 cat = OperatorRegistry._catalog.get(canonical) or {}
                 _panel, _scalar = _authoritative_param_split(canonical, cat)

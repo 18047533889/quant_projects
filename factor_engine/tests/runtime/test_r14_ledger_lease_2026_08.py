@@ -19,7 +19,7 @@ import json
 
 import pytest
 
-from runtime.incremental_scheduler import (
+from factor_engine.runtime.incremental_scheduler import (
     DataEvent,
     DataEventLedger,
     _ledger_pending_is_stale,
@@ -139,7 +139,7 @@ def test_r14_legacy_pending_without_reserved_at_not_taken_over(tmp_path):
 
 def test_r14_execute_flow_reports_in_flight_not_duplicate(tmp_path):
     """scheduler 对 in_flight 必须返回真实 ledger_status，不再塌缩成 duplicate。"""
-    from runtime.incremental_scheduler import _ledger_now_iso
+    from factor_engine.runtime.incremental_scheduler import _ledger_now_iso
 
     lake = tmp_path / "lake"
     # 预置一条**fresh** pending 预留（模拟其他 worker 正在处理、lease 未过期）

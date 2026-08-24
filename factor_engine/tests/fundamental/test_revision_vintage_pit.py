@@ -10,7 +10,7 @@ proves immutable vintage history.
 """
 from __future__ import annotations
 
-from cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 _REVISION_CANONICALS = (
     "fin_revision_delta",
@@ -51,6 +51,6 @@ def test_non_revision_period_ops_do_not_claim_revision_source():
 def test_revision_policy_distinct_first_and_latest():
     # R23-229..232: first_available / latest_available are distinct revision
     # policies; the strict fiscal kernel must accept both.
-    from cleaned_operators import fiscal_strict
+    from factor_engine.cleaned_operators import fiscal_strict
 
     assert fiscal_strict._REVISION_POLICIES == {"latest_available", "first_available"}
