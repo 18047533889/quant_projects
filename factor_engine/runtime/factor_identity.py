@@ -793,6 +793,10 @@ def partition_input_fingerprint(frame: Any) -> str:
             sub = sub.sort_values(["datetime", "asset"], kind="stable")
         except Exception:  # noqa: BLE001 - 非可排序列保守跳过
             pass
+    # NEW-P0-29: a broken/foreign frame must NOT short-circuit the fingerprint
+    # to a fixed constant — a frame whose ``reset_index``/``sort_values``/
+    # ``astype``/``to_numpy`` fails mid-computation must raise (fail closed to
+    # full recompute), never silently produce a degenerate identical hash.
     sub = sub.reset_index(drop=True)
     schema = {col: str(sub[col].dtype) for col in cols}
     payload = {

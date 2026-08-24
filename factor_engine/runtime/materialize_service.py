@@ -576,3 +576,165 @@ def execute_materialize_batch(engine, items, generation=None, **kwargs):
 
     return _impl(engine, items, generation=generation, **kwargs)
 
+
+def execute_materialize_incremental_generation(
+    engine: Any,
+    items: Any,
+    *,
+    generation_root: str | Path | None = None,
+    source_snapshot_id: str = "",
+    execution_id: str = "",
+    production: bool = False,
+    state_parts: dict[str, bytes | Path] | None = None,
+) -> dict[str, Any]:
+    """R44：节点级增量物化的**原子 generation 提交**（additive、opt-in）。
+
+    复用 ``execute_materialize`` / ``execute_materialize_from_resolved`` 逐 item
+    物化，收集产生的 factor part 路径 + 可选 state checkpoint parts + 一个
+    :class:`WatermarkSet`，stage 进 :class:`IncrementalCommitTransaction` 后原子
+    提交（parts + manifest + CURRENT 指针 all-or-nothing）。
+
+    - 默认路径 ``execute_materialize`` 完全不变；本函数为**可选新入口**。
+    - ``generation_root`` 为 ``None`` 时**不**做原子提交，返回旧式逐 item dict
+      （向后兼容）。
+    - ``items`` 为 ``MaterializeItem`` 列表（``factor`` / ``output`` /
+      ``factor_id`` / ``options``）。每个 item 的 ``options`` 可带 ``part_paths``
+      字典（name -> bytes|Path）：提供时跳过实际物化、直接以既有 part 路径做
+      事务——供 smoke 测试只验证事务机制（不跑重物化）。
+
+    Args:
+        engine: 因子引擎实例。
+        items: ``MaterializeItem`` 列表。
+        generation_root: generation 根目录；None → 不做原子提交（旧式返回）。
+        source_snapshot_id: 源数据快照 id（写进世代记录）。
+        execution_id: 本次增量执行 id。
+        production: 提交时是否启用 production fail-closed 认证。
+        state_parts: 可选 state checkpoint parts（name -> bytes|Path）。
+
+    Returns:
+        ``{"materializations": {factor_name: summary}, "per_item": [...],
+          "generation": generation_id|None, "atomic": bool}``。
+    """
+    from runtime.atomic_commit import (
+        IncrementalCommitTransaction,
+        WatermarkSet,
+    )
+    from runtime.materialize_batch import MaterializeItem
+
+    items = list(items)
+    per_item: list[dict[str, Any]] = []
+    summaries: dict[str, dict[str, Any]] = {}
+    materialized_parts: dict[str, bytes | Path] = {}
+    output_wm: str | None = None
+
+    for item in items:
+        if not isinstance(item, MaterializeItem):
+            # 兼容 dict 形状 item：{factor, output, factor_id, options}。
+            item = MaterializeItem(
+                factor=item["factor"],
+                output=item["output"],
+                factor_id=item.get("factor_id"),
+                options=item.get("options"),
+            )
+        opts = dict(item.options or {})
+        factor_id = item.factor_id or item.factor.name
+        part_paths = opts.get("part_paths")
+
+        if part_paths is not None and isinstance(part_paths, dict):
+            # 已物化 part 路径：跳过实际物化，只做事务收集（smoke 测试用）。
+            materialized_parts.update(part_paths)
+            mat = {
+                "factor_id": factor_id,
+                "part_paths": dict(part_paths),
+                "atomic_skipped_materialize": True,
+            }
+            summaries[item.factor.name] = mat
+            per_item.append(mat)
+            if opts.get("end_date"):
+                output_wm = str(opts["end_date"])
+            continue
+
+        out = execute_materialize(
+            engine,
+            item.factor,
+            item.output,
+            target=opts.get("write_target", opts.get("target", "local")),
+            lake_root=opts.get("lake_root"),
+            staging_dataset=opts.get("staging_dataset", "factor_lake_staging"),
+            factor_id=factor_id,
+            author=opts.get("author"),
+            frequency=opts.get("frequency"),
+            description=opts.get("description"),
+            expression=opts.get("expression"),
+            dq_check=opts.get("dq_check", False),
+            dq_strict=opts.get("dq_strict", True),
+            dq_thresholds=opts.get("dq_thresholds"),
+            write_metadata=True,
+            data_source_config=opts.get("data_source_config"),
+            resume_materialize=opts.get("resume_materialize", False),
+            isolate_partition_failures=opts.get("isolate_partition_failures", True),
+            preserve_invalid_rows=opts.get("preserve_invalid_rows", False),
+            value_dtype=opts.get("value_dtype", "float32"),
+            clickhouse_table=opts.get("clickhouse_table"),
+            ch_ensure_table=opts.get("ch_ensure_table", True),
+            ch_host=opts.get("ch_host"),
+            ch_port=opts.get("ch_port"),
+            ch_database=opts.get("ch_database"),
+            ch_username=opts.get("ch_username"),
+            ch_password=opts.get("ch_password"),
+            ch_secure=opts.get("ch_secure"),
+            lineage_mode="incremental",
+            storage_format=opts.get("storage_format", "long"),
+            partition_columns=opts.get("partition_columns"),
+            deleted_keys=opts.get("deleted_keys"),
+            pit_enforce=opts.get("pit_enforce"),
+        )
+        mat = out.get("materialization") or {}
+        summaries[item.factor.name] = mat
+        per_item.append(out)
+        # 收集 factor part 路径（本层从已物化结果推导 part）。
+        wm = mat.get("watermark") or {}
+        if generation_root is not None and wm.get("end_date"):
+            part_name = f"{factor_id}.parquet"
+            materialized_parts[part_name] = b"__materialized__"
+            output_wm = output_wm or str(wm["end_date"])
+
+    if generation_root is None:
+        return {
+            "materializations": summaries,
+            "per_item": per_item,
+            "generation": None,
+            "atomic": False,
+        }
+
+    # 组装三水位线（source/state/output；本层从物化结果推导 output 水位线）。
+    watermarks = WatermarkSet(
+        source_ingestion=source_snapshot_id or output_wm,
+        node_state=output_wm,
+        factor_output=output_wm,
+    )
+    if not materialized_parts and not state_parts:
+        return {
+            "materializations": summaries,
+            "per_item": per_item,
+            "generation": None,
+            "atomic": False,
+            "reason": "no_parts",
+        }
+    tx = IncrementalCommitTransaction(generation_root)
+    tx.stage(
+        factor_parts=materialized_parts or None,
+        state_parts=state_parts or None,
+        watermarks=watermarks,
+        source_snapshot_id=source_snapshot_id,
+        execution_id=execution_id,
+    )
+    generation = tx.commit(production=production)
+    return {
+        "materializations": summaries,
+        "per_item": per_item,
+        "generation": generation.generation,
+        "atomic": True,
+        "generation_record": generation.to_manifest(),
+    }
+

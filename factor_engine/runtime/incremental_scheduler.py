@@ -100,6 +100,14 @@ class DataEvent:
     #: fencing_epoch)`` 三元组做 fencing token 校验——stale worker（lease 已被接管）
     #: 的 token 永远对不上，绝不允许再提交。
     fencing_epoch: int | None = None
+    #: R44：受影响标的集合（asset 维度）。单标的更新可携带受影响 instrument 列表，
+    #: 供 Change Impact 的 asset-scope 传播使用。缺省 ``None`` = 单标的。
+    affected_instruments: tuple[str, ...] | None = None
+    #: R44：事件初始 asset 作用域字符串（``ONE_INSTRUMENT`` / ``INSTRUMENT_SET`` /
+    #: ``GROUP`` / ``FULL_UNIVERSE`` / ``GLOBAL``）。缺省 ``None`` = 单标的。
+    asset_scope: str | None = None
+    #: R44：GROUP 作用域时的分组 key（如 ``sw_l1=bank``）。缺省 ``None``。
+    group_key: str | None = None
 
     @property
     def field(self) -> str:
@@ -124,6 +132,11 @@ class DataEvent:
             "owner": self.owner,
             "attempt_id": self.attempt_id,
             "fencing_epoch": self.fencing_epoch,
+            "affected_instruments": (
+                list(self.affected_instruments) if self.affected_instruments else None
+            ),
+            "asset_scope": self.asset_scope,
+            "group_key": self.group_key,
         }
 
 
@@ -185,6 +198,13 @@ def normalize_data_event(event: DataEvent | dict[str, Any]) -> DataEvent:
         owner=str(raw["owner"]) if raw.get("owner") else None,
         attempt_id=str(raw["attempt_id"]) if raw.get("attempt_id") else None,
         fencing_epoch=_strict_int(raw.get("fencing_epoch"), "fencing_epoch"),
+        affected_instruments=(
+            tuple(str(i) for i in raw["affected_instruments"])
+            if raw.get("affected_instruments")
+            else None
+        ),
+        asset_scope=str(raw["asset_scope"]) if raw.get("asset_scope") else None,
+        group_key=str(raw["group_key"]) if raw.get("group_key") else None,
     )
 
 

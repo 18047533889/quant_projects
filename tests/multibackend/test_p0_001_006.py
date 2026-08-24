@@ -216,6 +216,7 @@ class TestMBP0004BackendRegionModel:
             TransferEdge,
             PhysicalBackend,
             Representation,
+            TransferTransform,
         )
 
         edge = TransferEdge(
@@ -226,6 +227,7 @@ class TestMBP0004BackendRegionModel:
             target_backend=PhysicalBackend.DUCKDB_SQL,
             source_representation=Representation.POLARS_LONG,
             target_representation=Representation.DUCKDB_RELATION,
+            transform=TransferTransform.POLARS_TO_PANDAS,
             estimated_rows=100000,
             estimated_bytes=800000,
             estimated_transfer_ms=10.0,
@@ -251,6 +253,7 @@ class TestMBP0005PhysicalRegionPlan:
             PhysicalBackend,
             Representation,
             ExecutionAxis,
+            TransferTransform,
         )
 
         region1 = BackendRegion(
@@ -283,6 +286,7 @@ class TestMBP0005PhysicalRegionPlan:
             target_backend=PhysicalBackend.DUCKDB_SQL,
             source_representation=Representation.POLARS_LONG,
             target_representation=Representation.DUCKDB_RELATION,
+            transform=TransferTransform.POLARS_TO_PANDAS,
             estimated_rows=100000,
             estimated_bytes=800000,
             estimated_transfer_ms=10.0,

@@ -100,16 +100,29 @@ def _code_payload(code: Any, *, include_names: bool) -> str:
     import hashlib
 
     name_codes = frozenset(dis.hasname)
+    n_names = len(code.co_names)
+    n_consts = len(code.co_consts)
     ops: list[tuple[str, Any]] = []
     for instr in dis.get_instructions(code):
         if instr.opname == "CACHE":  # adaptive-interpreter noise, not semantic
             continue
         opname = instr.opname
         arg = instr.arg
-        if opname == "LOAD_CONST" and arg is not None:
-            resolved = _freeze_const(code.co_consts[arg])
+        # R44-P0: wordcode (Python >= 3.11) quirks on this CPython build:
+        #  * ``LOAD_GLOBAL``/``LOAD_ATTR`` ``instr.arg`` is the raw encoded
+        #    operand (``(name_idx << 1) | flag`` for LOAD_GLOBAL), which may
+        #    exceed ``len(co_names)`` — never index past the tuple, fall back
+        #    to the raw arg.
+        #  * ``RETURN_CONST`` (3.12+) is a const-carrying opcode that is NOT
+        #    ``LOAD_CONST``; the digest must resolve the actual value from
+        #    ``co_consts[arg]`` or every ``return <literal>`` collapses to the
+        #    same opcode+arg pair (constant-swap collisions).
+        if opname in ("LOAD_CONST", "RETURN_CONST") and arg is not None:
+            resolved = _freeze_const(
+                code.co_consts[arg] if 0 <= arg < n_consts else None
+            )
         elif arg is not None and instr.opcode in name_codes:
-            resolved = code.co_names[arg] if include_names else arg
+            resolved = code.co_names[arg] if 0 <= arg < n_names else arg
         else:
             resolved = arg
         ops.append((opname, resolved))

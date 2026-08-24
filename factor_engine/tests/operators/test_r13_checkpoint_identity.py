@@ -356,6 +356,15 @@ def test_partition_fingerprint_failure_raises_not_empty():
         def astype(self, *a, **k):
             raise RuntimeError("boom")
 
+        def sort_values(self, *a, **k):
+            raise RuntimeError("boom")
+
+        def reset_index(self, *a, **k):
+            # NEW-P0-29: the fingerprint path's first unguarded call on the
+            # broken frame must fail loudly (fail-closed to full recompute) —
+            # never swallowed, never degraded to a fixed degenerate hash.
+            raise RuntimeError("boom")
+
     with pytest.raises(RuntimeError, match="boom"):
         partition_input_fingerprint(_BrokenFrame())
 

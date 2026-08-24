@@ -66,7 +66,8 @@ def test_cost_counts_every_occurrence_with_bound_params():
     occs = plan_occurrences(root)
     assert sorted(o.window for o in occs if o.canonical == "ts_mean") == [5, 20, 60, 120]
     mixed = _dag_aware_mixed_cost(
-        occs, rows=500_000, delegate_ops=frozenset(), data_kind="duckdb", mode="research", source_ref=False
+        occs, rows=500_000, delegate_ops=frozenset(), data_kind="duckdb", mode="research", source_ref=False,
+        source_lowered=False,
     )
     assert mixed is not None and mixed > 0
 
