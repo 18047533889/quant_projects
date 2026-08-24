@@ -80,9 +80,6 @@ class NumericPolicy:
 
 _DEFAULT_POLICY = NumericPolicy()
 
-# 除零保护：pc.divide 除数不能为 0，用一个极小的非零替身近似除零结果。
-_EPS = 1e-300
-
 
 # ---------------------------------------------------------------------------
 # AST
@@ -152,6 +149,11 @@ def _walk_refs(node: Any) -> list[Ref]:
     if isinstance(node, Bin):
         return _walk_refs(node.left) + _walk_refs(node.right)
     return []
+
+
+def _ref_key(ref: Ref) -> str:
+    """把列引用映射成绑定表键：带 dataset 前缀用 ``dataset.column``，裸引用用列名。"""
+    return f"{ref.dataset}.{ref.column}" if ref.dataset is not None else ref.column
 
 
 # ---------------------------------------------------------------------------
@@ -323,10 +325,14 @@ class DerivedFieldCompiler:
         return f"{self.logical_name} := {self.expression}"
 
     def bind(self) -> DerivedFieldCompiler:
-        """把每个列引用绑定成唯一 Field-ID（fix 1 plan 面）。"""
+        """把每个列引用绑定成唯一 Field-ID（fix 1 plan 面）。
+
+        绑定键按 ``(dataset, column)`` 组合区分：同一数据集里的多列不会相互覆盖，
+        不同数据集里的同名列也不会合并。
+        """
         self._bound = {}
         for ref in _walk_refs(self.ast):
-            key = ref.dataset if ref.dataset is not None else ref.column
+            key = _ref_key(ref)
             if key in self._bound:
                 continue
             self._bound[key] = bind_ref(ref.dataset, ref.column)
@@ -345,7 +351,7 @@ class DerivedFieldCompiler:
             raise ValidationError(f"DerivedFieldCompiler 尚未 bind（{self.logical_name}）")
         out: list[str] = []
         for ref in _walk_refs(self.ast):
-            fid = self._bound.get(ref.dataset if ref.dataset is not None else ref.column)
+            fid = self._bound.get(_ref_key(ref))
             if fid is not None and fid.physical_name not in out:
                 out.append(fid.physical_name)
         return out
@@ -371,17 +377,6 @@ def _resolve_by_id(table: pa.Table, fid: ResolvedFieldID) -> pa.ChunkedArray:
     return table.column(fid.physical_name)
 
 
-def _coerce_array(x: Any, n_rows: int) -> pa.Array:
-    """把求值子项统一成行数一致的单列 Array。"""
-    if isinstance(x, pa.ChunkedArray):
-        x = x.combine_chunks()
-    if isinstance(x, pa.Array):
-        return x
-    if isinstance(x, (int, float)):
-        return pa.array([float(x)] * n_rows)
-    raise UnsupportedFeatureError(f"derived 求值返回未知类型: {type(x).__name__}")
-
-
 def _divide(left: Any, right: Any, n_rows: int, policy: NumericPolicy) -> pa.Array:
     """除法：除零按 NumericPolicy.division 处理，结果 Inf/NaN 按 nonfinite 收口。"""
     larr = _coerce_fixed(left, n_rows)
@@ -393,11 +388,15 @@ def _divide(left: Any, right: Any, n_rows: int, policy: NumericPolicy) -> pa.Arr
             raise ValidationError(
                 "derived 除法遇到除零（NumericPolicy.division=raise）"
             )
-        return pc.divide(larr, rarr)
-    # nan / masked：用极小替身避免 pc.divide 抛错，除零位留下 inf 再由下面收口。
+        return _finalize(pc.divide(larr, rarr), policy)
+    # nan / masked：除零位置不参与真实除法，直接按策略填 NaN / NULL。
     zero_mask = pc.equal(rarr, 0)
-    safe_den = pc.if_else(zero_mask, _EPS, rarr)
+    safe_den = pc.if_else(zero_mask, pa.scalar(1.0, type=rarr.type), rarr)
     out = pc.divide(larr, safe_den)
+    if policy.division == "masked":
+        out = pc.if_else(zero_mask, pa.scalar(None, type=out.type), out)
+    else:  # nan
+        out = pc.if_else(zero_mask, pa.scalar(float("nan"), type=out.type), out)
     return _finalize(out, policy)
 
 
@@ -444,7 +443,7 @@ def _evaluate_node(
     if isinstance(node, Num):
         return node.value
     if isinstance(node, Ref):
-        key = node.dataset if node.dataset is not None else node.column
+        key = _ref_key(node)
         fid = bound.get(key)
         if fid is None:
             raise ValidationError(f"derived 引用未绑定列 {key!r}")
@@ -487,7 +486,7 @@ def evaluate_expression(
     else:
         bound = {}
         for ref in _walk_refs(ast):
-            key = ref.dataset if ref.dataset is not None else ref.column
+            key = _ref_key(ref)
             bound.setdefault(key, bind_ref(ref.dataset, ref.column))
     result = _evaluate_node(ast, table, bound, policy, table.num_rows)
     if isinstance(result, (int, float)):

@@ -1,0 +1,100 @@
+# R45 IncrementalCapabilityMatrix + IncrementalCertificationLedger — 当前 head 快照
+version: "R45"
+date: "2026-08-24"
+kind: "release-truth evidence"
+scope:
+  - "runtime/incremental_contract.py (R45 extension)"
+  - "tests/r45/test_r45_capability_ledger.py"
+
+authoritative_registry:
+  source: "cleaned_operators.registry.OperatorRegistry._catalog"
+  operator_total: 1624
+  note: >
+    权威算子数 1624（非 R44 机器报告误报的 466）。R45 修正：incremental_capability_matrix()
+    现迭代权威 registry 全量，不再依赖任何硬编码行数。1624 == 1624，矩阵无缺漏、无多算。
+
+certification_ledger:
+  source: "runtime.incremental_contract.IncrementalCertificationLedger"
+  operator_total: 1624
+  distribution:
+    TRUE_INCREMENTAL: 9
+    TAIL_REPLAY: 0
+    EVENT_INCREMENTAL: 0
+    FULL_REPLAY_ONLY: 0
+    NOT_CERTIFIED: 1615
+  strategy_distribution:
+    CHECKPOINTED_STATE: 16
+    FINITE_WINDOW: 1018
+    STATELESS: 498
+    FULL_REPLAY: 92
+  live_production_usable: 86
+  true_incremental_canonicals:
+    - ts_ema
+    - ts_ewm_std
+    - ts_ewm_var
+    - ts_ewm_cov
+    - ts_ewm_corr
+    - RSI_WILDER
+    - ATR_WILDER
+    - ADX
+    - MACD_line
+  note: >
+    仅 9 个（SEGMENTED_CANONICALS，任务书预估 8，实为 9）状态算子经完整 parity
+    （full vs segmented-incremental 逐行对齐 + restart-resume 恢复）证明 → TRUE_INCREMENTAL。
+    其余 1615 全部 NOT_CERTIFIED —— 诚实：框架已实现某 lane ≠ 生产增量已认证。
+    无 canonical 同时列为 TRUE_INCREMENTAL 与 NOT_CERTIFIED；两集合并集覆盖全量。
+
+capability_matrix:
+  per_row_fields:
+    - canonical
+    - incremental_mode
+    - certification_level
+    - direct_mining
+    - ashare_source_ready
+    - pit
+    - pandas
+    - polars
+    - duckdb
+    - q
+    - numba
+    - incremental
+    - e2e
+    - live_production_usable
+  dimension_summary_true_counts:
+    direct_mining: 1598
+    ashare_source_ready: 31
+    pit: 100
+    pandas: 1622
+    polars: 1623
+    duckdb: 0
+    q: 0
+    numba: 0
+    incremental: 1532
+    e2e: 1034
+    live_production_usable: 86
+  honest_NOT_RUN_items:
+    - "duckdb backend: 当前 catalog 无 duckdb 后端，全 0（如实报告，非 false-true）。"
+    - "q backend: 当前 catalog 无 q 后端，全 0。"
+    - "numba accelerator: 当前 catalog 无 numba 加速器（仅 Accelerator.NONE / pandas_reference），全 0。"
+    - "TAIL_REPLAY / EVENT_INCREMENTAL / FULL_REPLAY_ONLY: 均为 0 —— 策略槽位尚未被任何生产增量契约证明，如实报告。"
+
+live_production_usable_definition:
+  criteria:
+    - "lifecycle_status == 'production'"
+    - "production_certified is True"
+    - "not hidden_from_default_mining"
+    - "incremental_mode != FULL_REPLAY"
+  count: 86
+  note: "证据到齐才算可用；任何一项缺失 → False。"
+
+not_run_items:
+  - "未运行：全量 1624 算子逐一跑 production parity（超时不可行）；9 个状态算子的 parity 已在 R45 探测实际运行并全数通过。"
+  - "未运行：真实增量生产契约（TAIL_REPLAY / EVENT_INCREMENTAL 认证）—— 尚无生产证据。"
+
+test_result:
+  - file: "tests/r45/test_r45_capability_ledger.py"
+    result: "9 passed"
+  - file: "tests/r44/test_r44_incremental_contract.py"
+    result: "13 passed (无回归)"
+
+current_head_snapshot: true

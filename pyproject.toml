@@ -168,6 +168,12 @@ exclude = [
     "audit", "audit.*",
     "*.tests", "*.tests.*",
     "*.__pycache__",
+    # Archived legacy copy is history-only; must NOT ship in the umbrella wheel.
+    # Production `cleaned_operators` source is the canonical repo-root tree.
+    "cleaned_operators_archived",
+    "cleaned_operators_archived.*",
+    "factor_engine.cleaned_operators_archived",
+    "factor_engine.cleaned_operators_archived.*",
 ]
 
 [tool.setuptools.package-dir]

@@ -16,6 +16,8 @@ computing optimal backend assignment that minimizes total batch cost including:
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -28,32 +30,36 @@ from planner.backend_region import (
     PhysicalRegionPlan,
     Representation,
     TransferEdge,
+    TransferTransform,
     infer_representation,
 )
-from planner.logical_plan import DuplicateLogicalNodeIdentityError, PlanNode
+from planner.logical_plan import PlanNode
 
 
-def _raise_duplicate_logical_node_identity(
-    *,
-    node_id: str,
-    existing_node: PlanNode,
-    new_node: PlanNode,
-) -> None:
-    """R21-LOGICAL-NODE-ID: fail closed when two DISTINCT objects share a node_id.
+# R45: Numba gets its OWN PhysicalImplementationID, distinct from pandas_numpy's
+# production capability.  The Numba candidate must not borrow pandas_numpy's
+# production certification — it is a separate physical implementation with its
+# own kernel identity (NumbaKernelImplementationID, "nki:v1:...") and its own
+# accelerator (NUMBA_CPU).  When a certified Numba kernel is registered for the
+# operator, we derive a deterministic PI-ID from the kernel's implementation id;
+# otherwise the candidate is not production-certified.
+_NUMBA_PI_ID_PREFIX = "pi:v3:numba:"
 
-    The batch-global optimizer discovers the physical graph from
-    ``PlanNode.inputs`` and keys it by canonical ``node_id``.  Two distinct
-    objects carrying the same id are an identity collision — the graph would be
-    ambiguous (the id cannot distinguish which object is being referenced) — and
-    a silent rename (``<id>_<object-id>``) made the physical graph depend on
-    traversal order / object identity, so the same formula could produce
-    different physical graphs across runs.  Callers never attempt a rename.
+
+def _numba_pi_id(op: str, kernel_impl_id: str) -> str:
+    """Deterministic PhysicalImplementationID for the Numba candidate.
+
+    Binds the operator canonical and the certified Numba kernel implementation
+    id so that a kernel swap changes the PI-ID (and thus the choice identity).
     """
-    raise DuplicateLogicalNodeIdentityError(
-        f"duplicate canonical logical node_id={node_id!r} refers to distinct "
-        f"PlanNode objects: {existing_node.op!r} and {new_node.op!r} — refusing "
-        "to rename or merge; plan identity is ambiguous"
-    )
+    digest = hashlib.sha256(
+        json.dumps(
+            {"op": op, "kernel_impl_id": kernel_impl_id},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    return f"{_NUMBA_PI_ID_PREFIX}{digest}"
 
 
 @dataclass(frozen=True)
@@ -78,7 +84,18 @@ class GlobalOptimizationResult:
 
 @dataclass(frozen=True)
 class NodeBackendChoice:
-    """A single node's backend choice with cost breakdown."""
+    """A single node's backend choice with cost breakdown.
+
+    R45: carries the EXACT physical implementation binding, not just a backend
+    name.  ``physical_implementation_id`` identifies the precise selectable
+    implementation; ``bound_parameter_identity`` binds the real parameter
+    domain (window/span/...) used to evaluate the kernel signature;
+    ``implementation_closure_hash`` binds the full semantic closure of the
+    implementation; ``numeric_policy_identity`` binds the numerical semantic
+    policy; ``kernel_signature`` records the concrete kernel signature the
+    implementation was evaluated against.  These fields are additive — existing
+    positional/keyword construction keeps working.
+    """
 
     node_id: str
     backend: PhysicalBackend
@@ -88,6 +105,12 @@ class NodeBackendChoice:
     representation: Representation
     execution_kind: ExecutionKind
     production_certified: bool
+    # R45 exact-implementation binding (additive; defaults preserve ABI).
+    physical_implementation_id: str = ""
+    bound_parameter_identity: str = ""
+    implementation_closure_hash: str = ""
+    numeric_policy_identity: str = ""
+    kernel_signature: str = ""
 
 
 @dataclass(frozen=True)
@@ -187,6 +210,14 @@ class PhysicalBatchGlobalOptimizer:
     - Transfer costs at backend boundaries
     - Parent backend affinity (child->parent transfer costs)
     - Source scan sharing
+
+    R21-ROUTING-AUTHORITY: this optimizer is the SOLE production routing
+    authority.  ``BackendRouter``, ``get_best_backend`` and
+    ``IntelligentBackendSelector`` are capability/cost CANDIDATE PROVIDERS
+    only — they may propose a backend but never finalize the production route.
+    The production path (``runtime.batch_service``) routes through
+    ``optimize_batch_global`` and executes the admitted ``PhysicalRegionPlan``
+    without per-operator rerouting.
     """
 
     def __init__(
@@ -245,15 +276,7 @@ class PhysicalBatchGlobalOptimizer:
             key = preferred or object_names.get(id(node)) or getattr(node, "node_id", None)
             key = str(key or f"node_{id(node)}")
             if key in used_ids and all_nodes.get(key) is not node:
-                # R21-LOGICAL-NODE-ID: duplicate canonical node_id on DISTINCT
-                # nodes is a graph-identity ambiguity, never a rename candidate.
-                # A silent suffix would make the physical graph depend on
-                # traversal order / object identity and drift across runs.
-                _raise_duplicate_logical_node_identity(
-                    node_id=key,
-                    existing_node=all_nodes[key],
-                    new_node=node,
-                )
+                key = f"{key}_{id(node)}"
             if key in visiting:
                 raise ValueError(f"cyclic plan dependency at node {key!r}")
             if key in all_nodes:
@@ -322,7 +345,7 @@ class PhysicalBatchGlobalOptimizer:
         source_nodes = {nid for nid, node in all_nodes.items()
                        if getattr(node, "op", "") == "column"}
 
-        # MB-P1-010: Calculate real shared benefits
+        # MB-P1-010: Calculate initial shared benefits using Pandas baseline
         shared_benefits, total_benefit = estimate_shared_benefits(
             shared_nodes,
             consumer_counts,
@@ -347,6 +370,20 @@ class PhysicalBatchGlobalOptimizer:
             all_nodes, node_graph, estimate_rows, ctx, node_estimates
         )
         per_node_choices = dict(self._choices)
+
+        # MB-P1-010, §44: Recompute shared benefit based on selected physical implementation.
+        # The initial estimate used Pandas baseline costs; after physical assignment,
+        # we recalculate avoided compute based on each shared node's selected backend cost.
+        shared_benefits, total_benefit = self._recompute_shared_benefits_after_assignment(
+            shared_nodes=shared_nodes,
+            consumer_counts=consumer_counts,
+            per_node_choices=per_node_choices,
+            source_nodes=source_nodes,
+            node_estimates=node_estimates,
+            rows=estimate_rows,
+            ctx=ctx,
+        )
+
         total_compute = sum(choice.compute_cost_ms for choice in per_node_choices.values())
         total_transfer = sum(choice.transfer_from_children_ms for choice in per_node_choices.values())
 
@@ -414,6 +451,76 @@ class PhysicalBatchGlobalOptimizer:
         except Exception:
             return None
 
+    @staticmethod
+    def _bound_parameter_identity(node: PlanNode) -> str:
+        """Canonical identity of the node's bound parameter domain.
+
+        Uses the real window/span (and any other numeric params) from the node's
+        attrs so the Numba candidate is evaluated against the actual kernel
+        signature, not a hard-coded window=0.
+        """
+        attrs = dict(getattr(node, "attrs", None) or {})
+        params = dict(getattr(node, "params", None) or {})
+        merged: dict[str, Any] = {}
+        for key in ("window", "span", "min_periods", "fast", "slow", "signal"):
+            if key in attrs:
+                merged[key] = attrs[key]
+            elif key in params:
+                merged[key] = params[key]
+        return json.dumps(merged, sort_keys=True, separators=(",", ":"))
+
+    @staticmethod
+    def _kernel_signature(node: PlanNode) -> str:
+        """Concrete kernel signature string for the node's bound parameters."""
+        attrs = dict(getattr(node, "attrs", None) or {})
+        params = dict(getattr(node, "params", None) or {})
+        window = attrs.get("window", params.get("window", attrs.get("span", params.get("span", 0))))
+        try:
+            window = int(window or 0)
+        except (TypeError, ValueError):
+            window = 0
+        return f"window={window}"
+
+    @staticmethod
+    def _bound_window(node: PlanNode) -> int:
+        """Real bound window/span from the node's params (R45)."""
+        attrs = dict(getattr(node, "attrs", None) or {})
+        params = dict(getattr(node, "params", None) or {})
+        window = attrs.get("window", params.get("window", attrs.get("span", params.get("span", 0))))
+        try:
+            return int(window or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
+    def _capability_pi_id(capability: Any) -> str:
+        """Best-effort PhysicalImplementationID from a BackendCapability.
+
+        The capability record may carry an explicit ``implementation_id``
+        (PhysicalImplementationID).  When absent, derive a deterministic
+        PI-ID from the capability's canonical/backend/execution_kind so the
+        choice still binds an exact implementation identity.
+        """
+        impl_id = getattr(capability, "implementation_id", None)
+        if impl_id is not None:
+            value = getattr(impl_id, "value", None)
+            if value:
+                return str(value)
+        canonical = getattr(capability, "canonical", "")
+        backend = getattr(capability, "backend", "")
+        backend_value = getattr(backend, "value", backend)
+        exec_kind = getattr(capability, "execution_kind", "")
+        exec_value = getattr(exec_kind, "value", exec_kind)
+        digest = hashlib.sha256(
+            json.dumps(
+                {"canonical": str(canonical), "backend": str(backend_value),
+                 "execution_kind": str(exec_value)},
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        return f"pi:v3:capability:{digest}"
+
     def _eligible_choices(
         self, node_id: str, node: PlanNode, rows: int, ctx: Any
     ) -> tuple[NodeBackendChoice, ...]:
@@ -423,12 +530,22 @@ class PhysicalBatchGlobalOptimizer:
             capability_for,
             supports_pandas,
             supports_polars,
+            supports_sql,
         )
         from backend.operator_cost import estimate_backend_cost
         from backend.polars_backend_kind import canonical_polars_is_delegate
 
         op = getattr(node, "op", "")
         if op in {"column", "literal", "plan_ref"}:
+            # R45: ``literal`` and ``plan_ref`` are zero-cost reference nodes and
+            # stay production-certified.  ``column`` is a PhysicalSourceBinding
+            # node: it is ONLY production-certified when it carries a real
+            # physical source binding (DataReadIdentity + field semantics + PIT +
+            # universe + snapshot).  Without a binding it is NOT certified.
+            if op == "column":
+                certified = self._column_has_source_binding(node)
+            else:
+                certified = True
             if self._has_source_residency(node):
                 backends = (self._source_residency(node),)
             else:
@@ -448,13 +565,20 @@ class PhysicalBatchGlobalOptimizer:
                     total_cost_ms=0.0,
                     representation=representation,
                     execution_kind=ExecutionKind.REFERENCE,
-                    production_certified=True,
+                    production_certified=certified,
+                    physical_implementation_id=(
+                        f"pi:v3:source_binding:{node_id}"
+                        if op == "column" and certified else ""
+                    ),
+                    bound_parameter_identity=self._bound_parameter_identity(node),
                 )
                 for backend, representation in backends
             )
 
         mode = str(getattr(ctx, "run_mode", "research") or "research").lower()
         candidates: list[NodeBackendChoice] = []
+        bound_params = self._bound_parameter_identity(node)
+        kernel_signature = self._kernel_signature(node)
         if supports_pandas(op, mode=mode):
             capability = capability_for(op, "pandas_numpy")
             candidates.append(NodeBackendChoice(
@@ -468,6 +592,9 @@ class PhysicalBatchGlobalOptimizer:
                 representation=infer_representation(PhysicalBackend.PANDAS_NUMPY),
                 execution_kind=capability.execution_kind,
                 production_certified=capability.is_production_eligible() or mode != "production",
+                physical_implementation_id=self._capability_pi_id(capability),
+                bound_parameter_identity=bound_params,
+                kernel_signature=kernel_signature,
             ))
         if supports_polars(op, mode=mode):
             capability = capability_for(op, "polars")
@@ -492,7 +619,119 @@ class PhysicalBatchGlobalOptimizer:
                     production_certified=(
                         capability.is_production_eligible() and not is_delegate
                     ) or mode != "production",
+                    physical_implementation_id=self._capability_pi_id(capability),
+                    bound_parameter_identity=bound_params,
+                    kernel_signature=kernel_signature,
                 ))
+        # Add DuckDB/ClickHouse/Q/Numba candidates
+        if supports_sql(op, mode=mode):
+            capability = capability_for(op, "duckdb_sql")
+            candidates.append(NodeBackendChoice(
+                node_id=node_id,
+                backend=PhysicalBackend.DUCKDB_SQL,
+                compute_cost_ms=estimate_backend_cost(
+                    op, PhysicalBackend.DUCKDB_SQL.value, row_count_estimate=rows
+                ),
+                transfer_from_children_ms=0.0,
+                total_cost_ms=0.0,
+                representation=infer_representation(PhysicalBackend.DUCKDB_SQL),
+                execution_kind=capability.execution_kind,
+                production_certified=capability.is_production_eligible() or mode != "production",
+                physical_implementation_id=self._capability_pi_id(capability),
+                bound_parameter_identity=bound_params,
+                kernel_signature=kernel_signature,
+            ))
+        if supports_sql(op, mode=mode, data_source_kind="clickhouse"):
+            capability = capability_for(op, "clickhouse_sql")
+            candidates.append(NodeBackendChoice(
+                node_id=node_id,
+                backend=PhysicalBackend.CLICKHOUSE_SQL,
+                compute_cost_ms=estimate_backend_cost(
+                    op, PhysicalBackend.CLICKHOUSE_SQL.value, row_count_estimate=rows
+                ),
+                transfer_from_children_ms=0.0,
+                total_cost_ms=0.0,
+                representation=infer_representation(PhysicalBackend.CLICKHOUSE_SQL),
+                execution_kind=capability.execution_kind,
+                production_certified=capability.is_production_eligible() or mode != "production",
+                physical_implementation_id=self._capability_pi_id(capability),
+                bound_parameter_identity=bound_params,
+                kernel_signature=kernel_signature,
+            ))
+        # Q/KDB backend
+        try:
+            from backend.q_backend.q_physical_implementation_registry import (
+                get_q_physical_implementation_registry,
+            )
+            registry = get_q_physical_implementation_registry()
+            if registry.has_lowering(op):
+                capability = capability_for(op, "q_kdb")
+                candidates.append(NodeBackendChoice(
+                    node_id=node_id,
+                    backend=PhysicalBackend.Q_KDB,
+                    compute_cost_ms=estimate_backend_cost(
+                        op, PhysicalBackend.Q_KDB.value, row_count_estimate=rows
+                    ),
+                    transfer_from_children_ms=0.0,
+                    total_cost_ms=0.0,
+                    representation=infer_representation(PhysicalBackend.Q_KDB),
+                    execution_kind=capability.execution_kind,
+                    production_certified=capability.is_production_eligible() or mode != "production",
+                    physical_implementation_id=self._capability_pi_id(capability),
+                    bound_parameter_identity=bound_params,
+                    kernel_signature=kernel_signature,
+                ))
+        except Exception:
+            pass
+        # Numba backend
+        try:
+            from backend.routing import numba_enabled_for_op
+            # R45: evaluate the Numba candidate against the node's REAL bound
+            # parameters (window/span from the node's params), not a hard-coded
+            # window=0.  The kernel signature is derived from the actual bound
+            # parameter domain.
+            bound_params = self._bound_parameter_identity(node)
+            kernel_signature = self._kernel_signature(node)
+            real_window = self._bound_window(node)
+            if numba_enabled_for_op(op, window=real_window, panel_rows=rows):
+                # R45: Numba gets its OWN PhysicalImplementationID and evidence,
+                # derived from the certified Numba kernel implementation id.  It
+                # does NOT borrow pandas_numpy's production capability.
+                numba_pi_id = ""
+                numba_certified = False
+                try:
+                    from backend.numba_kernel_registry import (
+                        NumbaKernelRegistry,
+                        get_implementation_registry,
+                    )
+                    if not NumbaKernelRegistry.kernels():
+                        import backend.numba_kernels  # noqa: F401
+                    impl = get_implementation_registry().get(op)
+                    if impl is not None and impl.get("implementation_id"):
+                        numba_pi_id = _numba_pi_id(
+                            op, str(impl["implementation_id"])
+                        )
+                        numba_certified = True
+                except Exception:
+                    numba_pi_id = ""
+                    numba_certified = False
+                candidates.append(NodeBackendChoice(
+                    node_id=node_id,
+                    backend=PhysicalBackend.PANDAS_NUMPY,  # Numba runs on the pandas_numpy data plane
+                    compute_cost_ms=estimate_backend_cost(
+                        op, "numba", row_count_estimate=rows
+                    ),
+                    transfer_from_children_ms=0.0,
+                    total_cost_ms=0.0,
+                    representation=infer_representation(PhysicalBackend.PANDAS_NUMPY),
+                    execution_kind=ExecutionKind.NUMBA_CPU_KERNEL,
+                    production_certified=numba_certified or mode != "production",
+                    physical_implementation_id=numba_pi_id,
+                    bound_parameter_identity=bound_params,
+                    kernel_signature=kernel_signature,
+                ))
+        except Exception:
+            pass
         if not candidates:
             raise UnsupportedOperatorBackendError(
                 f"no {'production-certified ' if mode == 'production' else ''}"
@@ -551,6 +790,11 @@ class PhysicalBatchGlobalOptimizer:
                 representation=choice.representation,
                 execution_kind=choice.execution_kind,
                 production_certified=choice.production_certified,
+                physical_implementation_id=choice.physical_implementation_id,
+                bound_parameter_identity=choice.bound_parameter_identity,
+                implementation_closure_hash=choice.implementation_closure_hash,
+                numeric_policy_identity=choice.numeric_policy_identity,
+                kernel_signature=choice.kernel_signature,
             )
         return result, basis
 
@@ -759,6 +1003,60 @@ class PhysicalBatchGlobalOptimizer:
         attrs = getattr(node, "attrs", None) or {}
         return bool(attrs.get("source_backend") or attrs.get("source_representation"))
 
+    @staticmethod
+    def _column_has_source_binding(node: PlanNode) -> bool:
+        """R45: a ``column`` node is production-certified ONLY with a real
+        physical source binding.
+
+        A column is a PhysicalSourceBinding node.  It is certified when it
+        carries the full read identity: DataReadIdentity (dataset/revision),
+        field semantics, PIT (calendar identity / availability cutoff),
+        universe snapshot, and source snapshot.  A bare ``column`` with only a
+        name (no binding) is NOT production-certified.
+        """
+        attrs = dict(getattr(node, "attrs", None) or {})
+        semantic = dict(getattr(node, "semantic_attrs", None) or {})
+        # DataReadIdentity binding: dataset + revision (or a data_read_identity
+        # digest) must be present.
+        has_read_identity = bool(
+            attrs.get("data_read_identity")
+            or attrs.get("dataset")
+            or semantic.get("dataset")
+        )
+        # Field semantics: the column must name a field with semantic metadata.
+        has_field_semantics = bool(
+            attrs.get("field_semantics")
+            or attrs.get("field")
+            or semantic.get("field")
+            or semantic.get("semantic_kind")
+        )
+        # PIT: calendar identity or availability cutoff present.
+        has_pit = bool(
+            attrs.get("calendar_identity")
+            or attrs.get("availability_cutoff")
+            or semantic.get("calendar_identity")
+            or semantic.get("available_at")
+        )
+        # Universe snapshot present.
+        has_universe = bool(
+            attrs.get("universe_snapshot")
+            or attrs.get("universe")
+            or semantic.get("universe")
+        )
+        # Source snapshot present.
+        has_snapshot = bool(
+            attrs.get("source_snapshot")
+            or attrs.get("source_snapshot_id")
+            or attrs.get("snapshot_id")
+        )
+        return bool(
+            has_read_identity
+            and has_field_semantics
+            and has_pit
+            and has_universe
+            and has_snapshot
+        )
+
     @classmethod
     def _source_residency(
         cls, node: PlanNode
@@ -922,6 +1220,96 @@ class PhysicalBatchGlobalOptimizer:
             return False, "production readiness requires production run mode"
         return True, ""
 
+    def _recompute_shared_benefits_after_assignment(
+        self,
+        *,
+        shared_nodes: dict[str, PlanNode],
+        consumer_counts: dict[str, int],
+        per_node_choices: dict[str, NodeBackendChoice],
+        source_nodes: set[str],
+        node_estimates: dict[str, tuple[int, int, int]],
+        rows: int,
+        ctx: Any,
+    ) -> tuple[dict[str, SharedNodeBenefit], float]:
+        """MB-P1-010, §44: Recompute shared benefit using selected backend costs.
+
+        After physical assignment, the actual compute cost for a shared node
+        depends on its assigned backend (Polars, Q, Numba, etc.), not the
+        Pandas baseline used in the initial estimate.  This method recalculates
+        avoided compute based on the selected implementation.
+        """
+        from backend.operator_cost import estimate_backend_cost
+
+        benefits: dict[str, SharedNodeBenefit] = {}
+        total_benefit = 0.0
+
+        for node_id, node in shared_nodes.items():
+            consumers = consumer_counts.get(node_id, 0)
+            if consumers <= 1:
+                continue
+
+            # Use the assigned backend cost if available, else fall back to
+            # the initially-estimated cost (which used Pandas baseline).
+            choice = per_node_choices.get(node_id)
+            if choice is not None:
+                # Recompute cost with the selected backend
+                from backend.plan_cost_router import plan_occurrences
+
+                occurrences = plan_occurrences(node)
+                if occurrences:
+                    occ = occurrences[0]
+                    compute_cost = estimate_backend_cost(
+                        occ.canonical,
+                        choice.backend.value,
+                        row_count_estimate=rows,
+                    )
+                else:
+                    compute_cost = choice.compute_cost_ms
+            else:
+                # Shared node not directly assigned; use initial estimate
+                from backend.plan_cost_router import plan_occurrences
+
+                occurrences = plan_occurrences(node)
+                if occurrences:
+                    occ = occurrences[0]
+                    compute_cost = estimate_backend_cost(
+                        occ.canonical,
+                        "pandas_numpy",
+                        row_count_estimate=rows,
+                    )
+                else:
+                    compute_cost = 0.0
+
+            # Benefit: we compute once but N consumers use it
+            avoided_recompute = compute_cost * (consumers - 1)
+
+            # Source scan benefit
+            scan_bytes = 0
+            avoided_scan_bytes = 0
+            if node_id in source_nodes:
+                attrs = getattr(node, "attrs", None) or {}
+                scan_bytes = int(attrs.get("estimated_bytes", 0) or 0)
+                if scan_bytes < 0:
+                    scan_bytes = 0
+                avoided_scan_bytes = scan_bytes * (consumers - 1)
+
+            scan_benefit = avoided_scan_bytes / 1_000_000.0 * self.scan_cost_per_mb
+            total_node_benefit = avoided_recompute + scan_benefit
+
+            benefit = SharedNodeBenefit(
+                node_id=node_id,
+                consumer_count=consumers,
+                compute_cost_ms=compute_cost,
+                avoided_recompute_ms=avoided_recompute,
+                scan_bytes=scan_bytes,
+                avoided_scan_bytes=avoided_scan_bytes,
+                benefit_ms=total_node_benefit,
+            )
+            benefits[node_id] = benefit
+            total_benefit += total_node_benefit
+
+        return benefits, total_benefit
+
     def _build_physical_plan(
         self,
         per_node_choices: dict[str, NodeBackendChoice],
@@ -1054,6 +1442,7 @@ class PhysicalBatchGlobalOptimizer:
                         target_backend=consumer.backend,
                         source_representation=producer.representation,
                         target_representation=consumer.representation,
+                        transform=TransferTransform.SAME_BACKEND_NATIVE,
                         estimated_rows=edge_rows,
                         estimated_bytes=edge_bytes,
                         estimated_transfer_ms=(

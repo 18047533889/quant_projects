@@ -368,22 +368,26 @@ def _kernel_callable(kernel_name: str) -> Callable | None:
     """
     if not _NUMBA_ENV:
         return None
-    try:
-        from backend.numba_kernel_registry import NumbaKernelRegistry
-    except Exception:
-        return None
+    # R45-NUMBA-HYGIENE：软排除候选（Numba 不可用）只允许由「可选依赖缺失」
+    # 造成。registry 导入失败、kernel 注册代码抛错（内部 bug / 注册表损坏）必须
+    # 硬失败冒泡 —— 绝不把「内部错误」吞成「numba 后端不可用」。因此这里只
+    # 捕获 ImportError（pykx/numba 可选依赖缺失 = 真正的 BackendUnavailable），
+    # 其余异常（ValueError/TypeError/RuntimeError…）原样上抛。
+    from backend.numba_kernel_registry import NumbaKernelRegistry, NUMBA_AVAILABLE
+
     try:
         if not NumbaKernelRegistry.kernels():
             import backend.numba_kernels  # noqa: F401  (registers kernels)
-    except Exception:
+    except ImportError:
+        # 仅 numba 可选依赖缺失属于「Numba 不可用」，可软排除；注册逻辑内部
+        # 错误（如 DuplicateKernelRegistrationError）不得被吞成 unavailable。
         pass
     kernel = NumbaKernelRegistry.get(kernel_name)
     if kernel is None:
         return None
-    try:
-        from backend.numba_kernel_registry import NUMBA_AVAILABLE
-    except Exception:
+    if not NUMBA_AVAILABLE or kernel.numba_fn is None:
         return None
+    return kernel.call
     if not NUMBA_AVAILABLE or kernel.numba_fn is None:
         return None
     return kernel.call

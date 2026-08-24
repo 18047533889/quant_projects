@@ -70,6 +70,11 @@ class BoundNodeOccurrence:
 _BENCHMARK_PATH = Path(__file__).resolve().parents[1] / "benchmarks" / "backend_cost_baseline.json"
 _META_OPS = frozenset({"column", "literal", "plan_ref", "materialized_series"})
 
+#: R45-TYPED-ROWS：行数未知（rows_known=False）时用于成本/字节估算的保守默认，
+#: 与 operator_cost._DEFAULT_PLAN_ROWS 同量级。绝不把未知行数当 0 行 —— 那会
+#: 低估 scan/cost/memory，产生"看似便宜"的错误计划。
+_UNKNOWN_ROWS_CONSERVATIVE = 500_000
+
 #: R31-013：从 PlanNode.attrs 提取的 bound 参数键（window/k/feature_dim/regressors）。
 _PARAM_KEYS = ("window", "period", "k", "feature_dim", "regressors", "group_count")
 
@@ -929,7 +934,19 @@ def _shape_scan_bytes(shape: Any) -> int:
                 return max(0, int(v))
             except (TypeError, ValueError):
                 pass
-    rows = int(getattr(shape, "estimated_rows", 0) or 0)
+    # R45-TYPED-ROWS：estimated_rows 未知（0/缺省）时，绝不能按 0 行估算
+    # scan 字节 —— 那会让 ``_shape_scan_bytes`` 返回 0 字节、TTDC/成本被
+    # 系统性低估。shape 携带 ``rows_known``（DataShapeEstimate）时以它为权威；
+    # 未知行数用一个保守默认行数（与 operator_cost._DEFAULT_PLAN_ROWS 同量级）
+    # 估算，而不是 0。
+    raw_rows = getattr(shape, "estimated_rows", None)
+    known = getattr(shape, "rows_known", None)
+    if raw_rows:
+        rows = int(raw_rows)
+    elif known is False:
+        rows = _UNKNOWN_ROWS_CONSERVATIVE
+    else:
+        rows = 0
     cols = int(
         getattr(shape, "projected_columns", 0) or getattr(shape, "total_columns", 0) or 1
     )
@@ -972,7 +989,15 @@ def predict_ttdc(shape: Any, backend: str) -> TtdcEstimate:
       - PyArrow：native arrow scan，materialize 到 pandas/panel 另计。
     """
     scan_bytes = _shape_scan_bytes(shape)
-    rows = int(getattr(shape, "estimated_rows", 0) or 0)
+    raw_rows = getattr(shape, "estimated_rows", None)
+    known = getattr(shape, "rows_known", None)
+    if raw_rows:
+        rows = int(raw_rows)
+    elif known is False:
+        # R45-TYPED-ROWS：行数未知 → 用保守默认估算 execute 成本，而非 0。
+        rows = _UNKNOWN_ROWS_CONSERVATIVE
+    else:
+        rows = 0
     remote = _shape_remote(shape)
     mbps = _REMOTE_SCAN_MBPS if remote else _LOCAL_SCAN_MBPS
     scan_ms = 0.0

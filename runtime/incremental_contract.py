@@ -522,6 +522,252 @@ def incremental_capability_matrix(
 
 
 # ---------------------------------------------------------------------------
+# R45 认证等级 + IncrementalCertificationLedger
+# ---------------------------------------------------------------------------
+class IncrementalCertificationLevel(str, enum.Enum):
+    """算子生产增量认证等级（R45）。
+
+    * ``TRUE_INCREMENTAL`` —— 已通过数值 parity（full vs segmented-incremental
+      逐行对齐 + restart-resume 恢复）的状态算子，真实增量已证明。
+    * ``TAIL_REPLAY`` / ``EVENT_INCREMENTAL`` / ``FULL_REPLAY_ONLY`` —— 策略
+      分类槽位（保留），仅当对应算子的生产增量契约被证明后才落位。
+    * ``NOT_CERTIFIED`` —— 尚未证明（框架已实现 ≠ 生产增量已认证）。
+    """
+
+    TRUE_INCREMENTAL = "TRUE_INCREMENTAL"
+    TAIL_REPLAY = "TAIL_REPLAY"
+    EVENT_INCREMENTAL = "EVENT_INCREMENTAL"
+    FULL_REPLAY_ONLY = "FULL_REPLAY_ONLY"
+    NOT_CERTIFIED = "NOT_CERTIFIED"
+
+
+# 当前 head 上经 parity（full vs incremental 逐行对齐 + restart-resume）证明的
+# 状态算子集合。与 runtime.incremental_parity.SEGMENTED_CANONICALS 保持一致；
+# 实测 9 个全部通过（任务书预估 8，实为 9，以真实 parity 为准）。
+_PARITY_PROVEN_FALLBACK = frozenset({
+    "ts_ema", "ts_ewm_std", "ts_ewm_var", "ts_ewm_cov", "ts_ewm_corr",
+    "RSI_WILDER", "ATR_WILDER", "ADX", "MACD_line",
+})
+
+
+def parity_proven_canonicals() -> frozenset[str]:
+    """返回当前 head 上已通过 incremental parity 的状态算子集合（R45）。
+
+    懒加载 ``runtime.incremental_parity.SEGMENTED_CANONICALS`` 保持单一权威；
+    若 import 失败回退到本模块内联快照。
+    """
+    try:
+        from runtime.incremental_parity import SEGMENTED_CANONICALS
+
+        return frozenset(SEGMENTED_CANONICALS)
+    except Exception:
+        return _PARITY_PROVEN_FALLBACK
+
+
+def classify_certification_level(
+    canonical: str, mode: IncrementalMode | None = None
+) -> IncrementalCertificationLevel:
+    """把 canonical 归类为 5 级认证状态（R45）。
+
+    诚实原则：仅当算子已通过 parity（状态增量逐段对齐 + restart-resume）才给
+    ``TRUE_INCREMENTAL``；其余一律 ``NOT_CERTIFIED``。绝不因框架实现了某 lane 就
+    虚报生产认证。``mode`` 参数保留给未来策略槽位，当前不改变结果。
+    """
+    if canonical in parity_proven_canonicals():
+        return IncrementalCertificationLevel.TRUE_INCREMENTAL
+    return IncrementalCertificationLevel.NOT_CERTIFIED
+
+
+# 扩展 capability matrix 每行额外携带的字段（R45 维度；在 10 个既有字段之上）。
+_CAPABILITY_EXTRA_FIELDS = (
+    "certification_level",
+    "direct_mining",
+    "ashare_source_ready",
+    "pit",
+    "pandas",
+    "polars",
+    "duckdb",
+    "q",
+    "numba",
+    "incremental",
+    "e2e",
+    "live_production_usable",
+)
+
+
+def _registry_catalog_entry(canonical: str) -> dict[str, Any]:
+    """读取 OperatorRegistry._catalog 的单条目；registry 不可用时回退空 dict。"""
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        return dict(OperatorRegistry._catalog.get(canonical, {}))
+    except Exception:
+        return {}
+
+
+def _capability_dimensions(
+    canonical: str, mode: IncrementalMode
+) -> dict[str, bool]:
+    """每 canonical 的维度探测（R45）。
+
+    诚实性：只对 registry 声明为真的维度给 True；未知/缺失一律 False（不虚报）。
+    当前 head 上 catalog 的 backend 只有 pandas_numpy / polars / sql，无 duckdb /
+    q 后端，也无 numba 加速器，故 duckdb / q / numba 全为 False（如实报告）。
+    """
+    cat = _registry_catalog_entry(canonical)
+    backends = cat.get("backends") or []
+    backend_lower = {str(b).lower() for b in backends}
+    status = cat.get("status")
+    hidden = bool(cat.get("hidden_from_default_mining"))
+    return {
+        "direct_mining": (status in ("production", "experimental")) and not hidden,
+        "ashare_source_ready": (
+            cat.get("scope") == "ashare" or cat.get("category") == "ashare"
+        ),
+        "pit": cat.get("pit_safe") is True,
+        "pandas": "pandas_numpy" in backends,
+        "polars": "polars" in backends,
+        "duckdb": any("duck" in b for b in backend_lower),
+        "q": any(b == "q" or b.startswith("q_") or b.endswith("_q") for b in backend_lower),
+        "numba": False,
+        "incremental": mode is not IncrementalMode.FULL_REPLAY,
+        "e2e": mode in (
+            IncrementalMode.CHECKPOINTED_STATE,
+            IncrementalMode.FINITE_WINDOW,
+            IncrementalMode.EVENT_ASOF,
+        ),
+    }
+
+
+def _is_live_production_usable(canonical: str, mode: IncrementalMode) -> bool:
+    """聚合 LIVE_PRODUCTION_USABLE 判定（R45）。
+
+    全部证据到齐才算可用：lifecycle_status == "production"、production_certified、
+    未隐藏、且增量模式非 FULL_REPLAY（真实可增量运行）。任何一项缺失 → False。
+    """
+    cat = _registry_catalog_entry(canonical)
+    if cat.get("lifecycle_status") != "production":
+        return False
+    if cat.get("production_certified") is not True:
+        return False
+    if bool(cat.get("hidden_from_default_mining")):
+        return False
+    if mode is IncrementalMode.FULL_REPLAY:
+        return False
+    return True
+
+
+def _matrix_canonicals(
+    canonicals: Sequence[str] | None,
+) -> list[str]:
+    """解析待枚举的 canonical 集合；None 时取 OperatorRegistry._catalog 全量。"""
+    if canonicals is not None:
+        return list(canonicals)
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        return sorted(OperatorRegistry._catalog)
+    except Exception:
+        from cleaned_operators.registry import OperatorRegistry
+
+        return sorted(getattr(OperatorRegistry, "_catalog", {}))
+
+
+def incremental_capability_matrix_extended(
+    canonicals: Sequence[str] | None = None,
+) -> list[dict[str, Any]]:
+    """扩展 IncrementalCapabilityMatrix（R45）。
+
+    在 :func:`incremental_capability_matrix` 的 10 字段之上，为每个 canonical 追加
+    ``certification_level``（5 级认证）与 ``direct_mining`` / ``ashare_source_ready`` /
+    ``pit`` / ``pandas`` / ``polars`` / ``duckdb`` / ``q`` / ``numba`` /
+    ``incremental`` / ``e2e`` 维度，以及单个聚合 ``live_production_usable`` 布尔。
+    未证维度如实 False（不虚报 PASS）。缺省枚举 OperatorRegistry 权威全量。
+    """
+    rows: list[dict[str, Any]] = []
+    for canonical in _matrix_canonicals(canonicals):
+        contract = resolve_incremental_contract(canonical)
+        row = contract.to_dict()
+        row["certification_level"] = classify_certification_level(
+            canonical, contract.incremental_mode
+        ).value
+        dims = _capability_dimensions(canonical, contract.incremental_mode)
+        row.update({k: bool(v) for k, v in dims.items()})
+        row["live_production_usable"] = _is_live_production_usable(
+            canonical, contract.incremental_mode
+        )
+        rows.append(row)
+    return rows
+
+
+@dataclass(frozen=True)
+class IncrementalCertificationLedger:
+    """R45 认证账本：全量 canonical 的认证分布快照。
+
+    * ``operator_total`` —— 权威 registry 的 canonical 总数。
+    * ``distribution`` —— certification_level -> 计数（5 级分布）。
+    * ``strategy_distribution`` —— incremental_mode -> 计数（策略分布）。
+    * ``live_production_usable`` —— 聚合 LIVE 数。
+    * ``true_incremental_canonicals`` —— 已认证（TRUE_INCREMENTAL）的 canonical。
+    * ``not_certified_canonicals`` —— NOT_CERTIFIED 的 canonical。
+    """
+
+    operator_total: int
+    distribution: Mapping[str, int]
+    strategy_distribution: Mapping[str, int]
+    live_production_usable: int
+    true_incremental_canonicals: tuple[str, ...]
+    not_certified_canonicals: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "operator_total": self.operator_total,
+            "distribution": dict(self.distribution),
+            "strategy_distribution": dict(self.strategy_distribution),
+            "live_production_usable": self.live_production_usable,
+            "true_incremental_canonicals": list(self.true_incremental_canonicals),
+            "not_certified_canonicals_count": len(self.not_certified_canonicals),
+        }
+
+
+def build_incremental_certification_ledger(
+    canonicals: Sequence[str] | None = None,
+) -> IncrementalCertificationLedger:
+    """构建当前 head 的全量增量认证账册（R45）。
+
+    枚举权威 registry 全量；每个 canonical 恰好一条：certification_level 由
+    :func:`classify_certification_level` 决定（parity 证明者 TRUE_INCREMENTAL，其余
+    NOT_CERTIFIED），strategy 由 incremental_mode 决定。诚实：不虚报未证认证。
+    """
+    rows = incremental_capability_matrix_extended(canonicals)
+    distribution: dict[str, int] = {}
+    for row in rows:
+        lvl = str(row["certification_level"])
+        distribution[lvl] = distribution.get(lvl, 0) + 1
+    strategy: dict[str, int] = {}
+    for row in rows:
+        mode = str(row["incremental_mode"])
+        strategy[mode] = strategy.get(mode, 0) + 1
+    live = sum(1 for row in rows if row["live_production_usable"])
+    true_canonicals = tuple(
+        sorted(row["canonical"] for row in rows
+               if row["certification_level"] == IncrementalCertificationLevel.TRUE_INCREMENTAL.value)
+    )
+    not_cert = tuple(
+        sorted(row["canonical"] for row in rows
+               if row["certification_level"] == IncrementalCertificationLevel.NOT_CERTIFIED.value)
+    )
+    return IncrementalCertificationLedger(
+        operator_total=len(rows),
+        distribution=distribution,
+        strategy_distribution=strategy,
+        live_production_usable=live,
+        true_incremental_canonicals=true_canonicals,
+        not_certified_canonicals=not_cert,
+    )
+
+
+# ---------------------------------------------------------------------------
 # IR 节点级解析
 # ---------------------------------------------------------------------------
 def _node_params(node: Any) -> dict[str, Any]:
@@ -579,4 +825,10 @@ __all__ = [
     "resolve_incremental_contract",
     "incremental_capability_matrix",
     "node_incremental_slot",
+    "IncrementalCertificationLevel",
+    "IncrementalCertificationLedger",
+    "classify_certification_level",
+    "build_incremental_certification_ledger",
+    "incremental_capability_matrix_extended",
+    "parity_proven_canonicals",
 ]
