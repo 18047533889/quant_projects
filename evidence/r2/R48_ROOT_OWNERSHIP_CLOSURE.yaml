@@ -1,0 +1,61 @@
+R48: Monorepo root ownership closure
+status: complete
+commit: 908fd72c
+date: 2026-08-25
+
+before:
+  root dirs: 47
+  dual source roots: operator_contracts/research_operators/research_tools/execution/export/telemetry/audit/planning
+  stateful shells: 3 root .py
+  dataaccess/ + data_access/ shim: 2 roots
+  factor_engine/modeling mirror: 34 files
+
+after:
+  root dirs: 18 (real subsystems + infra only)
+  data_access/: single physical package (455 files)
+  factor_engine/: sole FE authority
+  modeling/: sole model authority
+
+deletions:
+  root mirrors: operator_contracts research_operators research_tools execution export telemetry audit planning
+  root stateful shells: stateful_contract.py stateful_runtime.py stateful_kernel.py
+  root loose twins: 49 .py (factor_engine/ is authority)
+  factor_engine/modeling/: deleted (root modeling/ is authority)
+  nested cleaned_operators/cleaned_operators/: 187 identical files deleted
+  dataaccess/: merged into data_access/ (455 files, git mv)
+
+moves:
+  jobs tools bin -> scripts/archive/
+  loop -> .claude/loop/
+  schemas -> factor_preprocess/schemas/
+  integration_tests -> tests/integration/
+  factor_delivery_converted -> evidence/historical/factor_engine/deliveries/
+  weekly_backtest_output -> evidence/historical/factor_engine/backtests/
+
+untracked + gitignored:
+  runs/ data/ build/ dist/ *_egg-info/ _r38_spill_store/
+
+import rewrites:
+  bare stateful_* -> factor_engine.stateful_* (47 files)
+  bare research_tools/operators/audit/export/telemetry -> factor_engine.*
+  bare pipeline/pit_contract/workspace_paths etc -> factor_engine.*
+  bare dataaccess -> data_access (13 files)
+
+pyproject:
+  include: factor_engine.* / data_access.* / modeling / vectorbt_qs / evidence
+  removed: planning* export* research_* telemetry* dataaccess* aliases
+  py-modules: [] (root shells gone)
+  package-dir: data_access only
+
+gates:
+  stateful r44: 41 passed
+  planning: 40 passed
+  DA: 25 passed
+  stateful ops: 146 passed (full R48 gate)
+  fresh-wheel deep smoke: registry 1624, all imports OK
+
+pre-existing failures (NOT R48 regressions, confirmed):
+  test_operator_surface cube/legacy/research_tools (6)
+  test_mining_admission grain/manifest (6)
+  test_r32_p0_021_040 manifest digest (4)
+  test_phase24 read_auto, test_operator_usage ts_decay_linear
