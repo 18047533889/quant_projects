@@ -9,6 +9,7 @@ for large factor universes.
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Set, Tuple, Optional
 from collections import defaultdict
+import hashlib
 
 
 @dataclass(frozen=True)
@@ -92,6 +93,25 @@ class SparseCorrelationGraph:
 
         # Freeze adjacency lists
         self._adjacency = dict(self._adjacency)
+        self._graph_identity = hashlib.sha256()
+        for node in sorted(self._nodes):
+            encoded = node.encode("utf-8")
+            self._graph_identity.update(str(len(encoded)).encode("ascii"))
+            self._graph_identity.update(b":")
+            self._graph_identity.update(encoded)
+        for edge in self.to_edge_list():
+            encoded = f"{edge.factor_a}\x00{edge.factor_b}\x00{edge.correlation}".encode("utf-8")
+            self._graph_identity.update(str(len(encoded)).encode("ascii"))
+            self._graph_identity.update(b":")
+            self._graph_identity.update(encoded)
+        self._graph_identity = self._graph_identity.hexdigest()
+
+    @property
+    def graph_identity(self) -> str:
+        """Content hash over the node set and every edge (undirected, order
+        invariant).  Lets a ClusterArtifact record exactly which graph it was
+        produced from."""
+        return self._graph_identity
 
     @property
     def nodes(self) -> Set[str]:

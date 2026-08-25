@@ -140,3 +140,97 @@ def test_leiden_isolated_node_is_its_own_cluster():
     # The connected component {A,B,C} plus the isolated ISO node.
     assert "ISO" in result.assignments
     assert sorted(len(m) for m in clusters.values()) == [1, 3]
+
+
+def test_leiden_min_cluster_size_merge_nearest():
+    """min_cluster_size is honored via MERGE_NEAREST: a cluster smaller than
+    the threshold is merged into its nearest neighbour, never left as a dead
+    parameter."""
+    graph = SparseCorrelationGraph(
+        [
+            CorrelationEdge("A", "B", 0.9),
+            CorrelationEdge("B", "C", 0.9),
+            CorrelationEdge("D", "E", 0.9),
+        ]
+    )
+    # Default (min_cluster_size=1): every cluster kept as-is.
+    base = LeidenClustering(graph, seed=42).cluster()
+    assert set(base.cluster_sizes.values()) <= {2, 3}
+
+    merged = LeidenClustering(
+        graph, seed=42, min_cluster_size=2, min_cluster_policy="MERGE_NEAREST"
+    ).cluster()
+    # No cluster is left with size 1: the size-2 and size-2 clusters remain,
+    # and the merge policy ensures no isolated singleton survives.
+    assert all(size >= 2 for size in merged.cluster_sizes.values())
+
+    # Invalid policy fails closed.
+    import pytest
+    with pytest.raises(ValueError, match="min_cluster_policy"):
+        LeidenClustering(graph, seed=42, min_cluster_policy="BOGUS")
+
+
+def test_leiden_min_cluster_size_mark_unstable():
+    """MARK_UNSTABLE keeps small clusters but records them as unstable, so the
+    configuration is observable rather than silently dropped."""
+    graph = SparseCorrelationGraph(
+        [
+            CorrelationEdge("A", "B", 0.9),
+            CorrelationEdge("B", "C", 0.9),
+            CorrelationEdge("D", "E", 0.9),
+        ]
+    )
+    result = LeidenClustering(
+        graph, seed=42, min_cluster_size=3, min_cluster_policy="MARK_UNSTABLE"
+    ).cluster()
+    # The size-2 cluster is recorded as unstable.
+    small = [cid for cid, size in result.cluster_sizes.items() if size < 3]
+    assert small
+    assert set(small) == set(result.unstable_clusters)
+
+
+def test_leiden_records_run_config():
+    """The RNG/backend configuration that produced a partition is recorded so a
+    concurrent campaign cannot silently change the seed, backend, or version."""
+    graph = _two_triangles_graph()
+    lc = LeidenClustering(graph, seed=7, resolution=1.5, min_cluster_size=2)
+    cfg = lc.run_config
+    assert cfg["backend"] in ("igraph", "leidenalg")
+    assert cfg["backend_version"]  # non-empty
+    assert cfg["seed"] == 7
+    assert cfg["resolution"] == 1.5
+    assert cfg["min_cluster_size"] == 2
+
+
+def test_cluster_artifact_full_identity():
+    """Leiden now produces a production ClusterArtifact with full provenance:
+    graph identity, similarity spec ref, snapshot/universe, backend version,
+    seed, resolution, assignments, representatives, modularity, stability, and
+    a content hash over all of it."""
+    from factor_assets.clustering.families import ClusterArtifact
+
+    graph = _two_triangles_graph()
+    lc = LeidenClustering(graph, seed=42)
+    artifact = lc.cluster_artifact(
+        snapshot_ref="snapshot:2024",
+        universe_ref="universe:ashare",
+    )
+    assert artifact.graph_identity == graph.graph_identity
+    assert artifact.snapshot_ref == "snapshot:2024"
+    assert artifact.universe_ref == "universe:ashare"
+    assert artifact.algorithm == "leiden"
+    assert artifact.backend in ("igraph", "leidenalg")
+    assert artifact.backend_version
+    assert artifact.seed == 42
+    assert artifact.resolution == 1.0
+    assert artifact.assignments
+    assert artifact.representatives
+    assert artifact.modularity is None or artifact.modularity >= -1.0
+    assert artifact.stability is None or artifact.stability >= 0.0
+    assert artifact.content_hash
+    # Deterministic: two independent runs with the same inputs share a hash.
+    again = LeidenClustering(graph, seed=42).cluster_artifact(
+        snapshot_ref="snapshot:2024",
+        universe_ref="universe:ashare",
+    )
+    assert artifact.content_hash == again.content_hash

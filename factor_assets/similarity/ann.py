@@ -75,6 +75,18 @@ class ANNBackend(Enum):
     ANNOY = "annoy"
 
 
+class IndexCapability(Enum):
+    """Capability of a search index.
+
+    An index that answers queries EXACTLY (brute-force over every stored
+    vector) is NOT an approximate-nearest-neighbour (ANN) index, even when it
+    is backed by the ``faiss`` library.  Naming it correctly matters: a caller
+    selecting on ``capability`` must not be told a flat exact index is "ANN".
+    """
+    EXACT_FLAT = "exact_flat"        # exact brute-force; e.g. faiss.IndexFlatIP
+    APPROXIMATE = "approximate"      # real ANN; e.g. Annoy angular index
+
+
 @dataclass(frozen=True)
 class ANNSearchResult:
     """
@@ -154,11 +166,17 @@ class ANNIndex(Protocol):
 
 class FaissANNIndex:
     """
-    FAISS-based ANN index for factor similarity.
+    FAISS-backed EXACT flat index for factor similarity.
 
-    Uses inner product similarity (cosine after L2 normalization).
-    Requires embeddings to be pre-normalized for cosine similarity.
+    Uses ``faiss.IndexFlatIP`` which performs EXACT brute-force inner-product
+    search (cosine after L2 normalization).  This is **not** an approximate
+    nearest-neighbour (ANN) index — its ``capability`` is ``EXACT_FLAT``, and
+    callers must not assume approximation.  Requires embeddings to be
+    pre-normalized for cosine similarity.
     """
+
+    #: Honest capability: this is an exact flat index, not ANN.
+    capability = IndexCapability.EXACT_FLAT
 
     def __init__(self, embedding_dim: int, normalize: bool = True):
         """
@@ -299,11 +317,15 @@ class FaissANNIndex:
 
 class AnnoyANNIndex:
     """
-    Annoy-based ANN index for factor similarity.
+    Annoy-based approximate nearest neighbour (ANN) index for factor similarity.
 
-    Uses angular distance (equivalent to cosine similarity).
-    Suitable for larger datasets with trade-off between speed and accuracy.
+    Uses angular distance (equivalent to cosine similarity).  This is a real
+    ANN index — ``capability`` is ``APPROXIMATE``.  Suitable for larger
+    datasets with trade-off between speed and accuracy.
     """
+
+    #: Honest capability: real approximate nearest-neighbour search.
+    capability = IndexCapability.APPROXIMATE
 
     def __init__(self, embedding_dim: int, n_trees: int = 10):
         """
@@ -487,4 +509,5 @@ __all__ = [
     "FaissANNIndex",
     "AnnoyANNIndex",
     "create_ann_index",
+    "IndexCapability",
 ]

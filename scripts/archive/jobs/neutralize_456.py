@@ -51,11 +51,11 @@ def load_close():
     fs = "[" + ",".join(f"'{f}'" for f in files) + "]"
     con = duckdb.connect()
     df = con.execute(f"""
-        SELECT TradeDate as date, Symbol as symbol, Close as close
+        SELECT TradeDate as date, Symbol as symbol, Vwap as vwap
         FROM read_parquet({fs})
         WHERE TradeDate >= DATE '{START}' AND TradeDate <= DATE '{END}'
     """).df()
-    m = df.pivot_table(index='date', columns='symbol', values='close', aggfunc='first')
+    m = df.pivot_table(index='date', columns='symbol', values='vwap', aggfunc='first')
     m.index = pd.to_datetime(m.index)
     return m.sort_index()
 
@@ -112,14 +112,14 @@ def neutralize_matrix(fv, X):
     return resid
 
 
-def compute_daily_rankic(factor_mat, close):
-    common = factor_mat.index.intersection(close.index)
+def compute_daily_rankic(factor_mat, vwap):
+    common = factor_mat.index.intersection(vwap.index)
     fv = factor_mat.reindex(index=common)
-    cc = close.loc[common]
-    cols = cc.columns.intersection(fv.columns)
+    vv = vwap.loc[common]
+    cols = vv.columns.intersection(fv.columns)
     fv = fv[cols]
-    cc = cc[cols]
-    fwd = cc.pct_change().shift(-1)
+    vv = vv[cols]
+    fwd = vv.pct_change().shift(-1)
     T = fv.shape[0]
     ic = np.full(T, np.nan)
     fv_a = fv.values; fwd_a = fwd.values
@@ -168,12 +168,12 @@ def plot_neutral_compare(raw_ic, neu_ic, name):
 
 
 def main():
-    print("加载 close/行业/市值 ...", flush=True)
-    close = load_close()
+    print("加载 vwap/行业/市值 ...", flush=True)
+    vwap = load_close()
     industry = load_industry()
     mktcap = load_mktcap()
-    common_idx = close.index
-    common_cols = close.columns
+    common_idx = vwap.index
+    common_cols = vwap.columns
     industry = industry.reindex(index=common_idx, columns=common_cols)
     mktcap = mktcap.reindex(index=common_idx, columns=common_cols)
 
@@ -181,7 +181,7 @@ def main():
     ind_mat = industry.fillna("").values
     uniq_inds = sorted({x for row in ind_mat for x in row if x})
     K = len(uniq_inds) + 2
-    T, N = close.shape
+    T, N = vwap.shape
     X = np.zeros((T, N, K), dtype=np.float64)
     X[:, :, 0] = 1.0
     for i, name in enumerate(uniq_inds):
@@ -209,10 +209,10 @@ def main():
             continue
         mat = mat.reindex(index=common_idx, columns=common_cols)
         fv = mat.values.astype(np.float64)
-        raw_ic = compute_daily_rankic(mat, close)
+        raw_ic = compute_daily_rankic(mat, vwap)
         resid = neutralize_matrix(fv, X)
         resid_df = pd.DataFrame(resid, index=common_idx, columns=common_cols)
-        neu_ic = compute_daily_rankic(resid_df, close)
+        neu_ic = compute_daily_rankic(resid_df, vwap)
         out[page] = {"raw": agg_ic(raw_ic), "neutral": agg_ic(neu_ic)}
         series_store[page] = {"raw": raw_ic, "neutral": neu_ic}
         if fi % 50 == 0:

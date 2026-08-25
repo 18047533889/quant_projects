@@ -20,6 +20,7 @@ try:
         FaissANNIndex,
         AnnoyANNIndex,
         create_ann_index,
+        IndexCapability,
     )
     ANN_AVAILABLE = True
 except ImportError:
@@ -30,6 +31,7 @@ except ImportError:
     FaissANNIndex = None
     AnnoyANNIndex = None
     create_ann_index = None
+    IndexCapability = None
 
 __all__ = [
     "SimilarityMethod",
@@ -43,5 +45,6 @@ __all__ = [
     "FaissANNIndex",
     "AnnoyANNIndex",
     "create_ann_index",
+    "IndexCapability",
     "ANN_AVAILABLE",
 ]

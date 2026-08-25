@@ -620,9 +620,15 @@ def generate_tear_sheet(
         )
 
     # Panel 4: Quantile returns bar chart
+    # Reporting only renders pre-computed values.  ``quantile_returns`` is the
+    # kernel-computed per-quantile return vector (n_quantiles, F); the renderer
+    # never recomputes an aggregation inline.
     if evaluation_result.quantile_returns is not None:
-        avg_quantile_returns = np.nanmean(evaluation_result.quantile_returns, axis=0)
-        quantile_names = evaluation_result.quantile_names or [f"Q{i+1}" for i in range(len(avg_quantile_returns))]
+        quantile_returns = evaluation_result.quantile_returns
+        values = quantile_returns.tolist()
+        quantile_names = evaluation_result.quantile_names or [
+            f"Q{i+1}" for i in range(len(values))
+        ]
         panels["quantile_returns_bar"] = ChartSpec(
             title="Quantile Returns",
             x_label="Quantile",
@@ -630,8 +636,8 @@ def generate_tear_sheet(
             chart_type="bar",
             data={
                 "categories": quantile_names,
-                "values": avg_quantile_returns.tolist()
-            }
+                "values": values,
+            },
         )
 
     # Panel 5: Quantile spread time series

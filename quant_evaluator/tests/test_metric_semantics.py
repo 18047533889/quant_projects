@@ -14,12 +14,31 @@ Run with:
 
 import pytest
 
-from quant_evaluator.metrics.catalog import (
-   
-        Domain,
-    get_metric_spec,
-    list_all_metric_ids,
-)
+from quant_evaluator.metrics import catalog as _catalog_mod
+
+
+@pytest.fixture(autouse=True)
+def _fresh_catalog():
+    """Re-fetch catalog classes fresh.
+
+    QE-P0-01: metrics.catalog re-exports Domain/MetricSpec from
+    registry.metrics (single authority).  Other test modules reload the
+    registry to restore BUILDING state, recreating the classes; this fixture
+    re-imports the module so the names below always point at the CURRENT
+    class objects.
+    """
+    import importlib
+
+    importlib.reload(_catalog_mod)
+    globals()["Domain"] = _catalog_mod.Domain
+    globals()["get_metric_spec"] = _catalog_mod.get_metric_spec
+    globals()["list_all_metric_ids"] = _catalog_mod.list_all_metric_ids
+    yield
+
+
+Domain = _catalog_mod.Domain
+get_metric_spec = _catalog_mod.get_metric_spec
+list_all_metric_ids = _catalog_mod.list_all_metric_ids
 
 
 # ---------------------------------------------------------------------------

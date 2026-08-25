@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, Set, Optional, Tuple
 from collections import defaultdict
+import hashlib
 
 try:
     from scipy.cluster import hierarchy
@@ -23,6 +24,7 @@ except ImportError:
     np = None
 
 from factor_assets.graph.sparse import SparseCorrelationGraph
+from factor_assets.errors import InvalidClusteringContract
 
 
 class SimilarityObservationState(Enum):
@@ -45,8 +47,12 @@ class ClusterResult:
 
     Maps each factor to its cluster ID and provides cluster membership.
     """
+
     assignments: Dict[str, int]
     cluster_sizes: Dict[int, int]
+    #: Cluster IDs whose size fell below ``min_cluster_size`` under a
+    #: min-cluster policy (e.g. ``MARK_UNSTABLE``).  Empty when not applied.
+    unstable_clusters: Tuple[int, ...] = ()
 
     @property
     def num_clusters(self) -> int:
@@ -63,6 +69,114 @@ class ClusterResult:
         for factor, cluster_id in self.assignments.items():
             clusters[cluster_id].add(factor)
         return dict(clusters)
+
+
+@dataclass(frozen=True)
+class ClusterArtifact:
+    """
+    Production clustering artifact — full, hash-addressed provenance of a
+    clustering result, richer than the thin :class:`ClusterResult`.
+
+    Records which graph (``graph_identity``), which similarity spec
+    (``similarity_spec_ref``), on which snapshot/universe, with which algorithm
+    and backend/backend_version/seed/resolution produced the assignment.
+    ``representatives`` is one factor per cluster; ``modularity`` / ``stability``
+    are optional quality signals.  ``content_hash`` is derived over every
+    semantic field (see :meth:`recompute_content_hash`) so no caller may
+    self-report an arbitrary hash.
+    """
+
+    graph_identity: str
+    algorithm: str
+    assignments: Dict[str, int]
+    representatives: Tuple[str, ...]
+    content_hash: str
+    snapshot_ref: Optional[str] = None
+    universe_ref: Optional[str] = None
+    similarity_spec_ref: Optional[str] = None
+    backend: Optional[str] = None
+    backend_version: Optional[str] = None
+    seed: Optional[int] = None
+    resolution: Optional[float] = None
+    min_cluster_size: int = 1
+    min_cluster_policy: str = "KEEP_SMALL"
+    modularity: Optional[float] = None
+    stability: Optional[float] = None
+
+    def __post_init__(self) -> None:
+        if not self.graph_identity:
+            raise ValueError("graph_identity is required")
+        if not self.algorithm:
+            raise ValueError("algorithm is required")
+        if not self.assignments:
+            raise ValueError("assignments is required")
+        computed = self.recompute_content_hash()
+        if not self.content_hash:
+            object.__setattr__(self, "content_hash", computed)
+        elif self.content_hash != computed:
+            raise ValueError(
+                "content_hash does not match the recomputed cluster content "
+                "hash; a caller may not self-report an arbitrary hash — FAIL CLOSED"
+            )
+
+    @property
+    def num_clusters(self) -> int:
+        """Number of clusters (distinct cluster ids)."""
+        return len(set(self.assignments.values()))
+
+    def _content_digest(self) -> "hashlib._Hash":
+        digest = hashlib.sha256()
+
+        def _prefixed(value: object) -> None:
+            encoded = str(value).encode("utf-8")
+            digest.update(str(len(encoded)).encode("ascii"))
+            digest.update(b":")
+            digest.update(encoded)
+
+        _prefixed(self.graph_identity)
+        _prefixed(self.algorithm)
+        _prefixed(self.snapshot_ref)
+        _prefixed(self.universe_ref)
+        _prefixed(self.similarity_spec_ref)
+        _prefixed(self.backend)
+        _prefixed(self.backend_version)
+        _prefixed(self.seed)
+        _prefixed(self.resolution)
+        _prefixed(self.min_cluster_size)
+        _prefixed(self.min_cluster_policy)
+        _prefixed(self.modularity)
+        _prefixed(self.stability)
+        for fid in sorted(self.assignments):
+            _prefixed(fid)
+            _prefixed(self.assignments[fid])
+        for rep in self.representatives:
+            _prefixed(rep)
+        return digest
+
+    def recompute_content_hash(self) -> str:
+        """sha256 over every semantic field of the cluster artifact."""
+        return self._content_digest().hexdigest()
+
+    def to_dict(self) -> Dict[str, object]:
+        """Serializable dict form (provenance + hash retained)."""
+        return {
+            "graph_identity": self.graph_identity,
+            "algorithm": self.algorithm,
+            "snapshot_ref": self.snapshot_ref,
+            "universe_ref": self.universe_ref,
+            "similarity_spec_ref": self.similarity_spec_ref,
+            "backend": self.backend,
+            "backend_version": self.backend_version,
+            "seed": self.seed,
+            "resolution": self.resolution,
+            "min_cluster_size": self.min_cluster_size,
+            "min_cluster_policy": self.min_cluster_policy,
+            "assignments": dict(self.assignments),
+            "representatives": list(self.representatives),
+            "modularity": self.modularity,
+            "stability": self.stability,
+            "content_hash": self.content_hash,
+        }
 
 
 class ConnectedComponents:
@@ -324,22 +438,57 @@ class LeidenClustering:
         resolution: float = 1.0,
         seed: int = 42,
         min_cluster_size: int = 1,
+        min_cluster_policy: str = "KEEP_SMALL",
     ):
         """
         Args:
             graph: Sparse correlation graph to cluster.
             resolution: Leiden resolution parameter (higher = more/smaller clusters).
             seed: Stable random seed for reproducible assignments.
-            min_cluster_size: Minimum cluster size (smaller clusters merged/rejected).
+            min_cluster_size: Minimum cluster size.  The parameter is honored
+                via ``min_cluster_policy`` — it is never a dead configuration.
+            min_cluster_policy: How to handle a cluster smaller than
+                ``min_cluster_size``.  ``"KEEP_SMALL"`` (default, production)
+                records small clusters as-is so no factor is lost or merged
+                against dissimilar neighbors; ``"MERGE_NEAREST"`` merges a
+                small cluster into its nearest neighbor by edge weight;
+                ``"MARK_UNSTABLE"`` keeps small clusters but records them as
+                unstable via ``ClusterResult.unstable_clusters``.
 
         Raises:
             ImportError: If neither igraph nor leidenalg is installed.
         """
+        if min_cluster_size < 1:
+            raise ValueError("min_cluster_size must be >= 1")
+        if min_cluster_policy not in ("KEEP_SMALL", "MERGE_NEAREST", "MARK_UNSTABLE"):
+            raise ValueError(
+                "min_cluster_policy must be one of "
+                "'KEEP_SMALL' / 'MERGE_NEAREST' / 'MARK_UNSTABLE'"
+            )
         self.graph = graph
         self.resolution = resolution
         self.seed = seed
         self.min_cluster_size = min_cluster_size
+        self.min_cluster_policy = min_cluster_policy
         self._backend = self._detect_backend()
+
+    @property
+    def run_config(self) -> Dict[str, object]:
+        """Record the RNG / backend configuration that produced a partition.
+
+        Because igraph's ``set_random_number_generator`` mutates a module-global
+        RNG, a concurrent campaign could pollute it.  Recording backend /
+        backend_version / seed / resolution lets a caller reproduce (or audit)
+        an exact run and detect cross-campaign interference.
+        """
+        return {
+            "backend": self._backend,
+            "backend_version": self._backend_version(),
+            "seed": self.seed,
+            "resolution": self.resolution,
+            "min_cluster_size": self.min_cluster_size,
+            "min_cluster_policy": self.min_cluster_policy,
+        }
 
     @staticmethod
     def _detect_backend() -> str:
@@ -374,6 +523,50 @@ class LeidenClustering:
         if self._backend == "igraph":
             return self._cluster_igraph()
         return self._cluster_leidenalg()
+
+    def cluster_artifact(
+        self,
+        *,
+        snapshot_ref: Optional[str] = None,
+        universe_ref: Optional[str] = None,
+        similarity_spec_ref: Optional[str] = None,
+    ) -> ClusterArtifact:
+        """Produce a production :class:`ClusterArtifact` with full provenance.
+
+        Wraps the raw :class:`ClusterResult` with the algorithm, backend /
+        backend_version / seed / resolution that produced it, the graph
+        identity, snapshot / universe / similarity-spec refs, one representative
+        per cluster, and a derived ``content_hash``.
+        """
+        result = self.cluster()
+        cluster_of: Dict[int, List[str]] = defaultdict(list)
+        for fid, cid in result.assignments.items():
+            cluster_of[cid].append(fid)
+        representatives = tuple(sorted(min(members) for members in cluster_of.values()))
+        return ClusterArtifact(
+            graph_identity=self.graph.graph_identity,
+            algorithm="leiden",
+            assignments=dict(result.assignments),
+            representatives=representatives,
+            snapshot_ref=snapshot_ref,
+            universe_ref=universe_ref,
+            similarity_spec_ref=similarity_spec_ref,
+            backend=self._backend,
+            backend_version=self._backend_version(),
+            seed=self.seed,
+            resolution=self.resolution,
+            min_cluster_size=self.min_cluster_size,
+            min_cluster_policy=self.min_cluster_policy,
+            content_hash="",  # derived in __post_init__
+        )
+
+    @staticmethod
+    def _backend_version() -> str:
+        try:
+            import igraph
+            return getattr(igraph, "__version__", "unknown")
+        except ImportError:
+            return "unknown"
 
     def _cluster_igraph(self) -> ClusterResult:
         """Leiden via python-igraph."""
@@ -439,16 +632,60 @@ class LeidenClustering:
         return self._finalize(assignments)
 
     def _finalize(self, assignments: Dict[str, int]) -> ClusterResult:
-        """Renumber clusters contiguously and compute sizes."""
+        """Renumber clusters contiguously and compute sizes, then enforce the
+        min-cluster-size policy so it is never a dead parameter."""
         unique = sorted(set(assignments.values()))
         cluster_map = {old: new for new, old in enumerate(unique)}
         renumbered = {fid: cluster_map[cid] for fid, cid in assignments.items()}
         sizes = defaultdict(int)
         for cid in renumbered.values():
             sizes[cid] += 1
+
+        unstable: List[int] = []
+        if self.min_cluster_size > 1 and self.min_cluster_policy == "MERGE_NEAREST":
+            # Greedily merge every cluster smaller than min_cluster_size into
+            # the nearest neighbor cluster (largest aggregate edge weight).
+            by_cluster: Dict[int, List[str]] = defaultdict(list)
+            for fid, cid in renumbered.items():
+                by_cluster[cid].append(fid)
+            small = sorted(
+                [cid for cid, members in by_cluster.items() if len(members) < self.min_cluster_size]
+            )
+            for small_cid in small:
+                if small_cid not in renumbered.values():
+                    continue
+                members = [fid for fid, cid in renumbered.items() if cid == small_cid]
+                if not members:
+                    continue
+                # Find nearest cluster by sum of |corr| edge weights.
+                best_cid: Optional[int] = None
+                best_weight = -1.0
+                for fid in members:
+                    for neighbor, corr in self.graph.neighbors(fid):
+                        ncid = renumbered.get(neighbor)
+                        if ncid is None or ncid == small_cid:
+                            continue
+                        w = abs(corr)
+                        if w > best_weight:
+                            best_weight = w
+                            best_cid = ncid
+                if best_cid is None:
+                    continue
+                for fid in members:
+                    renumbered[fid] = best_cid
+            # Recompute sizes after merging.
+            sizes = defaultdict(int)
+            for cid in renumbered.values():
+                sizes[cid] += 1
+        elif self.min_cluster_size > 1 and self.min_cluster_policy == "MARK_UNSTABLE":
+            unstable = sorted(
+                [cid for cid, size in sizes.items() if size < self.min_cluster_size]
+            )
+
         return ClusterResult(
             assignments=renumbered,
             cluster_sizes=dict(sizes),
+            unstable_clusters=tuple(unstable),
         )
 
 
@@ -632,6 +869,17 @@ class HierarchicalClustering:
             raise ValueError(
                 "missing_distance_policy must be None (fail closed) or "
                 "'treat_missing_as_max' (research only)"
+            )
+        if method == "ward":
+            raise InvalidClusteringContract(
+                "method='ward' requires a real Euclidean feature-space "
+                "distance; it is invalid on a correlation-derived distance "
+                "(dist = 1 - |corr|). Ward uses squared Euclidean distances "
+                "and would produce a meaningless dendrogram here — FAIL CLOSED."
+            )
+        if metric not in ("correlation", "euclidean"):
+            raise ValueError(
+                f"metric must be 'correlation' or 'euclidean', got {metric!r}"
             )
 
         self.graph = graph

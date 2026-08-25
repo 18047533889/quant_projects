@@ -8,7 +8,17 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
 from enum import Enum
+import hashlib
 import warnings
+
+
+def _stable_params(p: Dict[str, Any]) -> str:
+    """Deterministic canonical form of a parameter dict (FP-P1-06)."""
+    if not isinstance(p, dict):
+        return repr(p)
+    return "{" + ",".join(
+        f"{k}:{_stable_params(v)}" for k, v in sorted(p.items())
+    ) + "}"
 
 
 class PolicyLevel(str, Enum):
@@ -63,6 +73,35 @@ class PolicyPreset:
         # No instance-level deprecation warning here; PolicyRegistry.register
         # already emits the canonical authority warning once.
         pass
+
+    @property
+    def policy_identity(self) -> str:
+        """Content-derived identity of the policy (FP-P1-06).
+
+        Hash over ordered step_ids + transform versions + implementation
+        hashes + parameters + admission + skip policy. Two policies that
+        would produce different numeric output have different identities.
+        """
+        from factor_preprocess.registry.transforms import get_default_registry
+        registry = get_default_registry()
+        parts = [f"name:{self.name}", f"level:{self.level.value}",
+                 f"causal_safe:{self.causal_safe}", f"tags:{','.join(sorted(self.tags))}"]
+        for step in self.steps:
+            impl = ""
+            try:
+                meta = registry.get(step.name)
+                if meta is not None:
+                    impl = f"|impl:{meta.implementation_hash}|num:{meta.numeric_policy_hash}|v:{meta.version}"
+            except Exception:
+                impl = ""
+            # Ordered step parameters in a deterministic form
+            params = _stable_params(step.parameters)
+            parts.append(
+                f"step:{step.step_id}|name:{step.name}|{impl}|params:{params}|"
+                f"skip:{step.skip_if_missing}"
+            )
+        payload = "\n".join(parts)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
 
     def validate(self, transform_registry=None) -> Tuple[bool, List[str]]:
         """

@@ -42,29 +42,29 @@ from quant_evaluator.contracts.label_bundle import LabelBundle
 
 QE_AVAILABLE = True
 
-_HAS_CLOSE = None
-def load_close():
-    """加载收盘价矩阵 (date × symbol)，全历史。"""
-    global _HAS_CLOSE
-    if _HAS_CLOSE is not None:
-        return _HAS_CLOSE
+_HAS_VWAP = None
+def load_vwap():
+    """加载 VWAP 矩阵 (date × symbol)，全历史。"""
+    global _HAS_VWAP
+    if _HAS_VWAP is not None:
+        return _HAS_VWAP
     try:
         import duckdb
         files = sorted(Path.home().glob("cos_data/StockDailyBar/*.parquet"))
         files_str = "[" + ",".join(f"'{f}'" for f in files) + "]"
         con = duckdb.connect()
         df = con.execute(f"""
-            SELECT TradeDate as date, Symbol as symbol, Close as close
+            SELECT TradeDate as date, Symbol as symbol, Vwap as vwap
             FROM read_parquet({files_str})
         """).df()
-        mat = df.pivot_table(index='date', columns='symbol', values='close', aggfunc='first')
+        mat = df.pivot_table(index='date', columns='symbol', values='vwap', aggfunc='first')
         mat.index = pd.to_datetime(mat.index)
         mat = mat.sort_index()
-        _HAS_CLOSE = mat
+        _HAS_VWAP = mat
         return mat
     except Exception:
-        _HAS_CLOSE = pd.DataFrame()
-        return _HAS_CLOSE
+        _HAS_VWAP = pd.DataFrame()
+        return _HAS_VWAP
 
 
 def compute_factor_metrics_single(factor_name: str, matrix: pd.DataFrame) -> dict:
@@ -72,20 +72,20 @@ def compute_factor_metrics_single(factor_name: str, matrix: pd.DataFrame) -> dic
 
     matrix: date × symbol 因子值矩阵（page_name 对应）。
     """
-    close = load_close()
-    if close.empty:
+    vwap = load_vwap()
+    if vwap.empty:
         return {}
-    common_idx = matrix.index.intersection(close.index)
+    common_idx = matrix.index.intersection(vwap.index)
     if len(common_idx) < 20:
         return {}
     fv = matrix.reindex(index=common_idx)
-    close_c = close.loc[common_idx]
+    vwap_c = vwap.loc[common_idx]
     # 对齐列
-    common_cols = close_c.columns.intersection(fv.columns)
+    common_cols = vwap_c.columns.intersection(fv.columns)
     fv = fv[common_cols]
-    close_c = close_c[common_cols]
+    vwap_c = vwap_c[common_cols]
 
-    fwd = close_c.pct_change().shift(-1)
+    fwd = vwap_c.pct_change().shift(-1)
 
     T, N = fv.shape
     if T < 20 or N < 20:

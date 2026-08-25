@@ -97,3 +97,84 @@ def create_factor_id(canonical_hash: str, prefix: str = "F") -> str:
         raise ValueError("canonical_hash must be at least 16 characters")
 
     return f"{prefix}{canonical_hash[:16]}"
+
+
+@dataclass(frozen=True)
+class FactorDefinitionIdentity:
+    """Identity of the *factor definition* itself.
+
+    Distinct from :class:`FactorCompilerIdentity` (which compiler/version
+    produced the representation) and :class:`FactorValueIdentity` (which
+    materialization/instance of the factor's values).  The definition identity
+    is version-qualified: ``factor_version`` is MANDATORY in production and
+    MUST NOT fall back to an FE compiler generation — the compiler is a
+    different identity axis.
+    """
+
+    factor_id: str
+    factor_version: str
+    canonical_hash: Optional[str] = None
+    canonical_repr: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if not self.factor_id:
+            raise ValueError("factor_id is required")
+        if not self.factor_version:
+            raise ValueError(
+                "FactorDefinitionIdentity requires a factor_version; it must "
+                "not fall back to an FE compiler generation"
+            )
+
+
+@dataclass(frozen=True)
+class FactorCompilerIdentity:
+    """Identity of the FE compiler / toolchain that produced the representation.
+
+    This is a separate identity axis from the factor definition: two factors
+    with the same canonical expression may be compiled by different compiler
+    generations.  Recording it is provenance, never a substitute for
+    ``FactorDefinitionIdentity.factor_version``.
+    """
+
+    compiler_generation: Optional[str] = None
+    fe_identity_ref: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if not self.compiler_generation and not self.fe_identity_ref:
+            raise ValueError(
+                "FactorCompilerIdentity requires at least one of "
+                "compiler_generation or fe_identity_ref"
+            )
+
+
+@dataclass(frozen=True)
+class FactorValueIdentity:
+    """Identity of a specific materialized instance of a factor's values.
+
+    Distinguishes one realization of a factor (e.g. by snapshot/universe/run)
+    from another.  It is orthogonal to the definition and compiler identity.
+    """
+
+    factor_id: str
+    snapshot_ref: Optional[str] = None
+    universe_ref: Optional[str] = None
+    run_ref: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if not self.factor_id:
+            raise ValueError("factor_id is required")
+        if not self.snapshot_ref and not self.universe_ref and not self.run_ref:
+            raise ValueError(
+                "FactorValueIdentity requires at least one of "
+                "snapshot_ref/universe_ref/run_ref"
+            )
+
+
+__all__ = [
+    "FactorIdentity",
+    "FactorIdentityProvider",
+    "FactorDefinitionIdentity",
+    "FactorCompilerIdentity",
+    "FactorValueIdentity",
+    "create_factor_id",
+]

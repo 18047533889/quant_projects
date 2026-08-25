@@ -1,242 +1,53 @@
 """
 10-domain metric catalog for quant_evaluator (QE-METRIC overhaul, section B).
 
-Defines MetricSpec, Domain enum, and a sealed MetricRegistry mapping metric IDs
-to their specifications across 10 evaluation domains.
+QE-P0-01: this module is a **compatibility adapter / generated read-only view**
+over the SINGLE metric authority in ``quant_evaluator.registry.metrics``.  It
+does NOT define its own ``MetricSpec`` / ``MetricRegistry`` / ``Domain`` — those
+are re-exported from the registry so there is exactly ONE class of each in the
+package.  The catalog keeps its historical 10-domain metric_ids and query
+helpers (``get_metric_spec``, ``get_metric_specs_by_domain``,
+``list_all_metric_ids``, ``list_all_domains``) as a read-only view over a
+catalog-scoped ``MetricRegistry`` instance built from the single ``MetricSpec``.
 
 The default catalog is registered at import time and then sealed: the module
 level ``CATALOG`` is an immutable ``MappingProxyType`` view over the backing
-registry, and any further ``register`` attempt fails closed.  Public query
-helpers (``get_metric_spec``, ``get_metric_specs_by_domain``,
-``list_all_metric_ids``, ``list_all_domains``) keep their exact historical
-behaviour.
+registry, and any further ``register`` attempt fails closed.
 """
 
 from __future__ import annotations
 
-import hashlib
-from dataclasses import dataclass
-from enum import Enum
 from types import MappingProxyType
 from typing import Any, Dict, List, Mapping, Set, Tuple
 
-
-class Domain(Enum):
-    """Metric evaluation domains."""
-
-    IC = "ic"
-    RANK_IC = "rank_ic"
-    QUANTILE = "quantile"
-    DRAWDOWN = "drawdown"
-    TURNOVER = "turnover"
-    TAIL_RISK = "tail_risk"
-    COVERAGE = "coverage"
-    HHI = "hhi"
-    STABILITY = "stability"
-    TEMPORAL = "temporal"
-
-
-# Mapping of output_type -> canonical artifact kind.
-_OUTPUT_TYPE_TO_ARTIFACT_KIND: Dict[str, str] = {
-    "scalar": "scalar",
-    "series": "series",
-    "timeseries": "series",
-    "vector": "vector",
-    "matrix": "matrix",
-    "distribution": "distribution",
-}
-
-_VALID_DIRECTIONS = frozenset(
-    {"higher_is_better", "lower_is_better", "neutral"}
+# QE-P0-01: single authority — re-export the one MetricSpec / MetricRegistry /
+# Domain from the registry.  No second definition lives here.
+from quant_evaluator.registry.metrics import (
+    Domain,
+    MetricRegistry,
+    MetricSpec,
+    MetricStatus,
+    MetricTier,
 )
 
-_VALID_ARTIFACT_KINDS = frozenset(
-    {"scalar", "series", "vector", "matrix", "distribution"}
-)
-
-
-def _content_hash(identity: str) -> str:
-    """Return a stable 16-hex content hash of an implementation identity.
-
-    The identity is the implementing module+function (e.g.
-    ``"quant_evaluator.metrics.portfolio_stats.compute_maximum_drawdown"``),
-    so the hash is a real, stable fingerprint of the kernel — never just the
-    metric_id. Two metrics sharing a kernel still hash to the same value,
-    which is the correct semantic (same implementation).
-    """
-    return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
-
-
-@dataclass(frozen=True)
-class MetricSpec:
-    """Specification for a single metric."""
-
-    domain: Domain
-    metric_id: str
-    description: str
-    required_inputs: Set[str]
-    output_type: str = "scalar"
-    metric_version: str = "0.1.0"
-    implementation_id: str = ""
-    implementation_hash: str = ""
-    artifact_kind: str = "scalar"
-    required_axes: Tuple[str, ...] = ()
-    units: str = ""
-    direction: str = "higher_is_better"
-    missing_policy: str = "nan"
-    numeric_policy: str = "finite"
-
-    def __post_init__(self) -> None:
-        """Validate inputs after construction."""
-        # Normalize required_inputs to a frozenset for hashability.
-        object.__setattr__(self, "required_inputs", frozenset(self.required_inputs))
-
-        if not isinstance(self.metric_id, str) or not self.metric_id.strip():
-            raise ValueError("MetricSpec.metric_id must be a non-empty string")
-
-        if self.direction not in _VALID_DIRECTIONS:
-            raise ValueError(
-                f"MetricSpec.direction must be one of {sorted(_VALID_DIRECTIONS)}, "
-                f"got {self.direction!r}"
-            )
-
-        if not isinstance(self.required_axes, tuple):
-            raise ValueError("MetricSpec.required_axes must be a tuple")
-        for axis in self.required_axes:
-            if not isinstance(axis, str) or not axis.strip():
-                raise ValueError(
-                    "MetricSpec.required_axes entries must be non-empty strings"
-                )
-
-        # Map output_type -> artifact_kind when the caller left the default.
-        if self.artifact_kind == "scalar" and self.output_type != "scalar":
-            mapped = _OUTPUT_TYPE_TO_ARTIFACT_KIND.get(self.output_type)
-            if mapped is not None and mapped != "scalar":
-                object.__setattr__(self, "artifact_kind", mapped)
-        if self.artifact_kind not in _VALID_ARTIFACT_KINDS:
-            raise ValueError(
-                f"MetricSpec.artifact_kind must be one of "
-                f"{sorted(_VALID_ARTIFACT_KINDS)}, got {self.artifact_kind!r}"
-            )
-
-        # implementation_id auto-defaults to metric_id when left empty.
-        if not isinstance(self.implementation_id, str):
-            raise ValueError("MetricSpec.implementation_id must be a string")
-        if not self.implementation_id.strip():
-            object.__setattr__(self, "implementation_id", self.metric_id)
-
-        # implementation_hash: stable content hash of the implementing
-        # module+function. When left empty it is derived from the
-        # implementation_id (never from metric_id alone), so two metrics that
-        # share a kernel still carry distinct, real implementation identity.
-        if not isinstance(self.implementation_hash, str):
-            raise ValueError("MetricSpec.implementation_hash must be a string")
-        if not self.implementation_hash.strip():
-            object.__setattr__(
-                self,
-                "implementation_hash",
-                _content_hash(self.implementation_id),
-            )
-
-        if not isinstance(self.missing_policy, str) or not self.missing_policy.strip():
-            raise ValueError("MetricSpec.missing_policy must be a non-empty string")
-        if not isinstance(self.numeric_policy, str) or not self.numeric_policy.strip():
-            raise ValueError("MetricSpec.numeric_policy must be a non-empty string")
-        if not isinstance(self.metric_version, str) or not self.metric_version.strip():
-            raise ValueError("MetricSpec.metric_version must be a non-empty string")
-
-
-class MetricRegistry:
-    """Sealed metric registry with a BUILDING -> SEALED lifecycle.
-
-    During BUILDING, ``register(spec)`` accepts distinct metric_ids and raises
-    ``ValueError`` on duplicates.  ``seal()`` freezes the backing mapping into
-    a ``MappingProxyType``; after sealing, ``register`` fails closed and all
-    reads are served from the immutable view.
-    """
-
-    _BUILDING = "building"
-    _SEALED = "sealed"
-
-    def __init__(self) -> None:
-        self._catalog: Dict[str, MetricSpec] = {}
-        self._sealed: bool = False
-
-    @property
-    def sealed(self) -> bool:
-        """True once the registry has been sealed."""
-        return self._sealed
-
-    def _check_sealed(self) -> None:
-        if self._sealed:
-            raise RuntimeError(
-                "MetricRegistry is SEALED: no further registrations are allowed."
-            )
-
-    def register(self, spec: MetricSpec) -> None:
-        """Register a MetricSpec during the BUILDING phase."""
-        self._check_sealed()
-        if not isinstance(spec, MetricSpec):
-            raise TypeError(f"register expects MetricSpec, got {type(spec).__name__}")
-        if spec.metric_id in self._catalog:
-            raise ValueError(
-                f"Duplicate metric_id {spec.metric_id!r}: "
-                "MetricRegistry does not allow silent overwrites."
-            )
-        self._catalog[spec.metric_id] = spec
-
-    def seal(self) -> None:
-        """Freeze the registry into an immutable MappingProxyType view."""
-        self._catalog = dict(self._catalog)
-        self._catalog = MappingProxyType(self._catalog)  # type: ignore[assignment]
-        self._sealed = True
-
-    def __len__(self) -> int:
-        return len(self._catalog)
-
-    def __contains__(self, metric_id: object) -> bool:
-        return metric_id in self._catalog
-
-    def get(self, metric_id: str) -> MetricSpec:
-        """Return the spec for ``metric_id``; unknown IDs raise UnsupportedMetricError."""
-        from quant_evaluator.contracts.errors import UnsupportedMetricError
-
-        try:
-            return self._catalog[metric_id]
-        except KeyError:
-            raise UnsupportedMetricError(
-                f"Unknown metric_id '{metric_id}'. "
-                f"Valid IDs: {sorted(self._catalog.keys())}"
-            )
-
-    def get_metric_spec(self, metric_id: str) -> MetricSpec:
-        """Alias for ``get`` (read-only after sealing)."""
-        return self.get(metric_id)
-
-    def list_all_metric_ids(self) -> List[str]:
-        """Return a sorted list of all registered metric IDs."""
-        return sorted(self._catalog.keys())
-
-    def get_metric_specs_by_domain(self, domain: Domain) -> List[MetricSpec]:
-        """Return all MetricSpec entries for a Domain, ordered by metric_id."""
-        return sorted(
-            (spec for spec in self._catalog.values() if spec.domain == domain),
-            key=lambda s: s.metric_id,
-        )
-
-    def list_all_domains(self) -> List[Domain]:
-        """Return a sorted list of all Domain enum values."""
-        return sorted(Domain, key=lambda d: d.value)
-
-    def to_dict(self) -> Dict[str, Dict[str, Any]]:
-        """Return a plain-dict snapshot of the registry contents."""
-        return {metric_id: spec for metric_id, spec in self._catalog.items()}
+__all__ = [
+    "Domain",
+    "MetricSpec",
+    "MetricRegistry",
+    "CATALOG",
+    "get_metric_spec",
+    "get_metric_specs_by_domain",
+    "list_all_metric_ids",
+    "list_all_domains",
+    "seal_metric_registry",
+]
 
 
 # ---------------------------------------------------------------------------
 # Module-level registry + CATALOG view.
 #
-# ``_REGISTRY`` is the authority; the module-level ``CATALOG`` is the sealed
+# ``_REGISTRY`` is a catalog-scoped MetricRegistry (the single class) holding
+# the 10-domain specs; the module-level ``CATALOG`` is the sealed
 # MappingProxyType (or the backing dict before sealing) so existing callers
 # doing ``CATALOG[metric_id]`` lookups and iteration keep working, while any
 # assignment raises ``TypeError`` once the default catalog has been sealed at
@@ -262,11 +73,15 @@ def _register(
     missing_policy: str = "nan",
     numeric_policy: str = "finite",
 ) -> None:
-    """Register a metric spec into the global catalog via the registry."""
+    """Register a metric spec into the catalog-scoped registry."""
     spec = MetricSpec(
+        name=metric_id,
+        display_name=metric_id,
+        description=description,
+        status=MetricStatus.STABLE,
+        tier=MetricTier.EXTENDED,
         domain=domain,
         metric_id=metric_id,
-        description=description,
         required_inputs=required_inputs,
         output_type=output_type,
         implementation_id=implementation_id,
@@ -282,7 +97,7 @@ def _register(
 
 
 def seal_metric_registry() -> None:
-    """Seal the module-level registry so the catalog becomes immutable.
+    """Seal the module-level catalog registry so it becomes immutable.
 
     Idempotent: calling it again after the registry is already sealed is a
     no-op.  Re-binds the module-level ``CATALOG`` to the registry's immutable

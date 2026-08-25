@@ -138,10 +138,33 @@ def _file_texts(files: List[str]) -> Dict[str, str]:
 
 
 def _mentioned(text: str, needle: str) -> bool:
-    """True when ``needle`` appears as a word/token in ``text``."""
+    """True when ``needle`` appears as a real code token in ``text``.
+
+    QE-P0-04: a mention inside a comment, docstring, or string literal is NOT
+    a binding — it does not prove the metric is actually consumed.  We strip
+    comments and string literals (via the tokenizer) before matching so the
+    READY gate is not a false positive from prose.
+    """
     if not needle:
         return False
-    return needle in _METRIC_MENTION_RE.findall(text) or needle in text
+    import tokenize
+    from io import StringIO
+
+    code_tokens: List[str] = []
+    try:
+        for tok in tokenize.generate_tokens(StringIO(text).readline):
+            if tok.type == tokenize.COMMENT:
+                continue
+            if tok.type == tokenize.STRING:
+                # Skip docstrings (triple-quoted) but keep real string literals
+                # used in code (e.g. get_metric("pearson_ic")).
+                if tok.string.startswith(('"""', "'''")):
+                    continue
+            code_tokens.append(tok.string)
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        # Unparseable text: fall back to the raw substring check (best effort).
+        return needle in _METRIC_MENTION_RE.findall(text) or needle in text
+    return needle in code_tokens or needle in " ".join(code_tokens)
 
 
 def _scan_artifact_consumers() -> Tuple[Set[str], Set[str]]:

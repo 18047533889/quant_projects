@@ -302,7 +302,7 @@ class TestMMRConsumesSimilarityArtifact:
         # With pnl_corr as primary, F1 and F2 are near-duplicates -> F3 chosen.
         assert result.factor_ids == ("F1", "F3")
 
-    def test_mmr_artifact_provider_none_value_treated_as_zero(self):
+    def test_mmr_artifact_provider_none_value_fails_closed(self):
         spec = make_spec("set-1", "Diverse", "diverse", max_factors=2)
 
         def decided(factor_id, quality, timestamp):
@@ -311,7 +311,9 @@ class TestMMRConsumesSimilarityArtifact:
             return d
 
         def similarity_provider(a, b):
-            # F1/F2 pair returns None (unmeasured) -> treated as zero similarity.
+            # F1/F2 pair returns None (unmeasured).  An UNKNOWN similarity must
+            # NOT be treated as zero — MMR must fail closed rather than reward
+            # exactly the pairs it cannot assess.
             if {a, b} == {"F1", "F2"}:
                 return None
             return SimilarityArtifact(
@@ -325,18 +327,17 @@ class TestMMRConsumesSimilarityArtifact:
                 created_at="2024-08-01T00:00:00Z",
             )
 
-        result = FactorSetAssembler().assemble(
-            spec,
-            [make_asset("F1"), make_asset("F2"), make_asset("F3")],
-            selection_decisions=[
-                decided("F1", 1.0, "2024-01-01T00:00:00Z"),
-                decided("F2", 0.9, "2024-01-01T00:00:00Z"),
-                decided("F3", 0.8, "2024-01-01T00:00:00Z"),
-            ],
-            similarity_provider=similarity_provider,
-        )
-        # F1/F2 unmeasured -> both high quality, F2 ranks second (not F3).
-        assert result.factor_ids == ("F1", "F2")
+        with pytest.raises(ValueError, match="UNKNOWN"):
+            FactorSetAssembler().assemble(
+                spec,
+                [make_asset("F1"), make_asset("F2"), make_asset("F3")],
+                selection_decisions=[
+                    decided("F1", 1.0, "2024-01-01T00:00:00Z"),
+                    decided("F2", 0.9, "2024-01-01T00:00:00Z"),
+                    decided("F3", 0.8, "2024-01-01T00:00:00Z"),
+                ],
+                similarity_provider=similarity_provider,
+            )
 
 
 class TestBackwardCompatBareFloatProvider:
@@ -390,7 +391,7 @@ class TestBackwardCompatBareFloatProvider:
         )
         assert result.factor_ids == ("F1", "F3")
 
-    def test_bare_float_provider_none_treated_as_zero(self):
+    def test_bare_float_provider_none_fails_closed(self):
         spec = make_spec("set-1", "Diverse", "diverse", max_factors=2)
 
         def decided(factor_id, quality, timestamp):
@@ -399,18 +400,20 @@ class TestBackwardCompatBareFloatProvider:
             return d
 
         def similarity(a, b):
+            # F1/F2 pair returns None (unmeasured).  An UNKNOWN similarity must
+            # NOT be treated as zero — MMR fails closed.
             if {a, b} == {"F1", "F2"}:
                 return None
             return 0.1
 
-        result = FactorSetAssembler().assemble(
-            spec,
-            [make_asset("F1"), make_asset("F2"), make_asset("F3")],
-            selection_decisions=[
-                decided("F1", 1.0, "2024-01-01T00:00:00Z"),
-                decided("F2", 0.9, "2024-01-01T00:00:00Z"),
-                decided("F3", 0.8, "2024-01-01T00:00:00Z"),
-            ],
-            similarity_provider=similarity,
-        )
-        assert result.factor_ids == ("F1", "F2")
+        with pytest.raises(ValueError, match="UNKNOWN"):
+            FactorSetAssembler().assemble(
+                spec,
+                [make_asset("F1"), make_asset("F2"), make_asset("F3")],
+                selection_decisions=[
+                    decided("F1", 1.0, "2024-01-01T00:00:00Z"),
+                    decided("F2", 0.9, "2024-01-01T00:00:00Z"),
+                    decided("F3", 0.8, "2024-01-01T00:00:00Z"),
+                ],
+                similarity_provider=similarity,
+            )

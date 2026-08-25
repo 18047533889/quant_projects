@@ -25,17 +25,43 @@ from types import MappingProxyType
 import pytest
 
 from quant_evaluator.contracts.errors import UnsupportedMetricError
-from quant_evaluator.metrics.catalog import (
-    CATALOG,
-    Domain,
-    MetricRegistry,
-    MetricSpec,
-    get_metric_spec,
-    get_metric_specs_by_domain,
-    list_all_domains,
-    list_all_metric_ids,
-    seal_metric_registry,
-)
+from quant_evaluator.metrics import catalog as _catalog_mod
+
+
+@pytest.fixture(autouse=True)
+def _fresh_catalog_classes():
+    """Re-fetch the catalog classes fresh.
+
+    QE-P0-01: ``metrics.catalog`` re-exports MetricSpec/Domain/MetricRegistry
+    from ``registry.metrics`` (single authority).  Other test modules reload
+    the registry to restore BUILDING state, which recreates the classes; this
+    fixture re-imports the module so the names below always point at the
+    CURRENT class objects (never a stale pre-reload identity).
+    """
+    import importlib
+
+    importlib.reload(_catalog_mod)
+    globals()["CATALOG"] = _catalog_mod.CATALOG
+    globals()["Domain"] = _catalog_mod.Domain
+    globals()["MetricRegistry"] = _catalog_mod.MetricRegistry
+    globals()["MetricSpec"] = _catalog_mod.MetricSpec
+    globals()["get_metric_spec"] = _catalog_mod.get_metric_spec
+    globals()["get_metric_specs_by_domain"] = _catalog_mod.get_metric_specs_by_domain
+    globals()["list_all_domains"] = _catalog_mod.list_all_domains
+    globals()["list_all_metric_ids"] = _catalog_mod.list_all_metric_ids
+    globals()["seal_metric_registry"] = _catalog_mod.seal_metric_registry
+    yield
+
+
+CATALOG = _catalog_mod.CATALOG
+Domain = _catalog_mod.Domain
+MetricRegistry = _catalog_mod.MetricRegistry
+MetricSpec = _catalog_mod.MetricSpec
+get_metric_spec = _catalog_mod.get_metric_spec
+get_metric_specs_by_domain = _catalog_mod.get_metric_specs_by_domain
+list_all_domains = _catalog_mod.list_all_domains
+list_all_metric_ids = _catalog_mod.list_all_metric_ids
+seal_metric_registry = _catalog_mod.seal_metric_registry
 
 
 def _make_spec(

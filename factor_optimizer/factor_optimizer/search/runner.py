@@ -16,7 +16,14 @@ from factor_optimizer.contracts.objective import (
     ObjectiveSpec,
 )
 from factor_optimizer.contracts.search_budget import BudgetTracker, SearchBudget
+from factor_optimizer.contracts.budget_extension import BudgetExtensionAuthorization
+from factor_optimizer.contracts.evaluation_artifact import (
+    EvaluationStatus,
+    TrialEvaluationArtifact,
+    normalize_evaluation_result,
+)
 from factor_optimizer.contracts.trial import Trial, TrialStatus
+from factor_optimizer.contracts.trial_ledger import TrialLedger
 from factor_optimizer.contracts.splits import (
     EvaluationProtocol,
     LabelBundle,
@@ -181,6 +188,10 @@ class SearchSession:
     sealed_test_consumed: bool = False
     sealed_test_results: List[Dict[str, Any]] = field(default_factory=list)
     strategy: Optional[SearchStrategy] = None
+    # FO-P0-04: append-only ledger of every proposal attempt.  A burned-budget
+    # proposal (raised / non-Trial) is recorded here as PROPOSAL_FAILED /
+    # INVALID_PROPOSAL, NOT silently dropped and NOT mislabelled as DUPLICATE.
+    ledger: TrialLedger = field(default_factory=TrialLedger)
 
     def __setattr__(self, name: str, value: Any) -> None:
         # Sealed-test state is append-only through freeze/consume; direct
@@ -469,6 +480,7 @@ class SearchSession:
             ),
             "sealed_test_consumed": self.sealed_test_consumed,
             "sealed_test_results": [dict(item) for item in self.sealed_test_results],
+            "ledger": self.ledger.to_dict(),
         }
 
     @classmethod
@@ -675,6 +687,17 @@ class SearchSession:
         # Reattach the serialized search-time data boundary so the frozen
         # session's overlap guard survives the checkpoint roundtrip.
         _restore_search_split_plan(config, values.get("search_split_masks"))
+        # FO-P0-04: restore the append-only proposal ledger (a checkpoint with
+        # a malformed/omitted ledger is rejected so burned-budget records can
+        # never be silently dropped).
+        ledger_raw = values.get("ledger")
+        if ledger_raw is None:
+            raise ValueError(
+                "session checkpoint missing the FO-P0-04 trial ledger; "
+                "refusing to restore a checkpoint that could hide burned "
+                "proposal budget"
+            )
+        ledger = TrialLedger.from_dict(ledger_raw)
         session = cls(
             session_id=values["session_id"],
             config=config,
@@ -693,6 +716,7 @@ class SearchSession:
             sealed_test_masks=None,
             sealed_test_consumed=False,
             sealed_test_results=list(sealed_test_results),
+            ledger=ledger,
         )
         if frozen_at is not None:
             # Replay the freeze through the guarded path so the restored
@@ -887,6 +911,10 @@ class SearchRunner:
         # is always None inside a search session; sealed test evaluation
         # happens only through a separate test authority.
         self._test_authority_broker: Optional[TestAuthorityBroker] = None
+        # FO-P0-02: the real search-session identity used for capability
+        # provenance.  Defaults to None (a placeholder that fails closed if a
+        # capability is demanded before a session id is established).
+        self._search_session_id: Optional[str] = None
         # The search-time split plan.  Every capability check in the runner's
         # evaluation path compares the requested coordinates against this plan
         # (R46 P0-Q exact-subset authorization).
@@ -899,15 +927,34 @@ class SearchRunner:
             object.__setattr__(
                 self.config, "_search_split_plan", evaluation_fn.split_plan
             )
-            self._data_capabilities = build_search_capabilities(
-                evaluation_fn.split_plan,
-                search_session_id="search",
-                dataset_identity="search_dataset",
-                provider_identity="search_provider",
-            )
+            # FO-P0-02: capabilities are bound placeholder-free and re-issued
+            # with the REAL session id once ``run``/``resume`` names it, so a
+            # capability is always attributable to a real session/artifact and
+            # never carries the placeholder strings "search"/"search_dataset".
+            self._bind_capabilities(session_id="<pending>")
+
+    def _bind_capabilities(self, session_id: str) -> None:
+        """Build/re-issue the search data capabilities bound to a REAL session id.
+
+        FO-P0-02: the capability provenance uses the real ``session_id`` and the
+        split artifact, never the placeholder strings ``"search"`` /
+        ``"search_dataset"``.  The search worker still holds ONLY train and
+        validation capabilities (no TEST capability / no test provider).
+        """
+        if self._search_split_plan is None:
+            self._data_capabilities = None
+            return
+        self._search_session_id = session_id
+        self._data_capabilities = build_search_capabilities(
+            self._search_split_plan,
+            search_session_id=session_id,
+            dataset_identity=f"dataset:{self._search_split_plan.split_id}",
+            provider_identity=f"provider:{self._search_split_plan.split_id}",
+        )
 
     def run(self, session_id: str) -> SearchSession:
         """Execute a new search until budget exhausted or plateau reached."""
+        self._bind_capabilities(session_id=session_id)
         session = SearchSession(
             session_id=session_id,
             config=self.config,
@@ -916,7 +963,13 @@ class SearchRunner:
         )
         return self._run_session(session)
 
-    def resume(self, session: SearchSession) -> SearchSession:
+    def resume(
+        self,
+        session: SearchSession,
+        *,
+        resume_same_budget: bool = False,
+        budget_extension: Optional["BudgetExtensionAuthorization"] = None,
+    ) -> SearchSession:
         """Resume a quiescent, unfinished session with matching configuration.
 
         A session that was checkpointed after its budget was exhausted is
@@ -924,10 +977,29 @@ class SearchRunner:
         budget runs out, then resumes it with a fresh runner.  Only a
         finished session with no strategy on either side is rejected (a
         terminal session with nothing to continue is meaningless).
+
+        FO-P1-24 budget hardening.  The default (legacy) ``resume`` keeps the
+        historical "fresh budget on resume" behavior for backward
+        compatibility.  Two explicit opt-in modes prevent silently re-issuing
+        the whole budget every resume:
+
+        - ``resume_same_budget=True``: continue an UNFINISHED session with the
+          SAME budget tracker (the partially-consumed budget is preserved).  A
+          finished session is rejected under this mode — you cannot re-arm the
+          entire budget by merely resuming.
+        - ``budget_extension=<BudgetExtensionAuthorization>``: extend the
+          budget of a FINISHED session to a new (larger) budget.  The extension
+          must be authorized (signed content hash) and the new budget must not
+          shrink the session's consumption limits.
         """
         if not isinstance(session, SearchSession):
             raise TypeError("session must be a SearchSession")
-        if session.is_finished() and session.strategy is None and self.strategy is None:
+        if (
+            session.is_finished()
+            and session.strategy is None
+            and self.strategy is None
+            and budget_extension is None
+        ):
             raise ValueError("cannot resume a finished session")
         if session.budget_tracker.evaluations_reserved or session.budget_tracker.cost_reserved:
             raise ValueError("cannot resume with active evaluation reservations")
@@ -939,16 +1011,67 @@ class SearchRunner:
             # Legacy checkpoint (SearchSession.from_dict) restored without a
             # strategy: keep working by adopting the runner's strategy.
             session.strategy = self.strategy
+        # FO-P0-02: re-issue the capabilities bound to the REAL session id being
+        # resumed (never a placeholder).
+        self._bind_capabilities(session_id=session.session_id)
+
+        if resume_same_budget and budget_extension is not None:
+            raise ValueError(
+                "resume_same_budget and budget_extension are mutually exclusive"
+            )
+        if budget_extension is not None:
+            # FO-P1-24: extending a budget requires an authorized extension.
+            # A finished session is extended to the extension's new budget;
+            # an unfinished session is NOT re-armed.
+            budget_extension.verify()
+            if budget_extension.search_session_id != session.session_id:
+                raise ValueError(
+                    "budget extension search_session_id does not match the "
+                    "session being resumed"
+                )
+            if budget_extension.old_budget.to_dict() != session.budget_tracker.budget.to_dict():
+                raise ValueError(
+                    "budget extension old_budget does not match the session's "
+                    "current budget"
+                )
+            self._validate_extension_growth(budget_extension)
+            session.budget_tracker = BudgetTracker(budget_extension.new_budget)
+            session.finished_at = None
+            session.stop_reason = None
+            return self._run_session(session)
+        if resume_same_budget:
+            # FO-P1-24: continuing an UNFINISHED session keeps its budget.  A
+            # finished session cannot re-arm its entire budget this way.
+            if session.is_finished():
+                raise ValueError(
+                    "cannot resume a finished session with resume_same_budget=True; "
+                    "re-issuing the whole budget requires a BudgetExtensionAuthorization"
+                )
+            return self._run_session(session)
+
+        # Legacy backward-compatible path: a checkpointed session that
+        # exhausted its budget is resumed with a fresh budget.  The
+        # already-evaluated trials are preserved; only the consumption counters
+        # and the terminal flags are reset so the runner can propose again.
         if session.is_finished():
-            # A checkpointed session that exhausted its budget is resumed with
-            # a fresh budget for the new runner's remaining budget.  The
-            # already-evaluated trials are preserved; only the consumption
-            # counters and the terminal flags are reset so the runner can
-            # propose again.
             session.budget_tracker = BudgetTracker(self.config.budget)
             session.finished_at = None
             session.stop_reason = None
         return self._run_session(session)
+
+    def _validate_extension_growth(self, extension: "BudgetExtensionAuthorization") -> None:
+        """Reject an extension that shrinks the budget (fail-closed)."""
+        old = extension.old_budget
+        new = extension.new_budget
+        if (
+            new.max_trials < old.max_trials
+            or new.max_evaluations < old.max_evaluations
+            or new.max_cost_units < old.max_cost_units
+        ):
+            raise ValueError(
+                "budget extension must not shrink max_trials/max_evaluations/"
+                "max_cost_units below the current budget"
+            )
 
     def create_train_evaluation_context(self) -> "TrainEvaluationContext":
         """Create an isolated evaluation context for training data."""
@@ -989,21 +1112,24 @@ class SearchRunner:
                 trial = self.proposal_fn()
             except Exception as exc:
                 budget_tracker.record_trial()
-                # Burned budget must be visible: record the failure as a
-                # duplicate-slot trial instead of continuing silently.
-                failed = Trial(
-                    trial_id=f"proposal-failure-{budget_tracker.trials_used}",
-                    mutation_id="proposal-failure",
-                    status=TrialStatus.PROPOSED,
+                # FO-P0-04: a raised proposal is a distinct burned-budget
+                # outcome, recorded in the append-only ledger as
+                # PROPOSAL_FAILED (NOT a duplicate).  The historical
+                # "proposal-failure" duplicate-slot Trial is replaced by the
+                # typed ledger entry so the burned budget is visible and
+                # attributable without mislabelling it as a duplicate.
+                session.ledger.append_proposal_failed(
+                    f"proposal_fn error: {exc}"
                 )
-                failed.update_status(
-                    TrialStatus.FAILED,
-                    failure_reason=f"proposal_fn error: {exc}",
-                )
-                session.duplicate_trials.append(failed)
                 continue
             budget_tracker.record_trial()
             if not isinstance(trial, Trial):
+                # FO-P0-04: a proposal that returned a non-Trial is an
+                # INVALID_PROPOSAL outcome, recorded in the ledger rather than
+                # silently dropped.
+                session.ledger.append_invalid_proposal(
+                    f"proposal_fn returned {type(trial).__name__}, not a Trial"
+                )
                 continue
             if session.has_trial(trial.trial_id):
                 duplicate = Trial.from_dict(trial.to_dict())
@@ -1012,13 +1138,16 @@ class SearchRunner:
                     failure_reason=f"trial_id already recorded: {trial.trial_id}",
                 )
                 session.duplicate_trials.append(duplicate)
+                session.ledger.append_trial("DUPLICATE", trial.trial_id)
                 continue
             session.add_trial(trial)
+            session.ledger.append_trial("PROPOSED", trial.trial_id)
 
             trial.update_status(TrialStatus.VALIDATING)
             legality = self._validate_trial(trial)
             if not legality["is_legal"]:
                 trial.update_status(TrialStatus.ILLEGAL, legality_check=legality)
+                session.ledger.append_trial("ILLEGAL", trial.trial_id)
                 continue
             trial.update_status(TrialStatus.LEGAL, legality_check=legality)
 
@@ -1031,6 +1160,10 @@ class SearchRunner:
                     reserved_cost = budget_tracker.remaining_cost()
                 if not budget_tracker.reserve_evaluation(reserved_cost):
                     trial.update_status(TrialStatus.FAILED, failure_reason="evaluation budget unavailable")
+                    session.ledger.append_trial(
+                        "EVALUATION_FAILED", trial.trial_id,
+                        failure_reason="evaluation budget unavailable",
+                    )
                     session.finish(reason="evaluation_budget_unavailable")
                     break
 
@@ -1047,21 +1180,35 @@ class SearchRunner:
                             "runner cannot evaluate without a "
                             "capability-authorized train boundary"
                         )
-                    result = self._evaluate_with_capability(
+                    raw_result = self._evaluate_with_capability(
                         train_capability, trial, fidelity
                     )
-                    actual_cost = result.get("cost")
-                    if actual_cost is None:
-                        raise ValueError("evaluation result cost is unknown")
+                    # FO-P1-25: every evaluation output is normalized into a
+                    # typed TrialEvaluationArtifact.  The runner reads ONLY the
+                    # artifact's fields (never bare magic dict keys), so an
+                    # evaluator that renames/removes a key is caught loudly,
+                    # never silently breaking the run.
+                    artifact = normalize_evaluation_result(
+                        trial.trial_id,
+                        raw_result,
+                        objective_name=self.config.objective_spec.metric_name,
+                        objective_spec_ref=self.config.objective_spec.metric_name,
+                        split_ref=getattr(self._search_split_plan, "split_id", None),
+                        fidelity=fidelity,
+                    )
+                    actual_cost = artifact.compute_cost
                     budget_tracker.commit_evaluation(reserved_cost, float(actual_cost))
                 except Exception as exc:
                     if budget_tracker.evaluations_reserved:
                         budget_tracker.release_evaluation(reserved_cost)
                     trial.update_status(TrialStatus.FAILED, failure_reason=str(exc))
+                    session.ledger.append_trial(
+                        "EVALUATION_FAILED", trial.trial_id, failure_reason=str(exc)
+                    )
                     break
 
                 try:
-                    raw_score = result["score"]
+                    raw_score = artifact.primary_objective_value
                     # bool is an int subclass; True silently coerces to 1.0
                     # and produces a checkpoint SearchSession.from_dict
                     # rejects, making the session un-deserializable.
@@ -1075,8 +1222,9 @@ class SearchRunner:
                     score = float(raw_score)
                     if not isfinite(score):
                         raise ValueError("evaluation result score must be finite")
-                    rank = result.get("rank")
-                    total = result.get("total")
+                    promotion = artifact.promotion_evidence or {}
+                    rank = promotion.get("rank")
+                    total = promotion.get("total")
                     peer_evidence_valid = (
                         isinstance(rank, int)
                         and not isinstance(rank, bool)
@@ -1092,18 +1240,21 @@ class SearchRunner:
                     # caller instead of silently killing the whole run —
                     # mark FAILED only for the expected coercion failures.
                     trial.update_status(TrialStatus.FAILED, failure_reason=str(exc))
+                    session.ledger.append_trial(
+                        "EVALUATION_FAILED", trial.trial_id, failure_reason=str(exc)
+                    )
                     break
 
                 # Promotion is opt-in and requires coherent peer rank evidence.
                 next_tier = scheduler.next_tier(FidelityTier(fidelity)) if scheduler else None
                 can_promote = (
                     scheduler is not None
-                    and bool(result.get("promote", False))
+                    and bool(promotion.get("promote", False))
                     and next_tier is not None
                     and peer_evidence_valid
                     and scheduler.should_promote(
                         FidelityTier(fidelity), score, rank, total,
-                        result.get("baseline_score")
+                        promotion.get("baseline_score")
                     )
                 )
                 if can_promote:
@@ -1116,7 +1267,7 @@ class SearchRunner:
             if result is None or trial.status == TrialStatus.FAILED:
                 continue
 
-            evaluation_ref = result.get("evidence_ref", result.get("evaluation_id"))
+            evaluation_ref = artifact.evidence_ref
             if not isinstance(evaluation_ref, str) or not evaluation_ref.strip():
                 trial.update_status(
                     TrialStatus.FAILED,
@@ -1125,19 +1276,32 @@ class SearchRunner:
                         "or evaluation_id"
                     ),
                 )
+                session.ledger.append_trial(
+                    "EVALUATION_FAILED", trial.trial_id,
+                    failure_reason="missing evidence_ref",
+                )
                 continue
 
-            trial.update_status(
-                TrialStatus.EVALUATED,
-                evaluation_ref=evaluation_ref,
-                metadata={"score": result.get("score"), "fidelity": fidelity},
-            )
-            score = result.get("score")
-            if score is not None:
+                trial.update_status(
+                    TrialStatus.EVALUATED,
+                    evaluation_ref=evaluation_ref,
+                    metadata={
+                        "score": artifact.primary_objective_value,
+                        "fidelity": fidelity,
+                        "evaluation_artifact": artifact.to_dict(),
+                    },
+                )
+                session.ledger.append_trial("EVALUATED", trial.trial_id)
+                score = artifact.primary_objective_value
+                # FO-P1-25: the trial's metadata.score is authoritative — the
+                # runner no longer reads a bare "score" magic key.
+                trial.metadata["score"] = score
                 recent_scores.append(score)
                 if len(recent_scores) > self.config.plateau_window:
                     recent_scores.pop(0)
-                session.update_best(trial.trial_id, score)
+                improved = session.update_best(trial.trial_id, score)
+                if improved:
+                    session.ledger.append_trial("SELECTED", trial.trial_id)
                 if session.strategy is not None:
                     session.strategy.record(
                         trial.metadata.get("params", {}), float(score)

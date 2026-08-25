@@ -100,8 +100,28 @@ class MissingFittedStateError(DataError):
     pass
 
 
+class MissingFittedStateError(DataError):
+    """Required fitted state is missing or unavailable."""
+    pass
+
+
 class StaleFittedStateError(DataError):
     """Fitted state is outdated or bound to wrong fit window."""
+    pass
+
+
+class UnknownRegimeError(DataError):
+    """Encountered a regime label that was not seen at fit time."""
+    pass
+
+
+class SupervisedTargetRequiredError(DataError):
+    """A supervised transform requires a target/label series."""
+    pass
+
+
+class UnsupportedTargetError(DataError):
+    """A label-free transform was given a target it does not accept."""
     pass
 
 
@@ -180,6 +200,9 @@ __all__ = [
     "InvalidValidityMask",
     "MissingFittedStateError",
     "StaleFittedStateError",
+    "UnknownRegimeError",
+    "SupervisedTargetRequiredError",
+    "UnsupportedTargetError",
     # Execution
     "ExecutionError",
     "NumericalFailure",

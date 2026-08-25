@@ -307,3 +307,31 @@ class TestHierarchicalClusteringIntegration:
         # Should complete reasonably fast
         result = clustering.cluster(num_clusters=2)
         assert result.num_clusters == 2
+
+
+def test_ward_on_correlation_distance_fails_closed():
+    """Ward linkage requires a real Euclidean feature-space distance.  On a
+    correlation-derived distance (dist = 1 - |corr|) it is invalid and MUST
+    raise InvalidClusteringContract — never silently produce a meaningless
+    dendrogram."""
+    from factor_assets.clustering.families import HierarchicalClustering
+    from factor_assets.errors import InvalidClusteringContract
+
+    edges = [
+        CorrelationEdge("A", "B", 0.9),
+        CorrelationEdge("B", "C", 0.8),
+    ]
+    graph = SparseCorrelationGraph(edges)
+
+    with pytest.raises(InvalidClusteringContract, match="ward"):
+        HierarchicalClustering(
+            graph,
+            method="ward",
+            missing_distance_policy="treat_missing_as_max",
+        )
+
+    # The other linkage methods are unaffected.
+    for method in ("single", "complete", "average"):
+        HierarchicalClustering(
+            graph, method=method, missing_distance_policy="treat_missing_as_max"
+        ).build_dendrogram()

@@ -18,10 +18,10 @@ share a hash and any drift in the frozen inputs is detectable.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Mapping, Optional
+from typing import Iterable, Mapping, Optional
 
 from factor_assets.contracts.similarity import SimilarityArtifact
 
@@ -165,25 +165,30 @@ class FactorAdmissionArtifact:
             if not self.gate_results:
                 raise ValueError("APPROVED admission requires gate_results")
 
+        object.__setattr__(self, "evidence_refs", tuple(self.evidence_refs))
+        object.__setattr__(self, "gate_results", tuple(self.gate_results))
+
+        computed_hash = _content_hash(
+            self.factor_id,
+            self.factor_version,
+            self.quality,
+            self.health_state_ref,
+            self.similarity_ref,
+            self.novelty_ref,
+            self.cluster_id,
+            self.orientation,
+            self.decision,
+            self.reason,
+            self.evidence_refs,
+            self.gate_results,
+            self.policy_ref,
+        )
         if not self.content_hash:
-            object.__setattr__(
-                self,
-                "content_hash",
-                _content_hash(
-                    self.factor_id,
-                    self.factor_version,
-                    self.quality,
-                    self.health_state_ref,
-                    self.similarity_ref,
-                    self.novelty_ref,
-                    self.cluster_id,
-                    self.orientation,
-                    self.decision,
-                    self.reason,
-                    self.evidence_refs,
-                    self.gate_results,
-                    self.policy_ref,
-                ),
+            object.__setattr__(self, "content_hash", computed_hash)
+        elif self.content_hash != computed_hash:
+            raise ValueError(
+                "content_hash does not match the recomputed admission content "
+                "hash; a caller may not self-report an arbitrary hash — FAIL CLOSED"
             )
         if not self.created_at:
             object.__setattr__(

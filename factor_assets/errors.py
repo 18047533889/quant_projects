@@ -48,6 +48,12 @@ class SnapshotMismatchError(ContractError):
     pass
 
 
+class InvalidClusteringContract(InvalidContractError):
+    """Clustering invoked with an invalid contract (e.g. Ward on a
+    correlation-derived, non-Euclidean distance)."""
+    pass
+
+
 # ============================================================================
 # Capability Errors
 # ============================================================================
@@ -173,6 +179,7 @@ __all__ = [
     "SchemaVersionError",
     "MissingInputError",
     "InvalidContractError",
+    "InvalidClusteringContract",
     "TimingContractError",
     "SnapshotMismatchError",
     # Capability

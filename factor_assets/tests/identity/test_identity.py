@@ -11,6 +11,34 @@ from factor_assets.identity import (
 )
 
 
+def test_factor_definition_identity_requires_version():
+    """FactorDefinitionIdentity is version-qualified and must NOT fall back to
+    an FE compiler generation — the compiler is a separate identity axis."""
+    from factor_assets.identity.canonical import (
+        FactorDefinitionIdentity,
+        FactorCompilerIdentity,
+        FactorValueIdentity,
+    )
+
+    # factor_version is mandatory: no fallback to a compiler generation.
+    with pytest.raises(ValueError, match="factor_version"):
+        FactorDefinitionIdentity(factor_id="F1", factor_version="")
+
+    d = FactorDefinitionIdentity(factor_id="F1", factor_version="v1")
+    assert d.factor_version == "v1"
+
+    # Compiler and value identity are distinct axes.
+    c = FactorCompilerIdentity(compiler_generation="fe-0.9.7")
+    assert c.compiler_generation == "fe-0.9.7"
+    with pytest.raises(ValueError, match="FactorCompilerIdentity"):
+        FactorCompilerIdentity()
+
+    v = FactorValueIdentity(factor_id="F1", snapshot_ref="snapshot:2024")
+    assert v.snapshot_ref == "snapshot:2024"
+    with pytest.raises(ValueError, match="FactorValueIdentity"):
+        FactorValueIdentity(factor_id="F1")
+
+
 def test_factor_identity_requires_fields():
     """FactorIdentity must have canonical_repr and canonical_hash."""
     with pytest.raises(ValueError, match="canonical_repr"):

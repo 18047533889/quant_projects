@@ -18,13 +18,15 @@ production mode) may adopt to carry snapshot/window/universe provenance.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from types import MappingProxyType
 from typing import Mapping, Optional
 
 __all__ = [
     "SimilarityArtifact",
     "SimilarityView",
+    "UNKNOWN_SIMILARITY",
 ]
 
 #: Canonical similarity view keys understood by consumers.  ``rank_corr`` is
@@ -69,6 +71,26 @@ def _length_prefixed(digest: "hashlib._Hash", field_value: object) -> None:
     digest.update(str(len(encoded)).encode("ascii"))
     digest.update(b":")
     digest.update(encoded)
+
+
+def _deep_freeze_views(
+    views: dict[str, Optional[float]],
+) -> Mapping[str, Optional[float]]:
+    """Deep-freeze a normalized views mapping into an immutable snapshot.
+
+    The returned mapping is a :class:`types.MappingProxyType` backed by a
+    private copy of the caller's dict, so no mutation of the caller's dict
+    (nor of the mapping itself) can change an artifact after construction.
+    """
+    snapshot = dict(views)
+    return MappingProxyType(snapshot)
+
+
+#: Sentinel distinguishing an explicitly ``UNKNOWN`` measurement from a
+#: genuinely computed zero.  ``UNKNOWN`` means the view was not measured and
+#: MUST NOT be conflated with ``COMPUTED_ZERO`` (similarity 0.0) by consumers
+#: such as the diverse (MMR) policy.
+UNKNOWN_SIMILARITY = None
 
 
 def _similarity_spec_digest(
@@ -159,20 +181,23 @@ class SimilarityArtifact:
             normalized[key] = value
         if not any(value is not None for value in normalized.values()):
             raise ValueError("views must contain at least one non-None similarity")
-        object.__setattr__(self, "views", normalized)
+        object.__setattr__(self, "views", _deep_freeze_views(normalized))
 
+        computed_hash = _similarity_spec_digest(
+            self.factor_a,
+            self.factor_b,
+            self.views,
+            self.snapshot_ref,
+            self.window_ref,
+            self.universe_ref,
+        )
         if not self.similarity_spec_hash:
-            object.__setattr__(
-                self,
-                "similarity_spec_hash",
-                _similarity_spec_digest(
-                    self.factor_a,
-                    self.factor_b,
-                    self.views,
-                    self.snapshot_ref,
-                    self.window_ref,
-                    self.universe_ref,
-                ),
+            object.__setattr__(self, "similarity_spec_hash", computed_hash)
+        elif self.similarity_spec_hash != computed_hash:
+            raise ValueError(
+                "similarity_spec_hash does not match the recomputed spec hash "
+                "(factor pair / views / snapshot / window / universe); a caller "
+                "may not self-report an arbitrary hash — FAIL CLOSED"
             )
         if not self.created_at:
             object.__setattr__(
@@ -213,9 +238,11 @@ class SimilarityArtifact:
         """Factory for an artifact with an explicitly supplied spec hash.
 
         The spec hash identifies *which similarity definition* was measured
-        (factor pair + view semantics + snapshot/window/universe).  Passing a
-        stored hash lets a caller attach a spec hash computed elsewhere; the
-        views/provenance fields still participate in validation.
+        (factor pair + view semantics + snapshot/window/universe).  A caller
+        attaching a stored hash MUST supply a hash that equals the one
+        recomputed from the supplied views/provenance; otherwise the artifact
+        fails closed (``ValueError``), because a self-reported arbitrary hash
+        would let content and hash diverge.
         """
         return cls(
             factor_a=factor_a,
@@ -309,7 +336,12 @@ class SimilarityArtifact:
         window_ref: Optional[str] = None,
         universe_ref: Optional[str] = None,
     ) -> "SimilarityArtifact":
-        """Return a copy carrying the given provenance refs."""
+        """Return a copy carrying the given provenance refs.
+
+        The spec hash is RECOMPUTED from the merged provenance — changing the
+        snapshot/window/universe is a change to the measurement's identity, so
+        a stale caller-supplied hash would be a lie.
+        """
         merged_snapshot = snapshot_ref if snapshot_ref is not None else self.snapshot_ref
         merged_window = window_ref if window_ref is not None else self.window_ref
         merged_universe = universe_ref if universe_ref is not None else self.universe_ref
@@ -320,7 +352,6 @@ class SimilarityArtifact:
             snapshot_ref=merged_snapshot,
             window_ref=merged_window,
             universe_ref=merged_universe,
-            similarity_spec_hash=self.similarity_spec_hash,
             producer=self.producer,
             created_at=self.created_at,
             primary_view=self.primary_view,

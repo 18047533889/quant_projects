@@ -223,13 +223,22 @@ class TestRunnerIngestion:
             boom,
             _protocol(lambda t, f: {"score": 1.0, "cost": 1.0}),
         ).run("proposal-failure")
-        assert len(session.duplicate_trials) == 1
-        failed = session.duplicate_trials[0]
-        assert failed.status is TrialStatus.FAILED
-        assert "generator exploded" in failed.failure_reason
+        # FO-P0-04: a raised proposal is a PROPOSAL_FAILED ledger entry, NOT a
+        # duplicate.  The burned budget is recorded in the append-only ledger.
+        counts = session.ledger.status_counts()
+        assert counts.get("PROPOSAL_FAILED") == 1
+        assert counts.get("DUPLICATE", 0) == 0
+        proposal_failed = [
+            e for e in session.ledger.entries if e.status_value == "PROPOSAL_FAILED"
+        ]
+        assert len(proposal_failed) == 1
+        assert "generator exploded" in proposal_failed[0].failure_reason
         # Burned budget stays visible across a checkpoint roundtrip.
         restored = SearchSession.from_dict(session.to_dict())
-        assert "generator exploded" in restored.duplicate_trials[0].failure_reason
+        restored_failed = [
+            e for e in restored.ledger.entries if e.status_value == "PROPOSAL_FAILED"
+        ]
+        assert "generator exploded" in restored_failed[0].failure_reason
 
     def test_nan_evaluation_score_never_reaches_update_best(self):
         session = SearchRunner(

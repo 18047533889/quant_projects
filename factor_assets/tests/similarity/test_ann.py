@@ -312,6 +312,31 @@ class TestCreateANNIndex:
             create_ann_index("invalid", embedding_dim=10)
 
 
+class TestANNCapabilityHonesty:
+    """The Faiss 'ANN' index is actually an EXACT flat index (faiss.IndexFlatIP),
+    not an approximate nearest-neighbour index.  Its capability must be named
+    honestly (EXACT_FLAT), while Annoy is a genuine ANN (APPROXIMATE)."""
+
+    def test_faiss_is_exact_flat_not_ann(self):
+        if not ANN_MODULE_AVAILABLE:
+            pytest.skip("ANN module not available")
+        from factor_assets.similarity.ann import FaissANNIndex, IndexCapability
+        assert FaissANNIndex.capability is IndexCapability.EXACT_FLAT
+        assert FaissANNIndex.capability is not IndexCapability.APPROXIMATE
+
+    def test_annoy_is_approximate_ann(self):
+        if not ANN_MODULE_AVAILABLE:
+            pytest.skip("ANN module not available")
+        from factor_assets.similarity.ann import AnnoyANNIndex, IndexCapability
+        assert AnnoyANNIndex.capability is IndexCapability.APPROXIMATE
+        assert AnnoyANNIndex.capability is not IndexCapability.EXACT_FLAT
+
+    def test_capability_enum_values(self):
+        from factor_assets.similarity.ann import IndexCapability
+        assert IndexCapability.EXACT_FLAT.value == "exact_flat"
+        assert IndexCapability.APPROXIMATE.value == "approximate"
+
+
 @pytest.mark.skipif(not NUMPY_AVAILABLE, reason="numpy not available")
 @pytest.mark.skipif(not FAISS_AVAILABLE, reason="faiss not available")
 class TestANNIntegration:

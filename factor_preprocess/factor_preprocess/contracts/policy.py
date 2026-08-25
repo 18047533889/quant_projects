@@ -18,6 +18,7 @@ class TransformKind(Enum):
     ROLLING = "rolling"
     NEUTRALIZATION = "neutralization"
     REPRESENTATION = "representation"
+    SUPERVISED_FITTED = "supervised_fitted"
 
 
 class TransformMode(Enum):

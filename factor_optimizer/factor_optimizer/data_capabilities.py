@@ -320,6 +320,67 @@ class TestDataCapability(DataCapability):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# R46 P0-S: the test authority seam
+# ---------------------------------------------------------------------------
+
+
+class TestStoreRef:
+    """Opaque reference to a test-data store (FO-P0-03).
+
+    The test authority holds the physical test data behind this opaque ref,
+    never as a raw caller object/dict.  ``read()`` is the ONLY way to obtain
+    the payload; the ref itself exposes no columns, so a caller (or a search
+    worker) cannot reach the rows without holding the store.  The ref is bound
+    to a ``dataset_identity`` so a store cannot be swapped across datasets.
+    """
+
+    def __init__(self, store, *, dataset_identity: str):
+        if not hasattr(store, "read"):
+            raise TypeError("TestStoreRef requires an object exposing read()")
+        if not isinstance(dataset_identity, str) or not dataset_identity.strip():
+            raise ValueError("dataset_identity must be a non-empty string")
+        object.__setattr__(self, "_store", store)
+        object.__setattr__(self, "_dataset_identity", dataset_identity)
+
+    @property
+    def dataset_identity(self) -> str:
+        return self._dataset_identity
+
+    def read(self):
+        return self._store.read()
+
+    def __repr__(self) -> str:
+        return (
+            f"{type(self).__name__}(dataset={self._dataset_identity!r}, "
+            "store=opaque)"
+        )
+
+
+class TestDatasetIdentity:
+    """Opaque identity of a test dataset (FO-P0-003).
+
+    Binds a physical test store to a real dataset artifact id so the search
+    worker cannot substitute a raw payload for the authoritative store.
+    """
+
+    def __init__(self, dataset_identity: str, store_ref: TestStoreRef):
+        if not isinstance(dataset_identity, str) or not dataset_identity.strip():
+            raise ValueError("dataset_identity must be a non-empty string")
+        if not isinstance(store_ref, TestStoreRef):
+            raise TypeError("store_ref must be a TestStoreRef")
+        self._dataset_identity = dataset_identity
+        self._store_ref = store_ref
+
+    @property
+    def dataset_identity(self) -> str:
+        return self._dataset_identity
+
+    @property
+    def store_ref(self) -> TestStoreRef:
+        return self._store_ref
+
+
 class TestAuthorityBroker:
     """Interface seam for issuing TEST capabilities and resolving test data.
 
@@ -327,6 +388,11 @@ class TestAuthorityBroker:
     evaluation happens only through a separate test authority (an independent
     worker/process).  A broker is the ONLY way to construct a
     ``TestDataCapability`` and the ONLY way to obtain a ``TestDataProvider``.
+
+    FO-P0-003: the broker holds an opaque ``TestStoreRef`` to the physical test
+    store.  The search worker cannot mint a store ref; a caller's raw payload
+    is never the store boundary — the broker only resolves through an attached
+    opaque store.
     """
 
     def __init__(
@@ -353,6 +419,22 @@ class TestAuthorityBroker:
         self._search_session_id = search_session_id
         self._split_id = split_id
         self._ttl_seconds = ttl_seconds
+        # FO-P0-03: the physical test-data path.  None until the test
+        # authority attaches an opaque store; a provider without one fails
+        # closed rather than falling back to a caller's raw dict.
+        self._store_ref: Optional[TestStoreRef] = None
+
+    @property
+    def store_ref(self) -> Optional[TestStoreRef]:
+        return self._store_ref
+
+    def attach_store_ref(self, store_ref: TestStoreRef) -> None:
+        """Attach the opaque physical store this broker owns."""
+        if not isinstance(store_ref, TestStoreRef):
+            raise TypeError("store_ref must be a TestStoreRef")
+        if self._store_ref is not None:
+            raise ValueError("broker already has a store attached")
+        self._store_ref = store_ref
 
     def issue_test_capability(self, test_mask) -> TestDataCapability:
         """Issue a TEST capability bound to this broker's identity."""
@@ -371,13 +453,39 @@ class TestAuthorityBroker:
         finally:
             _capability_issuer.broker = None
 
-    def create_test_provider(self, test_data) -> "TestDataProvider":
-        """Create a provider that resolves test data for a TEST capability."""
+    def create_test_provider(self, test_data=None) -> "TestDataProvider":
+        """Create a provider that resolves test data for a TEST capability.
+
+        ``test_data`` (backward-compatible): a raw dict is wrapped into an
+        opaque ``TestStoreRef`` so existing test code keeps working.  When
+        omitted, the broker's attached opaque store is used.  A provider with
+        no store fails closed at resolve.
+        """
+        if test_data is not None and not isinstance(test_data, TestStoreRef):
+            if not isinstance(test_data, dict):
+                raise TypeError("test_data must be a dict or TestStoreRef")
+            test_data = TestStoreRef(
+                _DictStore(test_data),
+                dataset_identity=self._dataset_identity,
+            )
+        store_ref = test_data if test_data is not None else self._store_ref
         return TestDataProvider(
-            test_data,
+            store_ref,
             dataset_identity=self._dataset_identity,
             provider_identity=self._provider_identity,
         )
+
+
+class _DictStore:
+    """Adapter wrapping a plain dict as an opaque ``read()`` store."""
+
+    def __init__(self, data: dict):
+        if not isinstance(data, dict):
+            raise TypeError("data must be a dict")
+        object.__setattr__(self, "_data", dict(data))
+
+    def read(self):
+        return object.__getattribute__(self, "_data")
 
 
 class TestDataProvider:
@@ -386,14 +494,25 @@ class TestDataProvider:
     This is the physical test-data path.  It is NOT constructible inside a
     search session: the only way to obtain one is through a
     ``TestAuthorityBroker``, which the search worker never holds.
+
+    FO-P0-003: the provider resolves through an opaque ``TestStoreRef``, never
+    a caller's raw payload.  A provider with no store attached fails closed.
     """
 
-    def __init__(self, test_data, *, dataset_identity: str, provider_identity: str):
+    def __init__(
+        self,
+        store_ref: Optional[TestStoreRef],
+        *,
+        dataset_identity: str,
+        provider_identity: str,
+    ):
         if not isinstance(dataset_identity, str) or not dataset_identity.strip():
             raise ValueError("dataset_identity must be a non-empty string")
         if not isinstance(provider_identity, str) or not provider_identity.strip():
             raise ValueError("provider_identity must be a non-empty string")
-        self._test_data = test_data
+        if store_ref is not None and not isinstance(store_ref, TestStoreRef):
+            raise TypeError("store_ref must be a TestStoreRef or None")
+        self._store_ref = store_ref
         self._dataset_identity = dataset_identity
         self._provider_identity = provider_identity
 
@@ -404,6 +523,10 @@ class TestDataProvider:
     @property
     def provider_identity(self) -> str:
         return self._provider_identity
+
+    @property
+    def store_ref(self) -> Optional[TestStoreRef]:
+        return self._store_ref
 
     def resolve(self, capability: DataCapability):
         """Return the test payload only for a valid TEST capability.
@@ -428,7 +551,12 @@ class TestDataProvider:
             raise CapabilityForgeryError(
                 "test capability provider_identity does not match the provider"
             )
-        return self._test_data
+        if self._store_ref is None:
+            raise CapabilityForgeryError(
+                "test provider has no opaque store attached; refusing to "
+                "resolve test data from a raw caller payload"
+            )
+        return self._store_ref.read()
 
 
 class ScopedEvaluator:
@@ -536,6 +664,8 @@ __all__ = [
     "TestDataCapability",
     "TestAuthorityBroker",
     "TestDataProvider",
+    "TestStoreRef",
+    "TestDatasetIdentity",
     "ScopedEvaluator",
     "build_search_capabilities",
     "build_data_capabilities",

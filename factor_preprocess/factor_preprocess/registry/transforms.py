@@ -3,6 +3,17 @@ Transform registry with versioning and discovery.
 
 Provides a central catalog of all preprocessing transforms with metadata,
 versioning, and category-based organization.
+
+Production integrity:
+- FP-P1-04: ``TransformMetadata.signature_hash`` only hashed
+  name + inspect.signature(func), so a function body rewrite with an
+  unchanged signature produced the same hash. We add
+  ``implementation_hash`` (source closure hash) and ``numeric_policy_hash``
+  (hash of parameter/version/admission defaults) so true implementation
+  identity is captured.
+- FP-P1-05: ``TransformRegistry.seal()`` freezes the registry into an
+  immutable ``RegistrySnapshotIdentity``; runtime re-registration after seal
+  raises (production semantics cannot change mid-run).
 """
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -10,6 +21,8 @@ from typing import Callable, Dict, List, Optional, Set, Any
 from enum import Enum
 import hashlib
 import inspect
+
+from factor_preprocess.errors import GovernanceError
 
 
 class TransformCategory(str, Enum):
@@ -21,6 +34,20 @@ class TransformCategory(str, Enum):
     FRESHNESS = "freshness"
     NEUTRALIZATION = "neutralization"
     REPRESENTATION = "representation"
+
+
+def _source_of(func: Callable) -> str:
+    """Best-effort stable source of a callable (may not exist for builtins)."""
+    try:
+        return inspect.getsource(func)
+    except (TypeError, OSError, IOError):
+        # Fall back to bytecode disassembly which is content-stable.
+        import dis
+        return str(dis.get_instructions(func))
+
+
+def _hash_bytes(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 @dataclass
@@ -36,17 +63,56 @@ class TransformMetadata:
     causal_safe: bool = True
     admission: str = "PRODUCTION"
     signature_hash: Optional[str] = None
+    implementation_hash: Optional[str] = None
+    numeric_policy_hash: Optional[str] = None
 
     def __post_init__(self):
-        """Compute signature hash after initialization."""
+        """Compute hashes after initialization."""
         if self.signature_hash is None:
             self.signature_hash = self._compute_signature_hash()
+        if self.implementation_hash is None:
+            self.implementation_hash = self._compute_implementation_hash()
+        if self.numeric_policy_hash is None:
+            self.numeric_policy_hash = self._compute_numeric_policy_hash()
 
     def _compute_signature_hash(self) -> str:
-        """Compute stable hash of function signature."""
+        """Compute stable hash of function signature (name + signature)."""
         sig = inspect.signature(self.func)
         sig_str = f"{self.name}:{str(sig)}"
-        return hashlib.sha256(sig_str.encode()).hexdigest()[:16]
+        return _hash_bytes(sig_str)[:16]
+
+    def _compute_implementation_hash(self) -> str:
+        """Hash the actual source/bytecode of the function body.
+
+        Distinguishes two functions with identical signatures but different
+        bodies (FP-P1-04). Includes the signature to guard against two
+        distinct body objects that happen to disassemble identically at a
+        different name.
+        """
+        source = _source_of(self.func)
+        sig = inspect.signature(self.func)
+        return _hash_bytes(f"{self.name}:{str(sig)}::body::{source}")[:16]
+
+    def _compute_numeric_policy_hash(self) -> str:
+        """Hash the numeric/default parameter surface (version, admission,
+        causal_safe, default parameters, tags) that changes numerical output
+        without touching the signature (FP-P1-04)."""
+        # Deterministic ordering: sort tags and parameter keys.
+        def canonical_params(p):
+            if isinstance(p, dict):
+                return "{" + ",".join(
+                    f"{k}:{canonical_params(v)}" for k, v in sorted(p.items())
+                ) + "}"
+            return repr(p)
+
+        payload = "|".join([
+            self.version,
+            self.admission,
+            str(self.causal_safe),
+            canonical_params(self.parameters),
+            ",".join(sorted(self.tags)),
+        ])
+        return _hash_bytes(payload)[:16]
 
     def bind_parameters(self, parameters: Dict[str, Any]) -> None:
         """Validate configured keyword parameters against the callable signature."""
@@ -77,6 +143,16 @@ class TransformRegistry:
             cat: [] for cat in TransformCategory
         }
         self._by_tag: Dict[str, List[str]] = {}
+        self._sealed = False
+        self._snapshot_identity: Optional[str] = None
+
+    def _check_not_sealed(self):
+        """Fail closed: no runtime mutation of sealed production semantics."""
+        if self._sealed:
+            raise GovernanceError(
+                "TransformRegistry is sealed; production semantics are "
+                "immutable at runtime (FP-P1-05)"
+            )
 
     def register(
         self,
@@ -117,6 +193,7 @@ class TransformRegistry:
         # Existing callers omit admission for ordinary causal transforms;
         # make that omission explicit rather than treating it as unknown.
         admission = admission or "PRODUCTION"
+        self._check_not_sealed()
         if admission not in {"PRODUCTION", "OFFLINE_ONLY", "RESEARCH_ONLY"}:
             raise ValueError("admission must be PRODUCTION, OFFLINE_ONLY, or RESEARCH_ONLY")
         if admission == "PRODUCTION" and not causal_safe:
@@ -150,6 +227,8 @@ class TransformRegistry:
                 and existing.causal_safe == metadata.causal_safe
                 and existing.admission == metadata.admission
                 and existing.signature_hash == metadata.signature_hash
+                and existing.implementation_hash == metadata.implementation_hash
+                and existing.numeric_policy_hash == metadata.numeric_policy_hash
             )
             if not same_registration:
                 raise ValueError(
@@ -212,6 +291,36 @@ class TransformRegistry:
         """Get signature hash for reproducibility tracking."""
         metadata = self._transforms.get(name)
         return metadata.signature_hash if metadata else None
+
+    def seal(self) -> str:
+        """Freeze the registry into an immutable snapshot identity (FP-P1-05).
+
+        After sealing, ``register`` raises. The returned identity is a
+        content-derived hash over the ordered registered metadata so the
+        exact production semantics are reproducibly identifiable.
+        """
+        entries = []
+        for name in sorted(self._transforms):
+            meta = self._transforms[name]
+            entries.append(
+                f"{name}|{meta.version}|{meta.signature_hash}|"
+                f"{meta.implementation_hash}|{meta.numeric_policy_hash}|"
+                f"{meta.admission}|{meta.causal_safe}"
+            )
+        identity = _hash_bytes("\n".join(entries))
+        self._sealed = True
+        self._snapshot_identity = identity
+        return identity
+
+    @property
+    def snapshot_identity(self) -> Optional[str]:
+        """Content-derived identity of the sealed snapshot (None if not sealed)."""
+        return self._snapshot_identity
+
+    @property
+    def is_sealed(self) -> bool:
+        """Whether the registry has been frozen."""
+        return self._sealed
 
 
 def create_default_registry() -> TransformRegistry:

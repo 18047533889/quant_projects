@@ -177,10 +177,9 @@ class FactorSetAssembler:
         assembly_hash = self._assembly_hash(factor_ids, spec, memberships)
         policy_hash = self._policy_hash(spec)
         versions = tuple(
-            member.factor_version or (
-                asset.metadata.fe_compiler_generation
-                or asset.metadata.canonical_hash
-            )
+            member.factor_version
+            if member.factor_version is not None
+            else asset.metadata.canonical_hash
             for member, asset in zip(memberships, matched)
         )
         evidence_refs = tuple(
@@ -350,15 +349,20 @@ class FactorSetAssembler:
             )
             cluster_id = artifact.cluster_id if artifact is not None else None
             orientation = artifact.orientation if artifact is not None else None
+            # factor_version must NEVER fall back to the FE compiler generation
+            # — the compiler is a separate identity axis (FactorCompilerIdentity)
+            # from the factor definition version (FactorDefinitionIdentity).
             factor_version = (
                 artifact.factor_version
                 if artifact is not None and artifact.factor_version is not None
-                else (
-                    asset.metadata.fe_compiler_generation
-                    or asset.metadata.canonical_hash
-                )
+                else None
             )
             if production:
+                if factor_version is None:
+                    raise ValueError(
+                        "production assembly requires factor_version from the "
+                        f"admission artifact; missing for factor_id {asset.factor_id!r}"
+                    )
                 if health_state_ref is None:
                     raise ValueError(
                         "production assembly requires health_state_ref from the "
@@ -420,29 +424,57 @@ class FactorSetAssembler:
         spec: FactorSetSpec,
         memberships: tuple[FactorMembership, ...],
     ) -> str:
-        """Content hash over the assembly identity, spec, and member order."""
+        """Canonical content hash over the assembly identity.
+
+        Covers every semantic field of every member (identity + role +
+        orientation + family/cluster + representative + every provenance ref +
+        score + rank) plus the snapshot / universe / split / policy identity.
+        The member fields are length-prefixed in a fixed canonical order, so a
+        new field added to :class:`FactorMembership` must be added here too
+        rather than hand-picking a subset that can silently drift.
+        """
         digest = hashlib.sha256()
-        for factor_id in factor_ids:
-            digest.update(factor_id.encode("utf-8"))
-            digest.update(b"\x00")
+
+        def _prefixed(field_value: object) -> None:
+            encoded = str(field_value).encode("utf-8")
+            digest.update(str(len(encoded)).encode("ascii"))
+            digest.update(b":")
+            digest.update(encoded)
+
         for member in memberships:
-            for field in (
+            # Canonical, exhaustive semantic field order (matches FactorMembership).
+            for field_value in (
                 member.factor_id,
-                member.selection_decision_ref or "",
-                member.evidence_ref or "",
-                member.novelty_ref or "",
-                member.health_state_ref or "",
-                member.cluster_id if member.cluster_id is not None else "",
-                member.orientation if member.orientation is not None else "",
-                member.representative_of or "",
+                member.role,
+                member.orientation,
+                member.family_id,
+                member.cluster_id,
+                member.factor_version,
+                member.representative_of,
+                member.selection_decision_ref,
+                member.evidence_ref,
+                member.novelty_ref,
+                member.similarity_ref,
+                member.health_state_ref,
+                member.assembly_score,
+                member.selection_rank,
+                member.reason,
             ):
-                # Length-prefix each field so delimiters inside values cannot
-                # create hash collisions across different field splits.
-                encoded = str(field).encode("utf-8")
-                digest.update(str(len(encoded)).encode("ascii"))
-                digest.update(b":")
-                digest.update(encoded)
-        digest.update(repr(spec).encode("utf-8"))
+                _prefixed(field_value)
+
+        # Assembly identity: snapshot / universe / split / policy identity.
+        _prefixed(spec.set_id)
+        _prefixed(spec.selection_policy)
+        _prefixed(spec.data_snapshot_ref)
+        _prefixed(spec.universe_ref)
+        _prefixed(spec.split_ref)
+        _prefixed(spec.frequency)
+        _prefixed(spec.max_factors)
+        _prefixed(spec.min_evidence_date)
+        _prefixed(spec.required_domains)
+        _prefixed(spec.excluded_domains)
+        _prefixed(spec.min_lifecycle_state)
+        _prefixed(spec.family_constraints)
         return digest.hexdigest()
 
     @staticmethod
@@ -723,13 +755,29 @@ def _diverse_mmr_rank(
         return float(len(assets) - recency_rank)
 
     def similarity_value(factor_a: str, factor_b: str) -> float:
-        """Similarity magnitude for MMR; None/absent is treated as zero."""
+        """Similarity magnitude for MMR.
+
+        An ``UNKNOWN`` similarity (provider returning ``None``, or an artifact
+        whose primary view is ``None``) MUST NOT be conflated with a computed
+        zero.  In production a missing measurement is a hard failure — MMR
+        would otherwise reward exactly the pairs it cannot assess.  This
+        helper raises, forcing a caller to supply a real similarity or an
+        explicit UNKNOWN policy; a bare ``float`` is treated as a computed
+        similarity (abs-normalized).
+        """
         result = similarity_provider(factor_a, factor_b)
         if isinstance(result, SimilarityArtifact):
             value = result.primary_value
         else:
             value = result
-        return abs(value) if value is not None else 0.0
+        if value is None:
+            raise ValueError(
+                "diverse (MMR) selection received an UNKNOWN similarity "
+                f"(None) for pair ({factor_a!r}, {factor_b!r}); an unmeasured "
+                "similarity must not be treated as zero. Supply a real "
+                "similarity or an explicit UNKNOWN policy."
+            )
+        return abs(float(value))
 
     # Precompute quality for each asset (recency rank = index in input order).
     quality_by_id = {

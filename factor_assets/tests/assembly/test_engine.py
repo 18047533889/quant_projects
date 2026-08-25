@@ -355,6 +355,67 @@ def test_assembly_hash_deterministic_and_content_sensitive():
     assert other.policy_hash != first.policy_hash
 
 
+def test_assembly_hash_is_canonical_over_all_semantic_fields():
+    """The assembly hash is a canonical serialization over EVERY semantic field
+    of the membership + snapshot/universe/split/policy identity — a change to
+    any one of them must change the hash, so a new field never silently drifts
+    out of the hash."""
+    spec = make_spec("set-1", "Canonical", "manual")
+    base = FactorSetAssembler().assemble(
+        spec, [make_asset("F1")], created_at="2024-02-01T00:00:00Z"
+    )
+    h = base.assembly_hash
+
+    # Changing the data snapshot / universe / split identity changes the hash.
+    assert FactorSetAssembler().assemble(
+        make_spec("set-1", "Canonical", "manual", data_snapshot_ref="snapshot:OTHER"),
+        [make_asset("F1")], created_at="2024-02-01T00:00:00Z",
+    ).assembly_hash != h
+    assert FactorSetAssembler().assemble(
+        make_spec("set-1", "Canonical", "manual", universe_ref="universe:OTHER"),
+        [make_asset("F1")], created_at="2024-02-01T00:00:00Z",
+    ).assembly_hash != h
+    assert FactorSetAssembler().assemble(
+        make_spec("set-1", "Canonical", "manual", split_ref="split:OTHER"),
+        [make_asset("F1")], created_at="2024-02-01T00:00:00Z",
+    ).assembly_hash != h
+
+    # Changing the admission provenance (cluster_id / orientation / factor_version)
+    # — which flow into the membership — must change the assembly hash too.
+    from factor_assets.contracts.admission import AdmissionDecision, FactorAdmissionArtifact
+
+    def admission(cluster_id, orientation, factor_version):
+        return FactorAdmissionArtifact(
+            factor_id="F1",
+            decision=AdmissionDecision.APPROVED,
+            quality=0.8,
+            factor_version=factor_version,
+            health_state_ref="lifecycle:APPROVED",
+            cluster_id=cluster_id,
+            orientation=orientation,
+            reason="APPROVED",
+            evidence_refs=("bundle-F1",),
+            gate_results=("gate-1",),
+        )
+
+    prod = FactorSetAssembler().assemble(
+        spec, [make_asset("F1")],
+        admission_artifacts={"F1": admission(3, 1, "v1")},
+        production=True, created_at="2024-02-01T00:00:00Z",
+    )
+    assert prod.assembly_hash != h  # membership provenance now included
+    assert FactorSetAssembler().assemble(
+        spec, [make_asset("F1")],
+        admission_artifacts={"F1": admission(4, 1, "v1")},
+        production=True, created_at="2024-02-01T00:00:00Z",
+    ).assembly_hash != prod.assembly_hash
+    assert FactorSetAssembler().assemble(
+        spec, [make_asset("F1")],
+        admission_artifacts={"F1": admission(3, 1, "v2")},
+        production=True, created_at="2024-02-01T00:00:00Z",
+    ).assembly_hash != prod.assembly_hash
+
+
 def test_factor_set_split_and_snapshot_refs_flow_from_spec():
     spec = make_spec(
         "set-1", "Refs", "manual",

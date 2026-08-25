@@ -363,7 +363,13 @@ def _registry_restore():
     state_before = registry_state()
     yield
     if registry_state() == "sealed" and state_before == "building":
+        # QE-P0-01: metrics.catalog re-exports MetricSpec/Domain/MetricRegistry
+        # from registry.metrics (single authority).  Reloading the registry
+        # alone would leave catalog holding stale class references, so reload
+        # both to keep the single-class identity intact.
         importlib.reload(registry_metrics)
+        import quant_evaluator.metrics.catalog as catalog_module
+        importlib.reload(catalog_module)
         assert registry_state() == "building", "registry reload must restore BUILDING state"
 
 

@@ -169,12 +169,35 @@ class TestSimilarityArtifactHash:
         unordered = _artifact(views={"pnl_corr": 0.7, "rank_corr": 0.9})
         assert ordered.similarity_spec_hash == unordered.similarity_spec_hash
 
-    def test_supplied_hash_is_preserved(self):
+    def test_supplied_hash_is_preserved_when_it_matches(self):
+        # A caller-supplied hash is only accepted when it equals the hash
+        # recomputed from the views/provenance (identity is derived, not
+        # self-reported).  Passing the recomputed hash round-trips exactly.
+        recomputed = SimilarityArtifact(
+            factor_a="F001", factor_b="F002", views={"rank_corr": 0.8}
+        ).similarity_spec_hash
         artifact = SimilarityArtifact.for_spec(
-            "F001", "F002", "custom-hash-123", views={"rank_corr": 0.8}
+            "F001", "F002", recomputed, views={"rank_corr": 0.8}
         )
-        assert artifact.similarity_spec_hash == "custom-hash-123"
+        assert artifact.similarity_spec_hash == recomputed
         assert artifact.primary_value == 0.8
+
+    def test_for_spec_rejects_mismatched_supplied_hash(self):
+        # A caller must not self-report an arbitrary hash: deserialize with a
+        # stored hash that does not match the recomputed spec hash fails closed.
+        with pytest.raises(ValueError, match="does not match"):
+            SimilarityArtifact.for_spec(
+                "F001", "F002", "not-the-real-hash", views={"rank_corr": 0.8}
+            )
+
+    def test_for_spec_accepts_recomputed_hash(self):
+        recomputed = SimilarityArtifact(
+            factor_a="F001", factor_b="F002", views={"rank_corr": 0.8}
+        ).similarity_spec_hash
+        artifact = SimilarityArtifact.for_spec(
+            "F001", "F002", recomputed, views={"rank_corr": 0.8}
+        )
+        assert artifact.similarity_spec_hash == recomputed
 
     def test_for_spec_requires_hash(self):
         # An empty hash falls back to auto-computation (still valid).
@@ -230,7 +253,7 @@ class TestSimilarityArtifactHash:
         assert artifact.snapshot_ref == "snapshot:2024-08"
         assert artifact.producer == "legacy:SimilarityResult"
 
-    def test_with_provenance_preserves_identity(self):
+    def test_with_provenance_recomputes_hash(self):
         artifact = _artifact()
         augmented = artifact.with_provenance(
             snapshot_ref="snapshot:2025", universe_ref="universe:hs300"
@@ -239,10 +262,37 @@ class TestSimilarityArtifactHash:
         assert augmented.universe_ref == "universe:hs300"
         assert augmented.window_ref == artifact.window_ref
         assert augmented.factor_a == artifact.factor_a
-        # The augmented copy preserves the supplied spec hash (a caller passing
-        # a stored hash keeps identity stable across provenance augmentation).
-        assert augmented.similarity_spec_hash == artifact.similarity_spec_hash
+        # Provenance change is a change to measurement identity: the spec hash
+        # must be recomputed, not carried over stale.
+        assert augmented.similarity_spec_hash != artifact.similarity_spec_hash
+        recomputed = SimilarityArtifact(
+            factor_a="F001",
+            factor_b="F002",
+            views={"rank_corr": 0.9, "pnl_corr": 0.7},
+            snapshot_ref="snapshot:2025",
+            window_ref="2024-01-01/2024-12-31",
+            universe_ref="universe:hs300",
+        )
+        assert augmented.similarity_spec_hash == recomputed.similarity_spec_hash
         assert augmented.created_at == artifact.created_at
+
+    def test_views_are_immutable_deep_frozen(self):
+        from types import MappingProxyType
+
+        artifact = _artifact()
+        assert isinstance(artifact.views, MappingProxyType)
+        with pytest.raises(TypeError):
+            artifact.views["rank_corr"] = 0.5  # type: ignore[misc]
+
+    def test_views_snapshot_isolated_from_caller_dict(self):
+        source = {"rank_corr": 0.9}
+        artifact = SimilarityArtifact(
+            factor_a="A", factor_b="B", views=source
+        )
+        # Mutating the caller's dict must not mutate the artifact's snapshot.
+        source["rank_corr"] = 0.0
+        assert artifact.views["rank_corr"] == 0.9
+        assert artifact.primary_value == 0.9
 
 
 class TestSimilarityView:
@@ -382,7 +432,18 @@ class TestFactorAdmissionArtifactHash:
         assert artifact.evidence_refs == ("e1",)
         assert artifact.gate_results == ("g1",)
         assert artifact.policy_ref == "policy:1.0"
-        assert artifact.content_hash == _admission(content_hash=artifact.content_hash).content_hash
+        # content_hash is derived and deterministic: an artifact built from the
+        # same decision content recomputes the identical hash.
+        rebuilt = FactorAdmissionArtifact.from_selection_decision(
+            decision,
+            factor_version="v1",
+            quality=0.8,
+            health_state_ref="lifecycle:APPROVED",
+            cluster_id=2,
+            orientation=1,
+            policy_ref="policy:1.0",
+        )
+        assert artifact.content_hash == rebuilt.content_hash
 
     def test_from_selection_decision_shadowed(self):
         decision = SelectionDecision(
@@ -419,3 +480,28 @@ class TestFactorAdmissionArtifactHash:
         assert data["decision"] == "APPROVED"
         assert data["content_hash"] == artifact.content_hash
         assert data["cluster_id"] == 3
+
+    def test_content_hash_is_derived_and_fails_closed_on_mismatch(self):
+        # A caller must not self-report an arbitrary content hash: passing a
+        # stored hash that does not equal the recomputed content hash FAILS
+        # CLOSED, so content and hash can never diverge.
+        with pytest.raises(ValueError, match="does not match"):
+            _admission(content_hash="forged-hash")
+
+    def test_evidence_refs_and_gate_results_are_construction_time_snapshot(self):
+        # Tuples passed by the caller are snapshotted at construction time; a
+        # caller mutating a list cannot change the artifact's frozen evidence.
+        source_evidence = ["bundle-X"]
+        source_gates = ["gate-X"]
+        artifact = FactorAdmissionArtifact(
+            factor_id="F001",
+            decision=AdmissionDecision.APPROVED,
+            quality=0.8,
+            reason="APPROVED",
+            evidence_refs=source_evidence,
+            gate_results=source_gates,
+        )
+        source_evidence.append("tampered")
+        source_gates.append("tampered")
+        assert artifact.evidence_refs == ("bundle-X",)
+        assert artifact.gate_results == ("gate-X",)

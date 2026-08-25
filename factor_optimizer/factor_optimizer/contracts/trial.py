@@ -6,8 +6,23 @@ from enum import Enum
 from typing import Any, Dict, Optional
 
 
+"""Trial: record of a single mutation attempt with status and results."""
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional
+
+
 class TrialStatus(Enum):
-    """Status of a mutation trial."""
+    """Status of a mutation trial.
+
+    FO-P0-04: the trial lifecycle is recorded with a single unified status
+    vocabulary.  The historical members are retained for backward
+    compatibility; the hardening adds explicit outcomes for every proposal
+    attempt so a burned-budget proposal is never silently dropped or mislabelled
+    as a duplicate.
+    """
 
     PROPOSED = "proposed"  # Mutation created, not yet validated
     VALIDATING = "validating"  # Checking legality/grammar
@@ -17,6 +32,12 @@ class TrialStatus(Enum):
     EVALUATED = "evaluated"  # Evaluation complete, has evidence
     FAILED = "failed"  # Evaluation failed (error, timeout, etc.)
     DUPLICATE = "duplicate"  # Seen cache hit
+    # FO-P0-04: proposal-attempt outcomes distinct from a duplicate.
+    PROPOSAL_FAILED = "proposal_failed"  # proposal_fn raised; budget burned
+    INVALID_PROPOSAL = "invalid_proposal"  # proposal_fn returned a non-Trial
+    EVALUATION_FAILED = "evaluation_failed"  # evaluation errored/illegal result
+    PRUNED = "pruned"  # multi-fidelity: dropped without promotion
+    SELECTED = "selected"  # EVALUATED and selected as incumbent
 
 
 @dataclass
@@ -74,6 +95,11 @@ class Trial:
             TrialStatus.EVALUATED,
             TrialStatus.FAILED,
             TrialStatus.DUPLICATE,
+            TrialStatus.PROPOSAL_FAILED,
+            TrialStatus.INVALID_PROPOSAL,
+            TrialStatus.EVALUATION_FAILED,
+            TrialStatus.PRUNED,
+            TrialStatus.SELECTED,
         }
 
     def is_successful(self) -> bool:

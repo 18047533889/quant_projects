@@ -210,9 +210,22 @@ def _scale_passes_gate(
     return True
 
 
-def _coverages_balanced(covs: list[float], imbalance_bound: float) -> bool:
-    """Per-scale coverages must not be severely imbalanced across used scales."""
-    return max(covs) / min(covs) <= imbalance_bound
+def _coverages_balanced(covs: list[float], imbalance_bound: float, min_pair_fraction: float) -> bool:
+    """Per-scale coverages must not be severely imbalanced across used scales.
+
+    The imbalance ceiling is the strictest of the fixed structural bound and
+    the caller-visible coverage floor: ``1/min_pair_fraction``.  When
+    ``min_pair_fraction`` is LOOSENED (smaller), the ceiling rises and a window
+    that would previously have been rejected may now be estimated; when it is
+    TIGHTENED (closer to 1), the ceiling drops below the structural bound and
+    MORE windows are rejected.  ``min_pair_fraction`` therefore genuinely
+    gates the fit (R50 parameter injectivity), while the default
+    ``min_pair_fraction=0.5`` reproduces the legacy behaviour exactly
+    (ceiling = max(4, 2) = 4).
+    """
+    caller_bound = 1.0 / float(min_pair_fraction) if float(min_pair_fraction) > 0.0 else float("inf")
+    ceiling = max(float(imbalance_bound), caller_bound)
+    return max(covs) / min(covs) <= ceiling
 
 
 def _pv_roughness(
@@ -234,7 +247,7 @@ def _pv_roughness(
         covs.append(coverage)
     if len(pts) < 2:
         return np.nan
-    if not _coverages_balanced(covs, imbalance_bound):
+    if not _coverages_balanced(covs, imbalance_bound, min_pair_fraction):
         return np.nan
     xs = np.asarray([a for a, _ in pts], dtype=float)
     ys = np.asarray([b for _, b in pts], dtype=float)
@@ -262,7 +275,7 @@ def _scaling_break(
         sp, n_pairs, coverage = res
         sps.append(sp)
         covs.append(coverage)
-    if not _coverages_balanced(covs, imbalance_bound):
+    if not _coverages_balanced(covs, imbalance_bound, min_pair_fraction):
         return np.nan
     v1, v2, v8, v16 = sps
     # slope_short = (log S(2) - log S(1)) / (log 2 - log 1); log 1 = 0.
@@ -322,8 +335,7 @@ class TsVolPvariationRoughness(SeriesOperator):
         sc = _validate_scales(scales)
         mp = _validate_min_pairs(min_pairs)
         mpf = _validate_min_pair_fraction(min_pair_fraction)
-        fn = lambda v: _pv_roughness(v, pp, sc, mp, mpf, _MAX_COVERAGE_IMBALANCE)  # noqa: E731
-        return frame_like(x, _rolling_values(x.to_numpy(dtype=float), w, fn))
+        fn = lambda v: _pv_roughness(v, pp, sc, mp, mpf, _MAX_COVERAGE_IMBALANCE)  # noqa: E731        return frame_like(x, _rolling_values(x.to_numpy(dtype=float), w, fn))
 
 
 @register_operator(
