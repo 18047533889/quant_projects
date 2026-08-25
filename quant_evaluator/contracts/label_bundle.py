@@ -14,6 +14,11 @@ class LabelBundle:
 
     QE consumes this contract and never infers labels, shifts, or fills. All timing
     is supplied by caller and validated, not guessed from file timestamps.
+
+    Return convention: the default forward-return measure is vwap-to-vwap
+    (VWAP_{t+H} / VWAP_t - 1).  External callers provide ``values`` in this
+    convention; the field is recorded as provenance only and is NOT enforced
+    or validated against ``target_id`` / content.
     """
     target_id: str
     values: np.ndarray
@@ -27,11 +32,14 @@ class LabelBundle:
     validity: Optional[np.ndarray] = None
     source_ref: Optional[str] = None
     calendar_ref: Optional[str] = None
+    price_convention: str = "vwap_to_vwap"
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         if not self.target_id:
             raise ValueError("target_id cannot be empty")
+        if not self.price_convention:
+            raise ValueError("price_convention cannot be empty")
         if self.values is None:
             raise ValueError("values cannot be None")
         if self.horizon <= 0:

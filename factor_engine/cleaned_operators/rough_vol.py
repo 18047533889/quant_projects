@@ -335,7 +335,8 @@ class TsVolPvariationRoughness(SeriesOperator):
         sc = _validate_scales(scales)
         mp = _validate_min_pairs(min_pairs)
         mpf = _validate_min_pair_fraction(min_pair_fraction)
-        fn = lambda v: _pv_roughness(v, pp, sc, mp, mpf, _MAX_COVERAGE_IMBALANCE)  # noqa: E731        return frame_like(x, _rolling_values(x.to_numpy(dtype=float), w, fn))
+        fn = lambda v: _pv_roughness(v, pp, sc, mp, mpf, _MAX_COVERAGE_IMBALANCE)  # noqa: E731
+        return frame_like(x, _rolling_values(x.to_numpy(dtype=float), w, fn))
 
 
 @register_operator(

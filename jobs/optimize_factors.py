@@ -258,59 +258,85 @@ def main():
     mktcap = mktcap.reindex(index=common_idx, columns=common_cols)
 
     names = sorted([f.stem for f in FV_DIR.glob("*.parquet")]) if FV_DIR.exists() else []
-    print(f"[opt1] 因子数: {len(names)} (vwap-to-vwap 口径)", flush=True)
+    print(f"[opt1] 因子数: {len(names)} (vwap-to-vwap 口径, 多进程并行)", flush=True)
 
-    meta = {}
-    t0 = time.time()
-    for i, page in enumerate(names):
-        fpath = FV_DIR / f"{page}.parquet"
+    # 已写因子（续跑跳过）
+    already = {p.stem for p in OUT_DIR.glob("*.parquet")} if OUT_DIR.exists() else set()
+    todo = [p for p in names if p not in already]
+    print(f"[opt1] 待算: {len(todo)} (已写 {len(already)})", flush=True)
+
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+    import pickle as _pk
+
+    # 全局共享数据（模块级 _GV，fork 后 worker 继承）
+    global _GV
+    _GV = {"vwap": vwap, "industry": industry, "mktcap": mktcap,
+           "common_idx": common_idx, "common_cols": common_cols}
+
+    meta = {p: {"error": "empty", "best": "raw", "steps": ["（无有效值）"], "variants": {}}
+            for p in already}  # 已写的先按 raw 占位，后续读已有文件时保留
+    # 修正：已写的因子保留原 meta（从旧 meta 文件读或重新处理）
+    old_meta = {}
+    if META_PATH.exists():
         try:
-            mat = pd.read_parquet(fpath)
+            old_meta = json.loads(META_PATH.read_text())
         except Exception:
-            continue
-        if mat.shape[1] == 0 or mat.isna().all().all():
-            meta[page] = {"error": "empty", "best": "raw", "steps": ["（无有效值）"], "variants": {}}
-            continue
-        mat = mat.reindex(index=common_idx, columns=common_cols)
+            old_meta = {}
+    for p in already:
+        if p in old_meta:
+            meta[p] = old_meta[p]
 
-        dsl_ops = detect_dsl_preproc(page)
-        variants = build_variants(mat, vwap, industry, mktcap, dsl_ops)
-
-        # 择优：各变体算 RankIC/IR（vwap-to-vwap）
-        best_name = "raw"; best_ir = -1e9; best_mean = 0.0
-        var_metrics = {}
-        for vname, vmat, vsteps in variants:
-            s, mean, ir = daily_rankic(vmat, vwap)
-            var_metrics[vname] = {"mean_rankic": mean, "rankic_ir": ir, "n": len(s)}
-            if ir > best_ir:
-                best_ir = ir; best_name = vname; best_mean = mean
-
-        # 取最优变体矩阵
-        best_mat = None
-        for vname, vmat, vsteps in variants:
-            if vname == best_name:
-                best_mat = vmat
-                best_steps = vsteps
-                break
-
-        # 写优化后因子
-        if best_mat is not None:
-            sub = best_mat.astype("float32").dropna(axis=1, how="all")
-            sub.to_parquet(OUT_DIR / f"{page}.parquet")
-
-        meta[page] = {
-            "best": best_name,
-            "best_mean_rankic": best_mean,
-            "best_rankic_ir": best_ir,
-            "steps": best_steps,
-            "dsl_preproc_ops": dsl_ops,
-            "variants": var_metrics,
-        }
-        if i % 50 == 0:
-            print(f"  {i}/{len(names)} {page} best={best_name} ir={best_ir:.3f} 耗时{time.time()-t0:.0f}s", flush=True)
+    n_workers = min(10, (os.cpu_count() or 4) - 2)
+    t0 = time.time()
+    done = 0
+    with ProcessPoolExecutor(max_workers=n_workers) as pool:
+        futures = {pool.submit(_process_one, p): p for p in todo}
+        for fut in as_completed(futures):
+            page, m = fut.result()
+            meta[page] = m
+            done += 1
+            if done % 20 == 0:
+                print(f"  {done}/{len(todo)} {page} 耗时{time.time()-t0:.0f}s", flush=True)
 
     META_PATH.write_text(json.dumps(meta, ensure_ascii=False, indent=2, default=str))
     print(f"[opt1] 完成 {len(meta)} 因子, meta 存 {META_PATH}, 耗时{time.time()-t0:.0f}s", flush=True)
+
+
+_GV = {}  # 模块级共享数据（worker fork 后读取）
+
+
+def _process_one(page):
+    """单因子处理（模块级函数，供 ProcessPool 序列化）。"""
+    try:
+        import numpy as _np, pandas as _pd
+        fpath = FV_DIR / f"{page}.parquet"
+        mat = _pd.read_parquet(fpath)
+        if mat.shape[1] == 0 or mat.isna().all().all():
+            return page, {"error": "empty", "best": "raw", "steps": ["（无有效值）"], "variants": {}}
+        g = _GV
+        mat = mat.reindex(index=g["common_idx"], columns=g["common_cols"])
+        dsl_ops = detect_dsl_preproc(page)
+        variants = build_variants(mat, g["vwap"], g["industry"], g["mktcap"], dsl_ops)
+        best_name = "raw"; best_ir = -1e9; best_mean = 0.0
+        var_metrics = {}
+        for vname, vmat, vsteps in variants:
+            s, mean, ir = daily_rankic(vmat, g["vwap"])
+            var_metrics[vname] = {"mean_rankic": mean, "rankic_ir": ir, "n": len(s)}
+            if ir > best_ir:
+                best_ir = ir; best_name = vname; best_mean = mean
+        best_mat = None; best_steps = []
+        for vname, vmat, vsteps in variants:
+            if vname == best_name:
+                best_mat = vmat; best_steps = vsteps; break
+        if best_mat is not None:
+            sub = best_mat.astype("float32").dropna(axis=1, how="all")
+            sub.to_parquet(OUT_DIR / f"{page}.parquet")
+        return page, {
+            "best": best_name, "best_mean_rankic": best_mean, "best_rankic_ir": best_ir,
+            "steps": best_steps, "dsl_preproc_ops": dsl_ops, "variants": var_metrics,
+        }
+    except Exception as _e:
+        return page, {"error": str(_e)[:100]}
 
 
 if __name__ == "__main__":

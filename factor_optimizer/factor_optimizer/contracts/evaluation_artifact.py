@@ -97,6 +97,13 @@ class TrialEvaluationArtifact:
             for v in self.objective_values
         ):
             raise TypeError("objective_values must be a list of name/value dicts")
+        # Validate each objective value fail-closed (bool/NaN/Inf rejected).
+        for v in self.objective_values:
+            value = v["value"]
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise TypeError("objective value must be a non-boolean number")
+            if not math.isfinite(float(value)):
+                raise ValueError("objective value must be finite")
         if isinstance(self.compute_cost, bool) or not isinstance(
             self.compute_cost, (int, float)
         ):
@@ -109,6 +116,7 @@ class TrialEvaluationArtifact:
             EvaluationStatus.PRUNED,
         ):
             raise ValueError(f"unknown evaluation status: {self.status!r}")
+        object.__setattr__(self, "_canonical", self._canonical_payload())
 
     @property
     def primary_objective_value(self) -> float:
@@ -138,6 +146,11 @@ class TrialEvaluationArtifact:
     @property
     def content_hash(self) -> str:
         return hashlib.sha256(self._canonical_payload().encode("utf-8")).hexdigest()
+
+    def verify(self) -> None:
+        """Fail closed if the artifact was altered after construction."""
+        if self._canonical_payload() != self._canonical:
+            raise ValueError("evaluation artifact content was tampered")
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -200,9 +213,16 @@ def normalize_evaluation_result(
     score = result.get("score")
     if score is None:
         raise ValueError("evaluation result is missing a primary objective score")
+    # A boolean score is rejected fail-closed here (it would silently coerce
+    # to 1.0 downstream).
+    if isinstance(score, bool):
+        raise ValueError("evaluation result score must not be boolean")
     evidence_ref = result.get("evidence_ref") or result.get("evaluation_id")
     if evidence_ref is None:
-        raise ValueError("evaluation result must include an evidence_ref")
+        raise ValueError(
+            "evaluation result must include a non-empty evidence_ref or "
+            "evaluation_id"
+        )
     promotion_evidence = None
     if any(k in result for k in ("rank", "total", "promote", "baseline_score")):
         promotion_evidence = {

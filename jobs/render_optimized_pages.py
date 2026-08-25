@@ -57,35 +57,37 @@ CLUSTER = PROJECT / "weekly_backtest_output" / "factor_clusters.json"
 DAILY = Path.home() / "cos_data" / "StockDailyBar"
 START, END = "2019-01-02", "2026-08-24"
 
-_HAS_CLOSE = None
+_HAS_VWAP = None
 
 
-def load_close():
-    global _HAS_CLOSE
-    if _HAS_CLOSE is not None:
-        return _HAS_CLOSE
+def load_vwap():
+    """加载 VWAP 矩阵（全局收益口径：vwap-to-vwap）。"""
+    global _HAS_VWAP
+    if _HAS_VWAP is not None:
+        return _HAS_VWAP
     import duckdb
     files = sorted(DAILY.glob("*.parquet"))
     fs = "[" + ",".join(f"'{f}'" for f in files) + "]"
     con = duckdb.connect()
     df = con.execute(f"""
-        SELECT TradeDate as date, Symbol as symbol, Close as close
+        SELECT TradeDate as date, Symbol as symbol, Vwap as vwap
         FROM read_parquet({fs})
         WHERE TradeDate >= DATE '{START}' AND TradeDate <= DATE '{END}'
     """).df()
-    m = df.pivot_table(index='date', columns='symbol', values='close', aggfunc='first')
+    m = df.pivot_table(index='date', columns='symbol', values='vwap', aggfunc='first')
     m.index = pd.to_datetime(m.index)
-    _HAS_CLOSE = m.sort_index()
-    return _HAS_CLOSE
+    _HAS_VWAP = m.sort_index()
+    return _HAS_VWAP
 
 
-def daily_rankic_series(factor_mat, close):
-    common = factor_mat.index.intersection(close.index)
+def daily_rankic_series(factor_mat, vwap):
+    """逐日 spearman rankic，收益 = vwap-to-vwap。"""
+    common = factor_mat.index.intersection(vwap.index)
     fv = factor_mat.reindex(index=common)
-    cc = close.loc[common]
-    cols = cc.columns.intersection(fv.columns)
-    fv = fv[cols]; cc = cc[cols]
-    fwd = cc.pct_change().shift(-1)
+    vv = vwap.reindex(index=common)
+    cols = vv.columns.intersection(fv.columns)
+    fv = fv[cols]; vv = vv[cols]
+    fwd = vv.pct_change().shift(-1)  # vwap-to-vwap
     T = fv.shape[0]
     ic = np.full(T, np.nan)
     fv_a = fv.values; fwd_a = fwd.values
@@ -126,15 +128,15 @@ def plot_ic_compare(raw_ic, opt_ic, name):
     return fig_to_b64(fig)
 
 
-def plot_decile_compare(raw_mat, opt_mat, close, name):
-    """原始 vs 优化后十分层净值并排。"""
+def plot_decile_compare(raw_mat, opt_mat, vwap, name):
+    """原始 vs 优化后十分层净值并排。收益口径 vwap-to-vwap。"""
     def decile_nav(mat):
-        common = mat.index.intersection(close.index)
+        common = mat.index.intersection(vwap.index)
         fv = mat.reindex(index=common)
-        cc = close.loc[common]
-        cols = cc.columns.intersection(fv.columns)
-        fv = fv[cols]; cc = cc[cols]
-        fwd = cc.pct_change().shift(-1)
+        vv = vwap.reindex(index=common)
+        cols = vv.columns.intersection(fv.columns)
+        fv = fv[cols]; vv = vv[cols]
+        fwd = vv.pct_change().shift(-1)  # vwap-to-vwap
         ranks = fv.rank(axis=1, method='first', pct=True).values
         valid = np.isfinite(fv.values) & np.isfinite(fwd.values)
         gids = np.floor(ranks * 10).clip(0, 9).astype(int)
@@ -149,7 +151,7 @@ def plot_decile_compare(raw_mat, opt_mat, close, name):
         return np.cumprod(1 + gr)
     raw_nav = decile_nav(raw_mat)
     opt_nav = decile_nav(opt_mat)
-    common = raw_mat.index.intersection(close.index)
+    common = raw_mat.index.intersection(vwap.index)
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 3.4))
     for k in range(10):
         ax1.plot(common, raw_nav[:, k], lw=0.8, alpha=0.7)
@@ -163,15 +165,15 @@ def plot_decile_compare(raw_mat, opt_mat, close, name):
     return fig_to_b64(fig)
 
 
-def plot_ls_compare(raw_mat, opt_mat, close, name):
-    """原始 vs 优化后多空 NAV 叠加。"""
+def plot_ls_compare(raw_mat, opt_mat, vwap, name):
+    """原始 vs 优化后多空 NAV 叠加。收益口径 vwap-to-vwap。"""
     def ls_nav(mat):
-        common = mat.index.intersection(close.index)
+        common = mat.index.intersection(vwap.index)
         fv = mat.reindex(index=common)
-        cc = close.loc[common]
-        cols = cc.columns.intersection(fv.columns)
-        fv = fv[cols]; cc = cc[cols]
-        fwd = cc.pct_change().shift(-1)
+        vv = vwap.reindex(index=common)
+        cols = vv.columns.intersection(fv.columns)
+        fv = fv[cols]; vv = vv[cols]
+        fwd = vv.pct_change().shift(-1)  # vwap-to-vwap
         ranks = fv.rank(axis=1, method='first', pct=True).values
         valid = np.isfinite(fv.values) & np.isfinite(fwd.values)
         gids = np.floor(ranks * 10).clip(0, 9).astype(int)
@@ -187,7 +189,7 @@ def plot_ls_compare(raw_mat, opt_mat, close, name):
         return np.cumprod(1 + ls)
     raw = ls_nav(raw_mat)
     opt = ls_nav(opt_mat)
-    common = raw_mat.index.intersection(close.index)
+    common = raw_mat.index.intersection(vwap.index)
     fig, ax = plt.subplots(figsize=(10, 3.2))
     ax.plot(common, raw, color="#dc2626", lw=1.2, label="原始多空")
     ax.plot(common, opt, color="#0d9488", lw=1.4, label="优化后多空")
@@ -251,8 +253,8 @@ def build_opt_block(page, opt1_meta, opt2_meta, cluster_meta):
 """
 
 
-def inject_detail_page(page, opt1_meta, opt2_meta, cluster_meta, close):
-    """向详情页注入优化因子区块 + 对比图。"""
+def inject_detail_page(page, opt1_meta, opt2_meta, cluster_meta, vwap):
+    """向详情页注入优化因子区块 + 对比图（vwap-to-vwap 口径）。"""
     html_path = FACTORS_DIR / f"factor_{page}.html"
     if not html_path.exists():
         return False
@@ -271,11 +273,11 @@ def inject_detail_page(page, opt1_meta, opt2_meta, cluster_meta, close):
         return False
 
     # 生成对比图
-    raw_ic = daily_rankic_series(raw_mat, close)
-    opt_ic = daily_rankic_series(opt_mat, close)
+    raw_ic = daily_rankic_series(raw_mat, vwap)
+    opt_ic = daily_rankic_series(opt_mat, vwap)
     ic_chart = plot_ic_compare(raw_ic, opt_ic, page)
-    decile_chart = plot_decile_compare(raw_mat, opt_mat, close, page)
-    ls_chart = plot_ls_compare(raw_mat, opt_mat, close, page)
+    decile_chart = plot_decile_compare(raw_mat, opt_mat, vwap, page)
+    ls_chart = plot_ls_compare(raw_mat, opt_mat, vwap, page)
 
     block = build_opt_block(page, opt1_meta, opt2_meta, cluster_meta)
     # 替换占位 div 为真实图
@@ -302,9 +304,9 @@ def main():
     cluster_meta = json.loads(CLUSTER.read_text()) if CLUSTER.exists() else {}
     print(f"[opt4] 阶段1 meta: {len(opt1_meta)}, 阶段2 meta: {len(opt2_meta)}, 聚类: {len(cluster_meta.get('cluster_members', {}))}", flush=True)
 
-    close = load_close()
+    close = load_vwap()
     pages = sorted([f.stem for f in OPT_DIR.glob("*.parquet")]) if OPT_DIR.exists() else []
-    print(f"[opt4] 优化因子数: {len(pages)}", flush=True)
+    print(f"[opt4] 优化因子数: {len(pages)} (vwap-to-vwap 口径)", flush=True)
 
     t0 = time.time()
     injected = 0

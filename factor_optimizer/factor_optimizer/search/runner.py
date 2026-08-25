@@ -1154,6 +1154,7 @@ class SearchRunner:
             scheduler = MultiFidelityScheduler() if self.config.enable_multifidelity else None
             fidelity = 0 if scheduler is not None else 4
             result = None
+            artifact = None
             while True:
                 reserved_cost = self.config.evaluation_cost_units
                 if reserved_cost is None:
@@ -1262,9 +1263,9 @@ class SearchRunner:
                     continue
                 break
 
-            if session.is_finished() and (result is None or trial.status == TrialStatus.FAILED):
+            if session.is_finished() and (artifact is None or trial.status == TrialStatus.FAILED):
                 break
-            if result is None or trial.status == TrialStatus.FAILED:
+            if artifact is None or trial.status == TrialStatus.FAILED:
                 continue
 
             evaluation_ref = artifact.evidence_ref
@@ -1282,30 +1283,30 @@ class SearchRunner:
                 )
                 continue
 
-                trial.update_status(
-                    TrialStatus.EVALUATED,
-                    evaluation_ref=evaluation_ref,
-                    metadata={
-                        "score": artifact.primary_objective_value,
-                        "fidelity": fidelity,
-                        "evaluation_artifact": artifact.to_dict(),
-                    },
+            trial.update_status(
+                TrialStatus.EVALUATED,
+                evaluation_ref=evaluation_ref,
+                metadata={
+                    "score": artifact.primary_objective_value,
+                    "fidelity": fidelity,
+                    "evaluation_artifact": artifact.to_dict(),
+                },
+            )
+            session.ledger.append_trial("EVALUATED", trial.trial_id)
+            score = artifact.primary_objective_value
+            # FO-P1-25: the trial's metadata.score is authoritative — the
+            # runner no longer reads a bare "score" magic key.
+            trial.metadata["score"] = score
+            recent_scores.append(score)
+            if len(recent_scores) > self.config.plateau_window:
+                recent_scores.pop(0)
+            improved = session.update_best(trial.trial_id, score)
+            if improved:
+                session.ledger.append_trial("SELECTED", trial.trial_id)
+            if session.strategy is not None:
+                session.strategy.record(
+                    trial.metadata.get("params", {}), float(score)
                 )
-                session.ledger.append_trial("EVALUATED", trial.trial_id)
-                score = artifact.primary_objective_value
-                # FO-P1-25: the trial's metadata.score is authoritative — the
-                # runner no longer reads a bare "score" magic key.
-                trial.metadata["score"] = score
-                recent_scores.append(score)
-                if len(recent_scores) > self.config.plateau_window:
-                    recent_scores.pop(0)
-                improved = session.update_best(trial.trial_id, score)
-                if improved:
-                    session.ledger.append_trial("SELECTED", trial.trial_id)
-                if session.strategy is not None:
-                    session.strategy.record(
-                        trial.metadata.get("params", {}), float(score)
-                    )
 
         if not session.is_finished():
             session.finish(reason="manual_stop")
