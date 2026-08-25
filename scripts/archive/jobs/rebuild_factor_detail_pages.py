@@ -26,6 +26,18 @@ import matplotlib.dates as mdates
 from matplotlib.gridspec import GridSpec
 import io, base64
 
+# ---- 中文字体（Noto Sans CJK SC）----
+_CN_FONT = "/home/sunhaiwei/.fonts/NotoSansSC-Regular.otf"
+if os.path.exists(_CN_FONT):
+    try:
+        import matplotlib.font_manager as _fm
+        _fm.fontManager.addfont(_CN_FONT)
+        _CN_NAME = _fm.FontProperties(fname=_CN_FONT).get_name()
+        plt.rcParams["font.sans-serif"] = [_CN_NAME, "DejaVu Sans"]
+        plt.rcParams["axes.unicode_minus"] = False
+    except Exception:
+        pass
+
 try:
     import duckdb
     _HAS_DUCKDB = True
@@ -57,14 +69,42 @@ except Exception as _qe_err:
     _QE_IMPORT_ERR = _qe_err
 
 PROJECT = Path("/home/sunhaiwei/quant_projects")
-CONV_DIR = PROJECT / "factor_delivery_converted" / "factors_combined"
-REPORT_DIR = PROJECT / "factor_engine" / "docs" / "reports" / "2026-08-23"
+CONV_DIR = Path("/home/sunhaiwei/factor_delivery_converted/factors_combined")
+REPORT_DIR = Path(os.environ.get("FACTOR_REPORT_DIR", str(PROJECT / "factor_engine" / "docs" / "reports" / "2026-08-23")))
 FACTORS_DIR = REPORT_DIR / "factors"
 BACKTEST_OUT = PROJECT / "weekly_backtest_output"
 OUT_IMGS = REPORT_DIR  # 生成的图放这里
 
 sys.path.insert(0, str(PROJECT))
 sys.path.insert(0, str(PROJECT / "vectorbt_qs"))
+
+# LQTP 转换结果（61 条：dsl / status / can_use_factor_engine / note / is_flipped）
+# FACTOR_SET=all 时加载 456 全量转换；否则 61
+_FACTOR_SET = os.environ.get("FACTOR_SET", "61").strip()
+_LQTP_PATH_ALL = Path("/home/sunhaiwei/factor_delivery_converted/formula_lqtp_all.json")
+_LQTP_PATH_61 = Path("/home/sunhaiwei/factor_delivery_converted/formula_lqtp.json")
+_LQTP_RECORDS: dict[str, dict] = {}
+try:
+    _lqtp_path = _LQTP_PATH_ALL if (_FACTOR_SET == "all" and _LQTP_PATH_ALL.exists()) else _LQTP_PATH_61
+    if _lqtp_path.exists():
+        import json as _json
+        _raw = _json.loads(_lqtp_path.read_text())
+        if isinstance(_raw, dict):
+            # 新格式：dict keyed by 因子名（aacd 版），value 含 lqtp_formula/fe_formula/custom_dsl/status/flipped
+            for _k, _rec in _raw.items():
+                _rec = dict(_rec)
+                _rec.setdefault("page_name", _k)
+                _rec["dsl"] = _rec.get("lqtp_formula") or _rec.get("fe_formula") or _rec.get("custom_dsl") or ""
+                _rec["status"] = _rec.get("status", "fallback")
+                _rec["can_use_factor_engine"] = (_rec.get("status") == "ok")
+                _rec["is_flipped"] = bool(_rec.get("flipped", False))
+                _LQTP_RECORDS[_k] = _rec
+        elif isinstance(_raw, list):
+            for _rec in _raw:
+                _rec = dict(_rec)
+                _LQTP_RECORDS[_rec.get("page_name", "")] = _rec
+except Exception:
+    _LQTP_RECORDS = {}
 
 # ============================================================
 # 配色
@@ -83,6 +123,10 @@ PLOT_BG = "#ffffff"
 # 工具函数
 # ============================================================
 def load_weekly_factor_names() -> list[str]:
+    if _FACTOR_SET == "all":
+        # 全量：从 factor_matrices_all/ 的文件名（page_name）
+        names = [f.stem for f in _FV_DIR.glob("*.parquet")] if _FV_DIR.exists() else []
+        return sorted(names)
     names = []
     for f in FACTORS_DIR.glob("factor_*.html"):
         name = f.stem.replace("factor_", "")
@@ -147,15 +191,46 @@ def extract_formula_info(name: str) -> dict:
     rationale = (d.get("rationale") or "")[:400]
     is_flipped = "_flipped" in name
 
-    # ---- 0. 优先查手写 manual (中文 DSL + 步骤) ----
+    # ---- 0. 优先用 LQTP 转换结果 (formula_lqtp.json) ----
+    lqtp_rec = _LQTP_RECORDS.get(name)
+    if lqtp_rec:
+        dsl_text = lqtp_rec.get("dsl", "") or ""
+        status = lqtp_rec.get("status", "fallback")
+        can_fe = lqtp_rec.get("can_use_factor_engine", False)
+        note = lqtp_rec.get("note", "")
+        lqtp_steps = lqtp_rec.get("steps") or []
+        lqtp_title = lqtp_rec.get("title") or ""
+        if status == "ok" and can_fe:
+            dsl_note = "✅ 已按 LQTP 转换，factor_engine DSL 可直接执行"
+        elif status == "fallback":
+            dsl_note = "已转 FactorEngine（DSL 语法近似，落值用真实 Python code）"
+        else:
+            dsl_note = "⚠️ 自命名 DSL，用不了 factor_engine —— " + note
+        return {
+            "formula": raw_formula or lqtp_rec.get("lqtp_formula", "") or "（未提供原 formula）",
+            "code": code,
+            "dsl": dsl_text,
+            "dsl_status": status,
+            "dsl_note": dsl_note,
+            "fe_formula": d.get("fe_formula", "") or lqtp_rec.get("fe_formula", "") or "",
+            "lqtp_formula": d.get("lqtp_formula", "") or lqtp_rec.get("lqtp_formula", "") or "",
+            "rationale": rationale,
+            "required_columns": ", ".join(lqtp_rec.get("required_columns") or d.get("required_columns", []) or []),
+            "is_flipped": is_flipped or lqtp_rec.get("is_flipped", False),
+            "title": lqtp_title,
+            "steps": lqtp_steps,
+            "manual_note": "",
+            "manual": False,
+            "can_use_factor_engine": can_fe,
+        }
+
+    # ---- 0b. 手写 manual (中文 DSL + 步骤) 兜底 ----
     manual = _FACTOR_MANUAL.get(name)
     if manual:
         manual_dsl = manual["dsl"]
-        # 如果是 _flipped 且 manual 已含负号, 直接用; 否则按 is_flipped 加前缀
         already_neg = manual_dsl.startswith("-")
         if is_flipped and not already_neg:
             manual_dsl = "-" + manual_dsl
-        # 负 IC 未翻转的因子, 在公式前加 ⚠ 提示
         return {
             "formula": raw_formula or manual["title"],
             "code": code,
@@ -274,26 +349,61 @@ def compute_max_drawdown(nav: pd.Series) -> float:
     return float(dd.min())
 
 _HAS_FV_DF = None  # 进程级缓存 parquet
+_FV_DIR = (BACKTEST_OUT / "factor_matrices_all") if (_FACTOR_SET == "all") else (BACKTEST_OUT / "factor_matrices")   # 每因子一个 parquet (date × symbol)
 
 def _load_full_fv() -> pd.DataFrame:
-    """进程级缓存：全 parquet 一次"""
+    """进程级缓存：从 factor_matrices/ 逐因子加载（新格式，per-factor 文件）。
+
+    返回 MultiIndex columns (factor, symbol) 的宽表；仅为兼容旧接口，
+    实际逐因子调用时直接读单文件更省内存。
+    """
     global _HAS_FV_DF
-    if _HAS_FV_DF is None:
-        try:
-            _HAS_FV_DF = pd.read_parquet(BACKTEST_OUT / "factor_values.parquet")
-            if not isinstance(_HAS_FV_DF.index, pd.DatetimeIndex):
-                _HAS_FV_DF.index = pd.to_datetime(_HAS_FV_DF.index)
-        except Exception:
-            _HAS_FV_DF = pd.DataFrame()
+    if _HAS_FV_DF is not None:
+        return _HAS_FV_DF
+    try:
+        files = sorted(_FV_DIR.glob("*.parquet")) if _FV_DIR.exists() else []
+        if not files:
+            # 回退旧宽表
+            _HAS_FV_DF = pd.read_parquet(BACKTEST_OUT / "factor_values.parquet",
+                                         engine='pyarrow',
+                                         thrift_string_size_limit=2**31-1,
+                                         thrift_container_size_limit=2**31-1)
+            return _HAS_FV_DF
+        # 只加载第一个文件的结构作为日期轴（各文件同日期轴）
+        first = pd.read_parquet(files[0])
+        idx = first.index
+        cols = []
+        mats = {}
+        for fp in files:
+            m = pd.read_parquet(fp)
+            fac = fp.stem  # 已是 page_name（含 _flipped）
+            for sym in m.columns:
+                mats[(fac, sym)] = m[sym].values
+        df = pd.DataFrame(mats, index=idx)
+        df.columns = pd.MultiIndex.from_tuples(df.columns, names=["factor", "symbol"])
+        if not isinstance(df.index, pd.DatetimeIndex):
+            df.index = pd.to_datetime(df.index)
+        _HAS_FV_DF = df
+    except Exception as _e:
+        _HAS_FV_DF = pd.DataFrame()
     return _HAS_FV_DF
 
 def _load_factor_matrix(name: str) -> pd.DataFrame:
-    """从 parquet 加载真因子矩阵 (date × symbol)"""
+    """从 per-factor parquet 加载真因子矩阵 (date × symbol)"""
     try:
+        fac = f"factor_{name}"
+        for cand in [f"{name}.parquet", f"{fac}.parquet", f"{name.replace('_flipped','')}.parquet"]:
+            p = _FV_DIR / cand
+            if p.exists():
+                m = pd.read_parquet(p)
+                if not isinstance(m.index, pd.DatetimeIndex):
+                    m.index = pd.to_datetime(m.index)
+                return m
+        # 兜底: 旧宽表
         df = _load_full_fv()
         if df.empty:
             return pd.DataFrame()
-        cols = [c for c in df.columns if isinstance(c, tuple) and c[0] == f"factor_{name}"]
+        cols = [c for c in df.columns if isinstance(c, tuple) and c[0] == fac]
         if not cols:
             return pd.DataFrame()
         m = df[cols]
@@ -310,7 +420,7 @@ def _load_close_matrix() -> pd.DataFrame:
         return _HAS_CLOSE
     try:
         LOCAL_DAILY = Path.home() / "cos_data" / "StockDailyBar"
-        files = sorted(LOCAL_DAILY.glob("*.parquet"))
+        files = sorted(LOCAL_DAILY.glob("2*.parquet"))
         if not files:
             _HAS_CLOSE = pd.DataFrame()
             return _HAS_CLOSE
@@ -319,6 +429,7 @@ def _load_close_matrix() -> pd.DataFrame:
         df = con.execute(f"""
             SELECT TradeDate as date, Symbol as symbol, Close as close
             FROM read_parquet({files_str})
+            WHERE TradeDate >= DATE '2019-01-02'
         """).df()
         mat = df.pivot_table(index='date', columns='symbol', values='close', aggfunc='first')
         mat.index = pd.to_datetime(mat.index)
@@ -353,18 +464,20 @@ def _compute_all_factors_metrics() -> dict:
         return {}
 
     try:
-        # 1. 全量加载因子矩阵
+        # 1. 全量加载因子矩阵（per-factor 文件；日期轴取第一个文件）
         df_full = _load_full_fv()
         if df_full.empty:
             _ALL_METRICS_CACHE = {}
             return _ALL_METRICS_CACHE
 
-        # 拆出 (T, N_total) per factor
+        # 拆出 (T, N_total) per factor（只保留对得上日期的）
         factor_names = sorted(set(c[0] for c in df_full.columns))
         common_idx = df_full.index
         mat_dict = {}
         for fn in factor_names:
             cols = [c for c in df_full.columns if c[0] == fn]
+            if not cols:
+                continue
             m = df_full[cols].copy()
             m.columns = [c[1] for c in m.columns]
             mat_dict[fn] = m
@@ -382,7 +495,7 @@ def _compute_all_factors_metrics() -> dict:
         # 对齐每个因子到 close columns
         common_cols = close.columns
         for fn in factor_names:
-            mat_dict[fn] = mat_dict[fn].reindex(columns=common_cols)
+            mat_dict[fn] = mat_dict[fn].reindex(index=common_idx, columns=common_cols)
 
         fwd = close.pct_change().shift(-1)
 
@@ -655,8 +768,8 @@ def plot_ic_monthly_heatmap(monthly_ic: pd.Series, factor_name: str) -> str:
     ax.set_xticklabels(["1","2","3","4","5","6","7","8","9","10","11","12"])
     ax.set_yticks(range(len(unique_years)))
     ax.set_yticklabels(unique_years)
-    ax.set_xlabel("Month")
-    ax.set_title(f"{factor_name} — Monthly RankIC", fontsize=9, color=FG)
+    ax.set_xlabel("月份")
+    ax.set_title(f"{factor_name} — 月度 RankIC 热力图", fontsize=9, color=FG)
     plt.colorbar(im, ax=ax, label="RankIC", shrink=0.8)
 
     # 填数值
@@ -697,12 +810,12 @@ def plot_decile_nav(decile_data: dict, factor_name: str) -> str:
     # 多空: 紫色虚线
     if "LS" in decile_data and len(decile_data["LS"]) == len(dates):
         ax.plot(dates, decile_data["LS"], color="#7c3aed",
-                linewidth=2.0, label="Long-Short (G10-G1)", linestyle="-")
+                linewidth=2.0, label="多空 (G10-G1)", linestyle="-")
 
     ax.axhline(1.0, color="gray", linewidth=0.7, linestyle="--", alpha=0.7)
-    ax.set_title(f"{factor_name} — Decile NAV (10 lines)", fontsize=10, color=FG, fontweight='bold')
-    ax.set_xlabel("Date")
-    ax.set_ylabel("NAV")
+    ax.set_title(f"{factor_name} — 十分层净值曲线 (G1~G10)", fontsize=10, color=FG, fontweight='bold')
+    ax.set_xlabel("日期")
+    ax.set_ylabel("净值")
     ax.legend(fontsize=7, loc="upper left", ncol=5)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -784,15 +897,15 @@ def plot_long_short_nav(decile_data: dict, factor_name: str) -> str:
     g10 = decile_data.get("G10", [])
     g1 = decile_data.get("G1", [])
 
-    ax.plot(dates, ls, color="#7c3aed", linewidth=1.5, label="Long-Short")
+    ax.plot(dates, ls, color="#7c3aed", linewidth=1.5, label="多空 (G10-G1)")
     if len(g10) == len(dates):
-        ax.plot(dates, g10, color="#16a34a", linewidth=1, label="G10 (Long)", alpha=0.7)
+        ax.plot(dates, g10, color="#16a34a", linewidth=1, label="G10 (多头)", alpha=0.7)
     if len(g1) == len(dates):
-        ax.plot(dates, g1, color="#dc2626", linewidth=1, label="G1 (Short)", alpha=0.7)
+        ax.plot(dates, g1, color="#dc2626", linewidth=1, label="G1 (空头)", alpha=0.7)
 
     ax.axhline(1.0, color="gray", linewidth=0.8, linestyle="--")
-    ax.set_title(f"{factor_name} — Long/Short NAV", fontsize=9, color=FG)
-    ax.set_ylabel("NAV")
+    ax.set_title(f"{factor_name} — 多空净值曲线", fontsize=9, color=FG)
+    ax.set_ylabel("净值")
     ax.legend(fontsize=7)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -813,13 +926,13 @@ def plot_ic_distribution(ic_series: pd.Series, factor_name: str) -> str:
     # 红线 = 均值 (而非 0)；0 线作为参考
     ic_mean = float(np.mean(ic_filtered.values))
     ic_med = float(np.median(ic_filtered.values))
-    ax.axvline(ic_mean, color="red", linewidth=2, linestyle="-", label=f"mean = {ic_mean:+.4f}")
-    ax.axvline(ic_med, color="orange", linewidth=1.5, linestyle="--", label=f"median = {ic_med:+.4f}")
+    ax.axvline(ic_mean, color="red", linewidth=2, linestyle="-", label=f"均值 = {ic_mean:+.4f}")
+    ax.axvline(ic_med, color="orange", linewidth=1.5, linestyle="--", label=f"中位数 = {ic_med:+.4f}")
     ax.axvline(0, color="gray", linewidth=1, linestyle=":", alpha=0.6)
     ax.legend(fontsize=7, loc="upper right")
-    ax.set_title(f"{factor_name} — RankIC Distribution", fontsize=8, color=FG)
+    ax.set_title(f"{factor_name} — RankIC 分布", fontsize=8, color=FG)
     ax.set_xlabel("RankIC")
-    ax.set_ylabel("Count")
+    ax.set_ylabel("频数")
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
     b64 = fig_to_base64(fig)
@@ -1220,7 +1333,14 @@ def build_detail_html(
                 'border-left:3px solid #f97316;border-radius:6px;'
                 'font-size:0.78rem;color:#7c2d12">' + note_esc + '</div>\n'
             )
-        elif dsl_note and is_flipped and dsl_status == "ok":
+        elif dsl_note and dsl_status == "custom":
+            note_esc = dsl_note.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            note_html = (
+                '<div style="margin-top:8px;padding:8px 12px;background:#fee2e2;'
+                'border-left:3px solid #dc2626;border-radius:6px;'
+                'font-size:0.78rem;color:#991b1b">' + note_esc + '</div>\n'
+            )
+        elif dsl_note and (is_flipped or dsl_status == "ok"):
             note_esc = dsl_note.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             note_html = (
                 '<div style="margin-top:8px;font-size:0.78rem;color:var(--muted)">'
@@ -1535,11 +1655,12 @@ def process_factor_thread(name: str, batch_metrics: dict) -> tuple:
     try:
         fi = extract_formula_info(name)
         is_flipped = fi["is_flipped"]
-        batch_key = f"factor_{name}"
-        fm = batch_metrics.get(batch_key, {})
+        # batch_metrics 的 key = per-factor parquet 文件名（page_name，不带 factor_ 前缀）
+        fm = batch_metrics.get(name, {})
         if not fm:
-            alt_key = f"factor_{name}_flipped"
-            fm = batch_metrics.get(alt_key, {})
+            fm = batch_metrics.get(f"factor_{name}", {})
+        if not fm:
+            fm = batch_metrics.get(f"factor_{name}_flipped", {})
 
         ic_series = fm.get("ic_series", pd.Series(dtype=float)).copy()
 

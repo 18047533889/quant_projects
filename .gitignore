@@ -68,3 +68,9 @@ modeling/modeling_adapters.egg-info/
 
 # claude worktrees
 .claude/worktrees/
+
+# R49.5: auto-generated factor-detail HTML (regenerable via jobs/rebuild_factor_detail_pages.py)
+factor_engine/docs/reports/*/factors/
+factor_engine/docs/factors/*.html
+factor_engine/docs/reports/2026-08-25/
+factor_engine/docs/reports/*/summary_stats.json
