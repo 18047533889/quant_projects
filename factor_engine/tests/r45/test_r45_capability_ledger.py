@@ -6,7 +6,8 @@
   2. ``build_incremental_certification_ledger`` 认证分布；同 canonical 不既为
      TRUE_INCREMENTAL 又为 NOT_CERTIFIED。
   3. 经 parity 证明的 9 个状态算子为 TRUE_INCREMENTAL（至少不是 FULL_REPLAY_ONLY）。
-  4. ``live_production_usable`` 聚合计数诚实（不超过权威总数，且与人工判定一致）。
+  4. ``lifecycle_incremental_eligible`` 聚合计数诚实（不超过权威总数，且与人工判定
+     一致）；严格硬门 ``production_usable`` 是 lifecycle 资格的真子集（R50）。
   5. 维度探测不虚报：当前 head 无 duckdb / q / numba 后端时对应维度全 False。
 """
 from __future__ import annotations
@@ -91,23 +92,49 @@ def test_unproven_canonical_is_not_certified() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 4. LIVE 聚合诚实性
+# 4. 生命周期资格 + 生产可用硬门诚实性
 # ---------------------------------------------------------------------------
 def test_live_count_is_honest_subset_of_total() -> None:
-    """LIVE 数 ≤ operator_total，且每个 LIVE canonical 维度证据齐全。"""
+    """lifecycle 资格数 ≤ operator_total，且每个资格 canonical 维度证据齐全。"""
     ledger = build_incremental_certification_ledger()
     rows = incremental_capability_matrix_extended()
-    assert 0 <= ledger.live_production_usable <= ledger.operator_total
+    assert 0 <= ledger.lifecycle_incremental_eligible <= ledger.operator_total
     # 行级聚合与账本一致。
-    assert sum(1 for r in rows if r["live_production_usable"]) == ledger.live_production_usable
-    # 每个 LIVE canonical：lifecycle=production & prod_certified & not hidden & 非 FULL_REPLAY。
+    assert sum(1 for r in rows if r["lifecycle_incremental_eligible"]) == ledger.lifecycle_incremental_eligible
+    # 每个资格 canonical：lifecycle=production & prod_certified & not hidden & 非 FULL_REPLAY。
     for r in rows:
-        if r["live_production_usable"]:
+        if r["lifecycle_incremental_eligible"]:
             assert r["incremental_mode"] != IncrementalMode.FULL_REPLAY.value
             cat = OperatorRegistry._catalog[r["canonical"]]
             assert cat.get("lifecycle_status") == "production"
             assert cat.get("production_certified") is True
             assert not cat.get("hidden_from_default_mining")
+
+
+def test_production_usable_is_strict_subset_of_lifecycle_eligible() -> None:
+    """严格硬门 production_usable 是 lifecycle 资格的真子集（R50 诚实性）。"""
+    ledger = build_incremental_certification_ledger()
+    rows = incremental_capability_matrix_extended()
+    assert 0 <= ledger.production_usable <= ledger.lifecycle_incremental_eligible
+    assert sum(1 for r in rows if r["production_usable"]) == ledger.production_usable
+    # 每个 production_usable canonical 必须满足全部硬门条件。
+    for r in rows:
+        if r["production_usable"]:
+            assert r["lifecycle_incremental_eligible"]
+            assert r["ashare_source_ready"]
+            assert r["pit"]
+            assert r["pandas"] or r["polars"]
+            assert r["certification_level"] == IncrementalCertificationLevel.TRUE_INCREMENTAL.value
+            assert r["e2e"]
+
+
+def test_live_production_usable_alias_matches_lifecycle_eligible() -> None:
+    """向后兼容别名 live_production_usable == lifecycle_incremental_eligible。"""
+    ledger = build_incremental_certification_ledger()
+    rows = incremental_capability_matrix_extended()
+    assert ledger.live_production_usable == ledger.lifecycle_incremental_eligible
+    for r in rows:
+        assert r["live_production_usable"] == r["lifecycle_incremental_eligible"]
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +155,7 @@ def test_extended_matrix_carries_all_r45_dimension_fields() -> None:
     expected = {
         "certification_level", "direct_mining", "ashare_source_ready", "pit",
         "pandas", "polars", "duckdb", "q", "numba", "incremental", "e2e",
+        "lifecycle_incremental_eligible", "production_usable", "backend_status",
         "live_production_usable",
     }
     for r in rows:

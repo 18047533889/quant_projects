@@ -38,6 +38,8 @@ from factor_engine.runtime.multibackend.batch_transfer_optimizer import (
     UnknownTransferTargetError,
     _assert_semantic_preservation,
 )
+from factor_engine.planning.transfer_edge import UnsupportedTransferTransform
+from factor_engine.planning.transfer_edge import UnsupportedTransferTransform
 
 
 @pytest.fixture(autouse=True)
@@ -133,7 +135,7 @@ class TestUnknownTargetFailsClosed:
 
     def test_unknown_backend_raises_on_register(self):
         b = BatchTransferOptimizer()
-        with pytest.raises(UnknownTransferTargetError):
+        with pytest.raises(UnsupportedTransferTransform):
             b.register_transfer_request(
                 "t", pd.DataFrame({"a": [1]}), "src", "totally_unknown"
             )

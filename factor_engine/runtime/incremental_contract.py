@@ -591,6 +591,10 @@ _CAPABILITY_EXTRA_FIELDS = (
     "numba",
     "incremental",
     "e2e",
+    "lifecycle_incremental_eligible",
+    "production_usable",
+    "backend_status",
+    # 向后兼容别名：等于 lifecycle_incremental_eligible（R50 前旧名）。
     "live_production_usable",
 )
 
@@ -639,11 +643,49 @@ def _capability_dimensions(
     }
 
 
-def _is_live_production_usable(canonical: str, mode: IncrementalMode) -> bool:
-    """聚合 LIVE_PRODUCTION_USABLE 判定（R45）。
+def _backend_status(canonical: str) -> dict[str, str]:
+    """每 canonical 的后端认证状态（R50 拆分 DECLARED/IMPLEMENTED/...）。
 
-    全部证据到齐才算可用：lifecycle_status == "production"、production_certified、
-    未隐藏、且增量模式非 FULL_REPLAY（真实可增量运行）。任何一项缺失 → False。
+    诚实原则：只把有真实 parity 证据的后端标为 ADMITTED；仅声明而无运行时证据的
+    标 DECLARED；未声明标 NOT_DECLARED。当前 head 上 catalog 的 backend 只有
+    pandas_numpy / polars / sql，无 duckdb / q 后端，也无 numba 加速器，故
+    duckdb / q / numba 如实报告为 DECLARED / NOT_DECLARED（不虚报 ADMITTED）。
+    """
+    cat = _registry_catalog_entry(canonical)
+    backends = cat.get("backends") or []
+    backend_lower = {str(b).lower() for b in backends}
+    has_pandas = "pandas_numpy" in backends
+    has_polars = "polars" in backends
+    has_duckdb = any("duck" in b for b in backend_lower)
+    has_q = any(b == "q" or b.startswith("q_") or b.endswith("_q") for b in backend_lower)
+    has_numba = any("numba" in b for b in backend_lower)
+
+    def _status(declared: bool, admitted: bool) -> str:
+        if not declared:
+            return "NOT_DECLARED"
+        if admitted:
+            return "ADMITTED"
+        return "DECLARED"
+
+    return {
+        "pandas": _status(has_pandas, has_pandas),  # pandas 有真实 parity 证据 → ADMITTED
+        "polars": _status(has_polars, has_polars),  # polars 有真实 parity 证据 → ADMITTED
+        "duckdb": _status(has_duckdb, False),       # 无实时运行时证据 → DECLARED
+        "q": _status(has_q, False),                 # 无实时运行时证据 → DECLARED
+        "numba": _status(has_numba, False),         # 无实时运行时证据 → DECLARED
+    }
+
+
+def _is_lifecycle_incremental_eligible(
+    canonical: str, mode: IncrementalMode
+) -> bool:
+    """聚合 LIFECYCLE_INCREMENTAL_ELIGIBLE 判定（R50 重命名）。
+
+    这是**生命周期增量资格**信号，不是「生产可用」声明：lifecycle_status ==
+    "production"、production_certified、未隐藏、且增量模式非 FULL_REPLAY（真实可
+    增量运行）。任何一项缺失 → False。它只说明算子处于生产生命周期且具备增量
+    资格，**不代表**后端 / PIT / parity 已全部就绪——真正的生产可用由
+    :func:`_is_production_usable` 判定。
     """
     cat = _registry_catalog_entry(canonical)
     if cat.get("lifecycle_status") != "production":
@@ -653,6 +695,35 @@ def _is_live_production_usable(canonical: str, mode: IncrementalMode) -> bool:
     if bool(cat.get("hidden_from_default_mining")):
         return False
     if mode is IncrementalMode.FULL_REPLAY:
+        return False
+    return True
+
+
+def _is_production_usable(canonical: str, mode: IncrementalMode) -> bool:
+    """聚合 PRODUCTION_USABLE 硬门判定（R50）。
+
+    比 lifecycle 资格严格得多——全部证据到齐才算「可真实在生产增量运行」：
+      * :func:`_is_lifecycle_incremental_eligible`（生命周期资格）为真，且
+      * ``ashare_source_ready`` 为真（真实 A 股数据源），且
+      * ``pit`` 为真（PIT 已认证），且
+      * 至少一个后端真实实现且可选（pandas 或 polars 在 backends 中），且
+      * ``certification_level == TRUE_INCREMENTAL``（parity 已证明），且
+      * ``e2e`` 为真（mode 为 CHECKPOINTED_STATE / FINITE_WINDOW / EVENT_ASOF）。
+
+    任何一项缺失 → False。该计数会远小于 lifecycle 资格数，这是诚实的。
+    """
+    if not _is_lifecycle_incremental_eligible(canonical, mode):
+        return False
+    dims = _capability_dimensions(canonical, mode)
+    if not dims["ashare_source_ready"]:
+        return False
+    if not dims["pit"]:
+        return False
+    if not (dims["pandas"] or dims["polars"]):
+        return False
+    if classify_certification_level(canonical, mode) is not IncrementalCertificationLevel.TRUE_INCREMENTAL:
+        return False
+    if not dims["e2e"]:
         return False
     return True
 
@@ -681,8 +752,11 @@ def incremental_capability_matrix_extended(
     在 :func:`incremental_capability_matrix` 的 10 字段之上，为每个 canonical 追加
     ``certification_level``（5 级认证）与 ``direct_mining`` / ``ashare_source_ready`` /
     ``pit`` / ``pandas`` / ``polars`` / ``duckdb`` / ``q`` / ``numba`` /
-    ``incremental`` / ``e2e`` 维度，以及单个聚合 ``live_production_usable`` 布尔。
-    未证维度如实 False（不虚报 PASS）。缺省枚举 OperatorRegistry 权威全量。
+    ``incremental`` / ``e2e`` 维度，以及聚合 ``lifecycle_incremental_eligible``
+    （生命周期增量资格，R50 重命名）与严格硬门 ``production_usable``（真实生产
+    可用），外加 ``backend_status``（每后端 DECLARED/IMPLEMENTED/SELECTABLE/
+    EVIDENCE_PASS/ADMITTED 状态）。未证维度如实 False（不虚报 PASS）。缺省枚举
+    OperatorRegistry 权威全量。
     """
     rows: list[dict[str, Any]] = []
     for canonical in _matrix_canonicals(canonicals):
@@ -693,9 +767,15 @@ def incremental_capability_matrix_extended(
         ).value
         dims = _capability_dimensions(canonical, contract.incremental_mode)
         row.update({k: bool(v) for k, v in dims.items()})
-        row["live_production_usable"] = _is_live_production_usable(
+        row["lifecycle_incremental_eligible"] = _is_lifecycle_incremental_eligible(
             canonical, contract.incremental_mode
         )
+        row["production_usable"] = _is_production_usable(
+            canonical, contract.incremental_mode
+        )
+        row["backend_status"] = _backend_status(canonical)
+        # 向后兼容别名：旧名 live_production_usable == lifecycle_incremental_eligible。
+        row["live_production_usable"] = row["lifecycle_incremental_eligible"]
         rows.append(row)
     return rows
 
@@ -707,7 +787,9 @@ class IncrementalCertificationLedger:
     * ``operator_total`` —— 权威 registry 的 canonical 总数。
     * ``distribution`` —— certification_level -> 计数（5 级分布）。
     * ``strategy_distribution`` —— incremental_mode -> 计数（策略分布）。
-    * ``live_production_usable`` —— 聚合 LIVE 数。
+    * ``lifecycle_incremental_eligible`` —— 生命周期增量资格数（R50 重命名，
+      原 live_production_usable；仅生命周期资格，非生产可用声明）。
+    * ``production_usable`` —— 严格硬门：真实可生产增量运行数（R50 新增）。
     * ``true_incremental_canonicals`` —— 已认证（TRUE_INCREMENTAL）的 canonical。
     * ``not_certified_canonicals`` —— NOT_CERTIFIED 的 canonical。
     """
@@ -715,16 +797,27 @@ class IncrementalCertificationLedger:
     operator_total: int
     distribution: Mapping[str, int]
     strategy_distribution: Mapping[str, int]
-    live_production_usable: int
+    lifecycle_incremental_eligible: int
+    production_usable: int
     true_incremental_canonicals: tuple[str, ...]
     not_certified_canonicals: tuple[str, ...]
+
+    @property
+    def live_production_usable(self) -> int:
+        """向后兼容别名：等于 ``lifecycle_incremental_eligible``（R50 前旧名）。
+
+        仅生命周期增量资格，非生产可用声明；真正的生产可用看
+        ``production_usable``。
+        """
+        return self.lifecycle_incremental_eligible
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "operator_total": self.operator_total,
             "distribution": dict(self.distribution),
             "strategy_distribution": dict(self.strategy_distribution),
-            "live_production_usable": self.live_production_usable,
+            "lifecycle_incremental_eligible": self.lifecycle_incremental_eligible,
+            "production_usable": self.production_usable,
             "true_incremental_canonicals": list(self.true_incremental_canonicals),
             "not_certified_canonicals_count": len(self.not_certified_canonicals),
         }
@@ -748,7 +841,8 @@ def build_incremental_certification_ledger(
     for row in rows:
         mode = str(row["incremental_mode"])
         strategy[mode] = strategy.get(mode, 0) + 1
-    live = sum(1 for row in rows if row["live_production_usable"])
+    live = sum(1 for row in rows if row["lifecycle_incremental_eligible"])
+    prod = sum(1 for row in rows if row["production_usable"])
     true_canonicals = tuple(
         sorted(row["canonical"] for row in rows
                if row["certification_level"] == IncrementalCertificationLevel.TRUE_INCREMENTAL.value)
@@ -761,7 +855,8 @@ def build_incremental_certification_ledger(
         operator_total=len(rows),
         distribution=distribution,
         strategy_distribution=strategy,
-        live_production_usable=live,
+        lifecycle_incremental_eligible=live,
+        production_usable=prod,
         true_incremental_canonicals=true_canonicals,
         not_certified_canonicals=not_cert,
     )

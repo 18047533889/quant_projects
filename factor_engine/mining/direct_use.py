@@ -1983,7 +1983,10 @@ def _is_production_denied(canonical: str) -> bool:
 
         return canonical in PRODUCTION_DENIED_CANONICALS
     except Exception:
-        return False
+        # FAIL-CLOSED (R50): a registry import/lookup error means we cannot
+        # positively establish that the operator is NOT denied.  For production
+        # admission, an unknown state must be treated as DENIED, so return True.
+        return True
 
 
 def _has_physical_production_evidence(canonical: str) -> bool:
@@ -2008,6 +2011,9 @@ def _has_physical_production_evidence(canonical: str) -> bool:
                 return True
         return False
     except Exception:
+        # FAIL-CLOSED (R50): on any evidence-lookup error we return False, i.e.
+        # "physical production evidence NOT proven".  For admission this is the
+        # safe direction: an unknown evidence state must never grant admission.
         return False
 
 
@@ -2173,33 +2179,52 @@ def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> Direct
         and bool(market_support(canonical))
     )
     terminal_usable = composition_usable and contract.status in _DIRECT_TERMINAL_STATUSES and contract.terminal_allowed
+    # production_admitted is FAIL-CLOSED (R50): every conjunct must be positively
+    # true, and any unknown/error state must keep the operator out of production.
+    # Conjuncts: certification ∧ cost contract ∧ sources ∧ NOT denied ∧ physical
+    # production evidence (a registry/evidence error => denied / not admitted).
     production_admitted = (
         bool(catalog.get("production_certified"))
         and cost_contract_declared(canonical, catalog)
         and not source_status(canonical, catalog, None).missing
         and not _is_production_denied(canonical)
+        and _has_physical_production_evidence(canonical)
     )
-    # R21-CONTEXT-ADMITTED-HARDEN: context_admitted validates that the operator
-    # can run in the current environment:
+    # R21-CONTEXT-ADMITTED-HARDEN / R50 FAIL-CLOSED: context_admitted machine-
+    # verifies each environment dimension.  Policy: any UNKNOWN (undeclared or
+    # unprovable) dimension -> NOT admitted in production.  There are no
+    # placeholder ``and True`` gates — each named local is an honest check.
     # 1. Market is ASHARE (current requirement)
     # 2. SourceCapabilities match operator requirements
     # 3. FieldRecipes are present
-    # 4. Units are consistent
-    # 5. Grain=Daily (current requirement)
+    # 4. Output unit declared (no declared unit -> not admitted)
+    # 5. Grain=Daily only.  FAIL-CLOSED: the catalog declares grain under
+    #    ``output_grain``; an undeclared (None) or non-daily grain is NOT
+    #    admitted — only a positively-declared daily output grain passes.
     # 6. Availability declared
     # 7. Calendar available
     # 8. Universe non-empty
     market_val = market[0] if market else ""
+    _src = source_status(canonical, catalog, None)
+    market_admitted = bool(market_val == "ashare")
+    source_admitted = bool(_src.required == () or _src.satisfied)
+    recipe_admitted = bool(default_input_recipe(canonical))
+    unit_admitted = bool(catalog.get("output_unit") is not None)
+    grain_admitted = bool(catalog.get("output_grain") == "daily")
+    availability_admitted = bool(catalog.get("availability") is not None)
+    calendar_admitted = bool(catalog.get("calendar") is not None
+                              or catalog.get("calendar_identity") is not None)
+    universe_admitted = bool(catalog.get("universe") is not None
+                             or catalog.get("universe_snapshot") is not None)
     context_admitted = (
-        bool(market_val == "ashare")
-        and bool(source_status(canonical, catalog, None).required == ()
-                 or source_status(canonical, catalog, None).satisfied)
-        and bool(default_input_recipe(canonical))
-        and bool(catalog.get("output_unit") is not None or True)  # Units check (simplified for now)
-        and True  # Grain check (simplified for now)
-        and True  # Availability check (simplified for now)
-        and True  # Calendar check (simplified for now)
-        and True  # Universe check (simplified for now)
+        market_admitted
+        and source_admitted
+        and recipe_admitted
+        and unit_admitted
+        and grain_admitted
+        and availability_admitted
+        and calendar_admitted
+        and universe_admitted
     )
     # R18 backward-compatible alias: "usable in eligible mining" = mining-visible
     # AND production-admitted (certification + cost + sources + not denied).  For

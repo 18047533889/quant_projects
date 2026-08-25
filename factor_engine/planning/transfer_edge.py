@@ -14,6 +14,16 @@ from typing import Any
 from factor_engine.planning.backend_region import PhysicalProperty, Representation
 
 
+class UnsupportedTransferTransform(Exception):
+    """Unrecognized source/target representation combination.
+
+    Raised by :func:`infer_transfer_kind` when no explicit conversion branch
+    covers the requested pair. The executor must fail closed rather than
+    silently defaulting to a guessed transform (R50). Callers that cannot
+    resolve a real conversion must propagate this instead of guessing.
+    """
+
+
 class TransferKind(str, Enum):
     """Type of transfer operation required at region boundary (section 32)."""
 
@@ -277,8 +287,12 @@ def infer_transfer_kind(
     if "LONG" in source_repr.value and "WIDE" in target_repr.value:
         return TransferKind.LONG_TO_WIDE
 
-    # Default to generic conversion
-    return TransferKind.PANDAS_TO_POLARS
+    # Unrecognized combination: fail closed (R50). Never silently default to a
+    # guessed transform, which could corrupt the physical plan's data flow.
+    raise UnsupportedTransferTransform(
+        f"no transfer kind for source representation {source_repr!r} "
+        f"-> target representation {target_repr!r}"
+    )
 
 
 def requires_sort_for_properties(

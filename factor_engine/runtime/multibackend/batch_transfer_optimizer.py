@@ -27,6 +27,7 @@ from typing import Any
 
 from factor_engine.planner.backend_region import Representation, TransferTransform
 
+
 from factor_engine.runtime.exceptions import (
     SemanticMismatchError,
     TransferInputTypeError,
@@ -526,6 +527,7 @@ class BatchTransferOptimizer:
         source_backend: str,
         target_backend: str,
         *,
+        source_representation: Representation | None = None,
         transform: TransferTransform | None = None,
     ) -> str | None:
         """注册一次传输请求（不立即执行，累积到批次）。
@@ -535,16 +537,31 @@ class BatchTransferOptimizer:
             data: 数据（DataFrame / Arrow Table / NumPy）
             source_backend: 源 backend
             target_backend: 目标 backend
-            transform: 显式 TransferTransform（缺省则由 backend 推断）
+            source_representation: 源表示（``Representation``）。当未显式提供
+                ``transform`` 时用于从 planner 元组推导真实转换 —— 绝不能只凭
+                target backend 猜测（R50）。
+            transform: 显式 TransferTransform。缺省时要求 ``source_representation``
+                + ``target_backend`` 能精确推导；否则抛
+                :class:`UnsupportedTransferTransform`（fail closed）。
 
         Returns:
             batch_id（已触发批量传输）或 None（仍在累积）
+
+        Raises:
+            UnsupportedTransferTransform: 无法从已知 (source repr, target)
+                元组确定真实转换，且调用方未显式提供 transform。
         """
         if transform is None:
-            transform = _infer_transform(target_backend)
+            transform = _infer_transform(source_representation, target_backend)
         if transform is None:
-            raise UnknownTransferTargetError(
-                f"unknown target_backend {target_backend!r} (no real executor)",
+            from factor_engine.planning.transfer_edge import (
+                UnsupportedTransferTransform,
+            )
+
+            raise UnsupportedTransferTransform(
+                "cannot determine a real transfer transform: register_transfer_request "
+                "must receive an explicit transform= or a source_representation= so the "
+                "executor never guesses from target_backend alone (R50)"
             )
 
         with self._lock:
@@ -658,21 +675,72 @@ def _row_count(data: Any) -> int:
         return 0
 
 
-def _infer_transform(target_backend: str) -> TransferTransform | None:
-    """按 target backend 推断 transform（与 planner 表示对齐）。
+def _infer_transform(
+    source_repr: Representation | None,
+    target_backend: str,
+) -> TransferTransform | None:
+    """从 (source representation, target backend) 推导真实 transform。
 
-    返回 None 表示未知 target —— 调用方应 fail closed。
+    R50：transform 必须来自 planner 的完整 (source backend, source
+    representation, target backend, target representation) 元组或显式
+    TransferEdge —— executor 绝不只凭 target backend 猜测。
+
+    调用方应在无法确定 transform 时抛 ``UnsupportedTransferTransform``（由
+    :meth:`BatchTransferOptimizer.register_transfer_request` 负责）。
+
+    Args:
+        source_repr: 源 ``Representation``。``None`` 表示调用方没有提供源表示
+            —— 无法精确推导，返回 None（fail closed）。
+        target_backend: 目标 backend 字符串。
+
+    Returns:
+        真实 TransferTransform；无法确定时返回 None。
     """
-    mapping = {
-        "arrow": TransferTransform.Q_TO_ARROW,  # 通用 Arrow target 用 Q→Arrow
-        "duckdb": TransferTransform.Q_TO_ARROW,  # 经 Arrow 到 DuckDB
-        "polars": TransferTransform.ARROW_TO_POLARS,
-        "pandas": TransferTransform.ARROW_TO_PANDAS,
-        "numpy": TransferTransform.ARROW_TO_PANDAS,
-        "q": TransferTransform.DUCKDB_TO_ARROW,
-        "clickhouse": TransferTransform.CLICKHOUSE_TO_ARROW,
-    }
-    return mapping.get(target_backend)
+    if source_repr is None:
+        return None
+    if source_repr == Representation.ARROW_TABLE:
+        if target_backend in {"polars", "pandas", "numpy"}:
+            return {
+                "polars": TransferTransform.ARROW_TO_POLARS,
+                "pandas": TransferTransform.ARROW_TO_PANDAS,
+                "numpy": TransferTransform.ARROW_TO_PANDAS,
+            }[target_backend]
+        if target_backend in {"q", "duckdb"}:
+            return TransferTransform.ARROW_TO_Q
+        if target_backend == "arrow":
+            return TransferTransform.SAME_BACKEND_NATIVE
+    if source_repr in {
+        Representation.Q_TABLE,
+        Representation.Q_VECTOR,
+        Representation.Q_KEYED_TABLE,
+        Representation.Q_SHARED_HANDLE,
+    }:
+        if target_backend in {"arrow", "duckdb", "polars", "pandas"}:
+            return TransferTransform.Q_TO_ARROW
+        if target_backend == "q":
+            return TransferTransform.SAME_BACKEND_NATIVE
+    if source_repr == Representation.DUCKDB_RELATION:
+        if target_backend in {"arrow", "duckdb"}:
+            return TransferTransform.DUCKDB_TO_ARROW
+    if source_repr in {
+        Representation.POLARS_LONG,
+        Representation.POLARS_WIDE,
+        Representation.POLARS_LAZY_LONG,
+    }:
+        if target_backend == "polars":
+            return TransferTransform.SAME_BACKEND_NATIVE
+        if target_backend == "pandas":
+            return TransferTransform.POLARS_TO_PANDAS
+        if target_backend in {"arrow", "duckdb"}:
+            return TransferTransform.ARROW_TO_POLARS
+    if source_repr in {Representation.PANDAS_LONG, Representation.PANDAS_WIDE}:
+        if target_backend == "pandas":
+            return TransferTransform.SAME_BACKEND_NATIVE
+        if target_backend == "polars":
+            return TransferTransform.PANDAS_TO_POLARS
+        if target_backend in {"arrow", "duckdb"}:
+            return TransferTransform.ARROW_TO_PANDAS
+    return None
 
 
 class UnknownTransferError(TypedTransferError):

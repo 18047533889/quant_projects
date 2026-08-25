@@ -1,20 +1,20 @@
 {
   "schema_version": 3,
-  "generated_at": "2026-08-24T17:52:43.356169+00:00",
-  "source_snapshot_id": "src:v1:f4480bffda67e898",
+  "generated_at": "2026-08-25T10:09:35.886560+00:00",
+  "source_snapshot_id": "src:v1:1e8f8d88815591e6",
   "sha_bindings": {
-    "RootRepoSHA": "{\"HEAD\":\"0d22dc674d0e3e6d1437c2c67e801ace7bc4cc37\",\"cached_diff_hash\":\"7eae1f15a04d4f8ce2b55c41db38df0e15446b3431e04b6ac746bfb276ff6291\",\"diff_hash\":\"d2ca617d65987d80ab5aa6a578a52518fea80c3c5b7e07f8b80e6605072b5bf1\",\"dirty\":true,\"identity_hash\":\"cf79a15d0b913ff13e558b0f63385995dc3b549ba725da125d6e45fb6602ecae\",\"untracked_source_hash\":\"af65b5aa04596f8ca01a996cf6e8a73c4896dc78d257a4704d405d3a82cab32b\"}",
-    "SourceTreeIdentity": "{\"HEAD\":\"0d22dc674d0e3e6d1437c2c67e801ace7bc4cc37\",\"cached_diff_hash\":\"7eae1f15a04d4f8ce2b55c41db38df0e15446b3431e04b6ac746bfb276ff6291\",\"diff_hash\":\"d2ca617d65987d80ab5aa6a578a52518fea80c3c5b7e07f8b80e6605072b5bf1\",\"dirty\":true,\"identity_hash\":\"cf79a15d0b913ff13e558b0f63385995dc3b549ba725da125d6e45fb6602ecae\",\"untracked_source_hash\":\"af65b5aa04596f8ca01a996cf6e8a73c4896dc78d257a4704d405d3a82cab32b\"}",
-    "PlatformSourceTreeIdentity": "b7b348c3ed044b21230710fb675c525afe06568b97c9c7a9d152d0819b1fe00c",
+    "RootRepoSHA": "{\"HEAD\":\"58be5764cb095a1eec7b3b43fbc07d39644d78d7\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"b7568b183736ecf7685b1ab67f51104a9af133eaf781c8944de74f5b12006d2c\",\"dirty\":true,\"identity_hash\":\"2cdeee99015d7e496b71bca5d744c54c92195985b467d3b707a32e736629e1c9\",\"untracked_source_hash\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"}",
+    "SourceTreeIdentity": "{\"HEAD\":\"58be5764cb095a1eec7b3b43fbc07d39644d78d7\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"b7568b183736ecf7685b1ab67f51104a9af133eaf781c8944de74f5b12006d2c\",\"dirty\":true,\"identity_hash\":\"2cdeee99015d7e496b71bca5d744c54c92195985b467d3b707a32e736629e1c9\",\"untracked_source_hash\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"}",
+    "PlatformSourceTreeIdentity": "ceaa699973260d12a4e028a1dc08be33fe5e1b2f9e130df2c3c865b1c8a21d4b",
     "AlphaGeneratorIdentity": "a2d47c9770f58d06a862e21009aafb3eadbb93f58eda61b4ad5579b95754787c",
-    "EvidenceAttestationIdentity": "e315c7948b9e9588d0002f4e7c75b528aa39749c811a37b2c9fda02636fec928",
-    "OperatorCatalogSHA": "bc6b282613b4352351a65c7f23b7686aa65ff32efa180a7c0ebe3b963f93c25d",
-    "SemanticCatalogIdentity": "a336cab3bf6b4113942c317e1949efdb2b749e334910cc458b1daef9ff16774d",
-    "ImplementationClosureHashSet": "0dd6302426d9af34badd1baff55e7225b0488f5c2f4b6761013c683c2c42f6b9",
+    "EvidenceAttestationIdentity": "5de3c637851146abac09918d5f93c705c0e0ce2144b146834c66cd1f5224007e",
+    "OperatorCatalogSHA": "eb04c8a5b7906a5ecf60228d65a20749f500bc2b65b7be51cecb260ad4d41da5",
+    "SemanticCatalogIdentity": "9310c82c074a8ce19d70fdeb77d0a24428097539f3b2f48507a264a13bad6495",
+    "ImplementationClosureHashSet": "115b73d03334dc7ad43b83244d2e653ec8a1814482a326a4457a556c0600a0e0",
     "DependencyLockHash": "f567dd4f2d37e0b8aafba60014e90f488913d7315dea9609164b1e1b33ba3377",
     "TestEnvironmentIdentity": "0a0fd01455850a189a8f1589fc65f1157a517fb0c293c9c6d8eb3337daa205f7"
   },
-  "source_tree_identity": "b7b348c3ed044b21230710fb675c525afe06568b97c9c7a9d152d0819b1fe00c",
+  "source_tree_identity": "ceaa699973260d12a4e028a1dc08be33fe5e1b2f9e130df2c3c865b1c8a21d4b",
   "sha_binding_metadata": {
     "OperatorCatalogPath": "build/mining/direct_mining_catalog.json",
     "DependencyLockPath": "requirements-production.lock",
@@ -35,10 +35,11 @@
     "operator-benchmark-manifest": {
       "artifact_id": "operator-benchmark-manifest",
       "status": "STALE",
-      "details": "source_snapshot_id changed; ImplementationClosureHashSet changed",
+      "details": "source_snapshot_id changed; ImplementationClosureHashSet changed; SemanticCatalogIdentity changed",
       "stale_inputs": [
         "source_snapshot_id changed",
-        "ImplementationClosureHashSet changed"
+        "ImplementationClosureHashSet changed",
+        "SemanticCatalogIdentity changed"
       ],
       "bound_input_identity": {
         "source_snapshot_id": "src:v1:de9f031abb6725fe",
@@ -50,10 +51,11 @@
     "operator-certification": {
       "artifact_id": "operator-certification",
       "status": "STALE",
-      "details": "source_snapshot_id changed; ImplementationClosureHashSet changed",
+      "details": "source_snapshot_id changed; ImplementationClosureHashSet changed; SemanticCatalogIdentity changed",
       "stale_inputs": [
         "source_snapshot_id changed",
-        "ImplementationClosureHashSet changed"
+        "ImplementationClosureHashSet changed",
+        "SemanticCatalogIdentity changed"
       ],
       "bound_input_identity": {
         "source_snapshot_id": "src:v1:de9f031abb6725fe",
@@ -65,10 +67,11 @@
     "operator-inventory": {
       "artifact_id": "operator-inventory",
       "status": "STALE",
-      "details": "source_snapshot_id changed; ImplementationClosureHashSet changed",
+      "details": "source_snapshot_id changed; ImplementationClosureHashSet changed; SemanticCatalogIdentity changed",
       "stale_inputs": [
         "source_snapshot_id changed",
-        "ImplementationClosureHashSet changed"
+        "ImplementationClosureHashSet changed",
+        "SemanticCatalogIdentity changed"
       ],
       "bound_input_identity": {
         "source_snapshot_id": "src:v1:de9f031abb6725fe",
@@ -93,13 +96,13 @@
   },
   "dimensions": {
     "build_health": "CURRENT",
-    "runtime_health": "CURRENT",
-    "research_validity": "CURRENT",
-    "release_validity": "CURRENT",
-    "production_readiness": "CURRENT"
+    "runtime_health": "STALE",
+    "research_validity": "STALE",
+    "release_validity": "STALE",
+    "production_readiness": "STALE"
   },
   "evaluation": {
-    "staleness_evaluated_at": "2026-08-24T17:52:43.685276+00:00",
+    "staleness_evaluated_at": "2026-08-25T10:09:36.445817+00:00",
     "status": "STALE",
     "changed_artifacts": [
       "operator-benchmark-manifest",
@@ -109,10 +112,10 @@
     "note": "status is CURRENT only when every artifact's BOUND input identity matches the LIVE identity set AND the artifact has an executed_at from a real verification run.",
     "dimensions": {
       "build_health": "CURRENT",
-      "runtime_health": "CURRENT",
-      "research_validity": "CURRENT",
-      "release_validity": "CURRENT",
-      "production_readiness": "CURRENT"
+      "runtime_health": "STALE",
+      "research_validity": "STALE",
+      "release_validity": "STALE",
+      "production_readiness": "STALE"
     }
   }
 }

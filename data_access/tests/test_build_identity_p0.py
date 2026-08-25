@@ -28,7 +28,11 @@ def test_runtime_metadata_never_invokes_git(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(subprocess, "run", fail)
     info = load_build_info(production=False)
     assert info.version == "0.10.2"
-    assert info.build_sha is None
+    # R50: build identity is frozen into _build_info at build time, so the
+    # frozen sha is available at runtime WITHOUT invoking git (previously the
+    # static _build_info hardcoded None).
+    assert info.build_sha is not None
+    assert info.build_id is not None
 
 
 def test_production_missing_metadata_fails_closed() -> None:

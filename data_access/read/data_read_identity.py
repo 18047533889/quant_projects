@@ -47,7 +47,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -864,7 +864,7 @@ def _execution_identity(
     executor = _execution_executor()
     ts = None
     if rid is not None and trace is not None:
-        ts = datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+        ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
     return ReadExecutionIdentity(
         request_id=rid,
         session=session,
@@ -960,9 +960,12 @@ def build_data_read_identity(
 
     # R45：production 读绝不消费 legacy 单值 availability/grain——必须用 per-field
     # FieldReadPolicySetIdentity（``fields`` 里的 ResolvedFieldIdentity）。单值只
-    # 是向后兼容/单字段读的首值，多字段混合语义下它必然塌缩，production 禁止。
+    # 是向后兼容/单字段读的首值，多字段混合语义下它必然塌缩。R50：多字段读不再
+    # 拒绝，而是把单值规范化为 MIXED/None，让标量字段诚实标注。
     if strict_mode and resolved_fields:
-        _assert_production_uses_field_policies(resolved_fields, availability, grain)
+        availability, grain = _assert_production_uses_field_policies(
+            resolved_fields, availability, grain
+        )
 
     provenance_status = "unknown" if notes else "available"
 
@@ -1011,24 +1014,23 @@ def _assert_production_uses_field_policies(
     fields: tuple[ResolvedFieldIdentity, ...],
     legacy_availability: str,
     legacy_grain: str | None,
-) -> None:
+) -> tuple[str, str | None]:
     """R45：production 读必须消费 per-field FieldReadPolicySetIdentity。
 
     单值 ``availability`` / ``grain`` 在多字段混合语义下必然塌缩（DA-P0-01 已
-    证明），production 消费它会把不同可见性/粒度的字段当成同一语义。这里在
-    production/strict 下拒绝「多字段读却依赖单值」的路径——单字段读（fields
-    长度 1）仍允许单值作为该字段的首值。
+    证明），production 消费它会把不同可见性/粒度的字段当成同一语义。per-field
+    ``ResolvedFieldIdentity[]``（``fields``）才是权威来源。
+
+    本函数**不再拒绝**多字段读（R50 修复：正常 OHLCV 多字段读必须放行），而是
+    把 legacy 单值**规范化**：多字段读时单值无法表达混合语义，返回
+    ``("MIXED", None)`` 让 DataReadIdentity 的标量 availability/grain 诚实标注
+    MIXED/None，任何消费方都不会误以为它是真实单一语义；单字段读（fields 长度
+    1）仍返回该字段的首值。
     """
     if len(fields) <= 1:
-        return
-    # 多字段读：单值 availability/grain 无法表达混合语义 → production 拒绝。
-    raise ValidationError(
-        "production/strict 读禁止消费 legacy 单值 availability/grain："
-        f"多字段读（{len(fields)} 个字段）的可见性/粒度必须用 per-field "
-        "FieldReadPolicySetIdentity（ResolvedFieldIdentity.availability / .grain），"
-        f"单值 availability={legacy_availability!r} / grain={legacy_grain!r} 会塌缩"
-        "混合语义（DA-P0-01）。"
-    )
+        return legacy_availability, legacy_grain
+    # 多字段读：单值 availability/grain 无法表达混合语义 → 标 MIXED/None。
+    return "MIXED", None
 
 
 def _session_id() -> str | None:

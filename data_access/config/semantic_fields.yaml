@@ -361,6 +361,8 @@ net_profit:
   aliases: [net_income]
 
 # ---- 指数权重（成分股权重，精确日频；必须指定 IndexSymbol） ----
+# IndexConstituent.Weight 是 PERCENT（如 0.5 表示 0.5%）→ canonical ratio 0.005。
+# R50：缺省百分→比例归一化，现补 source_unit/canonical_unit/scale=0.01。
 
 index_weight:
   market: ashare
@@ -371,11 +373,146 @@ index_weight:
   grain: instrument
   availability: same_day
   cross_market_comparable: false
+  source_unit: percent
+  canonical_unit: ratio
+  scale: 0.01  # Weight 是 percent → canonical ratio（乘子 0.01）
   time_role: event_time
   temporal_model: panel
   join_policy: exact
   required_filters: [IndexSymbol]
   primary_key: [TradeDate, Symbol, IndexSymbol]
+  mining_allowed: true
+
+# ---- 涨跌停价格（HighLimit/LowLimit；涨跌停价的唯一价格权威） ----
+# #R50 P0：涨跌停价由数据源提供，是 limit-up/down 的唯一价格权威。
+# 严禁在策略/引擎中硬编码 5/10/20/30% 涨跌停幅度——涨跌停价会随股价、
+# 四舍五入、ST 调整等变化，硬编码必然失真。可直接取用。
+
+high_limit:
+  market: ashare
+  dataset: ashare_stock_daily
+  physical_name: HighLimit
+  dtype: double
+  frequency: daily
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+low_limit:
+  market: ashare
+  dataset: ashare_stock_daily
+  physical_name: LowLimit
+  dtype: double
+  frequency: daily
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+# ---- 行业分类（多分类系统，必须指定 IndustrySource） ----
+# #R50 P0-35 hard contract：同一股票同一天可有多个行业分类（SW/CITIC/CSRC…），
+# 直接按 Symbol 读会行倍增（row multiplication）。读取必须 filter IndustrySource
+# （默认 sw_l1 或显式指定）。该 filter 身份必须进 DataReadIdentity/GroupContextIdentity，
+# 不允许留给调用方“记得”去补 filter。
+# primary_key 含 IndustrySource —— (TradeDate, Symbol, IndustrySource) 唯一。
+
+stock_industry:
+  market: ashare
+  dataset: ashare_stock_industry
+  physical_name: IndustryCode
+  dtype: string
+  frequency: daily
+  grain: instrument
+  availability: same_day
+  temporal_model: panel
+  join_policy: exact
+  required_filters: [IndustrySource]
+  primary_key: [TradeDate, Symbol, IndustrySource]
+  mining_allowed: true
+  aliases: [industry_code]
+
+# ---- 股东/质押/集中度（财报 PIT：PubDate 可见、下一交易日可用） ----
+# 单位均为 PERCENT（如股东占比 15 表示 15%）→ canonical ratio 乘子 0.01。
+# 知识时点为公告日 PubDate（可见性），下一交易日可用，knowledge_date_pit 保真。
+# 单个股东占比 / 前十大集中度 / 质押比例都属股东披露，同一条 PIT 契约。
+
+shareholder_ratio:
+  market: ashare
+  dataset: ashare_stock_shareholder
+  physical_name: ShareRatio
+  dtype: double
+  frequency: quarterly
+  grain: instrument
+  <<: *ratio_field
+  scale: 0.01
+  cross_market_comparable: false
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: PubDate
+  time_representation: date_label
+  time_precision: date
+  pit_fidelity: knowledge_date_pit
+  effective_time: ReportPeriodEndDate
+  period_time: ReportPeriodEndDate
+  revision_order: [UpdateTime]
+  availability: next_trading_day
+  join_policy: pit_asof_backward
+  period_selection: latest_period
+  mining_allowed: true
+
+top10_concentration:
+  market: ashare
+  dataset: ashare_stock_shareholder
+  physical_name: TopTenConcentration
+  dtype: double
+  frequency: quarterly
+  grain: instrument
+  <<: *ratio_field
+  scale: 0.01
+  cross_market_comparable: false
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: PubDate
+  time_representation: date_label
+  time_precision: date
+  pit_fidelity: knowledge_date_pit
+  effective_time: ReportPeriodEndDate
+  period_time: ReportPeriodEndDate
+  revision_order: [UpdateTime]
+  availability: next_trading_day
+  join_policy: pit_asof_backward
+  period_selection: latest_period
+  mining_allowed: true
+
+pledged_share_ratio:
+  market: ashare
+  dataset: ashare_stock_pledge
+  physical_name: PledgedShareRatio
+  dtype: double
+  frequency: daily
+  grain: instrument
+  <<: *ratio_field
+  scale: 0.01
+  cross_market_comparable: false
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: PubDate
+  time_representation: date_label
+  time_precision: date
+  pit_fidelity: knowledge_date_pit
+  effective_time: ReportPeriodEndDate
+  period_time: ReportPeriodEndDate
+  revision_order: [UpdateTime]
+  availability: next_trading_day
+  join_policy: pit_asof_backward
+  period_selection: latest_period
   mining_allowed: true
 
 
@@ -807,6 +944,8 @@ cash_dividend:
 # multiplier），但基期不同 / source 不同 / corporate action 覆盖不同 / US 有
 # clamped marker——**禁止**把 Factor / AdjFactor 直接统一成一个 raw column。
 # canonical concept 由 market provider 构造，物理列仍是各自市场的原始列。
+# R50：prose → 可执行 recipe。绑定各市场的真实 ResolvedFieldIDs，市场 provider
+# 据此构造：A 股 adjusted = close × factor；美股 adjusted = close × adj_factor。
 adjusted_price_backward:
   market: any
   dtype: double
@@ -816,7 +955,15 @@ adjusted_price_backward:
   temporal_model: panel
   join_policy: exact
   dimension: price
+  # R50：prose → 可执行 recipe。market provider 按 market 选择配方并用真实
+  # ResolvedFieldID 构造：A 股 adjusted = close * factor；美股 = close * adj_factor。
+  # 两者同属 backward-adjustment multiplier 概念，但 source/基期/CA 覆盖不同，
+  # 禁止统一成单一 raw column（见下注释）。
   derived_expression: >-
-    market provider constructs adjusted close (A: Close*Factor; US: Close*AdjFactor)
-  derived_from: []
+    ashare: close * factor ; us: close * adj_factor
+  derived_from: [close, adj_factor]
+  # A 股与美股公式同类（backward adjustment multiplier），但基期不同 / source 不同 /
+  # corporate action 覆盖不同 / US 有 clamped marker——禁止把 Factor / AdjFactor
+  # 直接统一成一个 raw column。canonical concept 由 market provider 构造，物理列
+  # 仍是各自市场的原始列。
   mining_allowed: false

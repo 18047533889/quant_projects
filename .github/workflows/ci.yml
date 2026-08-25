@@ -30,7 +30,7 @@
 #   ashare-semantic-golden  -- add to required checks ONLY after the A-share
 #                             dataaccess integration is wired (see job notes).
 #   ashare-real-data-shadow -- add to required checks ONLY when the
-#                             ASHARE_DATA_AVAILABLE secret is set (it is
+#                             ASHARE_DATA_AVAILABLE repo variable is set (it is
 #                             skipped otherwise, and a skipped job cannot be a
 #                             required check).
 # =============================================================================
@@ -163,18 +163,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install build tooling (pinned lock, fallback to --upgrade)
+      - name: Install build tooling (pinned lock, must succeed)
         run: |
-          # Prefer the pinned, hashed build-toolchain lock.  If the lock file is
-          # missing or the install fails, fall back to the plain --upgrade and
-          # warn on stderr so the drift is visible but does not silently hide.
-          if [ -f locks/ci-toolchain-py312.lock ]; then
-            python -m pip install --require-hashes -r locks/ci-toolchain-py312.lock && exit 0
-            echo "WARNING: pinned build-toolchain lock install failed; falling back to --upgrade" >&2
-          else
-            echo "WARNING: locks/ci-toolchain-py312.lock missing; falling back to --upgrade" >&2
+          # Reproducibility is mandatory: the pinned, hashed build-toolchain lock
+          # is REQUIRED.  A missing lock file or a failed install is a hard
+          # failure — there is NO --upgrade fallback to unpinned latest.
+          if [ ! -f locks/ci-toolchain-py312.lock ]; then
+            echo "ERROR: locks/ci-toolchain-py312.lock is required for reproducible builds but is missing" >&2
+            exit 1
           fi
-          python -m pip install --upgrade pip setuptools wheel build virtualenv
+          python -m pip install --require-hashes -r locks/ci-toolchain-py312.lock
       - name: Run FRESH_WHEEL_MATRIX verifier (bash scripts/fresh_wheel_matrix.sh)
         run: |
           python -c "import sys; sys.path.insert(0,'scripts'); from gate_runner import GateRunner, find_spec, Status; r=GateRunner(python=sys.executable); res=r.run_gate(find_spec('FRESH_WHEEL_MATRIX')); print('FRESH_WHEEL_MATRIX', res['status']); sys.exit(0 if res['status']==Status.PASS else 1)"
@@ -260,21 +258,22 @@ jobs:
           exit 1
 
   # ---------------------------------------------------------------------------
-  # ASHARE_REAL_DATA_SHADOW — REQUIRES real A-share data + secrets.  Gated on
-  # the ASHARE_DATA_AVAILABLE repository secret so a fresh clone WITHOUT the
-  # secret skips this job HONESTLY (GitHub shows it as "skipped", never a
-  # fabricated pass).  When the secret IS set, the pinned A-share mirror
-  # (data/a_share/lqtp_data, gitignored) MUST be restored into the workspace
-  # before this job runs — add a restore step here (e.g. download from COS /
-  # a private artifact store) that populates data/a_share/lqtp_data.  The real
-  # shadow suite must then pass (a skip is a FAIL there, because real data is
-  # expected to be present).
+  # ASHARE_REAL_DATA_SHADOW — REQUIRES real A-share data.  Gated on the
+  # ASHARE_DATA_AVAILABLE repository VARIABLE (secrets are not allowed in a
+  # job-level `if` context, so the gate uses a variable) so a fresh clone
+  # WITHOUT the variable set skips this job HONESTLY (GitHub shows it as
+  # "skipped", never a fabricated pass).  When the variable IS set to 'true',
+  # the pinned A-share mirror (data/a_share/lqtp_data, gitignored) MUST be
+  # restored into the workspace before this job runs — add a restore step here
+  # (e.g. download from COS / a private artifact store) that populates
+  # data/a_share/lqtp_data.  The real shadow suite must then pass (a skip is a
+  # FAIL there, because real data is expected to be present).
   # ---------------------------------------------------------------------------
   ashare-real-data-shadow:
     name: ashare-real-data-shadow
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ secrets.ASHARE_DATA_AVAILABLE == 'true' }}
+    if: ${{ vars.ASHARE_DATA_AVAILABLE == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -282,7 +281,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       # TODO(ashare): restore the pinned A-share mirror into data/a_share/lqtp_data
       # here (e.g. download from COS / a private artifact store) when the
-      # ASHARE_DATA_AVAILABLE secret is set.  Without it the suite skips and the
+      # ASHARE_DATA_AVAILABLE repo variable is set.  Without it the suite skips and the
       # wrapper below fails honestly (real data expected but absent).
       - name: Install lock deps (third-party only, --require-hashes)
         run: bash scripts/ci_smoke.sh

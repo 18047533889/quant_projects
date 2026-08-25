@@ -299,12 +299,51 @@ def platform_source_tree_identity() -> dict[str, Any]:
     return _inner(_REPO_ROOT)
 
 
-def operator_catalog_sha() -> str:
-    if not CATALOG_PATH.is_file():
-        raise RuntimeError(
-            f"R22-CURRENT-TRUTH: operator catalog missing: {CATALOG_PATH}"
+def _load_catalog() -> dict:
+    """Load the direct-mining operator catalog dict (R50).
+
+    Prefers the persisted build artifact ``build/mining/direct_mining_catalog.json``.
+    If that generated artifact is MISSING (it is a gitignored build artifact that
+    may be absent in a clean checkout), build the catalog in-memory from the LIVE
+    OperatorRegistry using the exact same R18 generator pipeline
+    (``load_all()`` -> ``direct_use_matrix_rows()`` -> ``retained_direct_rows()``),
+    so the evidence refresh NEVER hard-requires a pre-built artifact on the
+    developer machine.  Raises RuntimeError only when BOTH the file is missing AND
+    the live registry cannot be imported (fail-closed).
+    """
+    if CATALOG_PATH.is_file():
+        with CATALOG_PATH.open("r", encoding="utf-8") as fh:
+            return json.load(fh)
+    # Fallback: assemble the same ``operators`` list the R18 exporter writes,
+    # straight from the live OperatorRegistry at refresh time.
+    try:
+        from factor_engine.cleaned_operators import load_all
+        from factor_engine.mining.direct_use import (
+            direct_use_matrix_rows,
+            retained_direct_rows,
         )
-    return _sha256_file(CATALOG_PATH)
+    except Exception as _reg_exc:  # pragma: no cover - env-dependent
+        raise RuntimeError(
+            "R22-CURRENT-TRUTH: operator catalog missing at "
+            f"{CATALOG_PATH} and live OperatorRegistry unavailable "
+            f"({type(_reg_exc).__name__}: {_reg_exc})"
+        ) from _reg_exc
+    load_all()
+    rows = direct_use_matrix_rows()
+    direct = retained_direct_rows(rows)
+    return {"operators": [r.to_dict() for r in direct]}
+
+
+def operator_catalog_sha() -> str:
+    # When the build artifact exists, hash its bytes (stable vs prior releases).
+    # When it is missing, build it from the live registry (raises only if the
+    # live registry is also unavailable) and hash that in-memory catalog dict.
+    if CATALOG_PATH.is_file():
+        return _sha256_file(CATALOG_PATH)
+    catalog = _load_catalog()
+    return _sha256_bytes(
+        json.dumps(catalog, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    )
 
 
 def implementation_closure_hash_set() -> tuple[str, int]:
@@ -330,11 +369,7 @@ def implementation_closure_hash_set() -> tuple[str, int]:
     parameter domains) is available in ``backend.evidence_provenance`` for
     targeted audits; it is deliberately not expanded at release level here.
     """
-    if not CATALOG_PATH.is_file():
-        raise RuntimeError(
-            f"R22-CURRENT-TRUTH: operator catalog missing: {CATALOG_PATH}"
-        )
-    catalog = _load_catalog_cached()
+    catalog = _load_catalog_cached()  # raises only if file AND live registry missing
     canonicals = [
         str(op["canonical"]) for op in catalog.get("operators", [])
     ]
@@ -359,8 +394,7 @@ import functools
 
 @functools.lru_cache(maxsize=1)
 def _load_catalog_cached() -> dict:
-    with CATALOG_PATH.open("r", encoding="utf-8") as fh:
-        return json.load(fh)
+    return _load_catalog()
 
 
 @functools.lru_cache(maxsize=1)
@@ -910,6 +944,10 @@ def _evaluate_dimensions(payload: dict[str, Any]) -> dict[str, str]:
     tree the caller just wrote.  STALE here means "the live tree does not match
     a bound/certified state", so a healthy build can be CURRENT while the
     release validity is still STALE (operator cert / source snapshot drift).
+
+    R50 guard: a dimension is CURRENT only when its required evidence artifacts
+    are CURRENT+PASS.  If any release artifact is STALE/FAILED, every dimension
+    that depends on artifacts must be STALE — never silently CURRENT.
     """
     live = payload.get("sha_bindings", {})
     prior = load_existing()
@@ -938,6 +976,16 @@ def _evaluate_dimensions(payload: dict[str, Any]) -> dict[str, str]:
             return "CURRENT"
         return "STALE"
 
+    # R50: a dimension is CURRENT only when its required evidence artifacts are
+    # CURRENT+PASS.  Any artifact STALE/FAILED/UNRESOLVED forces the dimensions
+    # that depend on artifacts to STALE (never silently CURRENT).
+    def _artifact_ok(*art_ids: str) -> bool:
+        for aid in art_ids:
+            st = (payload.get("artifacts") or {}).get(aid, {}).get("status")
+            if st in ("STALE", "FAILED", "UNRESOLVED"):
+                return False
+        return True
+
     # build_health: the wheel/install env is reproducible and matches the lock.
     # (DependencyLockHash + TestEnvironmentIdentity bound by the prior run.)
     prior_dep = (prior.get("sha_bindings") or {}).get("DependencyLockHash") or "" \
@@ -952,14 +1000,23 @@ def _evaluate_dimensions(payload: dict[str, Any]) -> dict[str, str]:
     # runtime_health: the semantic catalog identity is live (dataaccess importable).
     runtime_health = "CURRENT" if prior_sem and prior_sem == live_sem else "STALE"
 
-    # research_validity: the research artifacts' operator closure matches.
-    research_validity = _ok(prior_cl, live_cl, "ImplementationClosureHashSet")
+    # research_validity: the research artifacts' operator closure matches.  The
+    # operator-certification artifact is the evidence for this dimension; if it
+    # is STALE/FAILED the dimension must be STALE.
+    research_validity = "STALE" if not _artifact_ok("operator-certification") else \
+        _ok(prior_cl, live_cl, "ImplementationClosureHashSet")
 
-    # release_validity: the release source identity matches the bound tree.
-    release_validity = _ok(prior_pl, live_pl, "PlatformSourceTreeIdentity")
+    # release_validity: the release source identity matches the bound tree.  The
+    # operator-benchmark-manifest / operator-inventory artifacts (source-bound)
+    # are evidence; STALE/FAILED -> STALE.
+    release_validity = "STALE" if not _artifact_ok(
+        "operator-benchmark-manifest", "operator-inventory"
+    ) else _ok(prior_pl, live_pl, "PlatformSourceTreeIdentity")
 
     # production_readiness: the Alpha generator identity matches the bound state.
-    production_readiness = _ok(prior_alpha, live_alpha, "AlphaGeneratorIdentity")
+    # operator-certification is the evidence; STALE/FAILED -> STALE.
+    production_readiness = "STALE" if not _artifact_ok("operator-certification") else \
+        _ok(prior_alpha, live_alpha, "AlphaGeneratorIdentity")
 
     return {
         "build_health": build_health,

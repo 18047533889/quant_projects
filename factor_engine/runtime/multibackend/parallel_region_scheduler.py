@@ -44,6 +44,16 @@ class PhysicalPlanCycleError(Exception):
         )
 
 
+class ResourceAdmissionError(Exception):
+    """All ready regions were rejected by the ResourceBroker and none is running.
+
+    R50: the scheduler must fail closed instead of silently breaking out of the
+    scheduling loop when the broker denies every ready region with no task in
+    flight. The caller must treat this as an admission failure (raise throughput,
+    free resources, or retry), never as a successful no-op.
+    """
+
+
 @dataclass
 class ExecutionRegion:
     """单个执行 region（连续同 backend 算子）。"""
@@ -182,20 +192,30 @@ class ParallelRegionScheduler:
         max_parallel_regions: int | None = None,
         resource_broker: Any | None = None,
         default_deadline_ms: float | None = None,
+        production: bool = False,
     ) -> None:
         """
         Args:
             max_parallel_regions: 最大并行 region 数（受 CPU/memory 约束）。
                 ``None`` 时从可用资源动态推导（R45）。
-            resource_broker: 可选 ``ResourceBroker`` 实例。提供时每个 region
+            resource_broker: ``ResourceBroker`` 实例。提供时每个 region
                 提交前经 ``try_reserve`` 获取 CPU/RAM/IO token，完成/取消时释放。
             default_deadline_ms: 未在 region 上显式指定 deadline 时的默认
                 deadline（monotonic ms）。``None`` 表示不设默认 deadline。
+            production: ``True`` 强制要求 ``resource_broker``（R50）。生产环境
+                必须经 broker 准入避免 oversubscription；传 ``False``（研究/向后
+                兼容）允许 ``None``。
         """
+        if production and resource_broker is None:
+            raise ValueError(
+                "ParallelRegionScheduler(production=True) requires a resource_broker; "
+                "production must never schedule regions without resource admission."
+            )
         if max_parallel_regions is None:
             max_parallel_regions = _derive_default_parallelism()
         self.max_parallel_regions = max(1, int(max_parallel_regions))
         self.resource_broker = resource_broker
+        self.production = bool(production)
         self.default_deadline_ms = default_deadline_ms
         self._metrics = ParallelSchedulerMetrics()
         self._lock = threading.RLock()
@@ -330,6 +350,7 @@ class ParallelRegionScheduler:
             """从 ready_queue 提交可运行的 region 到线程池（broker 准入）。"""
             nonlocal ready_queue
             admitted_this_round: list[str] = []
+            rejected_any = False
             for rid in ready_queue:
                 if len(running) >= self.max_parallel_regions:
                     break
@@ -359,6 +380,7 @@ class ParallelRegionScheduler:
                         contract, task_id=rid
                     )
                     if lease is None:
+                        rejected_any = True
                         continue  # 资源不足：本轮不提交，留待后续
                     leases[rid] = lease
                 future = self._executor.submit(execute_fn, region)
@@ -372,6 +394,18 @@ class ParallelRegionScheduler:
                     deadlines[rid] = start_ms + self.default_deadline_ms
             # Remove admitted regions from queue (keep unadmitted ones for next round)
             ready_queue = [r for r in ready_queue if r not in admitted_this_round]
+            # R50: broker 拒绝全部 ready region 且无任何在跑任务 → fail closed，
+            # 绝不静默 break 出主循环（会假成功返回空结果）。
+            if (
+                self.resource_broker is not None
+                and rejected_any
+                and not admitted_this_round
+                and not running
+            ):
+                raise ResourceAdmissionError(
+                    "ResourceBroker rejected every ready region and no region is "
+                    "running; unable to make scheduling progress (fail closed)."
+                )
 
         def _cancel_descendants(failed_rid: str) -> None:
             """Recursively cancel all descendants of a failed region."""
