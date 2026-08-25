@@ -12,7 +12,7 @@ ENV/
 *.parquet
 runs/
 runs/full-history-overnight/
-weekly_backtest_output/factor_values.parquet
+weekly_backtest_output/
 
 # vectorbt outputs (contain large parquet files)
 vectorbt_qs/examples/output/
