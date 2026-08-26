@@ -234,6 +234,32 @@ def test_keltner_family_param_specs_and_recursive_stateful_tag():
         assert {"stateful", "full_replay"} <= tags, f"{name} tags: {tags}"
 
 
+def test_keltner_compression_multiplier_is_rank_scale_invariant():
+    """R50 injectivity audit: ``multiplier`` genuinely feeds the Keltner band
+    width, but ``keltner_compression`` then takes a *trailing percentile rank*
+    of that width, so any positive multiplier rescales the width monotonically
+    and is normalised away by the rank.  The parameter is therefore NOT an
+    injective alpha dimension on this transform — it is a band-width knob whose
+    scale is washed out by the rank step (not a dead code path, and not a bug).
+    This pins the behaviour so a future change to the transform (e.g. removing
+    the rank) that would make the multiplier injective is caught here."""
+    high, low, close = _ohlc(
+        np.linspace(10.0, 15.0, 60) + np.sin(np.arange(60) * 0.9) * 0.4,
+        spread=0.4,
+    )
+    base = _op("keltner_compression").calculate(
+        high, low, close, ema_window=10, atr_window=10, multiplier=2.0, score_window=20
+    )
+    base_np = base.to_numpy(dtype=float)
+    assert np.isfinite(base_np).any()
+    for m in (0.5, 5.0, 20.0):
+        out = _op("keltner_compression").calculate(
+            high, low, close, ema_window=10, atr_window=10, multiplier=m, score_window=20
+        )
+        np.testing.assert_array_equal(out.to_numpy(dtype=float), base_np,
+                                      err_msg=f"multiplier={m} changed output")
+
+
 def test_keltner_relative_alpha_membership():
     from factor_engine.mining.direct_use import _RELATIVE_ALPHA_OPS
 

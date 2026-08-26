@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from unittest.mock import patch, MagicMock
 
+from factor_engine.market.context import Market
 from factor_engine.mining.direct_use import (
     build_direct_use_operator,
     DirectUseContext,
@@ -27,14 +28,20 @@ _INVENTORY = "factor_engine.backend.operator_capability.enumerate_physical_inven
 
 
 def _admitted_record(canonical: str = "ts_mean") -> PhysicalInventoryRecord:
-    """One fully-admitted physical inventory row for a canonical."""
+    """One fully-admitted physical inventory row for a canonical.
+
+    R50: the PhysicalImplementationSpec identity bindings must be valid 64-hex
+    SHA-256 digests (validation_errors() fails otherwise -> physical_implementation_id
+    is None).  Values here are dummy digests, not tied to real sources.
+    """
     spec = PhysicalImplementationSpec(
         canonical=canonical,
         backend="pandas_numpy",
         execution_kind=ExecutionKind.REFERENCE,
-        implementation_source_hash="abc123",
-        parameter_domain_hash="def456",
-        semantic_contract_hash="ghi789",
+        implementation_source_hash="a" * 64,
+        parameter_domain_hash="b" * 64,
+        semantic_contract_hash="c" * 64,
+        implementation_closure_hash="d" * 64,
         emitter_identity="test_emitter",
     )
     assert spec.physical_implementation_id is not None
@@ -110,10 +117,11 @@ class TestProductionAdmittedRequiresPhysicalEvidence:
                         row = build_direct_use_operator(canonical, catalog)
                         if row.production_certified:
                             assert row.production_admitted is True
-                            # The admitting implementation must be an exact
-                            # current-head PhysicalImplementationID.
+                            # R50: the admitting implementation must be an exact
+                            # current-head PhysicalImplementationID; the scheme is
+                            # pi:v3 (implementation_closure_hash binding), not pi:v1.
                             assert record.implementation_id is not None
-                            assert str(record.implementation_id).startswith("pi:v1:")
+                            assert str(record.implementation_id).startswith("pi:v3:")
 
 
 class TestDirectlyUsableRequiresProductionAdmitted:
@@ -204,7 +212,7 @@ class TestDirectUseMiningOperatorsAdmission:
 
         with patch(_INVENTORY, return_value=[]):
             operators = get_direct_use_mining_operators(
-                context=DirectUseContext(market="ashare"),
+                context=DirectUseContext(market=Market.ASHARE),
                 admission="eligible",
             )
             for op in operators:

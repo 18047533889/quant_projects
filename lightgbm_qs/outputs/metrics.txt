@@ -1,0 +1,26 @@
+# Portfolio backtest metrics (Vwap daily return basis)
+# generated: 2026-08-26T11:15:07
+# period: 2020-01-09 .. 2026-08-24
+
+total_return_pct        = 595.38
+bench_total_return_pct  = 127.88
+annual_return_pct       = 35.59
+bench_annual_return_pct = 13.81
+annual_vol_pct          = 22.19
+bench_annual_vol_pct    = 18.59
+sharpe                  = 1.484
+bench_sharpe            = 0.789
+max_drawdown_pct        = -32.52
+bench_max_drawdown_pct  = -31.90
+calmar                  = 1.09
+bench_calmar            = 0.43
+daily_win_rate_pct      = 54.58
+profit_factor           = 1.08
+n_rebalances            = 161
+avg_holdings            = 65.94
+avg_turnover_one_way    = 0.497
+opt_solves              = 161
+fallbacks               = 0
+trading_days            = 1605
+
+params: top_k=30 rebal_period=10 cov_window=60 max_w=0.08 backoff_w=0.16 min_holdings=8 max_turnover=0.50 tc_bps=0.0005 rf=0.00 oos_start=2019-01-01

@@ -90,6 +90,45 @@ class ParetoFrontier:
         """Number of points on the frontier."""
         return len(self.points)
 
+    def add(self, point: ParetoPoint) -> bool:
+        """
+        Add a point to the frontier if non-dominated.
+
+        Alias for :meth:`add_point` that returns whether the new point
+        survives (is not dominated).  Provided as a concise, discoverable
+        name for the winner-selector flow.
+
+        Returns:
+            True if point was added (non-dominated), False if dominated
+        """
+        return self.add_point(point)
+
+    def dominated(self, points) -> Set[str]:
+        """
+        Return the set of trial_ids among ``points`` that are dominated by
+        the frontier.
+
+        Args:
+            points: An iterable of :class:`ParetoPoint` (or a set of them).
+
+        Returns:
+            Set of trial_ids that are dominated by at least one frontier point.
+        """
+        dominated_ids: Set[str] = set()
+        for point in points:
+            if self.is_dominated(point):
+                dominated_ids.add(point.trial_id)
+        return dominated_ids
+
+    def frontier(self) -> List[ParetoPoint]:
+        """
+        Return the set of non-dominated points currently on the frontier.
+
+        Returns:
+            A list of the non-dominated :class:`ParetoPoint` objects.
+        """
+        return list(self.points)
+
     def add_point(self, point: ParetoPoint) -> bool:
         """
         Add a point to the frontier if non-dominated.

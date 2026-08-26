@@ -271,6 +271,16 @@ class MiningOperator:
     searchable_params: tuple[str, ...]
     allowed_ast_positions: tuple[str, ...]
     terminal_allowed: bool
+    # R50 dual-authority fix: terminal / AST-position authority comes from the
+    # DirectUse contract (build_direct_use_operator), not from the role.  These
+    # four orthogonal fields make the callable/production gates explicit so no
+    # caller picks a heuristic: terminal_allowed stays the *semantic* terminal
+    # gate (== terminal_usable), and production_terminal_usable /
+    # production_admitted / mining_visible are separate admission gates.
+    terminal_usable: bool
+    production_terminal_usable: bool
+    production_admitted: bool
+    mining_visible: bool
     stateful: bool
     execution_model: str
     checkpoint_supported: bool
@@ -1327,7 +1337,24 @@ def get_mining_operators(
         state, blockers, actions = _admission_decision(
             canonical, catalog, role, role_source, status
         )
-        terminal_allowed = role in _TERMINAL_ROLES
+        # R50 dual-authority fix: allowed_ast_positions and terminal_allowed come
+        # from the DirectUse contract — the ONE authority for "may this operator
+        # stand alone as a factor terminal, and where may it appear in the AST".
+        # The role only records the *semantic* role; DIRECT_INTERMEDIATE /
+        # DIRECT_RECIPE / DIRECT_CONTROL_FLOW map to role=ALPHA but are NOT
+        # terminal.  We call build_direct_use_operator here so the emitted
+        # terminal/positions/usable gates can never drift from DirectUse.
+        from factor_engine.mining.direct_use import build_direct_use_operator
+
+        du_row = build_direct_use_operator(canonical, catalog)
+        ast_positions = du_row.allowed_ast_positions
+        terminal_allowed = du_row.terminal_usable  # semantic terminal gate
+        # The four orthogonal callable/production flags (production_terminal_usable
+        # must NOT drive terminal_allowed — kept separate).
+        terminal_usable = du_row.terminal_usable
+        production_terminal_usable = du_row.production_terminal_usable
+        production_admitted = du_row.production_admitted
+        mining_visible = du_row.mining_visible
         incremental = execution_model in (
             ExecutionModel.INDEPENDENT_WITH_WARMUP,
             ExecutionModel.CHECKPOINT,
@@ -1356,6 +1383,10 @@ def get_mining_operators(
                 searchable_params=_searchable_params(canonical, catalog),
                 allowed_ast_positions=ast_positions,
                 terminal_allowed=terminal_allowed,
+                terminal_usable=terminal_usable,
+                production_terminal_usable=production_terminal_usable,
+                production_admitted=production_admitted,
+                mining_visible=mining_visible,
                 stateful=stateful,
                 execution_model=execution_model.value,
                 checkpoint_supported=checkpoint,

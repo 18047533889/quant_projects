@@ -335,6 +335,8 @@ def create_default_registry() -> TransformRegistry:
     from factor_preprocess.transforms import (
         cs_rank, cs_zscore, cs_demean, cs_winsor, cs_scale,
         rolling_mean, rolling_std, rolling_zscore, ewma,
+        trailing_sma, trailing_median, robust_ewma, kama,
+        one_sided_iir_lowpass, kalman_local_level,
         volatility_scale, volatility_scale_returns, realized_volatility,
         forward_fill, missing_indicator, missing_run_length, missing_rate,
         impute_with_fallback,
@@ -345,6 +347,7 @@ def create_default_registry() -> TransformRegistry:
     from factor_preprocess.transforms.decomposition import (
         bandpass_filter, extract_cycle, christiano_fitzgerald_filter,
         wavelet_decompose, wavelet_smooth, wavelet_denoise,
+        hp_filter, hp_decompose,
     )
 
     registry = TransformRegistry()
@@ -413,6 +416,49 @@ def create_default_registry() -> TransformRegistry:
         version="1.0.0",
         description="Exponentially weighted moving average",
         tags={"ewma", "temporal", "smoothing"},
+        causal_safe=True,
+    )
+    # Causal one-sided signal smoothers (strictly <= t - 1 information).
+    registry.register(
+        "trailing_sma", trailing_sma, TransformCategory.TEMPORAL,
+        version="1.0.0",
+        description="Lagged trailing simple moving average",
+        tags={"smoothing", "sma", "temporal"},
+        causal_safe=True,
+    )
+    registry.register(
+        "trailing_median", trailing_median, TransformCategory.TEMPORAL,
+        version="1.0.0",
+        description="Lagged trailing rolling median (robust to spikes)",
+        tags={"smoothing", "median", "robust", "temporal"},
+        causal_safe=True,
+    )
+    registry.register(
+        "robust_ewma", robust_ewma, TransformCategory.TEMPORAL,
+        version="1.0.0",
+        description="Lagged EWMA on winsorized values",
+        tags={"smoothing", "ewma", "robust", "temporal"},
+        causal_safe=True,
+    )
+    registry.register(
+        "kama", kama, TransformCategory.TEMPORAL,
+        version="1.0.0",
+        description="Kaufman adaptive moving average, recursive forward only",
+        tags={"smoothing", "kama", "adaptive", "temporal"},
+        causal_safe=True,
+    )
+    registry.register(
+        "one_sided_iir_lowpass", one_sided_iir_lowpass, TransformCategory.TEMPORAL,
+        version="1.0.0",
+        description="One-pole IIR low-pass applied forward only",
+        tags={"smoothing", "iir", "lowpass", "temporal"},
+        causal_safe=True,
+    )
+    registry.register(
+        "kalman_local_level", kalman_local_level, TransformCategory.TEMPORAL,
+        version="1.0.0",
+        description="One-sided Kalman local-level filter",
+        tags={"smoothing", "kalman", "temporal"},
         causal_safe=True,
     )
 
@@ -536,6 +582,11 @@ def create_default_registry() -> TransformRegistry:
 
     # Full-series decomposition uses symmetric/zero-phase reconstruction and is
     # therefore not admissible in production unless a causal implementation exists.
+    # The HP filter additionally solves the HP objective over the WHOLE lagged
+    # sample (spsolve over the full series), so a historical trend point can
+    # depend on later lagged observations: it is NOT prefix-invariant and is
+    # therefore NOT production-causal. hp_filter / hp_decompose are research /
+    # offline use only.
     for name, func in [
         ("bandpass_filter", bandpass_filter),
         ("extract_cycle", extract_cycle),
@@ -543,6 +594,8 @@ def create_default_registry() -> TransformRegistry:
         ("wavelet_decompose", wavelet_decompose),
         ("wavelet_smooth", wavelet_smooth),
         ("wavelet_denoise", wavelet_denoise),
+        ("hp_filter", hp_filter),
+        ("hp_decompose", hp_decompose),
     ]:
         registry.register(
             name, func, TransformCategory.TEMPORAL,

@@ -88,6 +88,37 @@ def make_admission(factor_id, **overrides):
     return FactorAdmissionArtifact(**defaults)
 
 
+def make_treatment(factor_id, **overrides):
+    """Build a TreatmentSelectionArtifact for the consume-only auto-treatment wiring."""
+    from factor_assets.contracts.treatment_selection import TreatmentSelectionArtifact
+
+    defaults = dict(
+        factor_id=factor_id,
+        factor_version="v1",
+        raw_baseline_evidence_ref="ref:raw_baseline",
+        factor_profile_ref="ref:profile",
+        eligibility_policy_ref="ref:eligibility",
+        search_space_ref="ref:search_space",
+        all_trial_refs=("ref:trial_a",),
+        pareto_candidate_refs=("ref:p_1",),
+        winner_recipe={"preprocess": "zscore", "winsorize": 0.01},
+        winner_policy_identity="policy:auto-treat/v3",
+        absolute_metric_refs={"sharpe": "ref:sharpe"},
+        delta_metric_refs={"delta_sharpe": "ref:delta_sharpe"},
+        dimension_scores={"return": 0.8, "robustness": 0.65},
+        hard_gate_results={"min_obs": "PASS", "non_nan": "PASS"},
+        soft_floor_results={"min_sharpe": 0.2},
+        robustness_evidence="ref:robustness",
+        complexity_score=0.42,
+        snapshot_ref="ref:snapshot",
+        universe_ref="ref:universe",
+        split_ref="ref:split",
+        created_at="2026-08-25T00:00:00+00:00",
+    )
+    defaults.update(overrides)
+    return TreatmentSelectionArtifact(**defaults)
+
+
 class TestProductionModeMandatory:
     def test_production_requires_complete_membership_provenance(self):
         spec = make_spec("set-1", "Prod", "manual")
@@ -110,6 +141,7 @@ class TestProductionModeMandatory:
             spec,
             [make_asset("F1")],
             admission_artifacts={"F1": make_admission("F1")},
+            treatment_selection_artifacts={"F1": make_treatment("F1")},
             production=True,
         )
         (membership,) = result.memberships
@@ -127,6 +159,7 @@ class TestProductionModeMandatory:
                 spec,
                 [make_asset("F1")],
                 admission_artifacts={"F1": artifact},
+                treatment_selection_artifacts={"F1": make_treatment("F1")},
                 production=True,
             )
 
@@ -138,6 +171,7 @@ class TestProductionModeMandatory:
                 spec,
                 [make_asset("F1")],
                 admission_artifacts={"F1": artifact},
+                treatment_selection_artifacts={"F1": make_treatment("F1")},
                 production=True,
             )
 
@@ -149,6 +183,7 @@ class TestProductionModeMandatory:
                 spec,
                 [make_asset("F1")],
                 admission_artifacts={"F1": artifact},
+                treatment_selection_artifacts={"F1": make_treatment("F1")},
                 production=True,
             )
 
@@ -162,6 +197,7 @@ class TestProductionModeMandatory:
             spec,
             [make_asset("F1")],
             admission_artifacts={"F1": artifact},
+            treatment_selection_artifacts={"F1": make_treatment("F1")},
             production=True,
         )
         (membership,) = result.memberships
@@ -203,6 +239,7 @@ class TestProductionModeMandatory:
             [make_asset("F1")],
             selection_decisions=[make_decision("F1")],
             admission_artifacts={"F1": make_admission("F1")},
+            treatment_selection_artifacts={"F1": make_treatment("F1")},
             production=True,
         )
         (membership,) = result.memberships

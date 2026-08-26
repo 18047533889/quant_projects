@@ -17,7 +17,6 @@ from factor_engine.cleaned_operators.registry import OperatorRegistry
 from factor_engine.mining.operator_catalog import (
     MiningRole,
     RoleSource,
-    _TERMINAL_ROLES,
     assign_mining_role,
     assign_mining_role_ex,
     get_mining_operators,
@@ -109,18 +108,57 @@ def test_get_mining_operators_filters() -> None:
 
 
 def test_terminal_allowlist_exact() -> None:
-    """R15-INC-221: only the factor-value roles (ALPHA / ALPHA_HIGH_COST /
-    INTRADAY_EOD / FUNDAMENTAL_PIT) may be terminal.  INTERNAL / DIAGNOSTIC /
-    RESEARCH / LEGACY / DENIED must be False — the pre-R15 exclusion list let
-    them fall through as terminal.  Supporting roles also have EMPTY positions."""
-    for op in get_mining_operators(admission="all"):
-        expected = op.role in _TERMINAL_ROLES
-        assert op.terminal_allowed is expected, (
-            f"{op.canonical}: terminal_allowed={op.terminal_allowed} "
-            f"role={op.role} but expected {expected}"
+    """R50: DirectUse is now the SINGLE terminal / AST-position authority.
+
+    ``get_mining_operators`` derives ``terminal_allowed`` and
+    ``allowed_ast_positions`` from the DirectUse contract
+    (``build_direct_use_operator``), not from the role.  A DIRECT_INTERMEDIATE /
+    DIRECT_RECIPE / DIRECT_CONTROL_FLOW canonical maps to role=ALPHA but is NOT
+    a terminal, so ``role in _TERMINAL_ROLES`` is no longer the contract.  The
+    invariant that every row satisfies ``terminal_allowed == ("terminal" in
+    allowed_ast_positions)`` holds because both come from the same DirectUse
+    row.  A canonical whose legacy role is supporting but whose DirectUse verdict
+    is DIRECT_* (e.g. fin_expectation_revision* -> DIRECT_ALPHA terminal while the
+    role machinery says DENIED) is resolved by DirectUse — the single authority.
+    """
+    from factor_engine.mining.direct_use import build_direct_use_operator
+
+    du_by = {
+        r.canonical: r
+        for r in (
+            build_direct_use_operator(c, OperatorRegistry._catalog.get(c) or {})
+            for c in sorted(OperatorRegistry._catalog)
         )
-        if not expected:
-            assert "terminal" not in op.allowed_ast_positions, op.canonical
+    }
+
+    for op in get_mining_operators(admission="all"):
+        # NEW single-authority invariant: both fields come from the same
+        # DirectUse row, so they are always self-consistent.
+        assert op.terminal_allowed == ("terminal" in op.allowed_ast_positions), (
+            f"{op.canonical}: terminal_allowed={op.terminal_allowed} but positions="
+            f"{op.allowed_ast_positions}"
+        )
+        # terminal_usable is the semantic gate behind terminal_allowed.
+        assert op.terminal_allowed == op.terminal_usable, op.canonical
+        # the four orthogonal fields are populated.
+        assert isinstance(op.mining_visible, bool), op.canonical
+        assert isinstance(op.production_terminal_usable, bool), op.canonical
+        assert isinstance(op.production_admitted, bool), op.canonical
+
+        # get_mining_operators must match the DirectUse authority on every row.
+        row = du_by.get(op.canonical)
+        assert row is not None, op.canonical
+        assert op.allowed_ast_positions == row.allowed_ast_positions, op.canonical
+        assert op.terminal_allowed == row.terminal_usable, op.canonical
+        assert op.terminal_usable == row.terminal_usable, op.canonical
+        assert op.production_terminal_usable == row.production_terminal_usable, op.canonical
+        assert op.production_admitted == row.production_admitted, op.canonical
+        assert op.mining_visible == row.mining_visible, op.canonical
+
+        # Supporting / non-direct DirectUse verdicts have EMPTY positions
+        # (research_tool / move_internal / delete_*).  A canonical with a
+        # DIRECT_* verdict gets its positions from the contract, even if the
+        # legacy role classifies it as a supporting role.
         if op.role in (
             MiningRole.RECIPE_INTERNAL,
             MiningRole.SOURCE_TRANSFORM,
@@ -131,7 +169,20 @@ def test_terminal_allowlist_exact() -> None:
             MiningRole.DENIED,
             MiningRole.UNRESOLVED,
         ):
-            assert op.allowed_ast_positions == (), op.canonical
+            if not row.direct_use_status.value.startswith("direct_"):
+                assert op.allowed_ast_positions == (), op.canonical
+
+    # Spot-check the DirectUse authority directly on a few representatives.
+    # DIRECT_INTERMEDIATE -> role ALPHA but NOT terminal, no "terminal" position.
+    for c in ("ATR_WILDER", "cos", "sin"):
+        if c in du_by:
+            assert "terminal" not in du_by[c].allowed_ast_positions, c
+            assert du_by[c].terminal_usable is False, c
+    # DIRECT_ALPHA -> terminal-eligible with "terminal" in positions.
+    for c in ("ts_mean", "rank"):
+        if c in du_by:
+            assert "terminal" in du_by[c].allowed_ast_positions, c
+            assert du_by[c].terminal_usable is True, c
 
 
 def test_no_fallback_role_sources() -> None:

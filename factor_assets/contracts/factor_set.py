@@ -33,6 +33,14 @@ class FactorMembership:
     novelty_ref: Optional[str] = None
     similarity_ref: Optional[str] = None       # similarity evidence that justified admission
     health_state_ref: Optional[str] = None     # health evidence at assembly time
+    # Auto-treatment optimizer references.  FA is CONSUME-only for these: it
+    # never recomputes or fabricates the selected treatment — it only carries
+    # the reference produced upstream by the treatment-selection stage.  In
+    # production mode the assembler fails closed if a treatment selection ref
+    # is required but missing.
+    treatment_selection_ref: Optional[str] = None   # selection artifact that picked the treatment
+    preprocess_policy_ref: Optional[str] = None     # preprocess policy that consumes this member
+    preprocess_state_ref: Optional[str] = None      # preprocess state snapshot the ref was computed on
     assembly_score: Optional[float] = None     # policy score that ranked this member
     selection_rank: Optional[int] = None       # 0-based rank within the assembled set
     reason: Optional[str] = None               # SelectionReason value
@@ -44,6 +52,15 @@ class FactorMembership:
             raise ValueError("orientation must be -1, 1, or None")
         if self.assembly_score is not None and self.assembly_score != self.assembly_score:
             raise ValueError("assembly_score must be finite")
+        for _name, _ref in (
+            ("treatment_selection_ref", self.treatment_selection_ref),
+            ("preprocess_policy_ref", self.preprocess_policy_ref),
+            ("preprocess_state_ref", self.preprocess_state_ref),
+        ):
+            if _ref is not None and not isinstance(_ref, str):
+                raise TypeError(f"{_name} must be a str or None")
+            if _ref is not None and not _ref:
+                raise ValueError(f"{_name} must be a non-empty string or None")
 
 
 @dataclass(frozen=True)

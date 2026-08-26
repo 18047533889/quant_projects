@@ -21,12 +21,66 @@ class OptionalDependencyMissing(Exception):
         )
 
 
+# Exposure types the adapter understands natively. Anything outside this set is
+# rejected (fail-closed) rather than silently routed to a custom fetch.
+SUPPORTED_EXPOSURE_TYPES = frozenset({"industry", "size", "sector", "beta", "custom"})
+
+# Provenance keys that MUST be present in every exposure bundle's metadata.
+# Exposure provenance is mandatory, not optional: without it a bundle cannot be
+# trusted for point-in-time neutralization.
+REQUIRED_PROVENANCE_KEYS = (
+    "knowledge_time",
+    "effective_time",
+    "snapshot_ref",
+    "classification_version",
+    "market",
+    "universe_ref",
+)
+
+
+def _validate_exposure_bundle(bundle: Any, exposure_type: str) -> Dict[str, Any]:
+    """Validate an exposure bundle carries mandatory provenance metadata.
+
+    Fail-closed: a bundle without the required provenance keys is rejected
+    rather than silently passed through.
+
+    Raises:
+        ValueError: if the bundle is malformed or missing provenance.
+    """
+    if not isinstance(bundle, dict):
+        raise ValueError(
+            f"Exposure provider returned non-dict for '{exposure_type}': {type(bundle).__name__}"
+        )
+    metadata = bundle.get("metadata")
+    if not isinstance(metadata, dict):
+        raise ValueError(
+            f"Exposure bundle for '{exposure_type}' missing 'metadata' dict"
+        )
+    missing = [k for k in REQUIRED_PROVENANCE_KEYS if k not in metadata]
+    if missing:
+        raise ValueError(
+            f"Exposure bundle for '{exposure_type}' missing required provenance "
+            f"keys: {missing}"
+        )
+    return bundle
+
+
 class ExposureProvider(Protocol):
     """
     Protocol for exposure data providers.
 
     Defines the interface for fetching exposure context needed for neutralization.
     Implementations must provide exposure values aligned with factor data.
+
+    Every returned exposure bundle is a dict that MUST contain, at minimum:
+        - 'values': np.ndarray of shape (n_times, n_assets)
+        - 'dates': np.ndarray of date strings
+        - 'assets': np.ndarray of asset identifiers
+        - 'metadata': dict with provenance. The metadata dict MUST contain the
+          keys ``knowledge_time``, ``effective_time``, ``snapshot_ref``,
+          ``classification_version``, ``market``, ``universe_ref``. Exposure
+          provenance is mandatory, not optional: bundles missing these keys are
+          rejected (fail-closed) by the adapter.
     """
 
     def get_industry_exposure(
@@ -214,14 +268,17 @@ class DataAccessAdapter:
 
         Raises:
             OptionalDependencyMissing: If dataaccess not available
+            ValueError: If the provider returns a bundle without mandatory
+                provenance metadata (fail-closed).
         """
-        return self._provider.get_industry_exposure(
+        bundle = self._provider.get_industry_exposure(
             market=market,
             start_date=start_date,
             end_date=end_date,
             assets=assets,
             industry_classification=industry_classification,
         )
+        return _validate_exposure_bundle(bundle, "industry")
 
     def fetch_size_exposure(
         self,
@@ -246,14 +303,17 @@ class DataAccessAdapter:
 
         Raises:
             OptionalDependencyMissing: If dataaccess not available
+            ValueError: If the provider returns a bundle without mandatory
+                provenance metadata (fail-closed).
         """
-        return self._provider.get_size_exposure(
+        bundle = self._provider.get_size_exposure(
             market=market,
             start_date=start_date,
             end_date=end_date,
             assets=assets,
             size_metric=size_metric,
         )
+        return _validate_exposure_bundle(bundle, "size")
 
     def fetch_multi_exposure(
         self,
@@ -280,10 +340,18 @@ class DataAccessAdapter:
 
         Raises:
             OptionalDependencyMissing: If dataaccess not available
+            ValueError: If an exposure_type is not in the supported set, or a
+                provider returns a bundle without mandatory provenance metadata
+                (fail-closed).
         """
         result = {}
 
         for exp_type in exposure_types:
+            if exp_type not in SUPPORTED_EXPOSURE_TYPES:
+                raise ValueError(
+                    f"Unknown exposure type '{exp_type}'. Supported types: "
+                    f"{sorted(SUPPORTED_EXPOSURE_TYPES)}"
+                )
             if exp_type == "industry":
                 result["industry"] = self.fetch_industry_exposure(
                     market, start_date, end_date, assets
@@ -293,22 +361,31 @@ class DataAccessAdapter:
                     market, start_date, end_date, assets
                 )
             elif exp_type == "sector":
-                result["sector"] = self._provider.get_sector_exposure(
-                    market, start_date, end_date, assets
+                result["sector"] = _validate_exposure_bundle(
+                    self._provider.get_sector_exposure(
+                        market, start_date, end_date, assets
+                    ),
+                    "sector",
                 )
             elif exp_type == "beta":
-                result["beta"] = self._provider.get_beta_exposure(
-                    market, start_date, end_date, assets
+                result["beta"] = _validate_exposure_bundle(
+                    self._provider.get_beta_exposure(
+                        market, start_date, end_date, assets
+                    ),
+                    "beta",
                 )
             else:
                 # Custom exposure
-                result[exp_type] = self._provider.get_custom_exposure(
-                    exposure_name=exp_type,
-                    market=market,
-                    start_date=start_date,
-                    end_date=end_date,
-                    assets=assets,
-                    **kwargs,
+                result[exp_type] = _validate_exposure_bundle(
+                    self._provider.get_custom_exposure(
+                        exposure_name=exp_type,
+                        market=market,
+                        start_date=start_date,
+                        end_date=end_date,
+                        assets=assets,
+                        **kwargs,
+                    ),
+                    exp_type,
                 )
 
         return result
@@ -357,4 +434,7 @@ __all__ = [
     "OptionalDependencyMissing",
     "check_data_access_available",
     "create_adapter",
+    "SUPPORTED_EXPOSURE_TYPES",
+    "REQUIRED_PROVENANCE_KEYS",
+    "_validate_exposure_bundle",
 ]

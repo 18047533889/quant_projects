@@ -438,7 +438,7 @@ def validate_cold_start(out_dir: Path, seed_source: str | Path | None = None) ->
     # kernel cannot even bind/execute on synthetic inputs is a defect, and an
     # illegally-bound relational param is caught by the binder here.
     try:
-from factor_engine.fundamental_cold_start import load_cold_start
+        from factor_engine.fundamental_cold_start import load_cold_start
 
         seeds, _report = load_cold_start(seed_source)
     except Exception as exc:

@@ -1,0 +1,565 @@
+# -*- coding: utf-8 -*-
+"""Final portfolio optimization + backtest + charts from OOS LightGBM predictions.
+
+pipenv-free; run with /srv/quant/envs/quantaalpha/bin/python (riskfolio/cvxpy optional;
+the optimizer used here is a pure cvxpy quadratic program, so riskfolio is not required).
+
+Inputs
+------
+- data/build/predictions.parquet : long frame (date, asset, pred) from scripts/train_final.py
+- data/panel/vwap_trad.parquet   : date x asset Vwap panel
+- data/panel/fwd_ret10.parquet   : date x asset 10-day forward returns (for rank-IC chart)
+
+Pipeline
+--------
+  1. Pivot predictions -> pred_matrix (date x asset).
+  2. Rebalance every 10 trading days, located by row position % 10 == 0 on the
+     vwap_trad trading calendar (indexed by date).  On each rebalance day:
+      - take top-K=30 predicted assets (pred non-NaN),
+      - estimate mean + covariance from the past COV_WINDOW=60 daily Vwap returns
+        of those 30 names (sample cov + eigen regularisation -> positive definite),
+      - solve the max-Sharpe quadratic program with cvxpy in Charnes-Cooper form:
+            max  mu'y          s.t.  y'Sy <= 1,  y >= 0,  y <= 0.10 * sum(y),
+        then normalise w = y / sum(y)  (sum(w)=1, long-only, single-name cap 0.10).
+        Verified scale-invariant: any risk bound gives the same weights.
+      - if the QP fails or degenerates (< 5 held names, or sum(w) <= 0.5), back off
+        the cap to 0.20; if it still fails, fall back to equal-weight top-30.
+        Both failure paths are counted and reported.
+      Weights are stored on the rebalance date; all other rows carry the previous
+      rebalance weights (forward-filled) for the backtest.
+  3. Backtest (Vwap basis, the global return standard):
+      daily asset returns  = vwap_trad.pct_change()  (row-wise, unshifted);
+      strategy daily return = sum( weights.shift(1) * asset_ret )  -> previous
+      rebalance weights, shifted 1 day, no look-ahead.
+      Equity  = cumprod(1 + r).  Benchmark = equal-weight return of the whole
+      vwap_trad pool, aligned from 2019-01 OOS (from the first rebalance onward).
+  4. Metrics  -> outputs/metrics.txt
+     Report    -> outputs/report.md (Chinese, parameter table + conclusions)
+  5. Charts (matplotlib, Agg backend, PNG, English labels to avoid CJK glyph issues)
+      outputs/equity_curve.png     strategy vs benchmark, log axis, from 2019
+      outputs/drawdown.png         strategy drawdown (+ benchmark line)
+      outputs/weights_heat.png     top-10 weights per rebalance (heatmap)
+      outputs/pred_ic_timeline.png cross-sectional rank IC of pred vs fwd_ret10
+
+Do NOT run before predictions.parquet exists (scripts/train_final.py).
+"""
+import os
+from datetime import datetime
+
+import numpy as np
+import pandas as pd
+import cvxpy as cp
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+
+ROOT = "/home/sunhaiwei/quant_projects/lightgbm_qs"
+# ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA = os.path.join(ROOT, "data")
+BUILD = os.path.join(DATA, "build")
+PANEL = os.path.join(DATA, "panel")
+OUT = os.path.join(ROOT, "outputs")
+
+PREDICTIONS = os.path.join(BUILD, "predictions.parquet")
+VWAP_TRAD = os.path.join(PANEL, "vwap_trad_adj.parquet")
+FWD_RET10 = os.path.join(PANEL, "fwd_ret10.parquet")
+
+WEIGHTS_OUT = os.path.join(BUILD, "weights.parquet")
+METRICS_OUT = os.path.join(OUT, "metrics.txt")
+REPORT_OUT = os.path.join(OUT, "report.md")
+
+# ---------------- configuration -----------------------------------------------
+TOP_K = 30            # top-K predicted assets per rebalance
+REBAL_PERIOD = 10     # rebalance every 10 trading days (row position % 10 == 0)
+COV_WINDOW = 60       # past COV_WINDOW daily Vwap returns used to estimate cov
+MAX_WEIGHT = 0.10     # single-name weight cap
+BACKOFF_WEIGHT = 0.20 # relaxed cap if QP degenerates
+MIN_HOLDINGS = 5      # require at least MIN_HOLDINGS non-zero weights
+OOS_START = "2019-01-01"  # benchmark alignment start
+RF_DAILY = 0.0        # daily risk-free rate (Sharpe)
+TRADING_DAYS = 252
+
+# cvxpy solvers, tried in order; first returning a usable optimum wins
+SOLVERS = [cp.CLARABEL, cp.SCS]
+
+# chart palette (validated, colourblind-safe categorical slots + neutral ink)
+C_STRATEGY = "#2a78d6"   # blue
+C_BENCH = "#eb6834"      # orange
+C_AQUA = "#1baf7a"       # aqua (secondary series)
+C_RED = "#e34948"        # red (drawdown)
+SURF = "#fcfcfb"         # chart surface
+INK = "#0b0b0b"          # primary ink
+INK2 = "#52514e"         # secondary ink
+GRID = "#e1e0d9"         # hairline grid
+
+os.makedirs(OUT, exist_ok=True)
+os.makedirs(BUILD, exist_ok=True)
+
+
+def log(msg):
+    print(msg, flush=True)
+
+
+def load_inputs():
+    pred = pd.read_parquet(PREDICTIONS)
+    pred["date"] = pd.to_datetime(pred["date"])
+    pred = pred.sort_values(["date", "asset"]).reset_index(drop=True)
+    vwap = pd.read_parquet(VWAP_TRAD)
+    vwap.index = pd.to_datetime(vwap.index)
+    vwap = vwap.sort_index()
+    fwd = pd.read_parquet(FWD_RET10)
+    fwd.index = pd.to_datetime(fwd.index)
+    fwd = fwd.sort_index()
+    return pred, vwap, fwd
+
+
+def asset_returns(vwap):
+    """Daily asset returns on the Vwap-to-Vwap basis (row-wise pct_change)."""
+    ret = vwap.pct_change()
+    ret = ret.replace([np.inf, -np.inf], np.nan)
+    return ret
+
+
+def solve_max_sharpe(mu, cov, cap):
+    """Charnes-Cooper max-Sharpe QP on the top-K sub-universe.
+
+    max  mu'y   s.t.  y'Sy <= 1,  y >= 0,  y <= cap * sum(y)
+    then w = y / sum(y).  The 1.0 risk bound is scale-invariant for the weights
+    (verified numerically); returns (weights, status) or (None, status).
+    """
+    n = len(mu)
+    y = cp.Variable(n)
+    objective = cp.Maximize(mu @ y)
+    constraints = [
+        cp.quad_form(y, cov) <= 1.0,
+        y >= 0,
+        y <= cap * cp.sum(y),
+    ]
+    prob = cp.Problem(objective, constraints)
+    last_status = "unsolved"
+    for solver in SOLVERS:
+        try:
+            prob.solve(solver=solver, verbose=False)
+        except Exception as e:
+            last_status = "error:" + type(e).__name__
+            continue
+        last_status = prob.status
+        if prob.status in ("optimal", "optimal_inaccurate") and y.value is not None:
+            w = np.asarray(y.value, dtype=float).ravel()
+            if w.sum() > 0:
+                w = w / w.sum()
+                return w, prob.status
+    return None, last_status
+
+
+def run_backtest(wmat, asset_ret):
+    """Daily strategy returns from a weights matrix + asset returns.
+
+    Previous rebalance weights are carried forward day-by-day; on day t the
+    weights used are those known at t-1 (shift(1)) -> no look-ahead.
+    """
+    r = asset_ret.fillna(0.0)
+    w = wmat.replace(0.0, np.nan).ffill().fillna(0.0)   # carry previous rebalance
+    return (w.shift(1) * r).sum(axis=1, min_count=1)
+
+
+def annualise(cum_ret, n_days):
+    return float((1.0 + cum_ret) ** (TRADING_DAYS / max(n_days, 1)) - 1.0)
+
+
+def max_drawdown(nav):
+    return float((nav / nav.cummax() - 1.0).min())
+
+
+def plot_charts(eq, oos_ret, wmat, rebal_dates, pm, fwd, ret, m):
+    """All charts: matplotlib Agg, PNG, English labels (no CJK glyphs), thin marks."""
+    # ---- 1. equity curve (log axis, from 2019) -------------------------------
+    fig, ax = plt.subplots(figsize=(11, 6))
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor(SURF)
+    ax.plot(eq.index, eq["strategy"], lw=2.0, color=C_STRATEGY,
+            label="Strategy max-Sharpe top-%d (Sharpe %.2f)" % (TOP_K, m["sharpe"]))
+    ax.plot(eq.index, eq["bench"], lw=1.6, color=C_BENCH,
+            label="Benchmark equal-weight (Sharpe %.2f)" % m["bench_sharpe"])
+    ax.axhline(1.0, color=INK2, lw=0.8, ls="--", alpha=0.6)
+    ax.set_yscale("log")
+    ax.set_title("Equity Curve (log scale) - Vwap basis, 2019 OOS")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Net value (log)")
+    ax.grid(True, color=GRID, lw=0.7, alpha=0.8)
+    ax.legend(loc="best")
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
+    plt.tight_layout()
+    fig.savefig(os.path.join(OUT, "equity_curve.png"), dpi=150)
+    plt.close(fig)
+
+    # ---- 2. drawdown ----------------------------------------------------------
+    dd = eq["strategy"] / eq["strategy"].cummax() - 1.0
+    ddb = eq["bench"] / eq["bench"].cummax() - 1.0
+    fig, ax = plt.subplots(figsize=(11, 4.5))
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor(SURF)
+    ax.plot(dd.index, dd * 100, color=C_RED, lw=1.2, label="Strategy drawdown")
+    ax.fill_between(dd.index, dd * 100, 0, color=C_RED, alpha=0.4, lw=0)
+    ax.plot(ddb.index, ddb * 100, color=C_BENCH, lw=0.9, alpha=0.8,
+            label="Benchmark drawdown")
+    ax.set_title("Drawdown (%)  (max {:.2f}%)".format(m["max_drawdown_pct"]))
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Drawdown (%)")
+    ax.grid(True, color=GRID, lw=0.7, alpha=0.8)
+    ax.legend(loc="lower left")
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
+    plt.tight_layout()
+    fig.savefig(os.path.join(OUT, "drawdown.png"), dpi=150)
+    plt.close(fig)
+
+    # ---- 3. weights heatmap (top-10 weights per rebalance ) -------------------
+    w_rows = wmat.loc[rebal_dates]
+    w_flat = w_rows.where(w_rows > 0).stack()
+    if len(w_flat) > 0:
+        top_names = w_flat.groupby(level=1).mean().nlargest(10).index
+        heat = w_rows[top_names].T.replace(0, np.nan)
+        fig, ax = plt.subplots(figsize=(12, 6))
+        fig.patch.set_facecolor("white")
+        im = ax.imshow(heat.values, aspect="auto", cmap="Blues",
+                       interpolation="nearest", vmin=0.0, vmax=0.10)
+        ax.set_yticks(range(heat.shape[0]))
+        ax.set_yticklabels(heat.index)
+        tick = list(range(0, heat.shape[1], max(1, heat.shape[1] // 10)))
+        ax.set_xticks(tick)
+        ax.set_xticklabels([d.strftime("%Y-%m") for d in heat.columns[tick]],
+                           rotation=45, ha="right")
+        ax.set_title("Top-10 Asset Weights heatmap (per rebalance, cap 0.10)")
+        ax.set_xlabel("Rebalance date")
+        ax.set_ylabel("Asset")
+        cb = fig.colorbar(im, ax=ax, shrink=0.85)
+        cb.set_label("Portfolio weight")
+        plt.tight_layout()
+        fig.savefig(os.path.join(OUT, "weights_heat.png"), dpi=150)
+        plt.close(fig)
+    else:
+        log("[port] WARN: no positive weights -> weights_heat.png not drawn")
+
+    # ---- 4. pred vs fwd_ret10 rank IC timeline --------------------------------
+    try:
+        common = ret.index.intersection(pm.index).intersection(fwd.index)
+        common = [d for d in common if d >= pd.Timestamp(OOS_START)]
+        ics = []
+        for d in common:
+            pa = pm.loc[d].dropna()
+            if len(pa) < 10:
+                continue
+            fb = fwd.loc[d].reindex(pa.index).dropna()
+            pa = pa.reindex(fb.index)
+            if len(pa) < 10:
+                continue
+            ic = pa.rank().corr(fb.rank())
+            if np.isfinite(ic):
+                ics.append((pd.Timestamp(d), float(ic)))
+        if len(ics) >= 10:
+            icdf = pd.Series(dict(ics)).sort_index()
+            icdf.index.name = "date"
+            mc = icdf.rolling(20, min_periods=5).mean()
+            fig, ax = plt.subplots(figsize=(11, 4.5))
+            fig.patch.set_facecolor("white")
+            ax.set_facecolor(SURF)
+            ax.plot(icdf.index, icdf.values, lw=0.7, color=INK2, alpha=0.55,
+                    label="Daily rank IC")
+            ax.plot(mc.index, mc.values, lw=1.8, color=C_AQUA,
+                    label="20D mean rank IC")
+            ax.axhline(0, color=INK2, lw=0.8, ls="--", alpha=0.6)
+            ax.set_title("Rank IC: prediction vs 10d forward Vwap return "
+                         "(mean %.4f)" % float(icdf.mean()))
+            ax.set_xlabel("Date")
+            ax.set_ylabel("Rank IC")
+            ax.grid(True, color=GRID, lw=0.7, alpha=0.8)
+            ax.legend(loc="best")
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
+            plt.tight_layout()
+            fig.savefig(os.path.join(OUT, "pred_ic_timeline.png"), dpi=150)
+            plt.close(fig)
+        else:
+            log("[port] WARN: <10 IC days -> pred_ic_timeline.png not drawn")
+    except Exception as e:
+        log("[port] WARN: pred_ic_timeline failed (%s: %s)" % (type(e).__name__, e))
+
+
+def main():
+    t0 = datetime.now()
+    log("[port] loading predictions / vwap_trad / fwd_ret10 ...")
+    pred, vwap, fwd = load_inputs()
+    pred_min, pred_max = pred["date"].min(), pred["date"].max()
+    log("[port] predictions %s  %s .. %s" % (pred.shape, pred_min.date(), pred_max.date()))
+
+    # prediction matrix (date x asset), aligned over the vwap calendar
+    pm = pred.pivot_table(index="date", columns="asset", values="pred")
+    pm = pm.reindex(index=vwap.index.union(pm.index)).sort_index()
+    cols = [c for c in vwap.columns if c in pm.columns]
+    pm = pm[cols]
+
+    ret = asset_returns(vwap)
+    idx_dates = list(vwap.index)
+
+    # ---- rebalance dates: vwap row % 10 == 0 AND a prediction exists ----------
+    positions = np.arange(len(idx_dates))
+    candidates = positions[(positions % REBAL_PERIOD) == 0]
+    reb_dates = []
+    for pos in candidates:
+        d = idx_dates[pos]
+        if d in pm.index and pm.loc[d].notna().any() and d <= pred_max:
+            reb_dates.append(d)
+    reb_dates = sorted(reb_dates)
+    log("[port] rebalance days (row %% %d == 0, prediction available): %d"
+        % (REBAL_PERIOD, len(reb_dates)))
+
+    # ---- benchmark: equal-weight full-pool Vwap daily return, from OOS ---------
+    bench = ret.loc[ret.index >= pd.Timestamp(OOS_START)].mean(axis=1, skipna=True)
+    bench.name = "bench"
+
+    # ---- build weights matrix ---------------------------------------------------
+    wmat = pd.DataFrame(0.0, index=vwap.index, columns=vwap.columns)
+    opt_done = fback = 0
+    n_holds = []
+    for d in reb_dates:
+        pos = idx_dates.index(d)
+        row = pm.loc[d].dropna()
+        if len(row) < MIN_HOLDINGS:
+            log("[port] %s skip: %d assets with predictions" % (d.date(), len(row)))
+            continue
+        uni = row.nlargest(TOP_K)
+        names = list(uni.index)
+        k = len(names)
+        if k < MIN_HOLDINGS:
+            log("[port] %s skip: top-K reduced to %d" % (d.date(), k))
+            continue
+
+        # mu and covariance from past COV_WINDOW daily Vwap returns (incl. day d)
+        rsub = ret.iloc[max(0, pos - COV_WINDOW):pos + 1][names].dropna()
+        mu = rsub.mean().values
+        cov = (rsub.cov().values + rsub.cov().values.T) / 2.0
+        eigs = np.linalg.eigvalsh(cov)
+        reg = max(1e-5 * np.nanmean(rsub.values ** 2) + 1e-9, -eigs.min() + 1e-7)
+        cov = cov + reg * np.eye(k)   # positive definite
+
+        w = None
+        status = "unsolved"
+        for cap in (MAX_WEIGHT, BACKOFF_WEIGHT):
+            w, status = solve_max_sharpe(mu, cov, cap)
+            if w is None or not np.isfinite(w).all():
+                w = None
+                continue
+            if w.sum() <= 0.5 or int((w > 1e-4).sum()) < MIN_HOLDINGS:
+                w = None                       # degenerate -> try relaxed cap
+                continue
+            if cap > MAX_WEIGHT:
+                fback += 1
+            break
+        if w is None:
+            w = np.full(k, 1.0 / k)
+            status = "fallback_eqw"
+            fback += 1
+        if w.sum() < 0.999:                    # normalise residual drift
+            w = w / w.sum()
+        n_hold = int((w > 1e-4).sum())
+        n_holds.append(n_hold)
+        opt_done += 1
+        wmat.loc[d, names] = w
+        log("[port] %s  top=%d  nnz=%d  maxw=%.4f  %s"
+            % (d.date(), k, n_hold, w.max(), status))
+
+    # save: rebalance days have weights, other rows NaN (previous weights carried
+    # forward inside the backtest, never persisted twice)
+    w_out = wmat.replace(0.0, np.nan)
+    w_out.to_parquet(WEIGHTS_OUT)
+    log("[port] SAVED %s  %s" % (WEIGHTS_OUT, wmat.shape))
+
+    # ---- backtest ----------------------------------------------------------------
+    strat = run_backtest(wmat, ret)
+    strat.name = "strategy"
+    anchor = max(pd.Timestamp(OOS_START), reb_dates[0]) if reb_dates else pd.Timestamp(OOS_START)
+    oos = pd.concat([strat, bench], axis=1)
+    oos = oos.loc[oos.index >= anchor].dropna(subset=["strategy"])
+    oos = oos.dropna()
+    eqall = (1 + oos).cumprod()
+    s, b = oos["strategy"], oos["bench"]
+
+    n_days = len(oos)
+    cum_s = eqall["strategy"].iloc[-1] - 1.0
+    cum_b = eqall["bench"].iloc[-1] - 1.0
+    ann_s, ann_b = annualise(cum_s, n_days), annualise(cum_b, n_days)
+    vol_s = s.std(ddof=1) * np.sqrt(TRADING_DAYS)
+    vol_b = b.std(ddof=1) * np.sqrt(TRADING_DAYS)
+    sharpe_s = (s.mean() - RF_DAILY) / (s.std(ddof=1) + 1e-12) * np.sqrt(TRADING_DAYS)
+    sharpe_b = (b.mean() - RF_DAILY) / (b.std(ddof=1) + 1e-12) * np.sqrt(TRADING_DAYS)
+    mdd_s = max_drawdown(eqall["strategy"])
+    mdd_b = max_drawdown(eqall["bench"])
+    win_s = (s > 0).mean()
+    pos = s[s > 0]
+    neg = s[s < 0]
+    avg_w = pos.mean() if len(pos) else np.nan
+    avg_l = neg.mean() if len(neg) else np.nan
+    pf = avg_w / abs(avg_l) if avg_l else np.nan
+    calmar_s = ann_s / abs(mdd_s) if mdd_s < 0 else np.nan
+    calmar_b = ann_b / abs(mdd_b) if mdd_b < 0 else np.nan
+
+    m = {
+        "period": "%s .. %s" % (oos.index[0].date(), oos.index[-1].date()),
+        "total_return_pct": cum_s * 100,
+        "bench_total_return_pct": cum_b * 100,
+        "annual_return_pct": ann_s * 100,
+        "bench_annual_return_pct": ann_b * 100,
+        "annual_vol_pct": vol_s * 100,
+        "bench_annual_vol_pct": vol_b * 100,
+        "sharpe": float(sharpe_s),
+        "bench_sharpe": float(sharpe_b),
+        "max_drawdown_pct": mdd_s * 100,
+        "bench_max_drawdown_pct": mdd_b * 100,
+        "calmar": float(calmar_s),
+        "bench_calmar": float(calmar_b),
+        "daily_win_rate_pct": win_s * 100,
+        "profit_factor": float(pf) if pf == pf else float("nan"),
+        "n_rebalances": len(reb_dates),
+        "avg_holdings": float(np.mean(n_holds)) if n_holds else float("nan"),
+        "opt_solves": opt_done,
+        "fallbacks": fback,
+        "trading_days": n_days,
+    }
+
+    # ---- metrics.txt -----------------------------------------------------------------
+    lines = [
+        "# Portfolio backtest metrics (Vwap daily return basis)",
+        "# generated: " + datetime.now().isoformat(timespec="seconds"),
+        "# period: " + m["period"],
+        "",
+        "total_return_pct        = %.2f" % m["total_return_pct"],
+        "bench_total_return_pct  = %.2f" % m["bench_total_return_pct"],
+        "annual_return_pct       = %.2f" % m["annual_return_pct"],
+        "bench_annual_return_pct = %.2f" % m["bench_annual_return_pct"],
+        "annual_vol_pct          = %.2f" % m["annual_vol_pct"],
+        "bench_annual_vol_pct    = %.2f" % m["bench_annual_vol_pct"],
+        "sharpe                  = %.2f" % m["sharpe"],
+        "bench_sharpe            = %.2f" % m["bench_sharpe"],
+        "max_drawdown_pct        = %.2f" % m["max_drawdown_pct"],
+        "bench_max_drawdown_pct  = %.2f" % m["bench_max_drawdown_pct"],
+        "calmar                  = %.2f" % m["calmar"],
+        "bench_calmar            = %.2f" % m["bench_calmar"],
+        "daily_win_rate_pct      = %.2f" % m["daily_win_rate_pct"],
+        "profit_factor           = %.2f" % m["profit_factor"],
+        "n_rebalances            = %d" % m["n_rebalances"],
+        "avg_holdings            = %.2f" % m["avg_holdings"],
+        "opt_solves              = %d" % m["opt_solves"],
+        "fallbacks               = %d" % m["fallbacks"],
+        "trading_days            = %d" % m["trading_days"],
+        "",
+        "params: top_k=%d rebal_period=%d cov_window=%d max_w=%.2f backoff_w=%.2f "
+        "min_holdings=%d rf=%.2f oos_start=%s" % (
+            TOP_K, REBAL_PERIOD, COV_WINDOW, MAX_WEIGHT, BACKOFF_WEIGHT,
+            MIN_HOLDINGS, RF_DAILY, OOS_START),
+    ]
+    with open(METRICS_OUT, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    log("[port] SAVED %s" % METRICS_OUT)
+
+    plot_charts(eqall, oos, wmat, reb_dates, pm, fwd, ret, m)
+
+    # ---- report.md (Chinese) ------------------------------------------------------------
+    verdict = "跑赢" if cum_s > cum_b else "跑输"
+    stable = "求解较稳定" if m["fallbacks"] < m["n_rebalances"] * 0.1 \
+        else "求解退化较多（回退 %d 次），建议加大协方差正则或改等权" % m["fallbacks"]
+    report = """# 组合优化与回测报告（lightgbm_qs）
+
+生成时间：{ts}
+
+## 一、参数表
+
+| 参数 | 值 | 说明 |
+|---|---|---|
+| Top-K | {k} | 每个调仓日取 pred 最高的前 {k} 只 |
+| 调仓周期 | {p} 个交易日 | 用 vwap_trad 行序号 % {p} == 0 定位调仓日 |
+| 协方差窗口 | {w} 日 | 过去 {w} 日该 {k} 只 Vwap 日收益估计协方差（样本协方差+特征值正则） |
+| 优化器 | cvxpy 二次规划 | 最大夏普（Charnes-Cooper 形式 max mu'y s.t. y'Sy<=1），归一化 w=y/sum(y) |
+| 权重约束 | 0<=w<=0.10, sum(w)=1 | long only、单票上限 10%、至少 {m} 只持仓 |
+| 回退策略 | cap 放宽 0.20 | 求解失败/收敛少于 {m} 只时先放宽上限，再失败则等权 top-{k}，均计数 |
+| 日收益口径 | Vwap-to-Vwap | 资产日收益 = vwap_trad.pct_change()（行间），全局硬性口径，禁止 close 收益 |
+| 防前视 | weights.shift(1) | 用上一调仓日权重并滞后 1 天参与收益计算 |
+| 基准 | 等权全池 | 2019-01 OOS 起对齐的 vwap_trad 全池等权日收益 |
+| 无风险利率 | {rf} | Sharpe 计算 rf=0 |
+| 回测区间 | {period} | 预测 OOS 区间 {pmin} .. {pmax} |
+
+## 二、回测指标
+
+| 指标 | 策略 | 基准（等权全池） |
+|---|---|---|
+| 累计收益 | {tr:.2f}% | {btr:.2f}% |
+| 年化收益 | {ar:.2f}% | {bar:.2f}% |
+| 年化波动 | {av:.2f}% | {bav:.2f}% |
+| 夏普 | {sh:.2f} | {bsh:.2f} |
+| 最大回撤 | {mdd:.2f}% | {bmdd:.2f}% |
+| 卡玛 | {ca:.2f} | {bca:.2f} |
+| 日胜率 | {wr:.2f}% | - |
+| 盈亏比 | {pf:.2f} | - |
+
+执行统计：调仓 {nr} 次，平均持仓 {ah:.1f} 只，优化求解 {os} 次，回退 {fb} 次，共 {td} 个交易日。
+
+## 三、结论
+
+- 策略在 Vwap 口径下累计收益 {tr:.2f}%（年化 {ar:.2f}%，波动 {av:.2f}%），
+  相对等权全池基准累计 {btr:.2f}%（年化 {bar:.2f}%），{verdict}基准。
+- 夏普 {sh:.2f} vs 基准 {bsh:.2f}；最大回撤 {mdd:.2f}%；卡玛 {ca:.2f}；
+  日胜率 {wr:.2f}%；盈亏比 {pf:.2f}。
+- 组合平均持仓 {ah:.1f} 只，回退 {fb} 次。{stable}。
+- 图表（英文标签，PNG，见 outputs/）：equity_curve.png（净值对数轴 vs 基准）、
+  drawdown.png（回撤）、weights_heat.png（每调仓日 top10 权重热力图）、
+  pred_ic_timeline.png（pred vs fwd_ret10 截面秩 IC 时间序列，辅助验证模型）。
+""".format(
+        ts=datetime.now().isoformat(timespec="seconds"),
+        k=TOP_K, p=REBAL_PERIOD, w=COV_WINDOW, m=MIN_HOLDINGS, rf=RF_DAILY,
+        period=m["period"], pmin=pred_min.date(), pmax=pred_max.date(),
+        tr=m["total_return_pct"], btr=m["bench_total_return_pct"],
+        ar=m["annual_return_pct"], bar=m["bench_annual_return_pct"],
+        av=m["annual_vol_pct"], bav=m["bench_annual_vol_pct"],
+        sh=m["sharpe"], bsh=m["bench_sharpe"],
+        mdd=m["max_drawdown_pct"], bmdd=m["bench_max_drawdown_pct"],
+        ca=m["calmar"], bca=m["bench_calmar"], wr=m["daily_win_rate_pct"],
+        pf=m["profit_factor"], nr=m["n_rebalances"], ah=m["avg_holdings"],
+        os=m["opt_solves"], fb=m["fallbacks"], td=m["trading_days"],
+        verdict=verdict, stable=stable,
+    )
+    with open(REPORT_OUT, "w") as f:
+        f.write(report)
+    log("[port] SAVED %s" % REPORT_OUT)
+
+    log("[port] DONE  elapsed=%.1fs" % (datetime.now() - t0).total_seconds())
+    print_usage()
+
+
+def print_usage():
+    print("""
+用法
+  /srv/quant/envs/quantaalpha/bin/python scripts/portfolio_and_backtest.py
+
+输入
+  data/build/predictions.parquet   (date, asset, pred)
+  data/panel/vwap_trad.parquet     (date x asset Vwap)
+  data/panel/fwd_ret10.parquet     (date x asset 10日前瞻 Vwap 收益)
+
+输出
+  data/build/weights.parquet       调仓日权重（非调仓日 NaN）
+  outputs/metrics.txt              回测指标（键值对）
+  outputs/report.md                中文报告（参数表 + 结论）
+  outputs/equity_curve.png         策略 vs 基准净值（对数轴，2019 起）
+  outputs/drawdown.png             策略回撤
+  outputs/weights_heat.png         每调仓日 top10 权重热力图
+  outputs/pred_ic_timeline.png     pred vs fwd_ret10 截面秩 IC 时间序列
+
+说明
+  先运行 scripts/train_final.py 生成 predictions.parquet 后再运行本脚本。
+  关键配置：Top-K=%d，调仓=%d 日，协方差=%d 日，单票上限=%.2f（退化回退 %.2f 或等权 top-%d）。
+  收益口径：Vwap-to-Vwap（vwap_trad.pct_change()），策略收益用上一调仓日权重 shift(1) 防前视。
+""" % (TOP_K, REBAL_PERIOD, COV_WINDOW, MAX_WEIGHT, BACKOFF_WEIGHT, TOP_K))
+
+
+if __name__ == "__main__":
+    main()

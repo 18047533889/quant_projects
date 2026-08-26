@@ -398,20 +398,52 @@ def test_assembly_hash_is_canonical_over_all_semantic_fields():
             gate_results=("gate-1",),
         )
 
+    # Auto-treatment artifacts so production mode has a consume-only
+    # treatment_selection_ref (production now requires one).
+    from factor_assets.contracts.treatment_selection import TreatmentSelectionArtifact
+
+    def treatment(factor_version="v1"):
+        return TreatmentSelectionArtifact(
+            factor_id="F1",
+            factor_version=factor_version,
+            raw_baseline_evidence_ref="ref:raw",
+            factor_profile_ref="ref:profile",
+            eligibility_policy_ref="ref:elig",
+            search_space_ref="ref:ss",
+            all_trial_refs=("ref:t_a",),
+            pareto_candidate_refs=("ref:p_1",),
+            winner_recipe={"preprocess": "zscore"},
+            winner_policy_identity="policy:auto-treat/v3",
+            absolute_metric_refs={"sharpe": "ref:s"},
+            delta_metric_refs={"delta_sharpe": "ref:d"},
+            dimension_scores={"return": 0.8, "robustness": 0.65},
+            hard_gate_results={"min_obs": "PASS"},
+            soft_floor_results={"min_sharpe": 0.2},
+            robustness_evidence="ref:rob",
+            complexity_score=0.42,
+            snapshot_ref="ref:snapshot",
+            universe_ref="ref:universe",
+            split_ref="ref:split",
+            created_at="2026-08-25T00:00:00+00:00",
+        )
+
     prod = FactorSetAssembler().assemble(
         spec, [make_asset("F1")],
         admission_artifacts={"F1": admission(3, 1, "v1")},
+        treatment_selection_artifacts={"F1": treatment()},
         production=True, created_at="2024-02-01T00:00:00Z",
     )
     assert prod.assembly_hash != h  # membership provenance now included
     assert FactorSetAssembler().assemble(
         spec, [make_asset("F1")],
         admission_artifacts={"F1": admission(4, 1, "v1")},
+        treatment_selection_artifacts={"F1": treatment()},
         production=True, created_at="2024-02-01T00:00:00Z",
     ).assembly_hash != prod.assembly_hash
     assert FactorSetAssembler().assemble(
         spec, [make_asset("F1")],
         admission_artifacts={"F1": admission(3, 1, "v2")},
+        treatment_selection_artifacts={"F1": treatment()},
         production=True, created_at="2024-02-01T00:00:00Z",
     ).assembly_hash != prod.assembly_hash
 

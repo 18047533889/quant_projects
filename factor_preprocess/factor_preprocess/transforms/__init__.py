@@ -12,6 +12,14 @@ from factor_preprocess.transforms.rolling import (
     rolling_zscore,
     ewma,
 )
+from factor_preprocess.transforms.smoothing import (
+    trailing_sma,
+    trailing_median,
+    robust_ewma,
+    kama,
+    one_sided_iir_lowpass,
+    kalman_local_level,
+)
 from factor_preprocess.transforms.volatility import (
     volatility_scale,
     volatility_scale_returns,
@@ -45,6 +53,12 @@ __all__ = [
     "rolling_std",
     "rolling_zscore",
     "ewma",
+    "trailing_sma",
+    "trailing_median",
+    "robust_ewma",
+    "kama",
+    "one_sided_iir_lowpass",
+    "kalman_local_level",
     "volatility_scale",
     "volatility_scale_returns",
     "realized_volatility",

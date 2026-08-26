@@ -22,6 +22,8 @@ from factor_assets.contracts.lifecycle import (
 )
 from factor_assets.contracts.envelope import ContractEnvelope
 from factor_assets.contracts.lineage import LineageRef, ParentRef
+from factor_assets.contracts.treatment_policy import TreatmentPolicyRef
+from factor_assets.contracts.treatment_selection import TreatmentSelectionArtifact
 
 __all__ = [
     "FactorAsset",
@@ -40,4 +42,6 @@ __all__ = [
     "ContractEnvelope",
     "LineageRef",
     "ParentRef",
+    "TreatmentPolicyRef",
+    "TreatmentSelectionArtifact",
 ]

@@ -44,6 +44,10 @@ from factor_optimizer.data_capabilities import (
 from factor_optimizer.search.multifidelity import FidelityTier, MultiFidelityScheduler
 from factor_optimizer.search.plateau import PlateauConfig, PlateauDetector
 from factor_optimizer.search.strategies import SearchStrategy
+from factor_optimizer.search.tiered_evaluation import (
+    TieredEvaluationPolicy,
+    TieredEvaluationScheduler,
+)
 
 
 @dataclass
@@ -81,6 +85,16 @@ class SearchConfig:
     # ``__post_init__``.
     objective_direction: Optional[ObjectiveDirection] = None
     objective_spec: Optional[ObjectiveSpec] = None
+    # FO-AutoTmt: tiered evaluation funnel.  When set, the runner routes
+    # trials through the TieredEvaluationScheduler before full evaluation so
+    # cheap screening tiers run first and a full backtest is scheduled ONLY
+    # for candidates that survive every prior tier.
+    tiered_evaluation: Optional[TieredEvaluationPolicy] = None
+    # FO-AutoTmt: categorical proposal strategy.  When provided, the runner
+    # proposes trials through it (instead of a bare proposal_fn), and its
+    # direction must agree with objective_spec (the existing strategy-direction
+    # guard in SearchRunner.__init__ reuses this).
+    candidate_strategy: Optional[SearchStrategy] = None
 
     def __post_init__(self):
         if isinstance(self.execution_mode, str):
@@ -109,6 +123,20 @@ class SearchConfig:
                 raise ValueError(
                     "objective_direction must be 'maximize' or 'minimize'"
                 )
+        # FO-AutoTmt: tiered-evaluation policy must be a valid instance.
+        if self.tiered_evaluation is not None and not isinstance(
+            self.tiered_evaluation, TieredEvaluationPolicy
+        ):
+            raise TypeError(
+                "tiered_evaluation must be a TieredEvaluationPolicy (or None)"
+            )
+        # FO-AutoTmt: categorical proposal strategy must be a SearchStrategy.
+        if self.candidate_strategy is not None and not isinstance(
+            self.candidate_strategy, SearchStrategy
+        ):
+            raise TypeError(
+                "candidate_strategy must be a SearchStrategy (or None)"
+            )
         # The spec is the authority for direction.  If both the spec and the
         # legacy field are given, they must agree; the field is then dropped
         # so the spec cannot drift from it.  If only the field is given, it is
@@ -149,6 +177,12 @@ class SearchConfig:
             "execution_mode": self.execution_mode.value,
             "require_evaluation_protocol": self.require_evaluation_protocol,
             "objective_spec": self.objective_spec.to_dict(),
+            "tiered_evaluation": (
+                self.tiered_evaluation.to_dict()
+                if self.tiered_evaluation is not None
+                else None
+            ),
+            "candidate_strategy": None,
         }
 
     @classmethod
@@ -163,6 +197,14 @@ class SearchConfig:
             values["objective_spec"] = ObjectiveSpec.from_dict(
                 values["objective_spec"]
             )
+        if values.get("tiered_evaluation") is not None:
+            values["tiered_evaluation"] = TieredEvaluationPolicy.from_dict(
+                values["tiered_evaluation"]
+            )
+        # ``candidate_strategy`` is a runtime object, not serialized into the
+        # config payload; a checkpoint round-trip must not try to reconstruct
+        # one from the dict.
+        values.pop("candidate_strategy", None)
         return cls(**values)
 
 
@@ -837,7 +879,20 @@ def _restore_search_split_plan(
 
 
 class SearchRunner:
-    """Orchestrates mutation search with budget and stopping criteria."""
+    """Orchestrates mutation search with budget and stopping criteria.
+
+    STRICT-OOS (factor auto-treatment / model selection): treatment search is
+    model selection — TRAIN fit -> VALIDATION select -> freeze winner ->
+    SEALED TEST one-shot.  When ``tiered_evaluation`` is configured, candidates
+    are routed through cheap screening tiers and a full backtest runs ONLY for
+    funnel survivors; tier routing is driven exclusively by search-time
+    (train/validation) evaluation and must NEVER let the sealed test influence
+    which tier a candidate is promoted to.  The sealed-test machinery below
+    already enforces the frozen-winner boundary: ``freeze_for_sealed_test``
+    runs only on the finished winner, its split plan must be disjoint from all
+    search data, and the seal is consumed exactly once.  Tiered evaluation
+    must never weaken that boundary.
+    """
 
     def __init__(
         self,
@@ -887,6 +942,12 @@ class SearchRunner:
         self.plateau_detector = plateau_detector
         self.trial_validator = trial_validator
         self.strategy = strategy
+        # FO-AutoTmt: tiered evaluation funnel scheduler (None when disabled).
+        self._tiered_scheduler: Optional[TieredEvaluationScheduler] = None
+        if config.tiered_evaluation is not None:
+            self._tiered_scheduler = TieredEvaluationScheduler(
+                config.tiered_evaluation
+            )
         # FO-P0-03: the strategy's direction must be derived from the
         # authoritative ObjectiveSpec.  A strategy whose direction disagrees
         # with the config spec is rejected outright — the strategy can never
@@ -898,6 +959,19 @@ class SearchRunner:
                     "strategy direction and objective_spec disagree; the "
                     f"objective spec is the single direction authority "
                     f"(strategy={strategy_dir!r}, spec={config.objective_spec.direction!r})"
+                )
+        # FO-AutoTmt: the candidate strategy's direction must also agree with
+        # the authoritative objective spec (single direction authority).
+        if config.candidate_strategy is not None:
+            cand_dir = getattr(config.candidate_strategy, "direction", None)
+            if (
+                cand_dir is not None
+                and cand_dir != config.objective_spec.direction
+            ):
+                raise ValueError(
+                    "candidate_strategy direction and objective_spec disagree; "
+                    "the objective spec is the single direction authority "
+                    f"(candidate={cand_dir!r}, spec={config.objective_spec.direction!r})"
                 )
         # Lazily-built default PlateauDetector (package semantics).
         self._default_plateau_detector: Optional[PlateauDetector] = None
@@ -1109,7 +1183,13 @@ class SearchRunner:
                 break
 
             try:
-                trial = self.proposal_fn()
+                # FO-AutoTmt: when a categorical candidate strategy is
+                # configured, propose through it instead of the bare
+                # proposal_fn.
+                if self.config.candidate_strategy is not None:
+                    trial = self.config.candidate_strategy.proposal_fn()
+                else:
+                    trial = self.proposal_fn()
             except Exception as exc:
                 budget_tracker.record_trial()
                 # FO-P0-04: a raised proposal is a distinct burned-budget
@@ -1151,8 +1231,22 @@ class SearchRunner:
                 continue
             trial.update_status(TrialStatus.LEGAL, legality_check=legality)
 
-            scheduler = MultiFidelityScheduler() if self.config.enable_multifidelity else None
-            fidelity = 0 if scheduler is not None else 4
+            # FO-AutoTmt: tiered funnel routing overrides the legacy
+            # multi-fidelity promotion path for this trial.
+            tiered_active = self._tiered_scheduler is not None
+            candidate = trial.trial_id
+            tier_name: Optional[str] = None
+            scheduler = None
+            if tiered_active:
+                tier_name = self._tiered_scheduler.tier_name_for(candidate)
+                fidelity = self._tiered_scheduler.fidelity_for(candidate)
+            else:
+                scheduler = (
+                    MultiFidelityScheduler()
+                    if self.config.enable_multifidelity
+                    else None
+                )
+                fidelity = 0 if scheduler is not None else 4
             result = None
             artifact = None
             while True:
@@ -1246,7 +1340,28 @@ class SearchRunner:
                     )
                     break
 
-                # Promotion is opt-in and requires coherent peer rank evidence.
+                # FO-AutoTmt: with a tiered funnel, advance the candidate based
+                # on its earlier-tier performance.  Failures prune it (never
+                # reaching the full/expensive tier); successes promote it to the
+                # next, more expensive tier.  Strict-OOS: this is driven ONLY by
+                # search-time (train/validation) evaluation; the sealed test
+                # never influences tier routing.
+                if tiered_active:
+                    passed = True
+                    next_name = self._tiered_scheduler.advance(
+                        candidate, tier_name, passed
+                    )
+                    if next_name is not None:
+                        if next_name != tier_name:
+                            fidelity = self._tiered_scheduler.fidelity_for(candidate)
+                        continue
+                    # No next tier: candidate either completed the full funnel
+                    # (Tier4/full backtest reached) or is being re-confirmed at
+                    # its current tier; either way evaluation is terminal here.
+                    break
+
+                # Legacy promotion is opt-in and requires coherent peer rank
+                # evidence.
                 next_tier = scheduler.next_tier(FidelityTier(fidelity)) if scheduler else None
                 can_promote = (
                     scheduler is not None

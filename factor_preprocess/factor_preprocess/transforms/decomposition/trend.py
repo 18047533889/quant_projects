@@ -1,8 +1,15 @@
 """
 Trend extraction using Hodrick-Prescott filter.
 
-All functions are causal - they exclude the current observation and operate
-per-asset to ensure no future leakage.
+STATUS: OFFLINE_ONLY / RESEARCH ONLY. These functions are NOT
+production-causal.
+
+They apply ``shift(1)`` to exclude the current observation, but then solve
+the HP objective over the WHOLE lagged sample (``spsolve(A, y)`` over the
+full series). As a result a historical trend point can depend on LATER
+lagged observations: the transform is NOT prefix-invariant. Recomputing
+``hp_filter`` over a prefix does not reproduce the first outputs computed
+over the full series. Do not use these in any production pipeline.
 """
 import numpy as np
 import pandas as pd
@@ -19,7 +26,13 @@ def hp_filter(
     value_col: str = "value",
 ) -> pd.Series:
     """
-    Causal Hodrick-Prescott filter for trend extraction.
+    Hodrick-Prescott filter for trend extraction. OFFLINE_ONLY.
+
+    This is NOT production-causal: after ``shift(1)`` the HP objective is
+    solved over the whole lagged sample (``spsolve``), so a historical trend
+    point can depend on later lagged observations. It is NOT prefix-invariant.
+    Keep this for research/offline use only; it is registered in the
+    default registry as OFFLINE_ONLY with ``causal_safe=False``.
 
     Parameters
     ----------
@@ -42,13 +55,12 @@ def hp_filter(
     -------
     pd.Series
         Trend component, aligned with input index.
-        First observation per asset is NaN (causal lag).
+        First observation per asset is NaN.
 
     Notes
     -----
-    Uses shift(1) to exclude current observation, ensuring causality.
-    The HP filter minimizes: sum((y_t - tau_t)^2) + lambda * sum((tau_t+1 - 2*tau_t + tau_t-1)^2)
-    where tau is the trend component.
+    Uses shift(1) to exclude the current observation, but solves the HP
+    objective over the WHOLE lagged sample. Do not use in production.
     """
     if lambda_param <= 0:
         raise ValueError(f"lambda_param must be > 0, got {lambda_param}")
@@ -111,7 +123,11 @@ def hp_decompose(
     value_col: str = "value",
 ) -> Tuple[pd.Series, pd.Series]:
     """
-    Causal Hodrick-Prescott decomposition into trend and cycle.
+    Hodrick-Prescott decomposition into trend and cycle. OFFLINE_ONLY.
+
+    Inherits the non-causal, non-prefix-invariant behavior of :func:`hp_filter`.
+    Keep for research/offline use only; registered as OFFLINE_ONLY with
+    ``causal_safe=False``.
 
     Parameters
     ----------
@@ -138,6 +154,7 @@ def hp_decompose(
     -----
     Decomposition: y_t = trend_t + cycle_t
     First observation per asset is NaN for both components.
+    Not production-causal.
     """
     trend = hp_filter(
         values,

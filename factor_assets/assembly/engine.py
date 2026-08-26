@@ -50,6 +50,7 @@ class FactorSetAssembler:
         admission_artifacts: Optional[
             Mapping[str, FactorAdmissionArtifact]
         ] = None,
+        treatment_selection_artifacts: Optional[Mapping[str, object]] = None,
         production: bool = False,
     ) -> FactorSetArtifact:
         """Assemble a factor set from candidate assets.
@@ -70,9 +71,19 @@ class FactorSetAssembler:
                 (``health_state_ref``, ``cluster_id``, ``orientation``,
                 ``factor_version``).  Membership fields are populated ONLY from
                 these artifacts — never synthesized.
+            treatment_selection_artifacts: Optional ``{factor_id:
+                TreatmentSelectionArtifact}`` map supplying the auto-treatment
+                selection reference.  FA is CONSUME-only: the membership's
+                ``treatment_selection_ref`` is populated from the artifact and
+                never recomputed or fabricated.  If the treatment-selection
+                contract is not yet importable, this argument is accepted but
+                ignored (the wiring lazily imports the contract inside the
+                method so this package still imports cleanly on its own).
             production: When True, membership provenance must be fully resolved
                 from admission artifacts; any unresolvable mandatory field fails
                 closed (raises ValueError) rather than fabricating a value.
+                A production assembly also requires every membership to carry a
+                ``treatment_selection_ref`` (consume-only — never synthesized).
 
         Raises:
             TypeError: If ``spec``, a candidate, or an admission artifact value
@@ -97,6 +108,9 @@ class FactorSetAssembler:
             )
 
         admission_artifacts = self._validate_admission_artifacts(admission_artifacts)
+        treatment_artifacts = self._validate_treatment_selection_artifacts(
+            treatment_selection_artifacts
+        )
 
         admitted_factor_ids: Optional[set[str]] = None
         latest_decisions: dict[str, SelectionDecision] = {}
@@ -172,7 +186,8 @@ class FactorSetAssembler:
         factor_ids = tuple(asset.factor_id for asset in matched)
         timestamp = created_at or datetime.now(timezone.utc).isoformat()
         memberships = self._build_memberships(
-            matched, latest_decisions, spec, admission_artifacts, production
+            matched, latest_decisions, spec, admission_artifacts,
+            treatment_artifacts, production,
         )
         assembly_hash = self._assembly_hash(factor_ids, spec, memberships)
         policy_hash = self._policy_hash(spec)
@@ -230,6 +245,51 @@ class FactorSetAssembler:
             if factor_id != artifact.factor_id:
                 raise ValueError(
                     f"admission_artifacts key {factor_id!r} must match "
+                    f"artifact.factor_id {artifact.factor_id!r}"
+                )
+            validated[factor_id] = artifact
+        return validated
+
+    @staticmethod
+    def _validate_treatment_selection_artifacts(
+        treatment_selection_artifacts: Optional[Mapping[str, object]],
+    ) -> dict[str, object]:
+        """Validate the treatment-selection artifact map.
+
+        Every value must be an instance of the sibling
+        :class:`TreatmentSelectionArtifact` (lazily imported so this package
+        imports cleanly even before that contract exists) and every key must
+        match the artifact's own ``factor_id``.  Returns a plain dict so
+        downstream membership construction never touches a caller-owned
+        mapping after validation.
+        """
+        if treatment_selection_artifacts is None:
+            return {}
+        if not isinstance(treatment_selection_artifacts, Mapping):
+            raise TypeError(
+                "treatment_selection_artifacts must be a mapping of factor_id "
+                "to TreatmentSelectionArtifact"
+            )
+        artifact_cls = _load_treatment_selection_artifact()
+        validated: dict[str, object] = {}
+        for factor_id, artifact in treatment_selection_artifacts.items():
+            if artifact_cls is None:
+                # Sibling contract not yet importable: we cannot validate the
+                # value type or read its factor_id.  Fail closed rather than
+                # silently consuming an unvalidated artifact.
+                raise TypeError(
+                    "treatment_selection_artifacts supplied but the "
+                    "TreatmentSelectionArtifact contract is not importable; "
+                    "cannot validate artifact values"
+                )
+            if not isinstance(artifact, artifact_cls):
+                raise TypeError(
+                    f"treatment_selection_artifacts[{factor_id!r}] must be a "
+                    "TreatmentSelectionArtifact"
+                )
+            if factor_id != artifact.factor_id:
+                raise ValueError(
+                    f"treatment_selection_artifacts key {factor_id!r} must match "
                     f"artifact.factor_id {artifact.factor_id!r}"
                 )
             validated[factor_id] = artifact
@@ -324,6 +384,7 @@ class FactorSetAssembler:
         decisions: dict[str, SelectionDecision],
         spec: FactorSetSpec,
         admission_artifacts: Optional[Mapping[str, FactorAdmissionArtifact]] = None,
+        treatment_selection_artifacts: Optional[Mapping[str, object]] = None,
         production: bool = False,
     ) -> tuple[FactorMembership, ...]:
         """Build per-member provenance from the admission decisions.
@@ -334,14 +395,38 @@ class FactorSetAssembler:
         missing mandatory field fails closed with ``ValueError``.  In
         non-production mode the fields stay None unless an artifact supplies
         them, preserving the legacy behaviour.
+
+        The auto-treatment references are CONSUME-only: the membership's
+        ``treatment_selection_ref`` is lifted from the treatment-selection
+        artifact (never recomputed or fabricated).  In production mode a
+        member without a ``treatment_selection_ref`` fails closed, because FA
+        must not assemble a production set whose treatment is unresolved.
         """
         artifacts = {} if admission_artifacts is None else admission_artifacts
+        treatment = (
+            {}
+            if treatment_selection_artifacts is None
+            else treatment_selection_artifacts
+        )
         members: list[FactorMembership] = []
         for rank, asset in enumerate(assets):
             decision = decisions.get(asset.factor_id)
             artifact = FactorSetAssembler._admission_for(
                 asset.factor_id, artifacts, production
             )
+            selection_artifact = treatment.get(asset.factor_id)
+            treatment_selection_ref = (
+                getattr(selection_artifact, "content_hash", None)
+                if selection_artifact is not None
+                else None
+            )
+            if production and treatment_selection_ref is None:
+                raise ValueError(
+                    "production assembly requires a treatment_selection_ref "
+                    "from the treatment selection artifact; missing for factor_id "
+                    f"{asset.factor_id!r} — FA is consume-only and will not "
+                    "fabricate a treatment"
+                )
             health_state_ref = (
                 artifact.health_state_ref
                 if artifact is not None
@@ -411,6 +496,7 @@ class FactorSetAssembler:
                         if decision is not None and decision.similarity_refs
                         else None
                     ),
+                    treatment_selection_ref=treatment_selection_ref,
                     assembly_score=_decision_score(decision),
                     selection_rank=rank,
                     reason=decision.reason.value if decision is not None else None,
@@ -456,6 +542,9 @@ class FactorSetAssembler:
                 member.novelty_ref,
                 member.similarity_ref,
                 member.health_state_ref,
+                member.treatment_selection_ref,
+                member.preprocess_policy_ref,
+                member.preprocess_state_ref,
                 member.assembly_score,
                 member.selection_rank,
                 member.reason,
@@ -572,6 +661,23 @@ _LIFECYCLE_RANK = {
     LifecycleState.DEPRECATED: -1,
     LifecycleState.RETIRED: -1,
 }
+
+
+def _load_treatment_selection_artifact() -> Optional[type]:
+    """Lazily import the sibling TreatmentSelectionArtifact contract.
+
+    Returns the artifact class when the sibling module exists and imports
+    cleanly, else ``None``.  This keeps ``factor_assets`` importable on its own
+    even before the treatment-selection contract lands, while letting the
+    assembler type-check and validate artifacts the moment they do.
+    """
+    try:
+        from factor_assets.contracts.treatment_selection import (  # type: ignore
+            TreatmentSelectionArtifact,
+        )
+    except Exception:
+        return None
+    return TreatmentSelectionArtifact
 
 
 def _decision_objectives(
