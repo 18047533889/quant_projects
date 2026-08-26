@@ -1,0 +1,296 @@
+[
+  {
+    "tag": "PRED_ELITE",
+    "family": "质量",
+    "rule": "RankIC>=0.040 且 raw ICIR>=0.50 且 IC positive rate>=58%",
+    "severity": "INFO",
+    "meaning": "预测强"
+  },
+  {
+    "tag": "PRED_STRONG",
+    "family": "质量",
+    "rule": "RankIC>=0.030 且 raw ICIR>=0.30",
+    "severity": "INFO",
+    "meaning": "预测良好"
+  },
+  {
+    "tag": "RECENT_STRONG",
+    "family": "健康",
+    "rule": "Rolling60/Full>=0.80 且 Rolling60 RankIC>0",
+    "severity": "INFO",
+    "meaning": "近期保持强"
+  },
+  {
+    "tag": "RECENT_DECAY",
+    "family": "健康",
+    "rule": "Rolling60/Full<0.60；<0.40为MAJOR",
+    "severity": "MINOR/MAJOR",
+    "meaning": "近期衰减"
+  },
+  {
+    "tag": "DIRECTION_UNSTABLE",
+    "family": "健康",
+    "rule": "冻结方向后最近60日同号率<60%或显著反向持续",
+    "severity": "MAJOR",
+    "meaning": "方向不稳定"
+  },
+  {
+    "tag": "TAIL_ONLY",
+    "family": "结构",
+    "rule": "Top-tail贡献>总spread 60%，且中间分层平坦",
+    "severity": "INFO",
+    "meaning": "主要依赖极端尾部"
+  },
+  {
+    "tag": "TAIL_CLIFF",
+    "family": "结构",
+    "rule": "tail_collapse>0.25；>0.40为MAJOR",
+    "severity": "MINOR/MAJOR",
+    "meaning": "尾组塌陷"
+  },
+  {
+    "tag": "U_SHAPE",
+    "family": "结构",
+    "rule": "单调拟合弱而quadratic/two-tail OOS显著更好",
+    "severity": "INFO",
+    "meaning": "U型结构"
+  },
+  {
+    "tag": "MONOTONIC_STRONG",
+    "family": "结构",
+    "rule": "quantile_monotonicity>=0.85 且 isotonic_r2>=0.80",
+    "severity": "INFO",
+    "meaning": "分层单调强"
+  },
+  {
+    "tag": "LONG_DOMINANT",
+    "family": "组合",
+    "rule": "Long alpha contribution>=70%",
+    "severity": "INFO",
+    "meaning": "Long端主导"
+  },
+  {
+    "tag": "SHORT_DOMINANT",
+    "family": "组合",
+    "rule": "Short alpha contribution>=70%",
+    "severity": "INFO",
+    "meaning": "Short端主导"
+  },
+  {
+    "tag": "BROAD_ALPHA",
+    "family": "组合",
+    "rule": "top5_day_pnl_share<25% 且 PnL breadth>=70",
+    "severity": "INFO",
+    "meaning": "收益广泛"
+  },
+  {
+    "tag": "LOTTERY_ALPHA",
+    "family": "组合",
+    "rule": "top5_day_pnl_share>40% 或concentration>历史P95",
+    "severity": "MAJOR",
+    "meaning": "收益高度集中"
+  },
+  {
+    "tag": "HIGH_TURNOVER",
+    "family": "交易",
+    "rule": "turnover>P75(peer) 或 cost_erosion>35%",
+    "severity": "MINOR",
+    "meaning": "高换手"
+  },
+  {
+    "tag": "LOW_TURNOVER",
+    "family": "交易",
+    "rule": "turnover<P25(peer) 且 cost_erosion<20%",
+    "severity": "INFO",
+    "meaning": "低换手"
+  },
+  {
+    "tag": "COST_SENSITIVE",
+    "family": "交易",
+    "rule": "1.5x成本下净Alpha下降>50%或2x后转负",
+    "severity": "MAJOR",
+    "meaning": "成本敏感"
+  },
+  {
+    "tag": "CAPACITY_LIMITED",
+    "family": "交易",
+    "rule": "break-even AUM<目标AUM",
+    "severity": "MAJOR",
+    "meaning": "容量不足"
+  },
+  {
+    "tag": "DELAY_SENSITIVE",
+    "family": "交易",
+    "rule": "delay_1_retention<0.40",
+    "severity": "MAJOR",
+    "meaning": "执行延迟敏感"
+  },
+  {
+    "tag": "EXECUTION_RESILIENT",
+    "family": "交易",
+    "rule": "delay1>=0.8 且 executable_alpha_retention>=0.85",
+    "severity": "INFO",
+    "meaning": "执行鲁棒"
+  },
+  {
+    "tag": "DATA_COVERAGE_DROP",
+    "family": "数据",
+    "rule": "当前coverage较健康基线下降>=10pp；>=15pp为MAJOR",
+    "severity": "MINOR/MAJOR",
+    "meaning": "覆盖率异常"
+  },
+  {
+    "tag": "DISTRIBUTION_SHIFT",
+    "family": "数据",
+    "rule": "PSI>=0.25 或 standardized Wasserstein>3σ",
+    "severity": "MAJOR",
+    "meaning": "分布漂移"
+  },
+  {
+    "tag": "DISPERSION_COLLAPSE",
+    "family": "数据",
+    "rule": "cross-section std低于历史P1且持续>=2日",
+    "severity": "MAJOR",
+    "meaning": "信号横截面塌缩"
+  },
+  {
+    "tag": "STYLE_CLEAN",
+    "family": "暴露",
+    "rule": "neutralization_survival>=0.70 且主要style |z|<2",
+    "severity": "INFO",
+    "meaning": "风格清洁"
+  },
+  {
+    "tag": "STYLE_DEPENDENT",
+    "family": "暴露",
+    "rule": "neutralization_survival<0.50",
+    "severity": "MINOR/MAJOR",
+    "meaning": "风格依赖"
+  },
+  {
+    "tag": "STYLE_DRIFT",
+    "family": "暴露",
+    "rule": "主要风格暴露|z|>3或>历史99%分位",
+    "severity": "MAJOR",
+    "meaning": "风格异常"
+  },
+  {
+    "tag": "INDUSTRY_CONCENTRATED",
+    "family": "暴露",
+    "rule": "单行业PnL>35%或industry HHI>历史P95",
+    "severity": "MINOR",
+    "meaning": "行业集中"
+  },
+  {
+    "tag": "MICROCAP_DEPENDENT",
+    "family": "鲁棒",
+    "rule": "剔除最小市值10%后RankIC保留率<0.50",
+    "severity": "MAJOR",
+    "meaning": "微盘依赖"
+  },
+  {
+    "tag": "REGIME_DEPENDENT",
+    "family": "鲁棒",
+    "rule": "全样本一般但预注册Regime显著且跨fold稳定",
+    "severity": "INFO",
+    "meaning": "状态依赖"
+  },
+  {
+    "tag": "PARAMETER_ROBUST",
+    "family": "鲁棒",
+    "rule": "parameter_plateau>=0.80",
+    "severity": "INFO",
+    "meaning": "参数平台宽"
+  },
+  {
+    "tag": "PARAMETER_FRAGILE",
+    "family": "鲁棒",
+    "rule": "parameter_plateau<0.60",
+    "severity": "MAJOR",
+    "meaning": "参数尖峰"
+  },
+  {
+    "tag": "NOVEL_UNIQUE",
+    "family": "独立性",
+    "rule": "MaxCorr<0.60 且 residual_rankic>=0.008",
+    "severity": "INFO",
+    "meaning": "独立增量强"
+  },
+  {
+    "tag": "CROWDED",
+    "family": "独立性",
+    "rule": "MaxCorr>=0.75",
+    "severity": "MINOR",
+    "meaning": "拥挤"
+  },
+  {
+    "tag": "NEAR_DUPLICATE",
+    "family": "独立性",
+    "rule": "MaxCorr>=0.90且结构/指纹近邻确认",
+    "severity": "MAJOR",
+    "meaning": "近重复"
+  },
+  {
+    "tag": "MODEL_INCREMENTAL",
+    "family": "用途",
+    "rule": "加入Benchmark模型后OOS主指标跨fold稳定提升",
+    "severity": "INFO",
+    "meaning": "模型端增量"
+  },
+  {
+    "tag": "GATING_FEATURE",
+    "family": "用途",
+    "rule": "自身alpha不强但下游routing/风险控制OOS提升稳定",
+    "severity": "INFO",
+    "meaning": "门控特征"
+  },
+  {
+    "tag": "EXECUTION_OVERLAY",
+    "family": "用途",
+    "rule": "主要价值为降低成本/改进入场",
+    "severity": "INFO",
+    "meaning": "执行微调器"
+  },
+  {
+    "tag": "BINARY_RULE",
+    "family": "语义",
+    "rule": "ValueSemantics=BINARY_01",
+    "severity": "INFO",
+    "meaning": "Binary Profile"
+  },
+  {
+    "tag": "SPARSE_EVENT",
+    "family": "语义",
+    "rule": "ValueSemantics=SPARSE_EVENT且activation<10%",
+    "severity": "INFO",
+    "meaning": "Event Profile"
+  },
+  {
+    "tag": "RULE_INTENSITY",
+    "family": "语义",
+    "rule": "存在trigger mask + continuous strength",
+    "severity": "INFO",
+    "meaning": "触发与强度分开"
+  },
+  {
+    "tag": "LABEL_NOT_MATURE",
+    "family": "Streaming",
+    "rule": "当前信号对应VWAP标签未成熟",
+    "severity": "INFO",
+    "meaning": "不更新实现收益"
+  },
+  {
+    "tag": "RUNTIME_FAILURE",
+    "family": "生产",
+    "rule": "生产计算失败或SLA硬失败",
+    "severity": "CRITICAL",
+    "meaning": "运行故障"
+  },
+  {
+    "tag": "LEAKAGE_REVIEW",
+    "family": "审计",
+    "rule": "negative lag/placebo/timestamp诊断异常",
+    "severity": "CRITICAL",
+    "meaning": "信息泄露复核"
+  }
+]

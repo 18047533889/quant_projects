@@ -1,0 +1,111 @@
+{
+  "policy_id": "QRC-A-SHARE-DAILY-CS-BASELINE",
+  "default_profile": "CN_A|DAILY|CROSS_SECTIONAL|VWAP_T1_T2|CONTINUOUS_ALPHA",
+  "factor_domain_weights": {
+    "Predictive": 0.25,
+    "Stratification": 0.15,
+    "Portfolio": 0.15,
+    "Stability": 0.15,
+    "Robustness": 0.1,
+    "Novelty": 0.1,
+    "Tradability": 0.05,
+    "StatisticalReliability": 0.05
+  },
+  "factor_dimension_metrics": {
+    "Predictive": {
+      "rank_ic_mean": 0.35,
+      "rank_ic_ir": 0.2,
+      "ic_positive_rate": 0.1,
+      "topk_lift": 0.1,
+      "ndcg_k": 0.1,
+      "pearson_ic": 0.05,
+      "kendall_tau": 0.05,
+      "horizon_auc": 0.05
+    },
+    "Stratification": {
+      "quantile_monotonicity": 0.25,
+      "isotonic_r2": 0.2,
+      "quantile_spread": 0.2,
+      "tail_collapse_utility": 0.1,
+      "selection_plateau": 0.1,
+      "top_tail_shape": 0.1,
+      "quantile_violation_utility": 0.05
+    },
+    "Portfolio": {
+      "net_ls_sharpe": 0.3,
+      "sortino": 0.1,
+      "calmar": 0.1,
+      "max_drawdown_utility": 0.1,
+      "time_under_water_utility": 0.1,
+      "rolling_sharpe_q20": 0.1,
+      "pnl_breadth": 0.1,
+      "positive_month_rate": 0.05,
+      "long_short_balance": 0.05
+    },
+    "Stability": {
+      "rolling_ic_q20": 0.2,
+      "recent_full_retention": 0.2,
+      "year_positive_ratio": 0.15,
+      "worst_subperiod_utility": 0.15,
+      "train_valid_retention": 0.15,
+      "direction_stability": 0.1,
+      "change_point_utility": 0.05
+    },
+    "Robustness": {
+      "parameter_plateau": 0.15,
+      "neutralization_survival": 0.15,
+      "universe_robustness": 0.15,
+      "regime_breadth": 0.15,
+      "microcap_resilience": 0.1,
+      "delay_1_retention": 0.1,
+      "return_definition_robustness": 0.1,
+      "perturbation_survival": 0.1
+    },
+    "Novelty": {
+      "library_corr_max_utility": 0.25,
+      "topk_corr_utility": 0.15,
+      "residual_rankic": 0.25,
+      "structural_novelty": 0.15,
+      "family_scarcity": 0.1,
+      "cross_lineage_novelty": 0.1
+    },
+    "Tradability": {
+      "cost_erosion_utility": 0.2,
+      "turnover_utility": 0.15,
+      "capacity_utility": 0.2,
+      "executable_alpha_retention": 0.2,
+      "blocked_trade_ratio_utility": 0.1,
+      "impact_sensitivity_utility": 0.1,
+      "slippage_sensitivity_utility": 0.05
+    },
+    "StatisticalReliability": {
+      "nw_tstat_utility": 0.2,
+      "block_bootstrap_prob": 0.2,
+      "fdr_qvalue_utility": 0.2,
+      "deflated_sharpe_prob": 0.2,
+      "pbo_utility": 0.2
+    }
+  },
+  "grade_rule": "从S+向下逐级判断：总分达标 + 所有Dimension Floor达标 + Hard Gate通过 + Evidence Cap允许；否则自动降级。",
+  "utility_rule": "原始Metric先映射为0-100 Utility。绝对阈值稳定的指标用冻结policy anchor分段线性；尺度依赖指标用冻结peer cohort percentile。lower-is-better先反向。NOT_APPLICABLE不记0，而在维度内对剩余权重重归一；若适用权重不足60%，维度=INSUFFICIENT_DATA。",
+  "critical_gates": [
+    "PIT/时间泄露失败",
+    "VWAP标签交易日错位",
+    "Final OOS参与选择/调参/定方向",
+    "有效样本不足最低门槛",
+    "严重数据损坏或snapshot不可证明",
+    "生产计算不可复现",
+    "Optimizer生产硬约束违规"
+  ],
+  "grade_caps": [
+    "自动挖掘因子缺CampaignContext/AttemptLedger：最高A",
+    "连续型因子无严格OOS：最高B+",
+    "Binary/Event/Regime不得使用Continuous Profile打Grade"
+  ],
+  "health": {
+    "GREEN": "无Critical；Rolling60 RankIC>=历史25%分位；Recent/Full>=0.60；Coverage/Drift/Exposure/Runtime正常",
+    "YELLOW": "1个Major或>=2个Minor；Rolling60进入历史10-25%分位；Recent/Full 0.40-0.60；PSI 0.10-0.25",
+    "RED": "任一Critical；或Major持续>=5个成熟标签日；Recent/Full<0.40；显著方向反转；PIT/生产计算失败",
+    "GREY": "标签未成熟、样本不足、暂停、评估未完成或指标不适用"
+  }
+}

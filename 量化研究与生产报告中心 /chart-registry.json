@@ -1,0 +1,322 @@
+[
+  {
+    "code": "F-01",
+    "name": "Daily IC + Rolling IC",
+    "entity": "Factor",
+    "requirement": "必备",
+    "content": "单日IC、60D/120D rolling IC",
+    "purpose": "看时变、衰减、方向"
+  },
+  {
+    "code": "F-02",
+    "name": "Yearly IC / ICIR",
+    "entity": "Factor",
+    "requirement": "必备",
+    "content": "每年RankIC与ICIR",
+    "purpose": "年度稳定/2026"
+  },
+  {
+    "code": "F-03",
+    "name": "Cumulative IC",
+    "entity": "Factor",
+    "requirement": "推荐",
+    "content": "累计IC",
+    "purpose": "长期信息贡献"
+  },
+  {
+    "code": "F-04",
+    "name": "Quantile Return Curve",
+    "entity": "Factor",
+    "requirement": "Continuous必备",
+    "content": "Q1-Q10平均收益",
+    "purpose": "单调/Tail/U-shape"
+  },
+  {
+    "code": "F-05",
+    "name": "Quantile NAV",
+    "entity": "Factor",
+    "requirement": "Continuous必备",
+    "content": "Q1-Q10累计净值",
+    "purpose": "长期分组分离"
+  },
+  {
+    "code": "F-06",
+    "name": "Long / Short / Long-Short NAV",
+    "entity": "Factor",
+    "requirement": "必备",
+    "content": "Long、Short、LS三条净值",
+    "purpose": "核心收益来源"
+  },
+  {
+    "code": "F-07",
+    "name": "Drawdown / Underwater",
+    "entity": "Factor",
+    "requirement": "必备",
+    "content": "LS回撤与水下区间",
+    "purpose": "MDD/TUW/恢复"
+  },
+  {
+    "code": "F-08",
+    "name": "Horizon Decay",
+    "entity": "Factor",
+    "requirement": "必备",
+    "content": "1/2/5/10/20D",
+    "purpose": "半衰期/反转"
+  },
+  {
+    "code": "F-09",
+    "name": "Execution Delay Sensitivity",
+    "entity": "Factor",
+    "requirement": "必备",
+    "content": "delay0/1/2/3/5",
+    "purpose": "实盘时效"
+  },
+  {
+    "code": "F-10",
+    "name": "Selection Ratio Curve",
+    "entity": "Factor",
+    "requirement": "推荐",
+    "content": "Top1/3/5/10/20/30%",
+    "purpose": "选择比例稳健性"
+  },
+  {
+    "code": "F-11",
+    "name": "Parameter Robustness Surface",
+    "entity": "Factor",
+    "requirement": "深度",
+    "content": "窗口/阈值surface",
+    "purpose": "参数尖峰"
+  },
+  {
+    "code": "F-12",
+    "name": "Correlation / Novelty",
+    "entity": "Factor",
+    "requirement": "必备",
+    "content": "Top邻居corr、Residual IC",
+    "purpose": "去重/独立性"
+  },
+  {
+    "code": "F-13",
+    "name": "Style Exposure",
+    "entity": "Factor",
+    "requirement": "必备",
+    "content": "Size/Beta/Liquidity/Vol",
+    "purpose": "风险暴露"
+  },
+  {
+    "code": "F-14",
+    "name": "Cost Curve",
+    "entity": "Factor",
+    "requirement": "必备",
+    "content": "成本bps→Net Sharpe/Alpha",
+    "purpose": "成本敏感"
+  },
+  {
+    "code": "F-15",
+    "name": "Capacity Curve",
+    "entity": "Factor",
+    "requirement": "必备",
+    "content": "AUM→Net Alpha/IR",
+    "purpose": "容量"
+  },
+  {
+    "code": "F-16",
+    "name": "Recent vs Full Scatter",
+    "entity": "Factor",
+    "requirement": "周报必备",
+    "content": "2026/60D vs full",
+    "purpose": "衰减/恢复"
+  },
+  {
+    "code": "F-17",
+    "name": "PnL Concentration / Lorenz",
+    "entity": "Factor",
+    "requirement": "推荐",
+    "content": "股票/日期/行业贡献",
+    "purpose": "彩票型Alpha"
+  },
+  {
+    "code": "F-18",
+    "name": "Streaming Health Timeline",
+    "entity": "Factor",
+    "requirement": "生产必备",
+    "content": "Health/事件时间线",
+    "purpose": "实盘监控"
+  },
+  {
+    "code": "F-19",
+    "name": "Event Study CAR",
+    "entity": "Factor-Event",
+    "requirement": "事件必备",
+    "content": "T-5~T+20 CAR",
+    "purpose": "事件因子"
+  },
+  {
+    "code": "F-20",
+    "name": "Activation / State Timeline",
+    "entity": "Factor-Rule",
+    "requirement": "规则必备",
+    "content": "trigger/state占用与收益",
+    "purpose": "规则/状态"
+  },
+  {
+    "code": "A-01",
+    "name": "Candidate Funnel",
+    "entity": "Algorithm",
+    "requirement": "必备",
+    "content": "Attempt→Unique→Fast→Robust→Admit",
+    "purpose": "搜索效率"
+  },
+  {
+    "code": "A-02",
+    "name": "Family Coverage",
+    "entity": "Algorithm",
+    "requirement": "必备",
+    "content": "Family分布/熵",
+    "purpose": "搜索多样性"
+  },
+  {
+    "code": "A-03",
+    "name": "Quality Distribution",
+    "entity": "Algorithm",
+    "requirement": "必备",
+    "content": "Grade/RankIC/Sharpe分布",
+    "purpose": "产出质量"
+  },
+  {
+    "code": "A-04",
+    "name": "Search Efficiency Trend",
+    "entity": "Algorithm",
+    "requirement": "推荐",
+    "content": "B+/1000 attempts/GPUh",
+    "purpose": "迭代效率"
+  },
+  {
+    "code": "M-01",
+    "name": "Daily OOS IC + Rolling IC",
+    "entity": "Model",
+    "requirement": "必备",
+    "content": "OOS IC时间序列",
+    "purpose": "模型健康"
+  },
+  {
+    "code": "M-02",
+    "name": "IS / Validation / OOS",
+    "entity": "Model",
+    "requirement": "必备",
+    "content": "阶段主指标",
+    "purpose": "过拟合"
+  },
+  {
+    "code": "M-03",
+    "name": "Fold Performance",
+    "entity": "Model",
+    "requirement": "必备",
+    "content": "Walk-forward fold",
+    "purpose": "泛化"
+  },
+  {
+    "code": "M-04",
+    "name": "Prediction Distribution",
+    "entity": "Model",
+    "requirement": "必备",
+    "content": "预测分布",
+    "purpose": "塌缩/漂移"
+  },
+  {
+    "code": "M-05",
+    "name": "Residual Distribution",
+    "entity": "Model",
+    "requirement": "推荐",
+    "content": "误差分布",
+    "purpose": "误差结构"
+  },
+  {
+    "code": "M-06",
+    "name": "Feature / Family Importance",
+    "entity": "Model",
+    "requirement": "必备",
+    "content": "Feature/Family贡献",
+    "purpose": "解释/集中度"
+  },
+  {
+    "code": "M-07",
+    "name": "Ablation Waterfall",
+    "entity": "Model",
+    "requirement": "必备",
+    "content": "移除组件ΔOOS",
+    "purpose": "边际贡献"
+  },
+  {
+    "code": "M-08",
+    "name": "Portfolio NAV / Drawdown",
+    "entity": "Model",
+    "requirement": "必备",
+    "content": "模型组合净值/回撤",
+    "purpose": "经济价值"
+  },
+  {
+    "code": "M-09",
+    "name": "Calibration Curve",
+    "entity": "Model-Prob",
+    "requirement": "概率任务必备",
+    "content": "预测概率vs实际",
+    "purpose": "校准"
+  },
+  {
+    "code": "M-10",
+    "name": "Drift Dashboard",
+    "entity": "Model",
+    "requirement": "生产必备",
+    "content": "Input/Prediction/Residual PSI",
+    "purpose": "线上监控"
+  },
+  {
+    "code": "O-01",
+    "name": "Alpha Capture vs Turnover Frontier",
+    "entity": "Optimizer",
+    "requirement": "必备",
+    "content": "Pareto frontier",
+    "purpose": "目标/成本权衡"
+  },
+  {
+    "code": "O-02",
+    "name": "Risk / TE Timeline",
+    "entity": "Optimizer",
+    "requirement": "必备",
+    "content": "forecast vs realized",
+    "purpose": "风险模型"
+  },
+  {
+    "code": "O-03",
+    "name": "Constraint Binding / Shadow Price",
+    "entity": "Optimizer",
+    "requirement": "必备",
+    "content": "约束触边/影子价格",
+    "purpose": "约束成本"
+  },
+  {
+    "code": "O-04",
+    "name": "Cost & Capacity Curve",
+    "entity": "Optimizer",
+    "requirement": "必备",
+    "content": "AUM/成本/Net IR",
+    "purpose": "容量"
+  },
+  {
+    "code": "O-05",
+    "name": "Solver Health",
+    "entity": "Optimizer",
+    "requirement": "生产必备",
+    "content": "solve time/KKT/infeasible",
+    "purpose": "求解稳定"
+  },
+  {
+    "code": "O-06",
+    "name": "Ex-ante vs Ex-post",
+    "entity": "Optimizer",
+    "requirement": "必备",
+    "content": "alpha/risk/cost预测vs实现",
+    "purpose": "实盘一致性"
+  }
+]
