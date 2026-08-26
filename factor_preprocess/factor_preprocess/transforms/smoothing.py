@@ -212,6 +212,7 @@ def kama(
     asset_col: str = "asset_id",
     time_col: str = "date",
     value_col: str = "value",
+    use_current: bool = False,
 ) -> pd.Series:
     """
     Kaufman Adaptive Moving Average (KAMA), built recursively forward only.
@@ -220,6 +221,18 @@ def kama(
     uses only observations up to and including ``t-1`` (the current observation
     ``x[t]`` is excluded by the ``shift(1)``), so each output depends only on
     the past. It is never centered.
+
+    The Efficiency Ratio (ER) follows the standard Kaufman formula over the
+    closed window ``[t-period_er, t]`` (in lagged terms):
+
+    * ``direction  = |x[t] - x[t-period_er]|`` (net change over the lookback)
+    * ``volatility = sum_{i=t-period_er+1}^{t} |x[i] - x[i-1]|`` (total path)
+    * ``ER = direction / volatility``
+
+    When ``volatility == 0`` (flat price) the ER is ``0``, so the smoothing
+    constant collapses to the slowest value and KAMA holds its level (standard
+    Kaufman convention). When ``volatility`` is undefined (warmup / missing
+    data) the ER is NaN and the recursion holds the previous KAMA value.
 
     Parameters
     ----------
@@ -238,6 +251,14 @@ def kama(
         Time column (for sorting verification).
     value_col : str
         Value column to smooth.
+    use_current : bool, default False
+        When ``False`` (default) the current observation ``x[t]`` is excluded
+        via ``shift(1)``, preserving the module's strict causal contract
+        (output depends only on strictly-past observations). When ``True`` the
+        shift is skipped and ``x[t]`` is usable at time ``t``; this is only
+        appropriate when an external clock (e.g. ``available_at`` /
+        ``DecisionClock`` in ``factor_engine/pit_contract.py``) has already
+        decided that ``x[t]`` is usable at decision time ``t``.
 
     Returns
     -------
@@ -257,26 +278,43 @@ def kama(
     result = _verified_series(values)
     for positions in values.groupby(asset_col, sort=False).indices.values():
         positions = list(positions)
-        lagged = values.iloc[positions][value_col].shift(1).to_numpy()
+        series = values.iloc[positions][value_col]
+        # use_current=False (default) preserves the module's causal contract:
+        # output at t uses only strictly-past observations (<= t-1).
+        lagged = series.to_numpy() if use_current else series.shift(1).to_numpy()
         n = len(lagged)
         out = np.full(n, np.nan)
 
-        # Efficiency ratio over the closed window [t-period_er, t-1].
-        change = np.abs(lagged - np.roll(lagged, 1))
-        change[0] = np.nan
+        # Standard Kaufman Efficiency Ratio over the closed window
+        # [t-period_er, t] (in lagged terms):
+        #   direction  = |x[t] - x[t-period_er]|   (net change over lookback)
+        #   volatility = sum_{i=t-period_er+1}^{t} |x[i] - x[i-1]|  (path length)
+        #   ER = direction / volatility
+        step = np.abs(lagged - np.roll(lagged, 1))  # |x[i] - x[i-1]|
+        step[0] = np.nan
         volatility = np.full(n, np.nan)
         for i in range(n):
-            if i - period_er + 1 < 1 or np.isnan(change[i]):
+            if i - period_er + 1 < 1 or np.isnan(step[i]):
                 continue
-            window = change[i - period_er + 1 : i + 1]
+            window = step[i - period_er + 1 : i + 1]
             if np.any(np.isnan(window)):
                 continue
             volatility[i] = window.sum()
+        direction = np.full(n, np.nan)
+        for i in range(n):
+            if i - period_er < 0:
+                continue
+            a = lagged[i - period_er]
+            b = lagged[i]
+            if np.isnan(a) or np.isnan(b):
+                continue
+            direction[i] = abs(b - a)
         with np.errstate(divide="ignore", invalid="ignore"):
+            # Flat price (volatility == 0) -> ER = 0 -> slowest sc -> KAMA holds.
             efficiency = np.where(
-                (volatility > 0) & ~np.isnan(volatility),
-                np.abs(change) / volatility,
-                np.nan,
+                (volatility > 0) & ~np.isnan(volatility) & ~np.isnan(direction),
+                direction / volatility,
+                0.0,
             )
 
         # Seed KAMA from the first valid value (after warmup).

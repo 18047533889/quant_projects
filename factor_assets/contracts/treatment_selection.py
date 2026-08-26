@@ -12,6 +12,16 @@ snapshot/universe/split provenance.
 caller may not self-report an arbitrary hash — any supplied hash that does not
 equal the recomputed value fails closed (``ValueError``).  This matches the
 established immutable-artifact style of ``similarity.py`` and ``admission.py``.
+
+Two hardening properties are built into the contract:
+
+- **Recursive deep-freeze** (``_freeze``): mapping fields are frozen into a
+  recursive immutable snapshot, so a nested ``dict``/``list`` inside e.g.
+  ``winner_recipe`` cannot be mutated after construction.
+- **Canonical structural hash** (``_canonical``): mapping fields are hashed via
+  a deterministic, type-distinguishing, order-independent byte encoding rather
+  than ``str(...)`` reprs, so structurally equal nested recipes hash identically
+  and equal-looking values of different types hash differently.
 """
 
 from __future__ import annotations
@@ -33,9 +43,38 @@ def _length_prefixed(digest: "hashlib._Hash", field_value: object) -> None:
     digest.update(encoded)
 
 
+def _freeze(value: object) -> object:
+    """Recursively deep-freeze arbitrary nested structures into immutables.
+
+    - dict / Mapping   -> MappingProxyType of deep-frozen values
+    - list             -> tuple of deep-frozen elements
+    - tuple            -> tuple of deep-frozen elements
+    - set / frozenset  -> frozenset of deep-frozen elements
+    - str/int/float/bool/None (and other scalars) pass through unchanged
+
+    The snapshot is a private copy: mutating a caller-supplied nested list or
+    dict after construction can no longer reach the frozen artifact.  Any other
+    object type is rejected so the frozen artifact is provably immutable.
+    """
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Mapping):
+        return MappingProxyType({k: _freeze(v) for k, v in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(v) for v in value)
+    if isinstance(value, (set, frozenset)):
+        return frozenset(_freeze(v) for v in value)
+    raise TypeError(
+        f"cannot deep-freeze value of unsupported type {type(value).__name__}"
+    )
+
+
 def _frozen(mapping: Mapping[str, object]) -> Mapping[str, object]:
-    """Deep-freeze a mapping into an immutable snapshot (private copy)."""
-    return MappingProxyType(dict(mapping))
+    """Deep-freeze a mapping into an immutable recursive snapshot."""
+    frozen = _freeze(mapping)
+    if not isinstance(frozen, Mapping):
+        raise TypeError("_frozen requires a mapping")
+    return frozen
 
 
 def _validate_str_map(values: Mapping[str, object], label: str) -> dict:
@@ -65,9 +104,46 @@ def _validate_number_map(values: Mapping[str, object], label: str) -> dict:
     return normalized
 
 
-def _sorted_mapping(mapping: Mapping[str, object]) -> str:
-    """Deterministic string form of a mapping for hashing."""
-    return "|".join(f"{k}={v}" for k, v in sorted(mapping.items()))
+def _canonical(value: object) -> bytes:
+    """Canonical structural byte encoding of a nested object for hashing.
+
+    Guarantees:
+      - Structurally equal nested objects encode identically regardless of
+        mapping insertion order or ``str(dict)`` repr quirks.
+      - Types are distinguished (``1`` vs ``1.0`` vs ``"1"``; dict vs list vs
+        tuple vs set), so equal-looking values of different types differ.
+      - Every atomic and aggregate is length-prefixed, so delimiters cannot
+        collide and no two distinct structures share a prefix/suffix encoding.
+      - Containers are recursively canonicalized; no depth guard is needed for
+        the bounded, validated artifact fields this module hashes.
+    """
+    if value is None:
+        return b"N1:\x00"
+    if isinstance(value, bool):
+        return b"B1:" + (b"1" if value else b"0")
+    if isinstance(value, str):
+        body = value.encode("utf-8")
+        return b"S" + str(len(body)).encode("ascii") + b":" + body
+    if isinstance(value, int):
+        body = str(value).encode("ascii")
+        return b"I" + str(len(body)).encode("ascii") + b":" + body
+    if isinstance(value, float):
+        body = repr(value).encode("ascii")
+        return b"F" + str(len(body)).encode("ascii") + b":" + body
+    if isinstance(value, Mapping):
+        children = sorted(_canonical(k) + _canonical(v) for k, v in value.items())
+        body = b"".join(children)
+        return b"M" + str(len(body)).encode("ascii") + b":" + body
+    if isinstance(value, (list, tuple)):
+        body = b"".join(_canonical(v) for v in value)
+        tag = b"L" if isinstance(value, list) else b"T"
+        return tag + str(len(body)).encode("ascii") + b":" + body
+    if isinstance(value, (set, frozenset)):
+        body = b"".join(sorted(_canonical(v) for v in value))
+        return b"E" + str(len(body)).encode("ascii") + b":" + body
+    raise TypeError(
+        f"cannot canonicalize value of unsupported type {type(value).__name__}"
+    )
 
 
 def _content_hash(
@@ -96,7 +172,9 @@ def _content_hash(
 
     Provenance bookkeeping (``created_at``, the derived ``content_hash`` itself)
     is intentionally excluded: two artifacts with identical decision content but
-    different timestamps share a hash.
+    different timestamps share a hash.  Mapping fields are hashed via
+    ``_canonical`` (structural, order-independent, type-distinguishing); scalar
+    and string-sequence fields remain length-prefixed.
     """
     digest = hashlib.sha256()
     for item in (
@@ -111,13 +189,19 @@ def _content_hash(
         "#",
         *pareto_candidate_refs,
         "#",
-        _sorted_mapping(winner_recipe),
+    ):
+        _length_prefixed(digest, item)
+    for mapping in (
+        winner_recipe,
+        absolute_metric_refs,
+        delta_metric_refs,
+        dimension_scores,
+        hard_gate_results,
+        soft_floor_results,
+    ):
+        _length_prefixed(digest, _canonical(mapping))
+    for item in (
         winner_policy_identity,
-        _sorted_mapping(absolute_metric_refs),
-        _sorted_mapping(delta_metric_refs),
-        _sorted_mapping(dimension_scores),
-        _sorted_mapping(hard_gate_results),
-        _sorted_mapping(soft_floor_results),
         robustness_evidence or "",
         complexity_score,
         snapshot_ref,

@@ -165,6 +165,7 @@ _DIAGNOSTIC_IN_SAMPLE = frozenset({
     "ts_huber_regression_resid_z", "ts_ridge_regression_coeff",
     "ts_ridge_regression_in_sample_resid", "ts_ridge_regression_resid_z",
     "ts_ar_forecast", "ts_ar_innovation", "ts_ar_innovation_z",
+    "ts_ar_fitted_value", "ts_ar_in_sample_resid",
     "ts_mean_reversion_half_life",
     # Expectile / quantile regression families are fitted on the full look-back
     # window (in-sample), so their coeff/resid/slope are diagnostics; the causal
@@ -172,6 +173,9 @@ _DIAGNOSTIC_IN_SAMPLE = frozenset({
     "ts_expectile_regression_coeff", "ts_expectile_regression_resid",
     "ts_quantile_regression_coeff", "ts_quantile_regression_resid",
     "ts_quantile_regression_slope",
+    # ts_poly2 coeff/resid are fitted over the full window (in-sample): the
+    # causal forms are ts_poly2_prior_* / ts_poly2_forecast_error*.
+    "ts_poly2_coeff", "ts_poly2_resid",
 })
 _IN_SAMPLE_REPLACEMENTS = {
     "ts_expectile_regression_coeff": "ts_expectile_regression_coeff_prior",
@@ -188,6 +192,10 @@ _IN_SAMPLE_REPLACEMENTS = {
     "ts_ar_forecast": "ts_ar_prior_forecast",
     "ts_ar_innovation": "ts_ar_prior_innovation",
     "ts_ar_innovation_z": "ts_ar_prior_innovation_z",
+    "ts_ar_fitted_value": "ts_ar_prior_forecast",
+    "ts_ar_in_sample_resid": "ts_ar_prior_innovation",
+    "ts_poly2_coeff": "ts_poly2_prior_coeff",
+    "ts_poly2_resid": "ts_poly2_forecast_error",
 }
 _JUMP_ALIAS_DEPRECATED = frozenset({
     "intra_positive_jump_variation", "intra_negative_jump_variation",

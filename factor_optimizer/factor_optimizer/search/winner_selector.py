@@ -63,6 +63,49 @@ class WinnerPolicy:
             raise ValueError("policy_version must be non-empty (policies are versioned)")
 
 
+def _validate_desirabilities_and_scores(
+    dimension_desirabilities: Sequence[float],
+    robustness_score: float,
+    complexity_score: float,
+) -> None:
+    """Strictly validate every desirability and score.
+
+    Fail-closed contract: each dimension desirability and both scores must be
+    finite AND within [0, 1] (their documented range).  A missing or non-finite
+    value, or a value outside [0, 1], raises :class:`ValueError` naming the
+    offending value — it is never clamped or silently coerced, so a poisoned
+    (NaN/Inf/out-of-range) input cannot slide through as a plausible winner.
+
+    NaN and +/-Infinity are rejected explicitly: NaN would otherwise propagate
+    silently through ``min``/``log`` (yielding NaN utility) and Infinity would
+    break the ``min``/deviation terms.
+    """
+    for idx, des in enumerate(dimension_desirabilities):
+        if isinstance(des, bool) or not isinstance(des, (int, float)):
+            raise ValueError(
+                f"dimension_desirabilities[{idx}] must be numeric, got {des!r}"
+            )
+        if not math.isfinite(float(des)):
+            raise ValueError(
+                f"dimension_desirabilities[{idx}] must be finite, got {des!r}"
+            )
+        if not 0.0 <= des <= 1.0:
+            raise ValueError(
+                f"dimension_desirabilities[{idx}] must be in [0, 1], got {des!r}"
+            )
+
+    for name, value in (
+        ("robustness_score", robustness_score),
+        ("complexity_score", complexity_score),
+    ):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{name} must be numeric, got {value!r}")
+        if not math.isfinite(float(value)):
+            raise ValueError(f"{name} must be finite, got {value!r}")
+        if not 0.0 <= value <= 1.0:
+            raise ValueError(f"{name} must be in [0, 1], got {value!r}")
+
+
 def _safe_geomean(values: Sequence[float]) -> float:
     """Geometric mean of ``values``, guarding non-positive / zero entries.
 
@@ -101,9 +144,19 @@ def RobustBalancedUtility(
 
     Returns:
         The scalar utility ``U``.  Higher is better.
+
+    Raises:
+        ValueError: If ``dimension_desirabilities`` is empty, or if any
+            desirability / ``robustness_score`` / ``complexity_score`` is
+            non-finite or outside [0, 1].  Inputs are validated strictly and
+            fail-closed; they are never clamped.
     """
     if not dimension_desirabilities:
         raise ValueError("dimension_desirabilities cannot be empty")
+
+    _validate_desirabilities_and_scores(
+        dimension_desirabilities, robustness_score, complexity_score
+    )
 
     min_dim = min(dimension_desirabilities)
     geomean = _safe_geomean(dimension_desirabilities)
@@ -136,6 +189,10 @@ def augmented_tchebycheff(
     """
     if not dimension_desirabilities:
         raise ValueError("dimension_desirabilities cannot be empty")
+
+    _validate_desirabilities_and_scores(
+        dimension_desirabilities, robustness_score, complexity_score
+    )
 
     if reference is None:
         reference = [1.0] * len(dimension_desirabilities)
@@ -184,22 +241,40 @@ def select_winner(
     if not candidates:
         raise ValueError("cannot select a winner from an empty candidate set")
 
+    # Fail-closed: every candidate on the Pareto frontier MUST have both a
+    # robustness and a complexity score.  A missing score is never defaulted to
+    # 0.0 (which would pretend a missing robustness is worst and a missing
+    # complexity is simplest — silently biasing the winner).  Missing entries
+    # raise a clear error naming the trial and the missing score.
+    for point in candidates:
+        if point.trial_id not in robustness_scores:
+            raise KeyError(
+                f"missing robustness score for candidate trial_id="
+                f"{point.trial_id!r} on the Pareto frontier"
+            )
+        if point.trial_id not in complexity_scores:
+            raise KeyError(
+                f"missing complexity score for candidate trial_id="
+                f"{point.trial_id!r} on the Pareto frontier"
+            )
+
     def utility(point: ParetoPoint) -> float:
         return RobustBalancedUtility(
             dimension_desirabilities=list(point.objectives),
-            robustness_score=robustness_scores.get(point.trial_id, 0.0),
-            complexity_score=complexity_scores.get(point.trial_id, 0.0),
+            robustness_score=robustness_scores[point.trial_id],
+            complexity_score=complexity_scores[point.trial_id],
             policy=policy,
         )
 
     scored = [(utility(p), p) for p in candidates]
 
     # Sort by utility desc, then complexity asc (simpler preferred), then
-    # trial_id asc for determinism.
+    # trial_id asc for determinism.  Direct lookups are safe here: the
+    # missing-score check above guarantees every candidate has an entry.
     scored.sort(
         key=lambda up: (
             -up[0],
-            complexity_scores.get(up[1].trial_id, 0.0),
+            complexity_scores[up[1].trial_id],
             up[1].trial_id,
         )
     )
@@ -212,9 +287,7 @@ def select_winner(
     # tied group; we only need to confirm the tie actually exists.
     for utility_i, point in scored[1:]:
         if abs(utility_i - best_utility) <= _UTILITY_TOLERANCE:
-            if complexity_scores.get(point.trial_id, 0.0) < complexity_scores.get(
-                best.trial_id, 0.0
-            ):
+            if complexity_scores[point.trial_id] < complexity_scores[best.trial_id]:
                 best = point
                 best_utility = utility_i
         else:

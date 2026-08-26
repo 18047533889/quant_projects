@@ -13,6 +13,10 @@ Pipeline
      Features = every column not in (date, asset, fwd).
   2. Walk-forward (expanding window): first train = all history < 2019-01-04 (first 3 years),
      then every 3 months retrain on all history < cut and predict the next 3-month block OOS.
+     A 10-trading-day purge (PURGE_TRADING_DAYS) is dropped before each cut from both the
+     train tail and the OOS front so no 10-day forward-label window overlaps the split
+     (P0-B label-leakage fix; see constant block). EMBARGO_TRADING_DAYS (default 0) can be
+     layered on top.
   3. LightGBM regression via lgb.train: objective=regression, lr=0.03, num_leaves=127,
      min_data_in_leaf=30, feature_fraction=0.8, bagging_fraction=0.8, bagging_freq=1,
      num_boost_round=300. First try device='gpu' (max_bin=127); on ANY exception/bad build/OOM
@@ -41,6 +45,29 @@ LOG_PATH = "/tmp/train_final.log"
 # Validation mode: ONLY_FOLD1=1 runs just the first fold (GPU path check), prints
 # the per-fold line, then exits WITHOUT writing predictions.parquet.
 ONLY_FOLD1 = os.environ.get("ONLY_FOLD1") == "1"
+
+# ----------------------------------------------------------------------------------
+# LABEL / PURGE CONSTANTS (P0-B fix)
+#
+# fwd_ret10 is the 10-day forward Vwap return: a sample at date t carries a label that
+# observes Vwap up to trading index t+10 (verified: fwd_ret10[t] == vwap[t+10]/vwap[t]-1
+# by row position on the vwap_trad trading calendar).  With the old split
+#   train = date < cut,  oos = cut <= date < next_cut,
+# a train sample at index t = cut-10 has a label window that reaches into the OOS block
+# (its label sees vwap at index cut, the first OOS row) -> LABEL LEAKAGE across the cut.
+#
+# Fix: purge the last PURGE_TRADING_DAYS trading days of the train block before each cut,
+# so every train sample's label window ends strictly before the OOS block starts.
+#   t + PURGE <= cut - 1   =>   drop t in [cut - PURGE, cut - 1]   (PURGE = 10)
+# We also drop the matching 10-day tail from the OOS block so the two are symmetric and
+# the train label_end (cut - 10) is strictly before the OOS label_start (cut + 1).
+# PURGE_TRADING_DAYS = 10, matching the fwd_ret10 label horizon (10 trading days).
+# ----------------------------------------------------------------------------------
+PURGE_TRADING_DAYS = 10
+# If autocorrelation between overlapping labels is a concern, an additional embargo can
+# be layered on top (PURGE + EMBARGO trading days dropped before each cut); default 0.
+EMBARGO_TRADING_DAYS = 0
+
 PARAMS = dict(
     objective="regression",
     metric="l2",
@@ -113,11 +140,23 @@ def main():
     pred_frames = []
 
     # ---- rolling forward training ----
+    # unique sorted trading dates on the label calendar (Vwap basis)
+    uniq_dates = pd.DatetimeIndex(df["date"].unique()).sort_values()
     for i, cut in enumerate(rolls):
         next_end = cut + pd.DateOffset(months=ROLL_MONTHS)
         date = df["date"]
-        train_mask = date < cut                       # expanding history
-        oos_mask = (date >= cut) & (date < next_end)
+
+        # P0-B purge/embargo: drop the last PURGE_TRADING_DAYS (+ embargo) trading days
+        # before the cut from the train block, and the same tail from the front of the
+        # OOS block, so no train label window overlaps the OOS block.
+        u_train = uniq_dates[uniq_dates < cut]
+        u_purge = PURGE_TRADING_DAYS + EMBARGO_TRADING_DAYS
+        u_train_cut = u_train[:-u_purge] if len(u_train) > u_purge else u_train
+        u_oos = uniq_dates[(uniq_dates >= cut) & (uniq_dates < next_end)]
+        u_oos_cut = u_oos[u_purge:] if len(u_oos) > u_purge else u_oos
+
+        train_mask = date.isin(u_train_cut)           # expanding history, purged
+        oos_mask = date.isin(u_oos_cut)               # next-quarter OOS block, purged front
 
         Xt = df.loc[train_mask, FEATURES].values.astype(np.float32)
         yt = df.loc[train_mask, "fwd"].values.astype(np.float32)

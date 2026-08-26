@@ -83,6 +83,12 @@ MIN_HOLDINGS = 8       # require at least MIN_HOLDINGS non-zero weights
 MAX_TURNOVER = 0.30    # max ONE-WAY turnover per rebalance (cost-control cap)
 TC_BPS = 0.0005        # per-side transaction cost (5 bps) on each rebalance trade
 OOS_START = "2019-01-01"  # benchmark alignment start
+# Sealed final test period: if set (e.g. "2025-01-01"), all evaluation metrics / the
+# hyper-parameter grid report are computed ONLY on dates BEFORE this seal. The seal is
+# NEVER used for tuning: grid search stops its metric window at the seal so the final
+# holdout stays untouched (P0-B: grid previously tuned on the SAME OOS block it reported,
+# which turned OOS into validation). Backtest/weights/charts still cover the full period.
+SEALED_TEST_START = None    # e.g. "2025-01-01"; None = no seal (backward compatible)
 RF_DAILY = 0.0          # daily risk-free rate (Sharpe)
 TRADING_DAYS = 252
 
@@ -324,8 +330,15 @@ def plot_charts(eq, oos_ret, wmat, rebal_dates, pm, fwd, ret, m):
 
 
 def run_portfolio(top_k, max_weight, max_turnover, tc_bps, pred, vwap, fwd,
-                  save_outputs=True):
-    """Run the full build+backtest pipeline for one parameter set; return metrics dict."""
+                  save_outputs=True, sealed_test_start=None):
+    """Run the full build+backtest pipeline for one parameter set; return metrics dict.
+
+    sealed_test_start: if not None, ALL reported metrics are computed ONLY on dates
+    BEFORE this date. The weights/backtest still span the full period, but the metric
+    window (and therefore any grid-search selection) stops at the seal so the held-out
+    final period is NEVER used to tune. This fixes P0-B (grid previously tuned on the
+    same OOS block it then reported, turning OOS into validation).
+    """
     global TOP_K, MAX_WEIGHT, BACKOFF_WEIGHT, MAX_TURNOVER, TC_BPS
     TOP_K = top_k
     MAX_WEIGHT = max_weight
@@ -380,8 +393,17 @@ def run_portfolio(top_k, max_weight, max_turnover, tc_bps, pred, vwap, fwd,
             continue
 
         # mu and covariance from past COV_WINDOW daily Vwap returns (incl. day d)
+        # IMPORTANT (P0-B): mu is the past-60d REALIZED mean Vwap return, NOT the LightGBM
+        # predicted return. This is INTENTIONAL today: the LightGBM predictions are used
+        # only to pick the top-K names; the max-Sharpe weights are then built from realized
+        # moments of those names. This is a top-K-selection pipeline, NOT an expected-return
+        # pipeline. If it is ever meant to be an expected-return pipeline, mu must come from
+        # the model predictions and this comment must be revisited.
         rsub = ret.iloc[max(0, pos - COV_WINDOW):pos + 1][names].dropna()
         mu = rsub.mean().values
+        # guard: mu is the realized-mean vector of length k (never the model prediction)
+        assert np.ndim(mu) == 1 and mu.shape == (k,), \
+            "mu must be the length-k realized-mean vector (see comment above)"
         cov = (rsub.cov().values + rsub.cov().values.T) / 2.0
         eigs = np.linalg.eigvalsh(cov)
         reg = max(1e-5 * np.nanmean(rsub.values ** 2) + 1e-9, -eigs.min() + 1e-7)
@@ -439,19 +461,31 @@ def run_portfolio(top_k, max_weight, max_turnover, tc_bps, pred, vwap, fwd,
     oos = pd.concat([strat, bench], axis=1)
     oos = oos.loc[oos.index >= anchor].dropna(subset=["strategy"])
     oos = oos.dropna()
-    eqall = (1 + oos).cumprod()
-    s, b = oos["strategy"], oos["bench"]
 
-    n_days = len(oos)
-    cum_s = eqall["strategy"].iloc[-1] - 1.0
-    cum_b = eqall["bench"].iloc[-1] - 1.0
+    # P0-B sealed test: metrics are computed only up to the seal. The backtest below the
+    # seal is still fully driven by the SAME rebalance weights (no re-tune inside the
+    # metric window), but the seal guarantees the held-out final period was never used
+    # to choose top_k/maxw/turnover in grid search.
+    seal = pd.Timestamp(sealed_test_start) if sealed_test_start else None
+    metrics_oos = oos.loc[oos.index < seal] if seal is not None else oos
+    if seal is not None and len(metrics_oos) < 30:
+        log("%sWARN: sealed window < 30 days (%d) -> falling back to full OOS for metrics "
+            "(seal still untouched by grid, but metric window includes seal)" % (tag, len(metrics_oos)))
+
+    eqall = (1 + oos).cumprod()
+    eq_m = (1 + metrics_oos).cumprod()
+    s, b = metrics_oos["strategy"], metrics_oos["bench"]
+
+    n_days = len(metrics_oos)
+    cum_s = eq_m["strategy"].iloc[-1] - 1.0
+    cum_b = eq_m["bench"].iloc[-1] - 1.0
     ann_s, ann_b = annualise(cum_s, n_days), annualise(cum_b, n_days)
     vol_s = s.std(ddof=1) * np.sqrt(TRADING_DAYS)
     vol_b = b.std(ddof=1) * np.sqrt(TRADING_DAYS)
     sharpe_s = (s.mean() - RF_DAILY) / (s.std(ddof=1) + 1e-12) * np.sqrt(TRADING_DAYS)
     sharpe_b = (b.mean() - RF_DAILY) / (b.std(ddof=1) + 1e-12) * np.sqrt(TRADING_DAYS)
-    mdd_s = max_drawdown(eqall["strategy"])
-    mdd_b = max_drawdown(eqall["bench"])
+    mdd_s = max_drawdown(eq_m["strategy"])
+    mdd_b = max_drawdown(eq_m["bench"])
     win_s = (s > 0).mean()
     pos = s[s > 0]
     neg = s[s < 0]
@@ -466,7 +500,9 @@ def run_portfolio(top_k, max_weight, max_turnover, tc_bps, pred, vwap, fwd,
     avg_rebal_turnover = float(rebal_to.mean()) if len(rebal_to) else 0.0
 
     m = {
-        "period": "%s .. %s" % (oos.index[0].date(), oos.index[-1].date()),
+        "period": "%s .. %s" % (metrics_oos.index[0].date(), metrics_oos.index[-1].date()),
+        "period_full": "%s .. %s" % (oos.index[0].date(), oos.index[-1].date()),
+        "sealed_test_start": (seal.date().isoformat() if seal is not None else None),
         "total_return_pct": cum_s * 100,
         "bench_total_return_pct": cum_b * 100,
         "annual_return_pct": ann_s * 100,
@@ -506,7 +542,9 @@ def run_portfolio(top_k, max_weight, max_turnover, tc_bps, pred, vwap, fwd,
         lines = [
             "# Portfolio backtest metrics (Vwap daily return basis)",
             "# generated: " + datetime.now().isoformat(timespec="seconds"),
-            "# period: " + m["period"],
+            "# metric period: " + m["period"],
+            "# full backtest period: " + m["period_full"],
+            "# sealed_test_start: " + str(m["sealed_test_start"]),
             "",
             "total_return_pct        = %.2f" % m["total_return_pct"],
             "bench_total_return_pct  = %.2f" % m["bench_total_return_pct"],
@@ -609,23 +647,28 @@ def parse_args(argv=None):
     ap.add_argument("--tc", type=float, default=TC_BPS, help="per-side transaction cost (default 0.0005)")
     ap.add_argument("--grid", action="store_true",
                     help="run the full 2x2x2 grid: topk in {30,40}, maxw in {0.05,0.08}, turnover in {0.30,0.50}")
+    ap.add_argument("--sealed-test", type=str, default=SEALED_TEST_START,
+                    help="YYYY-MM-DD: compute/report metrics only before this date; grid "
+                         "selection never sees the held-out final period (P0-B anti-leak). "
+                         "Default: config SEALED_TEST_START (None = no seal).")
     return ap.parse_args(argv)
 
 
 def main():
     args = parse_args()
     pred, vwap, fwd = load_inputs()
-    log("[port] predictions %s  vwap %s  fwd %s"
-        % (pred.shape, vwap.shape, fwd.shape))
+    log("[port] predictions %s  vwap %s  fwd %s  sealed_test_start=%s"
+        % (pred.shape, vwap.shape, fwd.shape, args.sealed_test))
+    seal = args.sealed_test
 
     if args.grid:
-        main_grid(pred, vwap, fwd)
+        main_grid(pred, vwap, fwd, sealed_test_start=seal)
     else:
         run_portfolio(args.topk, args.maxw, args.turnover, args.tc,
-                      pred, vwap, fwd, save_outputs=True)
+                      pred, vwap, fwd, save_outputs=True, sealed_test_start=seal)
 
 
-def main_grid(pred, vwap, fwd):
+def main_grid(pred, vwap, fwd, sealed_test_start=None):
     grid_topk = [30, 40]
     grid_maxw = [0.05, 0.08]
     grid_turnover = [0.30, 0.50]
@@ -633,8 +676,10 @@ def main_grid(pred, vwap, fwd):
     for topk in grid_topk:
         for maxw in grid_maxw:
             for to in grid_turnover:
-                log("\n===== GRID  topk=%d  maxw=%.2f  turnover=%.2f =====" % (topk, maxw, to))
-                m = run_portfolio(topk, maxw, to, TC_BPS, pred, vwap, fwd, save_outputs=False)
+                log("\n===== GRID  topk=%d  maxw=%.2f  turnover=%.2f  seal=%s ====="
+                    % (topk, maxw, to, sealed_test_start))
+                m = run_portfolio(topk, maxw, to, TC_BPS, pred, vwap, fwd,
+                                  save_outputs=False, sealed_test_start=sealed_test_start)
                 rows.append({
                     "topk": topk, "maxw": maxw, "turnover": to,
                     "sharpe": m["sharpe"],

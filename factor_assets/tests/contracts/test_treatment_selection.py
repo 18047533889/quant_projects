@@ -78,6 +78,85 @@ def test_caller_supplied_correct_content_hash_accepted():
     assert roundtripped.content_hash == a.content_hash
 
 
+# --- recursive deep-freeze ---------------------------------------------------
+
+
+def test_nested_recipe_is_deep_frozen_after_construction():
+    nested = {"winsor": {"q": [0.01, 0.99], "name": "clip"}, "outer": ["a", 1]}
+    a = _make_artifact(winner_recipe=nested)
+
+    # mutate the original nested structures after construction
+    nested["winsor"]["q"].append(0.5)
+    nested["winsor"]["name"] = "MUTATED"
+    nested["outer"].append("b")
+    nested["added"] = "x"
+
+    stored = a.winner_recipe
+    # frozen top level
+    assert stored["winsor"]["q"] == (0.01, 0.99)
+    assert stored["winsor"]["name"] == "clip"
+    assert stored["outer"] == ("a", 1)
+    assert "added" not in stored
+    # nested inner dict itself is immutable too
+    with pytest.raises(TypeError):
+        stored["winsor"]["name"] = "boom"  # type: ignore[index]
+
+
+def test_nested_mutation_does_not_change_content_hash():
+    nested = {"winsor": {"q": [0.01, 0.99]}}
+    a = _make_artifact(winner_recipe=nested)
+    recomputed = _make_artifact(
+        winner_recipe=nested,
+        content_hash=a.content_hash,
+    )
+    assert recomputed.content_hash == a.content_hash
+    # recompute against the exact current stored hash still matches
+    from factor_assets.contracts.treatment_selection import _content_hash
+
+    assert a.content_hash == _content_hash(
+        a.factor_id,
+        a.factor_version,
+        a.raw_baseline_evidence_ref,
+        a.factor_profile_ref,
+        a.eligibility_policy_ref,
+        a.search_space_ref,
+        a.all_trial_refs,
+        a.pareto_candidate_refs,
+        a.winner_recipe,
+        a.winner_policy_identity,
+        a.absolute_metric_refs,
+        a.delta_metric_refs,
+        a.dimension_scores,
+        a.hard_gate_results,
+        a.soft_floor_results,
+        a.robustness_evidence,
+        a.complexity_score,
+        a.snapshot_ref,
+        a.universe_ref,
+        a.split_ref,
+    )
+
+
+# --- canonical structural hashing --------------------------------------------
+
+
+def test_structural_equality_same_hash_regardless_of_insertion_order():
+    recipe_a = {"winsor": {"q": [0.01, 0.99], "name": "clip"}, "pre": "zscore"}
+    recipe_b = {"pre": "zscore", "winsor": {"name": "clip", "q": [0.01, 0.99]}}
+    a = _make_artifact(winner_recipe=recipe_a)
+    b = _make_artifact(winner_recipe=recipe_b)
+    assert a.content_hash == b.content_hash
+
+
+def test_distinct_types_produce_different_hashes():
+    int_a = _make_artifact(winner_recipe={"winsorize": 1})
+    float_a = _make_artifact(winner_recipe={"winsorize": 1.0})
+    str_a = _make_artifact(winner_recipe={"winsorize": "1"})
+    assert int_a.content_hash != float_a.content_hash
+    assert int_a.content_hash != str_a.content_hash
+    assert float_a.content_hash != str_a.content_hash
+
+
 # --- serialization round-trip ------------------------------------------------
 
 

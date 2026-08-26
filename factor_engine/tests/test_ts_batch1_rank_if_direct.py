@@ -4,6 +4,8 @@ from pathlib import Path
 import sys
 import types
 
+import enum
+
 import numpy as np
 import polars as pl
 
@@ -28,14 +30,23 @@ def _register_operator(**_kwargs):
     return lambda cls: cls
 
 
+# Standalone enum mirroring the canonical ParamRole members referenced by the
+# module under test (see cleaned_operators/base.py).  Using a real enum (not a
+# SimpleNamespace) keeps the shim semantically faithful to the canonical
+# definition.
+class _ParamRole(str, enum.Enum):
+    HORIZON = "horizon"
+    SUPPORT_POLICY = "support_policy"
+    SCALAR = "scalar"
+    NUMERICAL = "numerical"
+
+
 base = types.ModuleType("factor_engine.cleaned_operators.base")
 base.SeriesOperator = _SeriesOperator
 base.register_operator = _register_operator
 base.OperatorMetadata = _Metadata
 base.ParamSpec = _ParamSpec
-base.ParamRole = types.SimpleNamespace(
-    HORIZON="horizon", SUPPORT_POLICY="support_policy", SCALAR="scalar"
-)
+base.ParamRole = _ParamRole
 package = types.ModuleType("cleaned_operators")
 package.__path__ = [str(ROOT / "cleaned_operators")]
 sys.modules["cleaned_operators"] = package

@@ -8,6 +8,7 @@ from factor_optimizer.search.pareto import ParetoPoint, ParetoFrontier
 from factor_optimizer.search.winner_selector import (
     WinnerPolicy,
     RobustBalancedUtility,
+    augmented_tchebycheff,
     select_winner,
 )
 
@@ -165,3 +166,114 @@ def test_policy_requires_version():
             alpha=0.4, beta=0.3, gamma=0.2, lambda_=0.1,
             policy_id="p", policy_version="",
         )
+
+
+# ---------------------------------------------------------------------------
+# Fail-closed input validation
+# ---------------------------------------------------------------------------
+
+
+def test_missing_robustness_score_fails_closed():
+    """A frontier candidate with NO robustness entry must raise, not default 0."""
+    policy = _policy()
+    candidates = [ParetoPoint(trial_id="A", objectives=(0.8, 0.8, 0.8))]
+    robustness = {}  # missing
+    complexity = {"A": 0.3}
+    with pytest.raises(KeyError, match="robustness"):
+        select_winner(candidates, robustness, complexity, policy)
+
+
+def test_missing_complexity_score_fails_closed():
+    """A frontier candidate with NO complexity entry must raise, not default 0."""
+    policy = _policy()
+    candidates = [ParetoPoint(trial_id="A", objectives=(0.8, 0.8, 0.8))]
+    robustness = {"A": 0.5}
+    complexity = {}  # missing
+    with pytest.raises(KeyError, match="complexity"):
+        select_winner(candidates, robustness, complexity, policy)
+
+
+def test_missing_score_fails_closed_before_sort_and_utility():
+    """Missing score is rejected even when utility/tie-break would be reached.
+
+    Regression guard: a candidate with a MISSING complexity must not reach the
+    utility computation, sort key, or tie-break (which used to default to 0.0).
+    """
+    policy = _policy()
+    candidates = [
+        ParetoPoint(trial_id="A", objectives=(0.8, 0.8, 0.8)),
+        ParetoPoint(trial_id="B", objectives=(0.9, 0.9, 0.9)),
+    ]
+    robustness = {"A": 0.5, "B": 0.5}
+    complexity = {"A": 0.3}  # B missing
+    with pytest.raises(KeyError, match="complexity"):
+        select_winner(candidates, robustness, complexity, policy)
+
+
+def test_nan_robustness_rejected():
+    policy = _policy()
+    with pytest.raises(ValueError, match="robustness"):
+        RobustBalancedUtility(
+            [0.8, 0.8, 0.8], math.nan, 0.3, policy
+        )
+
+
+def test_complexity_out_of_range_rejected():
+    """complexity 1.2 is outside [0, 1] -> must raise, not be clamped."""
+    policy = _policy()
+    with pytest.raises(ValueError, match="complexity.*[0, 1]"):
+        RobustBalancedUtility(
+            [0.8, 0.8, 0.8], 0.5, 1.2, policy
+        )
+
+
+def test_dimension_desirability_out_of_range_rejected():
+    """dimension -0.1 and 1.3 are outside [0, 1] -> must raise."""
+    policy = _policy()
+    with pytest.raises(ValueError, match="dimension_desirabilities"):
+        RobustBalancedUtility(
+            [-0.1, 0.8, 0.8], 0.5, 0.3, policy
+        )
+    with pytest.raises(ValueError, match="dimension_desirabilities"):
+        RobustBalancedUtility(
+            [1.3, 0.8, 0.8], 0.5, 0.3, policy
+        )
+
+
+def test_nan_dimension_rejected():
+    """A NaN dimension must be rejected (would otherwise poison min/log)."""
+    policy = _policy()
+    with pytest.raises(ValueError, match="dimension_desirabilities"):
+        RobustBalancedUtility(
+            [0.8, math.nan, 0.8], 0.5, 0.3, policy
+        )
+
+
+def test_inf_robustness_rejected():
+    policy = _policy()
+    with pytest.raises(ValueError, match="robustness"):
+        RobustBalancedUtility(
+            [0.8, 0.8, 0.8], math.inf, 0.3, policy
+        )
+
+
+def test_augmented_tchebycheff_also_validates():
+    """The alternative metric shares the same strict fail-closed validator."""
+    policy = _policy()
+    with pytest.raises(ValueError, match="dimension_desirabilities"):
+        augmented_tchebycheff([0.8, -0.2, 0.8], 0.5, 0.3, policy)
+    with pytest.raises(ValueError, match="complexity"):
+        augmented_tchebycheff([0.8, 0.8, 0.8], 0.5, math.inf, policy)
+
+
+def test_valid_happy_path_selects_correct_winner():
+    """A fully-valid input still selects the intended winner (fail-open intact)."""
+    policy = _policy()
+    candidates = [
+        ParetoPoint(trial_id="low", objectives=(0.5, 0.5, 0.5)),
+        ParetoPoint(trial_id="high", objectives=(0.9, 0.9, 0.9)),
+    ]
+    robustness = {"low": 0.4, "high": 0.9}
+    complexity = {"low": 0.2, "high": 0.1}
+    winner = select_winner(candidates, robustness, complexity, policy)
+    assert winner.trial_id == "high"

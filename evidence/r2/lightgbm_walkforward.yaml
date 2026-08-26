@@ -1,0 +1,44 @@
+task_id: R2-LIGHTGBM-WALKFORWARD
+finding: lightgbm_qs full-sample factor-selection leakage + missing 10D purge/embargo fixed
+base_sha: UNKNOWN_WORKTREE
+current_head: UNCOMMITTED_CURRENT_TREE
+commit_sha: UNCOMMITTED_CURRENT_TREE
+owned_files:
+  - lightgbm_qs/scripts/factor_selection.py
+  - lightgbm_qs/scripts/train_final.py
+  - lightgbm_qs/scripts/portfolio_and_backtest.py
+  - lightgbm_qs/tests/test_purge.py
+status: CLOSED_LOCAL
+implementation:
+  - factor_selection.py reworked: selection is now walk-forward. New
+    select_factors_walk_forward(factor_pool, panel, fwd_ret, cuts) returns a per-fold frozen
+    factor list + an on-selection-set-only RankIC report. Per fold it computes RankIC / coverage
+    ONLY on dates < cut, minus the last PURGE_TRADING_DAYS (10) trading days (so no 10d fwd label
+    window reaches the OOS block). A guard asserts the selection date set is strictly before the
+    cut and that the last selection label window ends before the cut. CLI gains --fold / --cuts /
+    --folds-from-train; bare invocation keeps the legacy full-sample CSV for compatibility.
+  - train_final.py: named constants PURGE_TRADING_DAYS=10, EMBARGO_TRADING_DAYS=0. Each fold drops
+    the last (purge+embargo) trading days from the train tail and the same tail from the OOS front,
+    so train label_end (cut-10) is strictly before OOS label_start (cut+1). Verified
+    fwd_ret10[t] == vwap[t+10]/vwap[t]-1 on real panel (Vwap basis per project rule).
+  - portfolio_and_backtest.py: sealed-test holdout. New SEALED_TEST_START config + --sealed-test
+    CLI: all reported metrics / grid selection are computed ONLY on dates < seal, so the held-out
+    final period is never used to tune topk/maxw/turnover (fixes OOS-as-validation). mu is
+    explicitly the past-60d REALIZED mean Vwap return, NOT the LightGBM prediction; an assertion
+    + comment makes this non-expected-return pipeline explicit.
+  - tests/test_purge.py: 6 unit tests asserting no train sample's label window overlaps the OOS
+    block (synthetic calendar + real vwap/fwd_ret10 identity). Run via /tmp/p0b_run_purge_tests.py
+    (pytest not installed in the env): 6 passed, 0 failed.
+focused_tests:
+  command: /srv/quant/envs/quantaalpha/bin/python3 /tmp/p0b_run_purge_tests.py
+  result: 6 passed
+syntax_compile:
+  command: /srv/quant/envs/quantaalpha/bin/python3 -m py_compile lightgbm_qs/scripts/factor_selection.py lightgbm_qs/scripts/train_final.py lightgbm_qs/scripts/portfolio_and_backtest.py
+  result: PASS
+walkforward_selection:
+  command: /srv/quant/envs/quantaalpha/bin/python3 lightgbm_qs/scripts/factor_selection.py --fold 2019-04-01
+  result: PASS (23 factors selected on train-only data, output data/build/selected_factors_fold_2019-04-01.csv)
+guard_check:
+  result: PASS — selection date set strictly before cut; last selection label window ends before cut
+purge_semantics:
+  result: fwd_ret10[t] == vwap[t+10]/vwap[t]-1 confirmed by row position on the trading calendar

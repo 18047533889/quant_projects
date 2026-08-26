@@ -676,6 +676,17 @@ def _role_from_direct_status(status: Any) -> MiningRole | None:
     ALPHA (their ast positions and terminal authority come from DirectUse)."""
     from factor_engine.mining.direct_use import DirectUseStatus
 
+    # R63-032 orthogonal semantic roles: a node's ability to appear in an AST
+    # (callable) and its semantic role are separate axes.  DIRECT_INTERMEDIATE /
+    # DIRECT_RECIPE / DIRECT_CONTROL_FLOW are ALWAYS callable inside a recipe, but
+    # they are NOT "alpha" — alpha is the terminal decision a standalone factor
+    # makes.  Mapping them to MiningRole.ALPHA previously pretended an
+    # intermediate/control-flow/recipe building block was itself an alpha, which
+    # blurred whether it could stand alone as a factor terminal.  They now carry
+    # their own semantic role; terminal authority (False for all three) comes from
+    # the DirectUse contract via build_direct_use_operator, never from a role
+    # alias.  This is NOT a third role authority: it is the same role axis,
+    # just no longer lying that intermediates are alphas.
     mapping = {
         DirectUseStatus.DIRECT_ALPHA: MiningRole.ALPHA,
         DirectUseStatus.DIRECT_ALPHA_HIGH_COST: MiningRole.ALPHA_HIGH_COST,
@@ -684,10 +695,15 @@ def _role_from_direct_status(status: Any) -> MiningRole | None:
         DirectUseStatus.DIRECT_EVENT: MiningRole.EVENT,
         DirectUseStatus.DIRECT_GROUP_STATE: MiningRole.GROUP_STATE,
         DirectUseStatus.DIRECT_GLOBAL_STATE: MiningRole.GLOBAL_STATE,
-        DirectUseStatus.DIRECT_INTERMEDIATE: MiningRole.ALPHA,
+        DirectUseStatus.DIRECT_INTERMEDIATE: MiningRole.RECIPE_INTERNAL,
         DirectUseStatus.DIRECT_SOURCE_TRANSFORM: MiningRole.SOURCE_TRANSFORM,
-        DirectUseStatus.DIRECT_RECIPE: MiningRole.ALPHA,
-        DirectUseStatus.DIRECT_CONTROL_FLOW: MiningRole.ALPHA,
+        DirectUseStatus.DIRECT_RECIPE: MiningRole.RECIPE_INTERNAL,
+        DirectUseStatus.DIRECT_CONTROL_FLOW: MiningRole.RECIPE_INTERNAL,
+        # R63: MOVE_INTERNAL / RESEARCH_TOOL verdicts are explicit non-alpha —
+        # sin/cos/asin/acos and the in-sample AR/poly2 diagnostics get the honest
+        # role here, never a surface-promoted ALPHA.
+        DirectUseStatus.MOVE_INTERNAL: MiningRole.INTERNAL,
+        DirectUseStatus.RESEARCH_TOOL: MiningRole.RESEARCH,
     }
     return mapping.get(status)
 
@@ -733,6 +749,22 @@ def assign_mining_role_ex(
     if surface == "internal":
         return MiningRole.INTERNAL, RoleSource.VERIFIED_RULE
 
+    # R63: the explicit DirectUse verdict is the single semantic authority for a
+    # reviewed canonical, checked EARLY so an explicit MOVE_INTERNAL /
+    # RESEARCH_TOOL verdict (e.g. sin/cos raw trig, ts_ar_fitted_value /
+    # ts_ar_in_sample_resid / ts_poly2_coeff / ts_poly2_resid in-sample
+    # diagnostics) never gets surface-promoted to ALPHA or blanket-DIAGNOSTIC.
+    try:
+        from factor_engine.mining.direct_use import _resolve_explicit
+
+        contract = _resolve_explicit(canonical, catalog)
+        if contract is not None:
+            role = _role_from_direct_status(contract.status)
+            if role is not None:
+                return role, RoleSource.VERIFIED_RULE
+    except Exception:
+        pass
+
     try:
         from factor_engine.cleaned_operators.production_hardening import NON_FACTOR_PRODUCTION_CANONICALS
 
@@ -762,7 +794,6 @@ def assign_mining_role_ex(
         return MiningRole.DIAGNOSTIC, RoleSource.VERIFIED_RULE
     if canonical in _BENCHMARK_ONLY_CANONICALS:
         return MiningRole.DIAGNOSTIC, RoleSource.VERIFIED_RULE
-
     # 4. Explicit role field (R9-OP-024) — machine metadata, not a tag.
     role_field = _role_field(catalog)
     if role_field in ("group_state", "global_state"):
@@ -830,6 +861,25 @@ def assign_mining_role_ex(
             pass
         return MiningRole.RESEARCH, RoleSource.VERIFIED_RULE
     if surface in ("daily", "extended"):
+        # R63: a reviewed alpha surface alone no longer forces MiningRole.ALPHA.
+        # The explicit DirectUse verdict is the semantic authority: an operator
+        # whose verdict is DIRECT_INTERMEDIATE / DIRECT_EVENT / DIRECT_CONDITION /
+        # DIRECT_STATE / DIRECT_GROUP_STATE / DIRECT_GLOBAL_STATE /
+        # DIRECT_SOURCE_TRANSFORM / DIRECT_CONTROL_FLOW is NOT an alpha, even on a
+        # reviewed surface (e.g. candle body/shadow/gap, atan/asin, limit events).
+        # Role and terminal authority stay orthogonal — the DirectUse contract
+        # owns terminal_allowed.  alpha_high_cost (full-history replay) and
+        # intraday_eod / fundamental_pit lanes are handled by their own rules.
+        try:
+            from factor_engine.mining.direct_use import _resolve_explicit
+
+            contract = _resolve_explicit(canonical, catalog)
+            if contract is not None:
+                role = _role_from_direct_status(contract.status)
+                if role is not None:
+                    return role, RoleSource.VERIFIED_RULE
+        except Exception:
+            pass
         return MiningRole.ALPHA, RoleSource.VERIFIED_RULE
 
     # 10. R15-INC-001: never silently default to ALPHA.

@@ -1145,6 +1145,8 @@ def _default_from_role(canonical: str, catalog: dict[str, Any]) -> DirectUseCont
         return _contract(DirectUseStatus.DIRECT_GLOBAL_STATE, "global state (verified role)")
     if role is MiningRole.FUNDAMENTAL_PIT:
         return _contract(DirectUseStatus.DIRECT_ALPHA, "fundamental PIT alpha (verified role)")
+    if role is MiningRole.INTRADAY_EOD:
+        return _contract(DirectUseStatus.DIRECT_ALPHA, "intraday-to-EOD alpha (verified role)")
     if role is MiningRole.RECIPE_INTERNAL:
         return _contract(DirectUseStatus.DIRECT_RECIPE, "recipe-internal building block")
     if role is MiningRole.SOURCE_TRANSFORM:
