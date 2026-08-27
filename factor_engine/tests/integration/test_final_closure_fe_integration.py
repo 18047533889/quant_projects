@@ -24,8 +24,8 @@ from data_access.core.engine import DuckDBEngine
 from data_access.registry import load_registry
 from data_access.store import DataAccessStore
 
-_PKG = "/home/shw/quant_projects/dataaccess"
-_ASHARE = Path("/home/shw/quant_projects/data/a_share/lqtp_data/StockDailyBar")
+_PKG = str(Path(__file__).resolve().parents[2] / "data_access")
+_ASHARE = Path(__file__).resolve().parents[2] / "data" / "a_share" / "lqtp_data" / "StockDailyBar"
 HAS_ASHARE = _ASHARE.is_dir() and any(_ASHARE.glob("2019-*.parquet"))
 
 

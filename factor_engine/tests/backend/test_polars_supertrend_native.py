@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import types
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -358,7 +359,7 @@ def _pandas_reference():
     import ast
 
     src = open(
-        "/home/shw/quant_projects/factor_engine/cleaned_operators/technical/indicators_v2.py",
+        str(Path(__file__).resolve().parents[2] / "cleaned_operators" / "technical" / "indicators_v2.py"),
         encoding="utf-8",
     ).read()
     tree = ast.parse(src)

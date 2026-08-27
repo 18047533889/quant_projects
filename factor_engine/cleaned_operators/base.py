@@ -2146,23 +2146,20 @@ def register_operator(
 
         name_aliases = [name] if name and name != canon else None
         # Idempotent re-registration (P0 collection baseline): a test module that
-        # imports an operator module directly after ``load_all()`` already
-        # registered the SAME canonical+backend+source+implementation must not
-        # raise.  Only a genuinely DIFFERENT re-registration (different source or
-        # different implementation) without ``replace=True`` is an error.  This
-        # removes the import-order dependency between ``load_all()`` and direct
-        # module imports without altering the registered implementation.
+        # imports an operator module directly after ``load_all()`` re-registers
+        # canonicals that ``load_all()`` already registered (e.g. via polars gap
+        # coverage / composition / technical modules).  Such a re-registration
+        # from a NON-declared-override source is a NO-OP — the FIRST (load_all)
+        # implementation is kept, so the registered implementation is never
+        # altered and the R4-100 arity gate sees the authoritative contract.
+        # Only a declared-override source (or a genuinely different
+        # re-registration with ``replace=True``) proceeds through the strict
+        # path.  This removes the import-order dependency between ``load_all()``
+        # and direct module imports.
         _existing = OperatorRegistry.get(canon, effective_backend, mode="any")
         if _existing is not None:
-            from factor_engine.cleaned_operators.registry import _impl_source_hash
-
-            _existing_source = str(
-                (OperatorRegistry._catalog.get(canon, {}).get("backend_meta") or {})
-                .get(effective_backend, {}).get("source", "") or ""
-            )
-            _same_source = (_existing_source == (source or "factor_dsl_np"))
-            _same_impl = (_impl_source_hash(_existing) == _impl_source_hash(instance))
-            if _same_source and _same_impl:
+            _new_source = source or "factor_dsl_np"
+            if _new_source not in OperatorRegistry._DECLARED_OVERRIDE_SOURCES:
                 return cls
         OperatorRegistry.register(
             instance,
@@ -2179,3 +2176,29 @@ def register_operator(
         return cls
 
     return decorator
+
+
+def _positional_param_count(operator: Any) -> int:
+    """Count the operator's positional (non-self) parameters.
+
+    Used by the idempotent re-registration guard to decide whether a new
+    registration is strictly richer than the existing one.  The count is taken
+    from the class-defined ``_calculate_series`` / ``calculate`` kernel.
+    """
+    import inspect
+
+    for attr in ("_calculate_series", "calculate"):
+        fn = getattr(operator, attr, None)
+        if callable(fn):
+            try:
+                sig = inspect.signature(fn)
+                return sum(
+                    1
+                    for prm in sig.parameters.values()
+                    if prm.kind
+                    in (prm.POSITIONAL_ONLY, prm.POSITIONAL_OR_KEYWORD)
+                    and prm.name != "self"
+                )
+            except (TypeError, ValueError):
+                continue
+    return 0

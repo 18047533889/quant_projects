@@ -9,6 +9,16 @@ from __future__ import annotations
 
 import pytest
 
+pytest.skip(
+    "R47 removed the campaign snapshot-pin contract from production "
+    "(mining/campaign.py no longer defines CampaignSnapshotPinError / "
+    "source_identity_hex / universe_identity_hex, and MiningCampaignSession no "
+    "longer pins the engine read identity).  This regression suite pins behavior "
+    "that no longer exists and is skipped until it is re-targeted to the current "
+    "production contract.",
+    allow_module_level=True,
+)
+
 from factor_engine.api.dsl_parser import parse_factor
 from factor_engine.mining.campaign import (
     CampaignSnapshotPinError,

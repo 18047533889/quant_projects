@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quant-platform"
+version = "0.1.0"
+description = "Quant Research Platform — thin integration DTO layer (pure-stdlib contracts)."
+readme = "docs/PLATFORM_CONTRACTS_DRAFT.md"
+requires-python = ">=3.10"
+# PURE-DTO rule: stdlib dataclasses + typing.Protocol + enum only. No runtime
+# third-party dependencies.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "build>=1.2"]
+
+[tool.setuptools]
+py-modules = []
+# The source tree lives at the repo root of this package (quant_platform/__init__.py
+# is this directory's __init__.py). Map the installable package names onto the
+# on-disk layout explicitly.
+packages = [
+    "quant_platform",
+    "quant_platform.app",
+    "quant_platform.app.contracts",
+]
+
+[tool.setuptools.package-dir]
+"quant_platform" = "."
+
+[tool.setuptools.exclude-package-data]
+"*" = [
+    "tests", "tests.*",
+    "*.pyc", "__pycache__",
+    "test_*.py", "*_test.py",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

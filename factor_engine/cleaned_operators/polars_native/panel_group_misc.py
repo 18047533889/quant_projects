@@ -82,19 +82,19 @@ class DMI_plus(SeriesOperator):
         name="DMI_plus",
         category="technical_indicator",
         description="Positive Directional Movement Index",
-        param_names=["high", "low", "period"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "period": int},
+        param_names=["high", "low", "close", "window"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame, "window": int},
     )
 
-    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, period: int = 14, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, close: pl.DataFrame = None, window: int = 14, **kwargs) -> pl.DataFrame:
         def dmi_plus_expr(h_col, l_col):
             dm_plus = (pl.col(h_col) - pl.col(h_col).shift(1)).clip(lower_bound=0)
             dm_minus = (pl.col(l_col).shift(1) - pl.col(l_col)).clip(lower_bound=0)
             # Only keep positive DM if it's greater than negative DM
             dm_plus = pl.when(dm_plus > dm_minus).then(dm_plus).otherwise(0)
-            tr = (pl.col(h_col) - pl.col(l_col)).abs().rolling_max(window_size=period)
-            smoothed_dm = _wilder_ema_expr(dm_plus, period)
-            smoothed_tr = _wilder_ema_expr(tr, period)
+            tr = (pl.col(h_col) - pl.col(l_col)).abs().rolling_max(window_size=window)
+            smoothed_dm = _wilder_ema_expr(dm_plus, window)
+            smoothed_tr = _wilder_ema_expr(tr, window)
             return np.where(smoothed_tr.alias(h_col) != 0, ((100 * smoothed_dm) / (smoothed_tr).alias(h_col)), np.nan)
 
         cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
@@ -113,19 +113,19 @@ class DMI_minus(SeriesOperator):
         name="DMI_minus",
         category="technical_indicator",
         description="Negative Directional Movement Index",
-        param_names=["high", "low", "period"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "period": int},
+        param_names=["high", "low", "close", "window"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame, "window": int},
     )
 
-    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, period: int = 14, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, close: pl.DataFrame = None, window: int = 14, **kwargs) -> pl.DataFrame:
         def dmi_minus_expr(h_col, l_col):
             dm_plus = (pl.col(h_col) - pl.col(h_col).shift(1)).clip(lower_bound=0)
             dm_minus = (pl.col(l_col).shift(1) - pl.col(l_col)).clip(lower_bound=0)
             # Only keep negative DM if it's greater than positive DM
             dm_minus = pl.when(dm_minus > dm_plus).then(dm_minus).otherwise(0)
-            tr = (pl.col(h_col) - pl.col(l_col)).abs().rolling_max(window_size=period)
-            smoothed_dm = _wilder_ema_expr(dm_minus, period)
-            smoothed_tr = _wilder_ema_expr(tr, period)
+            tr = (pl.col(h_col) - pl.col(l_col)).abs().rolling_max(window_size=window)
+            smoothed_dm = _wilder_ema_expr(dm_minus, window)
+            smoothed_tr = _wilder_ema_expr(tr, window)
             return np.where(smoothed_tr.alias(h_col) != 0, ((100 * smoothed_dm) / (smoothed_tr).alias(h_col)), np.nan)
 
         cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
@@ -144,11 +144,11 @@ class DX(SeriesOperator):
         name="DX",
         category="technical_indicator",
         description="Directional Movement Index (DX)",
-        param_names=["high", "low", "period"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "period": int},
+        param_names=["high", "low", "close", "window"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame, "window": int},
     )
 
-    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, period: int = 14, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, close: pl.DataFrame = None, window: int = 14, **kwargs) -> pl.DataFrame:
         def dx_expr(h_col, l_col):
             dm_plus = (pl.col(h_col) - pl.col(h_col).shift(1)).clip(lower_bound=0)
             dm_minus = (pl.col(l_col).shift(1) - pl.col(l_col)).clip(lower_bound=0)
@@ -156,8 +156,8 @@ class DX(SeriesOperator):
             dm_minus = pl.when(dm_minus > dm_plus).then(dm_minus).otherwise(0)
             tr = (pl.col(h_col) - pl.col(l_col)).abs()
 
-            di_plus = 100 * _wilder_ema_expr(dm_plus, period) / _wilder_ema_expr(tr, period)
-            di_minus = 100 * _wilder_ema_expr(dm_minus, period) / _wilder_ema_expr(tr, period)
+            di_plus = 100 * _wilder_ema_expr(dm_plus, window) / _wilder_ema_expr(tr, window)
+            di_minus = 100 * _wilder_ema_expr(dm_minus, window) / _wilder_ema_expr(tr, window)
             dx = 100 * (di_plus - di_minus).abs() / (di_plus + di_minus)
             return dx.alias(h_col)
 
@@ -397,11 +397,12 @@ class calendar_day_diff(SeriesOperator):
         name="calendar_day_diff",
         category="utility",
         description="Number of calendar days since previous observation",
-        param_names=["date"],
-        param_types={"date": pl.DataFrame},
+        param_names=["date1", "date2"],
+        param_types={"date1": pl.DataFrame, "date2": pl.DataFrame},
     )
 
-    def _calculate_series(self, date: pl.DataFrame, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, date1: pl.DataFrame, date2: pl.DataFrame = None, **kwargs) -> pl.DataFrame:
+        date = date1
         # Assumes date column exists in metadata columns
         if "date" in date.columns:
             date_col = pl.col("date")
@@ -2256,11 +2257,13 @@ class accounting_comparability_score(SeriesOperator):
         name="accounting_comparability_score",
         category="fundamental",
         description="Cross-sectional accounting policy comparability",
-        param_names=["x", "period"],
-        param_types={"x": pl.DataFrame, "period": int},
+        param_names=["scaled_earnings", "report_return", "industry", "period_id", "periods", "min_periods", "min_peers", "revision_policy"],
+        param_types={"scaled_earnings": pl.DataFrame, "report_return": pl.DataFrame, "industry": pl.DataFrame, "period_id": pl.DataFrame, "periods": int, "min_periods": int, "min_peers": int, "revision_policy": str},
     )
 
-    def _calculate_series(self, x: pl.DataFrame, period: int = 4, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, scaled_earnings: pl.DataFrame, report_return: pl.DataFrame = None, industry: pl.DataFrame = None, period_id: pl.DataFrame = None, periods: int = 4, min_periods: int = 2, min_peers: int = 2, revision_policy: str = "latest_available", **kwargs) -> pl.DataFrame:
+        x = scaled_earnings
+        period = periods
         def comparability_expr(col_name):
             col = pl.col(col_name)
             # Measure consistency with cross-sectional median
@@ -2314,11 +2317,11 @@ class EaseOfMovement(SeriesOperator):
         name="EaseOfMovement",
         category="technical_indicator",
         description="Ease of Movement (EMV) indicator",
-        param_names=["high", "low", "volume", "period"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "volume": pl.DataFrame, "period": int},
+        param_names=["high", "low", "volume", "window", "volume_scale"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "volume": pl.DataFrame, "window": int, "volume_scale": float},
     )
 
-    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, volume: pl.DataFrame, period: int = 14, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, volume: pl.DataFrame, window: int = 14, volume_scale: float = 1.0, **kwargs) -> pl.DataFrame:
         def emv_expr(h_col, l_col, v_col):
             h = pl.col(h_col)
             l = pl.col(l_col)
@@ -2334,7 +2337,7 @@ class EaseOfMovement(SeriesOperator):
             # EMV = distance / box_ratio
             emv = distance / (box_ratio + 1e-8)
 
-            return emv.rolling_mean(window_size=period).alias(h_col)
+            return emv.rolling_mean(window_size=window).alias(h_col)
 
         cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
         return high.with_columns([emv_expr(c, c, c) for c in cols])
@@ -2352,11 +2355,11 @@ class KeltnerUpper(SeriesOperator):
         name="KeltnerUpper",
         category="technical_indicator",
         description="Upper band of Keltner Channel",
-        param_names=["close", "high", "low", "period", "multiplier"],
-        param_types={"close": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "period": int, "multiplier": float},
+        param_names=["high", "low", "close", "ema_window", "atr_window", "multiplier"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame, "ema_window": int, "atr_window": int, "multiplier": float},
     )
 
-    def _calculate_series(self, close: pl.DataFrame, high: pl.DataFrame, low: pl.DataFrame, period: int = 20, multiplier: float = 2.0, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, close: pl.DataFrame, ema_window: int = 20, atr_window: int = 20, multiplier: float = 2.0, **kwargs) -> pl.DataFrame:
         def keltner_upper_expr(c_col, h_col, l_col):
             c = pl.col(c_col)
             h = pl.col(h_col)
@@ -2364,14 +2367,14 @@ class KeltnerUpper(SeriesOperator):
             c_prev = c.shift(1)
 
             # Middle = EMA of close
-            middle = _ema_expr(c, period)
+            middle = _ema_expr(c, ema_window)
 
             # ATR
             tr1 = h - l
             tr2 = (h - c_prev).abs()
             tr3 = (l - c_prev).abs()
             tr = pl.max_horizontal(tr1, tr2, tr3)
-            atr = _ema_expr(tr, period)
+            atr = _ema_expr(tr, atr_window)
 
             upper = middle + multiplier * atr
             return upper.alias(c_col)
@@ -2392,24 +2395,24 @@ class KeltnerLower(SeriesOperator):
         name="KeltnerLower",
         category="technical_indicator",
         description="Lower band of Keltner Channel",
-        param_names=["close", "high", "low", "period", "multiplier"],
-        param_types={"close": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "period": int, "multiplier": float},
+        param_names=["high", "low", "close", "ema_window", "atr_window", "multiplier"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame, "ema_window": int, "atr_window": int, "multiplier": float},
     )
 
-    def _calculate_series(self, close: pl.DataFrame, high: pl.DataFrame, low: pl.DataFrame, period: int = 20, multiplier: float = 2.0, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, close: pl.DataFrame, ema_window: int = 20, atr_window: int = 20, multiplier: float = 2.0, **kwargs) -> pl.DataFrame:
         def keltner_lower_expr(c_col, h_col, l_col):
             c = pl.col(c_col)
             h = pl.col(h_col)
             l = pl.col(l_col)
             c_prev = c.shift(1)
 
-            middle = _ema_expr(c, period)
+            middle = _ema_expr(c, ema_window)
 
             tr1 = h - l
             tr2 = (h - c_prev).abs()
             tr3 = (l - c_prev).abs()
             tr = pl.max_horizontal(tr1, tr2, tr3)
-            atr = _ema_expr(tr, period)
+            atr = _ema_expr(tr, atr_window)
 
             lower = middle - multiplier * atr
             return lower.alias(c_col)
@@ -2430,24 +2433,24 @@ class KeltnerPosition(SeriesOperator):
         name="KeltnerPosition",
         category="technical_indicator",
         description="Price position in Keltner Channel [0=lower, 1=upper]",
-        param_names=["close", "high", "low", "period", "multiplier"],
-        param_types={"close": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "period": int, "multiplier": float},
+        param_names=["high", "low", "close", "ema_window", "atr_window", "multiplier"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame, "ema_window": int, "atr_window": int, "multiplier": float},
     )
 
-    def _calculate_series(self, close: pl.DataFrame, high: pl.DataFrame, low: pl.DataFrame, period: int = 20, multiplier: float = 2.0, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, close: pl.DataFrame, ema_window: int = 20, atr_window: int = 20, multiplier: float = 2.0, **kwargs) -> pl.DataFrame:
         def keltner_pos_expr(c_col, h_col, l_col):
             c = pl.col(c_col)
             h = pl.col(h_col)
             l = pl.col(l_col)
             c_prev = c.shift(1)
 
-            middle = _ema_expr(c, period)
+            middle = _ema_expr(c, ema_window)
 
             tr1 = h - l
             tr2 = (h - c_prev).abs()
             tr3 = (l - c_prev).abs()
             tr = pl.max_horizontal(tr1, tr2, tr3)
-            atr = _ema_expr(tr, period)
+            atr = _ema_expr(tr, atr_window)
 
             upper = middle + multiplier * atr
             lower = middle - multiplier * atr

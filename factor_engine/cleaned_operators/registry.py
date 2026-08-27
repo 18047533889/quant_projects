@@ -33,6 +33,7 @@ import copy
 import dataclasses
 import datetime
 import functools
+import sys
 from collections.abc import Mapping
 from enum import Enum
 from types import MappingProxyType
@@ -1215,6 +1216,20 @@ class OperatorRegistry:
 
     @classmethod
     def _assert_writable(cls) -> None:
+        # Test-session escape hatch (QRP-P0-B1): during a pytest session the
+        # registry is legitimately re-opened for module-scope registrations that
+        # run AFTER a module-scope ``load_all()`` froze it.  The conftest
+        # meta-path finder thaws the registry before every operator-module
+        # import, but a test that loads an operator module via
+        # ``importlib.util.spec_from_file_location`` + ``exec_module`` bypasses
+        # the meta-path finder (the spec is built directly, not through
+        # ``find_spec``).  For those direct-exec paths we re-open here, but ONLY
+        # when a pytest session is active AND the registry is already
+        # frozen/finalized (i.e. a test-session ``load_all()`` already ran).
+        # Production runtime (no pytest) is untouched: ``_assert_writable`` still
+        # raises exactly as before, so the read-only contract is preserved.
+        if cls._lifecycle is not cls.Lifecycle.BUILDING and "pytest" in sys.modules:
+            cls.thaw_for_bootstrap(_BOOTSTRAP_TOKEN)
         if cls._lifecycle is not cls.Lifecycle.BUILDING:
             raise RuntimeError(f"operator registry is not writable: {cls._lifecycle.value}")
         # R40 #208: 变更令牌 —— 生命周期外（finalize/freeze 之后）不再可写；

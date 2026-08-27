@@ -1,6 +1,12 @@
 """
 data_access.publish —— staging → published 的原子发布
 
+本模块是 **本地文件系统（LocalFilesystemPublisher）** 发布器：它把 staging 目录
+的 parquet 内容通过同 FS rename 原子晋升为 published 目录。**对象存储（COS）发布
+不在此处**——COS 无原子 rename，生产发布走不可变代次，见
+:mod:`data_access.write.object_store_generation_publisher`（ObjectStoreGenerationPublisher，
+对象存储发布的唯一权威）。
+
 职责：
     1. 校验 staging 和 target 数据集的配对合法性（access_mode、schema、params_schema）
     2. 把 staging 目录的 parquet 内容原子晋升为 published 版本

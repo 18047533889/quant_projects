@@ -43,6 +43,15 @@ class MemoryLeaseKind(str, enum.Enum):
     BACKEND_WORKSPACE = "BACKEND_WORKSPACE"  # backend 私有工作区
     SPILL_STAGING = "SPILL_STAGING"        # spill 落盘 staging
 
+    # P0-10..12: FactorEngine 结果直写 COS 的内存租约种类（bounded-memory）。
+    COS_READ_BUFFER = "COS_READ_BUFFER"            # COS 读取缓冲
+    PARQUET_DECODE = "PARQUET_DECODE"              # parquet 解码工作区
+    REMOTE_RANGE_BUFFER = "REMOTE_RANGE_BUFFER"    # 远程 range-read 缓冲
+    FEATURE_BLOCK_ASSEMBLY = "FEATURE_BLOCK_ASSEMBLY"  # 因子 block 内存组装
+    COS_UPLOAD_PART = "COS_UPLOAD_PART"            # COS 上传分片缓冲
+    COS_UPLOAD_INFLIGHT = "COS_UPLOAD_INFLIGHT"    # COS 上传进行中（inflight）
+    MANIFEST_BUFFER = "MANIFEST_BUFFER"            # manifest / 布局元数据缓冲
+
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.value
 

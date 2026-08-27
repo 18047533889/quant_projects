@@ -10,6 +10,7 @@ See ``platform/docs/PLATFORM_CONTRACTS_DRAFT.md`` for the full field tables.
 
 from __future__ import annotations
 
+from ._contenthash import canonical_str, content_hash
 from .artifact_ref import (
     ARTIFACT_TYPES,
     ARTIFACT_TYPE_BACKTEST,
@@ -40,9 +41,14 @@ from .backtest import (
 from .candidate import FactorCandidateManifest, READY_MARKER_NAME, is_ready_marker
 from .cluster_library import (
     ClusterConversionType,
+    ClusterLineageEdge,
+    ClusterMembership,
+    ClusterSetVersion,
     ClusterVersion,
     FactorLibraryVersion,
     LibraryMembership,
+    LogicalCluster,
+    SimilarityGraphVersion,
 )
 from .event_envelope import (
     EVENT_TYPES,
@@ -68,8 +74,10 @@ from .event_envelope import (
     EventEnvelope,
 )
 from .feature_set import (
+    FeatureMemberRef,
     FeatureSetArtifact,
     FeatureSetDiffCategory,
+    FeatureSetVersion,
     ModelRetrainRequiredEvent,
     retrain_required_for_diff,
 )
@@ -83,6 +91,9 @@ from .identities import (
 )
 from .jobs import (
     ErrorClass,
+    JobAttempt,
+    JobRecord,
+    JobResult,
     JobSpec,
     JobStatus,
     idempotency_key,
@@ -90,13 +101,41 @@ from .jobs import (
     qe_idempotency_key,
     treatment_idempotency_key,
 )
-from .lifecycle import HealthState, LifecycleState
-from .rbac import Permission, ROLE_PERMISSIONS, Role
-from .storage import CacheEvictionPolicy, LocalArtifactCache, ObjectStore, ObjectMetadata
+from .lifecycle import HealthState, LifecycleState, QRPPipelineStage
+from .rbac import (
+    PERMISSION_MIN_CLASSIFICATION,
+    ROLE_DEFAULT_CLASSIFICATION,
+    ROLE_PERMISSIONS,
+    HumanPrincipal,
+    Permission,
+    ResourceScope,
+    Role,
+    SecurityClassification,
+    Team,
+    WorkloadPrincipal,
+)
+from .storage import (
+    ArtifactPublisher,
+    ArtifactResolver,
+    ArtifactStoragePort,
+    CacheEvictionPolicy,
+    LocalArtifactCache,
+    ObjectMetadata,
+    ObjectStore,
+)
 from .timing import EvidenceStatus, TimingContract
-from .workflow import WorkflowBackend, WorkflowSignal
+from .workflow import (
+    WorkflowBackend,
+    WorkflowRun,
+    WorkflowSignal,
+    WorkflowSpec,
+    WorkflowStatus,
+)
 
 __all__ = [
+    # contenthash
+    "canonical_str",
+    "content_hash",
     # artifact_ref
     "ArtifactRef",
     "ARTIFACT_TYPES",
@@ -141,6 +180,9 @@ __all__ = [
     "JobStatus",
     "ErrorClass",
     "JobSpec",
+    "JobRecord",
+    "JobAttempt",
+    "JobResult",
     "idempotency_key",
     "materialization_idempotency_key",
     "qe_idempotency_key",
@@ -152,6 +194,7 @@ __all__ = [
     # lifecycle
     "LifecycleState",
     "HealthState",
+    "QRPPipelineStage",
     # identities
     "Identity",
     "FactorDefinitionIdentity",
@@ -162,21 +205,41 @@ __all__ = [
     # cluster_library
     "ClusterConversionType",
     "ClusterVersion",
+    "ClusterSetVersion",
+    "ClusterLineageEdge",
+    "ClusterMembership",
+    "LogicalCluster",
+    "SimilarityGraphVersion",
     "FactorLibraryVersion",
     "LibraryMembership",
     # feature_set
     "FeatureSetArtifact",
+    "FeatureSetVersion",
+    "FeatureMemberRef",
     "FeatureSetDiffCategory",
     "ModelRetrainRequiredEvent",
     "retrain_required_for_diff",
     # rbac
     "Permission",
     "Role",
+    "Team",
+    "SecurityClassification",
+    "HumanPrincipal",
+    "WorkloadPrincipal",
+    "ResourceScope",
     "ROLE_PERMISSIONS",
+    "PERMISSION_MIN_CLASSIFICATION",
+    "ROLE_DEFAULT_CLASSIFICATION",
     # workflow
     "WorkflowBackend",
     "WorkflowSignal",
+    "WorkflowSpec",
+    "WorkflowRun",
+    "WorkflowStatus",
     # storage
+    "ArtifactStoragePort",
+    "ArtifactPublisher",
+    "ArtifactResolver",
     "ObjectStore",
     "ObjectMetadata",
     "LocalArtifactCache",

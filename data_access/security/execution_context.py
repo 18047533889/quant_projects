@@ -46,6 +46,10 @@ class DataAccessExecutionContext:
     request_id: str | None = None
     run_mode: Any = None
     security_digest: str | None = None
+    # P0-6：principal 类型（HUMAN / TEAM / SERVICE）。None = 未指定（回退 process 级）。
+    # 只有 SERVICE（后台任务）允许回退到 server 的 global/env/service credential 链；
+    # HUMAN/TEAM 无 principal-scoped credential 时 fail-closed（见 cos.remote）。
+    principal_type: str | None = None
 
     def __post_init__(self) -> None:
         if self.security_digest is not None and not isinstance(self.security_digest, str):
@@ -109,6 +113,14 @@ def current_credential_provider() -> Any:
     return ctx.credential_provider if ctx is not None else None
 
 
+def current_principal_type() -> str | None:
+    """当前请求 principal 类型（HUMAN / TEAM / SERVICE）；无上下文时 None。"""
+    ctx = _execution_ctx_var.get()
+    if ctx is None:
+        return None
+    return ctx.principal_type
+
+
 def current_security_digest() -> str | None:
     ctx = _execution_ctx_var.get()
     if ctx is None:
@@ -134,6 +146,7 @@ def resolve_execution_context(
     credential_provider: Any = None,
     request_id: str | None = None,
     run_mode: Any = None,
+    principal_type: str | None = None,
 ) -> DataAccessExecutionContext:
     """构造一个执行上下文，缺省字段从当前上下文/环境回退。
 
@@ -156,6 +169,8 @@ def resolve_execution_context(
         )
     if run_mode is None:
         run_mode = getattr(outer, "run_mode", None) if outer else None
+    if principal_type is None:
+        principal_type = getattr(outer, "principal_type", None) if outer else None
     ctx = DataAccessExecutionContext(
         principal=principal,
         authorizer=authorizer,
@@ -163,6 +178,7 @@ def resolve_execution_context(
         credential_provider=credential_provider,
         request_id=request_id,
         run_mode=run_mode,
+        principal_type=principal_type,
     )
     return DataAccessExecutionContext(
         principal=ctx.principal,
@@ -171,6 +187,7 @@ def resolve_execution_context(
         credential_provider=ctx.credential_provider,
         request_id=ctx.request_id,
         run_mode=ctx.run_mode,
+        principal_type=ctx.principal_type,
         security_digest=ctx.digest(),
     )
 
@@ -182,6 +199,7 @@ __all__ = [
     "current_principal",
     "current_authorizer",
     "current_credential_provider",
+    "current_principal_type",
     "current_security_digest",
     "resolve_execution_context",
 ]

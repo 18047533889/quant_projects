@@ -53,6 +53,7 @@ class CredentialMaterial:
     expires_at: datetime | None = None
     principal_id: str | None = None
     credential_scope_id: str | None = None
+    credential_generation_id: str | None = None
     source: str = "env"
 
     def __post_init__(self) -> None:
@@ -69,6 +70,7 @@ class CredentialMaterial:
             "access_key_id": redact_secret(self.access_key_id),
             "principal_id": self.principal_id,
             "credential_scope_id": self.credential_scope_id,
+            "credential_generation_id": self.credential_generation_id,
             "source": self.source,
             "has_session_token": self.has_session_token,
             "expires_at": (
@@ -108,12 +110,14 @@ class EnvCredentialProvider:
             token = os.environ.get("COS_SESSION_TOKEN", "").strip() or None
             scope = os.environ.get("DATA_ACCESS_CREDENTIAL_SCOPE_ID", "").strip() or None
             principal = os.environ.get("DATA_ACCESS_PRINCIPAL_ID", "").strip() or None
+            gen = os.environ.get("DATA_ACCESS_CREDENTIAL_GENERATION_ID", "").strip() or None
             return CredentialMaterial(
                 access_key_id=cos_id,
                 secret_access_key=cos_key,
                 session_token=token,
                 principal_id=principal,
                 credential_scope_id=scope,
+                credential_generation_id=gen,
                 source="env",
             )
 
@@ -124,12 +128,14 @@ class EnvCredentialProvider:
             token = os.environ.get("AWS_SESSION_TOKEN", "").strip() or None
             scope = os.environ.get("DATA_ACCESS_CREDENTIAL_SCOPE_ID", "").strip() or None
             principal = os.environ.get("DATA_ACCESS_PRINCIPAL_ID", "").strip() or None
+            gen = os.environ.get("DATA_ACCESS_CREDENTIAL_GENERATION_ID", "").strip() or None
             return CredentialMaterial(
                 access_key_id=aws_id,
                 secret_access_key=aws_key,
                 session_token=token,
                 principal_id=principal,
                 credential_scope_id=scope,
+                credential_generation_id=gen,
                 source="env",
             )
 
@@ -140,12 +146,14 @@ class EnvCredentialProvider:
             token = os.environ.get("S3_SESSION_TOKEN", "").strip() or None
             scope = os.environ.get("DATA_ACCESS_CREDENTIAL_SCOPE_ID", "").strip() or None
             principal = os.environ.get("DATA_ACCESS_PRINCIPAL_ID", "").strip() or None
+            gen = os.environ.get("DATA_ACCESS_CREDENTIAL_GENERATION_ID", "").strip() or None
             return CredentialMaterial(
                 access_key_id=s3_id,
                 secret_access_key=s3_key,
                 session_token=token,
                 principal_id=principal,
                 credential_scope_id=scope,
+                credential_generation_id=gen,
                 source="env",
             )
 

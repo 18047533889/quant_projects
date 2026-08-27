@@ -20,7 +20,7 @@ import pytest
 
 # 独立加载 local_disk_policy（不触发 dataaccess 包 __init__ 循环导入）。
 _spec = importlib.util.spec_from_file_location(
-    "_r45_ldp", "dataaccess/read/local_disk_policy.py"
+    "_r45_ldp", str(Path(__file__).resolve().parents[3] / "data_access" / "read" / "local_disk_policy.py")
 )
 _ldp = importlib.util.module_from_spec(_spec)
 assert _spec and _spec.loader

@@ -27,8 +27,8 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 ROOT = "/home/sunhaiwei/quant_projects/lightgbm_qs"
-IN  = os.path.join(ROOT, "data/build/features_full2.parquet")
-OUT = os.path.join(ROOT, "data/build/features_full2_prep.parquet")
+IN  = os.environ.get("FEATURES_PARQUET", os.path.join(ROOT, "data/build/features_full2.parquet"))
+OUT = os.environ.get("PREP_OUT", os.path.join(ROOT, "data/build/features_full2_prep.parquet"))
 FWD = os.path.join(ROOT, "data/panel/fwd_ret10.parquet")
 VWAP_ADJ = os.path.join(ROOT, "data/panel/vwap_trad_adj.parquet")
 LOG = "/tmp/preprocess_features.log"

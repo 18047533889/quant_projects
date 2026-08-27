@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import factor_engine.cleaned_operators
+import factor_engine.cleaned_operators as cleaned_operators
 from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec
 from factor_engine.cleaned_operators.closure_audit import CLOSURE_CATEGORIES
 

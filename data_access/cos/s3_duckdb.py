@@ -2,7 +2,6 @@
 """DuckDB httpfs / S3 配置（COS 远程直读）。"""
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import threading
@@ -19,11 +18,20 @@ def _sql_string(value: str) -> str:
 
 
 def _creds_fingerprint(creds: S3Credentials) -> str:
-    """含 secret 哈希，便于密钥轮换后重新注入。"""
-    secret_fp = hashlib.sha256(creds.secret_access_key.encode("utf-8")).hexdigest()[:16]
+    """非 secret 的凭证身份（P0-7）。
+
+    旧实现用 ``sha256(secret_access_key)[:16]`` 做指纹——把 secret 的哈希放进
+    DuckDB SECRET 身份/日志/状态，是安全债。现在身份只由非 secret 字段构成：
+    ``(principal_id, credential_scope_id, credential_generation_id, expires_at,
+    endpoint, region, url_style, use_ssl)``。当 generation 变化（STS 轮换）时
+    身份改变 → ``_apply_s3_secret`` 重建 SECRET。**绝不**把 secret 或 secret
+    派生哈希放进身份。
+    """
     return (
-        f"{creds.access_key_id}:{secret_fp}:{creds.endpoint}:"
-        f"{creds.region}:{creds.url_style}:{int(creds.use_ssl)}"
+        f"{creds.principal_id or ''}:{creds.credential_scope_id or ''}:"
+        f"{creds.credential_generation_id or ''}:"
+        f"{creds.expires_at.isoformat() if creds.expires_at else ''}:"
+        f"{creds.endpoint}:{creds.region}:{creds.url_style}:{int(creds.use_ssl)}"
     )
 
 
@@ -104,7 +112,7 @@ def _apply_s3_secret(conn, creds: S3Credentials) -> None:
         + f"URL_STYLE {_sql_string(url_style)}",
     ]
     if creds.session_token:
-        parts.append(f"SESSION_TOKEN {_sql_string(creds.session_token)}")
+        parts.append(f",SESSION_TOKEN {_sql_string(creds.session_token)}")
     parts.append(");")
     conn.execute("".join(parts))
     logger.info(

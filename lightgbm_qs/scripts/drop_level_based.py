@@ -12,8 +12,8 @@ import os, time
 import pandas as pd
 
 ROOT = "/home/sunhaiwei/quant_projects/lightgbm_qs"
-IN = os.path.join(ROOT, "data/build/features_full2_prep.parquet")
-OUT = os.path.join(ROOT, "data/build/features_full2_prep_adj.parquet")
+IN = os.environ.get("PREP_IN", os.path.join(ROOT, "data/build/features_full2_adj_prep.parquet"))
+OUT = os.environ.get("PREP_OUT", os.path.join(ROOT, "data/build/features_full2_adj_prep_final.parquet"))
 LOG = "/tmp/drop_level_based.log"
 
 # 20 个水平型因子(审计确认, 需剔除)

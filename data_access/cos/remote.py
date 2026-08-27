@@ -66,6 +66,7 @@ class S3Credentials:
     expires_at: datetime | None = None
     principal_id: str | None = None
     credential_scope_id: str | None = None
+    credential_generation_id: str | None = None
 
     def __repr__(self) -> str:
         from data_access.security.redaction import redact_secret
@@ -79,7 +80,8 @@ class S3Credentials:
             f"session_token={'<redacted>' if self.session_token else None!r}, "
             f"expires_at={self.expires_at!r}, "
             f"principal_id={self.principal_id!r}, "
-            f"credential_scope_id={self.credential_scope_id!r})"
+            f"credential_scope_id={self.credential_scope_id!r}, "
+            f"credential_generation_id={self.credential_generation_id!r})"
         )
 
     @classmethod
@@ -103,6 +105,7 @@ class S3Credentials:
             expires_at=m.expires_at,
             principal_id=m.principal_id,
             credential_scope_id=m.credential_scope_id,
+            credential_generation_id=m.credential_generation_id,
         )
 
     @property
@@ -119,16 +122,58 @@ class S3Credentials:
             "has_session_token": self.has_session_token,
             "principal_id": self.principal_id,
             "credential_scope_id": self.credential_scope_id,
+            "credential_generation_id": self.credential_generation_id,
         }
 
 
+def _production_context() -> bool:
+    """P0-1：production 判定（remote-first 默认）。
+
+    与 ``local_disk_policy.spill_policy_for()`` 一致：``FACTOR_ENGINE_PRODUCTION``
+    （1/true/yes）或 ``FACTOR_ENGINE_LOCAL_DISK_POLICY=STRICT_REMOTE`` 视为
+    production。也兼容 ``QUANT_PRODUCTION_MODE`` / ``DATA_ACCESS_STRICT_READ``
+    （RuntimeModeIdentity 权威）。
+    """
+    try:
+        from data_access.read.local_disk_policy import (
+            LocalDiskPolicy,
+            spill_policy_for,
+        )
+
+        if spill_policy_for() is LocalDiskPolicy.STRICT_REMOTE:
+            return True
+    except Exception:
+        pass
+    try:
+        from data_access.runtime.mode_identity import is_production_authority
+
+        if is_production_authority():
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def cos_read_mode() -> str:
-    """``mirror`` | ``remote`` | ``auto``。"""
-    raw = os.environ.get("DATA_ACCESS_COS_READ_MODE", "mirror").strip().lower()
+    """``mirror`` | ``remote`` | ``auto``。
+
+    **P0-1**：production 上下文默认 ``remote``（remote-first，无 local-mirror
+    fallback）——即使 ``DATA_ACCESS_COS_READ_MODE`` 未设置或显式设为 ``mirror``，
+    production 也强制 ``remote``。``mirror``/``auto`` 仅 research/dev 允许。
+    """
+    raw = os.environ.get("DATA_ACCESS_COS_READ_MODE", "").strip().lower()
     if raw not in _VALID_MODES:
+        # 未设置或非法值：production 一律 remote-first；research 缺省 mirror。
+        if _production_context():
+            return "remote"
+        if not raw:
+            return "mirror"
         raise ValidationError(
             f"无效的 DATA_ACCESS_COS_READ_MODE={raw!r}，允许: {sorted(_VALID_MODES)}"
         )
+    if _production_context():
+        # production 强制 remote-first：mirror/auto 仅 research/dev 允许。
+        return "remote"
     return raw
 
 
@@ -204,6 +249,12 @@ def resolve_s3_credentials() -> S3Credentials:
         2. 部署注入的 server-scoped env credential（EnvCredentialProvider，§3.1 C）；
         3. research 显式 opt-in 的 coscli 配置（CosCliConfigProvider，§3.4）。
 
+    **P0-6 fail-closed**：当当前执行上下文有已认证 principal 且其类型为
+    HUMAN/TEAM（非 SERVICE）时，若没有 principal-scoped credential 解析成功，
+    则**必须 fail-closed（抛 ValidationError）**——绝不回退到 server 的
+    global/env/service credential（那会绕过 per-team 最小权限）。只有
+    principal_type=SERVICE（后台任务）才允许走 service/env/global 链。
+
     **production/strict 下绝不自动解析 ``~/.cos.yaml -> cos.base.secret*``**
     （A/B/C/D 之外的来源全部拒绝）。任何 provider 都不写 ``os.environ``。
     endpoint 缺省按 region 推断为 ``cos.<region>.myqcloud.com``。
@@ -212,7 +263,10 @@ def resolve_s3_credentials() -> S3Credentials:
         EnvCredentialProvider,
         _global_credential_provider,
     )
-    from data_access.security.execution_context import current_credential_provider
+    from data_access.security.execution_context import (
+        current_credential_provider,
+        current_principal_type,
+    )
 
     material = None
     # R28-17：优先 **request-scoped** credential provider（HTTP/任务执行上下文的
@@ -220,13 +274,29 @@ def resolve_s3_credentials() -> S3Credentials:
     # A/B 各自带自己的受限凭证时，嵌套读（read_joined / cache miss / stream）会
     # 拿全局 base credential，绕过 per-principal 权限分级。
     provider = current_credential_provider() or _global_credential_provider()
-    if provider is not None:
+
+    # P0-6：已认证 HUMAN/TEAM principal 只允许用 **principal-scoped** credential。
+    # 若没有 request-scoped provider → fail-closed，绝不回退 server 的
+    # global/env/service credential（那会绕过 per-team 最小权限）。
+    ptype = current_principal_type()
+    if ptype is not None and ptype.upper() != "SERVICE":
+        if current_credential_provider() is None:
+            raise ValidationError(
+                f"principal_type={ptype!r} 的已认证请求没有 principal-scoped COS/S3 "
+                "凭证，且不允许回退到 server 的 global/env/service credential "
+                "（P0-6 fail-closed，per-team 最小权限）。请为该 principal 显式注入 "
+                "CredentialProvider 或 scoped env credential。"
+            )
+        # 有 request-scoped provider：用它，绝不回退 global/env。
+        material = provider.resolve()
+    elif provider is not None:
         material = provider.resolve()
     else:
         try:
             material = EnvCredentialProvider().resolve()
         except ValidationError:
             material = None
+
     if material is None:
         # research 显式 opt-in：coscli/clean-cos-ro 配置（不影响 production）。
         access, secret = _read_cos_cli_credentials()

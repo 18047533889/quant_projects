@@ -1,15 +1,23 @@
-"""JobSpec / JobStatus / ErrorClass — platform job contract.
+"""JobSpec / JobRecord / JobAttempt / JobResult + JobStatus / ErrorClass.
 
 DRAFT. Implements ``platform/docs/PLATFORM_CONTRACTS_DRAFT.md`` §4.3 (spec §9,
-§12.2, §42, §43). PURE stdlib frozen dataclass + enums. ``JobStatus`` is the
-execution status and is distinct from ``LifecycleState`` and ``HealthState``
-(spec §9 invariant).
+§12.2, §42, §43). PURE stdlib frozen dataclasses + enums.
+
+Job layer split (§5.4):
+- ``JobSpec`` — the immutable *start* declaration. Carries NO outputs (outputs do
+  not exist at start time); outputs appear only on ``JobResult``.
+- ``JobRecord`` — the runtime bookkeeping that accrues as a job executes.
+- ``JobAttempt`` — one execution attempt's runtime facts.
+- ``JobResult`` — the terminal outcome, carrying ``output_artifact_refs``.
+
+``JobStatus`` is the execution status and is distinct from ``LifecycleState`` and
+``HealthState`` and ``QRPPipelineStage`` (spec §9 invariant).
 """
 
 from __future__ import annotations
 
 import enum
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from ._contenthash import content_hash
@@ -18,6 +26,9 @@ __all__ = [
     "JobStatus",
     "ErrorClass",
     "JobSpec",
+    "JobRecord",
+    "JobAttempt",
+    "JobResult",
     "idempotency_key",
     "materialization_idempotency_key",
     "qe_idempotency_key",
@@ -26,7 +37,8 @@ __all__ = [
 
 
 class JobStatus(enum.Enum):
-    """Execution status (spec §9). Distinct from LifecycleState / HealthState."""
+    """Execution status (spec §9). Distinct from LifecycleState / HealthState /
+    QRPPipelineStage."""
 
     PENDING = "PENDING"
     RUNNING = "RUNNING"
@@ -67,11 +79,16 @@ class ErrorClass(enum.Enum):
 
 @dataclass(frozen=True)
 class JobSpec:
-    """Declared activity contract (spec §12.2)."""
+    """Immutable declared activity contract (spec §12.2).
 
-    job_id: str
+    A start spec describes *what to do* and *what it consumes*. It carries NO
+    output artifact refs — outputs do not exist until the job succeeds, so they
+    belong on ``JobResult``.
+    """
+
     job_type: str
     idempotency_key: str
+    inputs: tuple[str, ...] = ()
     activity_kind: str | None = None
     priority: int = 0
     max_retries: int = 0
@@ -81,12 +98,9 @@ class JobSpec:
     estimated_factor_count: int = 0
     estimated_row_count: int = 0
     input_artifact_refs: tuple[str, ...] = ()
-    output_artifact_refs: tuple[str, ...] = ()
     created_at: datetime | None = None
 
     def __post_init__(self) -> None:
-        if not self.job_id:
-            raise ValueError("job_id is required")
         if not self.job_type:
             raise ValueError("job_type is required")
         if not self.idempotency_key:
@@ -95,6 +109,51 @@ class JobSpec:
             raise ValueError("priority must be >= 0")
         if self.max_retries < 0:
             raise ValueError("max_retries must be >= 0")
+
+
+@dataclass(frozen=True)
+class JobAttempt:
+    """One execution attempt's runtime facts (spec §43)."""
+
+    worker_id: str
+    heartbeat: datetime | None = None
+    error_class: ErrorClass | None = None
+    logs_ref: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.worker_id:
+            raise ValueError("worker_id is required")
+
+
+@dataclass(frozen=True)
+class JobRecord:
+    """Runtime bookkeeping that accrues as a job executes (spec §9, §42)."""
+
+    status: JobStatus
+    current_stage: str | None = None
+    progress: float = 0.0
+    created_at: datetime | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    attempt_count: int = 0
+    attempts: tuple[JobAttempt, ...] = ()
+    error_class: ErrorClass | None = None
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.progress <= 1.0:
+            raise ValueError("progress must be in [0.0, 1.0]")
+        if self.attempt_count < 0:
+            raise ValueError("attempt_count must be >= 0")
+
+
+@dataclass(frozen=True)
+class JobResult:
+    """Terminal outcome of a job (spec §12.2). Carries outputs."""
+
+    output_artifact_refs: tuple[str, ...] = ()
+    # Human-readable summary/status text for observability (never the source of
+    # truth for identity).
+    summary: str = ""
 
 
 def idempotency_key(*fields: object) -> str:

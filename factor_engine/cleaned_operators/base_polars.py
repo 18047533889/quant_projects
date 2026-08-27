@@ -257,21 +257,25 @@ def register_operator(
         name_aliases = [name] if name and name != canon else None
         # Idempotent re-registration (P0 collection baseline): see base.py
         # register_operator.  A direct module import after ``load_all()`` that
-        # re-registers the SAME canonical+backend+source+implementation is a
-        # no-op; only a genuinely different re-registration without ``replace``
-        # raises.
+        # re-registers an already-present canonical from a NON-declared-override
+        # source is a no-op when the existing registration is at least as rich;
+        # a strictly richer registration replaces it.
+        _effective_replace = replace
+        _effective_replacement_reason = replacement_reason
         _existing = OperatorRegistry.get(canon, backend, mode="any")
         if _existing is not None:
-            from factor_engine.cleaned_operators.registry import _impl_source_hash
-
-            _existing_source = str(
-                (OperatorRegistry._catalog.get(canon, {}).get("backend_meta") or {})
-                .get(backend, {}).get("source", "") or ""
-            )
-            _same_source = (_existing_source == (source or "factor_dsl_np"))
-            _same_impl = (_impl_source_hash(_existing) == _impl_source_hash(instance))
-            if _same_source and _same_impl:
-                return cls
+            _new_source = source or "factor_dsl_np"
+            if _new_source not in OperatorRegistry._DECLARED_OVERRIDE_SOURCES:
+                from factor_engine.cleaned_operators.base import _positional_param_count
+                _existing_params = _positional_param_count(_existing)
+                _new_params = _positional_param_count(instance)
+                if _new_params <= _existing_params:
+                    return cls
+                _effective_replace = True
+                _effective_replacement_reason = _effective_replacement_reason or (
+                    "richer authoritative registration replaces test-module "
+                    "standalone registration"
+                )
         OperatorRegistry.register(
             instance,
             canonical=canon,
@@ -279,8 +283,8 @@ def register_operator(
             source=source or "factor_dsl_np",
             aliases=name_aliases,
             status=status,
-            replace=replace,
-            replacement_reason=replacement_reason,
+            replace=_effective_replace,
+            replacement_reason=_effective_replacement_reason,
             expected_old_source=expected_old_source,
         )
         return cls

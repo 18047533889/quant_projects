@@ -4,11 +4,14 @@ DRAFT. Implements ``platform/docs/PLATFORM_CONTRACTS_DRAFT.md`` §4.2 (spec §11
 PURE stdlib frozen dataclass. Events are emitted after DB commit via the
 Transactional Outbox (spec §11.1); the platform never double-writes events and
 state.
+
+The ``payload`` mapping is deeply frozen on construction so that a frozen
+dataclass never leaks a mutable nested container.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Mapping
 
@@ -82,6 +85,28 @@ EVENT_TYPES: frozenset[str] = frozenset(
 )
 
 
+def _freeze_value(value: Any) -> Any:
+    """Recursively convert mutable containers into immutable equivalents.
+
+    ``dict`` → frozendict-like ``MappingProxy``; ``list``/``set`` → tuple.
+    The result is hashable/immutable enough that a frozen dataclass does not
+    leak a mutable nested container.
+    """
+    from types import MappingProxyType
+
+    if isinstance(value, Mapping):
+        return MappingProxyType(
+            {_freeze_value(k): _freeze_value(v) for k, v in value.items()}
+        )
+    if isinstance(value, list):
+        return tuple(_freeze_value(v) for v in value)
+    if isinstance(value, set):
+        return tuple(sorted((_freeze_value(v) for v in value), key=repr))
+    if isinstance(value, tuple):
+        return tuple(_freeze_value(v) for v in value)
+    return value
+
+
 @dataclass(frozen=True)
 class EventEnvelope:
     """Unified event envelope (spec §11)."""
@@ -95,7 +120,12 @@ class EventEnvelope:
     aggregate_id: str
     correlation_id: str
     causation_id: str | None = None
-    payload: Mapping[str, Any] = None  # type: ignore[assignment]
+    payload: Mapping[str, Any] = field(default_factory=dict)
+    # NEW fields (§5.3)
+    trace_id: str | None = None
+    actor_principal_id: str | None = None
+    idempotency_key: str | None = None
+    event_version: int = 1
 
     def __post_init__(self) -> None:
         if not self.event_id:
@@ -112,5 +142,7 @@ class EventEnvelope:
             raise ValueError("aggregate_id is required")
         if not self.correlation_id:
             raise ValueError("correlation_id is required")
-        if self.payload is None:
-            object.__setattr__(self, "payload", {})
+        # Deep-freeze the payload so the frozen dataclass does not leak a
+        # mutable nested container.
+        frozen = _freeze_value(self.payload)
+        object.__setattr__(self, "payload", frozen)

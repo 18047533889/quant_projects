@@ -7,10 +7,10 @@ instead of silently breaking (log + break was the old behavior).
 
 import pytest
 
-from factor_engine.runtime.exceptions import PhysicalPlanCycleError
 from factor_engine.runtime.multibackend.parallel_region_scheduler import (
     ExecutionRegion,
     ParallelRegionScheduler,
+    PhysicalPlanCycleError,
 )
 
 

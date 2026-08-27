@@ -5,12 +5,19 @@ PURE stdlib frozen dataclass. This is the *platform-facing ref / adapter
 boundary*; it does not replace domain-native artifacts (e.g.
 ``factor_assets/contracts/treatment_selection.py``). ``[RECONCILE]`` against
 domain-native ref types before freeze.
+
+An ``ArtifactRef`` is a **REFERENCE**, not a validator. It does NOT claim to
+recompute or verify the real object byte hash — that is the job of the artifact
+publisher / resolver (see ``storage.py``), which hashes the actual COS bytes.
+This DTO only validates the *shape* of its fields: hash FORMAT, required fields,
+URI scheme, and ``size_bytes >= 0``.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import re
 
 __all__ = [
     "ArtifactRef",
@@ -69,14 +76,30 @@ ARTIFACT_TYPES: frozenset[str] = frozenset(
     }
 )
 
+# Common sha256 hex form: 64 lowercase hex chars.
+_SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
+_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
+
 
 @dataclass(frozen=True)
 class ArtifactRef:
-    """Immutable reference to a published artifact (spec §7.2).
+    """Immutable reference to a *published* artifact (spec §7.2).
 
-    Fields match the spec exactly. ``content_hash`` is derived per the
-    content-hash rule (DRAFT doc §2); a caller-supplied hash that does not match
-    the recomputed value fails closed.
+    ``ArtifactRef`` is a REFERENCE, not a validator. It does **not** recompute or
+    verify the real object byte hash — that is the responsibility of the
+    ``ArtifactPublisher``/``ArtifactResolver`` (see ``storage.py``) which hash the
+    actual COS bytes. This DTO only validates the *shape* of its fields.
+
+    Two hash slots are distinguished:
+      - ``semantic_hash``: a domain-semantics hash (over semantic fields), if
+        applicable to this artifact type; may be empty for opaque byte blobs.
+      - ``content_hash``: the COS/object-bytes SHA-256 computed by the publisher
+        over the stored object. It is *reported* by the publisher/resolver, NOT
+        recomputed by this DTO. Here we only validate its hex format.
+
+    A caller-supplied hash is never "verified against a recomputed value" by this
+    class — it cannot, because it has no access to the underlying object bytes.
+    Verification happens at the storage boundary.
     """
 
     artifact_id: str
@@ -88,7 +111,13 @@ class ArtifactRef:
     created_at: datetime
     producer_type: str
     producer_version: str
-    snapshot_id: str | None = None
+    # NEW fields (§5.1)
+    semantic_hash: str = ""
+    media_type: str = "application/octet-stream"
+    producer_source_ref: str | None = None
+    snapshot_ref: str | None = None
+    universe_ref: str | None = None
+    security_classification: str | None = None
 
     def __post_init__(self) -> None:
         if not self.artifact_id:
@@ -98,8 +127,17 @@ class ArtifactRef:
         if not self.schema_version:
             raise ValueError("schema_version is required")
         if not self.content_hash:
-            raise ValueError("content_hash is required (derived, not self-reported)")
+            raise ValueError(
+                "content_hash is required (reported by the publisher/resolver, "
+                "not recomputed by ArtifactRef)"
+            )
+        if not _SHA256_HEX_RE.match(self.content_hash):
+            raise ValueError(
+                f"content_hash must be a 64-char lowercase hex sha256, got {self.content_hash!r}"
+            )
         if not self.storage_uri:
             raise ValueError("storage_uri is required")
+        if not _SCHEME_RE.match(self.storage_uri):
+            raise ValueError(f"storage_uri must carry a URI scheme, got {self.storage_uri!r}")
         if self.size_bytes < 0:
             raise ValueError("size_bytes must be >= 0")

@@ -114,6 +114,10 @@ include = [
     "factor_engine.telemetry*",
     "data_access",
     "data_access.*",
+    # QRP-P0R-C4: quant_platform is also independently installable (own
+    # pyproject.toml) and ships in the umbrella wheel too.
+    "quant_platform",
+    "quant_platform.*",
     "vectorbt_qs",
     "vectorbt_qs.mvp",
     "vectorbt_qs.mvp.analysis",

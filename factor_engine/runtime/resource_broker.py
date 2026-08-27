@@ -58,15 +58,23 @@ DEFAULT_MIN_FREE_FRACTION = 0.10
 #: 空闲池把额度借给忙池，全局硬上限 ``SUM(leases)+candidate <= ExecutionBudget``
 #: 始终成立。
 DEFAULT_SOFT_POOL_FRACTIONS: dict[MemoryLeaseKind, float] = {
-    MemoryLeaseKind.SOURCE_READ: 0.10,
-    MemoryLeaseKind.READ_WAVE: 0.18,
-    MemoryLeaseKind.COMPUTE: 0.44,
-    MemoryLeaseKind.CSE_CACHE: 0.12,
+    MemoryLeaseKind.SOURCE_READ: 0.09,
+    MemoryLeaseKind.READ_WAVE: 0.17,
+    MemoryLeaseKind.COMPUTE: 0.40,
+    MemoryLeaseKind.CSE_CACHE: 0.10,
     MemoryLeaseKind.TRANSFER_BUFFER: 0.03,
     MemoryLeaseKind.RESULT_QUEUE: 0.05,
     MemoryLeaseKind.WRITER_BATCH: 0.05,
     MemoryLeaseKind.BACKEND_WORKSPACE: 0.02,
     MemoryLeaseKind.SPILL_STAGING: 0.01,
+    # P0-10..12: COS 直写租约（小分数，可借可用）。合计 0.075，与上文合计 ≈ 0.995。
+    MemoryLeaseKind.COS_READ_BUFFER: 0.02,
+    MemoryLeaseKind.PARQUET_DECODE: 0.01,
+    MemoryLeaseKind.REMOTE_RANGE_BUFFER: 0.01,
+    MemoryLeaseKind.FEATURE_BLOCK_ASSEMBLY: 0.02,
+    MemoryLeaseKind.COS_UPLOAD_PART: 0.005,
+    MemoryLeaseKind.COS_UPLOAD_INFLIGHT: 0.005,
+    MemoryLeaseKind.MANIFEST_BUFFER: 0.005,
 }
 #: 弹性借用上限：单个池可从其它空闲池借到的额度，不得超过其初始份额的 N 倍。
 DEFAULT_MAX_BORROW_MULTIPLIER = 4.0
@@ -871,6 +879,26 @@ class ResourceBroker:
     def current_cse_budget(self) -> int:
         """P3/P4: CSE cache 预算。"""
         return self._pool_limit(MemoryLeaseKind.CSE_CACHE, self.execution_budget())
+
+    def current_remote_io_lease_budget(self) -> int:
+        """P0-12: COS 直写/读取 类预算（read + upload + inflight 软池额度）。
+
+        FactorEngine 结果直写 COS 的 bounded-memory writer 用本值做块组装 /
+        上传缓冲的预算上限（再经 ``acquire_memory`` 按 kind 实际拿租约）。
+        """
+        exec_budget = self.execution_budget()
+        return sum(
+            self._pool_limit(k, exec_budget)
+            for k in (
+                MemoryLeaseKind.COS_READ_BUFFER,
+                MemoryLeaseKind.REMOTE_RANGE_BUFFER,
+                MemoryLeaseKind.FEATURE_BLOCK_ASSEMBLY,
+                MemoryLeaseKind.COS_UPLOAD_PART,
+                MemoryLeaseKind.COS_UPLOAD_INFLIGHT,
+                MemoryLeaseKind.MANIFEST_BUFFER,
+            )
+        )
+
 
     # -- admission --
 

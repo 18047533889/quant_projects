@@ -84,13 +84,23 @@ FeatureSets.
 | `artifact_id` | `str` | identity of the artifact object |
 | `artifact_type` | `str` | one of `ARTIFACT_TYPE_*` constants |
 | `schema_version` | `str` | JSON schema version of the payload |
-| `content_hash` | `str` | sha256 over semantic fields (see §2 above) |
-| `storage_uri` | `str` | COS / signed object uri; never a domain-internal path |
-| `size_bytes` | `int` | byte size of the stored object |
+| `content_hash` | `str` | COS/object-bytes SHA-256, **reported by the publisher/resolver over the stored object bytes** — NOT recomputed by `ArtifactRef` (this DTO only validates hex format; real verify happens at the storage boundary) |
+| `semantic_hash` | `str = ""` | optional domain-semantics hash; empty for opaque byte blobs |
+| `storage_uri` | `str` | COS / signed object uri; must carry a URI scheme; never a domain-internal path |
+| `size_bytes` | `int` | byte size of the stored object; `>= 0` |
 | `created_at` | `datetime` | UTC ISO-8601 creation timestamp |
 | `producer_type` | `str` | e.g. `FACTOR_ENGINE`, `QUANT_EVALUATOR`, `FACTOR_ASSETS`, `LLM_AGENT` |
 | `producer_version` | `str` | version string of the producer |
-| `snapshot_id` | `str \| None` | data snapshot id when the artifact is snapshot-bound |
+| `media_type` | `str` | default `application/octet-stream` |
+| `producer_source_ref` | `str \| None` | upstream source ref |
+| `snapshot_ref` | `str \| None` | data snapshot ref (replaces former `snapshot_id`) |
+| `universe_ref` | `str \| None` | universe ref when snapshot-bound |
+| `security_classification` | `str \| None` | sensitivity tier (see §4.10b) |
+
+`ArtifactRef` is a REFERENCE, not a validator. It validates only: hash FORMAT,
+required fields, URI scheme, `size_bytes >= 0`. It does NOT recompute/verify the
+real object byte hash — that is the job of `ArtifactPublisher`/`ArtifactResolver`
+(see §4.11).
 
 `ARTIFACT_TYPE_*` constants (spec §7.2):
 
@@ -115,7 +125,11 @@ MODEL                  BACKTEST                REPORT_EXPORT
 | `aggregate_id` | `str` | id of that aggregate |
 | `correlation_id` | `str` | root workflow / top-level request correlation |
 | `causation_id` | `str \| None` | immediate cause; `None` for root events |
-| `payload` | `dict` | event-specific fields |
+| `payload` | `dict` | event-specific fields; **deep-frozen** on construction |
+| `trace_id` | `str \| None` | distributed tracing id |
+| `actor_principal_id` | `str \| None` | the actor / principal that caused the event |
+| `idempotency_key` | `str \| None` | dedup key for the event |
+| `event_version` | `int = 1` | version of the event schema |
 
 Core `EVENT_TYPE_*` constants (spec §11):
 
@@ -133,7 +147,7 @@ Events are emitted **after** DB commit via the Transactional Outbox (spec §11.1
 DB state update + outbox insert happen in one transaction; an outbox publisher
 then delivers. The platform never double-writes events and state.
 
-### 4.3 JobSpec, JobStatus (spec §9, §12.2, §42, §43)
+### 4.3 JobSpec / JobRecord / JobAttempt / JobResult + JobStatus (spec §9, §12.2, §42, §43)
 
 `JobStatus` enum values (spec §9 "执行状态"):
 
@@ -142,13 +156,17 @@ PENDING  RUNNING  SUCCEEDED  FAILED_RETRYABLE  FAILED_TERMINAL
 CANCEL_REQUESTED  CANCELLED  BLOCKED_DATA  BLOCKED_DEPENDENCY  TIMED_OUT
 ```
 
+Job-layer split (§5.4): `JobSpec` is the immutable *start* declaration and carries
+NO outputs (outputs do not exist at start time); outputs appear only on
+`JobResult`. Runtime facts accrue on `JobRecord` / `JobAttempt`.
+
 `JobSpec` fields — every activity is declared with (spec §12.2):
 
 | field | type | notes |
 |---|---|---|
-| `job_id` | `str` | platform job identity |
 | `job_type` | `str` | e.g. `MATERIALIZE_FACTOR`, `TREATMENT_SEARCH`, `LIBRARY_PROMOTION` |
 | `idempotency_key` | `str` | sha256 of canonical tuple (§42) |
+| `inputs` | `tuple[str, ...]` | logical input ids |
 | `activity_kind` | `str \| None` | logical activity name in the workflow |
 | `priority` | `int` | higher = more urgent |
 | `max_retries` | `int` | retry budget; `0` = no retry allowed |
@@ -158,8 +176,18 @@ CANCEL_REQUESTED  CANCELLED  BLOCKED_DATA  BLOCKED_DEPENDENCY  TIMED_OUT
 | `estimated_factor_count` | `int = 0` | §44 scheduling hint |
 | `estimated_row_count` | `int = 0` | §44 scheduling hint |
 | `input_artifact_refs` | `tuple[str, ...]` | artifact ids consumed |
-| `output_artifact_refs` | `tuple[str, ...]` | artifact ids produced |
 | `created_at` | `datetime` | UTC |
+
+(Former `job_id` and `output_artifact_refs` removed from `JobSpec`: `job_id` is
+assigned by the backend on start; `output_artifact_refs` moved to `JobResult`.)
+
+`JobRecord` fields: `status: JobStatus`, `current_stage`, `progress: float ∈
+[0,1]`, `created_at`/`started_at`/`finished_at`, `attempt_count`, `attempts:
+tuple[JobAttempt, ...]`, `error_class`.
+
+`JobAttempt` fields: `worker_id`, `heartbeat`, `error_class`, `logs_ref`.
+
+`JobResult` fields: `output_artifact_refs: tuple[str, ...]`, `summary`.
 
 Idempotency-key rules (spec §42):
 
@@ -218,16 +246,21 @@ the marker file must be named exactly `_READY` and be empty (0 bytes); any other
 suffix (e.g. `_PENDING`) is not a readiness marker. A manifest without `_READY`
 is registered as `PENDING`, never `READY`.
 
-### 4.5 LifecycleState + HealthState (spec §9)
+### 4.5 LifecycleState / QRPPipelineStage + HealthState (spec §9)
 
-`LifecycleState`:
+`LifecycleState` (factor **ASSET** governance state machine — FA owns):
 
 ```text
-DISCOVERED VALIDATING VALIDATED COMPILED MATERIALIZING MATERIALIZED
-RAW_EVALUATING RAW_EVALUATED TREATMENT_SEARCHING TREATMENT_SELECTED
-TREATED_EVALUATING TREATED_EVALUATED NOVELTY_CHECKING ADMISSION_REVIEW
-CLUSTER_PENDING CLUSTERED LIBRARY_CANDIDATE SHADOW PRODUCTION_ELIGIBLE
-PRODUCTION DEGRADED RETIRED QUARANTINED
+REGISTERED EVALUATED APPROVED PRODUCTION_READY PRODUCTION DEGRADED RETIRED QUARANTINED
+```
+
+`LifecycleState` does NOT contain pipeline-progress states like `MATERIALIZING`,
+`RAW_EVALUATING`, `TREATMENT_SEARCHING` — those belong to the pipeline/job
+domain. Pipeline progress is a SEPARATE enum, `QRPPipelineStage` (§5.7):
+
+```text
+DISCOVERED VALIDATING COMPILING MATERIALIZING RAW_EVALUATING TREATMENT_SEARCHING
+TREATED_EVALUATING ADMISSION CLUSTERING LIBRARY PRODUCTION
 ```
 
 `HealthState`:
@@ -236,10 +269,10 @@ PRODUCTION DEGRADED RETIRED QUARANTINED
 UNKNOWN HEALTHY WATCH DEGRADED CRITICAL STALE
 ```
 
-Invariant (spec §9): `LifecycleState != JobStatus != HealthState` — three
-independent enums; never conflated.
+Invariant (spec §9, §5.7): `QRPPipelineStage != LifecycleState != JobStatus !=
+HealthState` — four independent enums; never conflated.
 
-### 4.6 ClusterVersion + ClusterVersionId + logical_cluster_id (spec §8.5, §14) `[RECONCILE]`
+### 4.6 Layered clustering model (spec §8.5, §14, §34, §35) `[RECONCILE]`
 
 `logical_cluster_id` (`CL_PV_MOM_0017` style) is stable across versions, while
 `algorithm_cluster_label` (`cluster 18`) changes per run. Every global clustering
@@ -249,24 +282,30 @@ re-matches against the previous version, producing cluster-lineage conversion:
 UNCHANGED MIGRATED SPLIT MERGED NEW DISSOLVED
 ```
 
-`ClusterVersionId` canonical input (spec §8.5):
+Layered model (§5.6, spec §34/§35):
 
-```text
-member universe snapshot + similarity graph version + clustering algorithm/version
-+ parameters + seed + policy hash
-```
-
-`ClusterVersion`:
+- `SimilarityGraphVersion` — one global similarity-graph version
+  (`graph_version_id`, `graph_ref`, `policy_hash`, `created_at`).
+- `ClusterSetVersion` — one *global clustering run* (`cluster_set_version_id`,
+  `similarity_graph_version`, `algorithm`, `backend`, `seed`, `resolution`,
+  `policy_hash`, `clustering_run_ref`, `created_at`).
+- `LogicalCluster` — stable id (`logical_cluster_id`, `created_at`).
+- `ClusterVersion` — one LogicalCluster's version within a ClusterSetVersion:
 
 | field | type | notes |
 |---|---|---|
 | `cluster_version_id` | `str` | identity; content-addressed |
 | `logical_cluster_id` | `str` | stable logical id, e.g. `CL_PV_MOM_0017` |
+| `cluster_set_version_id` | `str` | owning global clustering run |
 | `algorithm_cluster_label` | `str` | per-run label, e.g. `cluster 18` |
 | `conversion_type` | `ClusterConversionType \| None` | UNCHANGED/MIGRATED/SPLIT/MERGED/NEW/DISSOLVED |
 | `member_factor_ids` | `tuple[str, ...]` | members of this version |
 | `policy_hash` | `str` | clustering policy hash |
 | `created_at` | `datetime` | UTC |
+
+- `ClusterMembership` — `factor_definition_id` ↔ `logical_cluster_id`.
+- `ClusterLineageEdge` — `old_version_id` → `new_version_id` with a
+  `ClusterConversionType` transition.
 
 `ClusterVersion` is immutable (§14: "ClusterVersion 不可原地更新"); a refresh
 always produces a new version and records `v43 -> v44` lineage.
@@ -277,7 +316,7 @@ always produces a new version and records `v43 -> v44` lineage.
 
 ```text
 logical_library_id + ordered/normalized factor membership identities
-+ selection policy + cluster_version + evidence_snapshot
++ selection policy + cluster_set_version + evidence_snapshot
 ```
 
 `FactorLibraryVersion`:
@@ -286,7 +325,7 @@ logical_library_id + ordered/normalized factor membership identities
 |---|---|---|
 | `library_version_id` | `str` | identity |
 | `logical_library_id` | `str` | logical library id (CORE_LOW_REDUNDANCY …) |
-| `cluster_version_id` | `str` | referenced cluster version |
+| `cluster_set_version_id` | `str` | referenced **global clustering run** (a library spans MANY clusters — NOT a single cluster_version_id; §5.6) |
 | `members` | `tuple[LibraryMembership, ...]` | ordered membership list |
 | `policy_hash` | `str` | selection-policy hash |
 | `evidence_snapshot` | `str` | evidence snapshot ref |
@@ -310,7 +349,28 @@ logical_library_id + ordered/normalized factor membership identities
 Production library is always immutable; promotion flows go through
 CANDIDATE → SHADOW → APPROVED → PRODUCTION with explicit rollback (§16).
 
-### 4.8 FeatureSetArtifact + FeatureSetDiff + ModelRetrainRequired (spec §17, §18) `[RECONCILE]`
+### 4.8 FeatureSet + typed members + version + diff + ModelRetrainRequired (spec §17, §18) `[RECONCILE]`
+
+`FeatureMemberRef` (one ordered feature, §5.5):
+
+| field | type | notes |
+|---|---|---|
+| `position` | `int` | 0-based order — participates in the hash |
+| `feature_name` | `str` | required |
+| `factor_definition_ref` | `str` | required |
+| `raw_value_ref` | `str \| None` | |
+| `treatment_selection_ref` | `str \| None` | |
+| `treated_feature_ref` | `str \| None` | |
+| `orientation` | `str \| None` | |
+| `dtype` | `str \| None` | |
+| `channel` | `str \| None` | feature channel name (spec §8.7) |
+| `timing_ref` | `str \| None` | |
+| `security_classification` | `SecurityClassification \| None` | |
+
+`FeatureSetVersion`: `feature_set_id`, `version`, `consumer_profile`,
+`source_library_versions`, `ordered_members: tuple[FeatureMemberRef, ...]`,
+`schema_hash`, `semantic_hash`, `created_at`. Ordered feature identity
+participates in the hash.
 
 `FeatureSetArtifact` (spec §17):
 
@@ -320,7 +380,7 @@ CANDIDATE → SHADOW → APPROVED → PRODUCTION with explicit rollback (§16).
 | `feature_set_version` | `str` | version string |
 | `source_library_versions` | `tuple[str, ...]` | source FactorLibraryVersion ids |
 | `ordered_feature_manifest` | `tuple[str, ...]` | **ordered** feature identities |
-| `content_hash` | `str` | sha256 over semantics incl. ordering |
+| `content_hash` | `str` | sha256 over semantics incl. ordering — **VERIFIED when caller supplies one** (semantic hash over local fields; fail closed on mismatch) |
 | `created_at` | `datetime` | UTC |
 
 Each feature in the manifest binds (spec §8.7): `factor_definition_id`,
@@ -355,46 +415,67 @@ tuple). Display names never enter the canonical input.
 Helpers live in `quant_platform/app/contracts/identities.py` as pure dict-normalizing +
 hash functions and are unit-testable (`Identity.hash` round-trip).
 
-### 4.10 RBAC permission vocabulary (spec §24.1)
+### 4.10 RBAC permission vocabulary (spec §24.1) + SecurityClassification (§5.8)
 
 Permissions (semantics —— not page-based):
 
 ```text
-factor:read_summary       factor:read_evidence     factor:read_formula
-factor:read_values        factor:download_values   factor:reprocess
-cluster:read              library:promote          job:retry
-user:manage               standards:edit
+factor:read_summary   factor:read_evidence   factor:read_formula
+factor:read_raw_values factor:read_treated_values factor:download_values
+factor:submit         factor:reprocess      cluster:read
+library:read         library:create_candidate library:approve
+library:promote      library:rollback      feature_set:read
+feature_set:download job:read              job:retry
+job:cancel            artifact:read         artifact:download
+audit:read            standards:read        standards:edit
+user:manage           permission:manage
 ```
 
-Roles:
+Roles (`Role`): `MEMBER LEAD CORE ADMIN SERVICE`. Teams (`Team`):
+`FACTOR_TEAM MODEL_TEAM PRODUCTION_TEAM EXECUTIVE PLATFORM_ADMIN`.
+
+`SecurityClassification` enum:
 
 ```text
-VIEWER  RESEARCHER  CORE_RESEARCHER  OPS  ADMIN
+PUBLIC_METADATA INTERNAL_RESEARCH CONFIDENTIAL_ALPHA RESTRICTED_RAW_VALUES PRODUCTION_ONLY
 ```
+
+Final authorization = Role Permission × Team × ResourceScope ×
+SecurityClassification. Each permission maps to a minimum classification
+(`PERMISSION_MIN_CLASSIFICATION`): `factor:read_formula` requires ≥
+`CONFIDENTIAL_ALPHA`; `factor:read_raw_values` / `factor:download_values` require
+≥ `RESTRICTED_RAW_VALUES`; `library:approve` / `library:promote` /
+`library:rollback` / `audit:read` / `standards:edit` / `user:manage` /
+`permission:manage` require `PRODUCTION_ONLY`.
 
 Sensitive paths are enforced server-side (§24.2): without `factor:read_formula`,
 `GET /factors/{id}/formula` → 403, and the summary response omits the formula.
 Raw factor values use the signed-URL flow (§24.3): permission check → audit →
 short-lived signed URL.
 
-### 4.11 WorkflowBackend / ObjectStore / LocalArtifactCache / BacktestProvider (spec §12, §22, §41)
+### 4.11 Workflow / Storage / LocalArtifactCache / BacktestProvider (spec §12, §22, §41)
 
-`WorkflowBackend` Protocol (spec §12):
+`WorkflowBackend` Protocol (spec §12) — Workflow/Job two-layer split (§5.4):
 
 ```text
-start(job_spec) -> job_id
-signal(job_id, signal_name, payload)
-cancel(job_id)
-status(job_id) -> JobStatus
+start(workflow_spec) -> workflow_id     # WorkflowSpec contains multiple JobSpecs
+signal(workflow_id, signal_name, payload)
+cancel(workflow_id)
+status(workflow_id) -> WorkflowStatus
 ```
 
-`ObjectStore` Protocol (spec §22) — minimal surface:
+`WorkflowSpec` / `WorkflowRun` / `WorkflowStatus` carry the workflow layer;
+`JobSpec` / `JobRecord` / `JobResult` carry the per-activity layer (see §4.3).
+
+Storage ports (§5.9) — the platform does NOT own a second ObjectStore authority.
+`data_access` owns the mature ObjectStore. The platform declares three ports
+(implemented later as an adapter over DataAccess, task QRP-P0R-C5):
 
 ```text
-put(uri, bytes)               # upload; two-phase publish semantics
-get(uri) -> bytes             # download full object
-head(uri) -> metadata         # content_hash / size / etag
-delete(uri)                   # explicit deletion; never for published artifacts
+ArtifactStoragePort  # put/get/head/delete over durable bytes
+ArtifactPublisher    # publish(bytes) -> computes content_hash -> uploads ->
+                     # HEAD-verifies -> ArtifactRef
+ArtifactResolver     # open(artifact) + content_hash verify
 ```
 
 `LocalArtifactCache` requirements (spec §22): `max_bytes`, LRU eviction,

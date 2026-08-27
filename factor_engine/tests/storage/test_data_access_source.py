@@ -297,7 +297,7 @@ def test_composite_us_universe_exact(market_env):
 
 def test_local_ashare_parquet_smoke_if_present():
     """本地有 A 股 COS 镜像时，走真实 datasets.yaml 读一行。"""
-    root = Path("/home/shw/quant_projects/data/a_share/lqtp_data/StockDailyBar")
+    root = Path(__file__).resolve().parents[2] / "data" / "a_share" / "lqtp_data" / "StockDailyBar"
     if not root.exists():
         pytest.skip("local ashare parquet not present")
     from factor_engine.api.mining_integration import default_ashare_pv_data_source_config
@@ -312,7 +312,7 @@ def test_local_ashare_parquet_smoke_if_present():
 
 
 def test_local_us_parquet_smoke_if_present():
-    root = Path("/home/shw/quant_projects/data/us_stock/massive_data/StockDailyBar")
+    root = Path(__file__).resolve().parents[2] / "data" / "us_stock" / "massive_data" / "StockDailyBar"
     if not root.exists():
         pytest.skip("local us parquet not present")
     from factor_engine.api.mining_integration import default_us_pv_data_source_config
