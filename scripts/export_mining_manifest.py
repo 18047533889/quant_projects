@@ -68,8 +68,22 @@ def _searchable_schema(canonical: str) -> dict[str, dict[str, Any]]:
     )
     from factor_engine.cleaned_operators.registry import OperatorRegistry
 
-    operator = OperatorRegistry.get(canonical, "pandas_numpy")
+    operator = OperatorRegistry.get(canonical, "pandas_numpy") or OperatorRegistry.get(canonical)
     metadata = getattr(operator, "metadata", None)
+    if metadata is None:
+        # R63: a mineable operator whose ONLY backends are polars/sql (no
+        # pandas_numpy reference) still has real OperatorMetadata on its native
+        # class — the manifest must not abort on the pandas_numpy probe.  Fall
+        # back to any registered backend implementation with metadata; if NONE
+        # has metadata the operator is genuinely unbuildable (R16-026 abort).
+        from factor_engine.cleaned_operators.registry import OperatorRegistry as _OR
+
+        for _b in _OR.backends_for(canonical):
+            _op = _OR.get(canonical, _b)
+            _meta = getattr(_op, "metadata", None)
+            if _meta is not None:
+                metadata = _meta
+                break
     if metadata is None:
         raise ValueError(
             f"searchable schema for {canonical}: no operator metadata — a "
@@ -105,6 +119,16 @@ def _searchable_schema(canonical: str) -> dict[str, dict[str, Any]]:
 
 
 def _manifest_entry(op: MiningOperator) -> dict[str, Any]:
+    # R63: a DENIED / INTERNAL / non-searchable operator (e.g. ``arg``, a DSL
+    # grammar primitive with no searchable params and no backend metadata) has no
+    # buildable searchable schema — emit an honest empty schema instead of
+    # aborting the whole manifest (R16-026 abort applies to MINEABLE operators).
+    try:
+        schema = _searchable_schema(op.canonical)
+    except ValueError:
+        if op.mining_eligible:
+            raise
+        schema = {}
     entry = {
         "canonical": op.canonical,
         "production_certified": op.production_certified,
@@ -121,7 +145,7 @@ def _manifest_entry(op: MiningOperator) -> dict[str, Any]:
         "output_semantics": op.output_unit,
         "output_grain": op.output_grain,
         "searchable_params": list(op.searchable_params),
-        "searchable_param_schema": _searchable_schema(op.canonical),
+        "searchable_param_schema": schema,
         "allowed_ast_positions": list(op.allowed_ast_positions),
         "terminal_allowed": op.terminal_allowed,
         "stateful": op.stateful,
@@ -376,7 +400,12 @@ def validate_cold_start(out_dir: Path, seed_source: str | Path | None = None) ->
             f"STALE manifest: commit {fp.get('commit_sha')} != current {current['commit_sha']}"
         )
     if fp.get("dirty"):
-        violations.append(f"STALE manifest: built on a dirty tree ({len(fp['dirty'])} bytes)")
+        # R63: the manifest is stale only if the tree CHANGED after it was
+        # built — a dirty-but-identical tree (export + validate in the same
+        # process on the same uncommitted state) is not stale.  Compare the
+        # recorded dirty string with the current one.
+        if current["dirty"] != fp["dirty"]:
+            violations.append(f"STALE manifest: built on a dirty tree ({len(fp['dirty'])} bytes)")
     if fp.get("registry_fingerprint") and fp["registry_fingerprint"] != current["registry_fingerprint"]:
         violations.append("STALE manifest: registry fingerprint does not match current tree")
     if fp.get("evidence_fingerprint") and fp["evidence_fingerprint"] != current["evidence_fingerprint"]:

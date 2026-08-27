@@ -46,7 +46,11 @@ _MODULE_NAME = "cs_batch1_under_test"
 if _MODULE_NAME in sys.modules:
     del sys.modules[_MODULE_NAME]
 
-_MODULE_PATH = "/home/shw/quant_projects/factor_engine/cleaned_operators/polars_native/cs_batch1.py"
+from pathlib import Path as _Path
+_MODULE_PATH = str(
+    _Path(__file__).resolve().parents[2]
+    / "cleaned_operators" / "polars_native" / "cs_batch1.py"
+)
 _SPEC = importlib.util.spec_from_file_location(_MODULE_NAME, _MODULE_PATH)
 _MODULE = importlib.util.module_from_spec(_SPEC)
 sys.modules[_MODULE_NAME] = _MODULE

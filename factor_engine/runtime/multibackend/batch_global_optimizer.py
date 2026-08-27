@@ -399,6 +399,14 @@ class PhysicalBatchGlobalOptimizer:
             tuple(roots),
             node_estimates,
         )
+        # P2 split-brain closure: a production region must never be routed to a
+        # backend the runtime cannot execute.  The optimizer's candidate filter
+        # already drops CLICKHOUSE_SQL / Q_KDB (no wired runtime executor), but
+        # this fail-closed gate makes it impossible for ANY plan carrying one to
+        # reach the runtime — even one built by an older/newer caller path.
+        from factor_engine.runtime.engine import assert_all_backends_runtime_capable
+
+        assert_all_backends_runtime_capable(plan)
         production_ready, readiness_reason = self._readiness(
             roots=roots,
             all_nodes=all_nodes,
@@ -641,7 +649,15 @@ class PhysicalBatchGlobalOptimizer:
                 bound_parameter_identity=bound_params,
                 kernel_signature=kernel_signature,
             ))
-        if supports_sql(op, mode=mode, data_source_kind="clickhouse"):
+        # ClickHouse (CLICKHOUSE_SQL) candidate — P2 split-brain closure: disabled
+        # until the runtime actually wires a CLICKHOUSE_SQL executor in
+        # ``_physical_backend_for_region``.  ``ClickHousePushdownBackend`` exists in
+        # ``factor_engine.backend`` but is NOT wired into the runtime resolver, so a
+        # region routed here would fail at execution time.  Keeping it off the
+        # candidate list means the optimizer can never emit it, and
+        # ``assert_all_backends_runtime_capable`` (applied after plan build) fails
+        # loudly if anything else routes a region to it.
+        if False and supports_sql(op, mode=mode, data_source_kind="clickhouse"):
             capability = capability_for(op, "clickhouse_sql")
             candidates.append(NodeBackendChoice(
                 node_id=node_id,
@@ -658,13 +674,18 @@ class PhysicalBatchGlobalOptimizer:
                 bound_parameter_identity=bound_params,
                 kernel_signature=kernel_signature,
             ))
-        # Q/KDB backend
+        # Q/KDB (Q_KDB) candidate — P2 split-brain closure: disabled until the
+        # runtime wires a Q_KDB executor in ``_physical_backend_for_region``.
+        # ``QBackend`` exists in ``factor_engine.backend.q_backend`` but is NOT
+        # wired into the runtime resolver, so a region routed here would fail at
+        # execution time.  Never emit it; ``assert_all_backends_runtime_capable``
+        # is the final fail-closed guard.
         try:
             from factor_engine.backend.q_backend.q_physical_implementation_registry import (
                 get_q_physical_implementation_registry,
             )
             registry = get_q_physical_implementation_registry()
-            if registry.has_lowering(op):
+            if False and registry.has_lowering(op):
                 capability = capability_for(op, "q_kdb")
                 candidates.append(NodeBackendChoice(
                     node_id=node_id,

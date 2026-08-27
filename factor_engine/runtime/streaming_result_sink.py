@@ -338,7 +338,9 @@ class StreamingResultSink:
         self,
         *,
         writer: Callable[[list[ResultItem]], None],
-        queue_bytes: int = 4 * 1024**3,
+        # P3/P4: ``queue_bytes=None`` → 调用方从 broker live headroom 派生（不再
+        # 固定 4GiB）。本 sink 只做账目，不自行探测内存。None 时回退绝对上限。
+        queue_bytes: int | None = None,
         batch_size: int = 1,
         writer_threads: int | None = None,
         partition_key: Callable[[ResultItem], str] | None = None,
@@ -348,6 +350,8 @@ class StreamingResultSink:
     ) -> None:
         self._writer = writer
         self._batch_size = max(1, batch_size)
+        if queue_bytes is None:
+            queue_bytes = 4 * 1024**3  # 绝对上限回退（调用方应传 broker 派生值）
         # R39-PERF-040+045 收口：batch_size 变大后单次 flush（一次 writer 调用）
         # 可远超旧 10s。join timeout 必须覆盖「当前 batch 写完」所需时间，否则
         # finish() 对活着的慢 writer 误判 fatal 丢弃全部工作。sink 设计保证

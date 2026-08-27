@@ -7,6 +7,8 @@ brittle counts (the certification state moves when evidence is regenerated).
 """
 from __future__ import annotations
 
+from types import MappingProxyType
+
 import json
 from pathlib import Path
 
@@ -47,6 +49,20 @@ _ROLE_EXPECTATIONS = {
     "cube": MiningRole.LEGACY,
     "identity": MiningRole.INTERNAL,
     "fin_total_operating_accruals": MiningRole.FUNDAMENTAL_PIT,
+    # R63 orthogonality: raw trig -> INTERNAL (MOVE_INTERNAL verdict), in-sample
+    # AR/poly2 diagnostics -> RESEARCH (RESEARCH_TOOL verdict), recipe/fundamental
+    # period transforms -> RECIPE_INTERNAL (DIRECT_RECIPE verdict, non-terminal).
+    "sin": MiningRole.INTERNAL,
+    "cos": MiningRole.INTERNAL,
+    "asin": MiningRole.INTERNAL,
+    "acos": MiningRole.INTERNAL,
+    "ts_ar_fitted_value": MiningRole.RESEARCH,
+    "ts_ar_in_sample_resid": MiningRole.RESEARCH,
+    "ts_poly2_coeff": MiningRole.RESEARCH,
+    "ts_poly2_resid": MiningRole.RESEARCH,
+    "period_average": MiningRole.RECIPE_INTERNAL,
+    "quarter_from_cumulative": MiningRole.RECIPE_INTERNAL,
+    "ttm_from_cumulative": MiningRole.RECIPE_INTERNAL,
 }
 
 
@@ -113,8 +129,8 @@ def test_terminal_allowlist_exact() -> None:
     ``get_mining_operators`` derives ``terminal_allowed`` and
     ``allowed_ast_positions`` from the DirectUse contract
     (``build_direct_use_operator``), not from the role.  A DIRECT_INTERMEDIATE /
-    DIRECT_RECIPE / DIRECT_CONTROL_FLOW canonical maps to role=ALPHA but is NOT
-    a terminal, so ``role in _TERMINAL_ROLES`` is no longer the contract.  The
+    DIRECT_RECIPE / DIRECT_CONTROL_FLOW canonical has its own semantic role and is
+    NOT a terminal, so ``role in _TERMINAL_ROLES`` is no longer the contract.  The
     invariant that every row satisfies ``terminal_allowed == ("terminal" in
     allowed_ast_positions)`` holds because both come from the same DirectUse
     row.  A canonical whose legacy role is supporting but whose DirectUse verdict
@@ -173,8 +189,8 @@ def test_terminal_allowlist_exact() -> None:
                 assert op.allowed_ast_positions == (), op.canonical
 
     # Spot-check the DirectUse authority directly on a few representatives.
-    # DIRECT_INTERMEDIATE -> role ALPHA but NOT terminal, no "terminal" position.
-    for c in ("ATR_WILDER", "cos", "sin"):
+    # DIRECT_INTERMEDIATE / DIRECT_RECIPE -> role RECIPE_INTERNAL, NOT terminal.
+    for c in ("ATR_WILDER", "cos", "sin", "ttm_from_cumulative", "period_average"):
         if c in du_by:
             assert "terminal" not in du_by[c].allowed_ast_positions, c
             assert du_by[c].terminal_usable is False, c
@@ -273,10 +289,18 @@ def test_target_frequency_matches_output_grain() -> None:
     ]
     assert intraday
     for op in intraday:
-        assert op.output_grain == "daily", op.canonical
+        # R63: minute-grain session_intraday event/flag primitives
+        # (intra_neighbor_event_class, intra_range_gap_flag) stay at minute grain;
+        # every other intraday_eod row is minute-input → daily-output.
+        minute_grain = op.canonical in {"intra_neighbor_event_class", "intra_range_gap_flag"}
+        expected = "minute" if minute_grain else "daily"
+        assert op.output_grain == expected, op.canonical
     # Deterministic gate test on a certified local copy (the live catalog is
     # evidence-stale → 0 certified, so eligibility cannot be asserted directly).
-    candidate = intraday[0].canonical
+    candidate = next(
+        op.canonical for op in intraday
+        if op.canonical not in {"intra_neighbor_event_class", "intra_range_gap_flag"}
+    )
     catalog = dict(OperatorRegistry._catalog[candidate])
     catalog["production_certified"] = True
     catalog["tags"] = list(catalog.get("tags") or ()) + ["cost:5"]
@@ -313,6 +337,18 @@ def test_unresolved_role_never_mines() -> None:
     # daily/extended surface mapping can fire for 'zz_unresolved_probe_*')
     registered = "zz_unresolved_probe_never_exists"
     catalog = OperatorRegistry._catalog
+    # the registry may be frozen (MappingProxyType) after load_all(); thaw it for
+    # the throwaway registration, then re-freeze on exit.
+    thawed = False
+    try:
+        from factor_engine.cleaned_operators.registry import OperatorRegistry as _OR, _BOOTSTRAP_TOKEN as _BT
+
+        if isinstance(catalog, MappingProxyType):
+            _OR.thaw_for_bootstrap(_BT)
+            catalog = _OR._catalog
+            thawed = True
+    except Exception:
+        pass
     old = catalog.get(registered)
     catalog[registered] = {
         "surface": "unclassified",
@@ -331,6 +367,9 @@ def test_unresolved_role_never_mines() -> None:
             catalog.pop(registered, None)
         else:
             catalog[registered] = old
+        if thawed:
+            _OR.finalize()
+            _OR.freeze()
 
 
 def test_admission_matrix_no_vague_answers() -> None:

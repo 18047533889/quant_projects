@@ -1,0 +1,73 @@
+# -*- coding: utf-8 -*-
+# R51 matrix-rewrite evidence — build_r50_rehabilitation_matrix.py
+schema_version: 1
+task_id: P0-E-R51-MATRIX-REWRITE
+current_sha: UNCOMMITTED_CURRENT_TREE
+generation_timestamp: '2026-08-27'
+status: COMPLETED_LOCAL
+production_certification: NOT_RUN
+owned_files:
+  - scripts/build_r50_rehabilitation_matrix.py
+  - factor_engine/scripts/build_r50_rehabilitation_matrix.py
+  - build/r50/AGENT_CALLABLE_OPERATOR_MATRIX.json
+  - build/r50/AGENT_CALLABLE_OPERATOR_MATRIX.csv
+  - build/r50/AGENT_CALLABLE_OPERATOR_MATRIX.parquet
+  - build/r50/OPERATOR_CAPABILITY_CARD.json
+  - build/r50/AGENT_CALLABLE_OPERATOR_SUMMARY.json
+  - evidence/r2/P0-E-R51-MATRIX-REWRITE.yaml
+problem:
+  'Old generator conflated param-injectivity with math oracle; used name lint
+   (breakout/support/resistance/pivot) for FUTURE_LEAK; treated empty
+   data_inputs as INPUT_CONTRACT_BROKEN; accepted only panel+series output;
+   treated backend-name presence as implementation-exists; treated missing
+   source_recipes as DATA_GATED; and had no certification_basis column.'
+fix:
+  - 'Separated parameter_injectivity from math_oracle; each row reports both plus basis.'
+  - 'Removed name->FUTURE_LEAK; causality derives from DirectUse contract/execution model (FUTURE_LEAK=0).'
+  - 'Empty data_inputs is INPUT_POLYMORPHIC (date_diff_days), never BROKEN.'
+  - 'Output shape accepts scalar/broadcast/group/global; OUTPUT_CONTRACT_BROKEN only on real violation (OperatorSpec output_type != series while DirectUse claims panel/series).'
+  - 'implementation-exists truth = runtime registry callable calculate + enumerate_physical_inventory cross-check -> runtime_implemented column (1624/1624).'
+  - 'DATA_GATED only on a real declared-source gap (catalog source_requirements unwired); today 0.'
+  - 'Added certification_basis column naming the actual proof (direct_use_contract+param_injectivity_test | no_searchable_params | no_math_certificate | PIT_UNSAFE+...).'
+  - 'Added data_dependency_kind (INPUT_POLYMORPHIC/FIELD_BOUND/MARKET_CONTEXT_BOUND/EXTERNAL_SOURCE_BOUND) and runtime_implemented per R51.'
+  - 'PARAMETER_NOT_WIRED no longer fires as BROKEN without positive dead-param evidence: probe-fail rows are honestly RESEARCH_ONLY (unverified math), never fake pass or fake fail.'
+matrix:
+  TOTAL_CANONICAL: 1624
+  callable_status_counts:
+    PRODUCTION_AGENT_CALLABLE: 1151
+    RESEARCH_ONLY: 457
+    BROKEN: 12
+    DELETE: 4
+    DATA_GATED: 0
+  runtime_implemented: 1624
+  agent_callable: 1151
+  data_dependency_kind:
+    FIELD_BOUND: 1164
+    EXTERNAL_SOURCE_BOUND: 434
+    MARKET_CONTEXT_BOUND: 25
+    INPUT_POLYMORPHIC: 1
+  param_injectivity_basis:
+    param_injectivity_test: 755
+    no_searchable_params: 448
+    probe_failed_or_unproven: 421
+  math_oracle_basis:
+    param_injectivity_test: 755
+    no_searchable_params: 448
+    known_good_standard: 0
+    none: 421
+  blocker_histogram:
+    PIT_UNSAFE: 12
+    OUTPUT_CONTRACT_BROKEN: 1
+  verification:
+    - 'invariant sum(callable_status)==1624, unclassified==0'
+    - 'run command: cd /tmp && timeout 580 /home/sunhaiwei/quant_projects/.venv/bin/python /home/sunhaiwei/quant_projects/scripts/build_r50_rehabilitation_matrix.py'
+    - 'mirror byte-identical via diff (sha256 both 2454c710...)'
+    - 'r19 static audit has zero oracle evidence (M01=0, prefix_invariance False=0) -> audit_debt column is informational only'
+notes:
+  - 'unverified-math RO rows (419) are the 421 probe-fail rows minus 2 DELETE (holder_concentration_change / holder_count_change_rate)'
+  - '12 BROKEN = fundamental PIT_UNSAFE (positive contract fact)'
+  - 'constant = OUTPUT_CONTRACT_BROKEN but non-agent surface (internal) -> RESEARCH_ONLY'
+  - '35 old FUTURE_LEAK name hits: 18 now CALLABLE (causal, bounded_history), 17 RESEARCH_ONLY (unverified math)'
+  - 'fe venv /tmp/fe2 absent; used /home/sunhaiwei/quant_projects/.venv/bin/python (pandas 2.3.3/numpy 2.2.6/pyarrow 25); must run from /tmp cwd because repo-root platform/ package shadows stdlib platform'
+commit: NOT_CREATED
+remotes: NOT_USED

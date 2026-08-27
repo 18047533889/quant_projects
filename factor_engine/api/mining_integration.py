@@ -1157,7 +1157,7 @@ def validate_manifest_for_execution(
 # ``production_fastpath`` are kept only as backward-compat aliases.
 _R22_MINING_TIER_LANES: dict[str, str] = {
     # authoritative tiers
-    "direct_standard": "alpha_direct",   # DIRECT_ALPHA / DIRECT_RECIPE terminal lane
+    "direct_standard": "alpha_direct",   # DIRECT_ALPHA / DIRECT_ALPHA_HIGH_COST terminal lane
     "direct_high_cost": "alpha_high_cost",  # DIRECT_ALPHA_HIGH_COST lane
     "direct_all_context": "all",         # every DIRECT_* lane (incl. state/event/intermediate)
     "research_tools": "research_tools",  # research-tool manifest (NOT for automated miners)

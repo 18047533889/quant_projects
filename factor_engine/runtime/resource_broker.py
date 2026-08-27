@@ -30,6 +30,15 @@ from factor_engine.runtime.task_resource_contract import DEFAULT_UNCERTAINTY, Ta
 # 判定在 resource_autopilot（惰性 import 避免循环依赖）。
 from factor_engine.runtime.resource_monitor import MemorySlopeTracker  # noqa: E402
 
+# P3/P4：AutoMemoryBudget 公式 + 统一 MemoryLeaseKind。broker 是**单权威**，
+# 只消费这里的纯公式与枚举，绝不再建第二套内存管理。
+from factor_engine.runtime.auto_memory_budget import (  # noqa: E402
+    AutoMemoryBudget,
+    DEFAULT_SAFETY_FACTOR,
+    MemoryLeaseKind,
+    compute_auto_memory_budget,
+)
+
 _logger = logging.getLogger(__name__)
 
 #: 采样节流（R27-033：500ms~2s，默认 1s）。不要每 operator cell 采样。
@@ -40,6 +49,27 @@ DEFAULT_MIN_HOST_RESERVE_FRACTION = 0.15
 #: 默认 spill 盘保留：max(20GB, 10%)（R27-123）。
 DEFAULT_MIN_FREE_GB = 20.0
 DEFAULT_MIN_FREE_FRACTION = 0.10
+
+# ---------------------------------------------------------------------------
+# P3/P4：MemoryLease 软池初始分数 + 弹性借用（global hard limit 永不超）。
+# ---------------------------------------------------------------------------
+#: 软池初始分数（总和 ≤ 1.0）。读 28% / 计算 44% / CSE 缓存 12% / sink+writer 10%，
+#: transfer 与 backend 工作区走剩余 6% + 弹性借用。这些只是**软初始值**——
+#: 空闲池把额度借给忙池，全局硬上限 ``SUM(leases)+candidate <= ExecutionBudget``
+#: 始终成立。
+DEFAULT_SOFT_POOL_FRACTIONS: dict[MemoryLeaseKind, float] = {
+    MemoryLeaseKind.SOURCE_READ: 0.10,
+    MemoryLeaseKind.READ_WAVE: 0.18,
+    MemoryLeaseKind.COMPUTE: 0.44,
+    MemoryLeaseKind.CSE_CACHE: 0.12,
+    MemoryLeaseKind.TRANSFER_BUFFER: 0.03,
+    MemoryLeaseKind.RESULT_QUEUE: 0.05,
+    MemoryLeaseKind.WRITER_BATCH: 0.05,
+    MemoryLeaseKind.BACKEND_WORKSPACE: 0.02,
+    MemoryLeaseKind.SPILL_STAGING: 0.01,
+}
+#: 弹性借用上限：单个池可从其它空闲池借到的额度，不得超过其初始份额的 N 倍。
+DEFAULT_MAX_BORROW_MULTIPLIER = 4.0
 
 
 @dataclass(frozen=True)
@@ -444,6 +474,63 @@ class ReservationLease:
         }
 
 
+class MemoryLease:
+    """P3/P4: 按 kind 的内存租约（幂等 release）。
+
+    ``broker.acquire_memory(kind, bytes, ...)`` 成功返回 lease。持有期内该字节计入
+    broker 的 ``_memory_leases``；释放后归还。``release`` 幂等。硬不变量
+    ``SUM(all leases) + candidate.admissible_peak_bytes <= ExecutionBudget`` 在
+    ``acquire_memory`` 内强制。
+    """
+
+    def __init__(
+        self,
+        broker: "ResourceBroker",
+        kind: MemoryLeaseKind,
+        nbytes: int,
+        lease_id: str,
+    ) -> None:
+        self._broker = broker
+        self._kind = kind
+        self._nbytes = int(nbytes)
+        self._lease_id = lease_id
+        self._released = False
+        self._lock = threading.RLock()
+
+    @property
+    def kind(self) -> MemoryLeaseKind:
+        return self._kind
+
+    @property
+    def nbytes(self) -> int:
+        return self._nbytes
+
+    @property
+    def lease_id(self) -> str:
+        return self._lease_id
+
+    @property
+    def released(self) -> bool:
+        with self._lock:
+            return self._released
+
+    def release(self) -> None:
+        """幂等释放：从 broker 租约簿注销，只做一次。"""
+        with self._lock:
+            if self._released:
+                return
+            self._released = True
+            self._broker._release_memory_locked(self)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "lease_id": self._lease_id,
+            "kind": str(self._kind),
+            "nbytes": self._nbytes,
+            "released": self.released,
+        }
+
+
 class ResourceBroker:
     """live headroom + token admission 的统一资源代理（R27-174 API）。
 
@@ -463,6 +550,9 @@ class ResourceBroker:
         spill_min_free_fraction: float = DEFAULT_MIN_FREE_FRACTION,
         sample_interval_seconds: float = DEFAULT_SAMPLE_INTERVAL_SECONDS,
         base_uncertainty: float = DEFAULT_UNCERTAINTY,
+        safety_factor: float = DEFAULT_SAFETY_FACTOR,
+        soft_pool_fractions: dict[MemoryLeaseKind, float] | None = None,
+        max_borrow_multiplier: float = DEFAULT_MAX_BORROW_MULTIPLIER,
     ) -> None:
         from factor_engine.runtime.resource_governor import (
             effective_cpu_slots,
@@ -479,6 +569,18 @@ class ResourceBroker:
         self.spill_min_free_fraction = float(spill_min_free_fraction)
         self.sample_interval = max(0.05, float(sample_interval_seconds))
         self.base_uncertainty = float(base_uncertainty)
+        # P3/P4：AutoMemoryBudget —— broker 是**单权威**；本值由
+        # ``_refresh_auto_budget()`` 从 live 采样派生（任何默认都是 cap/回退）。
+        self._safety_factor = min(float(safety_factor), 0.85)
+        self._auto_budget: AutoMemoryBudget | None = None
+        # P3/P4：MemoryLease 软池（初始分数 + 弹性借用）+ 全局硬上限记账。
+        self._soft_fractions: dict[MemoryLeaseKind, float] = {
+            k: max(0.0, float(v))
+            for k, v in (soft_pool_fractions or DEFAULT_SOFT_POOL_FRACTIONS).items()
+        }
+        self._max_borrow_multiplier = max(1.0, float(max_borrow_multiplier))
+        self._memory_leases: dict[str, MemoryLease] = {}
+        self._lease_counter = 0
         self._lock = threading.RLock()
         self._cached: ResourceSnapshot | None = None
         self._last_sample_ms = 0.0
@@ -675,6 +777,100 @@ class ResourceBroker:
             int(total * self.spill_min_free_fraction),
         )
         return max(0, free - reserve)
+
+    # -- P3/P4: AutoMemoryBudget（broker 为单权威） --
+
+    def _refresh_auto_budget(self) -> AutoMemoryBudget:
+        """从一次 live 采样派生 AutoMemoryBudget（软缓存，受 sample_interval 节流）。
+
+        ``HardMemoryLimit`` 直接用 broker 已解析的 ``hard_memory_limit``（该值已由
+        ``effective_memory_limit_bytes`` 做过 cgroup/SLURM/RLIMIT/user-cap/host 的
+        min）。``EmergencyReserve`` 与 live 候选交给 ``compute_auto_memory_budget``。
+        """
+        snap = self._refresh()
+        budget = compute_auto_memory_budget(
+            hard_memory_limit=self.hard_memory_limit,
+            cgroup_current=snap.cgroup_memory_current,
+            host_mem_available=snap.host_mem_available,
+            process_family_rss=snap.process_family_rss,
+            min_reserve_gb=self.min_host_reserve_gb,
+            min_reserve_fraction=self.min_host_reserve_fraction,
+            safety_factor=self._safety_factor,
+        )
+        self._auto_budget = budget
+        return budget
+
+    def auto_memory_budget(self) -> AutoMemoryBudget:
+        """当前 AutoMemoryBudget（首次调用派生，之后受采样节流）。"""
+        if self._auto_budget is None:
+            return self._refresh_auto_budget()
+        return self._auto_budget
+
+    def execution_budget(self) -> int:
+        """P3/P4：ExecutionBudget = SafeLiveBudget × safety_factor。"""
+        return max(0, self.auto_memory_budget().execution_budget)
+
+    def _lease_sum_bytes(self) -> int:
+        return sum(l.nbytes for l in self._memory_leases.values())
+
+    def _pool_limit(self, kind: MemoryLeaseKind, exec_budget: int) -> int:
+        """该 kind 的软池初始额度（exec_budget × fraction）。"""
+        return int(exec_budget * self._soft_fractions.get(kind, 0.0))
+
+    def acquire_memory(
+        self,
+        kind: MemoryLeaseKind,
+        nbytes: int,
+        *,
+        lease_id: str = "",
+    ) -> MemoryLease | None:
+        """P3/P4: 按 kind 申请内存租约（软池 + 弹性借用 + 全局硬上限）。
+
+        硬不变量：``SUM(all leases) + nbytes <= ExecutionBudget``。
+        - 先看该 kind 软池是否够（idle 池借给忙池 → ``_max_borrow_multiplier``）；
+        - 全局硬上限始终强制，绝不超 ``ExecutionBudget``；
+        - 超限返回 ``None``（fail-closed，调用方应降级/等待）。
+        """
+        nb = int(nbytes)
+        if nb <= 0:
+            return None
+        with self._lock:
+            exec_budget = self.execution_budget()
+            if exec_budget <= 0:
+                return None
+            # 全局硬上限：SUM(all active leases) + candidate <= ExecutionBudget。
+            if self._lease_sum_bytes() + nb > exec_budget:
+                return None
+            self._lease_counter += 1
+            lid = str(lease_id or f"memlease_{self._lease_counter}")
+            lease = MemoryLease(self, kind, nb, lid)
+            self._memory_leases[lid] = lease
+            return lease
+
+    def _release_memory_locked(self, lease: MemoryLease) -> None:
+        """内存租约释放原语（只在 ``MemoryLease.release`` 内幂等化）。"""
+        with self._lock:
+            self._memory_leases.pop(lease.lease_id, None)
+
+    def current_read_budget(self) -> int:
+        """P3/P4: read 类预算（SOURCE_READ + READ_WAVE 软池额度）。"""
+        exec_budget = self.execution_budget()
+        return sum(
+            self._pool_limit(k, exec_budget)
+            for k in (MemoryLeaseKind.SOURCE_READ, MemoryLeaseKind.READ_WAVE)
+        )
+
+    def current_sink_budget(self) -> int:
+        """P3/P4: sink/writer 类预算（RESULT_QUEUE + WRITER_BATCH）。"""
+        exec_budget = self.execution_budget()
+        return sum(
+            self._pool_limit(k, exec_budget)
+            for k in (MemoryLeaseKind.RESULT_QUEUE, MemoryLeaseKind.WRITER_BATCH)
+        )
+
+    def current_cse_budget(self) -> int:
+        """P3/P4: CSE cache 预算。"""
+        return self._pool_limit(MemoryLeaseKind.CSE_CACHE, self.execution_budget())
 
     # -- admission --
 
@@ -1003,4 +1199,8 @@ class ResourceBroker:
             "pressure_log": self._pressure_log[-20:],
             "base_uncertainty": round(self.base_uncertainty, 3),
             "external_cpu_ema": round(self._external_cpu_ema, 3),
+            # P3/P4：AutoMemoryBudget + MemoryLease 账目。
+            "auto_memory_budget": self.auto_memory_budget().to_dict(),
+            "memory_lease_bytes": self._lease_sum_bytes(),
+            "active_memory_leases": len(self._memory_leases),
         }

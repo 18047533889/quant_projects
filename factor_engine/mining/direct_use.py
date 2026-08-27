@@ -93,11 +93,13 @@ class DirectUseStatus(str, Enum):
 
 # The ONLY statuses that may ever stand alone as a factor terminal
 # (R18-003 / R22-006: positive authority — nothing is terminal by exclusion).
+# R63-032: DIRECT_RECIPE is a composition building block (period transforms like
+# ttm/quarterly/yoy/period_average) and is REMOVED from the terminal set — it
+# never stands alone as a factor terminal, only as a recipe step.
 _DIRECT_TERMINAL_STATUSES = frozenset(
     {
         DirectUseStatus.DIRECT_ALPHA,
         DirectUseStatus.DIRECT_ALPHA_HIGH_COST,
-        DirectUseStatus.DIRECT_RECIPE,
     }
 )
 
@@ -171,7 +173,11 @@ _AST_POSITIONS_BY_STATUS: dict[DirectUseStatus, tuple[str, ...]] = {
     DirectUseStatus.DIRECT_GLOBAL_STATE: ("gate", "interaction"),
     DirectUseStatus.DIRECT_INTERMEDIATE: ("intermediate",),
     DirectUseStatus.DIRECT_SOURCE_TRANSFORM: ("data_processing",),
-    DirectUseStatus.DIRECT_RECIPE: ("intermediate", "terminal"),
+    # R63-032: DIRECT_RECIPE = composition building block, NOT a standalone
+    # terminal (period transforms like ttm/quarterly/yoy/period_average are
+    # always composed into a factor; they never stand alone).  Terminal
+    # authority lives in _DIRECT_TERMINAL_STATUSES, not in the AST table.
+    DirectUseStatus.DIRECT_RECIPE: ("intermediate",),
     DirectUseStatus.DIRECT_CONTROL_FLOW: ("control_flow",),
     DirectUseStatus.RESEARCH_TOOL: (),
     DirectUseStatus.MOVE_INTERNAL: (),
@@ -333,6 +339,16 @@ _PRICE_LEVEL_INTERMEDIATE_OPS = frozenset(
         "ts_swing_amplitude", "ts_channel_width", "ts_consolidation_width",
         "ts_ema", "ts_sma", "ts_wma", "ts_hma", "ts_dema",
         "bollinger_upper", "bollinger_lower", "bollinger_mid",
+    }
+)
+
+# R63: full-history replay indicators are terminal-grade alpha, just expensive
+# to replay.  They stay ALPHA_HIGH_COST (NOT price-level DIRECT_INTERMEDIATE):
+# the alpha_high_cost lane is terminal-eligible and DirectUse terminal authority
+# still gates placement.  Mirrors production_hardening.FULL_HISTORY_REPLAY_CANONICALS.
+_FULL_HISTORY_REPLAY_ALPHA = frozenset(
+    {
+        "KAMA", "DEMA", "TEMA", "PSAR", "Supertrend",
     }
 )
 
@@ -1084,6 +1100,12 @@ def _resolve_explicit(canonical: str, catalog: dict[str, Any]) -> DirectUseContr
         return _contract(DirectUseStatus.DIRECT_EVENT, "A-share limit Boolean — event mask")
     if canonical in _FIN_INDEX_ROLE:
         return _FIN_INDEX_ROLE[canonical]
+    if canonical in _FULL_HISTORY_REPLAY_ALPHA:
+        # R63: full-history replay indicators (KAMA/DEMA/TEMA/PSAR/Supertrend/…)
+        # stay ALPHA_HIGH_COST, NOT price-level DIRECT_INTERMEDIATE: they are
+        # terminal-grade factors, just expensive to replay.  The alpha_high_cost
+        # lane is terminal-eligible (DirectUse terminal authority still gates it).
+        return _contract(DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "full-history replay indicator — terminal-grade alpha (high cost)")
     if canonical in _PRICE_LEVEL_INTERMEDIATE_OPS:
         return _contract(DirectUseStatus.DIRECT_INTERMEDIATE, "price-level building block — not scale-invariant, composition only")
     if canonical in _RELATIVE_ALPHA_OPS:

@@ -494,12 +494,21 @@ def global_region_manager(
     global _GLOBAL_REGION_MANAGER
     if _GLOBAL_REGION_MANAGER is None:
         if total_memory_bytes is None:
-            # Default: 80% of available memory
+            # P3/P4: 从 ResourceBroker（单权威）的 ExecutionBudget 派生，不再固定
+            # 4GiB。broker 无法给出真实预算时回退绝对上限。
             try:
-                import psutil
-                total_memory_bytes = int(psutil.virtual_memory().available * 0.8)
+                from factor_engine.runtime.resource_broker import ResourceBroker
+
+                broker = ResourceBroker()
+                total_memory_bytes = broker.execution_budget()
             except Exception:
-                total_memory_bytes = 4 * 1024**3  # 4 GB fallback
+                total_memory_bytes = None
+            if not total_memory_bytes:
+                try:
+                    import psutil
+                    total_memory_bytes = int(psutil.virtual_memory().available * 0.8)
+                except Exception:
+                    total_memory_bytes = 4 * 1024**3  # 4 GB 绝对上限回退
 
         _GLOBAL_REGION_MANAGER = ConcurrentRegionIsolationManager(total_memory_bytes)
 

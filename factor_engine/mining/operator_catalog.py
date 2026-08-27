@@ -1029,13 +1029,23 @@ def _searchable_params(canonical: str, catalog: dict[str, Any]) -> tuple[str, ..
 def _output_grain(canonical: str, catalog: dict[str, Any], role: MiningRole) -> str:
     """R15-INC-003: separate input_grain from output_grain.  INTRADAY_EOD is
     minute INPUT / daily OUTPUT; ``target_frequency`` must match the OUTPUT
-    grain.  Undeclared output grain on a daily-rolling / EOD operator is daily."""
+    grain.  Undeclared output grain on a daily-rolling / EOD operator is daily.
+    R63: session_intraday EVENT/FLAG operators (e.g. intra_neighbor_event_class,
+    intra_range_gap_flag) are minute-grain event/flag series, NOT EOD aggregates
+    — their output stays minute unless a declared output_grain says otherwise."""
     declared = catalog.get("output_grain")
     if declared:
         return str(declared).lower()
-    if role is MiningRole.INTRADAY_EOD or str(
-        catalog.get("input_grain") or ""
-    ).lower() == "minute":
+    if role is MiningRole.INTRADAY_EOD and str(
+        catalog.get("scope") or ""
+    ).lower() != "session_intraday":
+        return "daily"
+    if str(catalog.get("input_grain") or "").lower() == "minute":
+        # minute-input operators default to daily output UNLESS they are
+        # session_intraday event/flag primitives that stay at minute grain.
+        scope = str(catalog.get("scope") or "").lower()
+        if scope == "session_intraday":
+            return "minute"
         return "daily"
     if role is MiningRole.FUNDAMENTAL_PIT:
         return "fundamental_period"

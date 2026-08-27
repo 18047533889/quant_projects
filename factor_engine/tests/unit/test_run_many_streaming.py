@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
-sys.path.insert(0, "/home/shw/quant_projects/factor_engine")
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from factor_engine.api import rank, ts_mean  # noqa: E402  （导入即填充 OperatorRegistry）
 from factor_engine.api.columns import col

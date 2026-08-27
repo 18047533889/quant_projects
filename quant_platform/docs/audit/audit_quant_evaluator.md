@@ -91,7 +91,7 @@ Both keyed by `metric_id`, overlapping on `pearson_ic`, `rank_ic`, `quantile_spr
 - **In-memory:** metric series/matrices are numpy arrays embedded in artifacts; frozen + copied. For 100k+ factors there is `runtime/streaming_evaluator.py` (chunked, constant-memory accumulators), returning `StreamingEvaluationResult`.
 - **Intermediate cache:** `runtime/cache_v2.py` `MultiLevelCache` (MemoryCacheLayer:352, DiskCacheLayer:600). Persistence: pickle payload + JSON `.meta.json` sidecars (:694, :711), atomic writes, checksum/TTL/dependency-invalidate. Wrapped by `runtime/cache_v2_adapter.py:V2IntermediateCacheAdapter` (:19).
 - **ChartSpec store:** `reporting/artifacts.py` `ChartArtifactStore` persists ChartSpec JSON files with SHA-256 content dedup (:158,216).
-- **ArtifactRef:** QE has **NO** `ArtifactRef` type. Spec §19.1 says DB only stores summary + ArtifactRef, large matrices in COS. The platform repo has `platform/app/contracts/artifact_ref.py` (ArtifactRef with artifact_id/type/schema_version/content_hash/storage_uri/...), but QE does not reference it; QE exposes raw artifacts/series via `.to_dict()` + evaluation_summary in `EvaluationBundle.series_refs` (strings, not typed ArtifactRef).
+- **ArtifactRef:** QE has **NO** `ArtifactRef` type. Spec §19.1 says DB only stores summary + ArtifactRef, large matrices in COS. The platform repo has `quant_platform/app/contracts/artifact_ref.py` (ArtifactRef with artifact_id/type/schema_version/content_hash/storage_uri/...), but QE does not reference it; QE exposes raw artifacts/series via `.to_dict()` + evaluation_summary in `EvaluationBundle.series_refs` (strings, not typed ArtifactRef).
 
 ## 4. API / adapters
 
@@ -122,7 +122,7 @@ Both keyed by `metric_id`, overlapping on `pearson_ic`, `rank_ic`, `quantile_spr
 | 3 | typed dependency, no magic string | **EXISTS** | `requires` names artifact-class (`ICSeriesArtifact`) — registry/metrics.py:555, evaluator.py:983-1007; `_ic_method_for_metric`::881. |
 | 4 | reporting reads artifact only (never computes) | **EXISTS** | tear_sheet.py:_spec_from_artifact:323; placeholders:306. |
 | 5 | summary support platform read model | **PARTIAL** | `EvaluationBundle` summary + `series_refs` (api/requests.py:115); no dedicated typed `factor evaluation summary` read-model contract, no ArtifactRef. |
-| 6 | large series/matrix use ArtifactRef | **MISSING** | No ArtifactRef in QE (only in platform/app/contracts/artifact_ref.py); series via in-memory ndarray / `series_refs` strings. |
+| 6 | large series/matrix use ArtifactRef | **MISSING** | No ArtifactRef in QE (only in quant_platform/app/contracts/artifact_ref.py); series via in-memory ndarray / `series_refs` strings. |
 | 7 | provenance immutable | **EXISTS** | `FrozenMapping` (metric_artifacts.py:74,353); artifact_types all use `FrozenMapping`. |
 | 8 | content hash includes data semantics | **EXISTS** | process-stable hash over payload+provenance (metric_artifacts:411; artifact_types `__hash__`); `TreatmentEvaluationArtifact` derived-only content_hash (treatment_evaluation.py:241). |
 

@@ -255,6 +255,23 @@ def register_operator(
         canon = canonical or (name if name else cls.__name__)
         from factor_engine.cleaned_operators.registry import OperatorRegistry
         name_aliases = [name] if name and name != canon else None
+        # Idempotent re-registration (P0 collection baseline): see base.py
+        # register_operator.  A direct module import after ``load_all()`` that
+        # re-registers the SAME canonical+backend+source+implementation is a
+        # no-op; only a genuinely different re-registration without ``replace``
+        # raises.
+        _existing = OperatorRegistry.get(canon, backend, mode="any")
+        if _existing is not None:
+            from factor_engine.cleaned_operators.registry import _impl_source_hash
+
+            _existing_source = str(
+                (OperatorRegistry._catalog.get(canon, {}).get("backend_meta") or {})
+                .get(backend, {}).get("source", "") or ""
+            )
+            _same_source = (_existing_source == (source or "factor_dsl_np"))
+            _same_impl = (_impl_source_hash(_existing) == _impl_source_hash(instance))
+            if _same_source and _same_impl:
+                return cls
         OperatorRegistry.register(
             instance,
             canonical=canon,

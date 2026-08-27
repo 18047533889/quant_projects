@@ -969,3 +969,17 @@ def _load_all_impl(*, include_research: bool = True) -> None:
     OperatorRegistry.finalize()
     OperatorRegistry.freeze()
     _LOADED = True
+
+
+def _test_session_reopen_if_needed() -> None:
+    """pytest 会话内重新开放注册（仅测试）。
+
+    ``load_all()`` 正常收尾时 finalize + freeze 注册表（production 运行时只读
+    契约）。pytest 收集时，session-conftest 在首个算子模块 import 前触发一次
+    重新开放；随后各测试模块在 import 期注册算子 —— 全部落在 BUILDING 期。
+    本函数由 tests/conftest.py 的 session hook 调用，除测试外无调用点。
+    """
+    from factor_engine.cleaned_operators.registry import OperatorRegistry, _BOOTSTRAP_TOKEN
+
+    if OperatorRegistry.lifecycle() in ("frozen", "finalized"):
+        OperatorRegistry.thaw_for_bootstrap(_BOOTSTRAP_TOKEN)

@@ -164,12 +164,15 @@ class CSECacheOptimizer:
     def __init__(
         self,
         *,
-        max_cache_bytes: int = 4 * 1024**3,
+        # P3/P4: ``None`` → 调用方从 broker live headroom 派生 CSE 预算（不再固定
+        # 4GiB）。本优化器只做账目，不自行探测内存。
+        max_cache_bytes: int | None = None,
         eviction_policy: str = "lru",
     ) -> None:
         """
         Args:
-            max_cache_bytes: Cache 最大内存占用
+            max_cache_bytes: Cache 最大内存占用（None → 绝对上限回退 4GiB，
+                但单权威由 ResourceBroker 的 ``current_cse_budget()`` 提供）
             eviction_policy: Eviction 策略（"lru" | "lfu"）。"lirs" 未实现，
                 fail-closed 抛 ``UnsupportedEvictionPolicy``，绝不静默回退 LRU。
         """
@@ -179,6 +182,8 @@ class CSECacheOptimizer:
                 f"Supported: 'lru', 'lfu'. LIRS is claimed but not implemented — "
                 f"refusing to silently fall back to LRU."
             )
+        if max_cache_bytes is None:
+            max_cache_bytes = 4 * 1024**3  # 绝对上限回退（单权威在 broker）
         self.max_cache_bytes = max_cache_bytes
         self.eviction_policy = eviction_policy
 
@@ -458,10 +463,24 @@ _global_lock = threading.Lock()
 
 
 def get_global_cse_cache_optimizer() -> CSECacheOptimizer:
-    """返回全局 CSECacheOptimizer（进程级单例）。"""
+    """返回全局 CSECacheOptimizer（进程级单例）。
+
+    P3/P4: 从 ResourceBroker（单权威）的 ``current_cse_budget()`` 派生 cache 预算，
+    不再固定 4GiB；broker 无法给出真实预算时回退绝对上限。
+    """
     global _global_cse_cache
     if _global_cse_cache is None:
         with _global_lock:
             if _global_cse_cache is None:
-                _global_cse_cache = CSECacheOptimizer()
+                max_cache = None
+                try:
+                    from factor_engine.runtime.resource_broker import ResourceBroker
+
+                    broker = ResourceBroker()
+                    max_cache = broker.current_cse_budget()
+                except Exception:
+                    max_cache = None
+                if not max_cache:
+                    max_cache = 4 * 1024**3
+                _global_cse_cache = CSECacheOptimizer(max_cache_bytes=max_cache)
     return _global_cse_cache

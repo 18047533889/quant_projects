@@ -8,12 +8,12 @@
 | `status` | `DRAFT — pending cross-package reconciliation` |
 | `date` | `2026-08-26` |
 | Spec source | `QUANT_RESEARCH_PLATFORM_MASTER_IMPLEMENTATION_SPEC_20260826.md` |
-| Implementation home | `platform/app/contracts/` |
+| Implementation home | `quant_platform/app/contracts/` |
 | Import rule | **PURE**: stdlib dataclasses only (frozen); NO fastapi/sqlalchemy/pydantic/third-party imports |
 
 ## Purpose
 
-`platform/app/contracts/` is the only thin integration DTO layer on the platform side
+`quant_platform/app/contracts/` is the only thin integration DTO layer on the platform side
 (spec §6). Its responsibilities are limited to:
 
 - external API DTOs;
@@ -32,7 +32,7 @@ translates:
 Platform DTO  <->  Domain Native Contract
 ```
 
-Realization of this DTO layer is `platform/app/contracts/*` (frozen dataclasses +
+Realization of this DTO layer is `quant_platform/app/contracts/*` (frozen dataclasses +
 `typing.Protocol`; stdlib only).
 
 ## 1. Immutability Rule (spec §7.3)
@@ -55,7 +55,7 @@ Every data payload in this contract set is declared `@dataclass(frozen=True)`.
 - the hash must be stable across processes (sort dict keys, fix float repr via
   a canonical string form, snapshot datetimes to ISO-8601 UTC).
 
-See `platform/app/contracts/_contenthash.py`.
+See `quant_platform/app/contracts/_contenthash.py`.
 
 ## 3. Two-Phase Publish Rule (spec §7.4)
 
@@ -180,7 +180,7 @@ InvalidInputError | SemanticContractError | CapabilityError | NumericalFailure
 CancellationError             -> user-initiated cancel -> CANCELLED
 ```
 
-`ErrorClass` enum in `platform/app/contracts/jobs.py` carries this taxonomy.
+`ErrorClass` enum in `quant_platform/app/contracts/jobs.py` carries this taxonomy.
 
 ### 4.4 FactorCandidateManifest (spec §10.2) + `_READY` protocol (spec §10.1)
 
@@ -352,7 +352,7 @@ tuple). Display names never enter the canonical input.
 | `EvaluationIdentity` | FactorValueIdentity + EvaluationPolicyIdentity + LabelDefinitionIdentity + EvaluationProfileIdentity |
 | `TreatmentIdentity` | source_factor_value_id + ordered preprocessing recipe + fit boundary + fit state content hash + neutralization schema |
 
-Helpers live in `platform/app/contracts/identities.py` as pure dict-normalizing +
+Helpers live in `quant_platform/app/contracts/identities.py` as pure dict-normalizing +
 hash functions and are unit-testable (`Identity.hash` round-trip).
 
 ### 4.10 RBAC permission vocabulary (spec §24.1)
@@ -515,5 +515,5 @@ package.
 
 This document is a DRAFT. It becomes frozen `v1` only after the
 `REMAINING_RECONCILIATION_ITEMS` above are resolved and the Phase-1 test harness
-passes against `platform/app/contracts/`. Changes after freeze require a version
+passes against `quant_platform/app/contracts/`. Changes after freeze require a version
 bump (v1 → v2) with a changelog section.

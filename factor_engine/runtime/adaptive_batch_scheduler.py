@@ -282,7 +282,9 @@ class AdaptiveBatchScheduler:
         broker: ResourceBroker | None = None,
         executor: HybridExecutor | None = None,
         sink: StreamingResultSink | None = None,
-        wave_memory_budget: int = 4 * 1024**3,
+        # P3/P4: ``None`` → 从 broker ResourceDecision 取动态 read-wave 预算，
+        # 不再固定 4GiB。broker 不可用时由 ``_dynamic_wave_budget`` 回退绝对上限。
+        wave_memory_budget: int | None = None,
         max_concurrency: int | None = None,
     ) -> None:
         if broker is None:
@@ -380,13 +382,24 @@ class AdaptiveBatchScheduler:
         self._explain("CANCELLED: no new task admitted; finishing running tasks")
 
     def _dynamic_wave_budget(self) -> int:
-        """R36 P0-010：从 broker ResourceDecision 取动态 read-wave 预算。"""
+        """R36 P0-010：从 broker ResourceDecision 取动态 read-wave 预算。
+
+        P3/P4：不再回退固定 4GiB——broker 无法给出真实预算时从 live headroom
+        派生（``current_read_budget``）；两者都不可用时才用绝对上限 4GiB 作 cap。
+        """
         try:
             decision = self.broker.resource_decision()
             self._last_decision = decision
             return max(1, int(decision.read_wave_bytes))
         except Exception:
-            return self.wave_memory_budget
+            pass
+        try:
+            live = self.broker.current_read_budget()
+            if live > 0:
+                return max(1, live)
+        except Exception:
+            pass
+        return 4 * 1024**3
 
     # -- plan --
 
@@ -2358,7 +2371,12 @@ class AdaptiveBatchScheduler:
                 self._last_decision = decision
                 queue_bytes = max(1, int(decision.result_queue_bytes))
             except Exception:
-                queue_bytes = 4 * 1024**3
+                # P3/P4: 从 broker live headroom 派生 sink 预算（不再固定 4GiB）；
+                # 都不行才回退绝对上限。
+                try:
+                    queue_bytes = self.broker.current_sink_budget() or (4 * 1024**3)
+                except Exception:
+                    queue_bytes = 4 * 1024**3
         sink = StreamingResultSink(
             writer=writer,
             queue_bytes=queue_bytes,

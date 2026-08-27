@@ -149,7 +149,7 @@ def test_ready_single_region_executes_original_root_without_hybrid_routing() -> 
         ),
         (
             _optimization(_plan(_region(PhysicalBackend.CLICKHOUSE_SQL))),
-            "unsupported physical backend",
+            "not runtime-capable",
         ),
         (
             _optimization(_plan(_region(node_ids=("other",)))),

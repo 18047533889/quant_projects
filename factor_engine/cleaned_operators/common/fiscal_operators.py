@@ -479,6 +479,20 @@ class _FunctionOperator(SeriesOperator):
 
 def _register(name, params, fn, description):
     """Register an operator with the registry."""
+    from factor_engine.cleaned_operators.registry import OperatorRegistry as _Reg
+    # Idempotent re-registration (P0 collection baseline): a direct module import
+    # after ``load_all()`` already registered this canonical+backend must not
+    # raise.  Only a genuinely different re-registration is an error.
+    _existing = _Reg.get(name, "pandas_numpy", mode="any")
+    if _existing is not None:
+        from factor_engine.cleaned_operators.registry import _impl_source_hash
+        _existing_source = str(
+            (_Reg._catalog.get(name, {}).get("backend_meta") or {})
+            .get("pandas_numpy", {}).get("source", "") or ""
+        )
+        _candidate = _FunctionOperator(name, params, fn, description)
+        if _existing_source == "fiscal_true_gap_batch1" and _impl_source_hash(_existing) == _impl_source_hash(_candidate):
+            return
     OperatorRegistry.register(
         _FunctionOperator(name, params, fn, description),
         canonical=name,

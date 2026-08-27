@@ -1256,6 +1256,11 @@ class OperatorRegistry:
     @classmethod
     def finalize(cls) -> None:
         """Validate aliases and close the bootstrap registration phase."""
+        # 会话级 thaw（pytest 收集时）之后 registry 处于 BUILDING 且 token 为
+        # bootstrap；再次 finalize 允许（幂等重建快照）。FINALIZED 状态视为已
+        # finalize 过，直接返回。
+        if cls._lifecycle is cls.Lifecycle.FINALIZED:
+            return
         cls._assert_writable()
         for alias, canonical in cls._aliases.items():
             if alias in cls._operators or alias in cls._catalog:
@@ -1271,9 +1276,15 @@ class OperatorRegistry:
 
     @classmethod
     def freeze(cls) -> None:
-        """Freeze all registry mutation after import-time bootstrap."""
+        """Freeze all registry mutation after import-time bootstrap.
+
+        会话级 thaw 后可被再次调用（pytest 收集期），重新生成不可变快照；
+        幂等：FROZEN 直接返回。
+        """
         if cls._lifecycle is cls.Lifecycle.BUILDING:
             raise RuntimeError("operator registry must be finalized before freezing")
+        if cls._lifecycle is cls.Lifecycle.FROZEN:
+            return
         if cls._lifecycle is not cls.Lifecycle.FROZEN:
             # R4-102: the catalog backend set must equal the runtime backend set
             # for every canonical.  A split (e.g. a catalog-only overlay that

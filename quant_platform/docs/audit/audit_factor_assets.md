@@ -164,4 +164,4 @@ factor_assets is a well-structured, immutability-first package (derived content-
 
 **Main gaps** are the pipeline-forward layer spec §14-18/§36: EvaluationIdentity, the full §9 lifecycle/Health/JobStatus dimensions, and — most critical for QRP-P6 — the entire cluster-version/logical-id/incremental-assignment layer, plus the Factor Library / FeatureSet / Promotion governance that §36 lists but FA has not yet implemented (8 of 12 new contracts missing). Similarity views also lack Pearson/quantile/regime-conditional.
 
-[audit completed; report written to platform/docs/audit/audit_factor_assets.md; HEAD d58eae08]
+[audit completed; report written to quant_platform/docs/audit/audit_factor_assets.md; HEAD d58eae08]

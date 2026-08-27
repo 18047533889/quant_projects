@@ -65,9 +65,9 @@ BUILD = os.path.join(DATA, "build")
 PANEL = os.path.join(DATA, "panel")
 OUT = os.path.join(ROOT, "outputs")
 
-PREDICTIONS = os.path.join(BUILD, "predictions.parquet")
-VWAP_TRAD = os.path.join(PANEL, "vwap_trad_adj.parquet")
-FWD_RET10 = os.path.join(PANEL, "fwd_ret10.parquet")
+PREDICTIONS = os.environ.get("PREDICTIONS", os.path.join(BUILD, "predictions.parquet"))
+VWAP_TRAD = os.environ.get("VWAP_TRAD", os.path.join(PANEL, "vwap_trad_adj.parquet"))
+FWD_RET10 = os.environ.get("FWD_RET10", os.path.join(PANEL, "fwd_ret10.parquet"))
 
 WEIGHTS_OUT = os.path.join(BUILD, "weights.parquet")
 METRICS_OUT = os.path.join(OUT, "metrics.txt")

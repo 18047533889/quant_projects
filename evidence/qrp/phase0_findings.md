@@ -25,7 +25,7 @@ Authority: repository tree + test output. Sources: baseline runs + subagent audi
 - **LocalArtifactCache: MISSING (spec §22 gap)**
 
 ### Ingestion today (verified)
-- Manifest/_READY protocol = **CONTRACT ONLY** (platform/app/contracts/candidate.py — `READY_MARKER_NAME="_READY"`, FactorCandidateManifest per §10.2). No ingestion service/scanner/writer.
+- Manifest/_READY protocol = **CONTRACT ONLY** (quant_platform/app/contracts/candidate.py — `READY_MARKER_NAME="_READY"`, FactorCandidateManifest per §10.2). No ingestion service/scanner/writer.
 - No COS candidate bucket. Today's ingestion = formula gates: FE `compile`/`materialize_from_config` (runtime/engine.py:1041/:2471), mining-manifest validation (api/mining_integration.py:1107/:1230), mining/campaign.py batch, operator_catalog.py:252 admission.
 - Transactional outbox **MISSING**; FE service uses in-memory BoundedJobQueue (service/queue.py:96). EventEnvelope = contract only (event_envelope.py:86, 19 event types :48-88).
 

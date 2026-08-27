@@ -559,52 +559,63 @@ def pl_same_clock_lag(
 # Registration
 # ---------------------------------------------------------------------------
 def register() -> None:
-    register_specs(
-        {
-            "report_asof": Spec(
-                "ts",
-                ["value", "report_date", "target_date"],
-                "PIT-safe report value lookup as-of target date",
-                pd_report_asof,
-                pl_report_asof,
-            ),
-            "event_window_return_asof": Spec(
-                "ts",
-                ["price", "event_date", "window_start", "window_end"],
-                "Event window return (strictly causal)",
-                pd_event_window_return_asof,
-                pl_event_window_return_asof,
-            ),
-            "financial_snapshot_lag": Spec(
-                "ts",
-                ["value", "snapshot_id", "lag"],
-                "Lag by financial snapshot ordinal (not calendar days)",
-                pd_financial_snapshot_lag,
-                pl_financial_snapshot_lag,
-            ),
-            "same_calendar_day_mean": Spec(
-                "ts",
-                ["value", "window", "min_periods"],
-                "Mean of values on same calendar day across prior years",
-                pd_same_calendar_day_mean,
-                pl_same_calendar_day_mean,
-            ),
-            "same_calendar_month_return": Spec(
-                "ts",
-                ["value", "window", "min_periods"],
-                "Mean return for same calendar month across prior years",
-                pd_same_calendar_month_return,
-                pl_same_calendar_month_return,
-            ),
-            "same_clock_lag": Spec(
-                "ts",
-                ["value", "clock", "lag"],
-                "Lag by clock ordinal (not calendar rows)",
-                pd_same_clock_lag,
-                pl_same_clock_lag,
-            ),
-        }
-    )
+    from factor_engine.cleaned_operators.registry import OperatorRegistry as _Reg
+    # Idempotent re-registration (P0 collection baseline): ``panel_batch1``
+    # already registers ``report_asof``/``event_window_return_asof`` with a
+    # different (panel-gap) contract.  A direct import of this module after
+    # ``load_all()`` must not re-register those canonicals and trip the R6-157
+    # param_specs invariant.  Only register canonicals not already present.
+    _specs = {
+        "report_asof": Spec(
+            "ts",
+            ["value", "report_date", "target_date"],
+            "PIT-safe report value lookup as-of target date",
+            pd_report_asof,
+            pl_report_asof,
+        ),
+        "event_window_return_asof": Spec(
+            "ts",
+            ["price", "event_date", "window_start", "window_end"],
+            "Event window return (strictly causal)",
+            pd_event_window_return_asof,
+            pl_event_window_return_asof,
+        ),
+        "financial_snapshot_lag": Spec(
+            "ts",
+            ["value", "snapshot_id", "lag"],
+            "Lag by financial snapshot ordinal (not calendar days)",
+            pd_financial_snapshot_lag,
+            pl_financial_snapshot_lag,
+        ),
+        "same_calendar_day_mean": Spec(
+            "ts",
+            ["value", "window", "min_periods"],
+            "Mean of values on same calendar day across prior years",
+            pd_same_calendar_day_mean,
+            pl_same_calendar_day_mean,
+        ),
+        "same_calendar_month_return": Spec(
+            "ts",
+            ["value", "window", "min_periods"],
+            "Mean return for same calendar month across prior years",
+            pd_same_calendar_month_return,
+            pl_same_calendar_month_return,
+        ),
+        "same_clock_lag": Spec(
+            "ts",
+            ["value", "clock", "lag"],
+            "Lag by clock ordinal (not calendar rows)",
+            pd_same_clock_lag,
+            pl_same_clock_lag,
+        ),
+    }
+    _to_register = {
+        name: spec
+        for name, spec in _specs.items()
+        if _Reg.get(name, "pandas_numpy", mode="any") is None
+    }
+    if _to_register:
+        register_specs(_to_register)
 
 
 register()

@@ -70,6 +70,68 @@ class PhysicalPlanRequiredError(TypeError):
     """Raised when a physical-plan backend is given a logical plan."""
 
 
+#: Physical backends for which ``_physical_backend_for_region`` actually wires a
+#: real executor today (P2 split-brain closure).  Any ``PhysicalBackend`` whose
+#: ``.value`` is not in this set is declared *not runtime-capable* so the planner
+#: can never route a production region to it and claim the runtime will run it.
+#:
+#: CLICKHOUSE_SQL / Q_KDB have standalone executor classes (``ClickHousePushdownBackend`` /
+#: ``QBackend`` in ``factor_engine.backend``), but those are NOT wired into the
+#: runtime resolver below, so a region routed to either would fail at execution
+#: time — the honest answer is capability=False until a real executor is wired.
+_RUNTIME_CAPABLE_BACKEND_VALUES = frozenset(
+    {"pandas_numpy", "polars_panel", "polars_long", "duckdb_sql"}
+)
+
+
+class PhysicalBackendNotRuntimeCapableError(PhysicalPlanRequiredError):
+    """Raised when a region is routed to a backend the runtime cannot execute.
+
+    P2 split-brain closure: distinguishes a genuinely unsupported / not-wired
+    physical backend (CLICKHOUSE_SQL, Q_KDB) from a generic execution contract
+    failure.  Subclasses ``PhysicalPlanRequiredError`` so existing callers that
+    catch the base type keep working, but carries a distinct identity so code can
+    recognise the not-capable case specifically.
+    """
+
+
+def physical_backend_runtime_capable(region_backend: Any) -> bool:
+    """Return True only for physical backends the runtime can actually execute.
+
+    Today that is exactly the four backends wired into ``_physical_backend_for_region``:
+    PANDAS_NUMPY / POLARS_PANEL / POLARS_LONG / DUCKDB_SQL.  CLICKHOUSE_SQL and
+    Q_KDB return False because no executor is wired for them there.
+
+    Accepts a ``PhysicalBackend`` member or a plain backend-name string.
+    """
+    return getattr(region_backend, "value", region_backend) in _RUNTIME_CAPABLE_BACKEND_VALUES
+
+
+def assert_all_backends_runtime_capable(physical_plan: Any) -> None:
+    """Fail loudly if a physical plan routes any region to a backend the runtime cannot run.
+
+    Planner guard (P2 split-brain closure): a production region must NEVER be
+    assigned to a backend ``physical_backend_runtime_capable`` reports False for
+    (today CLICKHOUSE_SQL and Q_KDB).  Call this after a ``PhysicalRegionPlan`` is
+    built so a plan the runtime cannot execute is rejected up front instead of
+    surfacing as a confusing execution-time mismatch.
+    """
+    from factor_engine.planner.backend_region import PhysicalBackend
+
+    regions = getattr(physical_plan, "regions", ()) or ()
+    for region in regions:
+        backend = getattr(region, "backend", None)
+        if backend is None or physical_backend_runtime_capable(backend):
+            continue
+        raise PhysicalBackendNotRuntimeCapableError(
+            f"region {getattr(region, 'region_id', '<unknown>')!r} is routed to "
+            f"physical backend {getattr(backend, 'value', backend)!r} ({PhysicalBackend.Q_KDB!r} "
+            f"and {PhysicalBackend.CLICKHOUSE_SQL!r} are not runtime-capable today). "
+            f"Refusing to emit a plan the runtime cannot run. Use a capable backend "
+            f"(e.g. DUCKDB_SQL) or wire a real executor first."
+        )
+
+
 def _assert_backend_plan_authority(backend: Any, plan: Any | None = None) -> None:
     """Reject HybridBackend logical execution until a physical consumer is wired."""
     if backend.__class__.__name__ != "HybridBackend":
@@ -196,8 +258,10 @@ def _physical_backend_for_region(backend: Any, region_backend: Any) -> Any:
             )
         if region_backend == PhysicalBackend.DUCKDB_SQL:
             return backend._sql
-        raise PhysicalPlanRequiredError(
-            f"unsupported physical backend {getattr(region_backend, 'value', region_backend)!r}"
+        raise PhysicalBackendNotRuntimeCapableError(
+            f"unsupported physical backend {getattr(region_backend, 'value', region_backend)!r} "
+            f"for HybridBackend: not runtime-capable (Q_KDB / CLICKHOUSE_SQL have no "
+            f"wired runtime executor)"
         )
 
     expected_names = {
@@ -211,6 +275,14 @@ def _physical_backend_for_region(backend: Any, region_backend: Any) -> Any:
     }
     allowed = expected_names.get(region_backend)
     if allowed is None or backend.__class__.__name__ not in allowed:
+        if not physical_backend_runtime_capable(region_backend):
+            raise PhysicalBackendNotRuntimeCapableError(
+                f"configured backend {backend.__class__.__name__!r} does not match "
+                f"physical backend {getattr(region_backend, 'value', region_backend)!r}, "
+                f"and {getattr(region_backend, 'value', region_backend)!r} is not "
+                f"runtime-capable today (no wired executor for "
+                f"{PhysicalBackend.Q_KDB!r} / {PhysicalBackend.CLICKHOUSE_SQL!r})"
+            )
         raise PhysicalPlanRequiredError(
             f"configured backend {backend.__class__.__name__!r} does not match "
             f"physical backend {getattr(region_backend, 'value', region_backend)!r}"
@@ -1997,7 +2069,7 @@ class FactorEngine:
         perf: PerfConfig | None,
         pit_enforce: bool,
         pit_forbid_forward_fill: bool,
-        wave_memory_budget: int = 4 * 1024**3,
+        wave_memory_budget: int | None = None,
     ) -> tuple[Any, Any, dict[str, AnalysisResult]]:
         """编译 → PhysicalFactorDAG 调度计划（R27-004..006/063）。"""
         from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
@@ -2022,7 +2094,7 @@ class FactorEngine:
         pit_enforce: bool = False,
         pit_forbid_forward_fill: bool = False,
         resource_profile: str = "balanced",
-        wave_memory_budget: int = 4 * 1024**3,
+        wave_memory_budget: int | None = None,
     ) -> dict[str, Any]:
         """R27-142/191: dry-run planner —— 只读 manifest/metadata 估算，不读大数据。
 
@@ -2110,8 +2182,8 @@ class FactorEngine:
         storage_format: str = "long",
         pit_enforce: bool = False,
         pit_forbid_forward_fill: bool = False,
-        writer_queue_bytes: int = 4 * 1024**3,
-        wave_memory_budget: int = 4 * 1024**3,
+        writer_queue_bytes: int | None = None,
+        wave_memory_budget: int | None = None,
         write_results: bool = True,
         materialize_kwargs: dict[str, Any] | None = None,
         writer_threads: int | None = None,
@@ -2288,7 +2360,13 @@ class FactorEngine:
 
         sink = StreamingResultSink(
             writer=_writer,
-            queue_bytes=writer_queue_bytes,
+            # P3/P4: ``writer_queue_bytes=None`` → 从 broker live headroom 派生
+            # sink 预算（不再固定 4GiB）；broker 无法给出真实预算时回退绝对上限。
+            queue_bytes=(
+                writer_queue_bytes
+                if writer_queue_bytes is not None
+                else scheduler.broker.current_sink_budget() or (4 * 1024**3)
+            ),
             # R39-PERF-039/040：默认 count batch 64 —— 使 sink 真正攒批，writer 走
             # execute_materialize_batch 批量提交（batch_write_transaction_count <<
             # factor_count）。显式 ``writer_batch_size`` 仍可覆盖。
