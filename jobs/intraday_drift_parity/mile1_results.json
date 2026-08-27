@@ -1,0 +1,301 @@
+{
+  "results": [
+    {
+      "name": "realized_variance",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 9.75781955236954e-17,
+      "max_pct": 9.75781955236954e-17,
+      "verdict": "PASS"
+    },
+    {
+      "name": "realized_semivariance_down",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 6.958201994097931e-06,
+      "max_pct": 6.958201994097931e-06,
+      "verdict": "PASS"
+    },
+    {
+      "name": "bipower_variation",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 1.1709383462843448e-16,
+      "max_pct": 1.1709383462843448e-16,
+      "verdict": "PASS"
+    },
+    {
+      "name": "jump_ratio",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 2.528532938583794e-14,
+      "max_pct": 2.528532938583794e-14,
+      "verdict": "PASS"
+    },
+    {
+      "name": "path_efficiency",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 0.0,
+      "max_pct": 0.0,
+      "verdict": "PASS"
+    },
+    {
+      "name": "high_time",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 0.0,
+      "max_pct": 0.0,
+      "verdict": "PASS"
+    },
+    {
+      "name": "low_time",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 0.0,
+      "max_pct": 0.0,
+      "verdict": "PASS"
+    },
+    {
+      "name": "price_vwap_max_pos_excursion",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 0.0,
+      "max_pct": 0.0,
+      "verdict": "PASS"
+    },
+    {
+      "name": "price_vwap_max_neg_excursion",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 0.0,
+      "max_pct": 0.0,
+      "verdict": "PASS"
+    },
+    {
+      "name": "time_above_vwap",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 0.0,
+      "max_pct": 0.0,
+      "verdict": "PASS"
+    },
+    {
+      "name": "longest_above_vwap_streak",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 0.0,
+      "max_pct": 0.0,
+      "verdict": "PASS"
+    },
+    {
+      "name": "longest_below_vwap_streak",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 0.0,
+      "max_pct": 0.0,
+      "verdict": "PASS"
+    },
+    {
+      "name": "vwap_reversion_speed",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 2.1094237467877974e-15,
+      "max_pct": 2.1094237467877974e-15,
+      "verdict": "PASS"
+    },
+    {
+      "name": "vwap_path_slope",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 5.5067062021407764e-14,
+      "max_pct": 5.5067062021407764e-14,
+      "verdict": "PASS"
+    },
+    {
+      "name": "vwap_path_curvature",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 2.721295411234337e-12,
+      "max_pct": 2.721295411234337e-12,
+      "verdict": "PASS"
+    },
+    {
+      "name": "drawdown_depth",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 0.0,
+      "max_pct": 0.0,
+      "verdict": "PASS"
+    },
+    {
+      "name": "drawdown_duration",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 0.0,
+      "max_pct": 0.0,
+      "verdict": "PASS"
+    },
+    {
+      "name": "drawdown_recovery_half_life",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 4,
+      "both_na": 4,
+      "diff": 0,
+      "max_abs": 0.0,
+      "max_pct": 0.0,
+      "verdict": "PASS"
+    },
+    {
+      "name": "interval_realized_variance",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 9.75781955236954e-17,
+      "max_pct": 9.75781955236954e-17,
+      "verdict": "PASS"
+    },
+    {
+      "name": "interval_vwap_deviation",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 1.0001938810177968e-05,
+      "max_pct": 1.0001938810177968e-05,
+      "verdict": "PASS"
+    },
+    {
+      "name": "interval_illiquidity",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 1.0339757656912846e-25,
+      "max_pct": 1.0339757656912846e-25,
+      "verdict": "PASS"
+    },
+    {
+      "name": "tripower_quarticity",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 1.0449175138203501e-05,
+      "max_pct": 1.0449175138203501e-05,
+      "verdict": "PASS"
+    },
+    {
+      "name": "jump_first_time",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 0.0,
+      "max_pct": 0.0,
+      "verdict": "PASS"
+    },
+    {
+      "name": "jump_last_time",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 0.0,
+      "max_pct": 0.0,
+      "verdict": "PASS"
+    },
+    {
+      "name": "jump_clustering",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 2,
+      "both_na": 6,
+      "diff": 0,
+      "max_abs": 0.0,
+      "max_pct": 0.0,
+      "verdict": "PASS"
+    },
+    {
+      "name": "realized_beta",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 1.1102230246251565e-15,
+      "max_pct": 1.0732697999322684e-15,
+      "verdict": "PASS"
+    },
+    {
+      "name": "realized_correlation",
+      "rows_pd": 4,
+      "rows_po": 4,
+      "shared": 8,
+      "both_na": 0,
+      "diff": 0,
+      "max_abs": 9.992007221626409e-16,
+      "max_pct": 9.992007221626409e-16,
+      "verdict": "PASS"
+    }
+  ]
+}

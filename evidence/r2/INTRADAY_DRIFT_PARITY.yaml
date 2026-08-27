@@ -1,0 +1,77 @@
+path: evidence/r2/INTRADAY_DRIFT_PARITY.yaml
+mission: G-intraday-drift
+title: Intraday polars-vs-pandas backend drift — 240-bar session parity (Mile-1)
+author: sunhaiwei
+date: 2026-08-28
+git_sha: 4cc2b679
+status: PROVISIONAL
+
+summary: |
+  High-noon parity driver compares every intraday polars operator (registered via
+  polars_intraday_full) against the factor_engine pandas reference on a seeded
+  4-day x 240-bar A-share session fixture (3% NaN gaps, planted jump bars, realistic
+  amount/volume). 26/26 operator rows now PASS at rtol/atol 1e-5 (all diff=0).
+
+harness:
+  driver: jobs/intraday_drift_parity/high_noon_parity_driver.py
+  pkg_bypass: |
+    The process imports base.py with a one-shot import hook that neutralises
+    _ParamRoleMeta attribute fences (CPython enum __set_name__ write path otherwise
+    fails base.py import in this interpreter).  The intraday polars module is loaded
+    by file (spec_from_file_location) because the package __init__ pulls
+    technical.kalman_variants -> rolling_pack.register_polars_bridge (pre-existing
+    broken symbol, unrelated to intraday).  No source files are touched by the hook.
+  fixture: |
+    4 trade days, 240 bars/day (morning 570..689 + afternoon 780..899 minute-of-day),
+    tz-aware Asia/Shanghai; 3% random NaN gaps in close+amount+volume + bar index 5 NaN;
+    planted 3.5%/4.5% single-minute jumps at bars 50/300/700/850/900; amount/volume
+    scaled so cumVWAP ~ price.  np.random.default_rng(20260828) seeded.
+  comparator: np.isclose on sorted (date, instrument) intersection; NA = both-NaN; diff=0.
+
+rows: []
+matrix:
+  26/26 PASS
+  diff_counts: [0]*26
+  max_abs_examples:
+    realized_variance: 9.76e-17
+    bipower_variation: 1.17e-16
+    jump_ratio: 2.53e-14
+    interval_illiquidity: 1.03e-25
+    tripower_quarticity: 1.04e-05
+    interval_vwap_deviation: 1.00e-05
+
+fixed:
+- name: RV / BV / jump-ratio / interval-RV / tripower quarticity / jump mask
+  issue: polars computed log-returns AFTER filtering finite closes, compressing the
+         day's minute grid so a missing bar bridged two bars into adjacency (RV ~1.087x
+         the pandas slot-axis reference).
+  fix: diff on the RAW grid (missing close -> NaN return -> NaN product), then filter.
+        New helper _log_returns_diff_on_grid.  Applied in _rv/_bipower/_jump_ratio/
+        _interval_rv/_tripower_quarticity/_jump_mask_long (polars_intraday_full.py).
+- name: longest_above/below_vwap_streak
+  issue: run_id init shifted counts and empty True runs dropped the row (pandas best=0).
+  fix: run boundary via flag & ~prev_flag on the raw grid; grid-join emits 0 for empty days.
+- name: jump timing (first/last)
+  issue: positions and denominator were finite-row based, not raw-grid slot positions.
+  fix: ordinal rank over ALL day rows (incl NaN-r); denominator = raw grid count - 1.
+- name: jump clustering
+  issue: list.diff leading NULL inflated len to 2 for 2-jump days -> 0.0 instead of None;
+        also gaps were not raw-slot positions.
+  fix: ordinal raw-grid rank + list.drop_nulls before the >=2-gap gate.
+
+blocked:
+- id: package-init-broken-symbol
+  reason: 'factor_engine.cleaned_operators.__init__ imports technical.kalman_variants ->
+          from rolling_pack import register_polars_bridge -> ImportError (pre-existing,
+          unrelated to intraday drift).  Driver bypasses with spec_from_file_location.'
+- id: full-suite-run
+  reason: FactorEngine operator-suite boot is blocked by the above package-init symbol;
+          the parity harness exercises all 26 rows directly.  A CI/pytest gate must fix
+          the rolling_pack symbol before the package __init__ is importable.
+- id: ex_self-beta-family
+  reason: not in this run; the driver covers intra_realized_beta/correlation (PASS).
+          ex_self variants and the broader beta family are a follow-on row expansion.
+
+tests:
+  direct: jobs/intraday_drift_parity/high_noon_parity_driver.py (26 rows, all diff=0)
+  note: pytest-based clone pending (see .claude harness); driver doubles as the harness.

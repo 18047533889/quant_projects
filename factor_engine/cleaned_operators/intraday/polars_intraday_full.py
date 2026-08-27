@@ -232,9 +232,26 @@ _mk("intra_segment_realized_vol", "指定时段已实现波动率 sqrt(sum(r_t^2
 # § Realized variance / semivariance / bipower / jump-ratio
 # ---------------------------------------------------------------------------
 
+def _log_returns_diff_on_grid(long: pl.DataFrame):
+    """Slot-axis log-return: diff on the RAW grid (missing bars stay as rows so
+    the return across a NaN bar is NaN — never bridges two bars into adjacency).
+    pandas ``intraday._core.log_returns`` follows the same rule.  Call AFTER the
+    date/instrument/ts sort and BEFORE any finite-close filter."""
+    return long.with_columns(
+        pl.col("close").log().diff().over(["date", "instrument"]).alias("r")
+    )
+
+
 def _rv(close: pl.DataFrame) -> pl.DataFrame:
-    long = _with_date(_melt(close, "close")).filter(pl.col("close").is_finite())
-    long = _log_returns_long(long)
+    long = _with_date(_melt(close, "close"))
+    # P1-100 (slot-axis rule): RV is defined on the ORIGINAL minute-slot axis.
+    # ``r`` is computed on the raw grid (missing close -> NaN return -> NaN
+    # product), so a missing minute contributes 0 and never bridges two bars
+    # into adjacency.  The diff MUST run on the full grid (before the
+    # finite-close filter) so gap-adjacent bars do not become neighbours.
+    long = long.sort(["date", "instrument", "ts"])
+    long = _log_returns_diff_on_grid(long)
+    long = long.filter(pl.col("close").is_finite())
     out = long.group_by(["date", "instrument"]).agg(
         (pl.col("r") * pl.col("r")).fill_nan(0.0).sum().alias("v")
     )
@@ -264,9 +281,13 @@ _mk("intra_realized_semivariance", "日内上/下半方差 sum(r_t^2 * 1(sign))�
 
 
 def _bipower(close: pl.DataFrame) -> pl.DataFrame:
-    long = _with_date(_melt(close, "close")).filter(pl.col("close").is_finite())
-    long = _log_returns_long(long).filter(pl.col("r").is_finite())
-    long = long.sort(["date", "instrument", "ts"]).with_columns(
+    long = _with_date(_melt(close, "close"))
+    # P1-100 slot-axis rule (same as _rv): diff on the RAW grid so a missing
+    # minute yields a NaN return that the adjacent product (|r_t||r_{t-1}|)
+    # cannot bridge.
+    long = long.sort(["date", "instrument", "ts"])
+    long = _log_returns_diff_on_grid(long)
+    long = long.with_columns(
         (pl.col("r").abs() * pl.col("r").abs().shift(1).over(["date", "instrument"])).alias("absprod")
     )
     out = long.group_by(["date", "instrument"]).agg(
@@ -280,9 +301,11 @@ _mk("intra_bipower_variation", "日内双幂变差 (pi/2)*sum(|r_t||r_{t-1}|)（
 
 
 def _jump_ratio(close: pl.DataFrame) -> pl.DataFrame:
-    long = _with_date(_melt(close, "close")).filter(pl.col("close").is_finite())
-    long = _log_returns_long(long).filter(pl.col("r").is_finite())
-    long = long.sort(["date", "instrument", "ts"]).with_columns(
+    long = _with_date(_melt(close, "close"))
+    # P1-100 slot-axis rule for BV (adjacent-slot |r| product on the RAW axis).
+    long = long.sort(["date", "instrument", "ts"])
+    long = _log_returns_diff_on_grid(long)
+    long = long.with_columns(
         (pl.col("r").abs() * pl.col("r").abs().shift(1).over(["date", "instrument"])).alias("absprod")
     )
     out = long.group_by(["date", "instrument"]).agg(
@@ -403,13 +426,27 @@ def _longest_streak(close: pl.DataFrame, amount: pl.DataFrame, volume: pl.DataFr
     long = long.filter(pl.col("cum_vwap").is_not_null())
     above = pl.col("close") > pl.col("cum_vwap")
     flag = (~above) if side == "below" else above
-    long = long.with_columns(flag.fill_null(False).alias("flag"))
+    flag_expr = pl.when(pl.col("cum_vwap").is_not_null()).then(flag).otherwise(False).fill_null(False)
+    long = long.with_columns(flag_expr.alias("flag"))
+    # P1-106: a run must count only rows where the day-vwap is DEFINED; the
+    # very first row of a session (r == null) must NOT start a forged zero-run
+    # (which shifted every count by 1 and made below-runs vanish from the
+    # output when the day's longest True segment touched the first row).
     long = long.sort(["date", "instrument", "ts"]).with_columns(
-        (pl.col("flag") != pl.col("flag").shift(1).fill_null(False)).cum_sum().over(["date", "instrument"]).alias("run_id")
+        pl.col("flag").shift(1).over(["date", "instrument"]).fill_null(False).alias("prev_flag")
+    ).with_columns(
+        (pl.col("flag") & ~pl.col("prev_flag")).cum_sum().over(["date", "instrument"]).alias("run_id")
     )
     # Only True segments count (pandas resets the counter on a False flag).
     runs = long.filter(pl.col("flag")).group_by(["date", "instrument", "run_id"]).agg(pl.len().alias("cnt"))
     out = runs.group_by(["date", "instrument"]).agg(pl.col("cnt").max().alias("v"))
+    # A day with NO True flag must still emit 0 (the pandas reference returns
+    # best = 0, never drops the row).  Join against the full (date, instrument)
+    # grid so empty pairs carry 0 instead of vanishing from the frame.
+    grid = long.select(["date", "instrument"]).unique()
+    out = grid.join(out, on=["date", "instrument"], how="left").with_columns(
+        pl.col("v").fill_null(0)
+    )
     return _pivot(out, "v")
 
 
@@ -965,10 +1002,21 @@ for _name, _desc, _fn in (
 # ---------------------------------------------------------------------------
 
 def _jump_mask_long(close: pl.DataFrame, threshold_scale: float) -> pl.DataFrame:
-    """Per-bar significant-jump mask |r| > scale * sqrt(RV/N); NaN r -> no jump."""
+    """Per-bar significant-jump mask |r| > scale * sqrt(RV/N); NaN r -> no jump.
+
+    P1-100 slot-axis rule: RV/N and the per-bar threshold use the RAW-grid
+    log-returns (missing bars stay rows, so RV = sum of finite r^2 over the
+    grid and N = number of r entries on the grid).  The pandas reference
+    (``higher_moments._jump_mask``) computes over ``log_returns(v)`` on the
+    original 240-slot grid.  The old path filtered finite closes first, which
+    compressed N and bridged gaps — the threshold therefore no longer matched."""
     ts = float(threshold_scale)
-    long = _with_date(_melt(close, "close")).filter(pl.col("close").is_finite())
-    long = _log_returns_long(long)
+    long = _with_date(_melt(close, "close"))
+    # P1-100 slot-axis rule: RV/N and the per-bar threshold use the RAW-grid
+    # log-returns (missing bars stay rows).  The finite-close filter below runs
+    # AFTER the diff so gap-adjacent bars can never become neighbours.
+    long = long.sort(["date", "instrument", "ts"])
+    long = _log_returns_diff_on_grid(long)
     rv = long.group_by(["date", "instrument"]).agg(
         (pl.col("r") * pl.col("r")).fill_nan(0.0).sum().alias("rv"),
         pl.col("r").count().alias("n"),
@@ -988,9 +1036,12 @@ def _jump_mask_long(close: pl.DataFrame, threshold_scale: float) -> pl.DataFrame
 
 
 def _tripower_quarticity(close: pl.DataFrame) -> pl.DataFrame:
-    long = _with_date(_melt(close, "close")).filter(pl.col("close").is_finite())
-    long = _log_returns_long(long).filter(pl.col("r").is_finite())
-    long = long.sort(["date", "instrument", "ts"]).with_columns(
+    long = _with_date(_melt(close, "close"))
+    # P1-100 slot-axis rule: adjacent triple |r|^{4/3} on the RAW grid.
+    long = long.sort(["date", "instrument", "ts"])
+    long = _log_returns_diff_on_grid(long)
+    r_fin = long.filter(pl.col("r").is_finite())
+    long = r_fin.with_columns(
         pl.col("r").abs().pow(4.0 / 3.0).alias("rp"),
     ).with_columns(
         (pl.col("rp") * pl.col("rp").shift(1).over(["date", "instrument"]) * pl.col("rp").shift(2).over(["date", "instrument"])).alias("prod")
@@ -1008,33 +1059,43 @@ def _tripower_quarticity(close: pl.DataFrame) -> pl.DataFrame:
 
 def _jump_timing(close: pl.DataFrame, threshold_scale: float, which: str) -> pl.DataFrame:
     long = _jump_mask_long(close, threshold_scale)
+    # P1-100 slot-axis rule: rank rows on the RAW return grid so a missing
+    # minute (a NaN r row) still occupies its slot.  ``ordinal rank`` assigns
+    # 1..N to every row of the day INCLUDING NaN-r rows, so positions line up
+    # with the pandas reference that indexes the raw 240-grid.
     long = long.sort(["date", "instrument", "ts"]).with_columns(
         pl.col("ts").rank("ordinal").over(["date", "instrument"]).cast(pl.Float64).alias("pos")
     )
     stats = long.group_by(["date", "instrument"]).agg(
-        pl.col("r").is_finite().sum().alias("n_finite"),
+        pl.len().alias("n_grid"),
         pl.when(pl.col("jump")).then(pl.col("pos")).otherwise(None).min().alias("first_pos"),
         pl.when(pl.col("jump")).then(pl.col("pos")).otherwise(None).max().alias("last_pos"),
     )
     if which == "first":
         out = stats.with_columns(
-            pl.when((pl.col("n_finite") > 1) & pl.col("first_pos").is_not_null())
-            .then((pl.col("first_pos") - 1.0) / (pl.col("n_finite") - 1.0))
+            pl.when((pl.col("n_grid") > 1) & pl.col("first_pos").is_not_null())
+            .then((pl.col("first_pos") - 1.0) / (pl.col("n_grid") - 1.0))
             .otherwise(None)
             .alias("v")
         )
     else:
         out = stats.with_columns(
-            pl.when((pl.col("n_finite") > 1) & pl.col("last_pos").is_not_null())
-            .then((pl.col("last_pos") - 1.0) / (pl.col("n_finite") - 1.0))
+            pl.when((pl.col("n_grid") > 1) & pl.col("last_pos").is_not_null())
+            .then((pl.col("last_pos") - 1.0) / (pl.col("n_grid") - 1.0))
             .otherwise(None)
             .alias("v")
         )
+    # jump timing is a NORMALIZED SLOT POSITION (matching the pandas reference
+    # which divides by the raw return count - 1 on the ORIGINAL grid, NOT by
+    # the number of finite jumps or finite rows).
     return _pivot(out, "v")
 
 
 def _jump_clustering(close: pl.DataFrame, threshold_scale: float) -> pl.DataFrame:
     long = _jump_mask_long(close, threshold_scale)
+    # P1-100 slot-axis rule: rank rows on the RAW return grid so a missing
+    # minute (a NaN r row) still occupies its slot.  ``ordinal rank`` assigns
+    # 1..N to every row of the day INCLUDING NaN-r rows.
     long = long.sort(["date", "instrument", "ts"]).with_columns(
         pl.col("ts").rank("ordinal").over(["date", "instrument"]).cast(pl.Float64).alias("pos")
     )
@@ -1043,6 +1104,11 @@ def _jump_clustering(close: pl.DataFrame, threshold_scale: float) -> pl.DataFram
     )
     out = jumps.with_columns(
         pl.col("poss").list.diff(1).alias("gaps")
+    ).with_columns(
+        # drop the leading NULL produced by list.diff so a 2-jump day
+        # ([null, gap]) is a length-1 gap list and the >=2-gap gate yields None
+        # (pandas requires >=3 jumps, i.e. >=2 real gaps).
+        pl.col("gaps").list.drop_nulls().alias("gaps")
     ).with_columns(
         pl.when(pl.col("gaps").list.len() >= 2)
         .then(pl.col("gaps").list.std(ddof=0) / pl.col("gaps").list.mean())
@@ -1260,9 +1326,12 @@ for _name, _desc, _kind, _fn in (
 # ---------------------------------------------------------------------------
 
 def _interval_rv(close: pl.DataFrame, start: int, end: int) -> pl.DataFrame:
-    long = _with_mod(_with_date(_melt(close, "close"))).filter(pl.col("close").is_finite())
+    long = _with_mod(_with_date(_melt(close, "close")))
     long = long.filter((pl.col("mod") >= int(start)) & (pl.col("mod") <= int(end)))
-    long = _log_returns_long(long)
+    # P1-100 slot-axis rule (see _rv): diff on the RAW grid — a missing
+    # minute keeps NaN so adjacent products can never bridge the gap.
+    long = long.sort(["date", "instrument", "ts"])
+    long = _log_returns_diff_on_grid(long)
     out = long.group_by(["date", "instrument"]).agg(
         (pl.col("r") * pl.col("r")).fill_nan(0.0).sum().alias("v")
     )
