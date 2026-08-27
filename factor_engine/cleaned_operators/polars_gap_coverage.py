@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8
 """Polars fallback coverage for every canonical that has a pandas reference.
 
 Registered late in :func:`cleaned_operators.load_all` (after every operator
@@ -35,6 +35,18 @@ The reference backend is untouched: production admission still reads
    never be reported as one.  The "bridge cleanup" final state therefore
    reflects the true topology: only *native* bridges were removed; the
    delegation layer is an explicit, labeled policy decision on top.
+
+Wave1-E backend-coverage audit note: the following canonicals are **deliberately
+delegate** even though a "matching-name" polars class exists elsewhere — the
+matching class is the same per-column pandas-EWM-delgate family, so wiring it
+would change nothing:
+  ``ts_ewm_corr`` / ``ts_ewm_cov`` (EXCEPTION R20-P0-EWM-PAIRWISE,
+  ``polars_ts_rolling.TSEwmCorrNative/TSEwmCovNative`` declare
+  ``ExecutionKind.POLARS_PANDAS_DELEGATE`` by design and land on
+  backend='polars' only).  They are native-in-shape but delegate-in-execution;
+  under the Wave1-E "no fake native kernels" rule we keep them classified as
+  delegates (measured: ``canonical_polars_kind`` ==
+  ``polars_udf_pandas_delegate``, count == 2 exactly).
 """
 from __future__ import annotations
 
@@ -128,3 +140,6 @@ def register_polars_gap_coverage() -> int:
     # the cleanup layer mislabelled as native).
     _reconcile_delegate_metadata()
     return count
+
+
+__all__ = ["register_polars_gap_coverage"]

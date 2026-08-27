@@ -31,6 +31,8 @@ from quant_evaluator.contracts.errors import (
     OverflowOrNonFiniteError,
 )
 from quant_evaluator.contracts.sealed_split import SealedSplitRef, check_sealed_split_overlap
+from quant_evaluator.contracts.evaluation_refs import FactorValueRef, LabelBundleRef
+from quant_evaluator.contracts.evaluation_artifact import EvaluationArtifact
 
 __all__ = [
     "FactorBatch",
@@ -60,4 +62,7 @@ __all__ = [
     "OverflowOrNonFiniteError",
     "SealedSplitRef",
     "check_sealed_split_overlap",
+    "FactorValueRef",
+    "LabelBundleRef",
+    "EvaluationArtifact",
 ]

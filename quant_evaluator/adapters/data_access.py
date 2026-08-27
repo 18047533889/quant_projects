@@ -100,15 +100,15 @@ class DataAccessAdapter:
         Initialize adapter and verify DataAccess is available.
 
         Raises:
-            OptionalDependencyMissing: If dataaccess package not installed
+            OptionalDependencyMissing: If data_access package not installed
         """
         try:
             import data_access  # noqa: F401
-            self._da_module = dataaccess
+            self._da_module = data_access
         except ImportError as e:
             raise OptionalDependencyMissing(
                 "DataAccess is not installed. "
-                "Install dataaccess package to use this adapter."
+                "Install the data_access package to use this adapter."
             ) from e
 
     def da_frame_to_factor_batch(

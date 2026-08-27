@@ -256,6 +256,20 @@ class QProcessUnavailableError(QExecutionError):
     pass
 
 
+class QBackendNotAvailable(QProcessUnavailableError):
+    """Q backend is not runnable in this environment (Q_NOT_AVAILABLE).
+
+    Carries an explicit ``reason`` so parity harnesses and gates can report
+    ``NOT_RUN`` with the exact missing runtime component instead of claiming a
+    pass.  Production callers must propagate this typed error — never silently
+    fall back to another backend.
+    """
+
+    def __init__(self, reason: str = "q runtime unavailable"):
+        super().__init__(reason)
+        self.reason = reason
+
+
 class QPlanningFallbackAllowed(FactorEngineError):
     """Planning-time 允许的 fallback（Q2-P0-018）。
 

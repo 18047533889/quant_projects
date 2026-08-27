@@ -531,13 +531,36 @@ def pl_kama(close, er_window=10, fast_window=2, slow_window=30, **_):
 
 
 def pl_wma(x, window=10, **_):
+    # PARITY-B: match pandas ``rolling_linear_weighted`` (RenormalizedPartialWMA,
+    # full-window renormalized-over-finite weights, NaN out only when the whole
+    # window is non-finite).
+    #
+    # The previous native ``rolling_mean(weights=..., min_samples=1)``:
+    #   1. panics on ANY null in the array ("weights not yet supported on array
+    #      with null values").
+    #   2. even without nulls, computes a partial-window weighted average too
+    #      early AND reuses the FULL weight set on partial windows (unrenormalized),
+    #      so warmup/NaN-gap NADs drift from the pandas reference.
+    #
+    # Fix: delegate per column to the single shared kernel authority that
+    # implements ``RenormalizedPartialWMA_age_slot_anchored`` — the exact stage-2
+    # reference semantics.  ``rolling_map`` is the crossing point (Polars native
+    # rolling API), the kernel is the certified Numba/NumPy implementation.
+    from factor_engine.cleaned_operators import _rolling_fast as _rf
+
     w = positive_int(window, "window")
-    weights = np.arange(1.0, w + 1.0)
-    weights /= weights.sum()
+    weights = np.arange(1, w + 1, dtype=np.float64)
+    kernel = _rf._linear_weighted_1d_jit or _rf._linear_weighted_1d_numpy
+
+    def _last(arr, w=w, weights=weights, kernel=kernel):
+        if len(arr) <= 0:
+            return np.nan
+        return float(kernel(np.asarray(arr, dtype=float), weights)[-1])
+
     return x.with_columns(
         [
             pl.col(c)
-            .rolling_mean(window_size=w, weights=weights.tolist(), min_samples=1)
+            .rolling_map(_last, window_size=w, min_samples=1)
             .alias(c)
             for c in pl_cols(x)
         ]

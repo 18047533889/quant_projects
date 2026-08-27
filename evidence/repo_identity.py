@@ -5,7 +5,7 @@
   ``root_repo_sha()`` return (``dict | str``).  It is returned *always*, so
   callers can never mis-handle a string-vs-dict split.
 * ``PackageTreeIdentity``: replaces the fake ``FactorEngineSubmoduleSHA`` /
-  ``DataAccessSubmoduleSHA`` "submodule" payloads.  factor_engine/dataaccess are
+  ``DataAccessSubmoduleSHA`` "submodule" payloads.  factor_engine/data_access are
   regular monorepo directories now, so the old ``git rev-parse HEAD`` inside
   them returned the PARENT HEAD — a fabricated submodule SHA.  A
   ``PackageTreeIdentity`` is a real Merkle tree hash over the package source.

@@ -3,9 +3,16 @@ Parent/child lineage detection for factor families.
 
 Identifies hierarchical relationships within factor families
 based on correlation patterns and structural similarity.
+
+RESEARCH / ANALYTIC ONLY (DLIB-FA-009): this module derives parent/child from
+degree / correlation / neighborhood overlap.  It is NOT real factor genealogy —
+real genealogy is generator ``parent_factor_ids`` / FO mutation lineage / FE
+AST / candidate provenance.  It is kept for research/analytic use only and must
+not be treated as authoritative factor genealogy.
 """
 
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Dict, List, Set, Optional, Tuple
 from collections import defaultdict
 
@@ -36,12 +43,27 @@ class FamilyLineage:
     Complete lineage structure for a factor family.
 
     Contains parent-child relations and root/leaf identification.
+
+    RESEARCH / ANALYTIC ONLY (DLIB-FA-009): this is a behavioral lineage
+    derived from degree/correlation/neighborhood overlap, NOT real factor
+    genealogy.  Real genealogy is generator ``parent_factor_ids`` / FO mutation
+    lineage / FE AST / candidate provenance.
+
+    DLIB-FA-008: deep-immutable — ``members`` / ``roots`` / ``leaves`` are
+    frozensets and ``relations`` is a tuple, so mutating a caller-supplied
+    set/list after construction cannot change the artifact.
     """
     family_id: int
     members: Set[str]
     relations: List[ParentChildRelation]
     roots: Set[str]  # Factors with no parents
     leaves: Set[str]  # Factors with no children
+
+    def __post_init__(self):
+        object.__setattr__(self, "members", frozenset(self.members))
+        object.__setattr__(self, "relations", tuple(self.relations))
+        object.__setattr__(self, "roots", frozenset(self.roots))
+        object.__setattr__(self, "leaves", frozenset(self.leaves))
 
     @property
     def size(self) -> int:

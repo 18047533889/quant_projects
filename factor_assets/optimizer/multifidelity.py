@@ -2,7 +2,23 @@
 Multi-fidelity evaluation policy with L0-L4 tiers.
 
 Typed promotion criteria with plateau-based gates.
+
+DEPRECATED (DLIB-FA-001): factor_optimizer (FO) is the authority for
+fidelity/promotion. FA consumes evaluation-tier evidence; it does not own a
+multi-fidelity promotion policy. This module is retained for compatibility
+(§108) and marked RESEARCH_ONLY. It will be removed after the deprecation
+window. No FA production path consumes it.
 """
+
+import warnings as _warnings
+
+_warnings.warn(
+    "factor_assets.optimizer.multifidelity is deprecated: FO owns "
+    "multi-fidelity promotion. FA consumes evaluation-tier evidence. "
+    "This module is retained for compatibility and will be removed.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 from dataclasses import dataclass, field
 from enum import Enum

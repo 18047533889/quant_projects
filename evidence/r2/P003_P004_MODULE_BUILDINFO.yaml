@@ -1,0 +1,74 @@
+# P0-03 / P0-04 — Single Module Identity + Build-time Build Info
+# Mission: Wave-1 P0-03/P0-04 closure (module authority + build info freshness).
+head_sha: "2013f94aefee1d6f4e9da3addec5a8ea9447e1f1"
+head_short: "2013f94aefee"
+date: "2026-08-28"
+
+p0_03_module_identity:
+  summary: "factor_engine/pyproject.toml now packages ONLY factor_engine + factor_engine.*; unqualified top-level names are dropped; a state-free deprecated shim aliases legacy names to the canonical modules."
+  changes:
+    - path: "factor_engine/pyproject.toml"
+      diff: "Removed all unqualified top-level package entries (api/backend/cache/cleaned_operators/planner/runtime/...) and the duplicate factor_engine.* mapping rows; replaced with [tool.setuptools.packages.find] where=['.'] include=factor_engine + factor_engine.<pkg>* entries only; py-modules=[]."
+      effect: "Wheel cannot install two sys.modules identities for the same physical .py file."
+    - path: "factor_engine/deprecated_shims.py"
+      new_file: true
+      content: "State-free meta-path finder + AliasLoader that aliases legacy unqualified imports (cleaned_operators, api, backend, runtime, planner, ...) to the SAME factor_engine.* module object. Handler materializes the canonical module and registers the alias under BOTH names before exec; carries NO registry state."
+      contract: "One physical .py -> one module object under any import path. OperatorRegistry stays a single R40 singleton."
+    - path: "factor_engine/__init__.py"
+      diff: "Documents the shim install; imports deprecated_shims so alias resolution is deterministic for any process that imports factor_engine."
+    - path: "factor_engine/cleaned_operators/registry.py"
+      diff: "_assert_writable test-session thaw escape hatch now gated on _FE_P0_SESSION_THAW_MARKER env (regression: governance tests asserting finalize-invalidated token must not auto-thaw). Production registry contract unchanged."
+  tests:
+    - "factor_engine/tests/test_p003_single_module_identity.py"
+      results: "11 passed"
+      assertions:
+        - "find_spec('factor_engine.cleaned_operators') is not None"
+        - "find_spec('cleaned_operators') resolves to the canonical factor_engine.* module (origin under factor_engine/)"
+        - "legacy dotted submodules (cleaned_operators.registry, backend.sql_pushdown.emitter, runtime.multibackend) import to the SAME object as factor_engine.*"
+        - "OperatorRegistry via legacy path is the identical singleton"
+        - "shim install is idempotent (sys.meta_path unique)"
+
+p0_04_build_info:
+  summary: "data_access/_build_info.py is now PEP 517 build-time generated from the live git tree; production gate requires build_sha == git HEAD and dirty is False (else raise)."
+  changes:
+    - path: "scripts/regenerate_build_info.py"
+      new_file: true
+      content: "Generates data_access/_build_info.py from git HEAD: full 40-char build_sha, version (QUANT_BUILD_VERSION override or 0.10.2), build_id (sha12-stablehash), build_time (commit time UTC ISO), dirty (git status --porcelain), tag, branch, dependency_lock_hash (requirements-production.lock body sha256, lock_digest line excluded; fallback data_access/constraints/py310.txt). --fallback emits BUILT_AT_RUNTIME_FALLBACK=True file."
+    - path: "data_access/_fe_build_backend.py"
+      new_file: true
+      content: "Private PEP 517 backend for data_access: wraps setuptools.build_meta and runs scripts/regenerate_build_info.py before build_wheel/build_sdist/prepare_metadata.*/build_editable so every built wheel carries build facts matching its revision."
+    - path: "data_access/pyproject.toml"
+      diff: "[build-system] build-backend=_fe_build_backend, backend-path=['.'] (P0-04 build-time generation hook)."
+    - path: "data_access/_build_info.py"
+      diff: "Regenerated: build_sha=2013f94aefee1d6f4e9da3addec5a8ea9447e1f1 (git HEAD), build_id=2013f94aefee-... , build_time=2026-08-27T09:48:33Z, dependency_lock_hash=dc83e1... (requirements-production.lock body), BUILT_AT_RUNTIME_FALLBACK=False (no longer the stale 0.10.2/58be5764/dirty=True)."
+    - path: "data_access/core/build_metadata.py"
+      diff: "load_build_info(production=True) now runs validate_production_ready() (dirty=False required) AND _validate_production_revision_matches(): rejects a BUILT_AT_RUNTIME_FALLBACK module, and when a git checkout is discoverable rejects build_sha != current HEAD."
+  production_gate:
+    - "dirty tree  -> load_build_info(production=True) raises ValidationError('production build metadata must have dirty=False') [verified]"
+    - "BUILT_AT_RUNTIME_FALLBACK=True -> rejected [code path]"
+    - "clean tree with matching regenerated sha -> passes"
+  tests:
+    - "data_access/tests/test_p004_buildinfo_p0.py"
+      results: "7 passed"
+      assertions:
+        - "regeneration reflects current git HEAD (full 40-char) + dirty status"
+        - "data_access runtime build_sha == current HEAD"
+        - "production gate rejects dirty build"
+        - "production gate requires clean metadata"
+        - "dependency_lock_hash present/stable"
+        - "--fallback emits BUILT_AT_RUNTIME_FALLBACK=True + dirty=True"
+
+constraints:
+  - "operator_registry_singleton": "intact (R40 immutable contract — single OperatorRegistry object under both import paths; governance tests pass under marker guard)"
+  - "same_clock_lag/cs_batch1": "untouched"
+  - "monorepo_dual_copy": "runtime/ remains mirrored into factor_engine/"
+
+regression:
+  - "data_access/tests/test_build_identity_p0.py": "11 passed"
+  - "data_access/tests/unit/test_r32_identity_version_2026_08.py": "passed"
+  - "factor_engine/tests/r40/test_r40_registry_governance_208_212.py": "9 passed"
+  - "factor_engine/tests/r40/test_r40_registry_bootstrap.py": "11 passed"
+  - "pre-existing_unknown-A": "factor_engine/tests/r40/test_r40_capability_identity.py expects len(hash)==16 while compute_payload_hash returns 64 (DA-ID-P0-002 256-bit) at HEAD — pre-existing drift, NOT introduced by this change (source untouched)."
+
+notes:
+  - "The checked-in data_access/_build_info.py in the working tree is regenerated (falls under dirty=True in dev). Production builds run the PEP 517 hook, emit dirty=False, and the gate guarantees build_sha == 2013f94aefee1d6f4e9da3addec5a8ea9447e1f1."

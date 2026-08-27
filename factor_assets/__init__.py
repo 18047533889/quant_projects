@@ -4,12 +4,24 @@ Factor Assets package — identity, registry, lifecycle, and governance.
 Core contracts for FactorAsset, FactorSet, EvidenceRef, and asset lifecycle.
 Append-only repository with immutable identity and lineage.
 No raw factor values, no file I/O, no parser duplication, protocol-based FE integration.
+
+Public API authority (DLIB-FA-003): the canonical artifacts are
+:class:`FactorSetArtifact`, :class:`FactorMembership`,
+:class:`FactorAdmissionArtifact`, :class:`SimilarityArtifact`,
+:class:`TreatmentSelectionArtifact`, etc. The legacy :class:`FactorSet` is a
+deprecated read-only compatibility view (produced via
+``FactorSetArtifact.to_legacy_view()``); new code must not construct it.
 """
 
 __version__ = "0.1.0"
 
 from factor_assets.contracts.asset import FactorAsset, AssetMetadata
-from factor_assets.contracts.factor_set import FactorSet, FactorSetSpec
+from factor_assets.contracts.factor_set import (
+    FactorSet,
+    FactorSetSpec,
+    FactorSetArtifact,
+    FactorMembership,
+)
 from factor_assets.contracts.evidence_ref import EvidenceRef, EvidenceBundleRef
 from factor_assets.contracts.lineage import LineageRef, ParentRef
 from factor_assets.contracts.lifecycle import (
@@ -18,6 +30,9 @@ from factor_assets.contracts.lifecycle import (
     StateEvent,
     LifecycleConflictError,
 )
+from factor_assets.contracts.admission import FactorAdmissionArtifact
+from factor_assets.contracts.similarity import SimilarityArtifact
+from factor_assets.contracts.treatment_selection import TreatmentSelectionArtifact
 from factor_assets.registry.repository import (
     AssetRepository,
     DuplicateIdentityError,
@@ -71,6 +86,12 @@ from factor_assets.errors import (
 )
 
 __all__ = [
+    # Canonical artifacts (public API authority — DLIB-FA-003)
+    "FactorSetArtifact",
+    "FactorMembership",
+    "FactorAdmissionArtifact",
+    "SimilarityArtifact",
+    "TreatmentSelectionArtifact",
     # Contracts
     "FactorAsset",
     "AssetMetadata",

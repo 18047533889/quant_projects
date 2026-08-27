@@ -6,6 +6,7 @@ Identity is obtained through a protocol boundary from FE adapters.
 """
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Protocol, Optional
 
 
@@ -147,18 +148,43 @@ class FactorCompilerIdentity:
             )
 
 
+class FactorValueStatus(Enum):
+    """Status of a factor value instance (DLIB-FA-004).
+
+    Distinguishes a genuinely computed value (including a computed ``0.0``)
+    from an unknown / insufficient / invalid value.  A consumer must never
+    conflate ``UNKNOWN`` with a computed zero.
+    """
+
+    COMPUTED = "COMPUTED"
+    UNKNOWN = "UNKNOWN"
+    INSUFFICIENT_DATA = "INSUFFICIENT_DATA"
+    INVALID = "INVALID"
+
+
 @dataclass(frozen=True)
 class FactorValueIdentity:
     """Identity of a specific materialized instance of a factor's values.
 
     Distinguishes one realization of a factor (e.g. by snapshot/universe/run)
     from another.  It is orthogonal to the definition and compiler identity.
+
+    DLIB-FA-004: strengthened with ``sample_ratio``, ``confidence``,
+    ``window_ref``, ``snapshot_ref``, ``universe_ref``, ``method_version`` and a
+    typed ``status`` enum so that a computed ``0.0`` value is distinguishable
+    from an ``UNKNOWN`` / ``INSUFFICIENT_DATA`` / ``INVALID`` value.
     """
 
     factor_id: str
     snapshot_ref: Optional[str] = None
     universe_ref: Optional[str] = None
     run_ref: Optional[str] = None
+    # DLIB-FA-004 additions
+    sample_ratio: Optional[float] = None      # fraction of universe/window observed
+    confidence: Optional[float] = None        # [0, 1] confidence in the value
+    window_ref: Optional[str] = None          # e.g. "2024-01-01/2024-12-31"
+    method_version: Optional[str] = None      # version of the value-computation method
+    status: "FactorValueStatus" = FactorValueStatus.COMPUTED
 
     def __post_init__(self) -> None:
         if not self.factor_id:
@@ -168,6 +194,35 @@ class FactorValueIdentity:
                 "FactorValueIdentity requires at least one of "
                 "snapshot_ref/universe_ref/run_ref"
             )
+        if not isinstance(self.status, FactorValueStatus):
+            raise TypeError("status must be a FactorValueStatus")
+        if self.sample_ratio is not None:
+            if isinstance(self.sample_ratio, bool) or not isinstance(
+                self.sample_ratio, (int, float)
+            ):
+                raise TypeError("sample_ratio must be a non-boolean number or None")
+            ratio = float(self.sample_ratio)
+            if ratio != ratio or ratio in (float("inf"), float("-inf")):
+                raise ValueError("sample_ratio must be finite")
+            if not 0.0 <= ratio <= 1.0:
+                raise ValueError("sample_ratio must be in [0, 1]")
+            object.__setattr__(self, "sample_ratio", ratio)
+        if self.confidence is not None:
+            if isinstance(self.confidence, bool) or not isinstance(
+                self.confidence, (int, float)
+            ):
+                raise TypeError("confidence must be a non-boolean number or None")
+            conf = float(self.confidence)
+            if conf != conf or conf in (float("inf"), float("-inf")):
+                raise ValueError("confidence must be finite")
+            if not 0.0 <= conf <= 1.0:
+                raise ValueError("confidence must be in [0, 1]")
+            object.__setattr__(self, "confidence", conf)
+
+    @property
+    def is_computed(self) -> bool:
+        """Whether this identity represents a genuinely computed value."""
+        return self.status is FactorValueStatus.COMPUTED
 
 
 __all__ = [
@@ -176,5 +231,6 @@ __all__ = [
     "FactorDefinitionIdentity",
     "FactorCompilerIdentity",
     "FactorValueIdentity",
+    "FactorValueStatus",
     "create_factor_id",
 ]

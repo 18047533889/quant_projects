@@ -685,7 +685,15 @@ class PhysicalBatchGlobalOptimizer:
                 get_q_physical_implementation_registry,
             )
             registry = get_q_physical_implementation_registry()
-            if False and registry.has_lowering(op):
+            def _q_available_for_optimizer() -> bool:
+                from factor_engine.backend.q_backend.q_process_manager import (
+                    is_q_available,
+                )
+                try:
+                    return is_q_available()
+                except Exception:
+                    return False
+            if registry.has_lowering(op) and _q_available_for_optimizer():
                 capability = capability_for(op, "q_kdb")
                 candidates.append(NodeBackendChoice(
                     node_id=node_id,

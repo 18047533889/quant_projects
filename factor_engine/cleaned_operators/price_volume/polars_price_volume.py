@@ -319,10 +319,54 @@ class RollingBetaToMarketPolars(TSBetaPolars):
         name="rolling_beta_to_market",
         category="price_volume",
         description="滚动市场 Beta",
-        param_names=["y", "x", "window"],
+        param_names=["ret", "benchmark_ret", "window"],
         return_type="series",
         tags=["price_volume", "polars"],
     )
+
+    def _calculate_series(self, *panels, **kwargs) -> pl.DataFrame:
+        # P0 fix (operator-correctness audit P0-3): canonical surface is
+        # ``(ret, benchmark_ret, window)``.  The inherited ``TSBetaPolars``
+        # kernel declared ``(y, x, window, min_periods=5)`` so a canonical
+        # keyword call ``rolling_beta_to_market(ret=..., benchmark_ret=...,
+        # window=3)`` was rejected, and the inherited ``min_periods=5`` default
+        # raised ``min_periods must be <= window`` on small windows.  Bind the
+        # canonical names and default ``min_periods`` to ``window`` so a
+        # ``window=3`` call works and output matches the pandas reference.
+        from factor_engine.cleaned_operators.common.strict_params import strict_int
+
+        ret = panels[0] if panels else kwargs.pop("ret", None)
+        benchmark_ret = panels[1] if len(panels) > 1 else kwargs.pop("benchmark_ret", None)
+        if ret is None or benchmark_ret is None:
+            raise TypeError(
+                "rolling_beta_to_market requires (ret, benchmark_ret) panels"
+            )
+        window = kwargs.pop("window", 60)
+        min_periods = kwargs.pop("min_periods", None)
+        w = strict_int(kwargs.pop("d", window), "window", minimum=2)
+        # match the pandas reference ``compute_rolling_beta``: default
+        # min_periods = max(2, window // 3)
+        mp = w // 3 if min_periods is None else strict_int(min_periods, "min_periods", minimum=2)
+        mp = max(2, mp)
+        if mp > w:
+            from factor_engine.backend.operator_errors import OperatorParameterError
+            raise OperatorParameterError("min_periods must be <= window")
+        cols = _align_cols(ret, benchmark_ret)
+        merged = ret
+        x_cols: list[str] = []
+        for c in cols:
+            xname = f"__x_{c}"
+            x_cols.append(xname)
+            merged = merged.with_columns(benchmark_ret.select(pl.col(c).alias(xname)))
+        exprs = []
+        for c in cols:
+            xn = f"__x_{c}"
+            cov = pl.rolling_cov(pl.col(c), pl.col(xn), window_size=w, min_samples=mp, ddof=1)
+            var = pl.col(xn).rolling_var(window_size=w, min_samples=mp, ddof=1)
+            # Constant benchmark within a window (var == 0) -> NaN, matching the
+            # pandas reference ``var.replace(0, np.nan)`` (beta undefined).
+            exprs.append((pl.when(var == 0).then(pl.lit(None)).otherwise(cov / var)).alias(c))
+        return merged.with_columns(exprs).drop(x_cols)
 
 
 @register_operator(

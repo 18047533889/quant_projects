@@ -495,10 +495,15 @@ class TSCountIfPolarsNative(SeriesOperator):
         param_names=['condition', 'window'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
+        # R6-157 registry invariant: every declared ParamSpec key must be in
+        # param_names.  ``condition`` is the panel input, ``window`` the single
+        # searchable scalar; ``d`` is the alpha-language alias of ``window`` and
+        # is NOT a runtime parameter of this polars native kernel, so it must
+        # not appear in the param_specs dict (the shared contract declare does).
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        },
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
 
     def _calculate_series(self, condition, window, **kwargs):
         return (

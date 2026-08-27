@@ -76,7 +76,7 @@ def build_engine_version() -> dict[str, str]:
         out["package_version"] = "unknown"
     git_sha = resolve_git_commit_hash()
     out["git_sha"] = git_sha or "unknown"
-    out["dataaccess_version"] = _ver("data_access") or _ver("dataaccess")
+    out["data_access_version"] = _ver("data_access")
     out["python"] = str(__import__("sys").version.split()[0])
     for mod in ("numpy", "pandas", "polars", "duckdb", "pyarrow", "scipy"):
         out[mod] = _ver(mod)

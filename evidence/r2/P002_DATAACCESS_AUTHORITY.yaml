@@ -1,0 +1,103 @@
+name: P0-02 DATAACCESS NAMING AUTHORITY CLOSURE
+status: CLOSURE
+r25_loop: true
+
+summary: >
+  Live-tree naming authority is closed on the importable `data_access` spell:
+  the six build/FI paths (fresh_wheel_matrix.sh, ci_fresh_wheel_run.sh,
+  gate_matrix.py, gate_runner.py, ci.yml, lock comment + setup token) now all
+  build from `data_access` / `data_access/pyproject.toml`; functional Python /
+  shell / workflow references that previously carried the historical
+  bare `dataaccess` spelling (runtime inheritance keys, r34 event keys,
+  adapters, evidence/current, FE runtime comments/paths, allowlist policy
+  reasons, CLAUDE.md scope) were normalized to `data_access`. A dedicated
+  fail-closed gate (scripts/forbidden_path_reference_gate.sh, wired as its
+  own small workflow .github/workflows/path_gate.yml) forces any NEW bare
+  `dataaccess` reference in the live paths (scripts, factor_engine,
+  factor_preprocess, factor_optimizer, quant_evaluator, factor_assets,
+  .github, root configs) to fail CI.
+
+scope_in: >
+  Live path categories: *.py *.sh *.yaml *.yml *.toml *.json *.lock +
+  CLAUDE.md + requirements-production.lock + .pre-commit-config.yaml under
+  scripts/ factor_engine/ factor_preprocess/ factor_optimizer/ quant_evaluator/
+  factor_assets/ .github/ (+data_access/ excluded by design below).
+
+excluded_by_design:
+  - "data_access/ itself — DataAccess-internal legacy strings (mutation_owner,
+    loggers, cache dirs, credential namespaces, docker volume names, upstream
+    manifests, self-referential pyproject comment) keep the historical spell;
+    the canonical python import name is data_access."
+  - "tests/ trees — factor_engine/tests and package tests carry legacy strings
+    / test names; out of scope (platform gate authority manages tests)."
+  - "evidence/ — generated attestation artifacts (source snapshots, gate
+    evidence, release manifests) recorded under the historical dir name."
+  - "scripts/archive/ — frozen historical job scripts."
+  - ".claude/ loop config, factor_engine/docs/ DataAccess legacy docs, and
+    factor_engine/*.md audit reports / READMEs + R32_*.csv audit tables:
+    historical evidence documents (recorded under the then-current path
+    spelling).  Docs are informational, not gate-scanned."
+
+changes:
+  - note: "wheel matrix + CI build tokens normalized to data_access"
+    files:
+      - scripts/fresh_wheel_matrix.sh            # PKGS entry + two CASES dict keys
+      - scripts/ci_fresh_wheel_run.sh            # build list + header comment
+      - scripts/gate_matrix.py                   # PACKAGE_GATES key + packages list
+      - scripts/gate_runner.py                   # SOURCE_AUTHORITY scan base name
+      - .github/workflows/ci.yml                 # PACKAGE_BUILD loop package token
+      - scripts/ci_smoke.sh                      # header comment
+      - requirements-production.lock             # data-access==0.10.2 comment -> data_access/
+  - note: "runtime / data-access identity keys normalized"
+    files:
+      - factor_engine/runtime/lineage.py         # dataaccess_version -> data_access_version
+      - data_access/security/governed_frame.py   # dataaccess_version field -> data_access_version
+      - factor_engine/runtime/r34_evidence.py    # dataaccess_contract_hash -> data_access_contract_hash
+      - factor_engine/runtime/evidence_truth.py  # dataaccess_contract_hash -> data_access_contract_hash
+  - note: "functional path / module references normalized"
+    files:
+      - factor_engine/scripts/audit_factor_engine.sh
+      - factor_engine/scripts/audit_fe_dataaccess_contract_drift.py   # func name / registry path
+      - scripts/audit_fe_dataaccess_contract_drift.py (root duplicate copy)
+      - factor_engine/scripts/generate_r38_baseline.py               # data_access/read/* paths
+      - factor_engine/scripts/generate_fe_da_traces.py
+      - factor_engine/scripts/generate_r37_baseline.py               # capabilities keys
+      - factor_engine/scripts/r39_benchmark_suite.py
+      - factor_engine/runtime/r34_evidence.py / quality/input_dq.py / generation_store.py
+      - factor_engine/runtime/config.py / backend/polars_lazy.py / backend/cleaned_bridge.py
+      - factor_engine/backend/plan_cost_router.py / cleaned_operators/production_hardening.py
+      - factor_engine/market/exchange_session_calendar.py / security/access.py
+      - factor_engine/runtime/resource_errors.py / column_footprint.py
+      - factor_preprocess/factor_preprocess/adapters/data_access.py
+      - factor_preprocess/factor_preprocess/adapters/_data_access_impl.py
+      - quant_evaluator/adapters/data_access.py
+      - .data_access_allowlist.yaml  # allowlist reasons dataaccess -> data_access
+      - evidence/current.py          # _ENV_PACKAGES / _dist_version / da_root / comments
+      - evidence/__main__.py, evidence/repo_identity.py
+      - evidence/VerificationManifest.json  # packages + environment.dependencies keys
+      - CLAUDE.md                     # Loop-1 scope factor_engine/ + data_access/
+      - .pre-commit-config.yaml       # hook id dataaccess-io-boundary -> data-access-io-boundary
+  - note: "archives/ docs/ evidence/ and tests/ untouched (out of scope)"
+
+gate:
+  script: scripts/forbidden_path_reference_gate.sh
+  workflow: .github/workflows/path_gate.yml
+  behavior: >
+    Exit non-zero on any bare `dataaccess` reference in the scanned live
+    paths (fail-closed CI job). Excludes build/, dist/, tests/, evidence/,
+    data_access/ (legacy internal spell), scripts/archive/ and the gate's own
+    token declaration. Whitelists the two historically-named files
+    (check_dataaccess_io_boundary.py, audit_fe_dataaccess_contract_drift.py)
+    that stay pinned by .pre-commit+ARCH-P0 references.
+
+evidence_command:
+  - bash scripts/forbidden_path_reference_gate.sh
+exit_code: 0
+
+verified:
+  - python3 -m py_compile on every edited .py (factor_engine + scripts + data_access governed_frame)
+  - bash -n on edited .sh (fresh_wheel_matrix.sh, ci_fresh_wheel_run.sh, ci_smoke.sh,
+    audit_factor_engine.sh, forbidden_path_reference_gate.sh)
+  - yaml.safe_load on .data_access_allowlist.yaml and .github/workflows/path_gate.yml
+  - json.load on evidence/VerificationManifest.json
+  - "gate self-run: PATH_GATE: PASS (exit 0)"

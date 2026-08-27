@@ -42,7 +42,7 @@ PKGS=(
   "factor_optimizer $REPO/factor_optimizer     factor-optimizer factor_optimizer"
   "factor_assets    $REPO/factor_assets        factor-assets    factor_assets"
   "factor_preprocess $REPO/factor_preprocess   factor-preprocess factor_preprocess"
-  "dataaccess       $REPO/dataaccess           data-access      data_access"
+  "data_access      $REPO/data_access           data-access      data_access"
 )
 
 build_one() {  # $1=pkg  $2=build_dir  $3=dist-name  $4=grep-token
@@ -120,7 +120,7 @@ CASES = {
     "factor_optimizer": ["factor_optimizer", "factor_optimizer.contracts"],
     "factor_assets": ["factor_assets", "factor_assets.registry"],
     "factor_preprocess": ["factor_preprocess", "factor_preprocess.contracts"],
-    "dataaccess": ["data_access", "data_access.contract"],
+    "data_access": ["data_access", "data_access.contract"],
 }
 rc = 0
 for pkg, mods in CASES.items():
@@ -175,7 +175,7 @@ PKG_MODULES = {
     "factor_optimizer": ["factor_optimizer", "factor_optimizer.contracts"],
     "factor_assets": ["factor_assets", "factor_assets.registry"],
     "factor_preprocess": ["factor_preprocess", "factor_preprocess.contracts"],
-    "dataaccess": ["data_access", "data_access.contract"],
+    "data_access": ["data_access", "data_access.contract"],
 }
 pkgs = list(PKG_MODULES)
 out = {"schema_version": 1, "generated_by": "fresh_wheel_matrix",

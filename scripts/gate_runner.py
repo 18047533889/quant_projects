@@ -347,7 +347,7 @@ def _verifier_source_authority(runner: GateRunner) -> tuple[str, dict, str]:
     dup_imports: list[str] = []
     for base in (
         "factor_engine", "factor_preprocess", "factor_optimizer",
-        "factor_assets", "quant_evaluator", "dataaccess", "integration_tests",
+        "factor_assets", "quant_evaluator", "data_access", "integration_tests",
     ):
         p = REPO_ROOT / base
         if not p.is_dir():

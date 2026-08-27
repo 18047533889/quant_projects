@@ -17,12 +17,35 @@ class SimilarityMethod(Enum):
     KENDALL = "kendall"
 
 
+class SimilarityMeasurementStatus(Enum):
+    """Measurement status of a similarity score (DLIB-FA-016).
+
+    Distinguishes a genuinely computed value (including a computed ``0.0``)
+    from an unknown / insufficient / constant-input / invalid measurement.  A
+    consumer must never conflate ``UNKNOWN`` with a computed zero.
+    """
+
+    COMPUTED_VALUE = "COMPUTED_VALUE"
+    UNKNOWN = "UNKNOWN"
+    INSUFFICIENT_DATA = "INSUFFICIENT_DATA"
+    CONSTANT_INPUT = "CONSTANT_INPUT"
+    INVALID = "INVALID"
+
+
 @dataclass(frozen=True)
 class SimilarityResult:
     """
     Result of similarity computation between two factors.
 
     Contains only summary statistics, not raw factor values.
+
+    DLIB-FA-016: a vanishing ``0.0`` similarity must be a deliberate, recorded
+    measurement, never an accidental byproduct of an empty / constant /
+    insufficient sample.  ``measurement_status`` distinguishes the computed
+    ``COMPUTED_VALUE`` (including a real computed zero) from ``UNKNOWN`` /
+    ``INSUFFICIENT_DATA`` / ``CONSTANT_INPUT`` / ``INVALID``.  A consumer must
+    never conflate ``UNKNOWN`` with a computed zero.  ``value_is_admissible``
+    reports whether the ``similarity_score`` can be trusted as a measurement.
     """
     factor_id_a: str
     factor_id_b: str
@@ -35,28 +58,57 @@ class SimilarityResult:
     period_end: Optional[str] = None
     confidence: Optional[float] = None
     warnings: tuple[str, ...] = ()
+    # DLIB-FA-016: typed measurement status.  Defaults to COMPUTED_VALUE so a
+    # legacy constructed result behaves exactly as before.
+    measurement_status: SimilarityMeasurementStatus = SimilarityMeasurementStatus.COMPUTED_VALUE
 
     def __post_init__(self):
         if not self.factor_id_a:
             raise ValueError("factor_id_a is required")
         if not self.factor_id_b:
             raise ValueError("factor_id_b is required")
+        if not isinstance(self.method, SimilarityMethod):
+            raise TypeError("method must be a SimilarityMethod")
         if not -1.0 <= self.similarity_score <= 1.0:
             raise ValueError("similarity_score must be in [-1, 1]")
         if self.sample_size < 0:
             raise ValueError("sample_size must be non-negative")
+        if not isinstance(self.measurement_status, SimilarityMeasurementStatus):
+            raise TypeError("measurement_status must be a SimilarityMeasurementStatus")
 
     @property
     def has_warnings(self) -> bool:
         """Check if result has warnings."""
         return len(self.warnings) > 0
 
+    @property
+    def value_is_admissible(self) -> bool:
+        """Whether the ``similarity_score`` is a trustworthy measurement.
+
+        Only a COMPUTED_VALUE (including a real computed zero) is admissible.
+        UNKNOWN / INSUFFICIENT_DATA / CONSTANT_INPUT / INVALID results must not
+        be treated as evidence of (dis)similarity.
+        """
+        return self.measurement_status is SimilarityMeasurementStatus.COMPUTED_VALUE
+
     def is_high_similarity(self, threshold: float = 0.7) -> bool:
-        """Check if similarity exceeds threshold."""
+        """Check if similarity exceeds threshold.
+
+        A non-computed result (UNKNOWN / INSUFFICIENT_DATA / CONSTANT_INPUT /
+        INVALID) never counts as high similarity — an unmeasured pair is not
+        evidence of duplication.
+        """
+        if not self.value_is_admissible:
+            return False
         return abs(self.similarity_score) >= threshold
 
     def is_significant(self, min_samples: int = 30) -> bool:
-        """Check if sample size is sufficient for significance."""
+        """Check if sample size is sufficient for significance.
+
+        A non-computed result is never significant, regardless of sample size.
+        """
+        if not self.value_is_admissible:
+            return False
         return self.sample_size >= min_samples
 
 

@@ -6,7 +6,7 @@
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 FE="$ROOT/factor_engine"
-DA="$ROOT/dataaccess"
+DA="$ROOT/data_access"
 FAIL=0
 
 step() { printf '\n\033[1;36m== %s ==\033[0m\n' "$*"; }
@@ -23,7 +23,7 @@ if (cd "$FE" && timeout 1800 python3 -m pytest tests/ -q -p no:cacheprovider >/t
 
 step "3/5 DataAccess 全量"
 if (cd "$DA" && timeout 1800 python3 -m pytest tests/ -q -p no:cacheprovider >/tmp/da_full.log 2>&1); then
-    pass "dataaccess full"; else fail "dataaccess full (见 /tmp/da_full.log 尾部)"; fi
+    pass "data_access full"; else fail "data_access full (见 /tmp/da_full.log 尾部)"; fi
 
 step "4/5 allowlist 静态检查"
 if (cd "$ROOT" && timeout 600 python3 -m pytest "$DA/tests/unit/test_allowlist_imports.py" -q -p no:cacheprovider >/tmp/da_allowlist.log 2>&1); then

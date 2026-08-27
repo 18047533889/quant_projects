@@ -44,7 +44,7 @@ def build_current_truth_payload() -> dict[str, Any]:
     Returns the freshly recomputed SHA-bound truth payload so the refresh CLI
     can embed the authoritative sha_bindings instead of a stale snapshot-only
     file.  Falls back to an empty payload if computation fails (keeps the CLI
-    usable on machines without git / dataaccess).
+    usable on machines without git / data_access).
     """
     try:
         from evidence.current import build_current

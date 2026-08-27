@@ -263,7 +263,7 @@ class EvidenceTruthEngine:
     #: *.json），若把它纳入比较会恒 FAIL（R37 收敛修正）。
     _CONTENT_HASH_KEYS = frozenset({
         "operator_registry_hash", "operator_surface_hash", "operator_semantic_hash",
-        "field_catalog_hash", "dataaccess_contract_hash", "planner_hash",
+        "field_catalog_hash", "data_access_contract_hash", "planner_hash",
         "backend_hash", "runtime_hash", "test_source_hash", "golden_source_hash",
         "dependency_lock_hash",
     })

@@ -1,0 +1,621 @@
+# -*- coding: utf-8 -*-
+"""QRP-P5-PIPE — full-pipeline orchestrator locking tests.
+
+Covers :mod:`quant_platform.app.orchestrator`:
+
+* entire happy path — 2 NEW candidates -> 1 approve / 1 reject (low
+  performance) -> registry registers 1 -> 4 milestone events published
+  (CANDIDATE_RECONCILED / CANDIDATE_REJECTED / CANDIDATE_APPROVED /
+  ARTIFACT_REGISTERED);
+* duplicate replay skip — re-running the SAME batch short-circuits through the
+  ``batch_fingerprint`` anti-replay gate (no registry writes, no new events);
+* promotion rejection path — low rank_ic / label-not-mature / wrong return
+  basis / forced-review -> REJECT / REVIEW reason codes;
+* outbox publish counting — every milestone event lands in the WorkerLoop drain;
+* ``PipelineReport`` immutability — the ``with_*`` builders return new reports
+  and never mutate ``self``;
+* the PURE-DTO promotion decision mirrors the FA ``PromotionGate`` semantics
+  without importing any domain package.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import os
+import sys
+
+import pytest
+
+# The quant_platform workspace is FLAT-LAYOUT: ``quant_platform/`` *is* the
+# package root. Importing ``quant_platform`` requires the *parent* of this
+# file's tree — ``.../quant_projects`` — on ``sys.path``.
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+_PLATFORM_ROOT = os.path.abspath(os.path.join(_THIS_DIR, ".."))
+_PARENT = os.path.abspath(os.path.join(_PLATFORM_ROOT, ".."))
+if _PARENT not in sys.path:
+    sys.path.insert(0, _PARENT)
+
+from quant_platform.app.candidate.ingest import batch_fingerprint, reconcile_candidates
+from quant_platform.app.contracts import (
+    ARTIFACT_TYPE_FACTOR_CANDIDATE,
+    EventEnvelope,
+    FeatureSetArtifact,
+    FeatureSetDiffCategory,
+    FeatureSetVersion,
+)
+from quant_platform.app.outbox import InMemoryPublisher
+from quant_platform.app.orchestrator import (
+    CandidateEvaluation,
+    DEFAULT_MIN_RANK_IC,
+    Pipeline,
+    PipelineReport,
+    PipelineStatusReason,
+    VWAP_TO_VWAP_BASIS,
+    build_with_evidence,
+    pipeline_gate_decision,
+)
+from quant_platform.app.storage.registry import ArtifactRegistry
+from quant_platform.app.worker.jobs import JobRunner
+from quant_platform.app.worker.publish import InMemoryOutbox, WorkerLoop
+
+
+def _h(s: str) -> str:
+    return hashlib.sha256(s.encode()).hexdigest()
+
+
+def _raw_candidate(
+    *,
+    seed: str,
+    factor_name: str = "p5factor",
+    formula: str = "sma(close, 20)",
+    market: str = "ashare",
+    frequency: str = "1d",
+    semantic_id: str = "P5:SMOOTH",
+    **extra,
+) -> dict:
+    payload = {
+        "semantic_id": semantic_id,
+        "content_hash": _h(seed),
+        "generator_type": "trailing_sma",
+        "generator_version": "1.0",
+        "submitted_by": "tester",
+        "market": market,
+        "frequency": frequency,
+        "factor_name": factor_name,
+        "formula": formula,
+        "factor_spec_uri": f"recipe://{factor_name}/{seed}",
+        "formula_language": "recipe",
+        "published_at": "2026-08-28T00:00:00Z",
+    }
+    payload.update(extra)
+    return payload
+
+
+def _library_snapshot(
+    *,
+    library_version_ref: str = "lib:v7",
+    min_rank_ic: float = DEFAULT_MIN_RANK_IC,
+    member_refs: list[str] | None = None,
+    reject_duplicates: bool = True,
+) -> dict:
+    return {
+        "library_version_ref": library_version_ref,
+        "library_version_id": library_version_ref,
+        "min_rank_ic": min_rank_ic,
+        "reject_duplicates": reject_duplicates,
+        "duplicate_similarity_threshold": 0.7,
+        "member_refs": member_refs or [],
+    }
+
+
+def _make_pipeline(
+    *,
+    evaluate_candidate,
+    registry: ArtifactRegistry | None = None,
+    outbox: InMemoryOutbox | None = None,
+    worker_id: str = "p5-worker",
+) -> Pipeline:
+    return Pipeline(
+        registry=registry if registry is not None else ArtifactRegistry(),
+        outbox=outbox if outbox is not None else InMemoryOutbox(),
+        runner=JobRunner(worker_id=worker_id),
+        evaluate_candidate=evaluate_candidate,
+    )
+
+
+def _eval_from(rank_ic: float | None, **extra) -> CandidateEvaluation:
+    candidate_ref = extra.pop("candidate_ref", None) or "test-candidate"
+    evidence = {"candidate_ref": candidate_ref, "rank_ic": rank_ic}
+    evidence.update(extra)
+    return build_with_evidence(evidence)
+
+
+# --------------------------------------------------------------------------- #
+# happy path — 2 NEW candidates -> 1 approve / 1 reject -> registry 1 -> 5 events
+# --------------------------------------------------------------------------- #
+
+
+def _normalize(raw: dict):
+    from quant_platform.app.candidate.ingest import normalize_candidate
+
+    return normalize_candidate(raw)
+
+
+def test_pipeline_happy_path_register_one_and_publishes_four_events():
+    registry = ArtifactRegistry()
+    outbox = InMemoryOutbox()
+    good = _raw_candidate(seed="good")
+    bad = _raw_candidate(seed="bad", factor_name="p5weak")
+    good_id = _normalize(good).candidate_id
+    bad_id = _normalize(bad).candidate_id
+
+    def evaluate(candidate, context):
+        cid = str(getattr(candidate, "candidate_id", ""))
+        if cid == good_id:
+            return build_with_evidence(
+                {
+                    "candidate_ref": cid,
+                    "rank_ic": 0.09,
+                    "evidence_status": "computed",
+                    "return_basis": VWAP_TO_VWAP_BASIS,
+                }
+            )
+        if cid == bad_id:
+            return build_with_evidence(
+                {
+                    "candidate_ref": cid,
+                    "rank_ic": 0.008,  # below the 0.02 floor
+                    "evidence_status": "computed",
+                    "return_basis": VWAP_TO_VWAP_BASIS,
+                }
+            )
+        return _eval_from(None, candidate_ref=cid)
+
+    pipeline = _make_pipeline(registry=registry, outbox=outbox, evaluate_candidate=evaluate)
+    report = pipeline.run(
+        [good, bad],
+        library_snapshot=_library_snapshot(),
+    )
+
+    # Per-candidate terminal states.
+    assert report.num_consumed == 2
+    assert report.num_approved == 1
+    assert report.num_rejected == 1
+    assert report.num_conflicts == 0
+    assert report.num_duplicates == 0
+    assert report.num_evaluation_failed == 0
+    assert report.num_registered == 1
+
+    statuses = {st["candidate_id"]: st["status"] for st in report.states}
+    assert statuses[good_id] == "APPROVED"
+    assert statuses[bad_id] == "REJECTED"
+    assert any(
+        st["candidate_id"] == bad_id
+        and st["reason"] == PipelineStatusReason.QRP_GATE_REJECTED_RANK_IC
+        for st in report.states
+    )
+
+    # Registered artifact is the approved candidate's FACTOR_CANDIDATE.
+    assert len(report.registered_artifacts) == 1
+    artifact_id, content_hash = report.registered_artifacts[0]
+    assert artifact_id.startswith("FC_")
+    assert content_hash == _h("good")
+    stored = registry.resolve(_h("good"))
+    assert stored is not None
+    assert stored.artifact_type == ARTIFACT_TYPE_FACTOR_CANDIDATE
+    assert registry.resolve(_h("bad")) is None
+
+    # Milestone events: one row per (candidate, milestone). For 2 NEW
+    # candidates (1 approve + 1 reject) that is 5 rows covering exactly the 4
+    # milestone types CANDIDATE_RECONCILED / CANDIDATE_APPROVED /
+    # CANDIDATE_REJECTED / ARTIFACT_REGISTERED.
+    assert report.num_events_published == 5
+    assert len(report.published_event_ids) == 5
+    assert len(outbox) == 5
+    rows = outbox.rows()
+    milestones = {row.event.payload.get("milestone") for row in rows}
+    assert milestones == {
+        "CANDIDATE_RECONCILED",
+        "CANDIDATE_REJECTED",
+        "CANDIDATE_APPROVED",
+        "ARTIFACT_REGISTERED",
+    }
+    assert rows[0].status == "pending"
+    for row in rows:
+        assert isinstance(row.event, EventEnvelope)
+
+
+def test_pipeline_workerloop_drains_all_milestone_events():
+    outbox = InMemoryOutbox()
+    publisher = InMemoryPublisher()
+    loop = WorkerLoop(outbox, publisher, in_flight_timeout_s=10.0)
+    good = _raw_candidate(seed="drain-g")
+    good_id = _normalize(good).candidate_id
+
+    def evaluate(candidate, context):
+        return build_with_evidence(
+            {
+                "candidate_ref": str(getattr(candidate, "candidate_id", "")),
+                "rank_ic": 0.11,
+            }
+        )
+
+    pipeline = _make_pipeline(outbox=outbox, evaluate_candidate=evaluate)
+    report = pipeline.run([good], library_snapshot=_library_snapshot())
+    assert report.num_events_published == 3  # reconciled + approved + registered
+
+    rep = loop.run_until_quiesce(max_cycles=50)
+    assert rep.published == 3
+    assert len(publisher.delivered) == 3
+    delivered_milestones = {
+        event.payload.get("milestone") for event in publisher.delivered
+    }
+    assert delivered_milestones == {
+        "CANDIDATE_RECONCILED",
+        "CANDIDATE_APPROVED",
+        "ARTIFACT_REGISTERED",
+    }
+
+
+# --------------------------------------------------------------------------- #
+# duplicate replay / anti-replay
+# --------------------------------------------------------------------------- #
+
+
+def test_pipeline_duplicate_replay_skips_and_no_new_events():
+    # Distinct factor identities (factor_name + formula) so a DIFFERENT batch
+    # in the same run is genuinely NEW (not a semantic conflict with a
+    # consumed one — the semantic family hint is derived from the carrier
+    # fields factor_name/market/frequency/formula, NOT the semantic_id key).
+    batch = [
+        _raw_candidate(seed="replay-a", factor_name="rep_a", formula="sma(close, 5)"),
+        _raw_candidate(seed="replay-b", factor_name="rep_b", formula="ema(close, 5)"),
+    ]
+    fingerprint = batch_fingerprint([_normalize(b) for b in batch])
+    outbox = InMemoryOutbox()
+    registry = ArtifactRegistry()
+    good = _raw_candidate(seed="replay-a", factor_name="rep_a", formula="sma(close, 5)")
+    good_id = _normalize(good).candidate_id
+
+    def evaluate(candidate, context):
+        return build_with_evidence(
+            {
+                "candidate_ref": str(getattr(candidate, "candidate_id", "")),
+                "rank_ic": 0.12,
+            }
+        )
+
+    pipeline = _make_pipeline(registry=registry, outbox=outbox, evaluate_candidate=evaluate)
+    first = pipeline.run(batch, library_snapshot=_library_snapshot())
+    assert first.num_consumed == 2
+    first_event_count = first.num_events_published
+    assert len(outbox) == first_event_count
+
+    # Replay the exact same batch: anti-replay short-circuit.
+    second = pipeline.run(batch, library_snapshot=_library_snapshot())
+    assert fingerprint in pipeline.processed_batches
+    assert second.num_replayed == 1
+    assert second.num_consumed == 0
+    assert second.num_approved == 0
+    assert second.num_events_published == 0
+    assert len(outbox) == first_event_count  # no new outbox rows
+    assert all(
+        st["reason"] == PipelineStatusReason.QRP_REPLAY_DETECTED for st in second.states
+    )
+
+    # A DIFFERENT batch still runs normally.
+    third = pipeline.run(
+        [_raw_candidate(seed="replay-c", factor_name="rep_c", formula="rsi(9)")],
+        library_snapshot=_library_snapshot(),
+    )
+    assert third.num_consumed == 1
+    # Fingerprint replay detection is per-batch, not global.
+    assert third.num_replayed == 0
+
+
+def test_pipeline_duplicate_content_hash_reconcile_skipped():
+    # Same raw record twice in one batch -> reconcile classifies the second as
+    # DUPLICATE_EXACT (both content + semantic hit the registered candidate),
+    # so only one is consumed.
+    raw = _raw_candidate(seed="dedup")
+
+    def evaluate(candidate, context):
+        return build_with_evidence(
+            {
+                "candidate_ref": str(getattr(candidate, "candidate_id", "")),
+                "rank_ic": 0.1,
+            }
+        )
+
+    pipeline = _make_pipeline(evaluate_candidate=evaluate)
+    report = pipeline.run([raw, raw], library_snapshot=_library_snapshot())
+    assert report.num_consumed == 1
+    assert report.num_duplicates == 1
+    assert report.num_approved == 1
+    duplicate_state = [
+        st for st in report.states if st["status"] == "DUPLICATE_SKIPPED"
+    ]
+    assert len(duplicate_state) == 1
+    assert duplicate_state[0]["reason"] == PipelineStatusReason.QRP_DUPLICATE_SKIPPED
+
+
+# --------------------------------------------------------------------------- #
+# promotion rejection / review paths
+# --------------------------------------------------------------------------- #
+
+
+def test_pipeline_gate_rejects_rank_ic_below_threshold():
+    result = pipeline_gate_decision(
+        _eval_from(0.005, candidate_ref="c1"),
+        _library_snapshot(),
+    )
+    assert result["decision"] == "REJECT"
+    assert "rank_ic_below_threshold" in result["reason_codes"]
+
+
+def test_pipeline_gate_rejects_label_not_mature():
+    not_mature = CandidateEvaluation(
+        candidate_ref="c2",
+        rank_ic=None,
+        label_maturity=False,
+        evidence_status="label_not_mature",
+        return_basis=VWAP_TO_VWAP_BASIS,
+    )
+    result = pipeline_gate_decision(not_mature, _library_snapshot())
+    assert result["decision"] == "REJECT"
+    assert "label_not_mature" in result["reason_codes"]
+    assert "rank_ic_below_threshold" in result["reason_codes"]
+
+
+def test_pipeline_gate_rejects_wrong_return_basis():
+    wrong = CandidateEvaluation(
+        candidate_ref="c3", rank_ic=0.08, return_basis="close_to_close"
+    )
+    result = pipeline_gate_decision(wrong, _library_snapshot())
+    assert result["decision"] == "REJECT"
+    assert "return_basis_wrong" in result["reason_codes"]
+
+
+def test_pipeline_gate_forces_review_when_similarity_unmeasured():
+    snapshot = _library_snapshot(member_refs=["FC_a", "FC_b"])
+    # No similarity_fn -> uniqueness cannot be proven -> forced REVIEW.
+    result = pipeline_gate_decision(_eval_from(0.1, candidate_ref="c4"), snapshot)
+    assert result["decision"] == "REVIEW"
+    assert result["reason_codes"] == ["merge_suggested"]
+
+
+def test_pipeline_gate_rejects_duplicate_member():
+    snapshot = _library_snapshot(
+        member_refs=["FC_a"], reject_duplicates=True
+    )
+
+    def similarity(candidate_ref, member_ref):
+        return 0.99  # duplicate of FC_a
+
+    result = pipeline_gate_decision(
+        _eval_from(0.1, candidate_ref="c5"),
+        {**snapshot, "similarity_fn": similarity},
+    )
+    assert result["decision"] == "REJECT"
+    assert "duplicate_of_existing_member" in result["reason_codes"]
+
+
+def test_pipeline_gate_review_merge_suggested_when_duplicates_soft():
+    snapshot = _library_snapshot(
+        member_refs=["FC_a"], reject_duplicates=False
+    )
+
+    def similarity(candidate_ref, member_ref):
+        return 0.99
+
+    result = pipeline_gate_decision(
+        _eval_from(0.1, candidate_ref="c6"),
+        {**snapshot, "similarity_fn": similarity},
+    )
+    assert result["decision"] == "REVIEW"
+    assert result["reason_codes"] == ["merge_suggested"]
+
+
+def test_pipeline_gate_approve_qualifies():
+    result = pipeline_gate_decision(
+        _eval_from(0.15, candidate_ref="c7"),
+        _library_snapshot(),
+    )
+    assert result["decision"] == "APPROVE"
+    assert result["reason_codes"] == ["qualifies"]
+
+
+def test_pipeline_rejection_path_no_registry_and_no_approved():
+    registry = ArtifactRegistry()
+    outbox = InMemoryOutbox()
+
+    def evaluate(candidate, context):
+        return build_with_evidence(
+            {
+                "candidate_ref": str(getattr(candidate, "candidate_id", "")),
+                "rank_ic": 0.01,
+            }
+        )
+
+    pipeline = _make_pipeline(registry=registry, outbox=outbox, evaluate_candidate=evaluate)
+    report = pipeline.run(
+        [_raw_candidate(seed="rej")],
+        library_snapshot=_library_snapshot(),
+    )
+    assert report.num_consumed == 1
+    assert report.num_approved == 0
+    assert report.num_rejected == 1
+    assert report.num_registered == 0
+    assert report.num_events_published == 2  # reconciled + rejected
+    # no feature snapshot (no approved members)
+    assert report.num_feature_snapshot_created == 0
+    assert registry.contains(_h("rej")) is False
+
+
+# --------------------------------------------------------------------------- #
+# evaluation failure path
+# --------------------------------------------------------------------------- #
+
+
+def test_pipeline_evaluation_failure_marks_failed_and_registers_nothing():
+    def evaluate(candidate, context):
+        raise RuntimeError("evaluator unavailable")
+
+    pipeline = _make_pipeline(evaluate_candidate=evaluate)
+    report = pipeline.run(
+        [_raw_candidate(seed="boom")],
+        library_snapshot=_library_snapshot(),
+    )
+    assert report.num_consumed == 1
+    assert report.num_evaluation_failed == 1
+    assert report.num_approved == 0
+    assert report.num_registered == 0
+    failed_states = [st for st in report.states if st["status"] == "FAILED"]
+    assert len(failed_states) == 1
+
+
+def test_pipeline_no_evidence_default_evaluator_approves_nothing():
+    # The fail-closed default evaluator must never approve anything.
+    pipeline = _make_pipeline(evaluate_candidate=None)
+    report = pipeline.run(
+        [_raw_candidate(seed="nerf")],
+        library_snapshot=_library_snapshot(),
+    )
+    assert report.num_approved == 0
+    assert report.num_registered == 0
+    assert report.num_events_published == 2  # reconciled + no-evidence rejected
+
+
+# --------------------------------------------------------------------------- #
+# feature-set snapshot + retrain diff
+# --------------------------------------------------------------------------- #
+
+
+def test_pipeline_feature_snapshot_and_retrain_diff_across_rounds():
+    def evaluate(candidate, context):
+        return build_with_evidence(
+            {
+                "candidate_ref": str(getattr(candidate, "candidate_id", "")),
+                "rank_ic": 0.1,
+            }
+        )
+
+    pipeline = _make_pipeline(evaluate_candidate=evaluate)
+    first = pipeline.run(
+        [_raw_candidate(seed="fs-a", factor_name="fsa")],
+        library_snapshot=_library_snapshot(),
+    )
+    assert first.num_approved == 1
+    assert first.num_feature_snapshot_created == 1
+    assert first.feature_snapshot_id == "fs_pipeline_default"
+    assert first.feature_snapshot_version == "v1"
+    assert len(first.feature_set_artifacts) == 1
+    fs_artifact = first.feature_set_artifacts[0]
+    assert isinstance(fs_artifact, FeatureSetArtifact)
+    assert fs_artifact.content_hash == fs_artifact.recomputed_hash()
+    assert len(pipeline.feature_snapshots()) == 1
+    snap = pipeline.feature_snapshots()[0]
+    assert isinstance(snap, FeatureSetVersion)
+    assert len(snap.ordered_members) == 1
+
+    # Second round with a DIFFERENT approved factor -> membership change ->
+    # retrain.
+    second = pipeline.run(
+        [_raw_candidate(seed="fs-b", factor_name="fsb")],
+        library_snapshot=_library_snapshot(),
+    )
+    assert second.num_feature_snapshot_created == 1
+    assert second.feature_snapshot_version == "v2"
+    assert second.retrain_required is True
+    assert second.feature_set_diff_category in {
+        FeatureSetDiffCategory.FEATURE_MEMBERSHIP_CHANGE.value
+    }
+    assert len(pipeline.feature_snapshots()) == 2
+
+    # Same identity round -> no retrain.
+    third = pipeline.run(
+        [_raw_candidate(seed="fs-a", factor_name="fsa")],
+        library_snapshot=_library_snapshot(),
+    )
+    # The identity was already consumed -> reconcile reports it as a duplicate
+    # (the same manifest was consumed in round 1), so no approval event and no
+    # snapshot.
+    assert third.num_approved == 0 or third.num_duplicates == 1
+    assert third.retrain_required is False
+
+
+# --------------------------------------------------------------------------- #
+# PipelineReport immutability
+# --------------------------------------------------------------------------- #
+
+
+def test_pipline_report_immutable_builders():
+    report = PipelineReport(batch_fingerprint="fp:1")
+    state = {"candidate_id": "c1", "content_hash": _h("a"), "status": "NEW_CONSUMED", "reason": "QRP_OK"}
+    extended = report.with_item(**state)
+    assert extended is not report
+    assert len(extended.states) == 1
+    assert report.states == ()  # original untouched
+    assert report.num_consumed == 0
+
+    replaced = extended.with_consumed(candidate_id="c2", content_hash=_h("b"), status="NEW_CONSUMED", reason="QRP_OK")
+    assert replaced.num_consumed == 1
+    assert replaced is not extended
+    assert extended.num_consumed == 0
+    assert extended.states == (state,)
+
+    with_ev = extended.with_event("evt-1")
+    assert with_ev.num_events_published == 1
+    assert with_ev.published_event_ids == ("evt-1",)
+    assert extended.num_events_published == 0
+
+    # Merged report fields become tuples.
+    assert isinstance(replaced.approved_content_hashes, tuple)
+    assert isinstance(with_ev.published_event_ids, tuple)
+
+
+def test_pipeline_report_replayed_flag():
+    report = PipelineReport(batch_fingerprint="fp:replay")
+    assert report.num_replayed == 0
+    replayed = report.as_replayed()
+    assert replayed.num_replayed == 1
+    assert report.num_replayed == 0  # original untouched
+    assert replayed.as_replayed().num_replayed == 1  # idempotent
+
+
+def test_pipeline_run_requires_library_snapshot():
+    pipeline = _make_pipeline(evaluate_candidate=_eval_from(0.1))
+    with pytest.raises(TypeError):
+        pipeline.run([_raw_candidate(seed="x")])
+
+
+# --------------------------------------------------------------------------- #
+# Registry idempotency: same candidate approved twice registers exactly once
+# --------------------------------------------------------------------------- #
+
+
+def test_pipeline_registry_register_idempotent_across_rounds():
+    registry = ArtifactRegistry()
+
+    def evaluate(candidate, context):
+        return build_with_evidence(
+            {
+                "candidate_ref": str(getattr(candidate, "candidate_id", "")),
+                "rank_ic": 0.1,
+            }
+        )
+
+    raw = _raw_candidate(seed="idem")
+    pipeline = _make_pipeline(registry=registry, evaluate_candidate=evaluate)
+
+    # Round 1 -> approved, registered.
+    first = pipeline.run([raw], library_snapshot=_library_snapshot())
+    assert first.num_registered == 1
+    assert len(registry.list_versions(f"FC_{_h('idem')[:16]}")) == 1
+
+    # Round 2 with the same raw record is a duplicate replay -> the registry is
+    # untouched (idempotent per (content_hash, artifact_type)).
+    second = pipeline.run([raw], library_snapshot=_library_snapshot())
+    assert second.num_replayed == 1
+    assert second.num_registered == 0
+    assert len(registry.list_versions(f"FC_{_h('idem')[:16]}")) == 1

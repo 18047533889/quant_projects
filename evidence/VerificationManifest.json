@@ -33,7 +33,7 @@
       "tree_sha256": "05bea63cae83b784ce0981f7201f2add04e9dd556e7758a4530d82cb51d8a67e",
       "wheel_sha256": null
     },
-    "dataaccess": {
+    "data_access": {
       "tree_sha256": null,
       "wheel_sha256": null
     }
@@ -50,7 +50,7 @@
       "pytest": "9.1.1",
       "duckdb": "1.5.4",
       "factor_engine": "NOT_INSTALLED",
-      "dataaccess": "0.10.2"
+      "data_access": "0.10.2"
     },
     "hash": "0a0fd01455850a189a8f1589fc65f1157a517fb0c293c9c6d8eb3337daa205f7"
   },

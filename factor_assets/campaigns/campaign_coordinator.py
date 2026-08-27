@@ -2,6 +2,17 @@
 Campaign coordinator for optimization lifecycle management.
 
 Manages campaign state, budget tracking, and plateau-based stopping.
+
+DLIB-FA-002: the search-control fields (``max_evaluations``, ``cost_budget``,
+``plateau_patience``, ``target_metric``, ``should_stop``) belong to FO
+SearchSession/Budget or QuantPlatform Workflow — NOT to FA. FA's campaign is a
+RESEARCH-campaign governance-metadata record only (campaign id / generator /
+factor assets / admission outcomes / library outcomes / statistics refs).
+
+The legacy ``CampaignCoordinator`` / ``CampaignConfig`` / ``CampaignBudget`` /
+``Campaign`` types below are retained for compatibility (§108) and are
+RESEARCH_ONLY. New code should use :class:`ResearchCampaignGovernance`, which
+carries governance metadata only and never search control.
 """
 
 from dataclasses import dataclass, field
@@ -20,10 +31,58 @@ class CampaignState(Enum):
     CANCELLED = "cancelled"
 
 
+@dataclass(frozen=True)
+class ResearchCampaignGovernance:
+    """RESEARCH-campaign governance metadata only (DLIB-FA-002).
+
+    Carries the campaign identity and the governance/outcome references that
+    FA legitimately owns. It deliberately has NO search-control fields
+    (no max_evaluations / cost_budget / plateau_patience / target_metric /
+    should_stop) — those belong to FO SearchSession/Budget or QuantPlatform
+    Workflow. FA records the campaign as a governance artifact, not as an
+    optimization search controller.
+    """
+
+    campaign_id: str
+    generator: Optional[str] = None          # e.g. "llm", "search", "manual"
+    factor_asset_refs: tuple[str, ...] = ()  # factor assets produced/consumed
+    admission_outcome_refs: tuple[str, ...] = ()
+    library_outcome_refs: tuple[str, ...] = ()
+    statistics_refs: tuple[str, ...] = ()
+    created_at: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        if not self.campaign_id:
+            raise ValueError("campaign_id is required")
+        object.__setattr__(self, "factor_asset_refs", tuple(self.factor_asset_refs))
+        object.__setattr__(self, "admission_outcome_refs", tuple(self.admission_outcome_refs))
+        object.__setattr__(self, "library_outcome_refs", tuple(self.library_outcome_refs))
+        object.__setattr__(self, "statistics_refs", tuple(self.statistics_refs))
+        if not self.created_at:
+            object.__setattr__(self, "created_at", datetime.utcnow().isoformat())
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize to dictionary."""
+        return {
+            "campaign_id": self.campaign_id,
+            "generator": self.generator,
+            "factor_asset_refs": list(self.factor_asset_refs),
+            "admission_outcome_refs": list(self.admission_outcome_refs),
+            "library_outcome_refs": list(self.library_outcome_refs),
+            "statistics_refs": list(self.statistics_refs),
+            "created_at": self.created_at,
+            "metadata": dict(self.metadata),
+        }
+
+
 @dataclass
 class CampaignConfig:
     """
     Campaign configuration.
+
+    RESEARCH_ONLY (DLIB-FA-002): the search-control fields below belong to FO
+    SearchSession/Budget. Retained for compatibility only.
 
     Attributes:
         campaign_id: Unique campaign identifier

@@ -72,7 +72,7 @@ def derive_derived_access_tags(
     tags = frozenset(t for t in source_tags if t and str(t).strip())
     if production is None:
         # R40 #144 修复：``from runtime.production_policy`` 在 DA 共存上下文里会
-        # 被 ``dataaccess/runtime`` 遮蔽（无 production_policy）→ 导入失败。
+        # 被 ``data_access/runtime`` 遮蔽（无 production_policy）→ 导入失败。
         # FE production 管线中 factor_engine 根在 sys.path 前部，取到 FE runtime；
         # 被遮蔽时保守取 research（DA 侧 caller 显式传 production= 决定严格度）。
         try:

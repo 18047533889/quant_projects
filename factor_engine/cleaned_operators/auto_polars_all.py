@@ -13974,14 +13974,46 @@ class TsPriceDelayPolars(SeriesOperator):
 class TsProductPolars(SeriesOperator):
     """Auto-generated Polars bridge for ts_product.
 
-    Execution delegated to polars_registry_bridge (long-table map_groups).
+    R4-100 arity reconciliation: the pandas reference carries the trailing
+    scalar contract ``(x, window, min_periods, skipna)``; the auto bridge has
+    no kernel to honour those controls, so it accepts them and honours the
+    min_periods/skipna flags through the shared ``_stable_product`` kernel in
+    ``cleaned_operators.semantic_hardening``.
     """
     metadata = OperatorMetadata(
         name="ts_product",
         category="general",
         description="Auto-generated Polars bridge",
+        param_names=["x", "window", "min_periods", "skipna"],
         tags=["auto_generated", "polars", "registry_bridge"],
     )
+
+    def _calculate_series(
+        self,
+        x,
+        window: int = 20,
+        min_periods: int | None = None,
+        skipna: bool = True,
+        **kwargs,
+    ):
+        from factor_engine.cleaned_operators.semantic_hardening import _validate_window
+        import polars as pl
+
+        w, mp = _validate_window(window, min_periods)
+        if not isinstance(x, pl.DataFrame):
+            if hasattr(x, "to_polars"):
+                x = x.to_polars()
+            else:
+                x = pl.from_pandas(x)
+        from factor_engine.cleaned_operators.semantic_hardening import _rolling_numpy_panel, _stable_product
+
+        arr = x.to_numpy().astype(float)
+        out = _rolling_numpy_panel(
+            arr, window=w, min_periods=mp,
+            func=lambda values: _stable_product(values, skipna=bool(skipna)),
+        )
+        out[~np.isfinite(out)] = np.nan
+        return pl.DataFrame(out, schema=x.columns)
 
 @register_operator(
     name="ts_quantile",

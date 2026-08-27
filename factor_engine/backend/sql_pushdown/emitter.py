@@ -663,12 +663,24 @@ def _ewm_adjust_false_sql(
     value_col: str = "_v",
     min_periods: int | None = None,
 ) -> str:
-    """``adjust=False`` EWM，精确匹配 pandas（DuckDB 可执行）。
+    """``adjust=False`` EWM，精确匹配 pandas（DuckDB 递归 CTE）。
 
-    DuckDB 禁止嵌套窗口函数；改用有限窗口自连接加权和（
-    ``alpha*SUM(x_i * decay^{t-i}) + (1-alpha)*decay^t * x0``），
-    在 ``decay^W`` 可忽略的窗口宽度内收敛到 pandas 递归定义（1e-15）。
-    ClickHouse 走原生 ``exponentialMovingAverage``。
+    pandas ``ewm(adjust=False, ignore_na=False)`` 的 NaN 缺口语义（绝对位置
+    衰减 + 有效观测重新归一化，输出在 NaN 行 carry-forward）在 DuckDB 中无法用
+    有限窗口自连接/单一窗口函数复刻。旧实现（有限窗指数衰减加权和）在 NaN 缺口
+    上给出错误结果（NaN 行 0.75 vs pandas 1.5 等）。本实现将 pandas 递归
+    逐条复刻为 DuckDB ``WITH RECURSIVE``：
+
+    - 锚点：每个 instrument 的第一个**有效**观测（``_v IS NOT NULL``）作为
+      递归种子（``y=_v, last_valid=ts``）；
+    - 有效行：``y = (decay^gap * y + alpha*cur) / (decay^gap + alpha)``，
+      ``gap = ts - last_valid``（绝对位置衰减）；
+    - NaN 行：``y`` 不变（carry-forward），``last_valid`` 不变；
+    - ``cnt`` 累计有效观测数，``cnt < min_periods`` → NULL。
+
+    已验证（pandas 2.3.3 cython 参照 + 多 instrument NaN 缺口）：逐点一致。
+    注意：这是**串行递归**（无并行窗口），但在 NaN 缺口语义下这是唯一
+    exact 写法；DuckDB 递归 CTE 对这类算子可用。
     """
     if min_periods is None:
         min_periods = w
@@ -679,49 +691,40 @@ def _ewm_adjust_false_sql(
             f"FROM ({inner_sql}) t"
         )
     decay = 1.0 - alpha
-    # 窗口宽度取 max(w, 32)，并对大 span 扩张到衰减到 ~1e-15 的宽度。
-    _W = max(int(w), 32)
-    while float(decay) ** _W > 1e-15 and _W < 1024:
-        _W *= 2
-    _W = max(_W, 256)  # 即便 span 很小，保持数值安全裕度
-    # pandas adjust=False 以第一个非空值作为递归种子（领先 NaN 被跳过），
-    # y_t = alpha*SUM_{i=k..t} decay^{t-i} x_i + decay^{t-k} x_k。
-    # 加权和 ws 中 i=k 项已带完整权重 decay^{t-k}，故补 (1-alpha)*decay^{t-k} x_k。
+    _a = repr(float(alpha))
+    _d = repr(float(decay))
+    _mp = int(min_periods)
+    # pandas ewm 是**等距位置**递归（绝对位置衰减），与 ts 实际日期间隔无关
+    # （周末缺口仍按 1 个位置步进）。故递归按 ROW_NUMBER 位置推进：
+    #   gap = n.rn - e.last_valid_rn （位置差），decay^gap 绝对位置衰减。
     return (
-        f"SELECT p.ts, p.inst, "
-        f"CASE WHEN p.cnt < {min_periods} THEN NULL "
-        f"WHEN p.pos = p.kpos THEN p.x0 "
-        f"ELSE {alpha!r} * j.ws + {1.0 - alpha!r} * POW({decay}, p.pos - p.kpos) * p.x0 END AS _v "
-        f"FROM ("
-        f"SELECT ts, inst, pos, x0, kpos, "
-        f"COUNT(_v) OVER (PARTITION BY inst ORDER BY ts "
-        f"ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cnt "
-        f"FROM ("
-        f"SELECT ts, inst, _v, pos, "
-        f"FIRST_VALUE(_v IGNORE NULLS) OVER (PARTITION BY inst ORDER BY ts) AS x0, "
-        f"MIN(CASE WHEN _v IS NOT NULL THEN pos END) OVER (PARTITION BY inst) AS kpos "
+        f"WITH RECURSIVE e(ts, inst, _v, rn, y, last_valid_rn, cnt) AS ("
+        f"SELECT t.ts, t.inst, t._v, 0, "
+        f"CASE WHEN t._v IS NULL THEN NULL ELSE t._v END AS y, 0, "
+        f"CASE WHEN t._v IS NULL THEN 0 ELSE 1 END AS cnt "
         f"FROM ("
         f"SELECT ts, inst, {value_col} AS _v, "
-        f"ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) - 1 AS pos "
-        f"FROM ({inner_sql}) _e0"
-        f") _e1"
-        f") _e2"
-        f") p "
-        f"JOIN ("
-        f"SELECT a.ts, a.inst, "
-        f"SUM(b._v * POW({decay}, a.pos - b.pos)) AS ws "
-        f"FROM ("
+        f"ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) - 1 AS rn "
+        f"FROM ({inner_sql})"
+        f") t WHERE t.rn = 0 "
+        f"UNION ALL "
+        f"SELECT n.ts, n.inst, n._v, n.rn, "
+        f"CASE "
+        f"WHEN n._v IS NULL THEN e.y "
+        f"WHEN e.y IS NULL THEN n._v "
+        f"ELSE ((POW({_d}, n.rn - e.last_valid_rn) * e.y + {_a} * n._v) / "
+        f"(POW({_d}, n.rn - e.last_valid_rn) + {_a})) END, "
+        f"CASE WHEN n._v IS NULL THEN e.last_valid_rn ELSE n.rn END, "
+        f"e.cnt + CASE WHEN n._v IS NULL THEN 0 ELSE 1 END "
+        f"FROM e JOIN ("
         f"SELECT ts, inst, {value_col} AS _v, "
-        f"ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) - 1 AS pos "
-        f"FROM ({inner_sql}) _j0"
-        f") a "
-        f"JOIN ("
-        f"SELECT ts, inst, {value_col} AS _v, "
-        f"ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) - 1 AS pos "
-        f"FROM ({inner_sql}) _j1"
-        f") b ON a.inst = b.inst AND b.pos BETWEEN a.pos - {_W - 1} AND a.pos "
-        f"GROUP BY a.ts, a.inst"
-        f") j ON p.ts = j.ts AND p.inst = j.inst"
+        f"ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) - 1 AS rn "
+        f"FROM ({inner_sql})"
+        f") n ON n.rn = e.rn + 1 AND n.inst = e.inst"
+        f") "
+        f"SELECT ts, inst, "
+        f"CASE WHEN cnt < {_mp} THEN NULL ELSE y END AS _v "
+        f"FROM e"
     )
 
 
@@ -1967,9 +1970,10 @@ def _duckdb_rolling_tstat_sql(
 # 无法在 SQL 中精确复刻 pandas 语义、由混合后端回退到 polars（与 pandas 完全
 # 一致）的算子——"不建议的不用强行加"原则。
 #
-# - EWMA/Wilder 平滑族：pandas ``ewm(adjust=False)`` 的 ignore_na=False 在
-#   NaN 缺口时按绝对位置衰减 + 每次有效观测重新归一化，无法用有限窗口加权和/
-#   运行积精确复刻（长序列 runprod 下溢，递归 CTE 无法并行）。
+# - EWMA/Wilder 平滑族已在 SQL 层精确复刻（递归 CTE，_ewm_adjust_false_sql
+#   2026-08-27）：RSI_WILDER/ATR_WILDER/DMI_plus/DMI_minus/DX/ADX/MACD_*/
+#   DEMA/TEMA/PPO_*/PVO_*/TSI_*/Keltner*/ADL/ChaikinOscillator/CMF/ForceIndex
+#   与 pandas ewm(adjust=False) NaN 缺口语义逐点一致。故不再列入回退集。
 # - cdl_hammer / cdl_hanging_man：pandas 参考嵌入 prior-trend 上下文（audit
 #   item 5），需要 AVG(LAG(close)) 嵌套窗口，DuckDB 禁止嵌套窗口函数。
 # - ts_time_slope / ts_upside_deviation / ts_weighted_standardized_moment /
@@ -1978,12 +1982,6 @@ def _duckdb_rolling_tstat_sql(
 #   位置 OLS 与有限值重归一化），精确复刻成本高；polars 后端已与 pandas 完全
 #   一致，回退到 polars。
 _SQL_FALLBACK_CANONICALS: frozenset[str] = frozenset({
-    "RSI_WILDER", "ATR_WILDER", "DMI_plus", "DMI_minus", "DX", "ADX",
-    "MACD_line", "MACD_signal", "MACD_hist",
-    "DEMA", "TEMA", "PPO", "PPO_signal", "PPO_hist",
-    "PVO", "PVO_signal", "PVO_hist", "TSI", "TSI_signal",
-    "KeltnerMid", "KeltnerUpper", "KeltnerLower", "KeltnerPosition",
-    "ADL", "ChaikinOscillator", "CMF", "ForceIndex",
     "cdl_hammer", "cdl_hanging_man",
     "ts_time_slope", "ts_upside_deviation", "ts_weighted_standardized_moment",
     "ts_abdi_ranaldo_spread", "ts_value_at_argextreme",
@@ -2006,6 +2004,11 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
     if op == "WMA":
         wma_node = PlanNode(op="ts_decay_linear", inputs=list(node.inputs), attrs=dict(node.attrs))
         return _compile_layer(wma_node, dialect=dialect)
+
+    if op in {"tema_no_ema", "tema_2"}:
+        # Historical placeholder for canonical names that never existed in the
+        # registry; unreachable. Keep the branch syntax-complete.
+        return None
 
     if op == "column":
         col = node.attrs.get("name") or node.attrs.get("column")
@@ -4788,12 +4791,28 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         fast = max(int(_literal_positional(node, 3, default=3) or 3), 2)
         slow = max(int(_literal_positional(node, 4, default=10) or 10), 2)
         adl_w = max(int(_literal_positional(node, 5, default=20) or 20), 1)
-        adl_node = PlanNode(op="ADL", inputs=list(node.inputs[:4]), attrs={"window": adl_w})
-        adl_layer = _compile_layer(adl_node, dialect=dialect)
-        if adl_layer is None:
-            return None
-        ef = _ema_span_over_inst(adl_layer.sql, fast, dialect=dialect, min_periods=fast)
-        es = _ema_span_over_inst(adl_layer.sql, slow, dialect=dialect, min_periods=slow)
+        w = adl_w
+        flow = (
+            f"SELECT h.ts, h.inst, "
+            f"(((c._v - l._v) - (h._v - c._v)) / NULLIF(h._v - l._v, 0)) * v._v AS _v "
+            f"FROM ({high.sql}) h INNER JOIN ({low.sql}) l USING (ts, inst) "
+            f"INNER JOIN ({close.sql}) c USING (ts, inst) "
+            f"INNER JOIN ({volume.sql}) v USING (ts, inst)"
+        )
+        # pandas/PC 参考：adl = flow.rolling_sum(w, min_samples=w)（warmup 段
+        # NULL）→ _ewm_span(adl, f) = adl.fill_nan(None).ewm_mean(span,adjust=False,
+        # min_samples=span).fill_null("forward")。SQL 侧先按 instrument 对 ADL
+        # 质量窗口 forward-fill，使 span ewm 的初始种子由第一个有效 ADL 值
+        # 提供（min_periods=1），与 polars _ewm_span 对齐（原实现在 ewm 前
+        # 直接喂 warmup NULL，导致 cold-start carrier=0 漂移）。
+        avl = _inst_window(dialect, w, "SUM", flow, min_periods=w)
+        avl_ff = (
+            f"SELECT ts, inst, "
+            f"LAST_VALUE(_v IGNORE NULLS) OVER (PARTITION BY inst ORDER BY ts) AS _v "
+            f"FROM ({avl}) t"
+        )
+        ef = _ema_span_over_inst(avl_ff, fast, dialect=dialect, min_periods=1)
+        es = _ema_span_over_inst(avl_ff, slow, dialect=dialect, min_periods=1)
         return _Layer(
             f"SELECT f.ts, f.inst, (f._v - s._v) AS _v "
             f"FROM ({ef}) f JOIN ({es}) s USING (ts, inst)",
@@ -7186,17 +7205,14 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                 has_inst_window=True,
             )
         decay = 1.0 - alpha
+        # #376 历史注记：旧实现是有限窗近似（嵌套窗口 rn 计算在 DuckDB 报
+        # “window function calls cannot be nested”，且 NaN 缺口语义不一致）。
+        # 现在改用精确递归 CTE（_ewm_adjust_false_sql，2026-08-27 起）。
         return _Layer(
-            f"SELECT ts, inst, "
-            f"SUM(_v * POW({decay}, rn)) OVER ({over}) / "
-            f"NULLIF(SUM(POW({decay}, rn)) OVER ({over}), 0) AS _v "
-            f"FROM ("
-            f"SELECT ts, inst, _v, "
-            f"(COUNT(*) OVER ({over}) - 1 - "
-            f"(ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) - "
-            f"MIN(ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts)) OVER ({over}))) AS rn "
-            f"FROM ({inner.sql}) t0"
-            f") t",
+            _ewm_adjust_false_sql(
+                inner.sql, w, alpha, dialect=dialect,
+                value_col="_v", min_periods=1,
+            ),
             has_inst_window=True,
         )
 

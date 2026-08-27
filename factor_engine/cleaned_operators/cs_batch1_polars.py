@@ -19,7 +19,6 @@ import polars as pl
 
 from factor_engine.cleaned_operators.base_polars import (
     OperatorMetadata,
-    ParamSpec,
     SeriesOperator,
     register_operator,
     PANEL_SKIP_COLUMNS,

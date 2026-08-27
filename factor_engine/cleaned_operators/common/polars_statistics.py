@@ -542,3 +542,15 @@ from factor_engine.cleaned_operators.registry import OperatorRegistry  # noqa: E
 
 OperatorRegistry.register_alias("ts_mean_absolute_deviation", "ts_mean_abs_deviation")
 OperatorRegistry.register_alias("ts_median_absolute_deviation", "ts_median_abs_deviation")
+
+# New canonicals must enter the static surface partition (extended) so
+# ``finalize_layer_governance``'s exact-classification check stays green.
+# Same in-module convention as ``statistics.py`` / downside_risk / liquidity_v2 —
+# run unconditionally (idempotent) so the polars bridge keeps the partition
+# exact even when it is imported before ``statistics.py``.
+try:
+    from factor_engine.cleaned_operators.operator_surface import extend_extended_only
+
+    extend_extended_only(["ts_mean_abs_deviation", "ts_median_abs_deviation"])
+except ImportError:  # pragma: no cover - surface always present in-tree
+    pass

@@ -11,6 +11,8 @@ from enum import Enum
 import hashlib
 import warnings
 
+from factor_preprocess.contracts._deep_freeze import deep_freeze
+
 
 def _stable_params(p: Dict[str, Any]) -> str:
     """Deterministic canonical form of a parameter dict (FP-P1-06)."""
@@ -47,6 +49,17 @@ class TransformStep:
         # ``step_id`` when the pipeline is validated.
         if self.step_id is None:
             object.__setattr__(self, 'step_id', self.name)
+        # Deep-freeze parameters so the step is deeply immutable and hash-safe
+        # (DLIB-FP-026).
+        object.__setattr__(self, "parameters", deep_freeze(self.parameters))
+
+    def __hash__(self):
+        """Fixed point: a policy step is an immutable, content-addressable unit.
+
+        Deep-frozen ``parameters`` (FrozenDict) hashes by content, so the hash
+        of the fully-assigned step is stable and can serve as an identity key.
+        """
+        return hash((self.name, self.parameters, self.step_id, self.skip_if_missing))
 
 
 @dataclass
@@ -72,7 +85,10 @@ class PolicyPreset:
     def __post_init__(self):
         # No instance-level deprecation warning here; PolicyRegistry.register
         # already emits the canonical authority warning once.
-        pass
+        # Deep-freeze the ordered steps and tags so the preset is deeply
+        # immutable and safe to use as an identity key (DLIB-FP-026).
+        object.__setattr__(self, "steps", tuple(self.steps))
+        object.__setattr__(self, "tags", frozenset(self.tags))
 
     @property
     def policy_identity(self) -> str:

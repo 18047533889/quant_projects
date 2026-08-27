@@ -275,7 +275,7 @@ def probe_fusion() -> None:
     )
 
 
-def probe_dataaccess_batch() -> None:
+def probe_data_access_batch() -> None:
     from factor_engine.planner.batch_data_request import build_batch_data_request
 
     req = build_batch_data_request(None, fields=["close", "volume", "open"])
@@ -468,7 +468,7 @@ def run_all() -> dict[str, Any]:
         probe_cost_router,
         probe_hardware_baseline,
         probe_fusion,
-        probe_dataaccess_batch,
+        probe_data_access_batch,
         probe_sql_certification,
         probe_telemetry,
         probe_cse_and_streaming,

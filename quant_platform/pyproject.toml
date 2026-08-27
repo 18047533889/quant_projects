@@ -24,6 +24,10 @@ packages = [
     "quant_platform",
     "quant_platform.app",
     "quant_platform.app.contracts",
+    "quant_platform.app.export",
+    "quant_platform.app.observability",
+    "quant_platform.app.storage",
+    "quant_platform.app.worker",
 ]
 
 [tool.setuptools.package-dir]

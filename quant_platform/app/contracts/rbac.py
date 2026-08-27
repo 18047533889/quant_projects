@@ -1,23 +1,42 @@
-"""RBAC — principals, teams, roles, permissions, security classification.
+"""RBAC — teams, roles, security classification, and the grant-based model.
 
 DRAFT. Implements ``platform/docs/PLATFORM_CONTRACTS_DRAFT.md`` §4.10 (spec
-§24.1). PURE stdlib enums + frozen dataclasses. Permissions are capability-based,
-not page-based.
+§24.1). PURE stdlib enums + frozen dataclasses.
 
-Final authorization is the product of four dimensions:
+Authorization model (upgraded to User/Team/Role/Permission/ResourceScope):
 
-    Authorization = Role Permission × Team × ResourceScope × SecurityClassification
+    Authorization = grant(principal, permission, resource_scope) covers (permission, resource)
 
-Each ``Permission`` maps to a minimum ``SecurityClassification``; a principal may
-exercise a permission only if their effective classification clears the
-permission's requirement.
+A **grant** is a triple ``(principal, permission, resource_scope)``. Access is
+granted **iff** a grant covers the requested ``(permission, resource)``. There
+is NO bare "RESEARCHER can read all formulas" rule — every grant is scoped.
+
+This module keeps the legacy role/classification vocabulary (``Team``, ``Role``,
+``SecurityClassification``, ``ROLE_PERMISSIONS``,
+``PERMISSION_MIN_CLASSIFICATION``, ``ROLE_DEFAULT_CLASSIFICATION``) and
+re-exports the grant-based model from ``permission.py`` / ``principal.py`` so
+existing callers keep working.
 """
 
 from __future__ import annotations
 
-import enum
-from dataclasses import dataclass, field
-from datetime import datetime
+from .permission import (
+    WORKLOAD_LEAST_PRIVILEGE,
+    WORKLOAD_PREFIX_MATRIX,
+    Grant,
+    Permission,
+    ResourceScope,
+    authorize,
+    grants_for,
+)
+from .principal import (
+    PRINCIPAL_TYPE_HUMAN,
+    PRINCIPAL_TYPE_SERVICE,
+    WORKLOAD_SERVICE_NAMES,
+    HumanPrincipal,
+    WorkloadPrincipal,
+)
+from .security import Role, SecurityClassification, Team
 
 __all__ = [
     "Permission",
@@ -27,82 +46,18 @@ __all__ = [
     "HumanPrincipal",
     "WorkloadPrincipal",
     "ResourceScope",
+    "Grant",
     "ROLE_PERMISSIONS",
     "PERMISSION_MIN_CLASSIFICATION",
     "ROLE_DEFAULT_CLASSIFICATION",
+    "authorize",
+    "grants_for",
+    "WORKLOAD_PREFIX_MATRIX",
+    "WORKLOAD_LEAST_PRIVILEGE",
+    "WORKLOAD_SERVICE_NAMES",
+    "PRINCIPAL_TYPE_HUMAN",
+    "PRINCIPAL_TYPE_SERVICE",
 ]
-
-
-class SecurityClassification(enum.Enum):
-    """Sensitivity tiers for factor assets (§5.8)."""
-
-    PUBLIC_METADATA = "PUBLIC_METADATA"
-    INTERNAL_RESEARCH = "INTERNAL_RESEARCH"
-    CONFIDENTIAL_ALPHA = "CONFIDENTIAL_ALPHA"
-    RESTRICTED_RAW_VALUES = "RESTRICTED_RAW_VALUES"
-    PRODUCTION_ONLY = "PRODUCTION_ONLY"
-
-    # Ordered by ascending sensitivity — higher rank = more restricted.
-    @property
-    def rank(self) -> int:
-        return {
-            SecurityClassification.PUBLIC_METADATA: 0,
-            SecurityClassification.INTERNAL_RESEARCH: 1,
-            SecurityClassification.CONFIDENTIAL_ALPHA: 2,
-            SecurityClassification.RESTRICTED_RAW_VALUES: 3,
-            SecurityClassification.PRODUCTION_ONLY: 4,
-        }[self]
-
-
-class Permission(enum.Enum):
-    """Capability-based permission vocabulary (spec §24.1)."""
-
-    FACTOR_READ_SUMMARY = "factor:read_summary"
-    FACTOR_READ_EVIDENCE = "factor:read_evidence"
-    FACTOR_READ_FORMULA = "factor:read_formula"
-    FACTOR_READ_VALUES = "factor:read_raw_values"
-    FACTOR_READ_TREATED_VALUES = "factor:read_treated_values"
-    FACTOR_DOWNLOAD_VALUES = "factor:download_values"
-    FACTOR_SUBMIT = "factor:submit"
-    FACTOR_REPROCESS = "factor:reprocess"
-    CLUSTER_READ = "cluster:read"
-    LIBRARY_READ = "library:read"
-    LIBRARY_CREATE_CANDIDATE = "library:create_candidate"
-    LIBRARY_APPROVE = "library:approve"
-    LIBRARY_PROMOTE = "library:promote"
-    LIBRARY_ROLLBACK = "library:rollback"
-    FEATURE_SET_READ = "feature_set:read"
-    FEATURE_SET_DOWNLOAD = "feature_set:download"
-    JOB_READ = "job:read"
-    JOB_RETRY = "job:retry"
-    JOB_CANCEL = "job:cancel"
-    ARTIFACT_READ = "artifact:read"
-    ARTIFACT_DOWNLOAD = "artifact:download"
-    AUDIT_READ = "audit:read"
-    STANDARDS_READ = "standards:read"
-    STANDARDS_EDIT = "standards:edit"
-    USER_MANAGE = "user:manage"
-    PERMISSION_MANAGE = "permission:manage"
-
-
-class Role(enum.Enum):
-    """Roles (spec §24.1, §5.8)."""
-
-    MEMBER = "MEMBER"
-    LEAD = "LEAD"
-    CORE = "CORE"
-    ADMIN = "ADMIN"
-    SERVICE = "SERVICE"
-
-
-class Team(enum.Enum):
-    """Teams (§5.8)."""
-
-    FACTOR_TEAM = "FACTOR_TEAM"
-    MODEL_TEAM = "MODEL_TEAM"
-    PRODUCTION_TEAM = "PRODUCTION_TEAM"
-    EXECUTIVE = "EXECUTIVE"
-    PLATFORM_ADMIN = "PLATFORM_ADMIN"
 
 
 # Minimum security classification required to exercise each permission.
@@ -138,7 +93,9 @@ PERMISSION_MIN_CLASSIFICATION: dict[Permission, SecurityClassification] = {
 }
 
 
-# Role -> permission mapping (spec §24.1, §5.8).
+# Role -> permission mapping (spec §24.1, §5.8). These are the DEFAULT
+# permissions a role holds; each is still scoped to the principal's
+# ``resource_scope`` when turned into a grant (see ``permission.grants_for``).
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     Role.MEMBER: frozenset(
         {
@@ -259,46 +216,3 @@ ROLE_DEFAULT_CLASSIFICATION: dict[Role, SecurityClassification] = {
     Role.ADMIN: SecurityClassification.PRODUCTION_ONLY,
     Role.SERVICE: SecurityClassification.RESTRICTED_RAW_VALUES,
 }
-
-
-@dataclass(frozen=True)
-class ResourceScope:
-    """Which resources a permission applies to (product/team/branch scoping)."""
-
-    team: Team | None = None
-    product: str | None = None
-    branch: str | None = None
-    # Empty tuple = all.
-    resource_ids: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class HumanPrincipal:
-    """A human actor (user id + name + team + role)."""
-
-    principal_id: str
-    display_name: str
-    team: Team
-    role: Role
-    resource_scope: ResourceScope = field(default_factory=ResourceScope)
-    classification: SecurityClassification = SecurityClassification.INTERNAL_RESEARCH
-
-    def __post_init__(self) -> None:
-        if not self.principal_id:
-            raise ValueError("principal_id is required")
-
-
-@dataclass(frozen=True)
-class WorkloadPrincipal:
-    """A service / workload actor (OAuth service identity)."""
-
-    principal_id: str
-    service_name: str
-    team: Team = Team.PLATFORM_ADMIN
-    role: Role = Role.SERVICE
-    resource_scope: ResourceScope = field(default_factory=ResourceScope)
-    classification: SecurityClassification = SecurityClassification.CONFIDENTIAL_ALPHA
-
-    def __post_init__(self) -> None:
-        if not self.principal_id:
-            raise ValueError("principal_id is required")

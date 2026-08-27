@@ -29,6 +29,12 @@ class RepresentativeSelection:
     Result of representative factor selection from a family.
 
     Contains selected factor IDs and selection metadata, not raw values.
+
+    DLIB-FA-014: MAX_IC must bind to an EvaluationArtifactRef / window /
+    snapshot / universe / split / label / evidence maturity — not a bare
+    ``ICProvider.get_ic`` float.  ``ic_evidence_refs`` records the evidence
+    reference that justified each selected representative's IC, so a
+    representative is traceable to the evidence that picked it.
     """
     selection_id: str
     family: str
@@ -48,6 +54,14 @@ class RepresentativeSelection:
     selection_score: Optional[float] = None
     diversity_score: Optional[float] = None
     warnings: tuple[str, ...] = ()
+    # DLIB-FA-014: evidence refs binding each selected representative to the
+    # evidence that justified its selection (one per selected factor).
+    ic_evidence_refs: tuple[Optional[str], ...] = ()
+    # DLIB-FA-014: the evaluation window / snapshot / split the IC was measured
+    # on (provenance for the MAX_IC binding).
+    ic_window_ref: Optional[str] = None
+    ic_snapshot_ref: Optional[str] = None
+    ic_split_ref: Optional[str] = None
 
     def __post_init__(self):
         if not self.selection_id:
@@ -66,6 +80,12 @@ class RepresentativeSelection:
         if self.avg_correlations:
             if len(self.avg_correlations) != len(self.selected_factor_ids):
                 raise ValueError("avg_correlations length must match selected_factor_ids")
+
+        if self.ic_evidence_refs:
+            if len(self.ic_evidence_refs) != len(self.selected_factor_ids):
+                raise ValueError(
+                    "ic_evidence_refs length must match selected_factor_ids"
+                )
 
     @property
     def num_selected(self) -> int:

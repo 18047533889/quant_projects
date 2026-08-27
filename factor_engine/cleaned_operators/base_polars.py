@@ -45,6 +45,14 @@ class OperatorMetadata:
     param_specs: Dict[str, Any] = field(default_factory=dict)
     param_aliases: Dict[str, str] = field(default_factory=dict)
     window_semantics: str | None = None
+    # Field-semantic parity with base.OperatorMetadata — the module note above
+    # declares these classes structurally equivalent, and the central catalog
+    # reads output_unit / grain fields off polars metadata too.
+    input_fields: List[str] = field(default_factory=list)
+    output_field: str | None = None
+    input_units: Dict[str, str] = field(default_factory=dict)
+    output_unit: str | None = None
+    compatible_units: Dict[str, tuple[str, ...]] = field(default_factory=dict)
     # WS4 P0-07: time-frequency grain contract (mirror of base.OperatorMetadata).
     input_grain: str | None = None
     output_grain: str | None = None
@@ -257,25 +265,16 @@ def register_operator(
         name_aliases = [name] if name and name != canon else None
         # Idempotent re-registration (P0 collection baseline): see base.py
         # register_operator.  A direct module import after ``load_all()`` that
-        # re-registers an already-present canonical from a NON-declared-override
-        # source is a no-op when the existing registration is at least as rich;
-        # a strictly richer registration replaces it.
-        _effective_replace = replace
-        _effective_replacement_reason = replacement_reason
+        # re-registers an already-present canonical+backend from a
+        # NON-declared-override source is a NO-OP — the FIRST (load_all)
+        # implementation is kept, so the R4-100 arity gate sees the authoritative
+        # contract and no duplicate re-registration is ever raised.  Only a
+        # declared-override source proceeds through the strict path.
         _existing = OperatorRegistry.get(canon, backend, mode="any")
         if _existing is not None:
             _new_source = source or "factor_dsl_np"
             if _new_source not in OperatorRegistry._DECLARED_OVERRIDE_SOURCES:
-                from factor_engine.cleaned_operators.base import _positional_param_count
-                _existing_params = _positional_param_count(_existing)
-                _new_params = _positional_param_count(instance)
-                if _new_params <= _existing_params:
-                    return cls
-                _effective_replace = True
-                _effective_replacement_reason = _effective_replacement_reason or (
-                    "richer authoritative registration replaces test-module "
-                    "standalone registration"
-                )
+                return cls
         OperatorRegistry.register(
             instance,
             canonical=canon,
@@ -283,8 +282,8 @@ def register_operator(
             source=source or "factor_dsl_np",
             aliases=name_aliases,
             status=status,
-            replace=_effective_replace,
-            replacement_reason=_effective_replacement_reason,
+            replace=replace,
+            replacement_reason=replacement_reason,
             expected_old_source=expected_old_source,
         )
         return cls

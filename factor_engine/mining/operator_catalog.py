@@ -1007,7 +1007,20 @@ def _searchable_params(canonical: str, catalog: dict[str, Any]) -> tuple[str, ..
     MODEL_ORDER.  ``ESTIMATOR_RESOLUTION`` (bins / grid / projections /
     surrogates / ridge) expands the AST without adding economic signal and is
     restricted to an audited preset / robustness lane — it is excluded from the
-    default searchable set here."""
+    default searchable set here.
+
+    R64: the catalog is the single authority for searchability when present.
+    The registry's ``searchable_param_names`` derive is the pre-migration
+    authority and is kept for catalog-only rows whose searchable fields were
+    never backfilled.  The two may differ only transiently during a metadata
+    migration and always converge on the same canonical field set.
+    """
+    try:
+        searchable = catalog.get("searchable_params") or ()
+        if searchable:
+            return tuple(sorted(searchable))
+    except Exception:
+        pass
     try:
         from factor_engine.cleaned_operators.base import ParamRole, searchable_param_names
         from factor_engine.cleaned_operators.registry import OperatorRegistry

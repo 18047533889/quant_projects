@@ -517,7 +517,9 @@ def pd_same_clock_lag(
     out = np.full(value.shape, np.nan, dtype=float)
 
     for col in range(value.shape[1]):
-        # Build clock -> (row, value) mapping
+        # Build clock -> (row, value) mapping.  A clock tick may span multiple
+        # rows (duplicate ordinals); the value recorded for the tick is the
+        # FIRST row it appears on, matching "value at that clock tick".
         clock_hist = {}  # clock_ordinal -> (row, value)
 
         for row in range(value.shape[0]):
@@ -527,11 +529,14 @@ def pd_same_clock_lag(
             if _finite(clk):
                 clock_ordinal = int(clk)
 
-                # Record this clock tick
-                if _finite(val):
+                # Record this clock tick (first occurrence wins)
+                if _finite(val) and clock_ordinal not in clock_hist:
                     clock_hist[clock_ordinal] = (row, val)
 
-                # Look back lag clock ticks
+                # Look back lag clock ticks by ordinal subtraction
+                # (clock - lag).  Non-contiguous clocks are handled naturally:
+                # if the target ordinal was never seen, it is absent from the
+                # history and no lag value is produced.
                 target_clock = clock_ordinal - lag
                 if target_clock in clock_hist:
                     _, lagged_val = clock_hist[target_clock]

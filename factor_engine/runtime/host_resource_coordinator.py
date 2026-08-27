@@ -143,7 +143,11 @@ class HostResourceCoordinator:
     """
 
     def __init__(self, *, broker: ResourceBroker | None = None) -> None:
-        self._broker = broker or ResourceBroker()
+        # P0-11 单权威 gate：production 下缺失 broker → raise MissingResourceBroker
+        # （fail-closed，不再 ``broker or ResourceBroker()`` 静默新建第二套）。
+        from factor_engine.runtime.resource_broker import require_broker
+
+        self._broker = require_broker(broker, raise_on_missing=True)
         self._lock = threading.RLock()
         self._leases: dict[str, HostResourceLease] = {}
         self._rejected: list[str] = []

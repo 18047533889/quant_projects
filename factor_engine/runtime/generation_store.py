@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 # ObjectStore 仅类型引用；运行时惰性 import 避免在未接入对象平面时拉入
-# dataaccess/data_access 的循环依赖。
+# data_access 的循环依赖。
 try:  # pragma: no cover - 类型引用（运行时惰性）
     from typing import TYPE_CHECKING
 
@@ -88,18 +88,42 @@ class GenerationStore(Protocol):
 
 
 class LocalGenerationStore:
-    """本地目录后端（research / 测试）。
+    """本地目录后端（research / dev-only）。
 
     布局与既有 ``IncrementalCommitTransaction`` 完全一致：part 直接落
     ``generation=<id>/`` 根目录，单 part temp + ``os.replace``；manifest 与
     CURRENT 亦 temp + ``os.replace`` 原子翻转。
 
+    P0-15: 本地后端是 research/dev-only —— production（STRICT_REMOTE）必须用
+    :class:`ObjectGenerationStore` 零本地持久写。``production_guard`` 开启时
+    在 production 模式构造本类直接抛 :class:`RuntimeError`（显式 guard，避免
+    生产执行静默落到本地目录后端）。
+
     参数:
         root: 世代根目录（与 CURRENT 指针平级）。
         backend: ``"local"``（磁盘）或 ``"tmpfs"``（临时盘）。
+        production_guard: production 模式下拒绝构造（默认关闭——研究/测试
+          不强制；生产入口显式传 True）。
     """
 
-    def __init__(self, root: str | Path, *, backend: str = "local") -> None:
+    #: 本地 / 研究 writer —— 显式标记 research/dev-only。
+    RESEARCH_DEV_ONLY = True
+
+    def __init__(
+        self,
+        root: str | Path,
+        *,
+        backend: str = "local",
+        production_guard: bool = False,
+    ) -> None:
+        if production_guard:
+            from factor_engine.runtime.production_policy import is_production_mode
+
+            if is_production_mode():
+                raise RuntimeError(
+                    "production 模式禁止 LocalGenerationStore（本地持久写）。"
+                    "production 必须用 ObjectGenerationStore（零本地字节）。"
+                )
         self.root = Path(root)
         self.backend = backend
 

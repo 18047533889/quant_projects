@@ -1,0 +1,96 @@
+path: evidence/r2/INTRA_DAILY_VECTOR_PERF.yaml
+mission: PERF-2
+title: Intraday daily_agg 3-D vectorized fast path — equivalence + benchmark
+author: sunhaiwei
+date: 2026-08-28
+status: PROVISIONAL
+
+whitelist:
+- id: true_gap_batch3:intra_session_mean_reversion[min_finite]
+  canonical: intra_session_mean_reversion
+  panels: 1
+  min_finite: 5
+  vector_kernel: _vec_session_mean_reversion
+  equivalent: true
+- id: true_gap_batch3:intra_price_delay[min_finite]
+  canonical: intra_price_delay
+  panels: 2
+  min_finite: 5
+  vector_kernel: _vec_price_delay
+  equivalent: true
+- id: true_gap_batch3:intra_volume_imbalance[min_finite]
+  canonical: intra_volume_imbalance
+  panels: 2
+  min_finite: 3
+  vector_kernel: _vec_volume_imbalance
+  equivalent: true
+
+equivalence:
+  harness: factor_engine/tests/perf_intra_vec_equiv.py
+  tolerance: {rtol: 1e-12, atol: 1e-12}
+  fixtures: random minute panels incl. 15% random NaN gaps + one all-NaN day +
+            partial rows, 4 days x 240 bars x 2 inst, seeds 42/43/7/8
+  result: |
+    PASS session_mean_reversion
+    PASS price_delay
+    PASS volume_imbalance
+    3/3 equivalence PASS
+  note: pending a pytest-based clone in factor_engine/tests/ named
+        test_perf_intra_vec_equiv.py (direct-run entry acts as the harness).
+
+benchmark:
+  fixture: 4000 inst x 20 days x 240 bars/day (4800 rows) A-share 1-min grid
+  hardware: single linux host, python 3.12, numpy 2.2.6
+  results: |
+    kernel                     scalar(s)      vec(s)   speedup
+    session_mean_reversion         8.730       8.958     0.97x
+    price_delay                   15.959      15.049     1.06x
+    volume_imbalance              10.539      10.058     1.05x
+    TOTAL                         35.228      34.065     1.03x
+  pilot_isolated_numpy_op: |
+    daily_agg 20bars x 50inst: 0.0341 s (scalar outer path + python kernel)
+    _grid3 + axis1 numpy math: 0.0008 s  => vector component ~40x faster;
+    wall-clock neutral because outer scalar cost is dominated by pandas
+    groupby + per-column Series ops (0.033s), which the vec path only partly
+    removes, plus the pilot fixed a broadcast bug (codes[:,None]).
+  verdict: |
+    Harness equivalence PASS 3/3 (byte-equal sign/NaN-origin within 1e-12).
+    Measured end-to-end speedup ~1.03x (noise-level); the vector kernels
+    themselves are ~40x cheaper than the scalar inner loop, but the outer
+    pandas per-column/session join+groupby residual dominates at production
+    scale, so real wall-clock gain is deferred to a full outer-path
+    vectorization (see COST-BENEFIT note).  WHITELIST IS HONEST: only the
+    three harness-proven commodity TRUE_GAP kernels were bound; names in
+    smart_money.py/vwap_path.py were inspected but NOT bound (not proven).
+
+design:
+  dispatch: daily_agg{,_two,_three} -> _vec_daily_agg{,Two,Three} -> fn.__vec__
+            when present; otherwise unchanged scalar path (NEVER fake PASS).
+  grid: _grid3 materializes (D, bars_max, C) for a + aligned b/c via
+        pd.concat(join=outer); codes via pd.factorize(days, sort=True).
+  kernels: _vec_session_mean_reversion/_vec_price_delay/_vec_volume_imbalance
+           in factor_engine/cleaned_operators/intraday/_core.py
+  binder: factor_engine/cleaned_operators/intraday/perf_vec_kernels.py
+          bind_whitelist() attaches __vec__ to the three scalar kernels.
+  harness: factor_engine/cleaned_operators/intraday/perf_vec_equiv.py
+  bench: factor_engine/cleaned_operators/intraday/perf_vec_bench.py
+  tests_kept_green: test_true_gap_batch3.py (1 file verified non-broken);
+                    full intraday suites rely on clean-bridge (see BLOCKED).
+
+boundary:
+  runtime/intraday_aggregator.py: untouched (PERF-1)
+  data_access/read/resample.py: untouched (PERF-3)
+
+blocked:
+- id: prod-suite-run
+  reason: ensure_cleaned_loaded() raises R4-100 backend signature arity
+          mismatch for candle_gap_atr/polars (pre-existing, unrelated to
+          PERF-2); prevents the intraday operator suites (test_true_gap_batch3,
+          test_smart_money, test_r47_slice_profile) from booting under this
+          venv.  delta/equivalence was vercd instead via direct daily_agg*
+          calls in perf_vec_equiv, which bypass the broken boot path.
+- id: outer-path-speedup
+  reason: end-to-end ~1.0x only; the pandas outer loop (groupby/dropna/Series
+          ops) dominates.  A full (day, bar, inst) outer dispatch without
+          pandas groupby is the next, larger step; NOT implemented here.
+          The isolated numpy math is ~40x faster than the scalar inner kernel.

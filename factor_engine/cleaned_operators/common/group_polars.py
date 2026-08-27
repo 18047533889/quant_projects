@@ -26,7 +26,7 @@ def _numeric_cols(df: pl.DataFrame) -> list[str]:
     return [c for c in df.columns if c not in _SKIP]
 
 
-def _group_rowwise(x: pl.DataFrame, group: pl.DataFrame | None, fn):
+def _group_rowwise(x: pl.DataFrame, group: pl.DataFrame | None, fn, fallback_policy: str | None = None):
     """对每个交易日截面调用 ``fn(row_x, row_group) -> row_out``。"""
     cols = _numeric_cols(x)
     x_arr = x.select(cols).to_numpy()
@@ -36,7 +36,11 @@ def _group_rowwise(x: pl.DataFrame, group: pl.DataFrame | None, fn):
         g_arr = group.select(cols).to_numpy()
     out = np.full_like(x_arr, np.nan, dtype=float)
     for i in range(len(x_arr)):
-        out[i] = fn(x_arr[i], g_arr[i] if g_arr is not None else None)
+        row_g = g_arr[i] if g_arr is not None else None
+        if fallback_policy is None:
+            out[i] = fn(x_arr[i], row_g)
+        else:
+            out[i] = fn(x_arr[i], row_g, fallback_policy)
     result = pl.DataFrame(out, schema=cols)
     if "date" in x.columns:
         result = result.with_columns(x["date"])
@@ -432,12 +436,19 @@ def _average_ranks_1d(vals: np.ndarray) -> np.ndarray:
     return ranks
 
 
-def _decay_linear_row(row_x: np.ndarray, row_g: np.ndarray | None) -> np.ndarray:
+def _decay_linear_row(row_x: np.ndarray, row_g: np.ndarray | None, fallback_policy: str = "nan") -> np.ndarray:
     """组内按**平均排名**线性加权（CS rank-weighted value）。
 
     与 ``group.py`` 中 ``GroupRankWeightedValue`` 一致：``rank(method='average')``
     后权重 ∝ 平均排名、组内归一化，再 ``x * weight``；并列值得到相同权重
     （不依赖列位置）。``window`` 参数不参与计算。时间衰减见 ``group_ts_decay_linear``。
+
+    ``fallback_policy`` 仅在整行分组缺失（group 全 NaN / 无 group）时生效，
+    语义与 pandas ``_group_rank_weighted_value_panel`` 对齐：
+      - ``nan``: 整行输出 NaN（PIT 生产默认）
+      - ``keep_original``: 保留原始 x
+      - ``global``: 不做分组，跨整行排名加权
+      - ``error``: 整行分组缺失时抛错（fail-closed）
     """
     out = np.full_like(row_x, np.nan, dtype=float)
     mask = ~np.isnan(row_x)
@@ -450,8 +461,24 @@ def _decay_linear_row(row_x: np.ndarray, row_g: np.ndarray | None) -> np.ndarray
         return vals * w
 
     if row_g is None or np.all(np.isnan(row_g)):
-        out[mask] = _apply(row_x[mask])
-        return out
+        # 整行分组缺失：按 fallback_policy 决定行为（与 pandas 对齐）。
+        if fallback_policy == "nan":
+            return out
+        if fallback_policy == "error":
+            raise ValueError(
+                "group_rank_weighted_value: entire group panel row is missing "
+                "and fallback_policy='error' (fail-closed)"
+            )
+        if fallback_policy == "keep_original":
+            out[mask] = row_x[mask]
+            return out
+        if fallback_policy == "global":
+            out[mask] = _apply(row_x[mask])
+            return out
+        raise ValueError(
+            f"group_rank_weighted_value fallback_policy must be one of "
+            f"{{'nan','error','global','keep_original'}}, got {fallback_policy!r}"
+        )
     for g in np.unique(row_g[~np.isnan(row_g)]):
         gm = (row_g == g) & mask
         if np.any(gm):
@@ -478,9 +505,14 @@ class GroupRankWeightedValuePolars(SeriesOperator):
     )
 
     def _calculate_series(
-        self, x: pl.DataFrame, group: pl.DataFrame = None, **kwargs
+        self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs
     ) -> pl.DataFrame:
-        return _group_rowwise(x, group, _decay_linear_row)
+        # P1 fix (operator-correctness audit P1): ``fallback_policy`` was declared
+        # in ``param_names`` but never forwarded to the kernel, so the knob was
+        # dead on the polars backend and ``fallback_policy="keep_original"`` was
+        # rejected as not in the allowed choices.  Forward it into
+        # ``_decay_linear_row`` so the knob is live and matches pandas.
+        return _group_rowwise(x, group, _decay_linear_row, fallback_policy=fallback_policy)
 
 
 @register_operator(

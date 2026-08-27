@@ -1,0 +1,91 @@
+mission: P0-11 ResourceBroker single-authority closure
+baseline: R53 (HEAD 2013f94a, current working tree state 2026-08-27)
+status: CLOSED
+
+# P0-11 ResourceBroker 单权威闭环 — evidence
+
+## 权威映射（budget authority map）
+
+所有内存/CPU/IO/spill/resource-envelope 权威收敛到唯一
+`factor_engine/runtime/resource_broker.py::ResourceBroker`。AutoMemoryBudget
+(`auto_memory_budget.py`) 与 ResourceBroker 已合并成单 authority：
+- `AutoMemoryBudget` 只做**纯公式**（compute_auto_memory_budget）；
+- `ResourceBroker` 是唯一有状态的 broker（单权威），`auto_memory_budget()` /
+  `execution_budget()` / `resource_envelope()` / `resource_decision()` /
+  `current_read_budget()` / `current_sink_budget()` / `current_cse_budget()` /
+  `current_remote_io_lease_budget()` / `acquire_memory()` 全部由它派生；
+- `AutoMemoryBudget` 保留为 compat/纯公式 facade（无状态，只有常数与类）。
+
+消费路径 -> 读的 envelope：
+| 消费模块 | 读的权威 | 合并后（P0-11） |
+|---|---|---|
+| Task admission (can_admit/try_reserve) | broker.live_headroom + reserve + tokens | 不变（已是 broker 单权威） |
+| MemoryLease (租约池) | broker.acquire_memory / ExecutionBudget | 不变；超预算 → None fail-closed |
+| ReadWave | broker.resource_decision().read_wave_bytes / current_read_budget() | 不变 |
+| CSE cache | broker.current_cse_budget()（get_global_cse_cache_optimizer 已接） | 不变；4GiB 仅绝对上限回退 |
+| cohort size | cohort_budget_from_broker → broker.resource_envelope().safe_memory_bytes | 新增 CohortBudgetResult（fallback 显式标记，见 execution_cohort.py） |
+| ResultQueue/sink | broker.current_sink_budget()（engine.py，无固定 4GiB 直读） | 不变 |
+| COS multipart / remote writer | broker.acquire_memory(kind)（RemoteFactorBlockWriter） | 不变 |
+| DA (data_access) | FE HostResourceCoordinator resource_envelope()（ExecutionLease.from_resource_envelope 防御性懒加载） | 不变（单权威在 FE） |
+| HostResourceCoordinator | broker（构造入参或 default new） | **新增 production fail-closed**：broker=None 在 production → raise |
+| AdaptiveBatchScheduler | service ContextVar broker → host coordinator broker → default new | **新增 production fail-closed**：仍 None → raise |
+| HybridExecutor | broker 入参 → default new | **新增 production fail-closed** |
+
+## Production gating（fail-closed）
+新增 `require_broker()` + `MissingResourceBroker`（resource_broker.py）：
+- production（FACTOR_ENGINE_RUN_MODE=production / QUANT_PRODUCTION_MODE=1，
+  与 `runtime.production_policy` 单权威一致）且 broker=None → **raise
+  MissingResourceBroker**（不再 `broker or ResourceBroker()` 静默新建第二套）；
+- research/dev 允许降级，但**必须显式标记**：`broker_degraded_observable()`
+  记录 `verdicts=['degraded']`（FE_STRICT_RESOURCE_BROKER=0 时 production 也
+  可降级但标记 forced_mark）；
+- 接线点（4 处找到 + host coordinator 共 5 处）：
+  `adaptive_batch_scheduler.py::AdaptiveBatchScheduler.__init__`、
+  `hybrid_executor.py::HybridExecutor.__init__`、
+  `host_resource_coordinator.py::HostResourceCoordinator.__init__`、
+  `multibackend/memory_budget_manager.py::global_budget_manager`、
+  `multibackend/cse_cache_optimizer.py::get_global_cse_cache_optimizer`（后两者
+  预算来源已是 broker，经 require_broker 后 failure 也 fail-closed）。
+- `concurrent_region_isolation.py` 全局 region manager 预算同样来自 broker
+  execution_budget()（无第二套）。
+
+## Non-vacuous tests（factor_engine/tests/r38/test_p011_resource_broker_authority.py）
+13 passed：
+- (a) 同一 epoch 各消费路径共享同一 SafeEnvelope / 派生预算
+  （read/sink/cse/remote/cohort/wave 全部来自同一 broker；
+  hard_memory_limit + emergency_reserve 恒定，safe 亚秒级漂移容差 ±512MiB）；
+- (b) production 缺 broker → MissingResourceBroker（require_broker /
+  AdaptiveBatchScheduler / HostResourceCoordinator / RemoteFactorBlockWriter）；
+  超预算 acquire_memory / try_reserve → None；
+- (c) epoch 释放归还：MemoryLease / ReservationLease CPU+IO token /
+  BoundedResultQueue 消费后字节归零；均为幂等 release。
+
+## Related regression
+- r27 资源套件、r38 scheduler/autopilot/oom/calibration/writer、r40 cancellation：
+  72 passed 0 failed。
+- r38 既有用例暴露的真实 bug（非本合并不引入）：BoundedResultQueue.put 在队列
+  为空但 `item.bytes > max_bytes` 时未阻塞（`self._items` 短路）→ 超预算单项
+  直接入队。**已修复** put 条件为 `current_bytes + item.bytes > max_bytes`
+  （动态吞吐与单超限项都阻塞）。r38 test_dynamic_sink_and_service_lease.py
+  5 passed。
+
+## Changed files（本 mission）
+- factor_engine/runtime/resource_broker.py      （+ require_broker/MissingResourceBroker/
+  single-authority gate；P0-15 生产判定与 production_policy 单权威对齐）
+- factor_engine/runtime/adaptive_batch_scheduler.py （+ os import；broker loss → raise）
+- factor_engine/runtime/hybrid_executor.py      （broker loss → raise）
+- factor_engine/runtime/host_resource_coordinator.py （broker loss → raise）
+- factor_engine/runtime/execution_cohort.py     （cohort_budget_from_broker → CohortBudgetResult）
+- factor_engine/runtime/streaming_result_sink.py （BUGFIX：BoundedResultQueue.put 超限单项阻塞）
+- factor_engine/tests/r38/test_p011_resource_broker_authority.py （新增 13 用例）
+
+## Constraints respected
+- R40 immutable registry：未触碰 cleaned_operators registry 契约。
+- object_store.py 流式：未改。
+- CSE/cohort 公共 API：cohort_budget_from_broker 返回值新增 CohortBudgetResult
+  （__int__ 兼容，原 int 调用方不改语义）。
+- 幂等：资源检查/释放全程幂等，重复 release 无害。
+
+run_command: /home/sunhaiwei/quant_projects/.venv/bin/python -m pytest \
+  factor_engine/tests/r38/test_p011_resource_broker_authority.py -q
+result: 13 passed

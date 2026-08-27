@@ -310,8 +310,8 @@ def test_batch_diamond_fan_in_routes_both_physical_predecessors_into_final_q_cod
         for query in connection.calls
         if query.startswith("qe_") and "+" in query
     )
-    assert "_left_out" in final_q_code
-    assert "_right_out" in final_q_code
+    assert "left_2dout" in final_q_code
+    assert "right_2dout" in final_q_code
     assert "_base" in final_q_code
 
 
@@ -337,7 +337,7 @@ def test_compiler_intermediates_are_namespaced_and_cleaned_with_the_workspace():
 
     executor.execute_region(plan, {"base": pd.DataFrame({"x": [1.0]})})
 
-    emitted = next(query for query in connection.calls if "middle_node:" in query)
+    emitted = next(query for query in connection.calls if "middle_2enode:" in query)
     assert "first-node" not in emitted
     assert "middle.node" not in emitted
     assert "final-node" not in emitted
@@ -349,7 +349,7 @@ def test_compiler_intermediates_are_namespaced_and_cleaned_with_the_workspace():
     compiler_symbols = {
         symbol
         for symbol in deleted
-        if symbol.endswith(("first_node", "middle_node", "final_node"))
+        if symbol.endswith(("first_2dnode", "middle_2enode", "final_2dnode"))
     }
     assert len(compiler_symbols) == 3
 

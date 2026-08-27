@@ -73,7 +73,7 @@ class DefaultExposureProvider:
     def _require_store(self, feature: str) -> Any:
         if self._store is None:
             raise OptionalDependencyMissing(
-                package_name="dataaccess",
+                package_name="data_access",
                 feature_name=feature,
             )
         return self._store
@@ -100,13 +100,13 @@ class DefaultExposureProvider:
             df = handle.to_pandas()
         except Exception as exc:  # noqa: BLE001 - fail closed on any data error
             raise OptionalDependencyMissing(
-                package_name="dataaccess",
+                package_name="data_access",
                 feature_name=f"{feature} (data unavailable: {type(exc).__name__})",
             ) from exc
 
         if df is None or df.empty:
             raise OptionalDependencyMissing(
-                package_name="dataaccess",
+                package_name="data_access",
                 feature_name=f"{feature} (empty result)",
             )
 
@@ -299,7 +299,7 @@ class DefaultExposureProvider:
         # Custom exposures are not natively resolvable; fail closed rather than
         # returning garbage.
         raise OptionalDependencyMissing(
-            package_name="dataaccess",
+            package_name="data_access",
             feature_name=f"custom exposure '{exposure_name}'",
         )
 

@@ -148,7 +148,7 @@ def plot_decile_compare(raw_mat, opt_mat, vwap, name):
                 mk = (gids[t] == k)
                 if mk.any():
                     gr[t, k] = np.nanmean(fwd.values[t, mk])
-        return np.cumprod(1 + gr)
+        return np.cumprod(1 + gr, axis=0)  # 按日期轴累计，避免 np.cumprod 展平
     raw_nav = decile_nav(raw_mat)
     opt_nav = decile_nav(opt_mat)
     common = raw_mat.index.intersection(vwap.index)
@@ -186,7 +186,7 @@ def plot_ls_compare(raw_mat, opt_mat, vwap, name):
                 if mk.any():
                     gr[t, k] = np.nanmean(fwd.values[t, mk])
         ls = gr[:, 9] - gr[:, 0]
-        return np.cumprod(1 + ls)
+        return np.cumprod(1 + ls, axis=0)  # 按日期轴累计（axis=0 一维等价默认）
     raw = ls_nav(raw_mat)
     opt = ls_nav(opt_mat)
     common = raw_mat.index.intersection(vwap.index)
@@ -272,22 +272,40 @@ def inject_detail_page(page, opt1_meta, opt2_meta, cluster_meta, vwap):
     if raw_mat.shape[1] == 0 or opt_mat.shape[1] == 0:
         return False
 
-    # 生成对比图
-    raw_ic = daily_rankic_series(raw_mat, vwap)
-    opt_ic = daily_rankic_series(opt_mat, vwap)
-    ic_chart = plot_ic_compare(raw_ic, opt_ic, page)
-    decile_chart = plot_decile_compare(raw_mat, opt_mat, vwap, page)
-    ls_chart = plot_ls_compare(raw_mat, opt_mat, vwap, page)
+    # 生成对比图（单页任一图失败不拖垮全流程）
+    ic_chart = decile_chart = ls_chart = None
+    try:
+        raw_ic = daily_rankic_series(raw_mat, vwap)
+        opt_ic = daily_rankic_series(opt_mat, vwap)
+        ic_chart = plot_ic_compare(raw_ic, opt_ic, page)
+    except Exception as exc:
+        print(f"  [ERR] {page} RankIC 对比图: {type(exc).__name__}: {str(exc)[:120]}", flush=True)
+    try:
+        decile_chart = plot_decile_compare(raw_mat, opt_mat, vwap, page)
+    except Exception as exc:
+        print(f"  [ERR] {page} 十分层图: {type(exc).__name__}: {str(exc)[:120]}", flush=True)
+    try:
+        ls_chart = plot_ls_compare(raw_mat, opt_mat, vwap, page)
+    except Exception as exc:
+        print(f"  [ERR] {page} 多空图: {type(exc).__name__}: {str(exc)[:120]}", flush=True)
+    if ic_chart is None and decile_chart is None and ls_chart is None:
+        print(f"  [ERR] {page} 三张对比图全部失败，跳过注入", flush=True)
+        return False
 
     block = build_opt_block(page, opt1_meta, opt2_meta, cluster_meta)
-    # 替换占位 div 为真实图
+    # 替换占位 div 为真实图（失败的图留占位说明）
+    charts_html = ""
+    if ic_chart:
+        charts_html += f'  <img src="data:image/png;base64,{ic_chart}" style="width:100%;border-radius:8px;margin-bottom:8px" alt="RankIC对比"/>\n'
+    if decile_chart:
+        charts_html += f'  <img src="data:image/png;base64,{decile_chart}" style="width:100%;border-radius:8px;margin-bottom:8px" alt="十分层对比"/>\n'
+    if ls_chart:
+        charts_html += f'  <img src="data:image/png;base64,{ls_chart}" style="width:100%;border-radius:8px" alt="多空对比"/>\n'
+    if not charts_html:
+        charts_html = '  <p style="color:#94a3b8;font-size:0.8rem">（对比图生成失败）</p>\n'
     block = block.replace(
         f'<div id="opt-charts-{page}" style="margin-top:10px">\n    <p style="color:#94a3b8;font-size:0.8rem">（优化对比图将在下方渲染）</p>\n  </div>',
-        f'<div style="margin-top:10px">\n'
-        f'  <img src="data:image/png;base64,{ic_chart}" style="width:100%;border-radius:8px;margin-bottom:8px" alt="RankIC对比"/>\n'
-        f'  <img src="data:image/png;base64,{decile_chart}" style="width:100%;border-radius:8px;margin-bottom:8px" alt="十分层对比"/>\n'
-        f'  <img src="data:image/png;base64,{ls_chart}" style="width:100%;border-radius:8px" alt="多空对比"/>\n'
-        f'</div>'
+        f'<div style="margin-top:10px">\n{charts_html}  </div>'
     )
 
     # 在 </main> 前插入
@@ -298,6 +316,13 @@ def inject_detail_page(page, opt1_meta, opt2_meta, cluster_meta, vwap):
 
 
 def main():
+    # 参数：--limit N（只注入前 N 页，冒烟用）、--pages p1,p2,...（指定页面）
+    import argparse
+    ap = argparse.ArgumentParser(description="阶段4：详情页注入优化因子区块 + 首页汇总")
+    ap.add_argument("--limit", type=int, default=0, help="只注入前 N 页（0=全部）")
+    ap.add_argument("--pages", type=str, default="", help="逗号分隔的指定页面（优先于 --limit）")
+    args = ap.parse_args()
+
     # 加载 meta
     opt1_meta = json.loads(OPT1_META.read_text()) if OPT1_META.exists() else {}
     opt2_meta = json.loads(OPT2_META.read_text()) if OPT2_META.exists() else {}
@@ -306,48 +331,71 @@ def main():
 
     close = load_vwap()
     pages = sorted([f.stem for f in OPT_DIR.glob("*.parquet")]) if OPT_DIR.exists() else []
+    if args.pages:
+        want = [p.strip() for p in args.pages.split(",") if p.strip()]
+        pages = [p for p in pages if p in want]
+        print(f"[opt4] 指定页面: {len(pages)} 页", flush=True)
+    elif args.limit and args.limit > 0:
+        pages = pages[:args.limit]
+        print(f"[opt4] 限制前 {len(pages)} 页", flush=True)
     print(f"[opt4] 优化因子数: {len(pages)} (vwap-to-vwap 口径)", flush=True)
 
     t0 = time.time()
     injected = 0
     for i, page in enumerate(pages):
-        if inject_detail_page(page, opt1_meta, opt2_meta, cluster_meta, close):
-            injected += 1
-        if i % 50 == 0:
-            print(f"  {i}/{len(pages)} 注入{injected} 耗时{time.time()-t0:.0f}s", flush=True)
+        try:
+            ok = inject_detail_page(page, opt1_meta, opt2_meta, cluster_meta, close)
+            if ok:
+                injected += 1
+        except Exception as exc:
+            print(f"  [ERR] {page}: {type(exc).__name__}: {str(exc)[:150]}", flush=True)
+            continue
+        if (i + 1) % 50 == 0 or (i + 1) == len(pages):
+            print(f"  {i+1}/{len(pages)} 注入{injected} 耗时{time.time()-t0:.0f}s", flush=True)
     print(f"[opt4] 详情页注入完成: {injected} 页, 耗时{time.time()-t0:.0f}s", flush=True)
 
     # 首页优化汇总（追加到 index.html）
     index_path = REPORT_DIR / "index.html"
     if index_path.exists():
-        html = index_path.read_text(encoding="utf-8")
-        if "优化因子汇总" not in html:
-            # 生成优化因子排序表
-            rows = []
-            for page in sorted(opt1_meta.items(), key=lambda kv: kv[1].get("best_rankic_ir", 0), reverse=True):
-                p, m = page
-                if m.get("best_rankic_ir", 0) <= 0:
-                    continue
-                cid = (cluster_meta.get("page_to_cluster") or {}).get(p, "—")
-                gate = (cluster_meta.get("quality_gate") or {}).get(p, {}).get("quality_gate", "—")
-                rows.append(
-                    f'<tr><td class="rank">{len(rows)+1}</td>'
-                    f'<td><a href="factors/factor_{p}.html"><code>{p}</code></a></td>'
-                    f'<td>{m.get("best_mean_rankic", 0):.4f}</td>'
-                    f'<td>{m.get("best_rankic_ir", 0):.3f}</td>'
-                    f'<td>{m.get("best", "—")}</td>'
-                    f'<td>{cid}</td><td>{gate}</td></tr>'
-                )
-            opt_table = f"""
+        try:
+            html = index_path.read_text(encoding="utf-8")
+            if "优化因子汇总" in html:
+                print(f"[opt4] 首页已含优化因子汇总，跳过", flush=True)
+            else:
+                # 生成优化因子排序表
+                rows = []
+                for page in sorted(opt1_meta.items(), key=lambda kv: kv[1].get("best_rankic_ir", 0), reverse=True):
+                    p, m = page
+                    if m.get("best_rankic_ir", 0) <= 0:
+                        continue
+                    cid = (cluster_meta.get("page_to_cluster") or {}).get(p, "—")
+                    gate = (cluster_meta.get("quality_gate") or {}).get(p, {}).get("quality_gate", "—")
+                    rows.append(
+                        f'<tr><td class="rank">{len(rows)+1}</td>'
+                        f'<td><a href="factors/factor_{p}.html"><code>{p}</code></a></td>'
+                        f'<td>{m.get("best_mean_rankic", 0):.4f}</td>'
+                        f'<td>{m.get("best_rankic_ir", 0):.3f}</td>'
+                        f'<td>{m.get("best", "—")}</td>'
+                        f'<td>{cid}</td><td>{gate}</td></tr>'
+                    )
+                opt_table = f"""
 <h2>🧬 优化因子汇总（预处理 + 择优）</h2>
 <table>
   <thead><tr><th>#</th><th>因子</th><th>优化后 RankIC</th><th>优化后 IR</th><th>最优变体</th><th>因子族</th><th>质量门槛</th></tr></thead>
   <tbody>{''.join(rows)}</tbody>
 </table>
 """
-            html = html.replace("</main>", opt_table + "\n</main>", 1)
-            index_path.write_text(html, encoding="utf-8")
-            print(f"[opt4] 首页优化汇总已追加", flush=True)
+                if "</main>" in html:
+                    html = html.replace("</main>", opt_table + "\n</main>", 1)
+                    index_path.write_text(html, encoding="utf-8")
+                    print(f"[opt4] 首页优化汇总已追加", flush=True)
+                else:
+                    # index.html 无 </main> 标记（旧格式），追加到 </body> 前
+                    html = html.replace("</body>", opt_table + "\n</body>", 1)
+                    index_path.write_text(html, encoding="utf-8")
+                    print(f"[opt4] 首页优化汇总已追加（无 </main>，追加到 </body> 前）", flush=True)
+        except Exception as exc:
+            print(f"[opt4] 首页追加失败: {type(exc).__name__}: {str(exc)[:150]}", flush=True)
 
     print(f"[opt4] 全部完成", flush=True)
 

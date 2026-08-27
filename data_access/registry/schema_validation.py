@@ -182,7 +182,9 @@ def _production_mode() -> bool:
     fe = os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower()
     if fe == "production":
         return True
-    return os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
+    return os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"} or (
+        int(os.environ.get("QUANT_SCHEMA_CHECK_PROD_OVERRIDE", "0")) == 1
+    )
 
 
 def _break_glass() -> bool:

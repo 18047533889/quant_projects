@@ -50,7 +50,11 @@ from factor_engine.runtime.feature_block import (
     choose_columns_per_block,
     _partition_token,
 )
-from factor_engine.runtime.resource_broker import ResourceBroker
+from factor_engine.runtime.resource_broker import (
+    MissingResourceBroker,
+    ResourceBroker,
+    require_broker,
+)
 
 __all__ = [
     "RemoteFactorBlockWriter",
@@ -98,9 +102,17 @@ class RemoteFactorBlockWriter:
 
     ``store`` 是 ``data_access.read.object_store.ObjectStore`` 实例（本地测试用
     ``LocalObjectStore``，生产用 ``COSObjectStore``）。``broker`` 是
-    ``ResourceBroker``，两者都可省略（省略时用内置 no-op broker / 内存 store，
-    便于最小化测试）。
+    ``ResourceBroker``。
+
+    P0-15 production gate：生产模式下 ``broker=None`` 直接抛
+    :class:`MissingResourceBroker`（fail-closed），绝不静默无界运行。本 writer
+    是**生产** writer（factor 结果直写 COS），默认 production-eligible；
+    仅显式 ``research_only=True`` 时才允许 research/dev 无 broker 运行。
     """
+
+    #: 生产 writer —— 本类不降级为 research/dev-only（区别于本地 FeatureBlockWriter）。
+    #: 但 P0-15 标记局部"本地/内存 store + 无 broker"的组合只允许 research/dev。
+    LOCAL_RESEARCH_ONLY = False
 
     def __init__(
         self,
@@ -113,14 +125,24 @@ class RemoteFactorBlockWriter:
         default_partition: str = "default",
         publisher: Any | None = None,
         on_lease_none: Callable[[MemoryLeaseKind, int], None] | None = None,
+        run_mode: str | None = None,
+        research_only: bool = False,
     ) -> None:
         self.store = store
         self.prefix = str(prefix).strip("/") or "factors"
-        self.broker = broker
         self.columns_per_block = columns_per_block
         self.writer_memory_bytes = writer_memory_bytes
         self.default_partition = str(default_partition)
         self.on_lease_none = on_lease_none
+        self.run_mode = run_mode
+        # P0-15: 生产模式（QUANT_PRODUCTION_MODE / FACTOR_ENGINE_RUN_MODE=production）
+        # 下 broker=None → MissingResourceBroker，绝不静默降级。
+        self.broker = require_broker(
+            broker,
+            run_mode=run_mode,
+            raise_on_missing=True,
+            return_fallback=False,
+        )
 
         if publisher is not None:
             self._publisher = publisher
@@ -143,6 +165,10 @@ class RemoteFactorBlockWriter:
         self._generation_id: str | None = None
         self._manifest: BlockManifest | None = None
 
+        # Wave1-F identity：{factor_id: FactorValueIdentity dict} + FeatureSetIdentity。
+        self._identities: dict[str, dict[str, Any]] = {}
+        self._feature_set_identity: dict[str, Any] | None = None
+
         # telemetry
         self._serializer_peak_bytes = 0
         self._upload_buffer_bytes = 0
@@ -152,6 +178,35 @@ class RemoteFactorBlockWriter:
         self._total_factors_written = 0
         self._leases: list[Any] = []  # 当前持有的内存租约
         self._lock = threading.RLock()
+        # P0-12 row-axis identity（partition -> RowAxisIdentity，每 partition 存一次）
+        self._row_axis: dict[str, Any] = {}
+
+    # -- P0-12 row-axis ----------------------------------------------------
+
+    def set_row_axis(self, identity: Any, partition: str | None = None) -> None:
+        """把一个 partition 的 row-axis identity 交给 writer，随 manifest 落盘。
+
+        identity 可以是 :class:`RowAxisIdentity` 或 ``to_dict()`` 结果。缺省
+        partition 参数时用于默认 partition。P0-12：每 partition 存一次行键，
+        不按 factor 重复。
+        """
+        if self._finished:
+            raise RuntimeError("set_row_axis: writer 已 finish")
+        if identity is None:
+            return
+        from factor_engine.runtime.feature_block import RowAxisIdentity
+
+        if hasattr(identity, "to_dict"):
+            payload = identity.to_dict()
+        elif isinstance(identity, dict):
+            payload = dict(identity)
+        else:  # pragma: no cover - 防御
+            raise TypeError(
+                f"set_row_axis 需 RowAxisIdentity 或其 dict，got {type(identity)}"
+            )
+        self._row_axis[str(partition) if partition is not None else self.default_partition] = (
+            RowAxisIdentity.from_dict(payload)
+        )
 
     # -- 状态 ---------------------------------------------------------------
 
@@ -163,6 +218,92 @@ class RemoteFactorBlockWriter:
 
     def generation_id(self) -> str | None:
         return self._generation_id
+
+    # -- Wave1-F identity -----------------------------------------------------
+
+    def set_identity(self, factor_id: str, identity: Any) -> None:
+        """把某因子的 FactorValueIdentity 交给 writer，finish 时随 manifest 落盘。
+
+        identity 可为 ``FactorValueIdentity`` 对象或其 ``to_dict()``。重复 set 幂等。
+        """
+        if self._finished:
+            raise RuntimeError(
+                "RemoteFactorBlockWriter.finish() 已调用，不能再 set_identity"
+            )
+        if identity is None:
+            return
+        payload = identity.to_dict() if hasattr(identity, "to_dict") else dict(identity)
+        self._identities.setdefault(str(factor_id), payload)
+
+    def set_feature_set_identity(self, identity: Any) -> None:
+        """把 FeatureSetIdentity 交给 writer，finish 时随 manifest 落盘。"""
+        if self._finished:
+            raise RuntimeError(
+                "RemoteFactorBlockWriter.finish() 已调用，不能再 set_feature_set_identity"
+            )
+        if identity is None:
+            return
+        self._feature_set_identity = (
+            identity.to_dict() if hasattr(identity, "to_dict") else dict(identity)
+        )
+
+    def _build_missing_identities(self) -> dict[str, dict[str, Any]]:
+        """为尚未显式 set_identity 的因子补齐 FactorValueIdentity（幂等）。
+
+        block_content_hash 从本地 block 数组真实字节计算（与 feature_block 一致，
+        保证 reader 重算可匹配）。显式 identity 缺 content hash 时同样补算。
+        """
+        from factor_engine.runtime.factor_value_identity import (
+            UNKNOWN_SNAPSHOT,
+            compute_block_content_hash,
+            factor_value_identity_fields,
+        )
+
+        def _content_hash_of(spec: BlockSpec | None) -> str:
+            if spec is None or not spec.file.endswith(_BLOCK_SUFFIX):
+                return ""
+            try:
+                payload = (
+                    self.store.read_bytes(spec.file)
+                    if hasattr(self.store, "read_bytes")
+                    else None
+                )
+                if payload is None:
+                    return ""
+                return compute_block_content_hash(
+                    deserialize_block(payload),
+                    factor_ids=list(spec.factor_ids),
+                    numeric_policy=self.dtype,
+                )
+            except Exception:  # pragma: no cover - 读取失败按空处理
+                return ""
+
+        out = dict(self._identities)
+        for fid, per_partition in self._factor_to_block.items():
+            partition = next(iter(per_partition.keys()))
+            block_id = per_partition[partition]
+            spec = self._blocks.get(block_id)
+            if fid in out:
+                if not out[fid].get("block_content_hash"):
+                    out[fid] = dict(out[fid])
+                    out[fid]["block_content_hash"] = _content_hash_of(spec)
+                continue
+            out[fid] = factor_value_identity_fields(
+                factor_id=fid,
+                market="",
+                frequency="",
+                partition_time=str(partition),
+                universe_snapshot_id=UNKNOWN_SNAPSHOT,
+                ordered_instrument_hash="",
+                data_snapshot_id=UNKNOWN_SNAPSHOT,
+                calendar_snapshot_id=UNKNOWN_SNAPSHOT,
+                decision_time_policy="",
+                numeric_policy=self.dtype,
+                dtype=self.dtype,
+                build_sha="",
+                block_content_hash=_content_hash_of(spec),
+            )
+        return out
 
     # -- 主写入 -------------------------------------------------------------
 
@@ -304,6 +445,9 @@ class RemoteFactorBlockWriter:
             factor_to_block={k: dict(v) for k, v in self._factor_to_block.items()},
             partition_rows=dict(self._partition_rows),
             columns_per_block=self.columns_per_block,
+            identities=self._build_missing_identities(),
+            feature_set_identity=self._feature_set_identity,
+            row_axis=dict(self._row_axis),
         )
         # 把本 writer 的 feature-block manifest 作为代次内对象发布（元数据与值分离）。
         manifest_bytes = json.dumps(
@@ -375,7 +519,12 @@ class RemoteFactorBlockWriter:
         )
 
     def _require_generation(self) -> str:
-        """惰性 begin_generation（首个 block/对象写入前）。"""
+        """惰性 begin_generation（首个 block/对象写入前）。
+
+        P0-10: 每次 writer 只允许一个活跃代次。``begin_generation`` 会快照
+        CURRENT 的 fencing epoch；若本 writer 已被更新的 writer 超越（并发
+        CURRENT 下 stale），finish 时由 publisher 拒绝晋升（StaleWriterError）。
+        """
         if self._generation_id is None:
             self._generation_id = self._publisher.begin_generation(
                 self.prefix,

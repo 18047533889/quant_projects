@@ -6,9 +6,63 @@ Public API for transforming selected factors into model-ready features.
 
 __version__ = "0.1.0"
 
-from factor_preprocess.contracts.policy import PreprocessingPolicy, TransformSpec, TransformKind, TransformMode
+# ---------------------------------------------------------------------------
+# DLIB-FP-001: canonical top-level public API.
+#
+# The primary public API is the registry-based, deeply-immutable contract
+# objects. ``PreprocessingPolicy`` / ``TransformSpec`` are retained ONLY as a
+# deprecated compatibility view (their real authority is
+# ``registry.policies.PolicyPreset`` / ``TransformStep``).
+# ---------------------------------------------------------------------------
+
+# Canonical policy + transform registries and their deeply-immutable contracts.
+from factor_preprocess.registry.policies import (
+    PolicyPreset,
+    PolicyRegistry,
+    PolicyLevel,
+    TransformStep,
+    create_default_policies,
+    get_default_policy_registry,
+)
+from factor_preprocess.registry.transforms import (
+    TransformRegistry,
+    TransformMetadata,
+    TransformCategory,
+    create_default_registry,
+    get_default_registry,
+)
+from factor_preprocess.contracts.treatment_lineage import (
+    TransformStage,
+    TransformSemanticID,
+    TransformLineage,
+    ExistingTreatmentSignature,
+    ExistingTreatmentStatus,
+    build_signature_from_lineage,
+    map_fe_dsl_to_semantic,
+)
+from factor_preprocess.contracts.treatment_recipe import (
+    TreatmentRecipe,
+    RecipeStep,
+    FitBoundary,
+    RecipeSchemaVersion,
+)
+from factor_preprocess.contracts.factor_profile import FactorProfileArtifact
 from factor_preprocess.contracts.state import FittedState
-from factor_preprocess.contracts.feature_bundle import FeatureBundle, AxisRef, ChannelRef, FeatureManifest
+from factor_preprocess.contracts.feature_bundle import (
+    FeatureBundle,
+    AxisRef,
+    ChannelRef,
+    FeatureManifest,
+)
+from factor_preprocess.neutralization.diagnostics_artifact import (
+    NeutralizationDiagnostics,
+    RankDeficientResolution,
+)
+from factor_preprocess.neutralization.spec import NeutralizationSpec
+
+# Deprecated compatibility view — NOT primary. Kept only so existing importers
+# keep working. See ``registry.policies`` for the canonical authority.
+from factor_preprocess.contracts.policy import PreprocessingPolicy, TransformSpec, TransformKind, TransformMode
 from factor_preprocess.errors import (
     FactorPreprocessError,
     ContractError,
@@ -37,11 +91,40 @@ from factor_preprocess.errors import (
 )
 
 __all__ = [
+    # Canonical registries
+    "PolicyPreset",
+    "PolicyRegistry",
+    "PolicyLevel",
+    "TransformStep",
+    "create_default_policies",
+    "get_default_policy_registry",
+    "TransformRegistry",
+    "TransformMetadata",
+    "TransformCategory",
+    "create_default_registry",
+    "get_default_registry",
+    # Treatment lineage / recipe / profile contracts
+    "TransformStage",
+    "TransformSemanticID",
+    "TransformLineage",
+    "ExistingTreatmentSignature",
+    "ExistingTreatmentStatus",
+    "build_signature_from_lineage",
+    "map_fe_dsl_to_semantic",
+    "TreatmentRecipe",
+    "RecipeStep",
+    "FitBoundary",
+    "RecipeSchemaVersion",
+    "FactorProfileArtifact",
+    "NeutralizationDiagnostics",
+    "RankDeficientResolution",
+    "NeutralizationSpec",
+    # Core contracts
+    "FittedState",
     "PreprocessingPolicy",
     "TransformSpec",
     "TransformKind",
     "TransformMode",
-    "FittedState",
     "FeatureBundle",
     "AxisRef",
     "ChannelRef",

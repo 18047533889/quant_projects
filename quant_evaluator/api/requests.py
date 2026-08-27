@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from quant_evaluator.contracts.sealed_split import SealedSplitRef
+from quant_evaluator.contracts.evaluation_refs import FactorValueRef, LabelBundleRef
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,13 @@ class EvaluationRequest:
     (backward compatible with every existing caller); when provided, the
     runtime raises :class:`SealedSplitOverlapError` if the split window
     overlaps the factor/label information boundary (R21 Q5 sealed-test gate).
+
+    Serialization (DLIB-QE-003, Option A): ``to_dict`` / ``from_dict`` are a
+    strict round-trip.  The request references the durable factor-value and
+    label-bundle artifacts via :class:`FactorValueRef` / :class:`LabelBundleRef`
+    (identity + provenance only, never the large raw arrays).  The raw
+    ``batch_or_factor_ids`` / ``label_bundle`` payloads are runtime-only and
+    deliberately NOT serialized.
     """
     batch_or_factor_ids: Any
     label_bundle: Any
@@ -31,9 +39,17 @@ class EvaluationRequest:
     cost_budget: Optional[float] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     split_ref: Optional[SealedSplitRef] = None
+    factor_value_ref: Optional[FactorValueRef] = None
+    label_bundle_ref: Optional[LabelBundleRef] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        """Serialize to a plain, JSON-friendly dict (for hashing/audit)."""
+        """Serialize to a plain, JSON-friendly dict (strict round-trip).
+
+        Serializes the reference fields (``factor_value_ref`` /
+        ``label_bundle_ref`` / ``split_ref``) and the scalar request fields.
+        The raw ``batch_or_factor_ids`` / ``label_bundle`` payloads are
+        runtime-only and deliberately omitted (they are large arrays).
+        """
         payload = {
             "tier": self.tier,
             "cost_budget": self.cost_budget,
@@ -44,14 +60,25 @@ class EvaluationRequest:
         }
         if self.split_ref is not None:
             payload["split_ref"] = self.split_ref.to_dict()
+        if self.factor_value_ref is not None:
+            payload["factor_value_ref"] = self.factor_value_ref.to_dict()
+        if self.label_bundle_ref is not None:
+            payload["label_bundle_ref"] = self.label_bundle_ref.to_dict()
         return payload
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "EvaluationRequest":
-        """Rebuild from :meth:`to_dict` output (``split_ref`` restored if present)."""
+        """Rebuild from :meth:`to_dict` output (strict round-trip).
+
+        Restores ``split_ref`` / ``factor_value_ref`` / ``label_bundle_ref``
+        when present.  ``batch_or_factor_ids`` / ``label_bundle`` are not
+        carried by ``to_dict`` and default to ``None``.
+        """
         if not isinstance(payload, dict):
             raise TypeError("EvaluationRequest.from_dict requires a dict")
         split = payload.get("split_ref")
+        fv_ref = payload.get("factor_value_ref")
+        lb_ref = payload.get("label_bundle_ref")
         return cls(
             batch_or_factor_ids=payload.get("batch_or_factor_ids"),
             label_bundle=payload.get("label_bundle"),
@@ -62,6 +89,12 @@ class EvaluationRequest:
             cost_budget=payload.get("cost_budget"),
             metadata=dict(payload.get("metadata", {})),
             split_ref=SealedSplitRef.from_dict(split) if split is not None else None,
+            factor_value_ref=(
+                FactorValueRef.from_dict(fv_ref) if fv_ref is not None else None
+            ),
+            label_bundle_ref=(
+                LabelBundleRef.from_dict(lb_ref) if lb_ref is not None else None
+            ),
         )
 
 
@@ -95,7 +128,15 @@ class FactorDiagnosis:
 @dataclass(frozen=True)
 class EvaluationBundle:
     """
-    Typed result bundle from evaluation.
+    API / query aggregation view of an evaluation result (DLIB-QE-002).
+
+    This is the *query/aggregation* view returned to API and reporting
+    consumers.  It aggregates per-metric values, diagnostics, grouped metrics,
+    series refs, and metadata for a single evaluation.  It does NOT own domain
+    identity, storage, read-model, or API responsibilities — those live in
+    the canonical durable :class:`EvaluationArtifact`
+    (``quant_evaluator.contracts.evaluation_artifact``) and the runtime /
+    adapters respectively.  This bundle is a projection for return + reporting.
 
     Contains versioned metrics, diagnostics, optional series refs, and all metadata
     needed to validate evidence. Does NOT contain admission decisions.

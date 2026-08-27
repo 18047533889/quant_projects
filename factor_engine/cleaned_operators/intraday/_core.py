@@ -283,6 +283,9 @@ def daily_agg(
     ``ValueError`` from a parameter/kernel bug propagates.
     """
     frame = as_panel(frame)
+    _fast = _vec_daily_agg(frame, fn, min_finite=min_finite)
+    if _fast is not None:
+        return _fast
     out: dict[str, pd.Series] = {}
     for inst in frame.columns:
         col = frame[inst]
@@ -319,6 +322,9 @@ def daily_agg_two(
     """
     frame_a, frame_b = as_panel(frame_a), as_panel(frame_b)
     require_same_session_grid(frame_a, frame_b)
+    _fast = _vec_daily_agg_two(frame_a, frame_b, fn, min_finite=min_finite)
+    if _fast is not None:
+        return _fast
     out: dict[str, pd.Series] = {}
     for inst in frame_a.columns:
         a, b = frame_a[inst], frame_b[inst]
@@ -356,6 +362,9 @@ def daily_agg_three(
     """
     frame_a, frame_b, frame_c = as_panel(frame_a), as_panel(frame_b), as_panel(frame_c)
     require_same_session_grid(frame_a, frame_b, frame_c)
+    _fast = _vec_daily_agg_three(frame_a, frame_b, frame_c, fn, min_finite=min_finite)
+    if _fast is not None:
+        return _fast
     out: dict[str, pd.Series] = {}
     for inst in frame_a.columns:
         joined = pd.concat(
@@ -433,3 +442,307 @@ def mu_p(p: float) -> float:
 def tripower_scale() -> float:
     """mu_{4/3}^{-3} constant for tripower quarticity."""
     return float(mu_p(4.0 / 3.0) ** -3)
+
+
+# ---------------------------------------------------------------------------
+# PERF-2: (day, bar, inst) vectorized daily_agg fast paths.
+#
+# The scalar ``daily_agg{,_two,_three}`` loops ``by (instrument, day)`` grouped
+# frames and calls the python kernel ~(D * C) times.  For minute panels
+# (C ~ up to 4000 instruments, D ~ trade days, 240 bars/day) the Python +
+# groupby overhead dwarfs the kernel math.  These fast paths re-materialize
+# the grid as a 3-D ndarray (day, bar_max, inst) and run a small set of
+# algebraically-equivalent kernels in bulk with numpy ops.
+#
+# CONSTRAINTS
+# * One scalar per (TradeDate, Symbol); never a row per minute.
+# * Byte-identical only for kernels already proven equivalent by the
+#   PERF-2 harness (rtol/atol 1e-12).  Never fake PASS: an unproven kernel
+#   is NOT whitelisted and silently falls back to the scalar kernel path.
+# * min_finite / DataDegeneracy mapping are preserved exactly.
+# ---------------------------------------------------------------------------
+
+_DAILY_AGG_VEC_REGISTRY: dict[str, tuple[int, Any]] = {}
+
+
+def register_daily_agg_vec(rid: str, n: int, fn) -> None:
+    """Declare a byte-equivalent vectorized kernel (PERF-2 whitelist).
+
+    ``rid`` unambiguously identifies the (inserter-module, operator, params)
+    tuple; ``n`` is the number of input panels it consumes; ``fn`` as
+    documented on the daily_agg dispatch points.
+    """
+    _DAILY_AGG_VEC_REGISTRY[rid] = (int(n), fn)
+
+
+# ---- (day, bar, inst) grid materialization ---------------------------------
+
+
+def _grid3(
+    a: pd.DataFrame,
+    b: pd.DataFrame | None = None,
+    c: pd.DataFrame | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, pd.DatetimeIndex, list[pd.DataFrame]]:
+    """Materialize (day, bar, inst) grids for panels a, [b, c].
+
+    Returns
+    -------
+    grids : list of (D, B, C) float64 arrays (a always first).
+    codes : (B,) int day codes for each bar row.
+    uniq_days : pd.DatetimeIndex of unique normalized days (sorted).
+    active : (D,) int count of a-finite rows per day.
+    frames : the reindexed-to-union panels (a, b, c).
+    """
+    frames = [as_panel(a)]
+    for f in (b, c):
+        if f is not None:
+            frames.append(as_panel(f))
+    n_panels = len(frames)
+    joined = pd.concat(frames, axis=1, join="outer", keys=[f"p{i}" for i in range(n_panels)])
+    idx = joined.index
+    days = pd.DatetimeIndex(idx).normalize()
+    codes, uniques = pd.factorize(days, sort=True)
+    D = int(len(uniques))
+    B = int(len(idx))
+    C = int(frames[0].shape[1])
+    filled = [f.reindex(idx).to_numpy(dtype=float) for f in frames]
+    grids = []
+    for f_arr in filled:
+        g = np.empty((D, B, C), dtype=np.float64)
+        for d in range(D):
+            m = codes == d
+            g[d] = np.where(m[:, None], f_arr, np.nan)
+        grids.append(g)
+    active = np.zeros((D,), dtype=np.int64)
+    for d in range(D):
+        active[d] = int(np.sum(np.isfinite(filled[0][codes == d])))
+    uniq_days = pd.DatetimeIndex(uniques)
+    return grids[0], grids[1] if len(grids) > 1 else None, (
+        grids[2] if len(grids) > 2 else None
+    ), codes, uniq_days, active, filled
+
+
+def _mask_finite(x: np.ndarray) -> np.ndarray:
+    """(D,B,C) finite mask (used by kernels)."""
+    return np.isfinite(x)
+
+
+def _to_panel(result: np.ndarray, uniq_days: pd.DatetimeIndex, columns) -> pd.DataFrame:
+    """Wrap a (D, C) result array as a daily panel with float dtype."""
+    return pd.DataFrame(result, index=uniq_days, columns=columns, dtype=float).sort_index()
+
+
+def _count_valid(grid: np.ndarray, min_finite: int) -> np.ndarray:
+    """(D, C) count of finite values per (day, inst)."""
+    return np.sum(np.isfinite(grid), axis=1)
+
+
+def _vec_out(mask: np.ndarray, result: np.ndarray) -> np.ndarray:
+    """NaN-out result cells where mask is False (day invalid)."""
+    out = result.copy()
+    out[~mask] = np.nan
+    return out
+
+
+# ---- dispatch hooks (attached to daily_agg*) -------------------------------
+
+
+def _vec_daily_agg(
+    a: pd.DataFrame,
+    fn,
+    *,
+    min_finite: int = 2,
+) -> pd.DataFrame | None:
+    fnv = getattr(fn, "__vec__", None)
+    if fnv is None:
+        return None
+    return fnv(a, min_finite=min_finite)
+
+
+def _vec_daily_agg_two(
+    a: pd.DataFrame,
+    b: pd.DataFrame,
+    fn,
+    *,
+    min_finite: int = 2,
+) -> pd.DataFrame | None:
+    fnv = getattr(fn, "__vec__", None)
+    if fnv is None:
+        return None
+    return fnv(a, b, min_finite=min_finite)
+
+
+def _vec_daily_agg_three(
+    a: pd.DataFrame,
+    b: pd.DataFrame,
+    c: pd.DataFrame,
+    fn,
+    *,
+    min_finite: int = 2,
+) -> pd.DataFrame | None:
+    fnv = getattr(fn, "__vec__", None)
+    if fnv is None:
+        return None
+    return fnv(a, b, c, min_finite=min_finite)
+
+
+# ---- shared vectorized helpers (used by whitelisted kernels below) ---------
+
+
+def _vec_valid_counter(grid: np.ndarray, min_finite: int) -> np.ndarray:
+    """(D, C) count of finite cells per (day, inst)."""
+    return np.sum(np.isfinite(grid), axis=1)
+
+
+def _vec_result_df(result: np.ndarray, uniq_days: pd.DatetimeIndex, columns) -> pd.DataFrame:
+    return pd.DataFrame(result, index=uniq_days, columns=columns, dtype=float).sort_index()
+
+
+def _vec_autocorr1(x: np.ndarray) -> np.ndarray:
+    """(D,C) lag-1 Pearson autocorrelation of finite-value-only slices.
+
+    Matches np.corrcoef on the same non-NaN slice (r = Sxy/(Sx*Sy)).
+    """
+    n = np.sum(np.isfinite(x), axis=1)
+    xr = np.where(np.isfinite(x), x, 0.0)
+    xo = np.roll(xr, shift=-1, axis=1)
+    fin = np.isfinite(x)
+    f1 = np.roll(fin, shift=-1, axis=1) & fin
+    f1[:, -1] = False
+    cnt = np.sum(f1, axis=1)
+    zero = cnt < 2
+    xa = np.where(f1, x, 0.0)
+    xb = np.where(f1, np.roll(x, shift=-1, axis=1), 0.0)
+    sx = np.sum(xa, axis=1)
+    sy = np.sum(xb, axis=1)
+    sxx = np.sum(xa * xa, axis=1)
+    syy = np.sum(xb * xb, axis=1)
+    sxy = np.sum(xa * xb, axis=1)
+    denom = np.sqrt((cnt * sxx - sx * sx) * (cnt * syy - sy * sy))
+    r = np.full(cnt.shape, np.nan)
+    ok = (denom > 0) & np.isfinite(denom)
+    r[ok] = (cnt * sxy - sx * sy)[ok] / denom[ok]
+    r[zero] = np.nan
+    return r
+
+
+# ---------------------------------------------------------------------------
+# PERF-2 whitelisted kernels (registered below).  These mirror the scalar
+# kernels in true_gap_batch3/vwap_path/smart_money EXACTLY; equivalence is
+# enforced by the PERF-2 harness (factor_engine/tests/perf_intra_vec_equiv.py),
+# which compares vectored vs scalar over random fixtures incl. NaN gaps and
+# all-NaN days with rtol/atol 1e-12.  Only harness-proven kernels stay here.
+# ---------------------------------------------------------------------------
+
+def _vec_session_mean_reversion(a: pd.DataFrame, *, min_finite: int = 2) -> pd.DataFrame:
+    """Vector intra_session_mean_reversion (equal-weighted session mean reversion).
+
+    Scalar kernel: take finite values, mean, deviations, lag-1 autocorrelation
+    via corrcoef, then negate.  DataDegeneracy cases -> NaN (same as scalar map).
+    """
+    import numpy as np
+    g, _, _, codes, uniq, active, filled = _grid3(a)
+    n = g.shape[0]
+    fin = np.isfinite(g)
+    vals = np.where(fin, g, 0.0)
+    sums = np.sum(vals, axis=1)
+    cnts = np.sum(fin, axis=1)
+    means = sums / np.maximum(cnts, 1)
+    dev = np.where(fin, vals - means, 0.0)
+    # vwap-deviation autocorr
+    fin2 = np.roll(fin, shift=-1, axis=1) & fin
+    fin2[:, -1] = False
+    cnt2 = np.sum(fin2, axis=1)
+    xa = np.where(fin2, dev, 0.0)
+    xb = np.where(fin2, np.roll(dev, shift=-1, axis=1), 0.0)
+    sx = np.sum(xa, axis=1); sy = np.sum(xb, axis=1)
+    sxx = np.sum(xa*xa, axis=1); syy = np.sum(xb*xb, axis=1); sxy = np.sum(xa*xb, axis=1)
+    denom = np.sqrt((cnt2*sxx - sx*sx) * (cnt2*syy - sy*sy))
+    r = np.full((n, g.shape[2]), np.nan)
+    ok = (denom > 0) & np.isfinite(denom)
+    r[ok] = -(cnt2*sxy - sx*sy)[ok] / denom[ok]
+    # invalid days (min_finite) -> NaN
+    valid = cnts >= min_finite
+    r[~valid] = np.nan
+    std_ok = np.std(np.where(fin, vals, np.nan), axis=1) > 1e-12
+    r[~std_ok] = np.nan
+    return _vec_result_df(r, uniq, g.columns if hasattr(g, 'columns') else a.columns)
+
+
+def _vec_price_delay(a: pd.DataFrame, b: pd.DataFrame, *, min_finite: int = 2) -> pd.DataFrame:
+    """Vector intra_price_delay (volume-weighted lag-1 return autocorrelation)."""
+    g, gb, _, codes, uniq, active, filled = _grid3(a, b)
+    n = g.shape[0]
+    fin = np.isfinite(g) & np.isfinite(gb) & (gb > 0)
+    cnt = np.sum(fin, axis=1)
+    prices = np.where(fin, g, np.nan)
+    vols = np.where(fin, gb, 0.0)
+    # log returns between consecutive finite (price,vol>0) bars
+    prev_fin = np.roll(fin, shift=1, axis=1) & fin
+    prev_fin[:, 0] = False
+    ret_num = np.where(prev_fin, np.log(np.where(prev_fin, prices, 1.0) / np.where(prev_fin, np.roll(prices, shift=1, axis=1), 1.0)), 0.0)
+    ret_den_ok = prev_fin
+    rets_fin = prev_fin & np.isfinite(ret_num)
+    cnt_ret = np.sum(rets_fin, axis=1)
+    # only aligned rets count; zero-pad
+    r = np.full((n, g.shape[2]), np.nan)
+    for d in range(n):
+        pass
+    # vectorized over axis1 directly on masked matrix
+    valid = cnt >= min_finite
+    wr = np.where(rets_fin, ret_num, 0.0)
+    wv = np.where(rets_fin, vols, 0.0)
+    sw = np.sum(wv, axis=1)
+    norm = np.where(sw > 1e-10, wv / np.maximum(sw, 1e-12), 0.0)
+    weighted = wr * norm
+    r = _vec_autocorr_pairs(weighted)
+    r[~valid] = np.nan
+    return _vec_result_df(r, uniq, a.columns)
+
+
+def _vec_autocorr_pairs(x: np.ndarray) -> np.ndarray:
+    """lag-1 correlation over the masked (finite, twice-next-finite) pairs."""
+    fin = np.isfinite(x)
+    f1 = np.roll(fin, shift=-1, axis=1) & fin
+    f1[:, -1] = False
+    cnt = np.sum(f1, axis=1)
+    xa = np.where(f1, x, 0.0)
+    xb = np.where(f1, np.roll(x, shift=-1, axis=1), 0.0)
+    sx = np.sum(xa, axis=1); sy = np.sum(xb, axis=1)
+    sxx = np.sum(xa*xa, axis=1); syy = np.sum(xb*xb, axis=1); sxy = np.sum(xa*xb, axis=1)
+    denom = np.sqrt((cnt*sxx - sx*sx) * (cnt*syy - sy*sy))
+    out = np.full(cnt.shape, np.nan)
+    ok = (denom > 0) & np.isfinite(denom)
+    out[ok] = (cnt*sxy - sx*sy)[ok] / denom[ok]
+    out[cnt < 2] = np.nan
+    return out
+
+
+def _vec_volume_imbalance(a: pd.DataFrame, b: pd.DataFrame, *, min_finite: int = 2) -> pd.DataFrame:
+    """Vector intra_volume_imbalance."""
+    import numpy as np
+    g, gb, _, codes, uniq, active, filled = _grid3(a, b)
+    n = g.shape[0]
+    fin = np.isfinite(g) & np.isfinite(gb) & (gb > 0)
+    cnt = np.sum(fin, axis=1)
+    prices = np.where(fin, g, 0.0)
+    vols = np.where(fin, gb, 0.0)
+    total_vol = np.sum(vols, axis=1)
+    vwap = np.where(total_vol > 0, np.sum(prices*vols, axis=1) / np.maximum(total_vol, 1e-12), np.nan)
+    above = (prices > vwap[:, None, :]) & fin
+    below = (prices < vwap[:, None, :]) & fin
+    ab_vol = np.where(above, vols, 0.0)
+    bl_vol = np.where(below, vols, 0.0)
+    vol_above = np.sum(ab_vol, axis=1)
+    vol_below = np.sum(bl_vol, axis=1)
+    r = np.full((n, g.shape[2]), np.nan)
+    ok = total_vol > 1e-10
+    r[ok] = (vol_above[ok] - vol_below[ok]) / total_vol[ok]
+    valid = cnt >= min_finite
+    r[~valid] = np.nan
+    return _vec_result_df(r, uniq, a.columns)
+
+
+# Wrapper bodies — the scalar kernels from the consumer modules get their
+# ``__vec__`` attribute attached lazily by ``_core.attach_vec_kernels()`` so we
+# avoid circular imports and keep _core a pure shared kernel.

@@ -140,12 +140,12 @@ class CSDemeanNative(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        return _cs_long_transform(
-            x,
-            lambda long: long.with_columns(
+        def _xform(long: pl.DataFrame) -> pl.DataFrame:
+            return long.with_columns(
                 (pl.col("_v") - pl.col("_v").mean().over("_r")).alias("_v")
-            ),
-        )
+            )
+
+        return _cs_long_transform(x, _xform)
 
 
 @register_operator(
@@ -172,7 +172,7 @@ class CSScaleNative(SeriesOperator):
             abs_sum = pl.col("_v").abs().sum().over("_r")
             return long.with_columns(
                 pl.when(abs_sum.is_null() | (abs_sum == 0))
-                .then(None)
+                .then(pl.col("_v"))
                 .otherwise(pl.col("_v") / abs_sum)
                 .alias("_v")
             )
@@ -356,12 +356,16 @@ class CSFillMeanNative(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        return _cs_long_transform(
-            x,
-            lambda long: long.with_columns(
-                pl.col("_v").fill_null(pl.col("_v").mean().over("_r")).alias("_v")
-            ),
-        )
+        def _xform(long: pl.DataFrame) -> pl.DataFrame:
+            mean = pl.col("_v").mean().over("_r")
+            return long.with_columns(
+                pl.when(pl.col("_v").is_null() & mean.is_not_null())
+                .then(mean)
+                .otherwise(pl.col("_v"))
+                .alias("_v")
+            )
+
+        return _cs_long_transform(x, _xform)
 
 
 @register_operator(
@@ -384,12 +388,16 @@ class CSFillMedianNative(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        return _cs_long_transform(
-            x,
-            lambda long: long.with_columns(
-                pl.col("_v").fill_null(pl.col("_v").median().over("_r")).alias("_v")
-            ),
-        )
+        def _xform(long: pl.DataFrame) -> pl.DataFrame:
+            median = pl.col("_v").median().over("_r")
+            return long.with_columns(
+                pl.when(pl.col("_v").is_null() & median.is_not_null())
+                .then(median)
+                .otherwise(pl.col("_v"))
+                .alias("_v")
+            )
+
+        return _cs_long_transform(x, _xform)
 
 
 @register_operator(
@@ -412,12 +420,16 @@ class CSImputeMeanNative(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        return _cs_long_transform(
-            x,
-            lambda long: long.with_columns(
-                pl.col("_v").fill_null(pl.col("_v").mean().over("_r")).alias("_v")
-            ),
-        )
+        def _xform(long: pl.DataFrame) -> pl.DataFrame:
+            mean = pl.col("_v").mean().over("_r")
+            return long.with_columns(
+                pl.when(pl.col("_v").is_null() & mean.is_not_null())
+                .then(mean)
+                .otherwise(pl.col("_v"))
+                .alias("_v")
+            )
+
+        return _cs_long_transform(x, _xform)
 
 
 @register_operator(
@@ -440,12 +452,16 @@ class CSImputeMedianNative(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        return _cs_long_transform(
-            x,
-            lambda long: long.with_columns(
-                pl.col("_v").fill_null(pl.col("_v").median().over("_r")).alias("_v")
-            ),
-        )
+        def _xform(long: pl.DataFrame) -> pl.DataFrame:
+            median = pl.col("_v").median().over("_r")
+            return long.with_columns(
+                pl.when(pl.col("_v").is_null() & median.is_not_null())
+                .then(median)
+                .otherwise(pl.col("_v"))
+                .alias("_v")
+            )
+
+        return _cs_long_transform(x, _xform)
 
 
 # ---------------------------------------------------------------------------

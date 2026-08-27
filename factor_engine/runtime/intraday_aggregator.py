@@ -1,5 +1,29 @@
 # -*- coding: utf-8
-"""分钟/小时 bar → 日频面板聚合器（Phase 12 生产地基）。"""
+"""分钟/小时 bar → 日频面板聚合器（Phase 12 生产地基；PERF-1 快速路径）。
+
+Design (PERF-1, 2026-08-28): 面板列全部是 MultiIndex(timestamp, instrument)
+Series。旧实现 ``_stack_frame()`` 把每列 reset 成长表后 N-way outer merge，
+再对长表 groupby(["trade_date", "asset"])——每个特征重复 merge 一次（12M 行
+约 10s/特征）。
+
+新快速路径把每列 ``unstack(level='instrument')`` 成宽表（行=DatetimeIndex、
+列=instrument），在构造时一次性缓存；``trade_date`` 用 ``index.normalize()``
+只算一次，所有特征共享。``last/first/sum/mean`` 直接用 ``resample('D')``
+在宽表上算，``vwap`` 用 ``resample('D').sum()(amount)/sum()(volume)``。
+宽表聚合完毕 stack 回 MultiIndex Series（索引名 ["timestamp","instrument"]）。
+
+语义不变式（与旧长表 groupby 完全一致）：
+  * 输出索引名 (timestamp, instrument) 与 dtype 不变；Series.name = 列名。
+  * last/first = 每个交易日的最后一根/第一根 bar（同 day 内按 ts 升序）。
+  * 全 NaN 日 → NaN（不补 0；vwap 分母 0 → replace(0, pd.NA) 语义保留）。
+  * 空面板 → ValueError；缺列 → KeyError。
+  * 宽表在 index 非升序时先 sort；同 (day, instrument) 存在重复 bar 时，
+    resample().last() 与旧实现 sort→groupby().last() 一样取最后出现的行。
+
+对齐假设（P0-08 session-grid 规则）：所有面板 Series 的 index 必须完全对齐
+（同一组 (timestamp, instrument) 组合）。unstack 后宽表只在「真正缺失」处
+产生 NaN；这一假设在 ``_require_aligned`` 中显式断言，避免静默错位。
+"""
 
 from __future__ import annotations
 
@@ -29,9 +53,23 @@ def _to_daily_key(ts: pd.DatetimeIndex) -> pd.DatetimeIndex:
 
 @dataclass
 class IntradayAggregator:
-    """已对齐的 intraday 面板列；按 (trade_date, asset) 聚合为日频。"""
+    """已对齐的 intraday 面板列；按 (trade_date, asset) 聚合为日频。
+
+    PERF-1 快速路径：构造时把每列 unstack 成宽表并缓存（``_wide_frames``），
+    日频聚合直接在宽表上 ``resample('D')`` 完成，跨特征复用。
+    """
 
     panels: dict[str, pd.Series] = field(default_factory=dict)
+
+    _wide_frames: dict[str, pd.DataFrame] = field(
+        default_factory=dict, init=False, repr=False, compare=False
+    )
+    _trade_date: pd.DatetimeIndex | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
+    _presence: pd.MultiIndex | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     @classmethod
     def from_panel(cls, panels: dict[str, pd.Series]) -> IntradayAggregator:
@@ -43,69 +81,186 @@ class IntradayAggregator:
             raise ValueError("IntradayAggregator 需要至少一列面板数据")
         return cls(panels=normalized)
 
-    def _stack_frame(self) -> pd.DataFrame:
-        """MultiIndex Series 字典 → 长表 [datetime, asset, *cols]。"""
-        frames: list[pd.DataFrame] = []
-        for col, series in self.panels.items():
-            df = series.reset_index()
-            names = list(df.columns)
-            df.columns = ["datetime", "asset", col]
-            frames.append(df)
-        out = frames[0]
-        for extra in frames[1:]:
-            out = out.merge(extra, on=["datetime", "asset"], how="outer")
-        out["trade_date"] = _to_daily_key(pd.DatetimeIndex(out["datetime"]))
-        return out
+    # ------------------------------------------------------------------ #
+    # 内部：宽表缓存 + 对齐断言
+    # ------------------------------------------------------------------ #
+
+    def _reference_index(self) -> pd.MultiIndex:
+        """锚定列（首列）的 index，作为对齐基准。"""
+        first = next(iter(self.panels.values()))
+        return first.index
+
+    def _presence_keys(self) -> pd.MultiIndex | None:
+        """构造 (day, instrument) 真实存在组合的锚点（惰性、一次性）。
+
+        与旧长表 groupby 的 drop-absent 语义等价：锚点来自参考列 index 的
+        唯一 (day, inst) 组合。宽表 stack 会在「该 instrument 其它天有数据」
+        的 (day, inst) 上产生本不该存在的单元格，需要它做过滤/占位。
+        """
+        if self._presence is None:
+            ref_index = self._reference_index()
+            ts_level = pd.Index(ref_index.get_level_values(0))
+            presence = pd.MultiIndex.from_arrays(
+                [_to_daily_key(ts_level), ref_index.get_level_values(1)],
+                names=["timestamp", "instrument"],
+            )
+            # 去重：同一 (day, instrument) 可能有多根 bar（一天多根 bar 是
+            # 常态），仅保留唯一组合作为存在性锚点。
+            self._presence = presence[~presence.duplicated()]
+        return self._presence
+
+    def _daily_wide(
+        self, column: str, func: str
+    ) -> pd.DataFrame:
+        """宽表 resample('D') 得到日均帧。
+
+        ``func`` ∈ {"last","first","sum","mean"}。返回的日均帧行 index =
+        日历日（DatetimeIndex）、列 = instrument。
+        """
+        wide = self._wide_frame(column)
+        return getattr(wide.resample("D"), func)()
+
+    def _to_series(self, daily: pd.DataFrame, name: str) -> pd.Series:
+        """日均帧 → MultiIndex Series，行键与旧长表 groupby 完全一致。
+
+        用 presence 的 (day, instrument) 组合把日均帧 reindex 成完整
+        行键网格（缺的行/列补 NaN 占位），再 ``stack(dropna=False)`` 并过滤
+        到真实存在的组合。这样：
+
+        * 全 NaN 源列（unstack 后 columns 为空 Index）也会产出 NaN 占位行；
+        * 某 instrument 整日缺失（停牌）的 (day, inst) 不会凭空出现；
+        * 输出索引名 (timestamp, instrument)、dtype、name 与旧实现一致。
+        """
+        presence = self._presence_keys()
+        days = pd.DatetimeIndex(
+            presence.get_level_values(0).drop_duplicates()
+        ).sort_values()
+        insts = pd.Index(presence.get_level_values(1).drop_duplicates())
+        # 行键网格（days × insts）：全 NaN 列也要有占位行/占位列。用
+        # ``.stack()`` 前先 ``dropna=False``（旧式 stack 保留全 NaN 位置）
+        # 保证全 NaN 源列产出 NaN 占位；再按真实 (day, inst) 坐标覆盖 daily
+        # 的值，模拟旧长表 outer-merge 的行键语义。
+        # 注意: daily 已经是按 insts 重排（reindex）后的帧，这里直接基于它。
+        daily = daily.reindex(index=days, columns=insts)
+        # 把 daily 的每个单元格（含全 NaN 的 day×inst）都纳入行键，再按真实
+        # 组合过滤。future_stack 不丢全 NaN 行（它是显式占位帧，无 NaN 丢弃
+        # 语义），因此空列也能产出 NaN 占位。
+        stacked = daily.stack(future_stack=True).rename(name)
+        stacked = stacked.sort_index()
+        # 过滤回真实存在组合（full 网格可能比 presence 多出无 bar 的组合）。
+        keep = presence.to_flat_index()
+        stacked = stacked[stacked.index.to_flat_index().isin(keep)]
+        return stacked
+
+    def _require_aligned(self) -> None:
+        """P0-08 session-grid 规则：所有面板列 index 必须与首列完全对齐。
+
+        快速路径按「宽表只对真正缺失产生 NaN」设计，依赖列间严格对齐。
+        这里做一次性显式断言（构造后首次聚合时触发），把静默错位变成
+        可诊断错误。
+        """
+        ref = self._reference_index()
+        for name, series in self.panels.items():
+            if not series.index.equals(ref):
+                raise ValueError(
+                    "IntradayAggregator 面板列未完全对齐（P0-08 session-grid "
+                    "规则要求各列 index 一致）："
+                    f"列 {name!r} 的 index 与首列不同 "
+                    f"(长度 {len(series.index)} vs {len(ref)}, "
+                    f"names {series.index.names} vs {ref.names})。"
+                    "请先对列做坐标对齐（如 reindex）后再构造聚合器。"
+                )
+
+    def _wide_frame(self, column: str) -> pd.DataFrame:
+        """宽表缓存：index=DatetimeIndex 行、columns=instrument、values=列值。
+
+        惰性构建并缓存；返回内部副本的只读视图（不 copy）。
+        """
+        frame = self._wide_frames.get(column)
+        if frame is None:
+            self._require_aligned()
+            series = self.panels[column]
+            if series.index.has_duplicates:
+                # 同 (timestamp, instrument) 出现重复行（如同一分钟两根 bar）：
+                # unstack 会报 duplicate 错。保持与旧长表 sort→groupby().last()
+                # 语义一致（按 index 排序后保留最后出现行），先做最后一行去重。
+                series = series[~series.index.duplicated(keep="last")]
+            wide = series.unstack(level="instrument")
+            if not isinstance(wide.index, pd.DatetimeIndex):
+                wide.index = pd.DatetimeIndex(wide.index)
+            if not wide.index.is_monotonic_increasing:
+                wide = wide.sort_index()
+            frame = wide
+            self._wide_frames[column] = frame
+            if self._trade_date is None:
+                # 全面板共享的 trade_date（UTC normalize），只算一次。
+                self._trade_date = _to_daily_key(frame.index)
+            # presence 锚点惰性构造（见 _presence_keys）。
+            self._presence_keys()
+        return frame
+
+    def _fast_daily(self, column: str, func: str) -> pd.Series:
+        """宽表 resample('D') 后 stack，并过滤到真实存在的 (day, instrument)。
+
+        ``func`` ∈ {"last","first","sum","mean"}。过滤步骤与旧长表 groupby
+        （drop 掉没有 bar 行的 (trade_date, asset)）等价。因锚点来自参考列
+        index 的唯一 (day, inst) 组合，宽表 stack 在多出的一天没有该
+        instrument 数据时（如 S00000 首日停牌），对应单元格会被剔除。
+        """
+        wide = self._wide_frame(column)
+        daily = getattr(wide.resample("D"), func)()
+        return self._to_series(daily, column)
+
+    def _resample_last_first(
+        self, column: str, how: str
+    ) -> pd.Series:
+        """宽表 resample('D') 后 stack 回 MultiIndex Series。
+
+        ``how`` ∈ {"last", "first"}。与旧实现 sort→groupby(...).last()/.first()
+        语义一致：每交易日内取时间序上最后/第一根 bar。同 (day, inst) 若存在
+        重复 bar（同一交易日多次出现），resample 在日窗口内按行序取末行/首行，
+        与旧实现的 sort→last/first 等价。
+        """
+        wide = self._wide_frame(column)
+        resampler = wide.resample("D")
+        daily = (
+            getattr(resampler, how)() if how == "last" else resampler.first()
+        )
+        return self._to_series(daily, column)
+
+    # ------------------------------------------------------------------ #
+    # 公共 API（不变）
+    # ------------------------------------------------------------------ #
 
     def last(self, column: str) -> pd.Series:
         """日末值（last bar of day）。"""
         if column not in self.panels:
             raise KeyError(f"列 {column!r} 不在面板中")
-        df = self._stack_frame()
-        daily = (
-            df.sort_values(["asset", "datetime"])
-            .groupby(["trade_date", "asset"], as_index=False)
-            .last()
-        )
-        idx = pd.MultiIndex.from_arrays(
-            [daily["trade_date"], daily["asset"]],
-            names=["timestamp", "instrument"],
-        )
-        return pd.Series(daily[column].values, index=idx, name=column)
+        return self._resample_last_first(column, "last")
 
     def first(self, column: str) -> pd.Series:
         """日初值（first bar of day）。"""
         if column not in self.panels:
             raise KeyError(f"列 {column!r} 不在面板中")
-        df = self._stack_frame()
-        daily = (
-            df.sort_values(["asset", "datetime"])
-            .groupby(["trade_date", "asset"], as_index=False)
-            .first()
-        )
-        idx = pd.MultiIndex.from_arrays(
-            [daily["trade_date"], daily["asset"]],
-            names=["timestamp", "instrument"],
-        )
-        return pd.Series(daily[column].values, index=idx, name=column)
+        return self._resample_last_first(column, "first")
+
+    def _resample_apply(self, column: str, func: str) -> pd.Series:
+        """宽表 resample('D') 后 stack 回 MultiIndex Series。"""
+        wide = self._wide_frame(column)
+        daily = getattr(wide.resample("D"), func)()
+        return self._to_series(daily, column)
 
     def sum(self, column: str) -> pd.Series:
         """按 (trade_date, asset) 对列求和。"""
         if column not in self.panels:
             raise KeyError(f"列 {column!r} 不在面板中")
-        df = self._stack_frame()
-        grouped = df.groupby(["trade_date", "asset"])[column].sum()
-        grouped.index.names = ["timestamp", "instrument"]
-        return grouped.rename(column)
+        return self._resample_apply(column, "sum")
 
     def mean(self, column: str) -> pd.Series:
         """按 (trade_date, asset) 对列求均值。"""
         if column not in self.panels:
             raise KeyError(f"列 {column!r} 不在面板中")
-        df = self._stack_frame()
-        grouped = df.groupby(["trade_date", "asset"])[column].mean()
-        grouped.index.names = ["timestamp", "instrument"]
-        return grouped.rename(column)
+        return self._resample_apply(column, "mean")
 
     def vwap(
         self,
@@ -122,19 +277,17 @@ class IntradayAggregator:
         """
         if volume not in self.panels:
             raise KeyError(f"vwap 需要 {volume!r} 列")
-        df = self._stack_frame()
+        v_wide = self._wide_frame(volume)
         if amount in self.panels:
-            numerator = df.groupby(["trade_date", "asset"])[amount].sum()
+            numerator = self._wide_frame(amount).resample("D").sum()
         elif price in self.panels:
-            numerator = (df[price] * df[volume]).groupby(
-                [df["trade_date"], df["asset"]]
-            ).sum()
+            numerator = (self._wide_frame(price) * v_wide).resample("D").sum()
         else:
             raise KeyError(f"vwap 需要 {amount!r} 或 {price!r} 列")
-        denominator = df.groupby(["trade_date", "asset"])[volume].sum()
-        vwap = (numerator / denominator.replace(0, pd.NA)).rename("vwap")
-        vwap.index.names = ["timestamp", "instrument"]
-        return vwap
+        denominator = v_wide.resample("D").sum()
+        return self._to_series(
+            numerator / denominator.replace(0, pd.NA), "vwap"
+        )
 
     def aggregate_features(
         self,
@@ -157,6 +310,102 @@ class IntradayAggregator:
             else:
                 raise ValueError(f"未知 intraday 日频特征: {feat!r}")
         return out
+
+    # ------------------------------------------------------------------ #
+    # 兼容回退：供旧调用方使用的长表参考实现（等值基准）
+    # ------------------------------------------------------------------ #
+
+    def _stack_frame(self) -> pd.DataFrame:
+        """MultiIndex Series 字典 → 长表 [datetime, asset, *cols]。
+
+        与 PERF-1 之前版本逐字相同的参考实现。仅测试/等值基准使用；
+        快速路径（last/first/sum/mean/vwap）不再经过本方法。
+        """
+        frames: list[pd.DataFrame] = []
+        for col, series in self.panels.items():
+            df = series.reset_index()
+            names = list(df.columns)
+            df.columns = ["datetime", "asset", col]
+            frames.append(df)
+        out = frames[0]
+        for extra in frames[1:]:
+            out = out.merge(extra, on=["datetime", "asset"], how="outer")
+        out["trade_date"] = _to_daily_key(pd.DatetimeIndex(out["datetime"]))
+        return out
+
+    def _last_long(self, column: str) -> pd.Series:
+        """旧 last 实现（长表 groupby），等值基准用。"""
+        if column not in self.panels:
+            raise KeyError(f"列 {column!r} 不在面板中")
+        df = self._stack_frame()
+        daily = (
+            df.sort_values(["asset", "datetime"])
+            .groupby(["trade_date", "asset"], as_index=False)
+            .last()
+        )
+        idx = pd.MultiIndex.from_arrays(
+            [daily["trade_date"], daily["asset"]],
+            names=["timestamp", "instrument"],
+        )
+        return pd.Series(daily[column].values, index=idx, name=column)
+
+    def _first_long(self, column: str) -> pd.Series:
+        """旧 first 实现（长表 groupby），等值基准用。"""
+        if column not in self.panels:
+            raise KeyError(f"列 {column!r} 不在面板中")
+        df = self._stack_frame()
+        daily = (
+            df.sort_values(["asset", "datetime"])
+            .groupby(["trade_date", "asset"], as_index=False)
+            .first()
+        )
+        idx = pd.MultiIndex.from_arrays(
+            [daily["trade_date"], daily["asset"]],
+            names=["timestamp", "instrument"],
+        )
+        return pd.Series(daily[column].values, index=idx, name=column)
+
+    def _sum_long(self, column: str) -> pd.Series:
+        """旧 sum 实现（长表 groupby），等值基准用。"""
+        if column not in self.panels:
+            raise KeyError(f"列 {column!r} 不在面板中")
+        df = self._stack_frame()
+        grouped = df.groupby(["trade_date", "asset"])[column].sum()
+        grouped.index.names = ["timestamp", "instrument"]
+        return grouped.rename(column)
+
+    def _mean_long(self, column: str) -> pd.Series:
+        """旧 mean 实现（长表 groupby），等值基准用。"""
+        if column not in self.panels:
+            raise KeyError(f"列 {column!r} 不在面板中")
+        df = self._stack_frame()
+        grouped = df.groupby(["trade_date", "asset"])[column].mean()
+        grouped.index.names = ["timestamp", "instrument"]
+        return grouped.rename(column)
+
+    def _vwap_long(
+        self,
+        *,
+        amount: str = "amount",
+        volume: str = "volume",
+        price: str = "close",
+    ) -> pd.Series:
+        """旧 vwap 实现（长表 groupby），等值基准用。"""
+        if volume not in self.panels:
+            raise KeyError(f"vwap 需要 {volume!r} 列")
+        df = self._stack_frame()
+        if amount in self.panels:
+            numerator = df.groupby(["trade_date", "asset"])[amount].sum()
+        elif price in self.panels:
+            numerator = (df[price] * df[volume]).groupby(
+                [df["trade_date"], df["asset"]]
+            ).sum()
+        else:
+            raise KeyError(f"vwap 需要 {amount!r} 或 {price!r} 列")
+        denominator = df.groupby(["trade_date", "asset"])[volume].sum()
+        vwap = (numerator / denominator.replace(0, pd.NA)).rename("vwap")
+        vwap.index.names = ["timestamp", "instrument"]
+        return vwap
 
 
 @dataclass

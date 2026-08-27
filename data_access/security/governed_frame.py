@@ -20,7 +20,7 @@ from data_access.core.exceptions import UnknownProvenanceError
 class ExecutionEnvironmentIdentity:
     """R25 §51：统一执行环境身份。"""
 
-    dataaccess_version: str | None = None
+    data_access_version: str | None = None
     factorengine_version: str | None = None
     git_commit: str | None = None
     registry_fingerprint: str | None = None

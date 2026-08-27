@@ -72,6 +72,15 @@ class ParamRole(str, enum.Enum):
     # when it interacts with an estimator (review §二 round-3: thresholds are
     # searched, but never at the resolution of estimator epsilon).
     STATE_THRESHOLD = "state_threshold"
+    # NEW-037: alias for STATE_THRESHOLD.  Multiple batch-native operator
+    # modules (polars_group_advanced / polars_ts_stats / polars_fin_advanced /
+    # polars_candle_patterns / polars_ts_advanced / polars_cs_basic) already
+    # declare thresholds as ``ParamRole.THRESHOLD``; the alias keeps the
+    # ParamRole contract complete so those modules import and register.
+    THRESHOLD = STATE_THRESHOLD
+    # Regularizer strength (ridge/lasso/elastic-net alpha, eta, shrinkage…):
+    # an estimator tuning knob — searched only on small reviewed grids.
+    REGULARIZATION = "regularization"
     # Estimator tuning knob: changes variance/bias of the estimator, not the
     # economic rule.  Only small reviewed grids should ever be searched.
     ESTIMATOR_RESOLUTION = "estimator_resolution"

@@ -58,7 +58,7 @@ PACKAGES: tuple[str, ...] = (
     "factor_optimizer",
     "factor_assets",
     "factor_preprocess",
-    "dataaccess",
+    "data_access",
 )
 
 # Optional: JSON file of pre-verified per-gate evidence that a re-run should
@@ -85,7 +85,7 @@ _EXCLUDE_DIR_NAMES: frozenset[str] = frozenset({
 # Key dependencies captured in the environment hash.
 _ENV_PACKAGES: tuple[str, ...] = (
     "numpy", "pandas", "polars", "pyarrow", "scipy", "pytest",
-    "duckdb", "factor_engine", "dataaccess",
+    "duckdb", "factor_engine", "data_access",
 )
 
 
@@ -157,17 +157,17 @@ def _is_excluded_dir(name: str) -> bool:
 def _dist_version(name: str) -> str:
     """Installed version of a package, with a fallback for dist-name mismatches.
 
-    ``dataaccess`` is shipped as the dist ``data-access`` (importable as
-    ``dataaccess``), so a bare importlib.metadata lookup would report
+    ``data_access`` is shipped as the dist ``data-access`` (importable as
+    ``data_access``), so a bare importlib.metadata lookup would report
     NOT_INSTALLED even when installed.  R23: resolve the ``data-access`` dist
-    so the manifest pins the installed dataaccess release.
+    so the manifest pins the installed data_access release.
     """
     try:
         import importlib.metadata as md
         return md.version(name)
     except Exception:
         pass
-    if name == "dataaccess":
+    if name == "data_access":
         try:
             import importlib.metadata as md
             return md.version("data-access")
@@ -193,7 +193,7 @@ class ReleaseIdentity:
     ``submodule_shas`` in the manifest MUST be populated ONLY from ``gitlinks``
     so the manifest can never fabricate submodule SHAs (this repo has no
     submodules; the old manifest recorded fabricated SHAs for factor_engine /
-    dataaccess — that stops here).
+    data_access — that stops here).
     """
 
     git_sha: str | None = None
@@ -748,7 +748,7 @@ def build_manifest() -> dict:
             "wheel_sha256": package_wheel_sha256(pkg),
         }
         # VER-P0-06: only REAL git index gitlinks count as submodule pins.
-        # factor_engine / dataaccess are plain tracked directories here (no
+        # factor_engine / data_access are plain tracked directories here (no
         # mode-160000 index entries), so they get NO git_sha / git_dirty / no
         # submodule fabrication.
         if pkg in identity.gitlinks:

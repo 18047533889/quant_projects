@@ -25,7 +25,7 @@ from typing import Any
 
 import pandas as pd
 
-#: calendar_version 的默认值。真实来源由 dataaccess 簇提供；此处给确定性默认。
+#: calendar_version 的默认值。真实来源由 data_access 簇提供；此处给确定性默认。
 DEFAULT_CALENDAR_VERSION = "exchange_v1"
 
 #: A 股默认午休区间（11:30-13:00）。

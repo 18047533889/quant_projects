@@ -33,6 +33,7 @@ import copy
 import dataclasses
 import datetime
 import functools
+import os
 import sys
 from collections.abc import Mapping
 from enum import Enum
@@ -1228,7 +1229,17 @@ class OperatorRegistry:
         # frozen/finalized (i.e. a test-session ``load_all()`` already ran).
         # Production runtime (no pytest) is untouched: ``_assert_writable`` still
         # raises exactly as before, so the read-only contract is preserved.
-        if cls._lifecycle is not cls.Lifecycle.BUILDING and "pytest" in sys.modules:
+        # P0-03 regression guard: the P0-14 session isolation lives in the test
+        # conftest, so a plain pytest process no longer carries a thawing
+        # meta-path finder — the ``pytest``-in-sys.modules escape hatch would
+        # silently re-open the registry DURING a governance test that asserts
+        # finalize-invalidated-token behavior.  Only bypass when a session-thaw
+        # marker is actually set.
+        if (
+            cls._lifecycle is not cls.Lifecycle.BUILDING
+            and "pytest" in sys.modules
+            and os.environ.get("_FE_P0_SESSION_THAW_MARKER") == "1"
+        ):
             cls.thaw_for_bootstrap(_BOOTSTRAP_TOKEN)
         if cls._lifecycle is not cls.Lifecycle.BUILDING:
             raise RuntimeError(f"operator registry is not writable: {cls._lifecycle.value}")
@@ -1432,7 +1443,22 @@ class OperatorRegistry:
                 "panel-axis / unknown-kwarg contracts cannot be bypassed."
             )
         if canonical in cls._aliases:
-            raise ValueError(f"canonical already declared as alias: {canonical!r}")
+            _stale_target = cls._aliases.get(canonical)
+            if _stale_target == canonical:
+                # Self-referential alias guard — never auto-remove.
+                raise ValueError(f"canonical already declared as alias: {canonical!r}")
+            if not cls._operators.get(canonical):
+                # NEW-037: an alias between two distinct canonicals, registered
+                # pre-bootstrap by a load-order-early alias module (e.g.
+                # ``_aliases.py`` registers ``cs_rank -> rank``), now that a REAL
+                # operator implementation registers under this name (e.g.
+                # ``common/polars_cs_basic.py``'s ``cs_rank`` canonical).  This
+                # is a name PROMOTION, not a duplicate: the alias is deleted and
+                # the operator is registered under its own name.  The alias
+                # target it pointed at remains valid by name.
+                cls._aliases.pop(canonical, None)
+            else:
+                raise ValueError(f"canonical already declared as alias: {canonical!r}")
         existing_ops = cls._operators.setdefault(canonical, {})
         # R7-234: capture the FIRST registration identity once and never
         # overwrite it — even when this canonical was never previously
@@ -1906,7 +1932,17 @@ class OperatorRegistry:
                 "declare it an intentional catalog-only overlay (P1-38)."
             )
         if canonical in cls._aliases:
-            raise ValueError(f"canonical already declared as alias: {canonical!r}")
+            _stale_target = cls._aliases.get(canonical)
+            if _stale_target == canonical:
+                # Self-referential alias guard — never auto-remove.
+                raise ValueError(f"canonical already declared as alias: {canonical!r}")
+            if not cls._operators.get(canonical):
+                # NEW-037 name promotion (see ``register`` above): a
+                # registry-load-order alias is superseded by the real operator
+                # implementation that now owns this canonical name.
+                cls._aliases.pop(canonical, None)
+            else:
+                raise ValueError(f"canonical already declared as alias: {canonical!r}")
         previous = cls._catalog.get(canonical, {})
         stale_aliases = set(previous.get("aliases") or []) - set(aliases or [])
         for alias in stale_aliases:

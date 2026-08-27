@@ -13,7 +13,7 @@ ticker string 不能当永久主键：ticker 会改名（rename）、symbol 会�
 
 cache / factor lake 的 key 应使用 ``security_master_id`` 而不是 ticker string，
 使 symbol rename 后历史输出仍映射到同一证券身份。本模块刻意自包含、不碰
-dataaccess/security 的真实存储（真实存储由 dataaccess 簇负责）。
+data_access/security 的真实存储（真实存储由 data_access 簇负责）。
 """
 from __future__ import annotations
 

@@ -1,0 +1,69 @@
+wave: WAVE1-FACtorLake-SECURITY
+mission: "factor-lake value identity + object-storage action-granular security"
+repo: /home/sunhaiwei/quant_projects
+git_sha: 2013f94aefee1d6f4e9da3addec5a8ea9447e1f1
+git_tree: dirty (wave1-f changes uncommitted; pre-existing dirty files untouched)
+date: 2026-08-27
+status: IMPLEMENTED_AND_LOCALLY_VERIFIED
+
+part_a_identity:
+  model:
+    - "factor_engine/runtime/factor_value_identity.py: FactorValueIdentity (factor_id, factor_definition_hash, factor_implementation_hash, treatment_preprocess_hash, market, frequency, partition_time, universe_snapshot_id, ordered_instrument_hash, data_snapshot_id, calendar_snapshot_id, decision_time_policy, numeric_policy, dtype, build_sha, block_content_hash) + identity_hash (excludes block_content_hash, the verification bound)."
+    - "FeatureSetIdentity (feature_set_version_id, feature_set_content_hash, ordered tuple[FactorValueIdentity]) — content hash binds version_id + ordered identity_hash list + each block_content_hash."
+    - "compute_block_content_hash: sha256 over the block's float32 bytes + factor_ids + numeric_policy (written by writer, recomputed by reader)."
+    - "feature_set_identity_for_backtest(backtest_id, factor_ids, identities, version/universe/frequency/build_sha/numeric_policy/dtype): model-layer helper returning FeatureSetIdentity — factors lacking a manifest identity are synthesized from explicit context (never a bare factor name)."
+  wiring:
+    - "feature_block.py: BlockManifest gains identities {factor_id: FactorValueIdentity dict} + feature_set_identity (dict); to_dict/from_dict round-trip; FeatureBlockWriter.set_identity/set_feature_set_identity + _build_missing_identities (backfills real block content hash; explicit identity with missing content hash also backfilled); FeatureBlockReader.verify_manifest_identities() recomputes content hash per factor and returns mismatch list."
+    - "remote_factor_block_writer.py: same identity API (set_identity/set_feature_set_identity/_build_missing_identities) and finish() emits identities in the generation manifest."
+  verification:
+    - "Identity round-trips: FactorValueIdentity<->dict and FeatureSetIdentity<->dict preserve identity/feature-set content hash."
+    - "Changing ANY component (numeric_policy, universe_snapshot_id, factor_definition_hash, ..., build_sha) changes identity_hash (parametrized over all 14 semantic fields)."
+    - "FeatureSetIdentity content hash changes when member block content changes, when universe changes, and when member ORDER is reversed."
+    - "Reader REJECTS a block whose identity content hash does not match the stored bytes (tamper block then verify_manifest_identities returns mismatches)."
+part_a_files_written:
+  - factor_engine/runtime/factor_value_identity.py (new)
+  - factor_engine/runtime/feature_block.py (wired)
+  - factor_engine/runtime/remote_factor_block_writer.py (wired)
+  - factor_engine/tests/r27/test_wave1_f_value_identity.py (new, 26 tests)
+
+part_b_security:
+  model:
+    - "quant_platform/app/contracts/permission.py: ResourceScope gains allowed_actions (tuple[str,...]); covers(..., action=...) fails closed when the scope constrains actions and the requested action is not among them. authorize(..., action=...) now requires BOTH action AND path scope coverage."
+    - "data_access/write/object_storage_boundary.py: ObjectResourceScope gains allowed_actions (frozenset); matches(resource, action) requires path coverage AND action membership (legacy scopes with empty allowed_actions stay path-only). authorize_object now enforces per-action grants (read-only scope cannot write/delete/multipart/metadata-commit)."
+    - "ObjectStorageAuthorizationBoundary(environment='production') REQUIRES an explicit factor_target_resolver (constructor raises ValidationError otherwise — no placeholder default)."
+    - "ProductionTargetResolver: explicit layout authority; unknown factor / empty bucket or prefix raises ValidationError (never falls back to factor-lake/factors/{id}); made callable (__call__) so it implements FactorWriteTargetResolver."
+  behavior_changes:
+    - "read-only scope (allowed_actions={object:read, object:list}) denied object:write/delete/multipart:*/metadata:commit — verified via both permission.authorize and ObjectStorageAuthorizationBoundary."
+    - "prefix A scope cannot touch prefix B (cos_prefix and key_prefix scoping both enforced; trailing-slash key_prefix now matches directory subtree, e.g. inbox/ covers inbox/f1)."
+    - "production resolver with no target raises (missing layout entry, empty bucket, or missing resolver)."
+  files_written:
+    - quant_platform/app/contracts/permission.py (modified)
+    - data_access/write/object_storage_boundary.py (modified)
+    - data_access/tests/unit/test_object_storage_action_granularity.py (new, 13 tests)
+
+constraints:
+  - "data_access/read/object_store.py streaming NOT touched."
+  - "OperatorRegistry semantics NOT touched."
+  - "BlockManifest identities added as optional fields — loaders/from_dict keep working for legacy manifests (identities default to {})."
+
+tests:
+  part_a:
+    file: factor_engine/tests/r27/test_wave1_f_value_identity.py
+    run: ".venv/bin/python -m pytest factor_engine/tests/r27/test_wave1_f_value_identity.py -q"
+    result: "26 passed in 0.08s"
+  part_b:
+    file: data_access/tests/unit/test_object_storage_action_granularity.py
+    run: ".venv/bin/python -m pytest data_access/tests/unit/test_object_storage_action_granularity.py -q"
+    result: "13 passed in 0.07s"
+  regressions:
+    - "factor_engine/tests/r27/test_feature_block_p11_p12.py + test_wave1_f_value_identity.py: 36 passed"
+    - "factor_engine/tests/r27/test_remote_factor_block_writer_p10_p12.py: 13 passed"
+    - "quant_platform/tests/test_rbac_grants.py + test_storage_security.py + data_access/tests/unit/test_object_store_generation_publisher.py: 30 passed"
+    - "quant_platform/tests/test_contracts_c1.py: 25 passed"
+  not_run:
+    - "Full repo CI / production integration (out of scope for this wave)."
+    - "COS remote end-to-end (no real COS credentials in this sandbox; writer path verified with LocalObjectStore/reader analogue)."
+
+limitations:
+  - "production wiring (resolve_factor_write_target via ProductionTargetResolver) is exercised through unit tests; real COS CAM/STS enforcement remains a cloud-layer gate (documented by the module, not implemented here)."
+  - "Feature-block writers synthesize identities for factors that are submitted without an explicit identity (backfill based on real block content + build context). The canonical treatment/definition hashes are plumbed via set_identity when the caller has them; the writer never guesses them."

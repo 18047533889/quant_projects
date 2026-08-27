@@ -31,7 +31,7 @@ def _store_scan(store: Any, dataset: str, read_kwargs: dict[str, Any]) -> Any:
 def _ensure_polars_lazyframe(lf: Any) -> Any:
     """Polars 原生 long 路径需要裸 ``LazyFrame``，不能链式 ``.collect()`` 得到 ``ReadResult``。
 
-    Phase 5 R13：通过 dataaccess 正式 ``ScanHandle.native_lazyframe()`` 获取
+    Phase 5 R13：通过 data_access 正式 ``ScanHandle.native_lazyframe()`` 获取
     composition-only 句柄，不再访问私有 ``._lf``。duck-type ``native_lazyframe()``
     以便 ScanHandle-like 对象/测试 fake 同样走 composition-only 语义。
     """

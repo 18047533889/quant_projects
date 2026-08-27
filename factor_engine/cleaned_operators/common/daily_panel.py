@@ -40,6 +40,23 @@ def _nonnegative_int(value: Any, name: str) -> int:
     return out
 
 
+def _check_int(value: Any, name: str, minimum: int) -> int:
+    """Strict integer contract shared by wave-1 expansion modules.
+
+    Rejects bools and non-integer floats so ``5.9`` never silently truncates
+    to ``5`` (a false search space); enforces a minimum bound.
+    """
+    if isinstance(value, (bool, np.bool_)):
+        raise ValueError(f"{name} must be an integer, not bool")
+    fv = float(value)
+    if not np.isfinite(fv) or fv != float(int(fv)):
+        raise ValueError(f"{name} must be an integer")
+    iv = int(fv)
+    if iv < minimum:
+        raise ValueError(f"{name} must be >= {minimum}")
+    return iv
+
+
 def _aligned(*frames: pd.DataFrame) -> tuple[pd.DataFrame, ...]:
     """Strict multi-panel alignment (round-6 P0-25).
 

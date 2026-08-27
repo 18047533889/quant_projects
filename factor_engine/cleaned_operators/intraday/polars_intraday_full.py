@@ -182,9 +182,9 @@ def _seg_share(value: pl.DataFrame, segment: str) -> pl.DataFrame:
     return _pivot(out, "v")
 
 
-_mk("intra_segment_volume_share", "指定时段成交量占全天比例（Polars）。", ["volume", "segment", "session_tz"],
+_mk("intra_segment_volume_share", "指定时段成交量占全天比例（Polars）。", ["volume", "segment", "session_tz", "market"],
    lambda volume, segment="morning": _seg_share(volume, segment))
-_mk("intra_segment_amount_share", "指定时段成交额占全天比例（Polars）。", ["amount", "segment", "session_tz"],
+_mk("intra_segment_amount_share", "指定时段成交额占全天比例（Polars）。", ["amount", "segment", "session_tz", "market"],
    lambda amount, segment="morning": _seg_share(amount, segment))
 
 

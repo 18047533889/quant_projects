@@ -300,32 +300,32 @@ class WherePolars(SeriesOperator):
 
     metadata = OperatorMetadata(
         name="where", category="signal", description="条件选择",
-        examples=["where(cond, a, b)"], param_names=["condition", "v1", "v2"], return_type="series",
+        examples=["where(cond, x, y)"], param_names=["condition", "x", "y"], return_type="series",
         tags=["signal", "polars"],
     )
 
     def _calculate_series(
         self,
-        cond: pl.DataFrame,
-        a: pl.DataFrame,
-        b: pl.DataFrame,
+        condition: pl.DataFrame,
+        x: pl.DataFrame,
+        y: pl.DataFrame,
         **kwargs,
     ) -> pl.DataFrame:
         # R5-04: unknown condition -> null output (never the false branch).  The
         # old ``cast(pl.Boolean, strict=False)`` mapped NaN/null to False, so a
         # missing condition silently returned ``b`` — the exact drift pandas'
         # ``where`` fixed.  Mirror the pandas contract: condition NaN/null -> NaN
-        # output, condition != 0 -> a, condition == 0 -> b.
-        cols = _align_cols(cond, a, b)
-        return cond.select([
+        # output, condition != 0 -> x, condition == 0 -> y.
+        cols = _align_cols(condition, x, y)
+        return condition.select([
             pl.when(
                 pl.col(c).cast(pl.Float64, strict=False).is_not_null()
                 & pl.col(c).cast(pl.Float64, strict=False).is_finite()
             )
             .then(
                 pl.when(pl.col(c).cast(pl.Float64, strict=False) != 0.0)
-                .then(a[c])
-                .otherwise(b[c])
+                .then(x[c])
+                .otherwise(y[c])
             )
             .otherwise(None)
             .alias(c)
@@ -562,7 +562,7 @@ class TSTopKSumPolars(SeriesOperator):
 
     metadata = OperatorMetadata(
         name="ts_topk_sum", category="time_series", description="滚动 Top-K 求和",
-        param_names=["x", "d", "k"], return_type="series", tags=["time_series", "polars"],
+        param_names=["x", "d", "k", "min_periods"], return_type="series", tags=["time_series", "polars"],
         # R19-050: hidden window/n aliases declared explicitly.
         param_aliases={"window": "d", "n": "k"},
         param_specs={
@@ -573,7 +573,7 @@ class TSTopKSumPolars(SeriesOperator):
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, d: int = 20, k: int | None = None, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, d: int = 20, k: int | None = None, min_periods: int | None = None, **kwargs) -> pl.DataFrame:
         from factor_engine.backend.operator_errors import OperatorParameterError
         from factor_engine.cleaned_operators._rolling_fast import rolling_top_n_sum_window
         from factor_engine.cleaned_operators.common.strict_params import strict_int
@@ -585,7 +585,10 @@ class TSTopKSumPolars(SeriesOperator):
             raise OperatorParameterError("k must be <= window")
         cols = _numeric_cols(x)
         pdf = x.select(cols).to_pandas()
+        mp = w if min_periods is None else int(min_periods)
         out = rolling_top_n_sum_window(pdf, w, top_k)
+        # min_periods gate: values with fewer than mp finite rows stay NaN.
+        out = out.mask(pdf.notna().sum(axis=1) < mp) if mp < w else out
         return x.with_columns([pl.Series(name=c, values=out[c].to_numpy()) for c in cols])
 
 

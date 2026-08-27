@@ -5,7 +5,7 @@
 repos:
   - repo: local
     hooks:
-      - id: dataaccess-io-boundary
+      - id: data-access-io-boundary
         name: DataAccess I/O Boundary Check (FE-DA-P0-002)
         entry: python3 scripts/check_dataaccess_io_boundary.py
         language: system

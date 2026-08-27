@@ -21,6 +21,7 @@ float32；回读返回 float32 ndarray。元数据（manifest）单独存放，�
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from dataclasses import dataclass, field
@@ -32,6 +33,16 @@ import numpy as np
 # ---- dtype contract ---------------------------------------------------------
 FACTOR_VALUE_DTYPE = "float32"  # 显式 dtype 契约：因子值一律 float32
 _BYTES_PER_CELL = np.dtype(FACTOR_VALUE_DTYPE).itemsize  # 4
+
+# ---- P0-12：row-axis identity 契约 -------------------------------------------
+# 行键（row identity）按 partition 存一次（不按 factor 重复）：每 partition 一
+# 条 row_key 记录 —— 时序键（date/bar timestamp）与截面键（instrument universe
+# 有序哈希）分开。reader 读取时以 partition 内任一块的 row_key 校验
+# ``ordered_instrument_hash``：universe 顺序/成员被 shuffle 时立即 DETECT 失配并
+# 抛错，绝不静默读错值。
+ROW_AXIS_SCHEMA_VERSION = 1
+#: 时序键列名（feature_block 行键最常用的时间标识）。
+ROW_KEY_TIME_COL = "timestamp"
 
 # ---- 块大小动态选择边界 -------------------------------------------------------
 MIN_COLUMNS_PER_BLOCK = 64
@@ -83,6 +94,110 @@ def block_bytes(row_count: int, columns: int, dtype: str = FACTOR_VALUE_DTYPE) -
 
 # ---- manifest 结构 ----------------------------------------------------------
 @dataclass
+class RowAxisIdentity:
+    """P0-12：block 文件的行轴身份。按 partition 存一次，不按 factor 重复。
+
+    - 时序（row-order）键：``partition_time``（分区代表时间）、``calendar_snapshot_id``
+      （交易历快照）、``source_snapshot_id``（上游数据快照）。
+    - 截面（universe）键：``market``、``universe_snapshot_id``、有序仪器列
+      哈希 ``ordered_instrument_hash``（列名顺序敏感；shuffle universe →
+      哈希失配）。
+    - ``row_axis_ref`` 是版本化行轴引用（内部 base64），行键内容一致性由
+      reader 在读取时重新生成该哈希来校验。
+    """
+
+    schema_version: int = ROW_AXIS_SCHEMA_VERSION
+    partition_time: str = ""
+    market: str = ""
+    universe_snapshot_id: str = ""
+    ordered_instrument_hash: str = ""
+    row_axis_ref: str = ""
+    calendar_snapshot_id: str = ""
+    source_snapshot_id: str = ""
+    #: 行键记录本体（每 partition 存一次；不按 factor）。
+    row_keys: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "partition_time": self.partition_time,
+            "market": self.market,
+            "universe_snapshot_id": self.universe_snapshot_id,
+            "ordered_instrument_hash": self.ordered_instrument_hash,
+            "row_axis_ref": self.row_axis_ref,
+            "calendar_snapshot_id": self.calendar_snapshot_id,
+            "source_snapshot_id": self.source_snapshot_id,
+            "row_keys": list(self.row_keys),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "RowAxisIdentity":
+        return cls(
+            schema_version=int(d.get("schema_version", ROW_AXIS_SCHEMA_VERSION)),
+            partition_time=str(d.get("partition_time", "")),
+            market=str(d.get("market", "")),
+            universe_snapshot_id=str(d.get("universe_snapshot_id", "")),
+            ordered_instrument_hash=str(d.get("ordered_instrument_hash", "")),
+            row_axis_ref=str(d.get("row_axis_ref", "")),
+            calendar_snapshot_id=str(d.get("calendar_snapshot_id", "")),
+            source_snapshot_id=str(d.get("source_snapshot_id", "")),
+            row_keys=list(d.get("row_keys", [])),
+        )
+
+    @property
+    def row_order_fingerprint(self) -> str:
+        """行键排列指纹（row_keys 顺序敏感）。reader 用它检测行顺序被 shuffle。
+
+        空 row_keys 返回空串（后退到 ordered_instrument_hash 校验）。
+        """
+        if not self.row_keys:
+            return ""
+        return compute_row_axis_ref(
+            ordered_names=True,
+            row_keys=self.row_keys,
+        )
+
+
+def compute_row_axis_ref(
+    *,
+    market: str = "",
+    universe: Sequence[str] = (),
+    ordered_names: bool = True,
+    row_keys: Sequence[str] = (),
+) -> str:
+    """生成版本化行轴引用（base64 哈希）。
+
+    - ``universe``：仪器有序列表。``ordered_names=True`` 时哈希对顺序敏感
+      （shuffle → 哈希失配）。为保持对"历史 manifest 无 row-axis"的兼容，
+      ``ordered_names=False`` 时对排序后的名称求值（universe 成员集校验，
+      不校验顺序）。
+    - ``row_keys``：行键列表。有则把行键排列一并纳入指纹（顺序敏感）。
+    """
+    h = hashlib.sha256()
+    h.update(b"feature_block_row_axis/v1")
+    h.update(b"market=" + str(market).encode("utf-8"))
+    h.update(b"\x00")
+    if ordered_names:
+        names = list(universe)
+    else:
+        names = sorted(str(n) for n in universe)
+    for n in names:
+        h.update(str(n).encode("utf-8"))
+        h.update(b"\x1f")
+    for n in row_keys:
+        h.update(str(n).encode("utf-8"))
+        h.update(b"\x1e")
+    return base64.b64encode(h.digest()).decode("ascii")
+
+
+class RowAxisMismatchError(RuntimeError):
+    """P0-12：row-axis identity 校验失败（universe 顺序/成员/行键排列失配）。"""
+
+
+import base64  # noqa: E402
+
+
+@dataclass
 class BlockSpec:
     """一个物理 block 的元数据（与值文件分离存放）。"""
 
@@ -117,7 +232,14 @@ class BlockSpec:
 
 @dataclass
 class BlockManifest:
-    """根 manifest：把 FactorID -> BlockID -> Column 全图映射。"""
+    """根 manifest：把 FactorID -> BlockID -> Column 全图映射。
+
+    Wave1-F identity: ``identities`` (factor_id -> FactorValueIdentity dict) 让
+    manifest 携带因子的值身份（definition/implementation/treatment/market/freq/
+    universe/data/calendar/numeric_policy/dtype/build_sha/block_content_hash），
+    reader 据此校验 identity <-> 实际 block 内容一致，模型层据此消费身份而非裸因子名。
+    ``feature_set_identity`` (FeatureSetIdentity dict) 是给定回测因子集的集合级身份。
+    """
 
     schema_version: int
     dtype: str
@@ -125,6 +247,10 @@ class BlockManifest:
     factor_to_block: dict[str, dict[str, str]]  # FactorID -> {partition: block_id}
     partition_rows: dict[str, int]  # partition -> 行数
     columns_per_block: int | None = None
+    identities: dict[str, dict[str, Any]] = field(default_factory=dict)  # factor_id -> FactorValueIdentity.to_dict()
+    feature_set_identity: dict[str, Any] | None = None  # FeatureSetIdentity.to_dict()
+    # P0-12 row-axis identity：partition -> RowAxisIdentity（行键每 partition 存一次）。
+    row_axis: dict[str, RowAxisIdentity] = field(default_factory=dict)
 
     def resolve(self, factor_id: str) -> list[tuple[str, BlockSpec, int]]:
         """FactorID -> [(partition, BlockSpec, column), ...]（跨全部分区）。"""
@@ -142,8 +268,54 @@ class BlockManifest:
             out.append((partition, block, column))
         return out
 
+    def verify_row_axis(
+        self,
+        *,
+        expected_universe: Sequence[str] | None = None,
+        expected_order: Sequence[str] | None = None,
+        strict_members: bool = True,
+    ) -> None:
+        """校验 row-axis identity（partition 级）。
+
+        - 对每个 partition 的 :class:`RowAxisIdentity`：若提供了
+          ``expected_universe``，用 ``compute_row_axis_ref`` 重算并比对
+          ``ordered_instrument_hash`` —— 失配抛 :class:`RowAxisMismatchError`。
+        - 若 partition 记录了 ``row_keys``，其行键排列指纹也参与校验
+          （行键 shuffle 被 DETECT）。
+        - ``strict_members=False`` 只校验成员集（universe 顺序不敏感）。
+        - 无 row_axis（旧 manifest）→ 跳过（向后兼容，不静默读错值风险）。
+        """
+        if not self.row_axis:
+            return
+        for partition, identity in self.row_axis.items():
+            if expected_universe is not None:
+                # ordered_instrument_hash 只代表 universe（列顺序）—— row_keys
+                # 是独立的行键排列指纹，不混入 universe 哈希。
+                ref = compute_row_axis_ref(
+                    market=identity.market,
+                    universe=expected_universe,
+                    ordered_names=strict_members,
+                )
+                if ref != identity.ordered_instrument_hash:
+                    raise RowAxisMismatchError(
+                        f"partition={partition!r} row-axis 失配："
+                        f"ordered_instrument_hash={identity.ordered_instrument_hash[:16]}… "
+                        f"expected={ref[:16]}…（universe 顺序/成员变化被 DETECT）"
+                    )
+            # 可选行键排列校验（expected_order 提供时）：行键 shuffle 也被 DETECT。
+            if expected_order is not None and identity.row_keys:
+                order_ref = compute_row_axis_ref(
+                    ordered_names=True,
+                    row_keys=expected_order,
+                )
+                if order_ref != identity.row_order_fingerprint:
+                    raise RowAxisMismatchError(
+                        f"partition={partition!r} row-key 排列失配："
+                        f"row_keys 被 shuffle（行键顺序变化被 DETECT）"
+                    )
+
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "schema_version": self.schema_version,
             "dtype": self.dtype,
             "columns_per_block": self.columns_per_block,
@@ -153,6 +325,15 @@ class BlockManifest:
             },
             "blocks": {k: v.to_dict() for k, v in self.blocks.items()},
         }
+        if self.identities:
+            payload["identities"] = dict(self.identities)
+        if self.feature_set_identity is not None:
+            payload["feature_set_identity"] = self.feature_set_identity
+        if self.row_axis:
+            payload["row_axis"] = {
+                k: v.to_dict() for k, v in self.row_axis.items()
+            }
+        return payload
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "BlockManifest":
@@ -166,6 +347,18 @@ class BlockManifest:
             },
             blocks={
                 k: BlockSpec.from_dict(v) for k, v in d.get("blocks", {}).items()
+            },
+            identities={
+                k: dict(v) for k, v in d.get("identities", {}).items()
+            },
+            feature_set_identity=(
+                dict(d["feature_set_identity"])
+                if d.get("feature_set_identity")
+                else None
+            ),
+            row_axis={
+                k: RowAxisIdentity.from_dict(v)
+                for k, v in d.get("row_axis", {}).items()
             },
         )
 
@@ -197,12 +390,14 @@ class FeatureBlockWriter:
         columns_per_block: int | None = None,
         writer_memory_bytes: int | None = None,
         default_partition: str = "default",
+        build_sha: str = "",
     ) -> None:
         self.base_dir = Path(base_dir)
         self.dtype = str(dtype or FACTOR_VALUE_DTYPE)
         self.default_partition = str(default_partition)
         self.columns_per_block = columns_per_block
         self.writer_memory_bytes = writer_memory_bytes
+        self.build_sha = str(build_sha)
         # partition -> {factor_id: 1D float32 ndarray}
         self._buffer: dict[str, dict[str, np.ndarray]] = {}
         self._order: dict[str, list[str]] = {}  # partition -> 插入顺序 factor_id
@@ -212,6 +407,11 @@ class FeatureBlockWriter:
         self._block_seq = 0
         self._manifest: BlockManifest | None = None
         self._finished = False
+        # Wave1-F identity: factor_id -> FactorValueIdentity dict（写入时逐因子供给）。
+        self._identities: dict[str, dict[str, Any]] = {}
+        self._feature_set_identity: dict[str, Any] | None = None
+        # P0-12 row-axis：partition -> RowAxisIdentity（行键每 partition 存一次）。
+        self._row_axis: dict[str, Any] = {}
 
     # -- 状态 ---------------------------------------------------------------
     def buffered_factors(self) -> int:
@@ -220,7 +420,120 @@ class FeatureBlockWriter:
     def block_count(self) -> int:
         return len(self._blocks)
 
+    # -- Wave1-F identity ---------------------------------------------------
+    def set_identity(self, factor_id: str, identity: Any) -> None:
+        """把某因子的 FactorValueIdentity 交给 writer，随 manifest 落盘。
+
+        identity 可以是 ``FactorValueIdentity`` 对象或 ``to_dict()`` 结果。
+        writer 只接受一次（重复 set 幂等忽略）。
+        """
+        if self._finished:
+            raise RuntimeError("FeatureBlockWriter.finish() 已调用，不能再 set_identity")
+        if identity is None:
+            return
+        if hasattr(identity, "to_dict"):
+            payload = identity.to_dict()
+        elif isinstance(identity, dict):
+            payload = dict(identity)
+        else:  # pragma: no cover - 防御
+            raise TypeError(
+                f"set_identity 需 FactorValueIdentity 或其 dict，got {type(identity)}"
+            )
+        self._identities.setdefault(str(factor_id), payload)
+
+    def set_feature_set_identity(self, identity: Any) -> None:
+        """把 FeatureSetIdentity 交给 writer，随 manifest 落盘。"""
+        if self._finished:
+            raise RuntimeError(
+                "FeatureBlockWriter.finish() 已调用，不能再 set_feature_set_identity"
+            )
+        if identity is None:
+            return
+        if hasattr(identity, "to_dict"):
+            self._feature_set_identity = identity.to_dict()
+        else:
+            self._feature_set_identity = dict(identity)
+
+    def _build_missing_identities(self) -> dict[str, dict[str, Any]]:
+        """为尚未显式 set_identity 的因子补齐 FactorValueIdentity（幂等）。
+
+        候补哈希用轻量 descriptor（factor_id/freq/dtype/build_sha + partition），
+        block_content_hash 从 block 真实字节计算 —— 保证「identity 的 content hash
+        与物理内容一致」这条契约对无显式身份因子也成立。
+
+        另外，显式 set_identity 但未携带 block_content_hash 的因子，也用真实 block
+        字节补算 content hash —— 这样 reader 的 verify 永远有内容可校验（非空）。
+        """
+        from factor_engine.runtime.factor_value_identity import (
+            UNKNOWN_SNAPSHOT,
+            compute_block_content_hash,
+            factor_value_identity_fields,
+        )
+
+        def _content_hash_of(spec: BlockSpec) -> str:
+            if spec is None:
+                return ""
+            try:
+                arr = np.load(self.base_dir / spec.file, allow_pickle=False)
+                return compute_block_content_hash(
+                    arr,
+                    factor_ids=list(spec.factor_ids),
+                    numeric_policy=self.dtype,
+                )
+            except Exception:  # pragma: no cover - 值文件尚未落盘等
+                return ""
+
+        out = dict(self._identities)
+        for fid, per_partition in self._factor_to_block.items():
+            partition = next(iter(per_partition.keys()))
+            block_id = per_partition[partition]
+            spec = self._blocks.get(block_id)
+            if fid in out:
+                # 显式 identity：若 content hash 为空则用真实字节补算。
+                if not out[fid].get("block_content_hash"):
+                    out[fid] = dict(out[fid])
+                    out[fid]["block_content_hash"] = _content_hash_of(spec)
+                continue
+            out[fid] = factor_value_identity_fields(
+                factor_id=fid,
+                market="",
+                frequency="",
+                partition_time=str(partition),
+                universe_snapshot_id=UNKNOWN_SNAPSHOT,
+                ordered_instrument_hash="",
+                data_snapshot_id=UNKNOWN_SNAPSHOT,
+                calendar_snapshot_id=UNKNOWN_SNAPSHOT,
+                decision_time_policy="",
+                numeric_policy=self.dtype,
+                dtype=self.dtype,
+                build_sha=self.build_sha,
+                block_content_hash=_content_hash_of(spec),
+            )
+        return out
+
     # -- 主写入 -------------------------------------------------------------
+    # P0-12 row-axis：partition -> RowAxisIdentity（行键每 partition 存一次）。
+    def set_row_axis(self, identity: RowAxisIdentity | dict[str, Any]) -> None:
+        """把一个 partition 的 row-axis identity 交给 writer，随 manifest 落盘。
+
+        identity 可以是 :class:`RowAxisIdentity` 或 ``to_dict()`` 结果。
+        默认按 default_partition 生效（partition 参数未给时）。P0-12：每
+        partition 存一份行键，不按 factor 重复。
+        """
+        if self._finished:
+            raise RuntimeError("FeatureBlockWriter.finish() 已调用，不能再 set_row_axis")
+        if identity is None:
+            return
+        if hasattr(identity, "to_dict"):
+            payload = identity.to_dict()
+        elif isinstance(identity, dict):
+            payload = dict(identity)
+        else:  # pragma: no cover - 防御
+            raise TypeError(
+                f"set_row_axis 需 RowAxisIdentity 或其 dict，got {type(identity)}"
+            )
+        self._row_axis[self.default_partition] = RowAxisIdentity.from_dict(payload)
+
     def add(self, factor_id: str, values: Any, partition: str | None = None) -> None:
         """把一个因子的一段值（1D float32）加入缓冲，满了即 flush 成整块。"""
         if self._finished:
@@ -331,6 +644,9 @@ class FeatureBlockWriter:
             },
             partition_rows=dict(self._partition_rows),
             columns_per_block=self.columns_per_block,
+            identities=self._build_missing_identities(),
+            feature_set_identity=self._feature_set_identity,
+            row_axis=dict(self._row_axis),
         )
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self._atomic_write(self.manifest_path, self._manifest.to_dict())
@@ -389,19 +705,68 @@ def load_manifest(base_dir: str | Path) -> BlockManifest:
 
 
 class FeatureBlockReader:
-    """reader：FactorID -> BlockID -> Column，回读因子值（float32 契约）。"""
+    """reader：FactorID -> BlockID -> Column，回读因子值（float32 契约）。
 
-    def __init__(self, base_dir: str | Path, manifest: BlockManifest | None = None):
+    Wave1-F identity：``read_block`` 之后可调用 ``verify_manifest_identities``
+    校验 manifest 内每因子的 identity.block_content_hash 与物理 block 内容一致；
+    不一致返回 mismatch 列表（调用方据此拒绝读取）。
+
+    P0-12 row-axis：构造时提供 ``expected_universe`` 后，每次 ``read_block`` /
+    ``resolve`` 都会调用 ``manifest.verify_row_axis`` —— universe 顺序/成员被
+    shuffle 时抛 :class:`RowAxisMismatchError`（绝不会静默读错值）。
+    """
+
+    def __init__(
+        self,
+        base_dir: str | Path,
+        manifest: BlockManifest | None = None,
+        *,
+        expected_universe: Sequence[str] | None = None,
+        verify_row_axis: bool = True,
+    ):
         self.base_dir = Path(base_dir)
         self.manifest = manifest or load_manifest(base_dir)
+        self.expected_universe = (
+            list(expected_universe) if expected_universe is not None else None
+        )
+        self.verify_row_axis = bool(verify_row_axis)
+
+    def _maybe_verify_row_axis(self) -> None:
+        if self.verify_row_axis and self.expected_universe is not None:
+            self.manifest.verify_row_axis(expected_universe=self.expected_universe)
 
     def resolve(self, factor_id: str) -> list[tuple[str, BlockSpec, int]]:
+        self._maybe_verify_row_axis()
         return self.manifest.resolve(factor_id)
+
+    def verify_manifest_identities(self) -> list[str]:
+        """校验 manifest 里所有 identity 的 content hash 与真实 block 内容一致。
+
+        返回 mismatch 的 factor_id 列表；空列表即全部通过。只校验携带
+        ``block_content_hash`` 的 identity（无 identity 的旧 manifest 跳过 ——
+        向后兼容，不破坏旧读路径）。
+        """
+        from factor_engine.runtime.factor_value_identity import (
+            verify_manifest_factors_against_content,
+        )
+
+        return verify_manifest_factors_against_content(
+            self.manifest, reader=self
+        )
+
+    def identities(self) -> dict[str, dict[str, Any]]:
+        """manifest 内的 ``{factor_id: FactorValueIdentity dict, ...}``。"""
+        return dict(self.manifest.identities)
+
+    def feature_set_identity(self) -> dict[str, Any] | None:
+        """manifest 内的 FeatureSetIdentity dict（若有）。"""
+        return self.manifest.feature_set_identity
 
     def read_block(self, block_id: str) -> np.ndarray:
         spec = self.manifest.blocks.get(block_id)
         if spec is None:
             raise KeyError(f"block 不存在: {block_id}")
+        self._maybe_verify_row_axis()
         arr = np.load(self.base_dir / spec.file, allow_pickle=False)
         if arr.dtype != np.dtype(FACTOR_VALUE_DTYPE):
             arr = arr.astype(FACTOR_VALUE_DTYPE)

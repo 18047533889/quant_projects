@@ -17,7 +17,7 @@ from the *current* tree so it can never silently drift:
     TestEnvironmentIdentity     = SHA-256 over python version + key dep versions
 
 R46 P0-C: the old ``FactorEngineSubmoduleSHA`` / ``DataAccessSubmoduleSHA``
-payloads are DELETED.  factor_engine / dataaccess are regular monorepo dirs
+payloads are DELETED.  factor_engine / data_access are regular monorepo dirs
 (no submodules); the old ``submodule_sha()`` ran ``git rev-parse HEAD`` inside
 them and returned the PARENT HEAD — a fabricated "submodule SHA".  Package
 identity now comes from :func:`package_tree_identity` (real Merkle tree hash).
@@ -95,7 +95,7 @@ LOCK_CANDIDATES = (
 
 _ENV_PACKAGES: tuple[str, ...] = (
     "numpy", "pandas", "polars", "pyarrow", "scipy", "pytest",
-    "duckdb", "factor_engine", "dataaccess",
+    "duckdb", "factor_engine", "data_access",
 )
 
 ARTIFACT_IDS = (
@@ -239,7 +239,7 @@ def root_repo_sha() -> RepoIdentity:
 def gitlink_count() -> int:
     """Count real git submodule pins (index entries with mode 160000).
 
-    factor_engine / dataaccess are regular monorepo directories (not
+    factor_engine / data_access are regular monorepo directories (not
     submodules), so the correct answer on this repo is 0.  This is the only
     legitimate source of "submodule SHAs"; the old ``submodule_sha()`` that ran
     ``git rev-parse HEAD`` inside a plain directory returned the PARENT HEAD — a
@@ -551,7 +551,7 @@ def semantic_catalog_identity() -> str:
     failure raises instead of silently returning an unavailable diagnostic
     identity (fail-closed).  The returned key is the canonical 256-bit digest.
     """
-    da_root = str(_REPO_ROOT / "dataaccess")
+    da_root = str(_REPO_ROOT / "data_access")
     for p in (da_root, _REPO_ROOT / "factor_engine"):
         if p not in sys.path:
             sys.path.insert(0, p)
@@ -573,8 +573,8 @@ def semantic_catalog_identity() -> str:
 def _dist_version(name: str) -> str:
     """Installed version of a package, with a fallback for dist-name mismatches.
 
-    ``dataaccess`` is shipped as the dist ``data-access`` (importable as
-    ``dataaccess``), so a bare importlib.metadata lookup by module name would
+    ``data_access`` is shipped as the dist ``data-access`` (importable as
+    ``data_access``), so a bare importlib.metadata lookup by module name would
     report NOT_INSTALLED even when it is installed and pinned to a release
     HEAD.  R23: resolve the ``data-access`` dist so the environment identity
     reflects the pinned install.
@@ -584,7 +584,7 @@ def _dist_version(name: str) -> str:
         return md.version(name)
     except Exception:
         pass
-    if name == "dataaccess":
+    if name == "data_access":
         try:
             import importlib.metadata as md
             return md.version("data-access")
@@ -997,7 +997,7 @@ def _evaluate_dimensions(payload: dict[str, Any]) -> dict[str, str]:
         and prior_env and prior_env == (live.get("TestEnvironmentIdentity") or "")
     ) else "STALE"
 
-    # runtime_health: the semantic catalog identity is live (dataaccess importable).
+    # runtime_health: the semantic catalog identity is live (data_access importable).
     runtime_health = "CURRENT" if prior_sem and prior_sem == live_sem else "STALE"
 
     # research_validity: the research artifacts' operator closure matches.  The
@@ -1156,13 +1156,13 @@ def main(argv: list[str] | None = None) -> int:
             "VER-P0-05: dry-run evaluate and print a single machine line "
             "'EVIDENCE_CURRENT: <PASS|FAIL|STALE|UNRESOLVED> reason=...'.  "
             "Never writes.  Returns non-zero unless every artifact is CURRENT "
-            "and no failures (dataaccess/import errors are honest UNRESOLVED, "
+            "and no failures (data_access/import errors are honest UNRESOLVED, "
             "fail-closed)."
         ),
     )
     args = parser.parse_args(argv)
 
-    # VER-P0-05: dataaccess (and other optional providers) must not take the
+    # VER-P0-05: data_access (and other optional providers) must not take the
     # whole check down with an import traceback.  Guard the import here so a
     # missing data_access package reports an honest UNRESOLVED with a reason.
     try:

@@ -23,6 +23,22 @@ def _config_path() -> Path | None:
     return Path(raw).expanduser().resolve() if raw else None
 
 
+def _looks_like_operator_name(value: str) -> bool:
+    """Platform aliases that are FE operator names resolve to a canonical.
+
+    Everything else (a DSL expression like ``rank(daily_return)``, a
+    ``field ${...}`` template, a ``DataTable.Field`` path) is platform
+    authoring, not an executable operator — skip at load so an unchanged
+    platform functions.yaml stays loadable.
+    """
+    s = str(value).strip()
+    if not s:
+        return False
+    if any(ch in s for ch in "().${}[]=,+-*/<>!&|"):
+        return False
+    return all(ch.isalnum() or ch == "_" for ch in s)
+
+
 def _load_payload(path: Path) -> dict[str, Any]:
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(payload, dict):
@@ -142,6 +158,16 @@ def _entries(payload: dict[str, Any]) -> tuple[dict[str, str], dict[str, dict[st
             if isinstance(spec, str):
                 aliases[str(name)] = spec
             elif isinstance(spec, dict):
+                sql_expr = spec.get("sql_expr")
+                if sql_expr:
+                    # ``sql_expr`` entries (safe_div / nullif_zero / safe_log /
+                    # clean) are SQL rendered at platform query time, not
+                    # executable FE kernels — none of their call sites currently
+                    # thread the platform SQL through FactorEngine.  Skip them
+                    # (never eval) so an unchanged platform functions.yaml loads;
+                    # unsupported use fails later at parse/allowlist with the
+                    # same visibility as any unsupported name.
+                    continue
                 if "alias" in spec or "canonical" in spec:
                     aliases[str(name)] = str(spec.get("alias") or spec.get("canonical"))
                 elif "expression" in spec:
@@ -171,6 +197,30 @@ def augment_from_functions_yaml(
 
     from factor_engine.cleaned_operators.registry import OperatorRegistry
     for external, canonical_or_alias in aliases.items():
+        # ``sql_expr``-style field aliases (open/high/low/close/... + Field)
+        # define the platform's LQTP *adjustment basis*, which FactorEngine
+        # already applies at the StockDailyBar source layer — the canonical
+        # string is NOT an FE operator name and must not be registry-resolved.
+        # ``${...}``-parameterized template bodies (ma / std_n / delta / ...
+        # = ``ts_mean(${field}, ${window})``) are parameterized templates, not
+        # executable alias strings.  Both are platform-authoring conveniences,
+        # not runnable FE operator names; skip so the unchanged platform
+        # functions.yaml loads, and let a formula that actually uses the name
+        # fail at parse/allowlist as any unsupported name would.
+        if " " in canonical_or_alias or "." in canonical_or_alias or "${" in canonical_or_alias:
+            if _config_path() is None and path is None:
+                raise LQTPFunctionsConfigError(
+                    f"external alias {external!r} targets unknown canonical "
+                    f"{canonical_or_alias!r}"
+                )
+            continue
+        if not _looks_like_operator_name(canonical_or_alias):
+            if _config_path() is None and path is None:
+                raise LQTPFunctionsConfigError(
+                    f"external alias {external!r} targets unknown canonical "
+                    f"{canonical_or_alias!r}"
+                )
+            continue
         try:
             canonical = OperatorRegistry.resolve_canonical_strict(canonical_or_alias)
         except Exception as exc:

@@ -244,7 +244,7 @@ def adjust_input_dq_thresholds_from_stats(
     """用 DataAccess sidecar stats 动态设定 ``min_non_null_ratio`` 下限。
 
     R21-111..113: ``DatasetStatsSnapshot.column_null_ratio`` 是 *null* 率
-    （已核实 ``dataaccess/read/stats.py``，且有 [0,1] bounds 校验）。之前代码
+    （已核实 ``data_access/read/stats.py``，且有 [0,1] bounds 校验）。之前代码
     把 null 率当作非空率用 —— ``min(observed)*slack`` 会把一个 90% null 的列
     反而抬成 0.855 的“非空率”，与字面含义相反。这里先 ``1 - null_ratio``。
     """

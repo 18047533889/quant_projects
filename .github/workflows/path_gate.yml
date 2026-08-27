@@ -1,0 +1,18 @@
+name: P0-02 Path Reference Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  path_gate:
+    name: PATH_GATE
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run forbidden path-reference gate
+        run: bash scripts/forbidden_path_reference_gate.sh
+        shell: bash -e {0}

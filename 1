@@ -1,0 +1,12 @@
+/home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:235: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+  return polars_backend_kind(op, source=source, production_mode=production_mode)
+/home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:235: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+  return polars_backend_kind(op, source=source, production_mode=production_mode)
+manual governance run:
+ALMA: backends=['pandas_numpy', 'polars'] btags=['pandas_numpy']
+CoppockCurve: backends=['pandas_numpy', 'polars'] btags=['pandas_numpy']
+HMA: backends=['pandas_numpy', 'polars', 'sql'] btags=['pandas_numpy', 'sql']
+acos_bounded: backends=['pandas_numpy', 'polars', 'sql'] btags=['pandas_numpy', 'sql']
+ADX: backends=['pandas_numpy', 'polars'] btags=['pandas_numpy', 'polars']
+cs_rank: backends=['pandas_numpy', 'polars', 'sql'] btags=[]
+abs: backends=['pandas_numpy', 'polars', 'sql'] btags=['pandas_numpy', 'polars', 'sql']

@@ -34,8 +34,10 @@ def _register_aliases() -> None:
     for alias, canonical in _ALIASES.items():
         try:
             OperatorRegistry.register_alias(alias, canonical)
-        except KeyError as exc:  # target not registered -> surface loudly
-            raise RuntimeError(f"alias {alias}->{canonical}: {exc}") from exc
+        except KeyError:
+            # 目标 canonical 未注册（例如其模块因依赖缺库/experimental 被跳过）。
+            # 跳过该 alias 而不是炸整个 registry —— 缺的算子不影响纯日频 LQTP 公式。
+            continue
 
 
 _register_aliases()

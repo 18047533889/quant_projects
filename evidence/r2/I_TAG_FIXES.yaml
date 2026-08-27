@@ -1,0 +1,101 @@
+id: I_TAG_FIXES
+title: "12-operator tag-fix completion — tag-governance wiring + verification"
+status: PASS
+date: 2026-08-27
+git_sha: 2013f94aefee1d6f4e9da3addec5a8ea9447e1f1
+mission: "Wave1-I: complete the 12-operator tag-fix work left by a prior (API-killed) agent"
+
+## Context
+
+The prior agent edited `factor_engine/cleaned_operators/*.py` (tag-governance body +
+operator correctness fixes) and its final intended step was to wire
+`_apply_tag_governance` into the `load_all()` path of
+`factor_engine/cleaned_operators/__init__.py`.  This run (a) confirmed that wiring is
+already present and correct, (b) verified all 12 audit fixes actually land against the
+live registry, (c) ran the tag-asserting operator tests, (d) ran the operators test tree
+and documented the pre-existing deltas.
+
+## Wiring (verified present, no edit needed)
+
+- Body: `factor_engine/cleaned_operators/production_hardening.py:704` — `def _apply_tag_governance()`
+- Wiring: `factor_engine/cleaned_operators/__init__.py:974-975` inside `_load_all_impl()`:
+  - After `apply_final_contract_hardening()` (line 961-962) — sees FINAL status / pit_safe /
+    stateful / determinism_verified fields and the final registered-backend set.
+  - Before `OperatorRegistry.finalize()` / `freeze()` (line 995-996) — writes land in the live dict.
+  - `backfill_scalar_roles()` / `apply_stateful_contract_migration()` /
+    `register_axis_effects_for_surface()` (run after governance) do NOT mutate
+    catalog `tags` / `stateful` / `determinism_verified` / `pit_safe` / `status`
+    (verified by grep + live re-check).
+- Idempotency: re-running `load_all()` produces byte-identical tag surfaces (1730 canonicals).
+
+## 12-fix verification table (live registry after load_all, 1730 canonicals)
+
+| Fix | Description | Verified result |
+|-----|-------------|-----------------|
+| FIX-1 | `backend:<name>` tag per registered backend | 1730/1730 canonicals carry backend:* tags (zero missing) |
+| FIX-3 | cost:N clamped to band 0..8 | 1730/1730 — zero cost:9/cost:10 remain |
+| FIX-4 | `grain_minute_to_daily` on minute->daily declared contract | 150 canonicals carry the grain tag; implied minute+daily_agg surface present |
+| FIX-5 | `causal` on causal-by-construction scope (elementwise/cs/group) | 559/559 scope-causal canonicals tagged |
+| FIX-7 | `pit_safe` on causal-by-construction scope | 559/559 tagged |
+| FIX-9 | `pit_safe` where catalog field True | 0 missing (field->tag consistent) |
+| FIX-6 | `deterministic` where determinism_verified=True | 86/86 tagged |
+| FIX-8 | `stateful` where catalog stateful=True | 54/54 tagged |
+| FIX-10 | `unit:ratio` where output_unit is ratio | 24/24 tagged |
+| FIX-11 | remove wrong `daily` tag from 2 intraday ops | both intraday_activity_duration_curvature + intraday_impact_decay_rate: daily absent |
+| FIX-9b | drop stale `source_blocked` on production ops | 0 production ops carry source_blocked |
+| FIX-12 | populate empty tags on production ops | 0 production ops with empty tags |
+
+## Tests
+
+- `tests/operators/test_true_gap_batch3.py` (tag/grain assertions): 24 passed
+- `tests/operators/test_same_clock_lag.py` + `tests/test_same_clock_lag.py`: 18 passed
+- Tag-asserting batch (`test_r11_round3_geometry`, `test_r11_round2_knn_units`,
+  `test_r11_round2_mi_defs`, `test_r41_mi_spectral_authority`, `test_true_gap_batch3`):
+  75 passed, 6 failed — all 6 failures PRE-EXISTING and unrelated to tag governance
+  (see Deltas).
+- Operators test tree: BLOCKED at collection by 3 pre-existing test bugs
+  (stale `/home/shw` hardcoded paths ×2, bare-name `cleaned_operators.load_all()` import
+  bug ×2); targeted run of the governed tag/registration tests is green.
+
+## Deltas (pre-existing, NOT caused by tag fixes)
+
+1. `tests/operators/test_cs_polars_native_batch1.py:49` — hardcoded
+   `/home/shw/quant_projects/.../cs_batch1.py` (stale home dir; this box is `/home/sunhaiwei`).
+2. `tests/operators/test_ts_nth_value_polars_causality.py:21` — reads
+   `<repo-root>/cleaned_operators/...` but the runtime lives under `factor_engine/cleaned_operators/`.
+3. `tests/operators/test_r11_round2_closure_audit.py:25` + `test_r11_round3_closure_audit_ext.py:25`
+   — call bare `cleaned_operators.load_all()` after `import factor_engine.cleaned_operators`
+   (does not bind the bare name in py3) → NameError at collection.
+4. `tests/operators/test_r11_round2_mi_defs.py::test_min_periods_below_10_raises[ts_lagged_mutual_information]`
+   — expects min_periods<10 to raise at binding; runtime now silently accepts (param binding
+   does not validate the MI min_periods floor). Unrelated to tags.
+5. `tests/operators/test_r41_mi_spectral_authority.py` (5 tests) — expect
+   `ts_mutual_information_nats` / `ts_normalized_mutual_information` registered in runtime;
+   the operator exists only in `evidence/.../MODEL_CLASSIFICATION_LEDGER.csv`, never registered
+   by any runtime module. Unrelated to tags.
+
+## Test delta (focused operators batch)
+
+- Batch A (`test_r20_group_state_direct_use_rehab`, `test_group_multi_resid`,
+  `test_polars_parity_tier2`, `test_operator_math_regression`): 61 passed, 2 skipped.
+- Batch B (`test_group_ext`): 28 FAILED — all call multi-panel operators
+  (hierarchical_group_neutralize/group_ex_self_mean/cs_huber_resid/...) with only the
+  primary `x` panel while the operator's committed signature requires `(x, group[,
+  subgroup])` panels. `group_ext.py` is COMMITTED CLEAN (no uncommitted edits); these
+  are pre-existing stale test-arm call mismatches, unrelated to tag governance.
+
+## Constraints honoured
+
+- `same_clock_lag.py` / `cs_batch1.py` NOT re-edited (only read / registered via
+  `_LOAD_MODULES` addition made by the prior agent, kept as-is).
+- `object_store.py` untouched. `factor_engine/pyproject.toml` untouched.
+- No `git checkout/restore/stash/clean/reset/rebase`. Working tree is truth.
+- Idempotent: verification script + re-load check.
+
+## Owned / modified files
+
+- `factor_engine/cleaned_operators/production_hardening.py` (tag-governance body — prior agent)
+- `factor_engine/cleaned_operators/__init__.py` (wiring — prior agent)
+- `scripts/verify_tag_fixes_wave1.py` (NEW verification script, this run)
+- Other `factor_engine/cleaned_operators/*.py` edits: pre-existing prior-agent operator
+  correctness work (verified imports + targeted tests green), not re-edited here.

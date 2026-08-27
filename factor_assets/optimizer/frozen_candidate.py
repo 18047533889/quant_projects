@@ -2,10 +2,28 @@
 Frozen candidate with hash verification and test contamination tracking.
 
 State machine ensures candidates cannot be modified after evaluation/test assignment.
+
+DEPRECATED (DLIB-FA-001 / §43): the sealed-test authority is factor_optimizer
+(FO) TestAuthorityBroker. FA does NOT own TEST_SEALED / TEST_CONTAMINATED as a
+real test-protection boundary — the FA ledger seal is a logical projection /
+audit record only. FA stores only a test-evidence-ref + contamination-verdict-ref.
+This module is retained for compatibility (§108) and marked RESEARCH_ONLY. It
+will be removed after the deprecation window. No FA production path consumes it.
 """
 
 import hashlib
 import json
+import warnings as _warnings
+
+_warnings.warn(
+    "factor_assets.optimizer.frozen_candidate is deprecated: the sealed-test "
+    "authority is FO TestAuthorityBroker. FA stores only test-evidence-ref + "
+    "contamination-verdict-ref. This module is retained for compatibility and "
+    "will be removed.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum

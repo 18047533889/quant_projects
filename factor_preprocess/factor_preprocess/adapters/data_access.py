@@ -1,5 +1,5 @@
 """
-Data Access adapter - optional integration with dataaccess package.
+Data Access adapter - optional integration with the data_access package.
 
 Provides protocol-based boundary for fetching exposure context (industry, sector, size, etc.)
 used in neutralization and feature engineering. Fails gracefully if not available.
@@ -230,10 +230,10 @@ class ExposureProvider(Protocol):
 
 class DataAccessAdapter:
     """
-    Adapter for dataaccess package integration.
+    Adapter for data_access package integration.
 
     Provides exposure context for neutralization and feature engineering.
-    Raises OptionalDependencyMissing if dataaccess is not installed.
+    Raises OptionalDependencyMissing if data_access is not installed.
     """
 
     def __init__(self, provider: ExposureProvider):
@@ -267,7 +267,7 @@ class DataAccessAdapter:
             Dictionary with industry exposure data
 
         Raises:
-            OptionalDependencyMissing: If dataaccess not available
+            OptionalDependencyMissing: If data_access not available
             ValueError: If the provider returns a bundle without mandatory
                 provenance metadata (fail-closed).
         """
@@ -302,7 +302,7 @@ class DataAccessAdapter:
             Dictionary with size exposure data
 
         Raises:
-            OptionalDependencyMissing: If dataaccess not available
+            OptionalDependencyMissing: If data_access not available
             ValueError: If the provider returns a bundle without mandatory
                 provenance metadata (fail-closed).
         """
@@ -339,7 +339,7 @@ class DataAccessAdapter:
             Dictionary mapping exposure_type -> exposure data dict
 
         Raises:
-            OptionalDependencyMissing: If dataaccess not available
+            OptionalDependencyMissing: If data_access not available
             ValueError: If an exposure_type is not in the supported set, or a
                 provider returns a bundle without mandatory provenance metadata
                 (fail-closed).
@@ -392,7 +392,7 @@ class DataAccessAdapter:
 
 
 def check_data_access_available() -> bool:
-    """Check if dataaccess package is available."""
+    """Check if the data_access package is available."""
     try:
         import data_access
         return True
@@ -411,14 +411,14 @@ def create_adapter(provider: Optional[ExposureProvider] = None) -> DataAccessAda
         DataAccessAdapter instance
 
     Raises:
-        OptionalDependencyMissing: If dataaccess not available and no provider given
+        OptionalDependencyMissing: If data_access not available and no provider given
     """
     if provider is not None:
         return DataAccessAdapter(provider)
 
     if not check_data_access_available():
         raise OptionalDependencyMissing(
-            package_name="dataaccess",
+            package_name="data_access",
             feature_name="Exposure context for neutralization"
         )
 

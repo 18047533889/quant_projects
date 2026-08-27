@@ -12,6 +12,9 @@ from typing import Dict, List, Set, Optional, Tuple
 from collections import defaultdict
 import hashlib
 
+from factor_assets.contracts._canonical import canonical_digest
+from factor_assets.contracts._frozen import FrozenMapping
+
 try:
     from scipy.cluster import hierarchy
     from scipy.spatial.distance import squareform
@@ -110,6 +113,13 @@ class ClusterArtifact:
             raise ValueError("algorithm is required")
         if not self.assignments:
             raise ValueError("assignments is required")
+        # DLIB-FA-008: deep-immutable — snapshot the caller's assignments dict
+        # into an immutable FrozenMapping so mutating the original dict after
+        # construction cannot change the artifact.  FrozenMapping is hashable
+        # and deepcopy-safe (matching the QE cross-package convention), so the
+        # artifact's assignments no longer block copy.deepcopy / hash.
+        object.__setattr__(self, "assignments", FrozenMapping(dict(self.assignments)))
+        object.__setattr__(self, "representatives", tuple(self.representatives))
         computed = self.recompute_content_hash()
         if not self.content_hash:
             object.__setattr__(self, "content_hash", computed)
@@ -124,38 +134,31 @@ class ClusterArtifact:
         """Number of clusters (distinct cluster ids)."""
         return len(set(self.assignments.values()))
 
-    def _content_digest(self) -> "hashlib._Hash":
-        digest = hashlib.sha256()
-
-        def _prefixed(value: object) -> None:
-            encoded = str(value).encode("utf-8")
-            digest.update(str(len(encoded)).encode("ascii"))
-            digest.update(b":")
-            digest.update(encoded)
-
-        _prefixed(self.graph_identity)
-        _prefixed(self.algorithm)
-        _prefixed(self.snapshot_ref)
-        _prefixed(self.universe_ref)
-        _prefixed(self.similarity_spec_ref)
-        _prefixed(self.backend)
-        _prefixed(self.backend_version)
-        _prefixed(self.seed)
-        _prefixed(self.resolution)
-        _prefixed(self.min_cluster_size)
-        _prefixed(self.min_cluster_policy)
-        _prefixed(self.modularity)
-        _prefixed(self.stability)
-        for fid in sorted(self.assignments):
-            _prefixed(fid)
-            _prefixed(self.assignments[fid])
-        for rep in self.representatives:
-            _prefixed(rep)
-        return digest
-
     def recompute_content_hash(self) -> str:
-        """sha256 over every semantic field of the cluster artifact."""
-        return self._content_digest().hexdigest()
+        """sha256 over every semantic field of the cluster artifact.
+
+        DLIB-FA-056: uses the typed canonical structural encoding
+        (:func:`factor_assets.contracts._canonical.canonical_digest`), not
+        ``str(value)``, so structurally equal nested values hash identically
+        and equal-looking values of different types differ.
+        """
+        return canonical_digest(
+            self.graph_identity,
+            self.algorithm,
+            self.snapshot_ref,
+            self.universe_ref,
+            self.similarity_spec_ref,
+            self.backend,
+            self.backend_version,
+            self.seed,
+            self.resolution,
+            self.min_cluster_size,
+            self.min_cluster_policy,
+            self.modularity,
+            self.stability,
+            self.assignments,
+            self.representatives,
+        )
 
     def to_dict(self) -> Dict[str, object]:
         """Serializable dict form (provenance + hash retained)."""
@@ -636,6 +639,24 @@ class LeidenClustering:
         min-cluster-size policy so it is never a dead parameter."""
         unique = sorted(set(assignments.values()))
         cluster_map = {old: new for new, old in enumerate(unique)}
+
+        # DLIB-FA-007/57: the algorithm label is unstable (Leiden label ``18``
+        # may be ``5`` next refresh).  Stable logical cluster identity is owned
+        # by the cluster-governance layer (:class:`~factor_assets.contracts.
+        # cluster_governance.LogicalCluster` / ``ClusterVersionArtifact``).
+        # This renumbering keeps the algorithm order contiguous and
+        # deterministic (smallest factor_id first), which is the only locality
+        # guaranteed here.
+        ordered_ids = sorted(assignments)
+        label_order = {cid: idx for idx, cid in enumerate(sorted(set(assignments.values())))}
+        # The map from old cluster-id to contiguous label must be deterministic
+        # and order-INVARIANT: build it by walking the sorted factor ids, not
+        # by sorting raw integer cluster ids (which are arbitrary backend ids).
+        cluster_map = {}
+        for fid in ordered_ids:
+            old = assignments[fid]
+            if old not in cluster_map:
+                cluster_map[old] = len(cluster_map)
         renumbered = {fid: cluster_map[cid] for fid, cid in assignments.items()}
         sizes = defaultdict(int)
         for cid in renumbered.values():

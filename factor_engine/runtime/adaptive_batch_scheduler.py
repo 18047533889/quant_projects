@@ -18,6 +18,7 @@ scoring + work stealing。**不是**「shared nodes 先全部算完再按 root l
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from concurrent.futures import FIRST_COMPLETED, Future, wait
 from dataclasses import dataclass, field
@@ -43,7 +44,12 @@ from factor_engine.runtime.plan_execution_certificate import (
     PlanExecutionCertificate,
     build_plan_execution_certificate,
 )
-from factor_engine.runtime.resource_broker import ReservationLease, ResourceBroker
+from factor_engine.runtime.resource_broker import (
+    MissingResourceBroker,
+    ReservationLease,
+    ResourceBroker,
+    require_broker,
+)
 from factor_engine.runtime.streaming_result_sink import ResultItem, StreamingResultSink
 
 _logger = logging.getLogger(__name__)
@@ -305,7 +311,14 @@ class AdaptiveBatchScheduler:
                 broker = get_host_coordinator().broker
             except Exception:
                 broker = None
-        self.broker = broker or ResourceBroker()
+# P0-11 单权威 gate：production 下 broker 仍为 None → raise
+        # MissingResourceBroker（fail-closed）；research/dev 经 require_broker
+        # 降级并显式标记（degraded observable）。
+        self.broker = require_broker(
+            broker,
+            raise_on_missing=True,
+            run_mode=os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower() or None,
+        )
         self.executor = executor or HybridExecutor(broker=self.broker)
         self.sink = sink
         self.wave_memory_budget = wave_memory_budget

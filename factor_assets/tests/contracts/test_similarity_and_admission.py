@@ -207,10 +207,13 @@ class TestSimilarityArtifactHash:
         assert len(artifact.similarity_spec_hash) == 64
 
     def test_primary_value_and_view_accessor(self):
+        from factor_assets.contracts._frozen import FrozenMapping
+
         artifact = _artifact()
         assert artifact.primary_value == 0.9
         assert artifact.view("pnl_corr") == 0.7
         assert artifact.view("missing") is None
+        assert isinstance(artifact.views, FrozenMapping)
 
     def test_to_dict_roundtrip(self):
         artifact = _artifact()
@@ -277,10 +280,10 @@ class TestSimilarityArtifactHash:
         assert augmented.created_at == artifact.created_at
 
     def test_views_are_immutable_deep_frozen(self):
-        from types import MappingProxyType
+        from factor_assets.contracts._frozen import FrozenMapping
 
         artifact = _artifact()
-        assert isinstance(artifact.views, MappingProxyType)
+        assert isinstance(artifact.views, FrozenMapping)
         with pytest.raises(TypeError):
             artifact.views["rank_corr"] = 0.5  # type: ignore[misc]
 
@@ -293,6 +296,22 @@ class TestSimilarityArtifactHash:
         source["rank_corr"] = 0.0
         assert artifact.views["rank_corr"] == 0.9
         assert artifact.primary_value == 0.9
+
+    def test_views_are_hashable(self):
+        import copy
+        import pickle
+
+        artifact = _artifact()
+        # DLIB-XPKG: mapping fields are hashable + deepcopy-safe (matching the
+        # QE FrozenMapping convention), so artifact deepcopy/hash no longer
+        # raise.  Hash is content-stable across equal artifacts.
+        assert isinstance(hash(artifact), int)
+        assert hash(artifact) == hash(_artifact())
+        # Content-sensitive: a different view value yields a different hash.
+        assert hash(artifact) != hash(_artifact(views={"rank_corr": 0.8, "pnl_corr": 0.7}))
+        # deepcopy + pickle round-trips preserve content and hash.
+        assert copy.deepcopy(artifact) == artifact
+        assert pickle.loads(pickle.dumps(artifact)) == artifact
 
 
 class TestSimilarityView:

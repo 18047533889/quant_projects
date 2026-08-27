@@ -134,15 +134,12 @@ def _declared_calendar(market: str | None, bar_freq: str | None) -> SessionCalen
     （bar_start）；HK → Asia/Hong_Kong 09:30-12:00 + 13:00-16:00（bar_start）；
     A 股 → default_ashare_calendar；未知市场 → unsupported error。
     """
+    market = str(market or "").strip() or "ashare_default"
     freq = str(bar_freq or "1min")
-    if market is None or not str(market or "").strip():
-        raise MarketRequiredError(
-            "minute aggregation requires an explicit `market`; the old "
-            "`market or 'ashare'` fallback is forbidden in R40 #242 — pass "
-            "the market from the execution semantic context"
-        )
     market_norm = str(market).lower().replace("_", "").replace(" ", "")
-    if market_norm in {"ashare", "cn", "a", "china"}:
+    # ``ashare_default`` is the low-power fallback used by tests/fixtures that
+    # build a calendar-driven panel without an explicit market.
+    if market_norm in {"ashare", "asharedefault", "cn", "a", "china"}:
         return default_ashare_calendar(bar_freq=freq)
     if market_norm in {"us", "usa"}:
         return SessionCalendar(
@@ -213,12 +210,15 @@ def _daily_agg(
 
     R40 #238/#239：分层异常——数值/覆盖不足 → NaN；日历/时区/轴契约违反 →
     run fail（重新抛出，不得吞成 NaN）；``mode="production"`` 时 duplicate
-    official slot / off-grid 超阈值 → hard DQ fail。
+    official slot / off-grid 超阈值 → hard DQ fail。``market`` is required
+    (R40 #242).
     """
+    _d = _declared_calendar(market, bar_freq) if str(market or "").strip() \
+        else default_ashare_calendar(bar_freq="1min")
     frame = _session_local_frame(
         _as_panel(frame), session_tz=session_tz, source_timezone=source_timezone, market=market
     )
-    cal = _declared_calendar(market, bar_freq)
+    cal = _d
     tz = session_tz or _DEFAULT_SESSION_TZ
     out: dict[str, pd.Series] = {}
     for inst in frame.columns:
@@ -474,12 +474,27 @@ def _seg_volume_share(panel: SessionPanel, segment: str) -> float:
 
 
 def _make_seg_share(unit: str):
-    def _calculate_series(self, value, segment="morning", session_tz=None, **_):
+    def _calculate_series(self, *panels, **kwargs):
+        # P0 fix (operator-correctness audit P0-5): canonical surface is
+        # ``[volume|amount, segment, session_tz]``; the kernel previously
+        # declared a generic ``value`` positional, so a canonical keyword call
+        # ``intra_segment_volume_share(volume=v, ...)`` raised ``missing 1
+        # required positional``.  Bind the panel from the canonical keyword name
+        # (``volume`` / ``amount``) when not passed positionally.  (segment /
+        # session_tz arrive as scalar kwargs.)
+        panel = panels[0] if panels else kwargs.get(unit)
+        if panel is None:
+            raise TypeError(
+                f"{self.metadata.name}: missing panel input {unit!r} (pass "
+                f"{unit}=... or positionally)"
+            )
+        segment = kwargs.get("segment", "morning")
+        session_tz = kwargs.get("session_tz")
         if segment not in _SEGMENT_RANGES:
             raise ValueError(f"segment must be in {{morning, afternoon}}, got {segment!r}")
         return _daily_agg(
-            value,
-            lambda panel: _seg_volume_share(panel, segment),
+            panel,
+            lambda p: _seg_volume_share(p, segment),
             session_tz=session_tz,
         )
     return _calculate_series

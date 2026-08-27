@@ -25,6 +25,7 @@ setup(
         "factor_assets.contracts",
         "factor_assets.graph",
         "factor_assets.identity",
+        "factor_assets.library",
         "factor_assets.lifecycle",
         "factor_assets.novelty",
         "factor_assets.optimizer",

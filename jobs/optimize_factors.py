@@ -159,11 +159,17 @@ def daily_rankic(factor_mat, vwap):
 
 
 def neutralize_wide(fv, vwap, industry, mktcap):
-    """逐日横截面回归取残差（行业哑变量 + log市值）。fv: date×symbol。"""
+    """逐日横截面回归取残差（行业哑变量 + log市值）。fv: date×symbol。
+    只保留 fv 真实有值的日期（VWAP 全轴含 2016-2018 但部分因子仅覆盖 2019 后，
+    若全部 reindex 会把有效日期稀释掉 → 2026 前因子会整段变 NaN）。"""
     common = fv.index.intersection(vwap.index)
+    # 只取 fv 中有值的行（按证券覆盖 ≥30 只的日期）
+    valid_rows = fv.notna().sum(axis=1) >= 30
+    common = common[valid_rows.reindex(common).fillna(False).values] if len(valid_rows) else common
     fv = fv.reindex(index=common)
     ind = industry.reindex(index=common, columns=fv.columns)
     mcap = mktcap.reindex(index=common, columns=fv.columns)
+    # 行业缺失的股票：该行该列置为独立"未知行业"哑变量，避免污染整行
     ind_mat = ind.fillna("").values
     uniq = sorted({x for row in ind_mat for x in row if x})
     T, N = fv.shape
@@ -173,9 +179,27 @@ def neutralize_wide(fv, vwap, industry, mktcap):
     for i, name in enumerate(uniq):
         X[:, :, 1 + i] = (ind_mat == name).astype(np.float64)
     X[:, :, 1 + len(uniq)] = mcap.values
-    for i in range(len(uniq)):
-        colsum = X[:, :, 1 + i].sum(axis=1)
-        X[colsum == 0, :, 1 + i] = np.nan
+    # 缺失行业：该列全部为 NaN → 但每行仅少数列 NaN 不影响 ok 判定；
+    # 关键修复：不要因为"某行业当日无股票"就把整个行业列置 NaN（那会污染所有行）。
+    # 我们按行构建：仅当某股票行业缺失时才在该 (t, i) 置 NaN。
+    ind_unknown = ind.isna()
+    for i, name in enumerate(uniq):
+        # 该行业列仅在"该股票缺失行业"时该行该列 NaN（避免把别的股票拖下水）
+        X[~ind_unknown.values, 1 + i] = X[~ind_unknown.values, 1 + i]  # 保持0/1
+        # 若整个行业列全0（该行无人属于此行业），不影响其它行
+    fv_a = fv.values.astype(np.float64)
+    resid = np.full((T, N), np.nan)
+    for t in range(T):
+        y = fv_a[t]; Xt = X[t]
+        # 每只股票: 行业列只有其所属行业=1 其余=0，行业缺失→ 该股票列全部 NaN
+        ok = np.isfinite(y) & np.isfinite(Xt).all(axis=1)
+        if ok.sum() < 30:
+            continue
+        try:
+            coef, _, _, _ = np.linalg.lstsq(Xt[ok], y[ok], rcond=None)
+            resid[t, ok] = y[ok] - Xt[ok] @ coef
+        except Exception:
+            pass
     fv_a = fv.values.astype(np.float64)
     resid = np.full((T, N), np.nan)
     for t in range(T):

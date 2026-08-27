@@ -14,19 +14,24 @@ def test_contracts_public_api_nonempty():
 
 def test_contracts_are_pure_stdlib():
     # The contracts layer must not pull in any third-party runtime deps.
+    # Run in a subprocess so other tests (e.g. the auth/API tests that import
+    # fastapi/pydantic) cannot pollute sys.modules for this check.
+    import subprocess
     import sys
 
-    third_party = {
-        "numpy",
-        "pandas",
-        "pydantic",
-        "fastapi",
-        "sqlalchemy",
-        "duckdb",
-        "pyarrow",
-    }
-    loaded = set(sys.modules)
-    assert not (third_party & loaded), f"third-party modules loaded: {third_party & loaded}"
+    code = (
+        "import sys; "
+        "import quant_platform.app.contracts as c; "
+        "third_party={'numpy','pandas','pydantic','fastapi','sqlalchemy','duckdb','pyarrow'}; "
+        "loaded=set(sys.modules); "
+        "assert not (third_party & loaded), f'third-party modules loaded: {third_party & loaded}'"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, f"contracts pulled third-party deps:\n{result.stderr}"
 
 
 def test_stdlib_platform_not_shadowed():

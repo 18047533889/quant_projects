@@ -51,3 +51,47 @@ def test_catalog_specs_carry_catalog_fields():
     assert spec.metric_id == "pearson_ic"
     assert spec.implementation_hash  # auto-derived content hash
     assert spec.direction == "higher_is_better"
+
+
+# ---------------------------------------------------------------------------
+# QE-P0-R-C2: single POPULATED authority (no dual data).
+# ---------------------------------------------------------------------------
+
+
+def test_single_populated_registry_authority():
+    """The two surfaces must share ONE backing MetricRegistry instance.
+
+    ``metrics.catalog`` must be a read-only view over the SAME populated
+    ``MetricRegistry`` that ``registry.metrics`` owns — never a second
+    independently-populated catalog.
+    """
+    assert catalog._REGISTRY is registry_metrics._REGISTRY, (
+        "metrics.catalog and registry.metrics hold TWO distinct populated "
+        "MetricRegistry instances; there must be exactly ONE"
+    )
+
+
+def test_catalog_is_read_only_view_over_single_registry():
+    """The catalog's CATALOG mapping must be a read-only view over the single
+    registry's backing store (the 10-domain subset)."""
+    from types import MappingProxyType
+
+    assert isinstance(catalog.CATALOG, MappingProxyType)
+    with pytest.raises(TypeError):
+        catalog.CATALOG["__new__"] = None  # type: ignore[index]
+    # Every catalog metric_id is served by the single registry.
+    assert set(catalog.list_all_metric_ids()) <= set(registry_metrics.list_metrics())
+    # The catalog exposes the 10-domain subset (its historical contract).
+    assert len(catalog.list_all_metric_ids()) >= 1
+    assert all(
+        catalog.get_metric_spec(mid).domain is not None
+        for mid in catalog.list_all_metric_ids()
+    )
+
+
+def test_catalog_metrics_are_registered_in_single_registry():
+    """Every catalog metric_id resolves through the single registry."""
+    for metric_id in catalog.list_all_metric_ids():
+        spec = registry_metrics.get_metric(metric_id)
+        assert spec.metric_id == metric_id
+        assert spec is catalog.get_metric_spec(metric_id)

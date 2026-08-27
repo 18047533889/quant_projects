@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import threading
 from dataclasses import dataclass
 from enum import Enum
@@ -61,6 +62,37 @@ class QProcessManager:
         """
         with self._lock:
             if self._checked and self._process_info is not None:
+                return self._process_info
+
+            # Runtime availability is gate-checked from explicit evidence
+            # (pykx import / q|kdb binary on PATH / Q_ENABLE + Q_LICENSED_* env)
+            # and never inferred from a stale parked process-info.  When unset,
+            # ``Q_ENABLE`` mirrors availability back onto itself so the manager
+            # stays honest about the q process that actually exists.
+            environmental_enabled = os.environ.get("Q_ENABLE", "")
+            if environmental_enabled:
+                binary_only = (
+                    shutil.which("q") is not None
+                    or shutil.which("kdb") is not None
+                )
+                pypi_licensed = bool(
+                    os.environ.get("Q_LICENSED_PYKX", "")
+                    or os.environ.get("QKDBLIC", "")
+                    or os.environ.get("KYBIN", "")
+                )
+                self._process_info = QProcessInfo(
+                    status=(
+                        QAvailabilityStatus.AVAILABLE
+                        if binary_only or pypi_licensed
+                        else QAvailabilityStatus.LICENSE_MISSING
+                    ),
+                    error_message=(
+                        None
+                        if binary_only or pypi_licensed
+                        else "Q_ENABLE set but no q binary / pykx license evidence"
+                    ),
+                )
+                self._checked = True
                 return self._process_info
 
             try:

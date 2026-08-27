@@ -26,7 +26,7 @@ import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Callable
 
-from factor_engine.runtime.resource_broker import ResourceBroker
+from factor_engine.runtime.resource_broker import MissingResourceBroker, ResourceBroker, require_broker
 
 _logger = logging.getLogger(__name__)
 
@@ -99,7 +99,9 @@ class HybridExecutor:
         worker_threads: int = 1,
         prefer_process: bool = False,
     ) -> None:
-        self.broker = broker or ResourceBroker()
+        # P0-11 单权威 gate：production 下缺失 broker → raise（fail-closed）；
+        # research/dev 经 require_broker 降级并显式标记。
+        self.broker = require_broker(broker, raise_on_missing=True)
         self.prefer_process = prefer_process
         self.worker_threads = max(1, worker_threads)
         from factor_engine.runtime.resource_governor import effective_cpu_slots

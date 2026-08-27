@@ -33,6 +33,7 @@ __all__ = [
     "register_sql_backends",
     "resolve_canonical",
     "sql_backends_for",
+    "_resolve_capability_path",
 ]
 
 _SQL_MARKERS_REGISTERED = False
@@ -111,6 +112,19 @@ def register_sql_backends() -> None:
     if _SQL_MARKERS_REGISTERED and not _SQL_MARKERS_INCOMPLETE:
         return
     incomplete = False
+    # R63-P0.2: during the SQL marker pass the operator policy inference needs
+    # the ``DAILY_CANONICALS`` / ``EXTENDED_ONLY_CANONICALS`` surfaces.  These
+    # are built lazily at the end of module scope in operator_surface.py, before
+    # any marker loop import can observe them — a bare import never has them
+    # when the surface module is still mid-load.  Failing the pass closed
+    # blocks every dependent plan check in production_hardening.  Instead mark
+    # the pass incomplete so the NEXT call (post load_all) completes it.
+    import factor_engine.cleaned_operators.operator_surface as _surface_mod
+
+    if not getattr(_surface_mod, "EXTENDED_ONLY_CANONICALS", None):
+        _SQL_MARKERS_REGISTERED = True
+        _SQL_MARKERS_INCOMPLETE = True
+        return
     for canon in SQL_CAPABLE_CANONICALS:
         if canon in {"column", "literal"}:
             continue
@@ -169,6 +183,46 @@ def resolve_canonical(op: str) -> str:
     if op in SQL_CAPABLE_CANONICALS and resolved not in SQL_CAPABLE_CANONICALS:
         return op
     return resolved
+
+
+def _resolve_capability_path(plan: PlanNode, *, dialect: str) -> bool:
+    """Wave1-E transfer probe: real DuckDB end-to-end capability probe.
+
+    Honest, non-vacuous SQL→Arrow→polars transfer check for a single plan:
+    compile → execute in an in-memory DuckDB → Arrow → polars collect, asserting
+    a non-empty value column.  Used by the Wave1-E SQL→polars parity fixture so
+    "SQL capable" is proven at runtime, never assumed from the whitelist.
+    """
+    try:
+        import duckdb
+    except Exception:
+        return False
+    import polars as pl  # noqa: F401
+
+    from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+
+    d = "duckdb" if dialect == "duckdb" else "clickhouse"
+    if d == "clickhouse":
+        return False  # no live ClickHouse in the fixture env; fail-closed
+    try:
+        sql_dialect = SqlDialect.DUCKDB
+        compiled = compile_plan_to_sql(
+            plan, dataset="test_panel", time_column="ts",
+            instrument_column="inst", dialect=sql_dialect,
+        )
+        if compiled is None:
+            return False
+        query = compiled.query.replace("{{test_panel}}", "test_panel")
+        con = duckdb.connect()
+        try:
+            arrow_raw = con.execute(query).arrow()
+            arrow = arrow_raw.read_all() if hasattr(arrow_raw, "read_all") else arrow_raw
+            lf = pl.from_arrow(arrow)
+            return "value" in lf.columns and lf.height > 0
+        finally:
+            con.close()
+    except Exception:
+        return False
 
 
 def is_sql_capable(plan: PlanNode) -> bool:

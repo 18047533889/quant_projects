@@ -1,0 +1,61 @@
+task_id: RIDGE2-P0-007_STREAMING
+git_sha: 2013f94aefee1d6f4e9da3addec5a8ea9447e1f1
+current_head: 2013f94aefee1d6f4e9da3addec5a8ea9447e1f1
+generation_timestamp: 2026-08-28
+dirty_count_before_evidence_edit: 0
+owned_files:
+  - data_access/read/object_store.py
+  - data_access/pyproject.toml
+  - data_access/tests/unit/test_object_store_cos.py
+modified_files: []
+summary: |
+  RIDGE2-P0-07 关闭：COSObjectStore multipart 从「整块 bytes 二次拷贝 + 整读回程
+  校验」升级为有界内存流式上传。
+  - put_object 接受 BinaryIO 入口：逐 part（part_size）从流读，有界 in-flight
+    队列（<= inflight=max_concurrency）并发 UploadPart，part 上传即释放；
+    sha256/MD5 边传边算，complete 后校验（不再整读回程）。
+  - bytes 入口保持小对象单 PUT / 大对象 multipart 不变，intent 兼容。
+  - PartNumber 统一 1..10000（_validate_part_number）与 PartNumber set 连续。
+  - 流 producer 失败（part 数越界 / 源读失败）通过 _StreamingProduceFailure 标记
+    → 立即 abort 不重试（同流不可重放；修复「重试用空流掩盖初始失败」NO-RAISE）。
+  - 新增依赖 boto3/botocore（数据平面拉真 multipart 的运行时依赖，P0-05 补全）。
+probes:
+  test_streaming_put_object_integrity_and_1based: PASS
+  test_streaming_part_count_guard: PASS
+  test_streaming_multipart_bounded_memory: PASS
+  test_bounded_memory_10gb_logical_rss:
+    result: PASS
+    rss_baseline_kb: 150672
+    rss_peak_kb: 202856
+    rss_delta_kb: 52184
+    threshold_kb: 216208
+    note: |
+      逻辑 10GB 流上传（part_size 8MiB × inflight 2），客户端 RSS 峰值增量
+      52MB <= 阈值 inflight×part_size×4=64MB —— O(part_size×inflight)，
+      不随对象总大小线性（对比整块 bytes 路径 10GB 需常驻 10GB+）。
+  cos_objectstore_suite: "40 passed"  # test_object_store_cos + generation_publisher
+focused_tests:
+  command: >-
+    /home/sunhaiwei/quant_projects/.venv/bin/python -m pytest
+    tests/unit/test_object_store_cos.py
+    tests/unit/test_object_store_generation_publisher.py
+    -q -p no:cacheprovider
+  result: "40 passed, 0 failed"
+syntax_compile:
+  command: python3 -m py_compile object_store.py
+  result: PASS
+broad_gates:
+  - full_data_access_unit_suite: |
+      27 pre-existing failures outside object_store scope (timezone / resource /
+      r26-lease / polars-budget env), 1489 passed — unrelated to P0-07.
+  - production_gate: NOT_RUN
+  - four_backend_parity: NOT_RUN
+no_defect: true
+known_limitations:
+  - broad gates NOT_RUN; four-backend parity NOT_RUN.
+  - FakeS3 is a sink fake; real COS round-trip not exercised (no network).
+  - streaming part count guard uses 1-based idx bound during iteration (O(1) precheck).
+  - bytes-path deduped _upload_parts_concurrent removed; both paths share
+    _run_multipart + producer.
+production_certification: NOT_RUN
+status: CLOSED_LOCAL

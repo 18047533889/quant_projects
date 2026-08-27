@@ -139,7 +139,7 @@
 - path: data_access/scripts/compact_dataset.py
   reason: "小文件 compaction 维护工具：读本地 parquet 重写成大文件（非读路径 consumer）"
 - path: data_access/core/duckdb_config.py
-  reason: "DuckDB PRAGMA 配置模块，供 dataaccess engine 复用"
+  reason: "DuckDB PRAGMA 配置模块，供 data_access engine 复用"
 - path: data_access/core/engine.py
   reason: "DuckDB 引擎封装本体，import/connect 是唯一合法落点"
 - path: data_access/cos/remote.py
@@ -155,7 +155,7 @@
 - path: data_access/service/client.py
   reason: "HTTP 客户端解析远程 Parquet 响应"
 - path: data_access/store.py
-  reason: "dataaccess 实现本体，内部原子写入 parquet"
+  reason: "data_access 实现本体，内部原子写入 parquet"
 - path: data_access/write/upsert.py
   reason: "upsert 读取已有分区并原子写回"
 - path: data_access/write/publish.py
@@ -163,35 +163,35 @@
 - path: data_access/write/generation.py
   reason: "R27-G generation 原子代写本体：hive 分区 data.parquet 直写 + manifest.json 单指针 flip（与 publish/upsert 同类，不能递归调自己）"
 - path: data_access/core/duckdb_capabilities.py
-  reason: "dataaccess 自身实现：DuckDB 版本能力探测（import duckdb 读版本）"
+  reason: "data_access 自身实现：DuckDB 版本能力探测（import duckdb 读版本）"
 - path: data_access/core/retry.py
-  reason: "dataaccess 自身实现：ExceptionClassifier 需要 duckdb.Error 判断瞬时/致命错误是否可重试"
+  reason: "data_access 自身实现：ExceptionClassifier 需要 duckdb.Error 判断瞬时/致命错误是否可重试"
 - path: data_access/read/formats.py
-  reason: "dataaccess 自身实现：格式适配层，arrow/feather 直读（pyarrow feather/ipc）"
+  reason: "data_access 自身实现：格式适配层，arrow/feather 直读（pyarrow feather/ipc）"
 - path: data_access/read/manifest.py
-  reason: "dataaccess 自身实现：数据集 manifest 读写 parquet footer（pq.read_table/read_metadata）"
+  reason: "data_access 自身实现：数据集 manifest 读写 parquet footer（pq.read_table/read_metadata）"
 - path: data_access/read/read_handle.py
-  reason: "dataaccess 自身实现：统一读句柄（无禁用 API，登记以防误报）"
+  reason: "data_access 自身实现：统一读句柄（无禁用 API，登记以防误报）"
 - path: data_access/read/scan_cost.py
-  reason: "dataaccess 自身实现：读路径成本估算（无禁用 API）"
+  reason: "data_access 自身实现：读路径成本估算（无禁用 API）"
 - path: data_access/read/session_calendar.py
-  reason: "dataaccess 自身实现：交易所 session/交易日历（#46），仅导入标准库与 pandas"
+  reason: "data_access 自身实现：交易所 session/交易日历（#46），仅导入标准库与 pandas"
 - path: data_access/read/physical_plan.py
-  reason: "dataaccess 自身实现：物理计划 DAG（#4），纯编译不读文件"
+  reason: "data_access 自身实现：物理计划 DAG（#4），纯编译不读文件"
 - path: data_access/read/pit_event_index.py
-  reason: "dataaccess 自身实现：美股财务 PIT 物理索引（#8），构建时 pq.read_table 读取列"
+  reason: "data_access 自身实现：美股财务 PIT 物理索引（#8），构建时 pq.read_table 读取列"
 - path: data_access/read/contract_ir.py
-  reason: "dataaccess 自身实现：Contract IR 编译器（#12），只编译不读文件"
+  reason: "data_access 自身实现：Contract IR 编译器（#12），只编译不读文件"
 - path: data_access/read/coverage.py
-  reason: "dataaccess 自身实现：覆盖/完整性报告（#14），glob() 枚举文件"
+  reason: "data_access 自身实现：覆盖/完整性报告（#14），glob() 枚举文件"
 - path: data_access/read/sql_escape.py
   reason: "SQL 逃生口实现本体（有限只读沙箱）：#P1-final closure 23 parser 级函数 allowlist 用隔离 :memory: DuckDB 连接读 duckdb_functions() 注册表（只读 introspection，不读数据）"
 - path: data_access/cos/serving.py
-  reason: "dataaccess 自身实现：serving 层预聚合（#30），read_parquet + groupby 聚合"
+  reason: "data_access 自身实现：serving 层预聚合（#30），read_parquet + groupby 聚合"
 - path: data_access/read/query_cache.py
-  reason: "dataaccess 自身实现：查询结果缓存（#25），无禁用 API"
+  reason: "data_access 自身实现：查询结果缓存（#25），无禁用 API"
 - path: data_access/scripts/audit_contract_ir.py
-  reason: "dataaccess 自身实现：Contract IR 审计脚本（#12），只编译不读文件"
+  reason: "data_access 自身实现：Contract IR 审计脚本（#12），只编译不读文件"
 - path: factor_engine/runtime/intermediate_registry.py
   reason: "factor_engine 独立下线计划（PR7 factor_engine→data_access）；迁移完成前暂豁免"
 - path: factor_engine/scripts/calibrate_backend_costs.py

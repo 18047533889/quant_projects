@@ -514,7 +514,7 @@ def load_config(path: str|Path, *, profile: str|None=None) -> FactorEngineConfig
     # R10 #9: extra="forbid" semantics — a typo like ``run: {mdoe: production}``
     # must fail fast instead of silently falling back to research.
     # R40 #79: data_access/label 从 allowed set 移除（DataAccess 由独立
-    # dataaccess/ 包自管，loader 不消费这两个段）→ 出现即 fail-fast。
+    # data_access/ 包自管，loader 不消费这两个段）→ 出现即 fail-fast。
     _forbid_unknown(
         payload,
         {

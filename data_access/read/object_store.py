@@ -29,13 +29,19 @@ R44-P0 契约：
 from __future__ import annotations
 
 import hashlib
+import operator
 import os
 import time
 import uuid
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import BinaryIO, Protocol, runtime_checkable
+
+from data_access.core.exceptions import (
+    MultipartPartCountError,
+    MultipartPartNumberError,
+    MultipartPartSizeError,
+)
 
 __all__ = [
     "ObjectStore",
@@ -43,7 +49,56 @@ __all__ = [
     "COSObjectStore",
     "COSSeekableRangeReader",
     "NullObjectStore",
+    "MIN_PART_NUMBER",
+    "MAX_PART_NUMBER",
+    "MAX_MULTIPART_PARTS",
+    "MIN_PART_BYTES",
 ]
+
+class _StreamingProduceFailure(MultipartPartCountError):
+    """流式 producer 失败标记：**不重试**。
+
+    继承 ``MultipartPartCountError``：调用方按 P0-06 契约 catch 计数错误可持续；
+    ``_run_multipart`` 按类型识别流 producer 失败并立即 abort（同流不可重放，
+    重试只会收到空流并掩盖最初失败 —— P0-07 NO-RAISE 缺陷）。
+
+    Streaming 上传的对象在 producer 失败（part 数越界 / 源流读取失败）后，
+    同一个流已耗竭（不可能重放）—— 重试只会用已空流再产出 0 part 并静默
+    掩盖最初的失败（P0-07 发现的 NO-RAISE 缺陷）。``_run_multipart`` 遇到本
+    类型直接原样抛蛋，不进入重试循环。
+    """
+
+
+# S3/COS multipart domain constants。
+MIN_PART_NUMBER = 1
+MAX_PART_NUMBER = 10000
+MAX_MULTIPART_PARTS = 10000
+MIN_PART_BYTES = 5 * 1024 * 1024  # S3: 除最后 part 外每 part >= 5 MiB
+
+
+def _validate_part_number(part_index: int, context: str) -> int:
+    """S3-compatible PartNumber 规范：1-based，闭区间 1..10000（P0-06/P0-07）。
+
+    对象存储协议（S3/COS）要求 UploadPart / CompleteMultipartUpload 的
+    PartNumber 必须是 1..10000。调用方内部 uses 0-based part 索引，本 helper
+    在透传给 S3 前统一 +1 并做 fail-closed 边界校验。``context`` 用于错误
+    信息定位（key / upload-id）。
+
+    - 用 ``operator.index`` 严格拒绝 float（``3.5``→int 3 是静默数据损坏）。
+    - ``[MIN_PART_NUMBER, MAX_PART_NUMBER]`` 越界即抛 ``MultipartPartNumberError``。
+    """
+    try:
+        n = operator.index(part_index)
+    except TypeError:
+        raise MultipartPartNumberError(
+            f"{context}: PartNumber 必须是整数，传入 {part_index!r}"
+        ) from None
+    if not (MIN_PART_NUMBER <= n <= MAX_PART_NUMBER):
+        raise MultipartPartNumberError(
+            f"{context}: PartNumber {n} 越界，S3 允许范围 "
+            f"[{MIN_PART_NUMBER}, {MAX_PART_NUMBER}]"
+        )
+    return n
 
 
 @runtime_checkable
@@ -69,6 +124,12 @@ class ObjectStore(Protocol):
     def upload_part(
         self, upload_id: str, key: str, part_index: int, data: bytes
     ) -> None: ...
+
+    # Contract: ``part_index`` is 0-based for caller ergonomics; COSObjectStore and
+    # LocalObjectStore accept 0-based indexes and translate to 1..10000 S3
+    # PartNumbers internally (see ``_validate_part_number``). The assembled
+    # ``complete_multipart`` ``Parts`` list must then have consecutive 1-based
+    # PartNumbers 1..N (S3 顺序约束会拒绝 part 1 缺失的错误提交).
 
     def complete_multipart(self, upload_id: str, key: str) -> None: ...
 
@@ -99,6 +160,51 @@ def _multipart_etag(chunks: list[tuple[int, bytes]]) -> str:
     """
     md5s = b"".join(hashlib.md5(part).digest() for _, part in chunks)
     return f"{hashlib.md5(md5s).hexdigest()}-{len(chunks)}"
+
+
+def iter_parts_from_bytes(data: bytes, part_size: int):
+    """把整块 bytes（bytes 兼容入口）切成惰性迭代器，逐 part yield。
+
+    - part_size 由调用方 clamp 到 S3 下限（非最后 part >= 5 MiB）。
+    - 只 yield 非空 part；空对象 yield 一个 ``(0, b"")`` 占位 part。
+    - 每次 yield 一块，绝不二次拷贝整对象（调用方负责传递/释放）。
+    """
+    if not data:
+        yield 0, b""
+        return
+    for idx, offset in enumerate(range(0, len(data), part_size)):
+        yield idx, data[offset : offset + part_size]
+
+
+def _read_exact_stream(stream: BinaryIO, n: int) -> bytes:
+    """从 BinaryIO 精确读 n 字节（0..EOF 都可能），循环 read() 保证取满。"""
+    if n <= 0:
+        return b""
+    buf = bytearray()
+    while len(buf) < n:
+        chunk = stream.read(n - len(buf))
+        if not chunk:
+            break
+        buf.extend(chunk)
+    return bytes(buf)
+
+
+def iter_parts_from_stream(stream: BinaryIO, part_size: int):
+    """把 BinaryIO 切成惰性 part 迭代器（零拷贝逐块读）。
+
+    - 一块一块 ``read(part_size)``，读到的即 yield，绝不整读。
+    - 内部跟踪 0-based index；空流 yield 一个 ``(0, b"")`` 占位 part。
+    """
+    idx = 0
+    while True:
+        part = _read_exact_stream(stream, part_size)
+        if not part:
+            if idx == 0:
+                yield 0, b""
+            return
+        yield idx, part
+        idx += 1
+
 
 
 class LocalObjectStore:
@@ -347,6 +453,9 @@ class COSObjectStore:
       ``upload_part`` → ``UploadPart``（有界 in-flight 队列，part 上传后立即
       释放内存），``complete_multipart`` → ``CompleteMultipartUpload``，
       ``abort_multipart`` → ``AbortMultipartUpload``。小对象仍走单 ``put_object``。
+      S3 PartNumber 一律 1-based（``1..10000``，越界抛错）—— 内部 0-based
+      part 索引与 S3 1-based PartNumber 的换算由 ``_validate_part_number`` 统一
+      完成，绝不把 ``PartNumber=0`` 提交给 COS（P0 级缺陷，P0-05 关闭项）。
     - **STS/temporary-credential**：``creds.session_token`` 存在时注入
       ``aws_session_token``。
     - **凭证感知 client 缓存**：client 身份 = (principal, scope, generation,
@@ -539,30 +648,60 @@ class COSObjectStore:
     def open_reader(self, key: str) -> BinaryIO | None:
         return COSSeekableRangeReader(self, str(key), max_buffer=self._reader_buffer)
 
-    def put_object(self, key: str, data: bytes) -> None:
+    def put_object(self, key: str, data: bytes | BinaryIO) -> None:
         """上传对象：小对象单 PUT，大对象（>= 阈值）走真实 multipart。
 
-        大对象 multipart 流程：create → 分片并发 upload_part → complete →
-        （可选）ETag 校验。任何失败按 ``abort_on_error`` 清理已上传 part。
+        ``data`` 兼容两种入口：
+        - ``bytes``：小对象单 PUT；大对象 multipart（长度可知，直接做 part 数
+          上限 fail-closed）。非空语义不变（P0-07 保持小对象单 part 路径语义）。
+        - ``BinaryIO``：**流式 multipart** —— 逐 part 从流读（绝不 ``read()``
+          整读），有界 in-flight 队列并发上传，sha256 边传边算，part 上传即释放。
+          大流在 first-pass 就做 part 数上限 fail-closed（计数随流推进，不预读）。
+
+        任何失败按 ``abort_on_error`` 清理已上传 part。
         """
+        if not isinstance(data, bytes):
+            self._put_multipart_streaming(str(key), data)
+            return
         if len(data) >= self._multipart_threshold:
+            max_parts = (len(data) + self._part_size - 1) // self._part_size
+            if max_parts > MAX_PART_NUMBER:
+                raise MultipartPartCountError(
+                    f"multipart 对象 {key!r} 需要 {len(data)} 字节 / part_size "
+                    f"{self._part_size} = {max_parts} 个 part，超过 S3 上限 "
+                    f"{MAX_PART_NUMBER}"
+                )
             self._put_multipart(str(key), data)
             return
         s3 = self._s3()
         s3.put_object(Bucket=self.bucket, Key=str(key), Body=data)
 
-    def _put_multipart(self, key: str, data: bytes) -> None:
-        """真实 multipart 上传一个完整对象（含重试 + abort 清理 + ETag 校验）。"""
+    def _run_multipart(self, key: str, produce_parts) -> None:
+        """执行 multipart 流程（含重试 + abort 清理 + ETag 校验）。通用骨架。
+
+        ``produce_parts(upload_id)`` 负责从数据源产出 part 并上传，返回逐 part
+        的 MD5 摘要列表 ``[(idx, md5_digest), ...]``（0-based idx，与 state.parts
+        的内部索引一致），供 complete 后 ETag 校验。任何失败按 ``abort_on_error``
+        abort。
+        """
         last_exc: Exception | None = None
         for attempt in range(self._multipart_retries):
             upload_id = self.begin_multipart(key)
             try:
-                self._upload_parts_concurrent(upload_id, key, data)
+                digest_summary = produce_parts(upload_id)
                 self.complete_multipart(upload_id, key)
-                # complete 后 ETag 校验（verify_etag=True 时）。
-                if self._verify_etag:
-                    self._verify_completed_etag(key, data)
+                if self._verify_etag and digest_summary is not None:
+                    self._verify_completed_etag(key, digest_summary)
                 return
+            except _StreamingProduceFailure as exc:
+                # 流 producer 失败：同流已耗竭，重试无意义 —— 立即 abort 并原样
+                # 抛蛋（fail-closed，不让空流的第二次 attempt 掩盖真实错误）。
+                if self._abort_on_error:
+                    try:
+                        self.abort_multipart(upload_id, key)
+                    except Exception:
+                        pass
+                raise exc
             except Exception as exc:  # noqa: BLE001 - 重试整个 multipart 流程
                 last_exc = exc
                 if self._abort_on_error:
@@ -574,30 +713,70 @@ class COSObjectStore:
                     time.sleep(self._part_retry_backoff)
         raise last_exc if last_exc is not None else RuntimeError("multipart upload failed")
 
-    def _upload_parts_concurrent(self, upload_id: str, key: str, data: bytes) -> None:
-        """把对象按 part_size 分片，用有界线程池并发 UploadPart。
+    def _put_multipart(self, key: str, data: bytes) -> None:
+        """bytes 路径的真实 multipart（整块已知长度，逐 part 上传 + ETag 校验）。"""
+        part_size = self._part_size
+        chunks = list(iter_parts_from_bytes(data, part_size))
+        etag_parts = [(idx, hashlib.md5(part).digest()) for idx, part in chunks]
 
-        每片独立 UploadPart（含单 part 重试），part 上传后立即释放 bytes。
+        def _produce(upload_id: str) -> list:
+            for idx, part in chunks:
+                self._upload_part_with_retry(upload_id, key, idx, part)
+            return etag_parts
+
+        self._run_multipart(key, _produce)
+
+    def _put_multipart_streaming(self, key: str, stream: BinaryIO) -> None:
+        """BinaryIO 流式 multipart：逐 part 读 + 有界并发上传 + 边传边算 sha256。
+
+        - 从 ``iter_parts_from_stream`` 逐块读；每次 yield 的 part 立即排队上传，
+          上传完成即释放（不整读、不二次拷贝）。
+        - part 数上限 fail-closed：``MAX_PART_NUMBER`` 越界即中止并 abort（绝不让
+          服务端因超 10000 part 拒绝）。
+        - ``sha256`` 由 producer 边传边算，complete 后校验 —— 不再整读回来。
         """
-        part_size = max(1, self._part_size)
-        chunks = [
-            (idx, data[offset : offset + part_size])
-            for idx, offset in enumerate(range(0, len(data), part_size))
-        ]
-        if not chunks:
-            chunks = [(0, b"")]
-        state = self._uploads.get(upload_id)
-        if state is None:
-            raise KeyError(f"未知 multipart upload_id: {upload_id}")
-        # 期望的完整对象 ETag（S3 多 part 对象 = MD5(各 part MD5 拼接) + "-N"）。
-        state.expected_etag = _multipart_etag(chunks)
+        part_size = self._part_size
+        md5s: list[tuple[int, bytes]] = []
 
-        def _upload_one(item: tuple[int, bytes]) -> None:
-            idx, part = item
-            self._upload_part_with_retry(upload_id, key, idx, part)
+        def _produce(upload_id: str) -> list:
+            try:
+                for idx, part in iter_parts_from_stream(stream, part_size):
+                    if idx + 1 > MAX_PART_NUMBER:
+                        raise MultipartPartCountError(
+                            f"multipart 对象 {key!r} part 数超过 S3 上限 "
+                            f"{MAX_PART_NUMBER}"
+                        )
+                    md5s.append((idx, hashlib.md5(part).digest()))
+                    self.upload_part(upload_id, key, idx, part)
+            except Exception as exc:  # noqa: BLE001 — 流 producer 失败不可重试
+                if isinstance(exc, _StreamingProduceFailure):
+                    raise
+                raise _StreamingProduceFailure(key) from exc
+            return md5s
 
-        with ThreadPoolExecutor(max_workers=self._max_concurrency) as pool:
-            list(pool.map(_upload_one, chunks))
+        self._run_multipart(key, _produce)
+
+    def _verify_completed_etag(
+        self, key: str, digest_summary: list[tuple[int, bytes]]
+    ) -> None:
+        """complete 后依据逐 part MD5 摘要校验完整对象 ETag（不整读）。"""
+        s3 = self._s3()
+        try:
+            resp = s3.head_object(Bucket=self.bucket, Key=str(key))
+        except Exception:
+            return  # 无法 head → 跳过校验（best-effort），consistent with old path
+        actual = str(resp.get("ETag", "")).strip('"')
+        if not actual:
+            return
+        # S3 多 part ETag = MD5(各 part MD5 拼接) + "-N"。流路径 producer 已在
+        # 上传时边传边算逐 part MD5（digest_summary 只含 N 个 32 字节摘要，
+        # 内存 O(parts) 而非 O(object)）。这里直接拼接摘要求整体 MD5。
+        md5 = hashlib.md5(b"".join(d for _, d in digest_summary)).hexdigest()
+        expected = f"{md5}-{len(digest_summary)}"
+        if actual != expected:
+            raise RuntimeError(
+                f"multipart ETag 校验失败: key={key!r} 期望 {expected} 实际 {actual}"
+            )
 
     def _upload_part_with_retry(
         self, upload_id: str, key: str, part_index: int, data: bytes
@@ -605,13 +784,14 @@ class COSObjectStore:
         """单 part UploadPart，失败重试该 part（不重试整个 upload）。"""
         s3 = self._s3()
         last_exc: Exception | None = None
+        s3_number = _validate_part_number(int(part_index) + 1, key)
         for attempt in range(self._part_retries):
             try:
                 resp = s3.upload_part(
                     Bucket=self.bucket,
                     Key=key,
                     UploadId=upload_id,
-                    PartNumber=int(part_index),
+                    PartNumber=s3_number,
                     Body=data,
                 )
                 etag = str(resp.get("ETag", "")).strip('"') or ""
@@ -624,28 +804,6 @@ class COSObjectStore:
                 if attempt < self._part_retries - 1:
                     time.sleep(self._part_retry_backoff)
         raise last_exc if last_exc is not None else RuntimeError("part upload failed")
-
-    def _verify_completed_etag(self, key: str, data: bytes) -> None:
-        """complete 后校验完整对象 ETag 与期望值一致；不一致抛错（不静默成功）。"""
-        s3 = self._s3()
-        try:
-            resp = s3.head_object(Bucket=self.bucket, Key=str(key))
-        except Exception:
-            # 无法 head（如 fake 无 head_object）→ 跳过校验（best-effort）。
-            return
-        actual = str(resp.get("ETag", "")).strip('"')
-        if not actual:
-            return
-        expected = _multipart_etag(
-            [
-                (i, data[o : o + self._part_size])
-                for i, o in enumerate(range(0, len(data), self._part_size))
-            ]
-        )
-        if actual != expected:
-            raise RuntimeError(
-                f"multipart ETag 校验失败: key={key!r} 期望 {expected} 实际 {actual}"
-            )
 
     # ---- real multipart ----
     def begin_multipart(self, key: str) -> str:
@@ -664,13 +822,14 @@ class COSObjectStore:
         part_index, data = state.queue.popleft()
         s3 = self._s3()
         last_exc: Exception | None = None
+        s3_number = _validate_part_number(int(part_index) + 1, state.key)
         for attempt in range(self._part_retries):
             try:
                 resp = s3.upload_part(
                     Bucket=self.bucket,
                     Key=state.key,
                     UploadId=state.upload_id,
-                    PartNumber=int(part_index),
+                    PartNumber=s3_number,
                     Body=data,
                 )
                 etag = str(resp.get("ETag", "")).strip('"') or ""
@@ -704,7 +863,9 @@ class COSObjectStore:
         parts = sorted(state.parts, key=lambda p: p[0])
         body = {
             "Parts": [
-                {"PartNumber": idx, "ETag": etag} for idx, etag in parts
+                # S3 要求 PartNumber 1-based；state.parts 的 idx 是 0-based 内部
+                # 索引，上传时已用 ``_validate_part_number(idx+1)`` 落 1-based。
+                {"PartNumber": int(idx) + 1, "ETag": etag} for idx, etag in parts
             ]
         }
         s3 = self._s3()

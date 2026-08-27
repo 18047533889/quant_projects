@@ -29,7 +29,7 @@ def main() -> None:
     dep = {
         "factor_engine_pyproject_min": "data-access>=0.2.0",
         "installed_data_access": da_installed,
-        "dataaccess_source_version": "0.8.0 (monorepo pyproject)",
+        "data_access_source_version": "0.8.0 (monorepo pyproject)",
         "apis_used": [
             "data_access.read.scan_cost.estimate_scan_cost",
             "data_access.read.semantic_catalog.get_semantic_catalog",

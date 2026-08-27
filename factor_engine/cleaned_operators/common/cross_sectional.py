@@ -1169,11 +1169,29 @@ class CrossSectionalDemeanPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        # PARITY-A（pandas 为参考）：cs_demean = 每行有限值减去该行有限均值，
+        # NaN 单元格保持 NaN。此前 ``pl.mean_horizontal`` 把 NaN 当数值参与 → 行含
+        # 任意 NaN 时整行除成 NaN。逐列对有限值减行均值；NaN 原样保留。
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
-        mean_expr = pl.mean_horizontal(*[pl.col(c) for c in numeric_cols])
-        return x.with_columns([
-            (pl.col(c) - mean_expr).alias(c) for c in numeric_cols
-        ])
+        mean_expr = pl.mean_horizontal(
+            *[
+                pl.when(pl.col(c).is_nan()).then(None).otherwise(pl.col(c))
+                for c in numeric_cols
+            ]
+        )
+        exprs = []
+        for c in numeric_cols:
+            val = pl.col(c)
+            exprs.append(
+                pl.when(val.is_nan())
+                .then(float("nan"))
+                .otherwise(
+                    pl.when(val.is_not_null()).then(val.cast(pl.Float64) - mean_expr).otherwise(None)
+                )
+                .cast(pl.Float64)
+                .alias(c)
+            )
+        return x.with_columns(exprs)
 
 # aliases: CS_DEMEAN
 
@@ -1401,15 +1419,29 @@ class CrossSectionalScale(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, to: float = 1, **kwargs) -> pl.DataFrame:
+        # PARITY-A（pandas 为参考）：scale = 每行有限值 ÷ 该行 |sum|；NaN 单元格
+        # 保持 NaN，有限单元格保持有限（pandas x.abs().sum(axis=1).replace(0,1) 语义）。
+        # 此前 polars 做 ``to / pl.when(abs_sum == 0).then(1).otherwise(abs_sum)``，
+        # 行内含任意 NaN 时 abs_sum 整行变 NaN → 整行除成 NaN，全表塌成 NaN。
+        # 这里用 is_nan 精确筛选（pandas reset_index 读入的 float NaN 是 float NaN，
+        # 不是 null）；用整行有限值重算 abs_sum（与 pandas skipna 一致）。
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
-
-        # 计算每行的绝对值之和
-        abs_sum_expr = sum(pl.col(c).abs() for c in numeric_cols)
-        scale_factor = to / pl.when(abs_sum_expr == 0).then(1).otherwise(abs_sum_expr)
-
-        return x.with_columns([
-            (pl.col(c) * scale_factor).alias(c) for c in numeric_cols
-        ])
+        exprs = []
+        for c in numeric_cols:
+            val = pl.col(c)
+            finite = val.is_finite() & val.is_not_null()
+            abs_abs = val.abs().cast(pl.Float64)
+            row_abs_exprs = [
+                pl.when(pl.col(f).is_nan()).then(None).otherwise(pl.col(f).abs().cast(pl.Float64))
+                for f in numeric_cols
+            ]
+            row_abs_sum = pl.sum_horizontal(row_abs_exprs)
+            divisor = pl.when((row_abs_sum == 0) | row_abs_sum.is_null()).then(1.0).otherwise(row_abs_sum)
+            out = pl.when(val.is_nan()).then(float("nan")).otherwise(
+                pl.when(finite).then(val.cast(pl.Float64) * (to / divisor)).otherwise(None)
+            ).cast(pl.Float64).alias(c)
+            exprs.append(out)
+        return x.with_columns(exprs)
 
 @register_operator(name="scale", category="cross_sectional", business_category="cross_sectional", canonical="scale", source="factor_dsl_np")
 class ScalePolars(CrossSectionalScale):

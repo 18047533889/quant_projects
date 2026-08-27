@@ -2,9 +2,23 @@
 Parameter plateau detection and neighbor survival analysis.
 
 Detects stable parameter regions via perturbation and robustness scoring.
+
+DEPRECATED (DLIB-FA-001): factor_optimizer (FO) owns search-stopping plateau
+detection. FA does not run a search loop. This module is retained for
+compatibility (§108) and marked RESEARCH_ONLY. It will be removed after the
+deprecation window. No FA production path consumes it.
 """
 
 import math
+import warnings as _warnings
+
+_warnings.warn(
+    "factor_assets.optimizer.plateau is deprecated: FO owns search-stopping "
+    "plateau detection. FA does not run a search loop. This module is "
+    "retained for compatibility and will be removed.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple

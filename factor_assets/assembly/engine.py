@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Iterable, Mapping, Optional, Union
 
 from factor_assets.contracts.admission import FactorAdmissionArtifact
 from factor_assets.contracts.asset import FactorAsset
+from factor_assets.contracts.assembly_evidence import AssemblyPolicy
 from factor_assets.contracts.factor_set import FactorMembership, FactorSetArtifact, FactorSetSpec
 from factor_assets.contracts.lifecycle import LifecycleState
 from factor_assets.contracts.similarity import SimilarityArtifact
+from factor_assets.errors import CapabilityError
 from factor_assets.optimizer.pareto import ParetoPoint
 from factor_assets.selection.policy import SelectionDecision
 
@@ -52,6 +55,7 @@ class FactorSetAssembler:
         ] = None,
         treatment_selection_artifacts: Optional[Mapping[str, object]] = None,
         production: bool = False,
+        assembly_policy: Optional[AssemblyPolicy] = None,
     ) -> FactorSetArtifact:
         """Assemble a factor set from candidate assets.
 
@@ -176,7 +180,7 @@ class FactorSetAssembler:
                 if self._matches(asset, spec):
                     matched.append(asset)
 
-        matched = self._rank(matched, spec, latest_decisions, similarity_provider)
+        matched = self._rank(matched, spec, latest_decisions, similarity_provider, assembly_policy)
         matched = self._apply_family_constraints(matched, spec.family_constraints)
         if spec.max_factors is not None:
             matched = matched[: spec.max_factors]
@@ -326,6 +330,7 @@ class FactorSetAssembler:
                 Callable[[str, str], Optional[SimilarityArtifact]],
             ]
         ] = None,
+        assembly_policy: Optional[AssemblyPolicy] = None,
     ) -> list[FactorAsset]:
         """Order candidates by policy-appropriate, evidence-based ranking.
 
@@ -375,7 +380,7 @@ class FactorSetAssembler:
         elif spec.selection_policy == "family_robust":
             ranked = _family_robust_rank(ranked, decisions)
         elif spec.selection_policy == "diverse":
-            ranked = _diverse_mmr_rank(ranked, decisions, similarity_provider)
+            ranked = _diverse_mmr_rank(ranked, decisions, similarity_provider, assembly_policy)
         return ranked
 
     @staticmethod
@@ -416,7 +421,7 @@ class FactorSetAssembler:
             )
             selection_artifact = treatment.get(asset.factor_id)
             treatment_selection_ref = (
-                getattr(selection_artifact, "content_hash", None)
+                _read_content_hash(selection_artifact, asset.factor_id)
                 if selection_artifact is not None
                 else None
             )
@@ -545,6 +550,7 @@ class FactorSetAssembler:
                 member.treatment_selection_ref,
                 member.preprocess_policy_ref,
                 member.preprocess_state_ref,
+                member.treatment_optimization_ref,
                 member.assembly_score,
                 member.selection_rank,
                 member.reason,
@@ -557,6 +563,7 @@ class FactorSetAssembler:
         _prefixed(spec.data_snapshot_ref)
         _prefixed(spec.universe_ref)
         _prefixed(spec.split_ref)
+        _prefixed(spec.treatment_optimization_ref)
         _prefixed(spec.frequency)
         _prefixed(spec.max_factors)
         _prefixed(spec.min_evidence_date)
@@ -678,6 +685,45 @@ def _load_treatment_selection_artifact() -> Optional[type]:
     except Exception:
         return None
     return TreatmentSelectionArtifact
+
+
+def _read_content_hash(selection_artifact: object, factor_id: str) -> str:
+    """Explicitly read the ``content_hash`` from a treatment-selection artifact.
+
+    Fail-closed (DLIB-FA): the artifact must be either a ``dict`` carrying a
+    ``content_hash`` key or a typed artifact exposing a ``content_hash``
+    attribute.  Anything else raises :class:`CapabilityError` instead of the
+    legacy ``getattr(..., None)`` behaviour that silently returned ``None`` for
+    a non-dict / non-artifact value and would have been indistinguishable from
+    a genuine missing hash.
+    """
+    if isinstance(selection_artifact, Mapping):
+        value = selection_artifact.get("content_hash")
+        if not isinstance(value, str) or not value:
+            raise CapabilityError(
+                "treatment-selection artifact for factor_id "
+                f"{factor_id!r} must carry a non-empty 'content_hash' key; "
+                "got "
+                f"{value!r} — failing closed rather than reading a silent None"
+            )
+        return value
+    if isinstance(selection_artifact, str):
+        # A bare-string artifact value is not a content-hashed artifact — a
+        # caller may not pass the hash in place of the artifact.
+        raise CapabilityError(
+            "treatment-selection artifact for factor_id "
+            f"{factor_id!r} must be a content-hashed artifact, not a bare str; "
+            "failing closed rather than silently treating the string as a hash"
+        )
+    value = getattr(selection_artifact, "content_hash", None)
+    if not isinstance(value, str) or not value:
+        raise CapabilityError(
+            "treatment-selection artifact for factor_id "
+            f"{factor_id!r} must expose a non-empty 'content_hash' attribute; "
+            f"got {type(selection_artifact).__name__!r} — failing closed "
+            "rather than reading a silent None"
+        )
+    return value
 
 
 def _decision_objectives(
@@ -816,6 +862,37 @@ def _family_robust_rank(
     return [asset for asset, _ in scored]
 
 
+@dataclass
+class _DiversePolicy:
+    """Carry the typed assembly policy into the diverse (MMR) ranker.
+
+    DLIB-FA-013: replaces the magic ``lambda_weight=0.5`` in
+    :func:`_diverse_mmr_rank` with a versioned :class:`AssemblyPolicy`.  When
+    the caller does not supply a policy, a default policy is used so the
+    existing diverse behavior is preserved exactly.
+    """
+
+    assembly_policy: Optional[AssemblyPolicy]
+
+    @property
+    def quality_weight(self) -> float:
+        if self.assembly_policy is not None:
+            return self.assembly_policy.quality_weight
+        return 0.5
+
+    @property
+    def redundancy_weight(self) -> float:
+        if self.assembly_policy is not None:
+            return self.assembly_policy.redundancy_weight
+        return 0.5
+
+    @property
+    def policy_ref(self) -> Optional[str]:
+        if self.assembly_policy is not None:
+            return f"{self.assembly_policy.policy_id}@{self.assembly_policy.version}"
+        return None
+
+
 def _diverse_mmr_rank(
     assets: list[FactorAsset],
     decisions: dict[str, SelectionDecision],
@@ -825,12 +902,14 @@ def _diverse_mmr_rank(
             Callable[[str, str], Optional[SimilarityArtifact]],
         ]
     ],
+    assembly_policy: Optional[AssemblyPolicy] = None,
 ) -> list[FactorAsset]:
     """Rank by greedy Maximal Marginal Relevance (MMR).
 
     MMR score for candidate ``c`` given the already-selected set ``S`` is::
 
-        lambda * quality(c) - (1 - lambda) * max_{s in S} similarity(c, s)
+        quality_weight * quality(c)
+            - redundancy_weight * max_{s in S} similarity(c, s)
 
     Quality comes from the decision metadata ``quality`` key (finite float);
     when absent it falls back to the recency rank (higher recency = higher
@@ -840,6 +919,12 @@ def _diverse_mmr_rank(
     (``None`` similarity — from either form — is treated as zero).  The policy
     fails closed (raises) when ``diverse`` is selected without a similarity
     provider, so this helper is only reached with a provider present.
+
+    DLIB-FA-013: the weights come from the optional typed :class:`AssemblyPolicy`
+    (defaulting to the legacy 0.5/0.5), not a module-level magic constant.  The
+    policy version is recorded on each membership's ``preprocess_policy_ref``
+    semantics (via ``assembly_policy``), so a change in how quality vs.
+    redundancy is traded is observable and reproducible.
     """
     if similarity_provider is None:
         raise ValueError(
@@ -847,7 +932,9 @@ def _diverse_mmr_rank(
             "failing closed rather than silently degrading to non-MMR"
         )
 
-    lambda_weight = 0.5  # balance quality vs. diversity
+    policy = _DiversePolicy(assembly_policy)
+    q_weight = policy.quality_weight
+    r_weight = policy.redundancy_weight
 
     def quality(asset: FactorAsset, recency_rank: int) -> float:
         decision = decisions.get(asset.factor_id)
@@ -907,7 +994,7 @@ def _diverse_mmr_rank(
                 )
             else:
                 max_sim = 0.0
-            mmr = lambda_weight * q - (1.0 - lambda_weight) * max_sim
+            mmr = q_weight * q - r_weight * max_sim
             if mmr > best_score:
                 best_score = mmr
                 best_asset = asset

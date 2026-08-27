@@ -20,25 +20,41 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from types import MappingProxyType
 from typing import Mapping, Optional
+
+from factor_assets.contracts._frozen import FrozenMapping
 
 __all__ = [
     "SimilarityArtifact",
     "SimilarityView",
+    "SimilarityViewRegistry",
+    "EdgeAffinityPolicy",
     "UNKNOWN_SIMILARITY",
+    "SIMILARITY_VIEW_KEYS",
+    "DEFAULT_SIMILARITY_VIEW",
 ]
 
 #: Canonical similarity view keys understood by consumers.  ``rank_corr`` is
 #: the primary view used by MMR; the remaining keys are common residual /
-#: overlap / horizon views a similarity producer may populate.
+#: overlap / horizon / regime views a similarity producer may populate.
+#:
+#: DLIB-FA-004/46-50: the canonical view set is versioned and explicit so a
+#: producer cannot silently emit a typo'd key.  ``pearson_corr`` is the
+#: Pearson view, ``rank_corr`` the Spearman view, ``kendall_tau`` the Kendall
+#: view (when enabled).  A pair that was never measured is ``None`` (UNKNOWN),
+#: never a computed ``0.0``.
 SIMILARITY_VIEW_KEYS = (
+    "pearson_corr",
     "rank_corr",
+    "kendall_tau",
     "pnl_corr",
     "top_overlap",
     "bottom_overlap",
+    "quantile_overlap",
     "residual_similarity",
     "horizon_similarity",
+    "regime_conditional_similarity",
+    "recent_similarity",
 )
 
 DEFAULT_SIMILARITY_VIEW = "rank_corr"
@@ -75,15 +91,17 @@ def _length_prefixed(digest: "hashlib._Hash", field_value: object) -> None:
 
 def _deep_freeze_views(
     views: dict[str, Optional[float]],
-) -> Mapping[str, Optional[float]]:
+) -> FrozenMapping:
     """Deep-freeze a normalized views mapping into an immutable snapshot.
 
-    The returned mapping is a :class:`types.MappingProxyType` backed by a
-    private copy of the caller's dict, so no mutation of the caller's dict
-    (nor of the mapping itself) can change an artifact after construction.
+    The returned mapping is a :class:`~factor_assets.contracts._frozen.
+    FrozenMapping` backed by a private copy of the caller's dict, so no
+    mutation of the caller's dict (nor of the mapping itself) can change an
+    artifact after construction.  FrozenMapping is hashable and deepcopy-safe
+    (matching the QE ``FrozenMapping`` cross-package convention), so the
+    artifact's ``views`` field no longer blocks ``copy.deepcopy`` / ``hash``.
     """
-    snapshot = dict(views)
-    return MappingProxyType(snapshot)
+    return FrozenMapping(dict(views))
 
 
 #: Sentinel distinguishing an explicitly ``UNKNOWN`` measurement from a
@@ -181,7 +199,9 @@ class SimilarityArtifact:
             normalized[key] = value
         if not any(value is not None for value in normalized.values()):
             raise ValueError("views must contain at least one non-None similarity")
-        object.__setattr__(self, "views", _deep_freeze_views(normalized))
+        object.__setattr__(
+            self, "views", _deep_freeze_views(dict(normalized))
+        )
 
         computed_hash = _similarity_spec_digest(
             self.factor_a,
@@ -367,3 +387,116 @@ def _legacy_window_ref(result: object) -> Optional[str]:
     if start is not None and end is not None:
         return f"{start}/{end}"
     return start if start is not None else end
+
+
+class SimilarityViewRegistry:
+    """Versioned registry of canonical similarity views (DLIB-FA-004/46-50).
+
+    A view is a named, self-describing similarity measurement with a canonical
+    key.  The registry is the single source of truth for which view keys are
+    valid in production, so a producer cannot silently emit a typo'd key.  A
+    view that is not registered is rejected (fail closed) rather than silently
+    accepted as an unknown key.
+    """
+
+    def __init__(self, version: str = "1.0", views: Optional[Mapping[str, str]] = None):
+        self.version = version
+        #: canonical key -> human-readable description
+        self._views: dict[str, str] = dict(views or {})
+        for key in SIMILARITY_VIEW_KEYS:
+            self._views.setdefault(key, key)
+
+    @property
+    def view_keys(self) -> tuple[str, ...]:
+        """All registered canonical view keys, sorted."""
+        return tuple(sorted(self._views))
+
+    def is_registered(self, key: str) -> bool:
+        """Whether ``key`` is a registered canonical view."""
+        return key in self._views
+
+    def validate(self, views: Mapping[str, Optional[float]]) -> None:
+        """Fail closed if any view key is not a registered canonical view.
+
+        Raises:
+            ValueError: If a view key is not registered (a silent typo).
+        """
+        for key in views:
+            if not self.is_registered(key):
+                raise ValueError(
+                    f"similarity view key {key!r} is not a registered canonical "
+                    f"view (registry version {self.version}); a silent typo must "
+                    "not reach production"
+                )
+
+    def to_dict(self) -> dict:
+        return {"version": self.version, "views": dict(self._views)}
+
+
+class EdgeAffinityPolicy:
+    """Fuses multiple similarity views into a single cluster-affinity value.
+
+    DLIB-FA-004/46-50: production clustering should support multi-view affinity
+    from an :class:`EdgeAffinityPolicy` rather than hardcoding ``abs(corr)`` as
+    the only clustering definition.  The policy version is recorded in the
+    :class:`SimilarityGraphIdentity` so a change in how views are fused is
+    observable and reproducible.
+
+    An ``UNKNOWN`` view (``None``) is never treated as a computed zero: it is
+    excluded from the fusion, and if no view is measurable the affinity is
+    ``None`` (unknown), not ``0.0``.
+    """
+
+    def __init__(
+        self,
+        view_weights: Mapping[str, float],
+        version: str = "1.0",
+        *,
+        default_unknown: Optional[float] = None,
+    ):
+        if not view_weights:
+            raise ValueError("view_weights must be non-empty")
+        for key, weight in view_weights.items():
+            if not isinstance(key, str) or not key:
+                raise ValueError("view_weights keys must be non-empty strings")
+            if isinstance(weight, bool) or not isinstance(weight, (int, float)):
+                raise TypeError(f"view_weights[{key!r}] must be a non-boolean number")
+            w = float(weight)
+            if w != w or w in (float("inf"), float("-inf")):
+                raise ValueError(f"view_weights[{key!r}] must be finite")
+            if w < 0.0:
+                raise ValueError(f"view_weights[{key!r}] must be non-negative")
+        self.view_weights = dict(view_weights)
+        self.version = version
+        self.default_unknown = default_unknown
+
+    def affinity(self, views: Mapping[str, Optional[float]]) -> Optional[float]:
+        """Fuse the given views into a single affinity value.
+
+        Returns ``None`` when no view is measurable (the pair is UNKNOWN, not
+        a computed zero).  Otherwise returns the weighted mean of the
+        measurable views' absolute values.
+        """
+        total_weight = 0.0
+        weighted_sum = 0.0
+        for key, weight in self.view_weights.items():
+            value = views.get(key)
+            if value is None:
+                continue
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise TypeError(f"views[{key!r}] must be a number or None")
+            v = float(value)
+            if v != v or v in (float("inf"), float("-inf")):
+                raise ValueError(f"views[{key!r}] must be finite")
+            weighted_sum += weight * abs(v)
+            total_weight += weight
+        if total_weight == 0.0:
+            return self.default_unknown
+        return weighted_sum / total_weight
+
+    def to_dict(self) -> dict:
+        return {
+            "version": self.version,
+            "view_weights": dict(self.view_weights),
+            "default_unknown": self.default_unknown,
+        }

@@ -11,6 +11,7 @@ from .search_budget import SearchBudget, BudgetTracker
 from .trial import Trial, TrialStatus
 from .splits import EvaluationProtocol, SplitPlan
 from .validator import TrialValidatorIdentity, MutationGrammarValidator
+from .library_snapshot_ref import LibrarySnapshotRef
 
 __all__ = [
     "CandidateMutation",
@@ -26,4 +27,5 @@ __all__ = [
     "EvaluationProtocol",
     "TrialValidatorIdentity",
     "MutationGrammarValidator",
+    "LibrarySnapshotRef",
 ]

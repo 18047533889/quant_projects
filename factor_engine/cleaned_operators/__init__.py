@@ -7,6 +7,7 @@ from enum import Enum
 from typing import Any
 
 from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 
 from factor_engine.cleaned_operators import common  # noqa: F401
 from factor_engine.cleaned_operators import price_volume  # noqa: F401
@@ -88,6 +89,7 @@ _LOAD_MODULES = (
     "factor_engine.cleaned_operators.downside_risk",
     "factor_engine.cleaned_operators.group_ext",
     "factor_engine.cleaned_operators.cs_batch1",
+    "factor_engine.cleaned_operators.same_clock_lag",
     "factor_engine.cleaned_operators.return_decomp",
     "factor_engine.cleaned_operators.ashare.limit_ops",
     "factor_engine.cleaned_operators.relation.ops",
@@ -296,6 +298,20 @@ _LOAD_MODULES = (
     "factor_engine.cleaned_operators.filter_despike",
     "factor_engine.cleaned_operators.filter_smooth",
     "factor_engine.cleaned_operators.filter_hysteresis",
+    # Wave-1 operator expansion (2026-08-27): genuinely new thematic ground —
+    # microstructure liquidity / time-of-day shape, order-flow imbalance /
+    # signed-volume dynamics, volatility regime statistics, fundamental
+    # earnings-stability / accrual-quality, valuation-relative measures,
+    # cross-sectional momentum / liquidity-adjusted, event-response decay,
+    # cyclical / seasonal decomposition.
+    "factor_engine.cleaned_operators.wave1_liquidity_tod",
+    "factor_engine.cleaned_operators.wave1_orderflow",
+    "factor_engine.cleaned_operators.wave1_volregime",
+    "factor_engine.cleaned_operators.wave1_earnings",
+    "factor_engine.cleaned_operators.wave1_valuation",
+    "factor_engine.cleaned_operators.wave1_cs_momentum",
+    "factor_engine.cleaned_operators.wave1_event_response",
+    "factor_engine.cleaned_operators.wave1_seasonal",
 )
 
 # R30 §7: explicit production / research / internal loader split.  The full
@@ -571,7 +587,16 @@ class RegistryBootstrap:
     def _run_initialization(self, include_research: bool) -> None:
         from factor_engine.cleaned_operators.registry import RegistryInitializationError
 
+        # R63-P0.1: when the registry is already frozen before load_all() is
+        # called (e.g. a pytest session whose meta-path thaw finder has not yet
+        # fired, or a module-scope ``load_all()`` racing an earlier freeze), a
+        # frozen registry means the lightweight ``OperatorRegistry._frozen``
+        # snapshot already exists.  Reset bootstrap state to NEW so a caller can
+        # safely retry after the registry is thawed; do NOT fail here.
         if OperatorRegistry.lifecycle() != "building":
+            if OperatorRegistry.lifecycle() in ("frozen", "finalized"):
+                self._state = _RegistryBootstrapState.NEW
+                return
             raise RegistryInitializationError(
                 f"unloaded registry cannot initialize from {OperatorRegistry.lifecycle()!r}"
             )
@@ -746,6 +771,58 @@ def check_signature_authority(*, production: bool = True) -> None:
         )
 
 
+def _normalize_polars_ts_legacy_surface() -> None:
+    """Align legacy ``factor_dsl_polars_native`` (cond,d) shims to the canonical
+    (condition, window) shape BEFORE the dedupe/overhaul pass re-validates.
+
+    ``polars_ts_basic.py`` registers ``ts_count_if`` / ``ts_days_since`` (and
+    friends) under the old ``(cond,d)`` parameter shell with a spin-``d``
+    ``ParamSpec``.  Those modules are intentionally NOT part of
+    ``BOOTSTRAP_MODULE_SPECS`` (the production surface loads the audited
+    ``polars_native.ts_batch1`` implementations); a pytest sessionstart that
+    stages the legacy module into the building window pollutes the canonical
+    logical contract with a ``d`` ParamSpec whose key is not in the canonical
+    ``param_names`` (R6-157).  The overhaul replacement then inherits that dead
+    key and crashes ``load_all``.  Normalise the legacy surface here so the
+    canonical contract stays key-aligned with the declared parameters.
+    """
+    _SHAPE: dict[str, tuple[str, ...]] = {
+        "ts_count_if": ("condition", "window"),
+        "ts_days_since": ("condition", "max_lookback"),
+        "ts_sum_if": ("x", "condition", "window"),
+        "ts_mean_if": ("x", "condition", "window"),
+        "ts_std_if": ("x", "condition", "window", "ddof"),
+        "ts_last_if": ("x", "condition", "window"),
+        "ts_true_streak": ("condition",),
+    }
+    for _canonical, _names in _SHAPE.items():
+        _op = OperatorRegistry._operators.get(_canonical, {}).get("polars")
+        if _op is None:
+            continue
+        _src = str(
+            (OperatorRegistry._catalog.get(_canonical, {}).get("backend_meta") or {})
+            .get("polars", {}).get("source", "") or ""
+        )
+        if _src != "factor_dsl_polars_native":
+            continue
+        _meta = getattr(_op, "metadata", None)
+        if _meta is None:
+            continue
+        _specs = dict(getattr(_meta, "param_specs", None) or {})
+        if "d" in _specs and "d" not in _names:
+            del _specs["d"]
+        if "window" in _names and "window" not in _specs and "d" not in _specs:
+            _specs["window"] = ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON)
+        try:
+            _meta.param_specs = _specs
+            _meta.param_names = list(_names)
+        except Exception:
+            continue
+        _cat = OperatorRegistry._catalog.setdefault(_canonical, {})
+        _cat["param_names"] = list(_names)
+        _cat["param_specs"] = dict(_specs) if "d" in _specs else {}
+
+
 def load_all(*, include_research: bool = True) -> None:
     """Initialize the registry exactly once (thread-safe, R40 #151-#155).
 
@@ -777,6 +854,16 @@ def _load_all_impl(*, include_research: bool = True) -> None:
 
     # R40 #154: the load loop is driven by the typed BootstrapModuleSpec table
     # (IMPLEMENTATION / INTERNAL_KERNEL / RESEARCH_EXTENSION / GOVERNANCE).
+    #
+    # P0-14 test session: the same module table is ALSO imported a second time
+    # against an EMPTY test-registry subclass during pytest sessionstart.  The
+    # package init already seeded that table's first half into the PRODUCTION
+    # class (a decorator sees an exact canonical/backend already present in the
+    # production binding and short-circuits), so a second import against the test
+    # subclass would silently nothing (the decorator resolves the production
+    # class and its idempotent guard fires).  A test registry whose storages were
+    # snapshotted from the PRODUCTION state reproduces the same guard outcome,
+    # which is what ``pytest_sessionstart`` pushes now.
     check_bootstrap_module_specs()
     for spec in BOOTSTRAP_MODULE_SPECS:
         if spec.role is BootstrapModuleRole.RESEARCH_EXTENSION and not include_research:
@@ -945,6 +1032,19 @@ def _load_all_impl(*, include_research: bool = True) -> None:
 
     from factor_engine.cleaned_operators.contract_hardening import apply_final_contract_hardening
     apply_final_contract_hardening()
+
+    # 2026-08 operator-tags audit: derive the final catalog ``tags`` surface
+    # (backend:* per registered backend, grain/causal/pit_safe/deterministic/
+    # stateful/unit:ratio, cost-band clamp, stale source_blocked removal, the
+    # two intraday ``daily`` fixes).  Runs AFTER the production-certification /
+    # R23 / contract-hardening passes so it sees the FINAL status /
+    # pit_safe / stateful / determinism_verified fields AND the final
+    # registered-backend set (``backends_for``).  It must also run BEFORE the
+    # registration audit / freeze gate so its writes land in the live dict.
+    # Every derivation reads authoritative registry fields, so re-running
+    # load_all() is idempotent.
+    from factor_engine.cleaned_operators.production_hardening import _apply_tag_governance
+    _apply_tag_governance()
 
     # R30 §24 (P1-025): backfill an explicit ParamRole for every scalar that
     # still resolves to the silent ECONOMIC fallback.  Rule-based roles are

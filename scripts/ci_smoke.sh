@@ -3,7 +3,7 @@
 # (--require-hashes) into the CI python.
 #
 # The six in-repo packages (factor_engine, quant_evaluator, factor_optimizer,
-# factor_assets, factor_preprocess, dataaccess) are NOT on PyPI.  For the pytest
+# factor_assets, factor_preprocess, data_access) are NOT on PyPI.  For the pytest
 # gates they are imported from source via the repo root (pytest rootdir conftest
 # puts the repo root on sys.path), so no `pip install -e` is needed here.  The
 # FRESH_WHEEL_MATRIX job builds real wheels from their own pyprojects instead.

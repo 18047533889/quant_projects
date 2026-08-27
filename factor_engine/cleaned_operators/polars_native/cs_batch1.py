@@ -29,12 +29,11 @@ from factor_engine.cleaned_operators.base import (
 
 def _to_polars_safe(feature: pd.Series) -> pl.LazyFrame:
     """安全转换 pandas Series 到 Polars LazyFrame"""
-    return (
-        feature.to_frame()
-        .reset_index(drop=False)
-        .pipe(pl.from_pandas)
-        .lazy()
-    )
+    # Force a stable string column name.  An unnamed series produces an integer
+    # column (``0``) via ``to_frame()``, which later breaks ``pl.col("value")``.
+    name = feature.name or "value"
+    frame = feature.to_frame(name=name).reset_index(drop=False)
+    return pl.from_pandas(frame).lazy()
 
 
 def _from_polars_safe(lf: pl.LazyFrame, feature_name: str, original_index) -> pd.Series:
@@ -42,7 +41,14 @@ def _from_polars_safe(lf: pl.LazyFrame, feature_name: str, original_index) -> pd
     df = lf.collect().to_pandas()
     if "index" in df.columns:
         df = df.set_index("index")
-    result = df[feature_name]
+    # The numeric series column may be unnamed (pandas ``Series.to_frame()``
+    # then names it ``"0"``) or named by the caller; ``_calculate_series``
+    # always aliases the computed column to ``feature_name``, so pick that
+    # column when present, otherwise fall back to the remaining column.
+    if feature_name in df.columns:
+        result = df[feature_name]
+    else:
+        result = df.iloc[:, 0]
     result.index = original_index
     return result
 
@@ -202,9 +208,11 @@ class CSBucketPolarsNative(SeriesOperator):
 
         lf = _to_polars_safe(feature)
 
-        # 使用 qcut 分桶
+        # 使用 qcut 分桶（labels 转 float）
         lf = lf.with_columns([
-            pl.col(feature_name).qcut(n_buckets, labels=[str(i) for i in range(n_buckets)])
+            pl.col(feature_name)
+            .qcut(int(n_buckets), labels=[str(i) for i in range(int(n_buckets))])
+            .cast(pl.Utf8)
             .cast(pl.Float64)
             .alias(feature_name)
         ])
@@ -240,9 +248,9 @@ class CSQuantilePolarsNative(SeriesOperator):
 
         lf = _to_polars_safe(feature)
 
-        # 计算截面分位数并广播
+        # 计算截面分位数并广播 (linear interpolation matches pandas default)
         lf = lf.with_columns([
-            pl.col(feature_name).quantile(q).alias(feature_name)
+            pl.col(feature_name).quantile(q, interpolation="linear").alias(feature_name)
         ])
 
         return _from_polars_safe(lf, feature_name, original_index)
@@ -786,7 +794,7 @@ class CSQuantileResidPolarsNative(SeriesOperator):
         lf = _to_polars_safe(feature)
 
         lf = lf.with_columns([
-            (pl.col(feature_name) - pl.col(feature_name).quantile(q))
+            (pl.col(feature_name) - pl.col(feature_name).quantile(q, interpolation="linear"))
             .alias(feature_name)
         ])
 

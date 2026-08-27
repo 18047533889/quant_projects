@@ -184,6 +184,11 @@ class LedgerAdapter:
         """
         Mark test splits as sealed (no further modifications allowed).
 
+        DLIB-FA-003 / §43: this is a LOGICAL seal — a projection/audit record
+        only. It is NOT a real test-protection boundary. Test authority is FO
+        TestAuthorityBroker; FA's ledger adapter is projection/audit only. No
+        production code may treat this seal as real test protection.
+
         Args:
             campaign_id: Campaign identifier
             test_split_ids: Test split identifiers to seal

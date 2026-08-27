@@ -13,7 +13,7 @@ columns are compatible.  Drift categories (each is reported):
 
 CI: exit code 1 when any unresolved drift exists.
 
-Run:  python3 scripts/audit_fe_dataaccess_contract_drift.py
+Run:  python3 scripts/audit_fe_data_access_contract_drift.py
 """
 from __future__ import annotations
 
@@ -28,16 +28,16 @@ def _load() -> None:
     sys.path.insert(0, str(REPO.parent))
 
 
-def _dataaccess_registry_datasets() -> dict:
+def _data_access_registry_datasets() -> dict:
     """Dataset name -> {time_column, instrument_column, schema_replace}.
 
-    Base registry = ``dataaccess/config/datasets.yaml``; the COS registry
+    Base registry = ``data_access/config/datasets.yaml``; the COS registry
     runtime patches overlay it (schema corrections / splits).
     """
     import yaml
 
     out: dict[str, dict] = {}
-    yaml_path = REPO.parent / "dataaccess" / "config" / "datasets.yaml"
+    yaml_path = REPO.parent / "data_access" / "config" / "datasets.yaml"
     if yaml_path.exists():
         try:
             raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
@@ -88,7 +88,7 @@ def audit() -> dict[str, list[str]]:
         "required_filter_mismatch", "current_snapshot_mismatch",
         "coverage_class_mismatch", "market_mismatch",
     )}
-    da = _dataaccess_registry_datasets()
+    da = _data_access_registry_datasets()
     for spec in _fe_table_specs():
         ds = getattr(spec, "dataset", None)
         if not ds:

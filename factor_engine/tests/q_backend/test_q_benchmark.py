@@ -12,6 +12,7 @@ import pandas as pd
 import numpy as np
 
 from factor_engine.backend.q_backend.q_backend import QBackend
+from factor_engine.backend.q_backend.q_process_manager import is_q_available
 from factor_engine.backend.pandas_backend import PandasBackend
 from factor_engine.backend.context import ExecutionContext
 from factor_engine.planner.logical_plan import PlanNode
@@ -69,6 +70,10 @@ class TestQBackendBenchmark:
     """q/K Backend 基准测试套件。"""
 
     @pytest.mark.benchmark
+    @pytest.mark.skipif(
+        not is_q_available(),
+        reason="Q runtime unavailable (pykx/q binary/Q_LICENSED missing) - NOT_RUN, not a failure",
+    )
     def test_rolling_mean_benchmark(self):
         """滚动均值性能测试。预期：q 在向量化操作上有 5-20x 加速。"""
         n_periods, n_instruments = BENCHMARK_SIZES["small"]

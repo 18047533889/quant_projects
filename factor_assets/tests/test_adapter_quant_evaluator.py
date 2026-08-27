@@ -72,6 +72,13 @@ class TestQEEvidenceProvider:
         mock_qe.EvaluationBundle = MockEvaluationBundle
         mock_qe.MetricValue = MockMetricValue
         mock_qe.FactorDiagnosis = MockFactorDiagnosis
+        # Snapshot the REAL quant_evaluator module so it can be restored in
+        # teardown_method — this test runs in-process alongside other domains'
+        # suites (e.g. DLIB-XPKG cross-package runs), and leaking the MagicMock
+        # into sys.modules would break every subsequent quant_evaluator import
+        # (pytest would choke on the mock's ``pytest_plugins`` attribute).
+        import quant_evaluator as _real_qe
+        self._real_qe_module = _real_qe
         sys.modules['quant_evaluator'] = mock_qe
 
         # Force reload of adapter to pick up mock
@@ -81,6 +88,17 @@ class TestQEEvidenceProvider:
 
         from factor_assets.adapters.quant_evaluator import QEEvidenceProvider
         self.provider = QEEvidenceProvider()
+
+    def teardown_method(self):
+        """Restore the real quant_evaluator module after the mock test."""
+        import sys
+        import importlib
+
+        if getattr(self, "_real_qe_module", None) is not None:
+            sys.modules["quant_evaluator"] = self._real_qe_module
+        # Reload any QE-importing FA adapters so they rebind the real module.
+        import factor_assets.adapters.quant_evaluator
+        importlib.reload(factor_assets.adapters.quant_evaluator)
 
     def test_create_evidence_bundle_ref_single_factor(self):
         """Test creating evidence bundle ref for single factor."""

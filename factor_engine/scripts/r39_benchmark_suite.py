@@ -44,7 +44,7 @@ from tests.helpers import InMemorySeriesSource
 
 OUT = Path(__file__).resolve().parent.parent / "build" / "r39_evidence"
 QUICK = bool(os.environ.get("R39_BENCH_QUICK", ""))
-# B6 构造 dataaccess store 时跳过 COS mirror（本地直读）。
+# B6 构造 data_access store 时跳过 COS mirror（本地直读）。
 os.environ.setdefault("DATA_ACCESS_SKIP_COS_MIRROR", "1")
 
 
@@ -233,8 +233,8 @@ def _incremental_write_bytes(lake_root: str) -> dict:
 def _b6_minute_daily(stocks: int, days: int) -> dict:
     """Minute→Daily：100 个聚合输出。直接量 native SQL 路径。
 
-    构造真实 dataaccess DataAccessStore（datasets.yaml + parquet），与
-    dataaccess/tests/r39/test_perf_minute_agg fixture 同构。
+    构造真实 data_access DataAccessStore（datasets.yaml + parquet），与
+    data_access/tests/r39/test_perf_minute_agg fixture 同构。
     """
     from data_access.core.engine import DuckDBEngine
     from data_access.read.aggregation import (

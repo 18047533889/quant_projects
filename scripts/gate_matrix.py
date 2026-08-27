@@ -132,13 +132,13 @@ PACKAGE_GATES: dict[str, set[str]] = {
     },
     # R46 P0-Z: production packages must carry production core responsibilities —
     # SERIALIZATION / DETERMINISM / FRESH_WHEEL resolve here so factor_optimizer
-    # and dataaccess cannot ride to PRODUCTION_CANDIDATE on CROSS_PACKAGE alone.
+    # and data_access cannot ride to PRODUCTION_CANDIDATE on CROSS_PACKAGE alone.
     "factor_optimizer": {
         "SERIALIZATION", "DETERMINISM", "FRESH_WHEEL",
     },
     "factor_assets": {"SERIALIZATION"},
     "factor_preprocess": {"LEAKAGE"},
-    "dataaccess": {
+    "data_access": {
         "SERIALIZATION", "DETERMINISM", "FRESH_WHEEL",
     },
 }
@@ -457,7 +457,7 @@ def main() -> int:
 
     # Print Package Classification
     packages = ["factor_engine", "quant_evaluator", "factor_optimizer",
-                "factor_assets", "factor_preprocess", "dataaccess"]
+                "factor_assets", "factor_preprocess", "data_access"]
     print_package_classification(packages, gate_statuses)
 
     # Summary

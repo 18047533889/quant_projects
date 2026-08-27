@@ -361,9 +361,14 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     # reference (the price-basis runtime gate).  The native polars impls do not
     # run the basis gate but must declare the same arity so positional calls
     # against the reference stay valid (R4-100); the kwarg is ignored.
-    ("open_close_return", ("open", "close", "price_basis"), open_close_return, "close / open - 1."),
-    ("open_to_vwap_return", ("open", "vwap", "price_basis"), open_to_vwap_return, "vwap / open - 1."),
-    ("overnight_return", ("open", "pre_close", "price_basis"), overnight_return, "open / pre_close - 1."),
+    #
+    # P1 fix (operator-correctness audit P1): the canonical surface is
+    # ``(open_px, close|vwap|pre_close, price_basis)`` (pandas ref
+    # ``return_decomp.py``); the backend previously declared ``open`` so a
+    # canonical keyword call ``open_close_return(open_px=...)`` was rejected.
+    ("open_close_return", ("open_px", "close", "price_basis"), open_close_return, "close / open - 1."),
+    ("open_to_vwap_return", ("open_px", "vwap", "price_basis"), open_to_vwap_return, "vwap / open - 1."),
+    ("overnight_return", ("open_px", "pre_close", "price_basis"), overnight_return, "open / pre_close - 1."),
     ("vwap_to_close_return", ("vwap", "close", "price_basis"), vwap_to_close_return, "close / vwap - 1."),
     ("ts_max_buildup", ("x", "d"), ts_max_buildup, "Rolling count of running-max updates."),
     ("ts_transition_count", ("condition", "window", "missing_policy"), ts_transition_count, "Count of state transitions in a window."),

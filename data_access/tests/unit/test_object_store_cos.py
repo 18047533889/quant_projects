@@ -20,10 +20,16 @@ import time
 
 import pytest
 
+from data_access.core.exceptions import (
+    MultipartPartCountError,
+    MultipartPartNumberError,
+)
 from data_access.read.object_store import (
     COSObjectStore,
     COSSeekableRangeReader,
     LocalObjectStore,
+    MAX_PART_NUMBER,
+    _validate_part_number,
 )
 
 
@@ -175,6 +181,10 @@ class _BytesBody:
 # ---------------------------------------------------------------------------
 # Helpers: credential provider + boto3 client injection
 # ---------------------------------------------------------------------------
+_DEFAULT_PART_MB = 1
+_DEFAULT_PART_SIZE = _DEFAULT_PART_MB * 1024 * 1024
+
+
 def _make_provider(access, secret, *, token=None, principal=None, scope=None, generation=None):
     from data_access.security.credentials import CredentialMaterial
 
@@ -634,3 +644,238 @@ def test_local_object_store_multipart(tmp_path):
     store.complete_multipart(uid, "d/obj")
     assert store.range_read("d/obj", offset=0, length=2) == b"ab"
     assert store.head_object("d/obj")["size"] == 2
+
+
+
+# ---------------------------------------------------------------------------
+# 6. S3 PartNumber 1-based 规范（P0-05 关闭项）
+# ---------------------------------------------------------------------------
+def _strip_etag(etag: str) -> str:
+    return str(etag).strip('"') or ""
+
+
+def _upload_records(fake) -> list[dict]:
+    return [kw for c, kw in fake.calls if c == "upload_part"]
+
+
+def test_cos_streaming_upload_uses_1based_partnumbers(monkeypatch):
+    """COSObjectStore.upload_part(0-based) -> 真实 UploadPart PartNumber=1..N。
+
+    回放 P0-05 缺陷：修复前 PartNumber 从 0 开始，第二个 part 编号 1 ——
+    complete 的 Parts 列表里 idx==1 的同时出现两处（part#1 etag 与 part#2
+    编号冲突），假 S3 用 idx 读取 part bytes 得到连续对象但真实 COS 会拒绝。
+    """
+    fake = FakeS3()
+    _patch_boto3(monkeypatch, fake)
+    _patch_global_provider(
+        monkeypatch, _make_provider("AK", "SK", principal="p1", scope="s1")
+    )
+    store = COSObjectStore("bucket", part_size_mb=_DEFAULT_PART_MB, inflight=2)
+    uid = store.begin_multipart("ords/obj")
+    store.upload_part(uid, "ords/obj", 0, b"P" * 10)
+    store.upload_part(uid, "ords/obj", 1, b"Q" * 20)
+    store.upload_part(uid, "ords/obj", 2, b"R" * 30)
+    store.complete_multipart(uid, "ords/obj")
+
+    uploads = _upload_records(fake)
+    assert [w["PartNumber"] for w in uploads] == [1, 2, 3]
+
+    complete_calls = [w for c, w in fake.calls if c == "complete_multipart_upload"]
+    assert len(complete_calls) == 1
+    parts = sorted(complete_calls[0]["MultipartUpload"]["Parts"], key=lambda x: x["PartNumber"])
+    assert [p["PartNumber"] for p in parts] == [1, 2, 3]
+    # 每个 PartNumber 的 ETag 与对应 UploadPart 返回的 ETag 一一配对（编号连续，
+    # 无 part 1 缺失 / 无 idx 冲突）。FakeS3 返回 ``etag-{upload_id}-{PartNumber}``。
+    for rec in uploads:
+        pnum = rec["PartNumber"]
+        assert _strip_etag(parts[pnum - 1]["ETag"]) == _strip_etag(
+            f"etag-{uid}-{pnum}"
+        )
+    assert fake.objects["ords/obj"] == b"P" * 10 + b"Q" * 20 + b"R" * 30
+
+
+def test_cos_put_object_batch_uses_1based_partnumbers(monkeypatch):
+    """put_object 批量 multipart（_put_multipart 路径）同样落 1-based。"""
+    fake = FakeS3()
+    _patch_boto3(monkeypatch, fake)
+    _patch_global_provider(
+        monkeypatch, _make_provider("AK", "SK", principal="p1", scope="s1")
+    )
+    store = COSObjectStore(
+        "bucket", part_size_mb=_DEFAULT_PART_MB, multipart_threshold_bytes=1
+    )
+    guard = _DEFAULT_PART_SIZE * MAX_PART_NUMBER  # 安全超上限对象
+    store.put_object("big/obj", b"Z" * (guard - _DEFAULT_PART_SIZE))
+    uploads = _upload_records(fake)
+    assert len(uploads) == MAX_PART_NUMBER - 1
+    # pool.map worker finish order 是竞态的 —— 契约是「PartNumber 集合 = 1..N 连续」。
+    assert sorted(w["PartNumber"] for w in uploads) == list(
+        range(1, MAX_PART_NUMBER)
+    )
+    complete_calls = [w for c, w in fake.calls if c == "complete_multipart_upload"]
+    complete_parts = complete_calls[0]["MultipartUpload"]["Parts"]
+    # complete 收到的 Parts 按 1-based PartNumber 严格排序且连续（S3 顺序约束）。
+    assert [p["PartNumber"] for p in complete_parts] == list(
+        range(1, MAX_PART_NUMBER)
+    )
+
+
+def test_cos_put_object_rejects_part_count_exceeding_s3_cap(monkeypatch):
+    """超过 10000 part 上限的拼接上传 fail-closed 抛错，绝不部分提交。"""
+    fake = FakeS3(fail_upload_parts=(10000,))
+    _patch_boto3(monkeypatch, fake)
+    _patch_global_provider(
+        monkeypatch, _make_provider("AK", "SK", principal="p1", scope="s1")
+    )
+    store = COSObjectStore(
+        "bucket", part_size_mb=1, multipart_threshold_bytes=1, part_retries=1,
+        multipart_retries=1, abort_on_error=False,
+    )
+    # 超过 10000 part 上限 fail-closed：用小 part size 把 10001 个 part 的
+    # 对象廉价构造出来（1 字节 part → 10001 字节 = 10001 part）。
+    store2 = COSObjectStore(
+        "bucket", part_size_mb=1, multipart_threshold_bytes=1, part_retries=1,
+        multipart_retries=1, abort_on_error=False,
+    )
+    store2._part_size = 1  # 1-byte part size → 10001+ 字节 = 10001+ part
+    with pytest.raises(MultipartPartCountError, match="超过 S3 上限"):
+        store2.put_object("toolarge/obj", b"y" * 10001)
+    assert "toolarge/obj" not in fake.objects
+
+
+def test_part_number_validator_bounds(monkeypatch):
+    """_validate_part_number：1 与 10000 合法，0/10001/非整数 fail-closed。"""
+    assert _validate_part_number(1, "ctx") == 1
+    assert _validate_part_number(10000, "ctx") == 10000
+    for bad in (0, 10001, -1, "x", None, 3.5):
+        with pytest.raises(MultipartPartNumberError):
+            _validate_part_number(bad, "ctx")
+
+
+# ---------------------------------------------------------------------------
+# 7. 有界内存 Streaming multipart（P0-07）
+# ---------------------------------------------------------------------------
+import io
+import resource
+
+
+class _LazyBytesStream(io.BytesIO):
+    """Synthetic 逻辑大对象 lazy stream：物理只持有模板 bytes，递归产出。
+
+    真实生产源是文件/网络（绝不整读），本 stub 只模拟「逐块产出、物理有界」。
+    total 逻辑字节数；模板重复拼段。物理内存 O(template)。
+    """
+
+    def __init__(self, template: bytes, *, total: int):
+        self._template = bytes(template)
+        self._remaining = total
+        self._offset = 0
+
+    def read(self, n: int = -1):
+        if n is None or n < 0:
+            n = self._remaining
+        out = bytearray()
+        while n > 0 and self._remaining > 0:
+            chunk = self._template[self._offset : self._offset + n]
+            if not chunk:
+                self._offset = 0
+                chunk = self._template[:n]
+            out.extend(chunk)
+            self._remaining -= len(chunk)
+            self._offset = (self._offset + len(chunk)) % len(self._template)
+            n -= len(chunk)
+        return bytes(out)
+
+    def readable(self):
+        return True
+
+    def seekable(self):
+        return False
+
+
+def test_streaming_multipart_bounded_memory(monkeypatch, tmp_path):
+    """逻辑 10GB 流上传：客户端 RSS 峰值 O(part_size × inflight)，不随对象大小线性。
+
+    - 用 **discarding** fake（每 part 到达即丢弃）—— 生产上 part 由 COS 服务端
+      吸收，only 客户端 producer 窗口 + boto 开销留在进程内。
+    - 断言：RSS 峰值增量 <= inflight × part_size × 4（保守系数），与 10GB 逻辑
+      对象大小无关。
+    """
+    part_size = 8 * 1024 * 1024
+    inflight = 2
+    total = 10 * 1024 * 1024 * 1024  # 逻辑 10GB（物理由 lazy stream 产出，不常驻）
+    fake = _make_discard_fake(monkeypatch)
+    store = COSObjectStore("bucket", part_size_mb=8, inflight=inflight, multipart_threshold_bytes=1)
+    store._verify_etag = False  # 丢弃 fake 无真实 ETag —— 只测按模型内存
+    baseline = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    stream = _LazyBytesStream(b"T" * 65536, total=total)
+    store.put_object("big/stream", stream)
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    # RSS 单位为 KB。阈值 = base + inflight×part_size×4（保守系数）。
+    threshold = baseline + 4 * inflight * part_size // 1024
+    uploads = [w for c, w in fake.calls if c == "upload_part"]
+    assert len(uploads) == (total + part_size - 1) // part_size
+    assert peak <= threshold, f"RSS peak {peak}KB > {threshold}KB (baseline {baseline}KB)"
+
+
+def _make_discard_fake(monkeypatch):
+    """构造不保留 part bytes 的 fake（只计数 + 记录 calls），隔离客户端内存。"""
+    fake = FakeS3()
+    fake._discard = True
+
+    orig_up = fake.upload_part
+    def upload_part_discard(**kw):
+        # 不写入 multiparts 存储（丢弃 part bytes）—— 只保留大小统计 + calls。
+        fake.calls.append(("upload_part", {k: (len(v) if k == "Body" else v) for k, v in kw.items()}))
+        fake.uploaded_part_sizes.append(len(kw["Body"]) if hasattr(kw["Body"], "__len__") else 0)
+        return {"ETag": '"discard-etag"'}
+    fake.upload_part = upload_part_discard
+
+    orig_comp = fake.complete_multipart_upload
+    def complete_discard(**kw):
+        fake.calls.append(("complete_multipart_upload", kw))
+        # No storage — mark object exists minimally.
+        fake.objects[kw["Key"]] = b""
+        fake.multiparts.pop(kw["UploadId"], None)
+        return {}
+    fake.complete_multipart_upload = complete_discard
+
+    _patch_boto3(monkeypatch, fake)
+    _patch_global_provider(
+        monkeypatch, _make_provider("AK", "SK", principal="p1", scope="s1")
+    )
+    return fake
+
+
+def test_streaming_put_object_integrity_and_1based(monkeypatch):
+    """流入口对象字节完整、PartNumber 1-based 连续、compile 后对象匹配。"""
+    fake = FakeS3()
+    _patch_boto3(monkeypatch, fake)
+    _patch_global_provider(
+        monkeypatch, _make_provider("AK", "SK", principal="p1", scope="s1")
+    )
+    store = COSObjectStore("bucket", part_size_mb=1, multipart_threshold_bytes=1)
+    store._verify_etag = True
+    payload = b"Q" * (1024 * 1024 * 3) + b"!" * 1234
+    store.put_object("stream/obj", io.BytesIO(payload))
+    assert fake.objects["stream/obj"] == payload
+    uploads = [w for c, w in fake.calls if c == "upload_part"]
+    pn = [w["PartNumber"] for w in uploads]
+    assert sorted(pn) == list(range(1, len(pn) + 1))
+
+
+def test_streaming_part_count_guard(monkeypatch):
+    """流模式 >10000 part fail-closed（MultipartPartCountError），不提交。"""
+    fake = FakeS3()
+    _patch_boto3(monkeypatch, fake)
+    _patch_global_provider(
+        monkeypatch, _make_provider("AK", "SK", principal="p1", scope="s1")
+    )
+    store = COSObjectStore("bucket", part_size_mb=1, multipart_threshold_bytes=1)
+    store._part_size = 1  # 1-byte part → 10001 字节 = 10001 part
+    store._verify_etag = False
+    with pytest.raises(MultipartPartCountError):
+        store.put_object("toolarge/stream", io.BytesIO(b"y" * 10001))
+    assert not fake.multiparts  # abort 清理，无孤儿 multipart
+    assert "toolarge/stream" not in fake.objects
+

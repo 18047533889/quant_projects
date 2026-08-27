@@ -6,7 +6,7 @@ References factors by ID only — no raw values stored.
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Mapping, Optional
 
 
 @dataclass(frozen=True)
@@ -41,6 +41,12 @@ class FactorMembership:
     treatment_selection_ref: Optional[str] = None   # selection artifact that picked the treatment
     preprocess_policy_ref: Optional[str] = None     # preprocess policy that consumes this member
     preprocess_state_ref: Optional[str] = None      # preprocess state snapshot the ref was computed on
+    # Reference to the FO treatment-optimization run that produced the
+    # selected treatment (DLIB-FO-008 / INT-2 closure).  FA is CONSUME-only:
+    # it carries the reference produced upstream by the optimizer (a bare str
+    # content-hash shorthand or a full ``LibrarySnapshotRef``-shaped dict
+    # PURE-DTO) and never recomputes or fabricates it.
+    treatment_optimization_ref: Optional[str] = None  # FO optimization result that produced the treatment
     assembly_score: Optional[float] = None     # policy score that ranked this member
     selection_rank: Optional[int] = None       # 0-based rank within the assembled set
     reason: Optional[str] = None               # SelectionReason value
@@ -56,11 +62,56 @@ class FactorMembership:
             ("treatment_selection_ref", self.treatment_selection_ref),
             ("preprocess_policy_ref", self.preprocess_policy_ref),
             ("preprocess_state_ref", self.preprocess_state_ref),
+            ("treatment_optimization_ref", self.treatment_optimization_ref),
         ):
             if _ref is not None and not isinstance(_ref, str):
                 raise TypeError(f"{_name} must be a str or None")
             if _ref is not None and not _ref:
                 raise ValueError(f"{_name} must be a non-empty string or None")
+
+
+def _canonical_ref(value: object) -> Optional[str | dict]:
+    """Canonicalize a treatment-optimization reference into its transport form.
+
+    Accepts the same shape family as FO's ``LibrarySnapshotRef``: ``None``, a
+    bare ``str`` (a content-hash shorthand), or a ``dict`` whose
+    ``content_hash`` (or full mapping) carries the FO optimization run
+    reference.  Returns ``None`` for ``None``, the canonical string transport
+    form for ``str`` / ``content_hash``-dict values, and the full mapping
+    otherwise — FA carries the reference cross-package as a PURE-DTO and never
+    imports the FO contract.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        if not value:
+            raise ValueError(
+                "treatment_optimization_ref must be a non-empty string, a dict, or None"
+            )
+        return value
+    if isinstance(value, tuple):
+        # Allow single-element tuple of the above (existing-style gradients);
+        # reject anything else — fail closed rather than force an unambiguous
+        # single form.
+        if len(value) != 1:
+            raise ValueError(
+                "a tuple treatment_optimization_ref must contain exactly one element"
+            )
+        return _canonical_ref(value[0])
+    if isinstance(value, Mapping):
+        ref = value.get("content_hash")
+        if isinstance(ref, str):
+            if not ref:
+                raise ValueError(
+                    "treatment_optimization_ref dict content_hash must be a "
+                    "non-empty string"
+                )
+            return ref
+        return value  # full ref mapping (FO LibrarySnapshotRef.to_dict() form)
+    raise TypeError(
+        "treatment_optimization_ref must be a non-empty string, a dict, or None; "
+        f"got {type(value).__name__}"
+    )
 
 
 @dataclass(frozen=True)
@@ -86,6 +137,13 @@ class FactorSetSpec:
     min_lifecycle_state: Optional[str] = None
     family_constraints: Optional[str] = None
     split_ref: Optional[str] = None
+    # Reference to the FO treatment-optimization run that produced the winner
+    # set (DLIB-FO-008 / INT-2 closure).  FA is CONSUME-only: it carries the
+    # reference produced upstream by the optimizer and never recomputes or
+    # fabricates it.  Transported as a bare str / dict PURE-DTO (FA never
+    # imports the FO contract); included in the content hash so the winner
+    # set is attributable to the exact optimization run.
+    treatment_optimization_ref: Optional[str | dict] = None
     description: Optional[str] = None
 
     def __post_init__(self):
@@ -100,6 +158,57 @@ class FactorSetSpec:
                 "data_snapshot_ref is required — the universe must not "
                 "impersonate the data snapshot"
             )
+        object.__setattr__(
+            self,
+            "treatment_optimization_ref",
+            _canonical_ref(self.treatment_optimization_ref),
+        )
+
+    def to_dict(self) -> dict:
+        """Serializable dict form; ``treatment_optimization_ref`` is preserved
+        in its transport shape (str shorthand or full ref mapping)."""
+        return {
+            "set_id": self.set_id,
+            "name": self.name,
+            "selection_policy": self.selection_policy,
+            "universe_ref": self.universe_ref,
+            "data_snapshot_ref": self.data_snapshot_ref,
+            "frequency": self.frequency,
+            "max_factors": self.max_factors,
+            "min_evidence_date": self.min_evidence_date,
+            "required_domains": list(self.required_domains),
+            "excluded_domains": list(self.excluded_domains),
+            "min_lifecycle_state": self.min_lifecycle_state,
+            "family_constraints": self.family_constraints,
+            "split_ref": self.split_ref,
+            "treatment_optimization_ref": self.treatment_optimization_ref,
+            "description": self.description,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping) -> "FactorSetSpec":
+        """Rebuild a spec from its ``to_dict`` form.
+
+        Backward compatible: an old-format dict without the
+        ``treatment_optimization_ref`` key defaults it to ``None``.
+        """
+        return cls(
+            set_id=data["set_id"],
+            name=data["name"],
+            selection_policy=data["selection_policy"],
+            universe_ref=data.get("universe_ref"),
+            data_snapshot_ref=data.get("data_snapshot_ref"),
+            frequency=data.get("frequency"),
+            max_factors=data.get("max_factors"),
+            min_evidence_date=data.get("min_evidence_date"),
+            required_domains=tuple(data.get("required_domains") or ()),
+            excluded_domains=tuple(data.get("excluded_domains") or ()),
+            min_lifecycle_state=data.get("min_lifecycle_state"),
+            family_constraints=data.get("family_constraints"),
+            split_ref=data.get("split_ref"),
+            treatment_optimization_ref=data.get("treatment_optimization_ref"),
+            description=data.get("description"),
+        )
 
 
 @dataclass(frozen=True)

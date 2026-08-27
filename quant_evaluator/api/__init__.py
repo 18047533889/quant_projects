@@ -8,10 +8,13 @@ from quant_evaluator.api.requests import (
     MetricValue,
     FactorDiagnosis,
 )
+from quant_evaluator.contracts.evaluation_refs import FactorValueRef, LabelBundleRef
 
 __all__ = [
     "EvaluationRequest",
     "EvaluationBundle",
     "MetricValue",
     "FactorDiagnosis",
+    "FactorValueRef",
+    "LabelBundleRef",
 ]

@@ -11,6 +11,15 @@ evolution tracks do not share file-level edit conflicts.
 """
 from __future__ import annotations
 
+# PERF-2: bind the vectorized daily_agg kernel whitelist so the dispatch
+# points in ``_core.daily_agg{,_two,_three}`` route the three harness-proven
+# TRUE_GAP kernels to the (day, bar, inst) 3-D fast path.  Importing this
+# package (as every intraday operator test does) activates the whitelist.
+from factor_engine.cleaned_operators.intraday import perf_vec_kernels as _pvk
+
+_pvk.bind_whitelist()
+del _pvk
+
 __all__ = [
     "higher_moments",
     "realized_beta",

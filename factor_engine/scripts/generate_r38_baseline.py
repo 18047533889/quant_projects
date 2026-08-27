@@ -53,11 +53,11 @@ _CANDIDATE_FILES = (
     "factor_engine/cache/session.py",
     "factor_engine/service/queue.py",
     "factor_engine/planner/physical_lowerer.py",
-    "dataaccess/read/read_session.py",
-    "dataaccess/runtime/read_pipeline.py",
-    "dataaccess/runtime/prepared_read.py",
-    "dataaccess/runtime/host_resource_bridge.py",
-    "dataaccess/runtime/resource_governor.py",
+    "data_access/read/read_session.py",
+    "data_access/runtime/read_pipeline.py",
+    "data_access/runtime/prepared_read.py",
+    "data_access/runtime/host_resource_bridge.py",
+    "data_access/runtime/resource_governor.py",
 )
 
 
@@ -204,7 +204,7 @@ CLAIMS: dict[str, dict[str, str]] = {
     "R29 DA session cache": {
         "claim": "DataReadSession resolution cache is request-scoped, race-free",
         "report": "R29 closure",
-        "entrypoint": "dataaccess/read/read_session.DataReadSession.__enter__",
+        "entrypoint": "data_access/read/read_session.DataReadSession.__enter__",
         "probe": "store._resolution_cache = self._resolution_cache",
         "wire_note": "pre-fix: mutates shared Store attribute (concurrent clobber)",
     },
@@ -242,9 +242,9 @@ def _resolve_path(entry: str) -> str:
         "factor_engine/backend/numba_kernel_registry.py",
         "factor_engine/service/queue.py",
         "factor_engine/planner/physical_lowerer.py",
-        "dataaccess/read/read_session.py",
-        "dataaccess/runtime/read_pipeline.py",
-        "dataaccess/runtime/prepared_read.py",
+        "data_access/read/read_session.py",
+        "data_access/runtime/read_pipeline.py",
+        "data_access/runtime/prepared_read.py",
     ):
         if entry in candidate:
             return candidate
@@ -275,7 +275,7 @@ def _behavior_test(claim_id: str) -> str:
     }.get(claim_id, "")
     if not key:
         return "none"
-    for root in ("tests/r38", "../dataaccess/tests/unit"):
+    for root in ("tests/r38", "../data_access/tests/unit"):
         try:
             hits = subprocess.check_output(
                 ["grep", "-rl", key, root], stderr=subprocess.DEVNULL

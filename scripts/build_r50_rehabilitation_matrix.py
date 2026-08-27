@@ -108,11 +108,18 @@ OUT_DIR = os.path.join(_REPO_ROOT, "build", "r50")
 
 # ---- NEW classification model constants ---------------------------------------
 CALLABLE_STATUSES = (
-    "PRODUCTION_AGENT_CALLABLE",
+    "PRODUCTION_ADMITTED",
     "DATA_GATED",
     "RESEARCH_ONLY",
     "BROKEN",
     "DELETE",
+)
+# R64: a gate is PASS only on positive proof; NOT_RUN/UNKNOWN never upgrade.
+_KNOWN_GATE_PASS = "PASS"
+_FINAL_GATES = (
+    "REGISTERED", "IMPLEMENTED", "BACKEND_WIRED", "BACKEND_RUNTIME_WIRED",
+    "PARAM_WIRED", "MATH_ORACLE_PASS", "CAUSALITY_PASS", "PIT_PASS",
+    "BACKEND_PARITY_PASS", "EDGE_PASS", "SCALE_PASS",
 )
 
 ROLES = (
@@ -343,9 +350,11 @@ def resolve_status(
     math_ok: bool,
     disposition: str,
     surface: str,
+    row_production_admitted: bool = False,
 ) -> str:
-    """callable_status resolution (DELETE > RESEARCH_ONLY > BROKEN >
-    DATA_GATED > PRODUCTION_AGENT_CALLABLE > RESEARCH_ONLY)."""
+    """R64: production admission is the registry row's fact, never a parallel
+    verdict.  ``DATA_GATED``/``BROKEN``/``DELETE``/``RESEARCH_ONLY`` stay as the
+    fail-closed precedence; the final callable tier is admitted-only."""
     status = op.direct_use_status.value
     bset = frozenset(blockers)
 
@@ -365,9 +374,13 @@ def resolve_status(
     if _declared_source_gap(canonical, catalog):
         return "DATA_GATED"
 
-    # 5. Fully production-callable: no blockers AND math evidence certified.
-    if not blockers and math_ok:
-        return "PRODUCTION_AGENT_CALLABLE"
+    # 5. Fully production-admitted: the SINGLE authority is the registry row
+    #    ``production_admitted``.  The matrix never re-judges admission — it
+    #    reflects it.  ``math_ok`` and the absence of blockers are supporting
+    #    VIEW facts kept for diagnostics; they do not upgrade a NOT-admitted
+    #    row to production.
+    if row_production_admitted and not blockers:
+        return "PRODUCTION_ADMITTED"
 
     # 6. Fallback: honest "unverified" (never fake pass/fail).
     return "RESEARCH_ONLY"
@@ -394,8 +407,8 @@ def certification_basis_for(
     """Name exactly what proved (or failed to prove) the row's claim."""
     if status == "DELETE":
         return "direct_use_contract"
-    if status == "PRODUCTION_AGENT_CALLABLE":
-        return f"direct_use_contract+{math_basis}"
+    if status == "PRODUCTION_ADMITTED":
+        return f"registry_production_admitted+{math_basis}"
     if status == "BROKEN":
         blk = "+".join(sorted(blockers)) if blockers else "no_defect"
         return f"direct_use_contract+{blk}+{math_basis if math_basis != 'none' else 'no_math_certificate'}"
@@ -431,9 +444,10 @@ def build_rows() -> tuple[list[dict[str, Any]], dict[str, Any]]:
 
     for name in canonicals:
         catalog = dict(OperatorRegistry._catalog.get(name, {}))
-        op = build_direct_use_operator(name, catalog)
+        row = build_direct_use_operator(name, catalog)
+        op = row
 
-        # ---- R51 evidence signals ------------------------------------------
+        # ---- R51/evidence signals (view facts; admission is row.production_admitted) ----
         inj = bool(op.parameter_injectivity_passed)
         inj_basis = _injectivity_basis(op)
         math_ok, math_basis = math_oracle_basis(name, op)
@@ -448,9 +462,10 @@ def build_rows() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             spec_output_type = None
 
         blockers = compute_blockers(name, op, catalog, spec_output_type, runtime_ok)
-        status = resolve_status(name, op, catalog, blockers, math_ok, disposition, surface)
+        status = resolve_status(name, op, catalog, blockers, math_ok, disposition,
+                                 surface, row_production_admitted=op.production_admitted)
         role = resolve_role(name, op)
-        agent_callable = status == "PRODUCTION_AGENT_CALLABLE"
+        agent_callable = status == "PRODUCTION_ADMITTED"
         direct_leaf_allowed = role == "TERMINAL_ALPHA" and agent_callable
         production_safe = agent_callable
         cert_basis = certification_basis_for(status, math_basis, blockers)
@@ -567,6 +582,7 @@ def build_rows() -> tuple[list[dict[str, Any]], dict[str, Any]]:
     summary = {
         "TOTAL_CANONICAL": total,
         "callable_status_counts": {k: status_cnt[k] for k in CALLABLE_STATUSES},
+        "registry_production_admitted": sum(1 for r in rows if r["production_admitted"]),
         "runtime_implemented": sum(1 for r in rows if r["runtime_implemented"]),
         "agent_callable": sum(1 for r in rows if r["agent_callable"]),
         "data_dependency_kind": {k: dep_cnt[k] for k in DEPENDENCY_KINDS},
@@ -594,7 +610,7 @@ def build_rows() -> tuple[list[dict[str, Any]], dict[str, Any]]:
     fam_call: Counter = Counter()
     for (fam, st), n in per_family.items():
         fam_total[fam] += n
-        if st == "PRODUCTION_AGENT_CALLABLE":
+        if st == "PRODUCTION_ADMITTED":
             fam_call[fam] += n
     summary["per_family_callable_rate"] = {
         k: {"callable": fam_call[k], "total": fam_total[k],

@@ -138,8 +138,6 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "ts_time_slope",
         "ts_argmax",
         "ts_argmin",
-        "ts_ewm_corr",
-        "ts_ewm_cov",
         "ts_sharpe",
         "ts_autocorr",
         "rolling_beta",
@@ -615,17 +613,21 @@ SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
     "expanding_rank",
 })
 
-# EWMA/Wilder 平滑族（RSI/ATR/DMI/DX/ADX/MACD/DEMA/TEMA/PPO/PVO/TSI/Keltner/
-# ADL/CMF/ChaikinOscillator/ForceIndex）：pandas ewm(adjust=False) 的 NaN 缺口
-# 语义（绝对位置衰减 + 有效观测重新归一化）无法在 SQL 中精确复刻，emitter 返回
-# None 走 polars 回退（与 pandas 完全一致）。从白名单移除以保持 sync 一致。
+# EWMA/Wilder 平滑族历史注记（2026-08-27 起不再从 SQL 白名单移除）：
+# RSI/ATR/DMI/DX/ADX/MACD/DEMA/TEMA/PPO/PVO/TSI/Keltner/ADL/CMF/
+# ChaikinOscillator/ForceIndex 的 pandas ewm(adjust=False) NaN 缺口语义
+# （绝对位置衰减 + 有效观测重新归一化）已由 emitter 精确递归 CTE 复刻
+# （行数级 exact parity，见 emitter._ewm_adjust_false_sql）。故这些 canonical
+# 保留在 SQL_IMPLEMENTED 中，register_sql_backends() 自动登记 backend='sql'
+# 占位；research/validation 模式可真实下推 DuckDB。production 下推仍受
+# SQL_PRODUCTION_SAFE 静态白名单 + 参数域认证约束。
+# 其余仍保持 SQL 回退的 canonical：
+#   cdl_hammer/cdl_hanging_man：pandas 参考嵌入 prior-trend 上下文（嵌套窗口，
+#   DuckDB 禁止嵌套窗口函数）。
+#   ts_time_slope/ts_upside_deviation/ts_weighted_standardized_moment/
+#   ts_abdi_ranaldo_spread/ts_value_at_argextreme：pandas 内核暖启动/窗口位置
+#   重索引与 SQL 分支不一致（精确复刻成本高），polars 已与 pandas 完全一致。
 SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS - frozenset({
-    "RSI_WILDER", "ATR_WILDER", "DMI_plus", "DMI_minus", "DX", "ADX",
-    "MACD_line", "MACD_signal", "MACD_hist",
-    "DEMA", "TEMA", "PPO", "PPO_signal", "PPO_hist",
-    "PVO", "PVO_signal", "PVO_hist", "TSI", "TSI_signal",
-    "KeltnerMid", "KeltnerUpper", "KeltnerLower", "KeltnerPosition",
-    "ADL", "ChaikinOscillator", "CMF", "ForceIndex",
     "cdl_hammer", "cdl_hanging_man",
     "ts_time_slope", "ts_upside_deviation", "ts_weighted_standardized_moment",
     "ts_abdi_ranaldo_spread", "ts_value_at_argextreme",

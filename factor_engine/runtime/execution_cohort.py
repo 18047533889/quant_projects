@@ -201,17 +201,45 @@ def cohort_budget_from_broker(
 
     复用既有 :class:`~factor_engine.runtime.resource_broker.ResourceBroker` 的
     ``resource_envelope().safe_memory_bytes``（已扣除 emergency/untracked/writer
-    reserve）。broker 缺失 / 异常时回退保守默认。
+    reserve）。broker 提供真实值时返回；返回时若 ``fallback_reason`` 非 None，
+    budget 即为保守回退值。
+
+    返回 :class:`CohortBudgetResult`：\n
+    - ``budget_bytes`` —— 幂等的纯计算字节数；\n
+    - ``fallback_reason`` —— None 表示预算来自真实 broker envelope
+      （单权威），否则为回退原因（当前硬编码 1GiB 或空预算的非单权威说明）。
     """
+    env = None
+    reason: str | None = None
     try:
         env = broker.resource_envelope()
         safe = int(getattr(env, "safe_memory_bytes", 0) or 0)
         if safe > 0:
-            return max(1, int(safe * fraction))
+            return CohortBudgetResult(
+                budget_bytes=max(1, int(safe * fraction)), fallback_reason=None
+            )
+        reason = "broker.resource_envelope().safe_memory_bytes <= 0"
     except Exception:
-        pass
-    # 保守回退：1 GiB。
-    return 1 * 1024**3
+        reason = "broker.resource_envelope() 不可用"
+    # 保守回退：1 GiB（非单权威来源，调用方生产模式应拒用）。
+    return CohortBudgetResult(budget_bytes=1 * 1024**3, fallback_reason=reason)
+
+
+@dataclass(frozen=True)
+class CohortBudgetResult:
+    """cohort 内存预算解析结果。
+
+    - ``budget_bytes``：幂等的纯计算分配字节。
+    - ``fallback_reason``：``None`` 表示预算来自真实 broker envelope
+      （FE 唯一资源权威）；否则为保守回退的原因（非单权威来源，生产调用方
+      必须据 ``fallback_reason`` 拒绝该预算，见 ``cohort_budget_from_broker``）。
+    """
+
+    budget_bytes: int
+    fallback_reason: str | None
+
+    def __int__(self) -> int:
+        return self.budget_bytes
 
 
 def per_factor_estimate_bytes(fp: FactorFingerprint) -> float:
@@ -299,9 +327,9 @@ class ExecutionCohortExecutor:
             source_scope=source_scope,
             required_field_family=required_field_family,
         )
-        budget = cohort_budget_from_broker(
+        budget = int(cohort_budget_from_broker(
             self.broker, fraction=self.cohort_memory_fraction
-        )
+        ))
         planned: list[tuple[ExecutionCohortKey, list[str], int]] = []
         for key in sorted(groups.keys(), key=lambda k: k.to_tuple()):
             names = groups[key]
@@ -359,9 +387,9 @@ class ExecutionCohortExecutor:
                         scheduler_output={},
                         results=results,
                         cohort_size=size,
-                        budget_bytes=cohort_budget_from_broker(
+                        budget_bytes=int(cohort_budget_from_broker(
                             self.broker, fraction=self.cohort_memory_fraction
-                        ),
+                        )),
                     )
                 )
         return self._cohort_results

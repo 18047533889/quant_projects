@@ -172,7 +172,7 @@ def produce_column_footprint_stats(
 def attach_column_footprints(manifest: Any, stats: Mapping[str, ColumnFootprintStats]) -> None:
     """把 per-column footprint 挂到 manifest 对象上（原地，读者直接消费）。
 
-    dataaccess 的 ``DatasetManifest`` 是 frozen dataclass——本函数通过
+    data_access 的 ``DatasetManifest`` 是 frozen dataclass——本函数通过
     ``object.__setattr__`` 附加 ``column_footprints`` 字段，供
     :func:`read_column_footprint_stats` 读取。旧 manifest 无此字段 → reader 返回
     ``None``。

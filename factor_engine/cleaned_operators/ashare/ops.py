@@ -30,8 +30,26 @@ def _metadata(name: str, description: str, params: list[str], *, domain: str, un
 
 
 class _RatioOp(SeriesOperator):
-    def _calculate_series(self, numerator, denominator, **kwargs):
-        return _safe_div(numerator, denominator)
+    def _calculate_series(self, *panels, **kwargs):
+        # P0 fix (operator-correctness audit P0-4): subclasses declare semantic
+        # canonical panel names (``float_shares``/``total_shares`` etc.), but the
+        # shared kernel previously declared positional ``(numerator, denominator)``
+        # so a canonical keyword call (``float_share_ratio(float_shares=fs,
+        # total_shares=ts)``) raised ``missing 2 required positional args``.
+        # Bind panels from the canonical ``param_names`` (positionally first,
+        # then by canonical keyword name) so canonical keyword calls work and
+        # output matches the pandas reference.  Subclasses that define their own
+        # ``_calculate_series`` (e.g. EarningsYield) still override this.
+        names = list(getattr(self.metadata, "param_names", None) or [])
+        vals = list(panels)
+        for n in names[len(vals):]:
+            vals.append(kwargs.get(n))
+        if len(vals) < 2:
+            raise TypeError(
+                f"{self.metadata.name} requires a numerator and denominator "
+                f"(declared params {names!r})"
+            )
+        return _safe_div(vals[0], vals[1])
 
 
 @register_operator(name="earnings_yield", category="ashare", business_category="valuation", canonical="earnings_yield", source="ashare.ops", status="experimental")

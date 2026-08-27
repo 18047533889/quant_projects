@@ -118,7 +118,7 @@ class EvidenceHeader:
     operator_surface_hash: str
     operator_semantic_hash: str
     field_catalog_hash: str
-    dataaccess_contract_hash: str
+    data_access_contract_hash: str
     planner_hash: str
     backend_hash: str
     runtime_hash: str
@@ -134,7 +134,7 @@ class EvidenceHeader:
             "operator_surface_hash": self.operator_surface_hash,
             "operator_semantic_hash": self.operator_semantic_hash,
             "field_catalog_hash": self.field_catalog_hash,
-            "dataaccess_contract_hash": self.dataaccess_contract_hash,
+            "data_access_contract_hash": self.data_access_contract_hash,
             "planner_hash": self.planner_hash,
             "backend_hash": self.backend_hash,
             "runtime_hash": self.runtime_hash,
@@ -230,9 +230,9 @@ def component_hashes() -> dict[str, str]:
     except Exception:
         semantic_hash = ""
 
-    # DataAccess：优先 hash monorepo 内 dataaccess/ 树，否则用安装版本
+    # DataAccess：优先 hash monorepo 内 data_access/ 树，否则用安装版本
     da_hash = ""
-    da_root = REPO_ROOT / "dataaccess"
+    da_root = REPO_ROOT / "data_access"
     if da_root.is_dir():
         da_hash = _tree_hash(da_root, ("*.py",))
     else:
@@ -259,7 +259,7 @@ def component_hashes() -> dict[str, str]:
         "operator_surface_hash": _source_hash(cleaned / "operator_surface.py"),
         "operator_semantic_hash": semantic_hash,
         "field_catalog_hash": _tree_hash(fields, ("*.py",)),
-        "dataaccess_contract_hash": da_hash,
+        "data_access_contract_hash": da_hash,
         "planner_hash": _tree_hash(planner, ("*.py",)),
         "backend_hash": _tree_hash(backend, ("*.py",)),
         "runtime_hash": _tree_hash(runtime, ("*.py",)),
@@ -278,7 +278,7 @@ def current_evidence_header() -> EvidenceHeader:
         operator_surface_hash=hashes["operator_surface_hash"],
         operator_semantic_hash=hashes["operator_semantic_hash"],
         field_catalog_hash=hashes["field_catalog_hash"],
-        dataaccess_contract_hash=hashes["dataaccess_contract_hash"],
+        data_access_contract_hash=hashes["data_access_contract_hash"],
         planner_hash=hashes["planner_hash"],
         backend_hash=hashes["backend_hash"],
         runtime_hash=hashes["runtime_hash"],

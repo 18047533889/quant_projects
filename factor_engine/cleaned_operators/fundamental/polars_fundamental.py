@@ -1165,15 +1165,15 @@ def _seasonal_history_1d(xv, pv, qv, years, min_history):
     return arr, visible, quarters
 
 
-def fin_seasonal_zscore(x, period_id, fiscal_quarter, years=5, min_history=2, revision_policy="latest_available"):
+def fin_seasonal_zscore(x, period_end, fiscal_quarter, years=5, min_history=2, revision_policy="latest_available"):
     years = _pi(years, "years")
     min_history = _pi(min_history, "min_history")
-    cols = _cols(x, period_id, fiscal_quarter)
+    cols = _cols(x, period_end, fiscal_quarter)
     rows = x.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         xv = _xv_of(x, c)
-        pv = _pv_of(period_id, c)
+        pv = _pv_of(period_end, c)
         qv = _pv_of(fiscal_quarter, c)
         order: list = []
         visible: OrderedDict = OrderedDict()
@@ -1202,15 +1202,15 @@ def fin_seasonal_zscore(x, period_id, fiscal_quarter, years=5, min_history=2, re
     return _make(x, cols, out)
 
 
-def fin_seasonal_percentile(x, period_id, fiscal_quarter, years=5, min_history=2, revision_policy="latest_available"):
+def fin_seasonal_percentile(x, period_end, fiscal_quarter, years=5, min_history=2, revision_policy="latest_available"):
     years = _pi(years, "years")
     min_history = _pi(min_history, "min_history")
-    cols = _cols(x, period_id, fiscal_quarter)
+    cols = _cols(x, period_end, fiscal_quarter)
     rows = x.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         xv = _xv_of(x, c)
-        pv = _pv_of(period_id, c)
+        pv = _pv_of(period_end, c)
         qv = _pv_of(fiscal_quarter, c)
         order: list = []
         visible: OrderedDict = OrderedDict()
@@ -1306,8 +1306,8 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("fin_ttm_quarterly", ("x", "period_id", "periods_per_year"), fin_ttm_quarterly, "Sum the latest complete set of single-period flow observations."),
     ("fin_quarter_from_cumulative", ("x", "period_id", "fiscal_quarter"), fin_quarter_from_cumulative, "Convert fiscal YTD cumulative values to one-quarter flows."),
     ("fin_ttm_cumulative", ("x", "period_id", "fiscal_quarter", "periods_per_year"), fin_ttm_cumulative, "Fiscal YTD cumulative values converted to TTM."),
-    ("fin_seasonal_zscore", ("x", "period_id", "fiscal_quarter", "years", "min_history", "revision_policy"), fin_seasonal_zscore, "Causal same-quarter fiscal z-score."),
-    ("fin_seasonal_percentile", ("x", "period_id", "fiscal_quarter", "years", "min_history", "revision_policy"), fin_seasonal_percentile, "Causal same-quarter fiscal percentile."),
+    ("fin_seasonal_zscore", ("x", "period_end", "fiscal_quarter", "years", "min_history", "revision_policy"), fin_seasonal_zscore, "Causal same-quarter fiscal z-score."),
+    ("fin_seasonal_percentile", ("x", "period_end", "fiscal_quarter", "years", "min_history", "revision_policy"), fin_seasonal_percentile, "Causal same-quarter fiscal percentile."),
 )
 
 

@@ -17,7 +17,7 @@ Production integrity:
 """
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Set, Any
+from typing import Callable, Dict, List, Optional, Set, Any, Tuple
 from enum import Enum
 import hashlib
 import inspect
@@ -36,6 +36,14 @@ class TransformCategory(str, Enum):
     REPRESENTATION = "representation"
 
 
+# DLIB-FP-023: the known semantic factor families the eligibility layer keys
+# on. Immutable public constant used for semantic enrichment of transforms.
+ALL_FAMILY_TAGS = frozenset({
+    "PRICE_VOLUME", "HIGH_TURNOVER", "FUNDAMENTAL", "SPARSE_UPDATE",
+    "EVENT", "BINARY", "DISCRETE",
+})
+
+
 def _source_of(func: Callable) -> str:
     """Best-effort stable source of a callable (may not exist for builtins)."""
     try:
@@ -52,7 +60,16 @@ def _hash_bytes(text: str) -> str:
 
 @dataclass
 class TransformMetadata:
-    """Metadata for a registered transform."""
+    """Metadata for a registered transform.
+
+    Extended semantic surface (DLIB-FP-015): the eligibility engine queries
+    transforms *by metadata* (semantic id, stage, family tags, causality
+    class, allowed factor families / asset types / frequencies, parameter
+    domain, numeric policy, production admission, FE-equivalent semantics,
+    cost class, output channels) instead of maintaining a hand-written name
+    list. All mutable fields are deeply frozen in ``__post_init__`` so the
+    metadata snapshot is hash-safe (DLIB-FP-026).
+    """
     name: str
     func: Callable
     category: TransformCategory
@@ -66,8 +83,38 @@ class TransformMetadata:
     implementation_hash: Optional[str] = None
     numeric_policy_hash: Optional[str] = None
 
+    # DLIB-FP-015 extended semantic surface (deeply frozen).
+    semantic_id: Optional[str] = None
+    stage: Optional[str] = None
+    family_tags: Set[str] = field(default_factory=set)
+    causality_class: Optional[str] = None
+    requires_fit: bool = False
+    requires_exposure: bool = False
+    requires_universe: bool = False
+    allowed_factor_families: Set[str] = field(default_factory=set)
+    allowed_asset_types: Set[str] = field(default_factory=set)
+    allowed_frequencies: Set[str] = field(default_factory=set)
+    parameter_domain: Dict[str, Any] = field(default_factory=dict)
+    numeric_policy: Optional[str] = None
+    production_admission: Optional[str] = None
+    fe_equivalent_semantics: Optional[str] = None
+    cost_class: Optional[str] = None
+    output_channels: Tuple[str, ...] = field(default_factory=tuple)
+
     def __post_init__(self):
         """Compute hashes after initialization."""
+        # Freeze mutable nested containers before hashing (DLIB-FP-026).
+        object.__setattr__(self, "parameters", dict(self.parameters))
+        object.__setattr__(self, "tags", set(self.tags))
+        object.__setattr__(self, "family_tags", set(self.family_tags))
+        object.__setattr__(self, "allowed_factor_families", set(self.allowed_factor_families))
+        object.__setattr__(self, "allowed_asset_types", set(self.allowed_asset_types))
+        object.__setattr__(self, "allowed_frequencies", set(self.allowed_frequencies))
+        object.__setattr__(self, "parameter_domain", dict(self.parameter_domain))
+        object.__setattr__(self, "output_channels", tuple(self.output_channels))
+        if self.production_admission is None:
+            object.__setattr__(self, "production_admission", self.admission)
+
         if self.signature_hash is None:
             self.signature_hash = self._compute_signature_hash()
         if self.implementation_hash is None:
@@ -165,6 +212,22 @@ class TransformRegistry:
         tags: Optional[Set[str]] = None,
         causal_safe: bool = True,
         admission: Optional[str] = None,
+        # DLIB-FP-015 extended semantic surface.
+        semantic_id: Optional[str] = None,
+        stage: Optional[str] = None,
+        family_tags: Optional[Set[str]] = None,
+        causality_class: Optional[str] = None,
+        requires_fit: bool = False,
+        requires_exposure: bool = False,
+        requires_universe: bool = False,
+        allowed_factor_families: Optional[Set[str]] = None,
+        allowed_asset_types: Optional[Set[str]] = None,
+        allowed_frequencies: Optional[Set[str]] = None,
+        parameter_domain: Optional[Dict[str, Any]] = None,
+        numeric_policy: Optional[str] = None,
+        fe_equivalent_semantics: Optional[str] = None,
+        cost_class: Optional[str] = None,
+        output_channels: Optional[Tuple[str, ...]] = None,
     ) -> None:
         """
         Register a transform.
@@ -189,6 +252,36 @@ class TransformRegistry:
             Whether transform preserves causal structure
         admission : str
             Production admission class
+        semantic_id : str, optional
+            Canonical semantic identifier (DLIB-FP-015)
+        stage : str, optional
+            Semantic stage of the transform
+        family_tags : set, optional
+            Semantic family tags (e.g. ``{PRICE_VOLUME, EVENT}``)
+        causality_class : str, optional
+            Causality classification
+        requires_fit : bool
+            Whether the transform requires fitted state
+        requires_exposure : bool
+            Whether exposure data is required
+        requires_universe : bool
+            Whether a universe is required
+        allowed_factor_families : set, optional
+            Factor families the transform may be applied to
+        allowed_asset_types : set, optional
+            Asset types the transform supports
+        allowed_frequencies : set, optional
+            Supported data frequencies
+        parameter_domain : dict, optional
+            Domain for each parameter (e.g. ranges)
+        numeric_policy : str, optional
+            Numeric policy (e.g. ``"nan_skip"``)
+        fe_equivalent_semantics : str, optional
+            FE DSL semantic equivalent
+        cost_class : str, optional
+            Runtime cost classification
+        output_channels : tuple, optional
+            Output channel names
         """
         # Existing callers omit admission for ordinary causal transforms;
         # make that omission explicit rather than treating it as unknown.
@@ -209,6 +302,21 @@ class TransformRegistry:
             tags=deepcopy(tags or set()),
             causal_safe=causal_safe,
             admission=admission,
+            semantic_id=semantic_id,
+            stage=stage,
+            family_tags=deepcopy(family_tags or set()),
+            causality_class=causality_class,
+            requires_fit=requires_fit,
+            requires_exposure=requires_exposure,
+            requires_universe=requires_universe,
+            allowed_factor_families=deepcopy(allowed_factor_families or set()),
+            allowed_asset_types=deepcopy(allowed_asset_types or set()),
+            allowed_frequencies=deepcopy(allowed_frequencies or set()),
+            parameter_domain=deepcopy(parameter_domain or {}),
+            numeric_policy=numeric_policy,
+            fe_equivalent_semantics=fe_equivalent_semantics,
+            cost_class=cost_class,
+            output_channels=tuple(output_channels) if output_channels else (),
         )
 
         if name in self._transforms:
@@ -249,6 +357,47 @@ class TransformRegistry:
         """Get an isolated transform metadata snapshot by name."""
         metadata = self._transforms.get(name)
         return deepcopy(metadata) if metadata is not None else None
+
+    def enrich(self, name: str, **fields) -> None:
+        """Attach additional semantic metadata to an existing transform.
+
+        DLIB-FP-015: separates the *registration* step (identity hashes are
+        computed at registration) from *semantic enrichment* (semantic_id,
+        stage, family_tags, causality_class, ...) so the whole catalog becomes
+        self-describing without changing signature/implementation/numeric
+        policy hashes. Fails closed on unknown names and after seal.
+        """
+        self._check_not_sealed()
+        if name not in self._transforms:
+            raise ValueError(f"Cannot enrich unknown transform {name!r}")
+        meta = self._transforms[name]
+        allowed = {
+            "semantic_id", "stage", "family_tags", "causality_class",
+            "requires_fit", "requires_exposure", "requires_universe",
+            "allowed_factor_families", "allowed_asset_types",
+            "allowed_frequencies", "parameter_domain", "numeric_policy",
+            "fe_equivalent_semantics", "cost_class", "output_channels",
+        }
+        unknown = set(fields) - allowed
+        if unknown:
+            raise ValueError(f"Unknown semantic metadata fields: {sorted(unknown)}")
+        for key, value in fields.items():
+            if isinstance(
+                value,
+                (set, frozenset),
+            ) and key in (
+                "family_tags",
+                "allowed_factor_families",
+                "allowed_asset_types",
+                "allowed_frequencies",
+            ):
+                setattr(meta, key, set(value))
+            elif key == "output_channels":
+                setattr(meta, key, tuple(value))
+            elif key == "parameter_domain":
+                setattr(meta, key, dict(value))
+            else:
+                setattr(meta, key, value)
 
     def validate_production(self, name: str) -> TransformMetadata:
         """Resolve registry metadata and fail closed for production admission."""
@@ -349,6 +498,10 @@ def create_default_registry() -> TransformRegistry:
         wavelet_decompose, wavelet_smooth, wavelet_denoise,
         hp_filter, hp_decompose,
     )
+    from factor_preprocess.transforms.treatment_variants import (
+        freshness_aware_fill,
+    )
+    from factor_preprocess.transforms.event_decay import event_decay
 
     registry = TransformRegistry()
 
@@ -388,6 +541,32 @@ def create_default_registry() -> TransformRegistry:
         tags={"scale", "normalization", "cs"},
         causal_safe=True,
     )
+
+    # DLIB-FP-015: semantic enrichment of the cross-sectional transforms so
+    # eligibility queries can run on metadata instead of transform names.
+    registry.enrich("cs_rank", semantic_id="CS_RANK:pct", stage="representation",
+                    family_tags=set(ALL_FAMILY_TAGS), causality_class="cross_sectional_causal",
+                    requires_fit=False, parameter_domain={"pct": (True, True)},
+                    numeric_policy="nan_skip_cs", fe_equivalent_semantics="cs_rank",
+                    output_channels=("transformed",))
+    registry.enrich("cs_zscore", semantic_id="CROSS_SECTIONAL_ZSCORE:cs", stage="representation",
+                    family_tags=set(ALL_FAMILY_TAGS), causality_class="cross_sectional_causal",
+                    requires_fit=False, parameter_domain={"ddof": (0.0, 1.0)},
+                    numeric_policy="nan_skip_cs", fe_equivalent_semantics="cs_zscore",
+                    output_channels=("transformed",))
+    registry.enrich("cs_demean", semantic_id="CROSS_SECTIONAL_DEMEAN:cs", stage="representation",
+                    family_tags=set(ALL_FAMILY_TAGS), causality_class="cross_sectional_causal",
+                    requires_fit=False, parameter_domain={}, numeric_policy="nan_skip_cs",
+                    output_channels=("transformed",))
+    registry.enrich("cs_winsor", semantic_id="WINSOR:cs", stage="outlier",
+                    family_tags=set(ALL_FAMILY_TAGS), causality_class="cross_sectional_causal",
+                    requires_fit=False, parameter_domain={"lower": (0.005, 0.05), "upper": (0.95, 0.995)},
+                    numeric_policy="clip_cross_sectional", fe_equivalent_semantics="cs_winsor",
+                    cost_class="cross_sectional", output_channels=("transformed",))
+    registry.enrich("cs_scale", semantic_id="CROSS_SECTIONAL_SCALE:cs", stage="representation",
+                    family_tags=set(ALL_FAMILY_TAGS), causality_class="cross_sectional_causal",
+                    requires_fit=False, parameter_domain={"target_std": (0.5, 2.0)},
+                    numeric_policy="scale_factor_cs", output_channels=("transformed",))
 
     # Temporal transforms
     registry.register(
@@ -571,6 +750,16 @@ def create_default_registry() -> TransformRegistry:
         description="OLS residual neutralization",
         tags={"neutralize", "ols", "residual"},
         causal_safe=True,
+        semantic_id="NEUTRAL:ols",
+        stage="neutralization",
+        family_tags={"PRICE_VOLUME", "HIGH_TURNOVER", "FUNDAMENTAL", "SPARSE_UPDATE", "EVENT"},
+        causality_class="cross_sectional_causal",
+        requires_exposure=True,
+        parameter_domain={"min_observations": (2, None), "add_intercept": (True, True)},
+        numeric_policy="nan_pairwise_deletion",
+        fe_equivalent_semantics="ols_neutralize",
+        cost_class="cross_sectional_fit",
+        output_channels=("residual",),
     )
     registry.register(
         "compute_exposures", compute_exposures, TransformCategory.NEUTRALIZATION,
@@ -578,6 +767,102 @@ def create_default_registry() -> TransformRegistry:
         description="Compute factor exposures",
         tags={"exposure", "ols"},
         causal_safe=True,
+        semantic_id="EXPOSURE:compute",
+        stage="neutralization",
+        requires_exposure=True,
+        causality_class="cross_sectional_causal",
+    )
+
+    # DLIB-FP-014 / DLIB-FP-020: event-decay and freshness-aware fill are real,
+    # executable transforms so the eligibility engine's proposals resolve to
+    # canonical registry entries (no second hand-written catalog).
+    registry.register(
+        "event_decay", event_decay, TransformCategory.TEMPORAL,
+        version="1.0.0",
+        description="Causal short-halflife event decay persistence",
+        tags={"event_decay", "smoothing", "event", "temporal"},
+        causal_safe=True,
+        semantic_id="EVENT_DECAY:short_halflife",
+        stage="temporal",
+        family_tags={"EVENT"},
+        causality_class="one_sided_causal",
+        requires_fit=False,
+        parameter_domain={"halflife": (1.0, 5.0)},
+        numeric_policy="nan_resets_memory",
+        fe_equivalent_semantics="event_decay",
+        cost_class="per_asset_recursive",
+        output_channels=("transformed",),
+    )
+    registry.register(
+        "freshness_aware_fill", freshness_aware_fill, TransformCategory.FRESHNESS,
+        version="1.0.0",
+        description="Freshness-aware forward fill with exponential decay",
+        tags={"freshness", "fill", "missingness", "fundamental"},
+        causal_safe=True,
+        semantic_id="FILL:freshness_aware",
+        stage="missingness",
+        family_tags={"FUNDAMENTAL", "SPARSE_UPDATE"},
+        causality_class="one_sided_causal",
+        requires_fit=False,
+        parameter_domain={"max_lag": (1.0, 20.0), "decay_halflife": (1.0, None)},
+        numeric_policy="nan_forward_carry",
+        fe_equivalent_semantics="freshness_aware_fill",
+        cost_class="per_asset_forward",
+        output_channels=("transformed",),
+    )
+
+    # DLIB-FP-020: the canonical neutralization kernel is ``ols_neutralize``.
+    # ``industry_neutral`` / ``size_neutral`` / ``dual_neutral`` are *semantic*
+    # aliases bound to that kernel via NeutralizationSpec, NOT independent
+    # duplicated implementations. They resolve here so the eligibility engine's
+    # proposals are canonical; their semantics are formalized by the spec.
+    registry.register(
+        "industry_neutral", ols_neutralize, TransformCategory.NEUTRALIZATION,
+        version="1.0.0",
+        description="Industry-neutralization semantic alias (kernel=ols_neutralize)",
+        tags={"neutralize", "industry", "ols", "semantic_alias"},
+        causal_safe=True,
+        semantic_id="INDUSTRY_NEUTRAL:SW_L1",
+        stage="neutralization",
+        family_tags={"PRICE_VOLUME", "HIGH_TURNOVER", "FUNDAMENTAL", "SPARSE_UPDATE", "EVENT"},
+        causality_class="cross_sectional_causal",
+        requires_exposure=True,
+        numeric_policy="nan_pairwise_deletion",
+        fe_equivalent_semantics="industry_neutral",
+        cost_class="cross_sectional_fit",
+        output_channels=("residual",),
+    )
+    registry.register(
+        "size_neutral", ols_neutralize, TransformCategory.NEUTRALIZATION,
+        version="1.0.0",
+        description="Size-neutralization semantic alias (kernel=ols_neutralize)",
+        tags={"neutralize", "size", "ols", "semantic_alias"},
+        causal_safe=True,
+        semantic_id="SIZE_NEUTRAL:log_mktcap",
+        stage="neutralization",
+        family_tags={"PRICE_VOLUME", "HIGH_TURNOVER", "FUNDAMENTAL", "SPARSE_UPDATE", "EVENT"},
+        causality_class="cross_sectional_causal",
+        requires_exposure=True,
+        numeric_policy="nan_pairwise_deletion",
+        fe_equivalent_semantics="size_neutral",
+        cost_class="cross_sectional_fit",
+        output_channels=("residual",),
+    )
+    registry.register(
+        "dual_neutral", ols_neutralize, TransformCategory.NEUTRALIZATION,
+        version="1.0.0",
+        description="Industry+size neutralization semantic alias (kernel=ols_neutralize)",
+        tags={"neutralize", "industry", "size", "ols", "semantic_alias"},
+        causal_safe=True,
+        semantic_id="DUAL_NEUTRAL:industry_size",
+        stage="neutralization",
+        family_tags={"PRICE_VOLUME", "HIGH_TURNOVER", "FUNDAMENTAL", "SPARSE_UPDATE", "EVENT"},
+        causality_class="cross_sectional_causal",
+        requires_exposure=True,
+        numeric_policy="nan_pairwise_deletion",
+        fe_equivalent_semantics="dual_neutral",
+        cost_class="cross_sectional_fit",
+        output_channels=("residual",),
     )
 
     # Full-series decomposition uses symmetric/zero-phase reconstruction and is
@@ -605,6 +890,61 @@ def create_default_registry() -> TransformRegistry:
             causal_safe=False,
             admission="OFFLINE_ONLY",
         )
+
+    # DLIB-FP-015: semantic enrichment of the temporal / volatility /
+    # missingness / freshness transforms so eligibility queries run on
+    # metadata (semantic_id, stage, family_tags, causality_class, cost_class)
+    # instead of a hand-maintained transform-name list.
+    _SMOOTH_FAMILIES = {"PRICE_VOLUME", "HIGH_TURNOVER"}
+    for _name, _sid, _stage, _cost, _dom in [
+        ("ewma", "SMOOTH:ewma", "temporal", "per_asset_recursive", {"halflife": (3.0, 60.0)}),
+        ("kama", "SMOOTH:kama", "temporal", "per_asset_recursive",
+         {"er_window": (5.0, 30.0), "fast_span": (2.0, 10.0), "slow_span": (20.0, 60.0)}),
+        ("one_sided_iir_lowpass", "SMOOTH:one_sided_iir_lowpass", "temporal", "per_asset_recursive", {"alpha": (0.05, 0.5)}),
+        ("kalman_local_level", "SMOOTH:kalman_local_level", "temporal", "per_asset_recursive",
+         {"process_noise": (0.001, 0.1), "measurement_noise": (0.1, 1.0)}),
+        ("trailing_sma", "SMOOTH:trailing_sma", "temporal", "per_asset_rolling", {"window": (3.0, 60.0)}),
+        ("trailing_median", "SMOOTH:trailing_median", "temporal", "per_asset_rolling", {"window": (3.0, 30.0)}),
+        ("robust_ewma", "SMOOTH:robust_ewma", "temporal", "per_asset_recursive", {"halflife": (3.0, 60.0)}),
+    ]:
+        registry.enrich(
+            _name, semantic_id=_sid, stage=_stage,
+            family_tags=set(_SMOOTH_FAMILIES),
+            causality_class="one_sided_causal", requires_fit=False,
+            parameter_domain=_dom, numeric_policy="nan_lagged",
+            cost_class=_cost, output_channels=("transformed",),
+        )
+    del _name, _sid, _stage, _cost, _dom, _SMOOTH_FAMILIES
+
+    _VOLA_FAMILIES = {"PRICE_VOLUME", "HIGH_TURNOVER", "FUNDAMENTAL", "SPARSE_UPDATE"}
+    registry.enrich("volatility_scale", semantic_id="VOL_SCALE:realized", stage="scaling",
+                    family_tags=set(_VOLA_FAMILIES), causality_class="one_sided_causal",
+                    requires_fit=False, cost_class="per_asset_rolling",
+                    output_channels=("transformed",))
+    registry.enrich("volatility_scale_returns", semantic_id="VOL_SCALE_RETURNS:realized", stage="scaling",
+                    family_tags=set(_VOLA_FAMILIES), causality_class="one_sided_causal",
+                    requires_fit=False, cost_class="per_asset_rolling",
+                    output_channels=("transformed",))
+    del _VOLA_FAMILIES
+
+    registry.enrich("forward_fill", semantic_id="FILL:forward", stage="missingness",
+                    family_tags=set(ALL_FAMILY_TAGS), causality_class="one_sided_causal",
+                    requires_fit=False, parameter_domain={"max_lag": (1.0, 20.0)},
+                    numeric_policy="nan_forward_carry", fe_equivalent_semantics="forward_fill",
+                    cost_class="per_asset_forward", output_channels=("transformed",))
+    registry.enrich("missing_indicator", semantic_id="MISSING_INDICATOR:binary", stage="missingness",
+                    family_tags=set(ALL_FAMILY_TAGS), causality_class="cross_sectional_causal",
+                    requires_fit=False, output_channels=("missing",))
+    registry.enrich("missing_rate", semantic_id="MISSING_RATE:rolling", stage="missingness",
+                    family_tags=set(ALL_FAMILY_TAGS), causality_class="one_sided_causal",
+                    requires_fit=False, cost_class="per_asset_rolling",
+                    output_channels=("missing",))
+    registry.enrich("days_since_update", semantic_id="FRESHNESS:days_since_update", stage="missingness",
+                    family_tags=set(ALL_FAMILY_TAGS), causality_class="one_sided_causal",
+                    requires_fit=False, output_channels=("freshness",))
+    registry.enrich("freshness_score", semantic_id="FRESHNESS:score", stage="missingness",
+                    family_tags=set(ALL_FAMILY_TAGS), causality_class="one_sided_causal",
+                    requires_fit=False, output_channels=("freshness",))
 
     return registry
 

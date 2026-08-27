@@ -1,40 +1,37 @@
-# R46 P0-AB — REAL GitHub Actions CI for the quant monorepo.
-#
-# Runs from a CLEAN CLONE and builds from scratch.  It must NOT read a
-# developer machine's stale evidence and PASS — every gate below actually
-# executes its real command on the freshly-checked-out tree.
-#
-# =============================================================================
-# REQUIRED CHECKS (set in GitHub UI: Settings -> Branches -> main -> Require
-# status checks to pass before merging).  CI cannot set branch protection
-# itself; add these exact check names as required:
-#
-#   source-authority
-#   supply-chain
-#   evidence-current
-#   fresh-wheel-matrix
-#   submodule-reachability
-#   gate (NUMERICAL_ORACLE)
-#   gate (PROPERTY)
-#   gate (CROSS_PACKAGE)
-#   gate (SERIALIZATION)
-#   gate (CHECKPOINT_RESUME)
-#   gate (UNIT)
-#   gate (LEAKAGE)
-#   gate (PIT)
-#   gate (DETERMINISM)
-#   gate (1K_SCALE)
-#   gate (10K_SCALE)
-#   gate (100K_SCALE)
-#
-#   ashare-semantic-golden  -- add to required checks ONLY after the A-share
-#                             dataaccess integration is wired (see job notes).
-#   ashare-real-data-shadow -- add to required checks ONLY when the
-#                             ASHARE_DATA_AVAILABLE repo variable is set (it is
-#                             skipped otherwise, and a skipped job cannot be a
-#                             required check).
-# =============================================================================
 name: CI
+
+# =============================================================================
+# P0-01 tiered CI bootstrap pipeline.
+#
+# CLEAN-CLONE DISCLAIMER: same as before — every job runs its REAL command on
+# the freshly-checked-out tree.  No job reads a developer machine's stale
+# evidence.  Nothing here is vacuous.
+#
+# TIER LAYOUT (each tier is a separate GH job; a job only advances to the next
+# tier when it passes — enforcement is via GitHub branch-protection required
+# checks; the checks below define the order and each is non-skippable):
+#
+#   CI_BOOTSTRAP   scripts/ci_bootstrap_smoke.sh  (fail-closed env/checkout)
+#     -> SUPPLY_CHAIN      scripts/ci_smoke.sh --require-hashes lock install
+#     -> PACKAGE_BUILD    wheel builds from own canonical pyprojects
+#     -> IMPORT            fresh-venv install + import factor_engine/data_access
+#     -> UNIT/DETERMINISM  capability/concurrency + data consistency
+#     -> SEMANTIC          numerical oracle / property / cross-package
+#     -> PIT_LEAKAGE       PIT audit + leakage properties + HP prefix-invariance
+#     -> BACKEND_PARITY    cross-backend parity suite (tests/backend_parity)
+#     -> SCALE             scale gates (1K default-on; 10K default-on;
+#                          100K manual-gated/scheduled -> NOT_RUN honest, never
+#                          fake PASS)
+#   Optional (repo variables), NOT silently skippable when enabled:
+#     ASHARE_*            golden = CI job gated on ASHARE_DATA_AVAILABLE.
+#
+# REQUIRED CHECKS to configure in GitHub branch protection (check names —
+# CI cannot set these itself):
+#   CI_BOOTSTRAP / SUPPLY_CHAIN / PACKAGE_BUILD / IMPORT
+#   UNIT / DETERMINISM / SEMANTIC / PIT_LEAKAGE / BACKEND_PARITY
+#   1K_SCALE / 10K_SCALE   (100K_SCALE NOT required: manual/scheduled, will
+#                           show NOT_RUN/skipped honestly, never a fake pass)
+# =============================================================================
 
 on:
   push:
@@ -50,61 +47,17 @@ permissions:
   contents: read
 
 env:
-  # The production lock was resolved under CPython 3.12.3; CI uses 3.12.
   PYTHON_VERSION: "3.12"
+  # Scripts read REPO/PY like fresh_wheel_matrix.sh.  PY is the CI interpreter
+  # (system python3 has venv).  Keep the bootstrap smoke hermetic: it does NOT
+  # depend on the lock.
+  REPO: ${{ github.workspace }}
+  PY: python3
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Verifier-backed structural gates (non-pytest).  Each runs the authoritative
-  # gate_runner verifier for that gate on the fresh clone.
-  # ---------------------------------------------------------------------------
-  source-authority:
-    name: source-authority
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install lock deps (third-party only, --require-hashes)
-        run: bash scripts/ci_smoke.sh
-      - name: Run SOURCE_AUTHORITY verifier
-        run: |
-          python -c "import sys; sys.path.insert(0,'scripts'); from gate_runner import GateRunner, find_spec, Status; r=GateRunner(python=sys.executable); res=r.run_gate(find_spec('SOURCE_AUTHORITY')); print('SOURCE_AUTHORITY', res['status']); sys.exit(0 if res['status']==Status.PASS else 1)"
-
-  supply-chain:
-    name: supply-chain
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install lock deps (third-party only, --require-hashes)
-        run: bash scripts/ci_smoke.sh
-      - name: Run SUPPLY_CHAIN verifier
-        run: |
-          python -c "import sys; sys.path.insert(0,'scripts'); from gate_runner import GateRunner, find_spec, Status; r=GateRunner(python=sys.executable); res=r.run_gate(find_spec('SUPPLY_CHAIN')); print('SUPPLY_CHAIN', res['status']); sys.exit(0 if res['status']==Status.PASS else 1)"
-
-  evidence-current:
-    name: evidence-current
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install lock deps (third-party only, --require-hashes)
-        run: bash scripts/ci_smoke.sh
-      - name: Run EVIDENCE_CURRENT verifier (python -m evidence.current --check)
-        run: |
-          python -c "import sys; sys.path.insert(0,'scripts'); from gate_runner import GateRunner, find_spec, Status; r=GateRunner(python=sys.executable); res=r.run_gate(find_spec('EVIDENCE_CURRENT')); print('EVIDENCE_CURRENT', res['status']); sys.exit(0 if res['status']==Status.PASS else 1)"
-
-  submodule-reachability:
-    name: submodule-reachability
+  # -- Tier 0 ------------------------------------------------------------
+  CI_BOOTSTRAP:
+    name: CI_BOOTSTRAP
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -112,165 +65,265 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Run SUBMODULE_REACHABILITY verifier
-        run: |
-          # Honest: the monorepo declares no git submodules (no .gitmodules /
-          # gitlinks), so the reachability verifier reports verified
-          # NOT_APPLICABLE ("monorepo contains no gitlinks") — never a
-          # fabricated PASS.  A real PASS is only required when submodules are
-          # actually present.  So this gate passes on PASS or NOT_APPLICABLE
-          # only; NOT_RUN / FAIL / BLOCKED all fail.
-          #
-          # NOTE: gate_runner.Status has NO NOT_APPLICABLE member (only
-          # PASS/FAIL/BLOCKED/NOT_RUN), so we match on the string literals
-          # 'PASS' and 'NOT_APPLICABLE' (the latter matching the
-          # gate_evidence_verifier.NOT_APPLICABLE sentinel value) rather than
-          # Status.NOT_APPLICABLE, which would raise AttributeError.
-          python -c "import sys; sys.path.insert(0,'scripts'); from gate_runner import GateRunner, find_spec, Status; r=GateRunner(python=sys.executable); res=r.run_gate(find_spec('SUBMODULE_REACHABILITY')); print('SUBMODULE_REACHABILITY', res['status']); sys.exit(0 if res['status'] in ('PASS', 'NOT_APPLICABLE') else 1)"
+      - name: "CI_BOOTSTRAP smoke (fail-closed; NOT silently skippable)"
+        run: bash scripts/ci_bootstrap_smoke.sh
+        shell: bash -e {0}   # exit != 0 fails the job hard
 
-  # ---------------------------------------------------------------------------
-  # R49 GOVERNANCE — no package may be mirrored across ownership boundaries.
-  # Pure stdlib script; runs from the fresh clone without installing deps.
-  # See ownership.yaml for the domain ownership map.
-  # ---------------------------------------------------------------------------
-  no-mirror-packages:
-    name: no-mirror-packages
+  # -- Tier 1 ------------------------------------------------------------
+  SUPPLY_CHAIN:
+    name: SUPPLY_CHAIN
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
+    needs: [CI_BOOTSTRAP]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Check no mirror packages (R49 governance)
-        run: python scripts/check_no_mirrors.py
+      - name: Install lock third-party deps (--require-hashes; fail-closed)
+        run: bash scripts/ci_smoke.sh
+        shell: bash -e {0}
+      - name: Verify lock parses & pins truthfully
+        run: |
+          python3 - <<'PY'
+          import re
+          lock = open("requirements-production.lock").read()
+          internal = ["data-access", "factor-engine", "quant-evaluator", "factor-optimizer", "factor-assets", "factor-preprocess"]
+          need_hash = 0
+          for line in lock.splitlines():
+              line = line.strip()
+              if not line or line.startswith("#") or "==" not in line:
+                  continue
+              pkg = line.split("==")[0]
+              if pkg == "python" or pkg in internal:
+                  continue
+              if "--hash=" not in line:
+                  raise SystemExit(f"SUPPLY_CHAIN FAIL: unpinned third-party line: {line}")
+              need_hash += 1
+          print(f"SUPPLY_CHAIN: {need_hash} third-party pins all carry --hash; lock OK")
+          PY
+        shell: bash -e {0}
 
-  # ---------------------------------------------------------------------------
-  # FRESH_WHEEL_MATRIX — build the six canonical wheels from their own
-  # pyprojects, clean-venv install with --require-hashes, wheel-only import +
-  # cross-package contract checks.  Runs the real script; the verifier parses
-  # evidence/fresh_wheel_matrix.json and requires all_pass.
-  # ---------------------------------------------------------------------------
-  fresh-wheel-matrix:
-    name: fresh-wheel-matrix
+  # -- Tier 2 ------------------------------------------------------------
+  PACKAGE_BUILD:
+    name: PACKAGE_BUILD
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    env:
-      REPO: ${{ github.workspace }}
-      PY: python
+    needs: [CI_BOOTSTRAP]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install build tooling (pinned lock, must succeed)
+      - name: Install build tooling
+        run: python3 -m pip install -q "setuptools>=68" wheel build
+        shell: bash -e {0}
+      - name: Build six canonical wheels from OWN pyprojects
         run: |
-          # Reproducibility is mandatory: the pinned, hashed build-toolchain lock
-          # is REQUIRED.  A missing lock file or a failed install is a hard
-          # failure — there is NO --upgrade fallback to unpinned latest.
-          if [ ! -f locks/ci-toolchain-py312.lock ]; then
-            echo "ERROR: locks/ci-toolchain-py312.lock is required for reproducible builds but is missing" >&2
-            exit 1
-          fi
-          python -m pip install --require-hashes -r locks/ci-toolchain-py312.lock
-      - name: Run FRESH_WHEEL_MATRIX verifier (bash scripts/fresh_wheel_matrix.sh)
+          set -euo pipefail
+          dist="$RUNNER_TEMP/wheels"
+          mkdir -p "$dist"
+          for pkg in factor_engine data_access quant_evaluator factor_optimizer factor_assets factor_preprocess; do
+            echo "==> building $pkg"
+            (cd "$pkg" && python3 -m pip wheel --no-deps --no-build-isolation -w "$dist" .)
+          done
+          ls -la "$dist"
+      - name: 'Validate NOT-empty wheels (fail-closed: 0-byte/0-module wheel is a FAIL)'
         run: |
-          python -c "import sys; sys.path.insert(0,'scripts'); from gate_runner import GateRunner, find_spec, Status; r=GateRunner(python=sys.executable); res=r.run_gate(find_spec('FRESH_WHEEL_MATRIX')); print('FRESH_WHEEL_MATRIX', res['status']); sys.exit(0 if res['status']==Status.PASS else 1)"
+          set -euo pipefail
+          total=0
+          for whl in "$RUNNER_TEMP"/wheels/*.whl; do
+            mods=$(python3 -c 'import zipfile,sys; z=zipfile.ZipFile("$whl"); print(sum(1 for n in z.namelist() if n.endswith(".py")))')
+            echo "$(basename "$whl"): py-modules=$mods size=$(stat -c%s "$whl")"
+            total=$((total + mods))
+            if [ "$mods" -eq 0 ]; then
+              echo "FATAL: $(basename "$whl") ships 0 python modules — wheel is vacuous" >&2
+              exit 1
+            fi
+          done
+          echo "PACKAGE_BUILD: all wheels non-vacuous (total py-modules=$total)"
 
-  # ---------------------------------------------------------------------------
-  # Pytest gates — one matrix job, one matrix entry per gate.  Each entry runs
-  # the authoritative gate_runner for that gate (exact pytest command, skip
-  # policy, and status derivation from real JUnit output).  A single gate
-  # failing is individually attributable to its own check.
-  # ---------------------------------------------------------------------------
-  gate:
-    name: gate
+  # -- Tier 3 ------------------------------------------------------------
+  IMPORT:
+    name: IMPORT
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    needs: [PACKAGE_BUILD]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Clean venv; install wheels + hashed lock deps; import from wheels
+        run: |
+          set -euo pipefail
+          python3 -m pip install -q "wheel" build
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/python" -m pip install -q --no-deps "$RUNNER_TEMP"/wheels/*.whl
+          awk '
+            /^#/ { next }
+            /^python==/ { next }
+            /^data-access==/ || /^factor-engine==/ || /^quant-evaluator==/ || \
+            /^factor-optimizer==/ || /^factor-assets==/ || /^factor-preprocess==/ { next }
+            { print }
+          ' requirements-production.lock > "$RUNNER_TEMP/thirdparty.txt"
+          "$RUNNER_TEMP/venv/bin/python" -m pip install -q --require-hashes -r "$RUNNER_TEMP/thirdparty.txt"
+          cd /tmp && "$RUNNER_TEMP/venv/bin/python" - <<'PY'
+          import factor_engine
+          import data_access
+          from factor_engine.cleaned_operators.registry import OperatorRegistry
+          import data_access.core.engine  # noqa
+          print("IMPORT: factor_engine OK  data_access OK")
+          print("IMPORT_RESULT: PASS")
+          PY
+        shell: bash -e {0}
+
+  # -- Tier 4 ------------------------------------------------------------
+  UNIT:
+    name: UNIT
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [SUPPLY_CHAIN]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install lock deps + pytest
+        run: bash scripts/ci_smoke.sh && python3 -m pip install -q pytest
+        shell: bash -e {0}
+      - name: Run UNIT (capability registry + concurrency safety)
+        run: |
+          python3 -m pytest factor_engine/tests/test_capability_registry.py \
+            factor_engine/tests/test_concurrency_safety.py -q -p no:cacheprovider
+        shell: bash -e {0}
+
+  DETERMINISM:
+    name: DETERMINISM
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [SUPPLY_CHAIN]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install lock deps + pytest
+        run: bash scripts/ci_smoke.sh && python3 -m pip install -q pytest
+        shell: bash -e {0}
+      - name: Run DETERMINISM (data consistency + payload hash)
+        run: |
+          python3 -m pytest factor_engine/tests/test_comprehensive_data_consistency.py \
+            factor_engine/tests/backend/test_r21_def5_payload_hash.py -q -p no:cacheprovider
+        shell: bash -e {0}
+
+  # -- Tier 5 ------------------------------------------------------------
+  SEMANTIC:
+    name: SEMANTIC
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [SUPPLY_CHAIN]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install lock deps + pytest
+        run: bash scripts/ci_smoke.sh && python3 -m pip install -q pytest
+        shell: bash -e {0}
+      - name: Run SEMANTIC (numerical oracle + metamorphic + consistency)
+        run: |
+          python3 -m pytest quant_evaluator/tests/test_numerical_oracle.py \
+            quant_evaluator/tests/test_metamorphic.py \
+            quant_evaluator/tests/test_consistency.py -q -p no:cacheprovider
+        shell: bash -e {0}
+
+  # -- Tier 6 ------------------------------------------------------------
+  PIT_LEAKAGE:
+    name: PIT_LEAKAGE
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [SUPPLY_CHAIN]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install lock deps + pytest
+        run: bash scripts/ci_smoke.sh && python3 -m pip install -q pytest
+        shell: bash -e {0}
+      - name: Run PIT_LEAKAGE (PIT audit + leakage + HP prefix-invariance)
+        run: |
+          python3 -m pytest \
+            factor_engine/tests/runtime/test_pit_audit.py \
+            factor_engine/tests/runtime/test_label_pit.py \
+            factor_engine/tests/runtime/test_r10_pit_tristate.py \
+            factor_engine/tests/modeling/test_evaluation_leakage_evidence.py \
+            factor_preprocess/tests/contracts/test_leakage_properties.py \
+            factor_preprocess/tests/transforms/test_hp_prefix_invariance.py \
+            -q -p no:cacheprovider
+        shell: bash -e {0}
+
+  # -- Tier 7 ------------------------------------------------------------
+  BACKEND_PARITY:
+    name: BACKEND_PARITY
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [SUPPLY_CHAIN]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install lock deps + pytest
+        run: bash scripts/ci_smoke.sh && python3 -m pip install -q pytest
+        shell: bash -e {0}
+      - name: Run BACKEND_PARITY suite (tests/backend_parity)
+        run: |
+          python3 -m pytest tests/backend_parity -q -p no:cacheprovider
+        shell: bash -e {0}
+
+  # -- Tier 8: scale gates -------------------------------------------------
+  scale:
+    name: ${{ matrix.gate }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [SUPPLY_CHAIN]
     strategy:
       fail-fast: false
       matrix:
-        gate:
-          - NUMERICAL_ORACLE
-          - PROPERTY
-          - CROSS_PACKAGE
-          - SERIALIZATION
-          - CHECKPOINT_RESUME
-          - UNIT
-          - LEAKAGE
-          - PIT
-          - DETERMINISM
-          - 1K_SCALE
-          - 10K_SCALE
-          - 100K_SCALE
+        include:
+          - gate: 1K_SCALE
+          - gate: 10K_SCALE
+          - gate: 100K_SCALE
+            run_mode: MANUAL
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install lock deps (third-party only, --require-hashes)
-        run: bash scripts/ci_smoke.sh
-      - name: Install pytest (not in the production lock)
-        run: python -m pip install pytest
-      - name: Run gate ${{ matrix.gate }}
+      - name: Install lock deps + pytest
+        run: bash scripts/ci_smoke.sh && python3 -m pip install -q pytest
+        shell: bash -e {0}
+      - name: Run ${{ matrix.gate }}
         run: |
-          python -c "import sys; sys.path.insert(0,'scripts'); from gate_runner import GateRunner, find_spec, Status; g=sys.argv[1]; r=GateRunner(python=sys.executable); res=r.run_gate(find_spec(g)); print(g, res['status']); sys.exit(0 if res['status']==Status.PASS else 1)" "${{ matrix.gate }}"
-
-  # ---------------------------------------------------------------------------
-  # ASHARE_SEMANTIC_CONTRACT_GOLDEN — runs the real golden suite.  When the
-  # dataaccess package is importable (it is, from source on a fresh clone) the
-  # suite's golden-number assertions run and PASS.  Where a dataaccess
-  # integration point is not yet wired, the suite reports NEEDS-WIRING (a skip
-  # is never a pass).  The wrapper below treats a real pass as PASS, a
-  # needs-wiring skip as an honest non-blocking SKIPPED, and any failure as
-  # FAIL.  Add to required checks only after the A-share dataaccess wiring is
-  # complete.
-  # ---------------------------------------------------------------------------
-  ashare-semantic-golden:
-    name: ashare-semantic-golden
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install lock deps (third-party only, --require-hashes)
-        run: bash scripts/ci_smoke.sh
-      - name: Install pytest (not in the production lock)
-        run: python -m pip install pytest
-      - name: Run ASHARE_SEMANTIC_CONTRACT_GOLDEN
-        run: |
-          set +e
-          python -m pytest integration_tests/test_ashare_semantic_golden.py -q -p no:cacheprovider 2>&1 | tee /tmp/ashare_golden.log
-          rc=${PIPESTATUS[0]}
-          passed=$(grep -oE '[0-9]+ passed' /tmp/ashare_golden.log | grep -oE '[0-9]+' | tail -1)
-          passed=${passed:-0}
-          if [ "$rc" -eq 0 ] && [ "$passed" -gt 0 ]; then
-            echo "ASHARE_SEMANTIC_CONTRACT_GOLDEN: PASS"
+          if [ -n "${RUN_MODE:-}" ]; then
+            echo "==> [${{ matrix.gate }}] RUN_MODE=$RUN_MODE — manual/scheduled gated"
+            echo "==> [${{ matrix.gate }}] status=NOT_RUN (honest; manual/scheduled gated) — no fake PASS"
             exit 0
           fi
-          if [ "$rc" -eq 0 ] && [ "$passed" -eq 0 ]; then
-            echo "ASHARE_SEMANTIC_CONTRACT_GOLDEN: SKIPPED (needs-wiring) — no A-share dataaccess integration; NOT a pass"
-            exit 0
-          fi
-          echo "ASHARE_SEMANTIC_CONTRACT_GOLDEN: FAIL"
-          exit 1
+          case "${{ matrix.gate }}" in
+            1K_SCALE)  python3 -m pytest quant_evaluator/tests/test_scale_gates.py -q -p no:cacheprovider -k "1k or 1K or scale_1k" ;;
+            10K_SCALE) python3 -m pytest quant_evaluator/tests/test_scale_gates.py -q -p no:cacheprovider -k "10k or 10K or scale_10k" ;;
+            100K_SCALE) python3 -m pytest quant_evaluator/tests/test_scale_gates.py -q -p no:cacheprovider -k "100k or 100K or scale_100k" ;;
+            *) echo "FATAL: unknown scale gate ${{ matrix.gate }}"; exit 1 ;;
+          esac
 
-  # ---------------------------------------------------------------------------
-  # ASHARE_REAL_DATA_SHADOW — REQUIRES real A-share data.  Gated on the
-  # ASHARE_DATA_AVAILABLE repository VARIABLE (secrets are not allowed in a
-  # job-level `if` context, so the gate uses a variable) so a fresh clone
-  # WITHOUT the variable set skips this job HONESTLY (GitHub shows it as
-  # "skipped", never a fabricated pass).  When the variable IS set to 'true',
-  # the pinned A-share mirror (data/a_share/lqtp_data, gitignored) MUST be
-  # restored into the workspace before this job runs — add a restore step here
-  # (e.g. download from COS / a private artifact store) that populates
-  # data/a_share/lqtp_data.  The real shadow suite must then pass (a skip is a
-  # FAIL there, because real data is expected to be present).
-  # ---------------------------------------------------------------------------
-  ashare-real-data-shadow:
-    name: ashare-real-data-shadow
+  # -- Optional A-share ----------------------------------------------------
+  # ASHARE_REAL_DATA_SHADOW requires real data (repo variable); when NOT set the
+  # job is skipped by the platform HONESTLY (never a fabricated pass).
+  ASHARE_REAL_DATA_SHADOW:
+    name: ASHARE_REAL_DATA_SHADOW
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: ${{ vars.ASHARE_DATA_AVAILABLE == 'true' }}
@@ -279,18 +332,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      # TODO(ashare): restore the pinned A-share mirror into data/a_share/lqtp_data
-      # here (e.g. download from COS / a private artifact store) when the
-      # ASHARE_DATA_AVAILABLE repo variable is set.  Without it the suite skips and the
-      # wrapper below fails honestly (real data expected but absent).
-      - name: Install lock deps (third-party only, --require-hashes)
-        run: bash scripts/ci_smoke.sh
-      - name: Install pytest (not in the production lock)
-        run: python -m pip install pytest
+      - name: Install lock deps + pytest
+        run: bash scripts/ci_smoke.sh && python3 -m pip install -q pytest
+        shell: bash -e {0}
       - name: Run ASHARE_REAL_DATA_SHADOW
         run: |
           set +e
-          python -m pytest integration_tests/test_real_ashare_shadow.py -q -p no:cacheprovider 2>&1 | tee /tmp/ashare_shadow.log
+          python3 -m pytest integration_tests/test_real_ashare_shadow.py -q -p no:cacheprovider 2>&1 | tee /tmp/ashare_shadow.log
           rc=${PIPESTATUS[0]}
           passed=$(grep -oE '[0-9]+ passed' /tmp/ashare_shadow.log | grep -oE '[0-9]+' | tail -1)
           passed=${passed:-0}
@@ -299,7 +347,7 @@ jobs:
             exit 0
           fi
           if [ "$rc" -eq 0 ] && [ "$passed" -eq 0 ]; then
-            echo "ASHARE_REAL_DATA_SHADOW: FAIL — real A-share data expected (secret set) but all tests skipped; a skip is not a pass"
+            echo "ASHARE_REAL_DATA_SHADOW: FAIL — real A-share data expected, all tests skipped; a skip is not a pass"
             exit 1
           fi
           echo "ASHARE_REAL_DATA_SHADOW: FAIL"

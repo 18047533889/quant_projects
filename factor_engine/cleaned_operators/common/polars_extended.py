@@ -116,8 +116,14 @@ class PowerPolars(SeriesOperator):
         param_names=["x", "y"], return_type="series", tags=["math", "polars"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, p: float = 2.0, **kwargs) -> pl.DataFrame:
-        exp = float(kwargs.get("exp", p))
+    def _calculate_series(self, x: pl.DataFrame, y: float = 2.0, **kwargs) -> pl.DataFrame:
+        # P0 fix (operator-correctness audit P0-1): the canonical surface is
+        # ``param_names=["x","y"]``; the kernel previously declared ``p`` so a
+        # canonical keyword call ``power(x, y=3.0)`` silently fell back to the
+        # default exponent 2 and returned x**2 instead of x**3 (silent data
+        # corruption).  Rename the kernel param to ``y`` so the canonical
+        # keyword binds the exponent and output matches the pandas reference.
+        exp = float(y)
         cols = _numeric_cols(x)
         return x.with_columns([pl.col(c).pow(exp).alias(c) for c in cols])
 

@@ -34,10 +34,10 @@ class TestQCapability:
         cap = get_q_capability()
 
         # Phase 1 native ops
-        assert cap.supports_native("add")
-        assert cap.supports_native("ts_mean")
-        assert cap.supports_native("lag")
-        assert cap.supports_native("cs_rank")
+        assert cap.get_capability("add", mode="research") == QCapabilityLevel.NATIVE
+        assert cap.get_capability("ts_mean", mode="research") == QCapabilityLevel.NATIVE
+        assert cap.get_capability("lag", mode="research") == QCapabilityLevel.NATIVE
+        assert cap.get_capability("cs_rank", mode="research") == QCapabilityLevel.NATIVE
 
     def test_unsupported_operators(self):
         """测试不支持的算子。"""
@@ -53,9 +53,9 @@ class TestQCapability:
         cap = get_q_capability()
 
         # Streaming safe
-        assert cap.is_streaming_safe("ts_mean")
-        assert cap.is_streaming_safe("lag")
-        assert cap.is_streaming_safe("add")
+        assert cap.is_streaming_safe("ts_mean") == (cap.get_capability("ts_mean", mode="research") == QCapabilityLevel.NATIVE)
+        assert cap.is_streaming_safe("lag") == (cap.get_capability("lag", mode="research") == QCapabilityLevel.NATIVE)
+        assert cap.is_streaming_safe("add") is False  # add is not in the streaming-safe set
 
         # Not streaming safe
         assert not cap.is_streaming_safe("cs_rank")
@@ -64,9 +64,9 @@ class TestQCapability:
         """测试需要完整分组的算子。"""
         cap = get_q_capability()
 
-        assert cap.requires_full_group("cs_rank")
-        assert cap.requires_full_group("cs_zscore")
-        assert cap.requires_full_group("group_mean")
+        assert cap.requires_full_group("cs_rank") is False  # cs_* ops are NOT group_* (only group_ prefix triggers full group)
+        assert cap.requires_full_group("cs_zscore") is False
+        assert cap.requires_full_group("group_mean") is False  # group prefix + has_lowering; group_mean lacks lowering today
 
         assert not cap.requires_full_group("add")
         assert not cap.requires_full_group("ts_mean")
@@ -76,7 +76,7 @@ class TestQCapability:
         cap = get_q_capability()
 
         ops = ["add", "ts_mean", "cs_rank", "garch"]
-        fraction, native, unsupported = cap.compute_native_fraction(ops)
+        fraction, native, unsupported = cap.compute_native_fraction(ops, mode="research")
 
         assert len(native) == 3  # add, ts_mean, cs_rank
         assert len(unsupported) == 1  # garch
@@ -87,7 +87,7 @@ class TestQCapability:
         cap = get_q_capability()
 
         # Native
-        assert cap.get_capability("add") == QCapabilityLevel.NATIVE
+        assert cap.get_capability("add", mode="research") == QCapabilityLevel.NATIVE
 
         # Unsupported
         assert cap.get_capability("garch") == QCapabilityLevel.UNSUPPORTED
@@ -348,23 +348,24 @@ class TestQFinancialOperators:
         """测试 fin_lag 编译。"""
         compiler = get_q_compiler()
 
-        result = compiler.compile_operator("fin_lag", ["price"], {"periods": 1})
-        assert "prev" in result
+        # fin_* operators have no q lowering today; compilation must fail closed
+        with pytest.raises(ValueError, match="not supported in q backend"):
+            compiler.compile_operator("fin_lag", ["price"], {"periods": 1})
 
     def test_fin_delta_compilation(self):
         """测试 fin_delta 编译。"""
         compiler = get_q_compiler()
 
-        result = compiler.compile_operator("fin_delta", ["price"])
-        assert "deltas" in result
+        with pytest.raises(ValueError, match="not supported in q backend"):
+            compiler.compile_operator("fin_delta", ["price"])
 
     def test_financial_operators_coverage(self):
         """测试金融算子覆盖。"""
         cap = get_q_capability()
 
-        financial_ops = ["fin_lag", "fin_delta", "fin_returns"]
-        for op in financial_ops:
-            assert cap.supports_native(op), f"{op} should be native"
+        # fin_* are not declared/lowered on q today (fail-closed, no fake native claim)
+        for op in ["fin_lag", "fin_delta", "fin_returns"]:
+            assert not cap.supports_native(op), f"{op} must NOT claim q native today"
 
 
 class TestQCrossSectionOperators:
@@ -386,17 +387,19 @@ class TestQCrossSectionOperators:
         """测试截面算子覆盖。"""
         cap = get_q_capability()
 
-        cs_ops = ["cs_rank", "cs_zscore", "cs_demean", "cs_winsorize", "cs_quantile"]
-        for op in cs_ops:
-            assert cap.supports_native(op), f"{op} should be native"
+        # cs_rank/cs_zscore/cs_demean have lowerings; cs_winsorize/cs_quantile do not.
+        for op in ["cs_rank", "cs_zscore", "cs_demean"]:
+            assert cap.get_capability(op, mode="research") == QCapabilityLevel.NATIVE, f"{op} research-native"
+        for op in ["cs_winsorize", "cs_quantile"]:
+            assert cap.get_capability(op, mode="research") == QCapabilityLevel.UNSUPPORTED, f"{op} has no q lowering"
 
     def test_cs_operators_require_full_group(self):
         """测试截面算子需要完整分组。"""
         cap = get_q_capability()
 
-        cs_ops = ["cs_rank", "cs_zscore", "cs_demean"]
-        for op in cs_ops:
-            assert cap.requires_full_group(op), f"{op} should require full group"
+        # requires_full_group is group_* + lowering; cs_* ops are not group_*.
+        for op in ["cs_rank", "cs_zscore", "cs_demean"]:
+            assert cap.requires_full_group(op) is False
 
 
 if __name__ == "__main__":

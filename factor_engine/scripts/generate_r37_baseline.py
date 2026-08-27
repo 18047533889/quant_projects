@@ -112,9 +112,9 @@ def build_fe_da_boundary() -> dict:
 
     boundary: dict = {"fe_da_modules": {}, "capability_handshake": False}
     for name, modname in {
-        "dataaccess_capabilities": "data_access.capabilities",
-        "dataaccess_resource_bridge": "data_access.runtime.resource_bridge",
-        "dataaccess_governor": "data_access.runtime.resource_governor",
+        "data_access_capabilities": "data_access.capabilities",
+        "data_access_resource_bridge": "data_access.runtime.resource_bridge",
+        "data_access_governor": "data_access.runtime.resource_governor",
         "fe_prepared_batch_session": "factor_engine.runtime.batch_service",
         "fe_batch_data_request": "factor_engine.runtime.batch_service",
     }.items():

@@ -1,0 +1,98 @@
+# -*- coding: utf-8 -*-
+# P0-12 + P0-15 evidence — row-axis identity + production broker gate
+# Generated 2026-08-28 local; dual-copy rule: factor_engine/runtime + factors mirrored.
+schema_version: 1
+task_ids:
+  - P0-12-ROW-AXIS-IDENTITY
+  - P0-15-PRODUCTION-BROKER-GATE
+current_sha: UNCOMMITTED_CURRENT_TREE
+generation_timestamp: '2026-08-28'
+status: COMPLETED_LOCAL
+production_certification: NOT_RUN
+
+owned_files:
+  - factor_engine/runtime/feature_block.py
+  - factor_engine/runtime/remote_factor_block_writer.py
+  - factor_engine/runtime/generation_store.py
+  - factor_engine/tests/r27/test_remote_factor_block_writer_p10_p12.py
+  - factor_engine/tests/r27/test_feature_block_p11_p12.py
+  - factor_engine/tests/r44/test_r44_atomic_commit.py
+  - tests/r27/test_remote_factor_block_writer_p10_p12.py
+  - tests/r27/test_feature_block_p11_p12.py
+  - tests/r44/test_r44_atomic_commit.py
+  - evidence/r2/P012_P015_ROW_ID_BROKER.yaml
+
+constraints_honored:
+  - object_store.py 流式/RangeRead 未改动
+  - OperatorRegistry 语义未改动
+  - 生产判定与 backend 单权威 production_policy.resolve_run_mode 一致
+
+# ---- P0-15: production broker gate ------------------------------------------
+p015:
+  problem:
+    - RemoteFactorBlockWriter 在 production 模式下 broker=None 时静默无界运行
+      （只影响 bounded-memory 保证；RAM 预算缺失）。
+    - 局部本地 writer（FeatureBlockWriter / LocalGenerationStore）在 production
+      下可能被当成生产落盘路径使用（本地持久写）。
+  fix:
+    - resource_broker.require_broker(broker, run_mode=..., raise_on_missing=True):
+      production（FACTOR_ENGINE_RUN_MODE=production / QUANT_PRODUCTION_MODE=1）
+      缺失 broker → raise MissingResourceBroker，绝不静默降级。
+    - 生产判定与 production_policy.is_production_mode 单权威对接。
+    - RemoteFactorBlockWriter(store, prefix, broker=None) 构造时走该 gate。
+    - LocalGenerationStore 加 RESEARCH_DEV_ONLY=True 标记 + production_guard。
+    - FeatureBlockWriter（本地/研究 path）不强制 gate（研究/测试仍可写）；
+      文档显式标记本地 writer 为 research/dev-only。
+  tests:
+    - test_production_broker_none_raises_missing_resource_broker (FACTOR_ENGINE_RUN_MODE)
+    - test_quant_production_mode_broker_none_raises (QUANT_PRODUCTION_MODE)
+    - test_research_mode_broker_none_still_works
+    - test_production_broker_provided_works
+  results:
+    run: pytest factor_engine/tests/r27/test_remote_factor_block_writer_p10_p12.py -q
+    passed: 19
+
+# ---- P0-12: row-axis identity ------------------------------------------------
+p012:
+  problem:
+    - BlockManifest 没有 row-axis identity：reader 无法知道 block 的行/列顺序
+      对应哪个 universe；universe 顺序被 shuffle 时静默读错值。
+  fix:
+    - RowAxisIdentity dataclass（schema_version/partition_time/market/
+      universe_snapshot_id/ordered_instrument_hash/row_axis_ref/
+      calendar_snapshot_id/source_snapshot_id/row_keys）。
+    - BlockManifest.row_axis: dict[partition -> RowAxisIdentity]（每 partition
+      存一次，不按 factor 重复）；to_dict/from_dict 序列化（旧 manifest 无
+      row_axis 兼容跳过）。
+    - compute_row_axis_ref(market, universe, ordered_names=True) 顺序敏感哈希
+      （shuffle → 失配）；row_keys 为独立行键排列指纹（decoupled）。
+    - verify_row_axis(expected_universe=..., expected_order=...)：失配抛
+      RowAxisMismatchError。
+    - FeatureBlockReader(... expected_universe=...) 构造后可开启每次
+      read_block/resolve 校验；reader 带错误 universe → 直接抛错，拒绝静默读错值。
+    - FeatureBlockWriter.set_row_axis / RemoteFactorBlockWriter.set_row_axis。
+  destructive_tests:
+    - 合法 block 后 shuffle universe 顺序 → verify_row_axis 抛 RowAxisMismatchError
+    - 合法 block 后 drop universe 成员 → 抛 RowAxisMismatchError
+    - reader 用 shuffled universe 读取 → read_factor 抛错（绝不静默返回错值）
+  results:
+    run: pytest factor_engine/tests/r27/test_remote_factor_block_writer_p10_p12.py factor_engine/tests/r27/test_feature_block_p11_p12.py -q
+    passed: 29
+    run: pytest factor_engine/tests/r44/test_r44_atomic_commit.py -q
+    passed: 17
+
+# ---- full gate sweep ---------------------------------------------------------
+gate:
+  total_r27_writer: 19 passed
+  total_feature_block: 10 passed
+  total_r44_atomic: 17 passed
+  pre_existing_not_regression:
+    - factor_engine/tests/r44/test_r44_atomic_commit.py old path "dataaccess/read/object_store.py"
+      pointed at nonexistent package; corrected to data_access/read/object_store.py —
+      same fix mirrored to tests/r44/test_r44_atomic_commit.py.
+
+limitations:
+  - RemoteFactorBlockWriter disk round-trip reader probe verified via LocalObjectStore
+    manifest + writer manifest (block file values verified through serialize/deserialize
+    helpers in existing r27 suite). Production COS reader wiring not certified here.
+  - QUANT_PRODUCTION_MODE default(absent) == research; no production certification run.

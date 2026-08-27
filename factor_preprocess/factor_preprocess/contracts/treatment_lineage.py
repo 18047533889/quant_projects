@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
+from factor_preprocess.contracts._deep_freeze import deep_freeze
+
 
 class TransformStage(str, Enum):
     """Semantic stage of a transform within a treatment pipeline.
@@ -91,7 +93,9 @@ class TransformStep:
             object.__setattr__(self, "stage", TransformStage(self.stage))
         if not self.name:
             raise ValueError("TransformStep.name cannot be empty")
-        object.__setattr__(self, "parameters", dict(self.parameters))
+        # Deep-freeze parameters so the frozen step is also deeply immutable
+        # and safe to hash (DLIB-FP-026).
+        object.__setattr__(self, "parameters", deep_freeze(self.parameters))
 
 
 @dataclass(frozen=True)
@@ -138,12 +142,32 @@ class TransformLineage:
         return TransformLineage(tuple(kept))
 
 
+class ExistingTreatmentStatus(str, Enum):
+    """Completeness of the detected existing-treatment signature.
+
+    DLIB-FP-004: when the FE DSL contains a preprocessing semantic that the FP
+    mapping does NOT recognize, the signature is flagged UNKNOWN / INCOMPLETE
+    so the optimizer is prevented from silently treating it as "untreated"
+    (which would risk duplicating an unrecognized treatment). Such cases must
+    be routed to manual / research review.
+    """
+
+    KNOWN = "known"
+    UNKNOWN = "unknown"
+    INCOMPLETE = "incomplete"
+
+
 @dataclass(frozen=True)
 class ExistingTreatmentSignature:
     """Summary of treatments already applied to a factor.
 
     Used by the eligibility engine to avoid duplicating treatments (e.g. do
     not re-neutralize an already-industry-neutral factor).
+
+    ``status`` records whether the detection was complete (DLIB-FP-004). If an
+    unknown preprocessing semantic is present, ``status`` is UNKNOWN /
+    INCOMPLETE and the eligibility engine must NOT silently proceed as if the
+    factor were untreated.
     """
 
     winsor: bool = False
@@ -154,12 +178,80 @@ class ExistingTreatmentSignature:
     cs_rank: bool = False
     temporal_smoothing: bool = False
     temporal_smoothing_params: Dict[str, Any] = field(default_factory=dict)
+    status: ExistingTreatmentStatus = ExistingTreatmentStatus.KNOWN
 
     def __post_init__(self):
-        object.__setattr__(self, "winsor_params", dict(self.winsor_params))
+        object.__setattr__(self, "winsor_params", deep_freeze(self.winsor_params))
         object.__setattr__(
-            self, "temporal_smoothing_params", dict(self.temporal_smoothing_params)
+            self,
+            "temporal_smoothing_params",
+            deep_freeze(self.temporal_smoothing_params),
         )
+        if not isinstance(self.status, ExistingTreatmentStatus):
+            object.__setattr__(self, "status", ExistingTreatmentStatus(self.status))
+
+    @property
+    def is_unknown_or_incomplete(self) -> bool:
+        """True when the signature must not be treated as fully known.
+
+        When True, the caller must NOT silently route to "untreated"; it must
+        route to manual / research review instead (DLIB-FP-004).
+        """
+        return self.status in (
+            ExistingTreatmentStatus.UNKNOWN,
+            ExistingTreatmentStatus.INCOMPLETE,
+        )
+
+
+def build_signature_from_lineage(
+    lineage,
+    semantic_ids_known=None,
+) -> ExistingTreatmentSignature:
+    """Build an :class:`ExistingTreatmentSignature` from a TransformLineage.
+
+    Any preprocessing semantic step whose semantic id is NOT recognized by the
+    FP map sets ``status = UNKNOWN`` and prevents treating the factor as fully
+    understood (DLIB-FP-004 fail-safe). Recognized steps populate the usual
+    signature fields.
+
+    ``semantic_ids_known`` may be a set of semantic ids considered known; when
+    omitted it defaults to the union of the FP-maintained map values so the
+    mapping is self-consistent.
+    """
+    from factor_preprocess.contracts.treatment_lineage import (
+        TransformLineage,
+        TransformSemanticID,
+    )
+    if not isinstance(lineage, TransformLineage):
+        lineage = TransformLineage(tuple(lineage))
+
+    if semantic_ids_known is None:
+        semantic_ids_known = set(_FE_DSL_SEMANTIC_MAP.values())
+
+    sig = ExistingTreatmentSignature()
+    unknown = []
+    for step in lineage.steps:
+        sid = step.semantic_id.value
+        if sid not in semantic_ids_known:
+            unknown.append(sid)
+            continue
+        if step.stage in (TransformStage.OUTLIER,) and "WINSOR" in sid.upper():
+            object.__setattr__(sig, "winsor", True)
+        elif "INDUSTRY_NEUTRAL" in sid.upper():
+            object.__setattr__(sig, "industry_neutral", True)
+        elif "SIZE_NEUTRAL" in sid.upper():
+            object.__setattr__(sig, "size_neutral", True)
+        elif "CS_RANK" in sid.upper():
+            object.__setattr__(sig, "cs_rank", True)
+        elif "SMOOTH" in sid.upper() or "EVENT_DECAY" in sid.upper():
+            object.__setattr__(sig, "temporal_smoothing", True)
+            object.__setattr__(
+                sig, "temporal_smoothing_params", dict(step.parameters)
+            )
+
+    if unknown:
+        object.__setattr__(sig, "status", ExistingTreatmentStatus.UNKNOWN)
+    return sig
 
 
 # ---------------------------------------------------------------------------
@@ -215,5 +307,7 @@ __all__ = [
     "TransformStep",
     "TransformLineage",
     "ExistingTreatmentSignature",
+    "ExistingTreatmentStatus",
+    "build_signature_from_lineage",
     "map_fe_dsl_to_semantic",
 ]

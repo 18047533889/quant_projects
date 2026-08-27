@@ -150,3 +150,74 @@ class AggregationResult:
         if not self.computed_weights:
             return None
         return sum(w * w for w in self.computed_weights)
+
+
+@dataclass(frozen=True)
+class AggregationFitArtifact:
+    """Record of how aggregation weights were FIT (DLIB-FA-015).
+
+    IC_WEIGHTED / INVERSE_VARIANCE weights are fit parameters.  They MUST be
+    fit on TRAIN only — never full-sample-then-backtest-whole.  This artifact
+    records the fit split, the fit window, the fit snapshot, the fit universe,
+    the fit method, and the computed weights.  Changing future/test data must
+    not change the computed weights: the weights are bound to the fit split,
+    so a re-fit on a different split yields a different artifact (and a
+    different weight set), never a silent mutation of the original.
+    """
+
+    fit_id: str
+    spec: AggregationSpec
+    fit_split_ref: str
+    fit_window_ref: str
+    fit_snapshot_ref: str
+    fit_universe_ref: str
+    fit_method: str
+    computed_weights: tuple[float, ...]
+    created_at: str = ""
+
+    def __post_init__(self):
+        if not self.fit_id:
+            raise ValueError("fit_id is required")
+        if not self.fit_split_ref:
+            raise ValueError(
+                "fit_split_ref is REQUIRED — IC_WEIGHTED / INVERSE_VARIANCE "
+                "weights must be fit on TRAIN only, never full-sample-then-"
+                "backtest-whole"
+            )
+        if not self.fit_window_ref:
+            raise ValueError("fit_window_ref is required")
+        if not self.fit_snapshot_ref:
+            raise ValueError("fit_snapshot_ref is required")
+        if not self.fit_universe_ref:
+            raise ValueError("fit_universe_ref is required")
+        if not self.fit_method:
+            raise ValueError("fit_method is required")
+        if not self.computed_weights:
+            raise ValueError("computed_weights cannot be empty")
+        if len(self.computed_weights) != self.spec.num_factors:
+            raise ValueError("computed_weights length must match spec.num_factors")
+        for w in self.computed_weights:
+            if isinstance(w, bool) or not isinstance(w, (int, float)):
+                raise TypeError("computed_weights must be non-boolean numbers")
+            fw = float(w)
+            if fw != fw or fw in (float("inf"), float("-inf")):
+                raise ValueError("computed_weights must be finite")
+        object.__setattr__(self, "computed_weights", tuple(self.computed_weights))
+        if not self.created_at:
+            from datetime import datetime, timezone
+            object.__setattr__(
+                self, "created_at", datetime.now(timezone.utc).isoformat()
+            )
+
+    def to_dict(self) -> dict:
+        return {
+            "fit_id": self.fit_id,
+            "spec_id": self.spec.spec_id,
+            "fit_split_ref": self.fit_split_ref,
+            "fit_window_ref": self.fit_window_ref,
+            "fit_snapshot_ref": self.fit_snapshot_ref,
+            "fit_universe_ref": self.fit_universe_ref,
+            "fit_method": self.fit_method,
+            "computed_weights": list(self.computed_weights),
+            "created_at": self.created_at,
+        }

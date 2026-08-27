@@ -1,16 +1,15 @@
-"""factor_engine — umbrella namespace entry point.
+"""P0-03: install the legacy-name alias finder as part of the package import.
 
-This package is the top-level importable entry for the FactorEngine suite in
-the ``quant-projects`` umbrella wheel.  The engine's actual code lives in the
-top-level packages ``runtime``, ``api``, ``ir``, ``expr``, ``modeling``,
-``backend``, ``cleaned_operators``, etc. (mirrored under ``factor_engine/``),
-and those submodules import each other via top-level absolute imports.
-
-This ``__init__`` is intentionally minimal: it must be importable in a clean
-venv WITHOUT pulling in numpy/pandas or any heavy engine module.  Submodules
-are imported lazily on demand (``import factor_engine.runtime`` etc.).
+``deprecated_shims`` is a pure shim and is imported lazily the first time a
+legacy import is attempted; importing it from the package ``__init__`` makes
+the alias resolution behaviour deterministic for any process that imports
+``factor_engine`` (which every FE submodule does).  It carries no state.
 """
 
-__version__ = "0.3.1"
+from . import deprecated_shims as _deprecated_shims  # noqa: F401
 
+# Re-export the static mapping tables for tests/patching without importing the
+# full engine.
+_EXPOSE = None
+__version__ = "0.3.1"
 __all__ = ["__version__"]

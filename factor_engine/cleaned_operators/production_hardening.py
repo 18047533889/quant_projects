@@ -18,7 +18,7 @@ from factor_engine.cleaned_operators.semantic_certification import (
 # Operators that require a specific source dataset (minute bars, relation/
 # shareholder tables, index constituent weights).  The A-share sources are
 # confirmed in COS (StockMinuteBar / StockTopTenShareholder / IndexConstituent)
-# and the dataaccess remote read path is functional, so these operators are
+# and the data_access remote read path is functional, so these operators are
 # eligible production targets.  Keep this set for any future source-dependent
 # surface that is NOT yet mirrored/readable; runtime execution still enforces
 # the dataset/column contract (see storage.sources.data_access_source).
@@ -678,6 +678,165 @@ def apply_production_hardening() -> None:
                 catalog["incremental_strategy"] = "segmented_checkpoint"
                 if catalog.get("full_history_replay_required") is None:
                     catalog["full_history_replay_required"] = True
+
+
+def _ensure_backend_tags(
+    canonical: str, catalog: dict[str, Any], tags: list[str]
+) -> list[str]:
+    """Append ``backend:<name>`` tags derived from the canonical's ACTUAL
+    registered backends (``OperatorRegistry.backends_for``) at sync time.
+
+    FIX-1 (2026-08 audit): every canonical carries a ``backend:*`` tag per
+    registered backend — without hand-editing the 1624 operator declarations.
+    Backend is the runtime truth (``backends_for`` / ``catalog["backends"]``),
+    so the tag is DERIVED centrally and re-derived on every sync; it can never
+    drift from the registry.
+    """
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    backends = sorted(OperatorRegistry.backends_for(canonical))
+    existing = {str(t) for t in tags}
+    for backend in backends:
+        existing.add(f"backend:{backend}")
+    return sorted(existing)
+
+
+def _apply_tag_governance() -> None:
+    """Central tag-governance pass for the final runtime contract (2026-08
+    operator-tags audit, /tmp/operator_tags_audit.md — FIX-1..12).
+
+    The audit found the catalog ``tags`` surface (consumed by operator_policy,
+    operator_cost_model and the production gates) diverged from the declared
+    catalog fields.  Fixes here are DERIVED from the same authoritative fields
+    the audit cross-checked, so the surface stays correct as operators change:
+
+    * FIX-1  ``backend:<name>`` per registered backend (see
+             ``_ensure_backend_tags``).
+    * FIX-3  clamp ``cost:9``/``cost:10`` to the documented band 0..8
+             (``cost:8``).
+    * FIX-4  ``grain_minute_to_daily`` where the declared contract is
+             minute -> daily.
+    * FIX-5  ``causal``/``pit_safe`` on causal-by-construction scopes.
+    * FIX-6  ``deterministic`` where ``determinism_verified`` is True.
+    * FIX-8  ``stateful`` where ``catalog["stateful"]`` is True.
+    * FIX-9  drop the stale ``source_blocked`` tag (SOURCE_BLOCKED_CANONICALS
+             is empty — source eligibility is CONTEXTUAL, never a global ban).
+    * FIX-10 ``unit:ratio`` where ``output_unit`` is a ratio.
+    * FIX-12 populate empty tags on production ops (audit's exact sets).
+
+    The audit's caveats are respected: a ``pit_safe``/``causal`` tag is only
+    ADDED when the catalog FIELD (or a causal-by-construction scope) is True —
+    never stripped based on ``field=False`` (the 1303-operator intentional
+    tag-vs-field gap stays untouched); ``daily`` is only removed from the two
+    ops the audit names; ``domain:price_volume`` and ``domain:fundamental``
+    are NOT modified (borderline, name-based heuristics — see BLOCKED in the
+    audit).
+    """
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    for canonical in sorted(OperatorRegistry.list_canonical()):
+        catalog = OperatorRegistry._catalog.get(canonical)
+        if not isinstance(catalog, dict):
+            continue
+        tags = [str(t) for t in (catalog.get("tags") or ())]
+        status = str(catalog.get("status") or "").lower()
+        scope = str(catalog.get("scope") or "").lower()
+        output_unit = str(catalog.get("output_unit") or "").lower()
+        input_grain = str(catalog.get("input_grain") or "").lower()
+        output_grain = str(catalog.get("output_grain") or "").lower()
+
+        # FIX-9: drop the stale ``source_blocked`` tag on production-status
+        # operators (SOURCE_BLOCKED_CANONICALS is empty; source eligibility is
+        # contextual, so the global-ban tag is a lie).  Only production-status
+        # carriers are touched — experimental/research operators keep whatever
+        # the metadata declares.
+        if status == "production":
+            tags = [t for t in tags if t != "source_blocked"]
+
+        # FIX-3: clamp out-of-band cost tags to the documented band 0..8.
+        tags = [
+            "cost:8" if t.startswith("cost:") and _cost_band(t) > 8 else t
+            for t in tags
+        ]
+
+        # FIX-4: minute -> daily declared contract must carry the grain tag
+        # (and its implied minute/daily_agg surface).
+        if input_grain == "minute" and output_grain == "daily":
+            if "grain_minute_to_daily" not in tags:
+                tags.append("grain_minute_to_daily")
+            if "intraday" not in tags:
+                tags.append("intraday")
+            if "minute" not in tags:
+                tags.append("minute")
+            if "daily_agg" not in tags:
+                tags.append("daily_agg")
+
+        # FIX-5/7: causal-by-construction scopes declare their structural
+        # causality.  Add the tags ONLY when the scope is elementwise / cs /
+        # group (causal by construction) or the catalog field is True — never
+        # strip a tag based on field=False (audit caveat).
+        if scope in {"elementwise", "cs", "group"}:
+            if "causal" not in tags:
+                tags.append("causal")
+            if "pit_safe" not in tags:
+                tags.append("pit_safe")
+        if catalog.get("pit_safe") is True and "pit_safe" not in tags:
+            tags.append("pit_safe")
+
+        # FIX-6: deterministic where the verified field is True.
+        if catalog.get("determinism_verified") is True and "deterministic" not in tags:
+            tags.append("deterministic")
+
+        # FIX-8: stateful where the field is True.
+        if catalog.get("stateful") is True and "stateful" not in tags:
+            tags.append("stateful")
+
+        # FIX-10: unit:ratio where the declared output unit is a ratio.
+        if output_unit and "ratio" in output_unit and "unit:ratio" not in tags:
+            tags.append("unit:ratio")
+
+        # FIX-11: the two intraday/minute ops the audit names carry a wrong
+        # ``daily`` tag (they are minute->daily aggregations, not daily ops).
+        if canonical in {
+            "intraday_activity_duration_curvature",
+            "intraday_impact_decay_rate",
+        }:
+            tags = [t for t in tags if t != "daily"]
+
+        # FIX-12: populate empty tags on production-status ops.  The audit's
+        # exact families: fin_* -> domain:fundamental (+causal/pit_safe for
+        # their causal-by-construction elementwise scope); ts_* regression ->
+        # time_series_regression; intra_* minute->daily -> the intraday family;
+        # valuation_* -> domain:valuation; holder_* -> domain:shareholder.
+        if not tags and status == "production":
+            if canonical.startswith("fin_"):
+                tags = ["domain:fundamental", "causal", "pit_safe"]
+            elif canonical.startswith(("ts_expectile_", "ts_huber_", "ts_multi_",
+                                       "ts_poly2_", "ts_quantile_", "ts_ridge_",
+                                       "ts_ar_", "ts_mean_reversion_")):
+                tags = ["time_series_regression", "causal", "pit_safe"]
+            elif canonical.startswith("intra_"):
+                tags = ["intraday", "minute", "daily_agg", "grain_minute_to_daily",
+                        "causal", "pit_safe"]
+            elif canonical.startswith("valuation_"):
+                tags = ["domain:valuation", "causal", "pit_safe"]
+            elif canonical.startswith(("holder_", "circulating_")):
+                tags = ["domain:shareholder", "causal", "pit_safe"]
+            else:
+                tags = ["causal", "pit_safe"]
+
+        # FIX-1: backend tags derived from the actual registered backends.
+        tags = _ensure_backend_tags(canonical, catalog, tags)
+
+        catalog["tags"] = tuple(dict.fromkeys(tags))
+
+
+def _cost_band(tag: str) -> int:
+    """Parse a ``cost:N`` tag label into its integer band (0 for garbage)."""
+    try:
+        return int(str(tag).split(":", 1)[1])
+    except (TypeError, ValueError, IndexError):
+        return 0
 
 
 def check_factor_production_hardening() -> list[str]:

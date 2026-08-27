@@ -17,6 +17,7 @@ verify which split the profile was derived from.
 """
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
+from collections.abc import Mapping
 import hashlib
 
 from factor_preprocess.errors import InvalidContractError
@@ -24,6 +25,8 @@ from factor_preprocess.errors import InvalidContractError
 
 def _stable_repr(value: Any) -> str:
     """Deterministic canonical string form for content hashing."""
+    if isinstance(value, Mapping):
+        value = dict(value)
     if isinstance(value, dict):
         return "{" + ",".join(
             f"{_stable_repr(k)}:{_stable_repr(v)}"
@@ -120,6 +123,25 @@ class FactorProfileArtifact:
     universe_ref: Optional[str] = None
     split_ref: Optional[str] = None
 
+    # DLIB-FP-006: descriptive (non-leaking) profile extension. These are
+    # diagnostic descriptors of the factor used to *guide* the eligibility
+    # engine's search space; they carry no future/test information.
+    raw_turnover: Optional[float] = None
+    autocorrelation: Optional[float] = None
+    half_life: Optional[float] = None
+    sparsity: Optional[float] = None
+    missingness: Optional[float] = None
+    freshness: Optional[float] = None
+    outlier_rate: Optional[float] = None
+    cross_section_cardinality: Optional[int] = None
+    sign_stability: Optional[float] = None
+    scale_drift: Optional[float] = None
+    industry_exposure: Optional[float] = None
+    size_exposure: Optional[float] = None
+    tail_concentration: Optional[float] = None
+    event_semantics: Optional[str] = None
+    preexisting_treatments: Tuple[str, ...] = field(default_factory=tuple)
+
     content_hash: str = ""
 
     def __post_init__(self):
@@ -140,6 +162,9 @@ class FactorProfileArtifact:
         object.__setattr__(self, "exposures", dict(self.exposures))
         object.__setattr__(
             self, "existing_transform_lineage", tuple(self.existing_transform_lineage)
+        )
+        object.__setattr__(
+            self, "preexisting_treatments", tuple(self.preexisting_treatments)
         )
 
         actual_hash = self._derive_content_hash()
@@ -166,6 +191,22 @@ class FactorProfileArtifact:
             "snapshot_ref": self.snapshot_ref,
             "universe_ref": self.universe_ref,
             "split_ref": self.split_ref,
+            # DLIB-FP-006 descriptive fields participate in content identity.
+            "raw_turnover": self.raw_turnover,
+            "autocorrelation": self.autocorrelation,
+            "half_life": self.half_life,
+            "sparsity": self.sparsity,
+            "missingness": self.missingness,
+            "freshness": self.freshness,
+            "outlier_rate": self.outlier_rate,
+            "cross_section_cardinality": self.cross_section_cardinality,
+            "sign_stability": self.sign_stability,
+            "scale_drift": self.scale_drift,
+            "industry_exposure": self.industry_exposure,
+            "size_exposure": self.size_exposure,
+            "tail_concentration": self.tail_concentration,
+            "event_semantics": self.event_semantics,
+            "preexisting_treatments": self.preexisting_treatments,
         }
         return _content_hash(components)
 
@@ -186,6 +227,21 @@ class FactorProfileArtifact:
             snapshot_ref=self.snapshot_ref,
             universe_ref=self.universe_ref,
             split_ref=self.split_ref,
+            raw_turnover=self.raw_turnover,
+            autocorrelation=self.autocorrelation,
+            half_life=self.half_life,
+            sparsity=self.sparsity,
+            missingness=self.missingness,
+            freshness=self.freshness,
+            outlier_rate=self.outlier_rate,
+            cross_section_cardinality=self.cross_section_cardinality,
+            sign_stability=self.sign_stability,
+            scale_drift=self.scale_drift,
+            industry_exposure=self.industry_exposure,
+            size_exposure=self.size_exposure,
+            tail_concentration=self.tail_concentration,
+            event_semantics=self.event_semantics,
+            preexisting_treatments=self.preexisting_treatments,
         )
 
 

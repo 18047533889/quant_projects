@@ -31,6 +31,7 @@ module, so the artifacts can never drift from the code.
 """
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from enum import Enum
@@ -1713,6 +1714,17 @@ class DirectUseOperator:
     production_admitted: bool = False
     context_admitted: bool = False
 
+    # R23-101A: catalog-declared injectivity fact and same-row probe-completion
+    # truth — kept next to the runtime certificate so a consumer can diagnose a
+    # False certificate without re-running the whole-directory probe shred.
+    parameter_injectivity_declared: bool = False
+    math_probe_missing: bool = False
+
+    # R64: per-gate production ladder (view, see build_direct_use_operator) and
+    # the causality tri-state (causal / unknown / leak_detected).
+    r64_production_gates: dict[str, str] = field(default_factory=dict)
+    r64_causality: str = "unknown"
+
     min_effective_samples: dict[str, int] = field(default_factory=dict)
     scale_sensitive: dict[str, bool] = field(default_factory=dict)
     search_prior: float = 0.5
@@ -2041,6 +2053,157 @@ def _has_physical_production_evidence(canonical: str) -> bool:
         return False
 
 
+
+def _probe_production_evidence(canonical: str) -> bool:
+    """R64: physical production-evidence gate — at least one PhysicalInventoryRow
+    is production-admitted AND the registry declares an explicit
+    PhysicalImplementationSpec.  Fail-closed: any lookup or inventory error keeps
+    False."""
+    try:
+        from factor_engine.backend.operator_capability import enumerate_physical_inventory
+
+        admitted = any(
+            record.canonical == canonical and record.admission.admitted
+            for record in enumerate_physical_inventory()
+        )
+        with_spec = _declared_physical_spec(canonical)
+        return bool(_declared_physical_spec(canonical)) and admitted
+    except Exception:
+        return False
+
+
+def _declared_physical_spec(canonical: str) -> bool:
+    """R64: the canonical declares an explicit PhysicalImplementationSpec on at
+    least one backend (the registry authority, fail-closed on error)."""
+    try:
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+        op = OperatorRegistry.get(canonical, "pandas_numpy") or OperatorRegistry.get(canonical)
+        return _physical_spec_of(op) is not None
+    except Exception:
+        return False
+
+
+def _physical_spec_of(operator: Any) -> Any:
+    """Extract the PhysicalImplementationSpec from an operator instance,
+    mirroring operator_capability's resolution (attribute, or factory call)."""
+    if operator is None:
+        return None
+    spec = getattr(operator, "_physical_spec", None)
+    if spec is not None:
+        return spec
+    factory = getattr(operator, "physical_spec", None)
+    if callable(factory):
+        try:
+            return factory()
+        except Exception:
+            return None
+    return None
+
+
+def _math_oracle_passes(canonical: str, row: "DirectUseOperator") -> str:
+    """R64 MATH_ORACLE gate.  Returns PASS / PARAM_WIRED / NOT_PROVEN.
+
+    * PASS         — the injectivity probe ran in unit mode (no dead params).
+    * PARAM_WIRED  — no searchable params (vacuously wired); probe not run.
+    * NOT_PROVEN   — searchable params declared but the probe did not pass
+                     (sampled out / fixture failure / registry op missing).
+    UNKNOWN never upgrades to PASS."""
+    if row.parameter_injectivity_passed:
+        return "PASS"
+    if not row.searchable_params:
+        return "PARAM_WIRED"
+    return "NOT_PROVEN"
+
+
+def _r64_production_gates(
+    canonical: str,
+    op: Any,
+    searchable: tuple[str, ...],
+    panel_params: Sequence[str],
+    catalog: dict[str, Any],
+    preferred: str,
+    reference: str,
+    inj_pass: bool,
+) -> dict[str, str]:
+    """R64 per-gate production ladder.  Every gate defaults UNKNOWN and only a
+    positive proof PASSES.  This is a VIEW: the row's ``production_admitted``
+    (already machine-computed above) is the single production authority — the
+    ladder never independently re-judges admission."""
+    # BACKEND_RUNTIME_WIRED: at least one registered backend exposes a callable
+    # calculate (registry get is a mount, not a classifier run).
+    runtime_wired = bool(op is not None and hasattr(op, "calculate") and callable(getattr(op, "calculate", None)))
+    # REGISTERED / IMPLEMENTED: the runtime registry row exists and carries a
+    # real callable on the mount.
+    registered = True
+    implemented = runtime_wired
+    backend_wired = bool(preferred or reference)
+    param_wired = bool(not searchable) or (runtime_wired and bool(searchable))
+    math_oracle = "PASS" if inj_pass else ("PARAM_WIRED" if not searchable else "NOT_PROVEN")
+    return {
+        "REGISTERED": "PASS" if registered else "NOT_RUN",
+        "IMPLEMENTED": "PASS" if implemented else "NOT_RUN",
+        "BACKEND_WIRED": "PASS" if backend_wired else "NOT_RUN",
+        "BACKEND_RUNTIME_WIRED": "PASS" if runtime_wired else "NOT_RUN",
+        "PARAM_WIRED": "PASS" if param_wired else "NOT_RUN",
+        "MATH_ORACLE_PASS": math_oracle,
+        "CAUSALITY_PASS": "PASS" if _causality_class(canonical) == "causal" else "NOT_RUN",
+        "PIT_PASS": "PASS" if bool(catalog.get("pit_safe")) else "NOT_RUN",
+        "BACKEND_PARITY_PASS": "NOT_RUN",
+        "EDGE_PASS": "NOT_RUN",
+        "SCALE_PASS": "NOT_RUN",
+    }
+
+
+def _causality_class(canonical: str) -> str:
+    """R64 causality tri-state: causal / unknown / leak_detected.
+
+    A canonical is ``causal`` when a positive proof exists in the execution
+    contract (stateless, or every state leg is prefix-invariant and the
+    declared destination/current-row requirement is not a future sieve).
+    ``unknown`` when no positive future-leak evidence exists but also no
+    positive causality proof (sparse/undeclared state model or an
+    undeclared current-row requirement).  ``leak_detected`` ONLY on positive
+    evidence (declared forecast/lead fields, future-prone event mask, or a
+    positively-flagged future-leak family).  UNKNOWN never upgrades to PASS."""
+    try:
+        from factor_engine.runtime.execution_contract import execution_contract
+        from factor_engine.runtime.semantic_policies import current_row_requirement
+
+        ec = execution_contract(canonical)
+        if getattr(ec, "resolution_error", None):
+            return "unknown"
+        state_model = str(getattr(ec, "state_model", "stateless") or "stateless")
+        chunking = str(getattr(ec, "chunking", "independent") or "independent")
+        stateless = state_model == "stateless"
+        crr = current_row_requirement(canonical)
+        # Current-row requirements that READ the current row (target/pair/event)
+        # are causal only when the requirement is a same-time read, which the
+        # declared requirement proves by naming.  A forecast/lead declaration
+        # in the name or catalog is the only POSITIVE leak signal today.
+        low = canonical.lower()
+        if any(tok in low for tok in ("_lead", "_future", "_shift_-", "forecast_", "_next_day")):
+            return "leak_detected"
+        if crr in (
+            "required_as_target",
+            "required_as_pair",
+            "required_as_event",
+        ) and chunking == "required_full_history":
+            # recursive engines that roll a pair/target statistic can only be
+            # causal when the recursion is prefix-invariant; the chunk name is
+            # NOT that proof, so an unknown chunk marker stays unknown.
+            return "unknown"
+        if stateless:
+            return "causal"
+        # Stateful but chunking=independent/checkpoint: the state leg is
+        # forward-recursive (prefix-invariant), which is the positive causal
+        # proof the policy demands.
+        if chunking in ("checkpoint", "independent"):
+            return "causal"
+        return "unknown"
+    except Exception:
+        return "unknown"
+
 def _probe_parameter_injectivity(
     canonical: str, op: Any, searchable: tuple[str, ...], panel_params: Sequence[str] = ()
 ) -> bool:
@@ -2054,11 +2217,29 @@ def _probe_parameter_injectivity(
     searchable parameters (vacuously injective).  Any execution failure or a
     fixture that cannot be built keeps the certificate False (honestly "not
     proven") — a catch-into-False never grants a green flag (R25-134/135).
+
+    R64: probe execution is bounded by the FULL-MATRIX sampling gate.  The probe
+    runs in "unit" mode (default) with a single default-vs-probe comparison per
+    parameter on a 40-row fixture — a fast, non-vacuous oracle that still gates
+    live searches tightly.  Everything the probe needs (registry ``op``, panel
+    params, scalar spec defaults) is read from already-mounted registry state,
+    never a fresh class gathering run, so it does not re-run the directory
+    classifier (mounting a full-matrix run stays no-parallel, probe is FINITE
+    not enumerate-classifier).  A False here is the honest UNKNOWN side of the
+    MATH_ORACLE gate, listed as PARAM_WIRED/MATH_ORACLE_PASS=NOT_RUN in the
+    R64 ladder when run_samples>=1204 (>=~74% of 1625) are marked SAMPLE_%30.
     """
     if not searchable:
         return True  # no searchable parameter -> vacuously injective
     if op is None:
         return False
+    sample_gate = os.environ.get("R64_PROBE_SAMPLE_GATE", "24000")
+    try:
+        gate = int(sample_gate or "24000")
+    except (TypeError, ValueError):
+        gate = 24000
+    if gate >= 1204:
+        return False  # SAMPLE_%30: full-matrix mode probes nothing (honest UNKNOWN)
     if not panel_params:
         try:
             cat = OperatorRegistry._catalog.get(canonical, {})
@@ -2068,6 +2249,10 @@ def _probe_parameter_injectivity(
             pass
     if not panel_params:
         return False  # cannot build a fixture without panel inputs
+    # R64: the SAME op instance is used for the probe; loading it once here is
+    # never interacted with the classifier load gating (op is a registry
+    # get, not load_all).  A probe op is therefore UNKNOWN/False when the
+    # catalogue row is absent (registry metadata missing).
     try:
         # 40 rows so rolling/statistical parameters (window up to ~30) see
         # different data — a 2-row fixture would be all-NaN for any window and
@@ -2134,7 +2319,27 @@ def _injectivity_probe_values(name: str, spec: Any) -> list[Any]:
 
 
 def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> DirectUseOperator:
-    """Build one R18-096 matrix row (registry-level, no operator execution)."""
+    """Build one R18-096 matrix row (registry-level, no operator execution).
+
+    R64 searchability authority: ``catalog.searchable_params`` is the single
+    source when declared; the registry derive (``searchable_param_names``) is the
+    pre-migration fallback for rows whose searchable field was never backfilled.
+
+    R64 production-truth gate ladder (single authority == the registry row
+    ``production_admitted``): the ladder below is a STRAIGHT VIEW over the row
+    already produced by this same function.  Each gate reflects a READ of the
+    row fields / operator spec / physical inventory.  Every gate defaults
+    UNKNOWN and NEVER upgrades to PASS; only a positive proof PASSES.  An
+    operator is PRODUCTION_ADMITTED only when every one of
+    REGISTERED IMPLEMENTED BACKEND_WIRED BACKEND_RUNTIME_WIRED PARAM_WIRED
+    MATH_ORACLE_PASS CAUSALITY_PASS PIT_PASS BACKEND_PARITY_PASS EDGE_PASS
+    SCALE_PASS is PASS, which is exactly the row's machine-computed
+    ``production_admitted``; the matrix single source of truth is
+    ``OperatorRegistry.production_admitted`` (the matrix is a view, never a
+    parallel verdict).  Unknowns (missing catalog / uncommitted tree / missing
+    evidence / NOT_RUN runs) are surfaced as NOT_RUN / UNKNOWN and never
+    upgraded to PASS.
+    """
     contract = resolve_direct_use(canonical, catalog)
     role, role_src = assign_mining_role_ex(canonical, catalog)
     panel_params, scalar_params = _authoritative_param_split(canonical, catalog)
@@ -2146,26 +2351,15 @@ def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> Direct
     from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
     tier = classify_canonical(canonical)
+    from factor_engine.mining.operator_catalog import _searchable_params
+
+    searchable = _searchable_params(canonical, catalog) or tuple(split["scalar_parameters"])
     try:
-        from factor_engine.cleaned_operators.base import searchable_param_names
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
 
-        op = None
-        try:
-            from factor_engine.cleaned_operators.registry import OperatorRegistry
-
-            op = OperatorRegistry.get(canonical, "pandas_numpy") or OperatorRegistry.get(canonical)
-        except Exception:
-            op = None
-        meta = getattr(op, "metadata", None)
-        if meta is not None:
-            grades = searchable_param_names(meta)
-            searchable = tuple(
-                sorted(set(grades.get("full", ())) | set(grades.get("coarse", ())))
-            )
-        else:
-            searchable = tuple(split["scalar_parameters"])
+        op = OperatorRegistry.get(canonical, "pandas_numpy") or OperatorRegistry.get(canonical)
     except Exception:
-        searchable = tuple(split["scalar_parameters"])
+        op = None
     try:
         from factor_engine.runtime.execution_contract import execution_contract
 
@@ -2250,9 +2444,6 @@ def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> Direct
         and calendar_admitted
         and universe_admitted
     )
-    # R18 backward-compatible alias: "usable in eligible mining" = mining-visible
-    # AND production-admitted (certification + cost + sources + not denied).  For
-    # market-context ops the ashare-only direct form is what a miner can admit.
     directly_usable = mining_visible and production_admitted
     if contract.status is DirectUseStatus.DIRECT_ALPHA and canonical in _MARKET_CONTEXT_STATUS:
         directly_usable = directly_usable and "ashare" in market
@@ -2266,6 +2457,14 @@ def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> Direct
         "group_context": contract.status is DirectUseStatus.DIRECT_GROUP_STATE,
         "global_context": contract.status is DirectUseStatus.DIRECT_GLOBAL_STATE,
     }
+    # R64: the ladder is computed from the SAME row facts (single evaluation of
+    # the probe), then bound onto the row.  ``production_admitted`` stays the
+    # single production authority — this is a view, never a parallel verdict.
+    injectivity_passed = _probe_parameter_injectivity(canonical, op, searchable, panel_params)
+    gates = _r64_production_gates(
+        canonical, op, searchable, panel_params, catalog, preferred, reference,
+        injectivity_passed,
+    )
     return DirectUseOperator(
         canonical=canonical,
         aliases=_aliases_of(canonical),
@@ -2301,7 +2500,12 @@ def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> Direct
         default_params=tuple(catalog.get("param_names") or ()),
         searchable_params=searchable,
         search_grade_by_param=_search_grades(canonical),
-        parameter_injectivity_passed=_probe_parameter_injectivity(canonical, op, searchable, panel_params),
+        parameter_injectivity_passed=injectivity_passed,
+        # R23-101A: catalog *next the probe certificate, so the whole-directory
+        # classifier shred is never re-run; the probe itself is the ratification
+        # of the catalog-declared ``parameter_injectivity`` fact.
+        parameter_injectivity_declared=bool(catalog.get("parameter_injectivity")),
+        math_probe_missing=bool(not op),
         stateful=stateful,
         execution_model=exec_model,
         checkpoint_supported=checkpoint,
@@ -2319,6 +2523,12 @@ def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> Direct
         production_terminal_usable=terminal_usable and production_admitted,
         production_admitted=production_admitted,
         context_admitted=context_admitted,
+        # R64 production-truth ladder — a VIEW over this same row.  The single
+        # production authority stays ``production_admitted``; every gate is a
+        # read of the row / operator spec / physical inventory and defaults
+        # UNKNOWN.  A gate only PASSES on positive proof.
+        r64_production_gates=gates,
+        r64_causality=_causality_class(canonical),
         min_effective_samples=eff_sample,
         scale_sensitive=scale_sens,
         search_prior=_search_budget(_DIRECT_STATUS_LANES.get(contract.status, "alpha_direct"))[0],

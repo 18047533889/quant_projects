@@ -6,7 +6,7 @@ This repo has **two independent self-running loops**. Start them and they keep g
 
 ### Loop 1: FactorEngine / DataAccess
 
-- **Scope:** `factor_engine/` + `dataaccess/`
+- **Scope:** `factor_engine/` + `data_access/`
 - **Entry:** Read `loop/start_fe.md` and follow it
 - **Agents:** writer-fe, finder, dispatcher, tester, reviewer (use subagents)
 - **Skills:** `.claude/skills/factor-engine-rules/` (always on), `.claude/skills/verify/`, `.claude/skills/github-push/`

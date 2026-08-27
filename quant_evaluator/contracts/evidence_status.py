@@ -30,13 +30,24 @@ from quant_evaluator.contracts.metric_artifacts import MetricArtifact
 
 
 class EvidenceStatus(Enum):
-    """Whether evidence for a metric exists and can be trusted."""
+    """Whether evidence for a metric exists and can be trusted.
+
+    Mirrors the platform contract (``quant_platform.app.contracts.timing``)
+    label-maturity semantics: ``LABEL_NOT_MATURE`` means the forward label
+    window has not yet elapsed, so no IC is available — never a zero-fill.
+    ``INVALID_EVIDENCE`` means the evidence was computed but is invalid /
+    untrustworthy.  ``INSUFFICIENT_DATA`` means there were too few
+    observations to compute a trustworthy value.  All three are distinct from
+    ``COMPUTED`` and from a fabricated ``0.0``.
+    """
 
     COMPUTED = "computed"
     NOT_COMPUTED = "not_computed"
     UNAVAILABLE = "unavailable"
     UNSUPPORTED = "unsupported"
     INSUFFICIENT_DATA = "insufficient_data"
+    LABEL_NOT_MATURE = "label_not_mature"
+    INVALID_EVIDENCE = "invalid_evidence"
     FAILED = "failed"
 
     @classmethod
@@ -70,6 +81,8 @@ class EvidenceReasonCode(str, Enum):
     MIN_PERIODS_NOT_MET = "min_periods_not_met"
     OBSERVATIONS_TOO_FEW = "observations_too_few"
     EMPTY_INPUT = "empty_input"
+    LABEL_NOT_YET_MATURE = "label_not_yet_mature"
+    INVALID_EVIDENCE = "invalid_evidence"
     KERNEL_FAILURE = "kernel_failure"
     NUMERICAL_FAILURE = "numerical_failure"
     SERIALIZATION_FAILURE = "serialization_failure"
@@ -190,6 +203,8 @@ __all__ = [
     "EvidenceReasonCode",
     "MetricEvidence",
     "evidence_for_computed",
+    "evidence_for_not_computed",
+    "evidence_for_label_not_mature",
 ]
 
 
@@ -225,5 +240,27 @@ def evidence_for_not_computed(
         observations=observations,
         minimum_required=minimum_required,
         artifact=artifact,
+        reason_detail=reason_detail,
+    )
+
+
+def evidence_for_label_not_mature(
+    *,
+    observations: int = 0,
+    minimum_required: Optional[int] = None,
+    reason_detail: str = "label not yet mature: forward label window has not elapsed",
+) -> MetricEvidence:
+    """Build a LABEL_NOT_MATURE evidence bundle (no IC available, never 0.0).
+
+    A label that has not yet matured yields *no* IC — the evidence is absent,
+    not a fabricated zero.  ``computed`` is ``False`` and there is no numeric
+    payload to read.
+    """
+    return MetricEvidence(
+        status=EvidenceStatus.LABEL_NOT_MATURE,
+        reason_code=EvidenceReasonCode.LABEL_NOT_YET_MATURE,
+        observations=observations,
+        minimum_required=minimum_required,
+        artifact=None,
         reason_detail=reason_detail,
     )

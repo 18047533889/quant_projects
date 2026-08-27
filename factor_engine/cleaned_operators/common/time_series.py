@@ -2321,29 +2321,40 @@ class TSMinPolars(SeriesOperator):
 # canonical=ts_product backend=polars selected=ts_product source=time_series/ts_ops_polars.py
 @register_operator(name="ts_product", category="time_series", business_category="time_series", canonical="ts_product", source="factor_dsl_np")
 class TSProductPolars(SeriesOperator):
-    """Polars 滚动乘积。"""
+    """Polars 滚动乘积。
+
+    R4-100 arity reconciliation: the pandas reference carries the trailing
+    scalar contract ``(x, window, min_periods, skipna)``; this backend keeps
+    the same positional contract and honours the two extra controls.
+    """
 
     metadata = OperatorMetadata(
         name="ts_product", category="time_series",
         description="滚动乘积（保留零与负号，signed + zero-safe）",
         examples=["ts_product(volume + 1, 5)"],
-        param_names=["x", "window"], return_type="series",
+        param_names=["x", "window", "min_periods", "skipna"], return_type="series",
         tags=["time_series", "ts_", "product"],
         param_specs={
             "window": ParamSpec(dtype=int, min=1, default=5, searchable=True,
                                 param_role=ParamRole.HORIZON),
         },
     )
-    def _calculate_series(self, x: pl.DataFrame, window: int = 5, **kwargs) -> pl.DataFrame:
-        from factor_engine.cleaned_operators._rolling_fast import rolling_signed_product
+    def _calculate_series(self, x: pl.DataFrame, window: int = 5, min_periods: int | None = None, skipna: bool = True, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.semantic_hardening import _rolling_numpy_panel, _stable_product, _validate_window
         from factor_engine.cleaned_operators.base_polars import panel_pandas_bridge
-        from factor_engine.cleaned_operators.common.strict_params import strict_int
 
-        # R19-043/044: signed + zero-safe product, synced to the pandas kernel.
-        w = strict_int(window, "window", minimum=1)
-        return panel_pandas_bridge(
-            x, lambda pdf: rolling_signed_product(pdf, w)
-        )
+        w, mp = _validate_window(window, min_periods)
+
+        def _fn(pdf):
+            arr = pdf.to_numpy(dtype=float)
+            out = _rolling_numpy_panel(
+                arr, window=w, min_periods=mp,
+                func=lambda values: _stable_product(values, skipna=bool(skipna)),
+            )
+            out[~np.isfinite(out)] = np.nan
+            return pd.DataFrame(out, index=pdf.index, columns=pdf.columns)
+
+        return panel_pandas_bridge(x, _fn)
 
 
 

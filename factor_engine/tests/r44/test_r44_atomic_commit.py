@@ -392,7 +392,7 @@ def test_object_store_generation_commit_zero_local_path_writes(tmp_path) -> None
     # dataaccess 包 __init__ 存在既有循环导入（会拉进 data_access），object_store
     # 本身仅用 stdlib，故按文件独立加载以隔离环境问题。
     _spec = importlib.util.spec_from_file_location(
-        "_r45_object_store", "dataaccess/read/object_store.py"
+        "_r45_object_store", "data_access/read/object_store.py"
     )
     _mod = importlib.util.module_from_spec(_spec)
     assert _spec and _spec.loader

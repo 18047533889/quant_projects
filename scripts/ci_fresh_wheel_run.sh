@@ -11,7 +11,7 @@
 #   factor_optimizer (factor-optimizer 0.1.0)
 #   factor_assets    (factor_assets 0.1.0)
 #   factor_preprocess(factor-preprocess 0.1.0)
-#   dataaccess       (data-access 0.10.2)
+#   data_access     (data-access 0.10.2)
 #
 # Locked deps come from requirements-production.lock (NOT pip freeze — the lock
 # is the pinned truth; freeze is used by the security audit for hash pinning).
@@ -31,7 +31,7 @@ SMOKE_DIR="$TMP_BASE/smoke"
 mkdir -p "$DIST_DIR" "$SMOKE_DIR"
 
 echo "==> [1/8] building wheels (--no-build-isolation for deterministic local backends)"
-for pkg in factor_engine quant_evaluator factor_optimizer factor_assets factor_preprocess dataaccess; do
+for pkg in factor_engine quant_evaluator factor_optimizer factor_assets factor_preprocess data_access; do
   echo "    building $pkg"
   ( cd "$REPO/$pkg" && "$PYTHON" -m pip wheel --no-deps --no-build-isolation -w "$DIST_DIR" . )
 done

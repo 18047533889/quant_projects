@@ -323,3 +323,30 @@ class CommittedButAuditFailed(AuditWriteError):
     仍然 rebuild manifest（数据确实发布了，manifest 必须追平），再单独向上报告
     审计失败。真正的 mutation failure（body 中途抛错）仍是 ABORTED，绝不 rebuild。
     """
+
+
+class MultipartPartNumberError(DataAccessError):
+    """S3/COS multipart PartNumber 越界（P0-06）。
+
+    S3 PartNumber 域 = 1..10000（AWS S3 API 约束）。PartNumber 0 / 负数 /
+    超过 10000 都视为协议级错误：绝不允许把 0 或越界 part number 发给 COS/S3。
+    """
+
+
+class MultipartPartSizeError(DataAccessError):
+    """multipart 非最后 part 尺寸 < 5 MiB（P0-06）。
+
+    AWS S3：除最后 part 外，每个 part 必须 >= 5 MiB（最小 5 MB，ends at
+    5 GiB max）。非最后 part 小于 5 MiB 属于协议非法——服务端会直接拒绝或
+    complete 时失败。
+    """
+
+    min_part_bytes = 5 * 1024 * 1024
+
+
+class MultipartPartCountError(DataAccessError):
+    """multipart part 数量超过 10000（P0-06）。
+
+    AWS S3：一次 multipart upload 最多 10000 个 part。超出即 fail-closed，
+    不该把数据切分到一万片以上再让服务端报错。
+    """

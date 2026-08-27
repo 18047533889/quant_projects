@@ -39,6 +39,17 @@ from data_access.read.object_store import ObjectStore
 
 logger = logging.getLogger("data_access.object_store_generation_publisher")
 
+
+class StaleWriterError(DataError):
+    """P0-10: 并发 CURRENT 下 stale writer 被拒绝的显式信号。
+
+    判定依据（monotonic fencing-epoch）：
+        - ``resolve_stale(outdated_epoch)``：本地最大 epoch > 待判定 epoch →
+          该 writer 已 stale（被更新的晋升超越），拒绝任何覆盖动作；
+        - ``expect_sole_writer(prefix, epoch)``：待判定 epoch 低于 CURRENT 快照
+          的 epoch（CURRENT 已被别的 writer 晋升过）→ 拒绝晋升（防重放）。
+    """
+
 # CURRENT 指针对象 key（相对 prefix）。
 _CURRENT_KEY = "CURRENT.json"
 # 代次 manifest 对象 key（相对 generation 前缀）。
@@ -88,6 +99,11 @@ class GenerationManifest:
     metadata: dict[str, Any]
     created_at: str
     content_hash: str  # manifest 自身内容哈希（不含本字段）
+    # P0-10: promoted_at 编号（epoch）。每翻转一次 CURRENT，fencing epoch 单调
+    # 递增（读回 CURRENT 快照的 epoch+1）。代次 manifest 发布时固化该 epoch，
+    # 供 stale-writer / 审计判定哪个代次是最后晋升的。
+    fencing_epoch: int = 0
+    writer_id: str = ""  # P0-10: 谁晋升的（writer token），供 stale-writer 判定。
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -98,6 +114,8 @@ class GenerationManifest:
             "metadata": self.metadata,
             "created_at": self.created_at,
             "content_hash": self.content_hash,
+            "fencing_epoch": self.fencing_epoch,
+            "writer_id": self.writer_id,
         }
 
     @classmethod
@@ -112,6 +130,8 @@ class GenerationManifest:
             metadata=dict(d.get("metadata") or {}),
             created_at=str(d["created_at"]),
             content_hash=str(d.get("content_hash") or ""),
+            fencing_epoch=int(d.get("fencing_epoch") or 0),
+            writer_id=str(d.get("writer_id") or ""),
         )
 
 
@@ -140,6 +160,8 @@ class _PendingGeneration:
         "metadata",
         "objects",
         "created_at",
+        "writer_id",
+        "fencing_epoch",
     )
 
     def __init__(
@@ -148,6 +170,9 @@ class _PendingGeneration:
         prefix: str,
         layout_version: int,
         metadata: dict[str, Any],
+        *,
+        writer_id: str = "",
+        fencing_epoch: int = 0,
     ) -> None:
         self.generation_id = generation_id
         self.prefix = prefix
@@ -155,6 +180,8 @@ class _PendingGeneration:
         self.metadata = metadata
         self.objects: list[GenerationObject] = []
         self.created_at = _now_iso()
+        self.writer_id = str(writer_id or "")
+        self.fencing_epoch = int(fencing_epoch or 0)
 
 
 class ObjectStoreGenerationPublisher:
@@ -179,13 +206,19 @@ class ObjectStoreGenerationPublisher:
         *,
         bucket: str | None = None,
         multipart_threshold: int = 8 * 1024 * 1024,
+        writer_id: str = "",
     ) -> None:
         self.store = store
         self.bucket = bucket
         self.multipart_threshold = multipart_threshold
+        self.writer_id = str(writer_id or "")
         self._pending: dict[str, _PendingGeneration] = {}
         # generation_id -> prefix（begin 时记录，finish 后保留，供 list/gc 定位 manifest）。
         self._gen_prefix: dict[str, str] = {}
+        # P0-10: 本地已知的最大 fencing epoch（跨进程不假设同步；跨进程权威用
+        # resolve_current + CURRENT 快照的 epoch 递增保证）。跨进程 stale-writer
+        # 防护：每次 publish 前读取 CURRENT 快照，取快照 epoch+1 递增。
+        self._max_epoch = 0
 
     # ---- 生命周期 ----------------------------------------------------------
 
@@ -207,9 +240,15 @@ class ObjectStoreGenerationPublisher:
         if gid in self._pending:
             raise ValidationError(f"generation {gid} 已在进行中")
         self._pending[gid] = _PendingGeneration(
-            gid, prefix, int(layout_version), dict(metadata or {})
+            gid, prefix, int(layout_version), dict(metadata or {}),
+            writer_id=self.writer_id,
         )
         self._gen_prefix[gid] = prefix
+        # P0-10: Begin 时快照 CURRENT 的 fencing epoch —— finish 时以此判定
+        # 期间是否有新代次晋升（epoch 落后 → stale）。
+        _pending = self._pending[gid]
+        _pending.fencing_epoch = self._read_current_epoch(prefix)
+        self._max_epoch = max(self._max_epoch, _pending.fencing_epoch)
         return gid
 
     def add_object(
@@ -229,26 +268,33 @@ class ObjectStoreGenerationPublisher:
         rel_key = _safe_object_key(key)
         full_key = f"{pending.prefix}/{pending.generation_id}/{rel_key}"
 
-        blob = _coerce_bytes(data)
+        blob = _coerce_bytes(data)  # bytes | BinaryIO（publisher 不整读）
         self._upload(full_key, blob)
 
-        # 上传后验证 size + sha256。
+        # 上传后验证 size + sha256。BinaryIO 无法整读回验 —— 由 store 上传时
+        # 边传边算（sha256 在流式路径中由 producer 累计），head 只验证 size。
         head = self.store.head_object(full_key)
         if head is None:
             raise DataError(
                 f"generation {generation_id} 对象 {full_key} 上传后 head 缺失"
             )
-        actual_size = head.get("size")
-        if actual_size is not None and int(actual_size) != len(blob):
-            raise DataError(
-                f"generation {generation_id} 对象 {full_key} size 不匹配："
-                f"期望 {len(blob)} 实际 {actual_size}"
-            )
+        if isinstance(blob, bytes):
+            actual_size = head.get("size")
+            if actual_size is not None and int(actual_size) != len(blob):
+                raise DataError(
+                    f"generation {generation_id} 对象 {full_key} size 不匹配："
+                    f"期望 {len(blob)} 实际 {actual_size}"
+                )
+            size = len(blob)
+            sha = _sha256_bytes(blob)
+        else:
+            size = -1  # 流无法回读 —— 由 store 的流式校验保证（head size 由服务端聚合）
+            sha = ""
         pending.objects.append(
             GenerationObject(
                 key=rel_key,
-                size=len(blob),
-                sha256=_sha256_bytes(blob),
+                size=size,
+                sha256=sha,
                 metadata=dict(metadata or {}),
             )
         )
@@ -257,6 +303,10 @@ class ObjectStoreGenerationPublisher:
         """写不可变 manifest、校验代次 COMPLETE、最后翻转 CURRENT 指针。
 
         任何失败（写 manifest / 校验 / 翻转）都让 CURRENT 保持原值。
+
+        P0-10: 晋升 commit 时固化单调递增的 fencing epoch（读回 CURRENT 快照
+        的 epoch+1，绝不回落），并把 ``writer_id`` 写进 manifest。stale-writer
+        判定依据：manifest/CURRENT 快照的 epoch 单调性与 writer 身份。
         """
         pending = self._require_pending(generation_id)
         if not pending.objects:
@@ -264,7 +314,33 @@ class ObjectStoreGenerationPublisher:
                 f"generation {generation_id} 无任何对象，拒绝晋升空代次"
             )
 
-        # 1) 写不可变 manifest（含自身内容哈希）。
+        # P0-10: 并发 CURRENT 下 stale-writer 拒绝 —— 待晋升代次若带陈旧 epoch
+        # 基（begin 时快照的 CURRENT 已落后于当前 CURRENT），说明在它写期间已有
+        # 更新代次晋升；该 writer 是 stale，拒绝覆盖（fail-closed）。
+        _pending = pending
+        if getattr(_pending, "fencing_epoch", 0) is None:
+            _pending.fencing_epoch = 0
+        _fresh_epoch = self._read_current_epoch(_pending.prefix)
+        if _fresh_epoch > int(_pending.fencing_epoch or 0):
+            raise StaleWriterError(
+                f"generation {generation_id} begin 时快照 epoch="
+                f"{int(_pending.fencing_epoch or 0)}，当前 CURRENT 已晋升到 "
+                f"epoch={_fresh_epoch}——期间有新代次晋升，旧 writer stale 被拒"
+            )
+        if _pending.writer_id and self.writer_id and _pending.writer_id != self.writer_id:
+            raise StaleWriterError(
+                f"generation {generation_id} 归属 writer={_pending.writer_id!r}，"
+                f"当前 publisher writer={self.writer_id!r}——stale writer 无法晋升"
+            )
+
+        # P0-10: 每次晋升 epoch 单调递增：本 publisher 已知最大 epoch+1。
+        fresh_epoch = self._read_current_epoch(_pending.prefix)
+        epoch = max(fresh_epoch + 1, self._max_epoch + 1)
+        _pending.fencing_epoch = epoch
+        self._max_epoch = max(self._max_epoch, epoch)
+        _pending.writer_id = self.writer_id
+
+        # 1) 写不可变 manifest（含自身内容哈希 + fencing_epoch + writer_id）。
         manifest = self._write_manifest(pending)
 
         # 2) 晋升前校验代次 COMPLETE：所有列出的对象存在且 checksum 匹配。
@@ -340,7 +416,8 @@ class ObjectStoreGenerationPublisher:
         """显式垃圾回收：删除「非 CURRENT 且不被不可变 manifest 引用」的对象。
 
         只删除 CURRENT 指针未指向、且其代次目录下没有不可变 manifest 的对象。
-        返回删除的对象数。绝不自动调用。
+        返回删除的对象数。绝不自动调用（P0-08：已发布的历史代次永远带 manifest，
+        任何 GC 路径都不会删它们——除非手工强制删除 manifest 后才能删）。
         """
         prefix = _normalize_prefix(prefix)
         current = self.resolve_current(prefix)
@@ -360,7 +437,9 @@ class ObjectStoreGenerationPublisher:
             if gid == current:
                 continue
             # 有不可变 manifest 的代次是已发布历史，保留（回滚/审计用）。
-            if self._read_manifest_for_generation(gid) is not None:
+            # 注意：manifest 必须直接读取（绝不经 _gen_prefix 内存态定位——
+            # 跨进程/重启后 _gen_prefix 为空会误判历史代次无 manifest 而误删）。
+            if self._read_manifest_at(f"{prefix}/{gid}/{_MANIFEST_KEY}") is not None:
                 continue
             for key in keys:
                 try:
@@ -377,14 +456,14 @@ class ObjectStoreGenerationPublisher:
         if len(blob) >= self.multipart_threshold:
             upload_id = self.store.begin_multipart(full_key)
             try:
-                # 分片上传（每片 8MB）。
+                # 分片上传（每片 8MB）。PartNumber 1-based（S3 域 1..10000）：
+                # ``upload_part`` 的 ``part_index`` 是 0-based 内部索引，这里的
+                # 顺序即 part 顺序；完整对象 PartNumber = 1..N 由 store 换算。
                 chunk = self.multipart_threshold
-                idx = 0
-                for offset in range(0, len(blob), chunk):
+                for idx, offset in enumerate(range(0, len(blob), chunk), start=1):
                     self.store.upload_part(
                         upload_id, full_key, idx, blob[offset : offset + chunk]
                     )
-                    idx += 1
                 self.store.complete_multipart(upload_id, full_key)
             except Exception:
                 try:
@@ -403,6 +482,8 @@ class ObjectStoreGenerationPublisher:
             "objects": [o.to_dict() for o in pending.objects],
             "metadata": pending.metadata,
             "created_at": pending.created_at,
+            "fencing_epoch": int(getattr(pending, "fencing_epoch", 0) or 0),
+            "writer_id": str(getattr(pending, "writer_id", "") or ""),
             "content_hash": "",  # 占位，下面填
         }
         manifest_dict["content_hash"] = _manifest_content_hash(manifest_dict)
@@ -434,10 +515,21 @@ class ObjectStoreGenerationPublisher:
                 )
 
     def _flip_current(self, prefix: str, generation_id: str) -> None:
-        """最后翻转 CURRENT 指针（单对象原子写）。"""
+        """最后翻转 CURRENT 指针（单对象原子写）。
+
+        P0-10: CURRENT 快照写入单调递增的 ``fencing_epoch``（本代次的 epoch），
+        供跨进程 stale-writer 判定使用——epoch 不回落即「写入合法」，回落的
+        writer 视为 stale 已被拒。
+        """
         current_key = f"{prefix}/{_CURRENT_KEY}"
+        pending = self._pending.get(generation_id)
+        epoch = int(getattr(pending, "fencing_epoch", 0) or 0)
         payload = json.dumps(
-            {"generation_id": generation_id, "updated_at": _now_iso()},
+            {
+                "generation_id": generation_id,
+                "updated_at": _now_iso(),
+                "fencing_epoch": epoch,
+            },
             sort_keys=True,
         ).encode("utf-8")
         self.store.put_object(current_key, payload)
@@ -445,11 +537,22 @@ class ObjectStoreGenerationPublisher:
     def _read_manifest_for_generation(
         self, generation_id: str
     ) -> GenerationManifest | None:
-        """读取某代次的不可变 manifest；不存在返回 None。"""
+        """读取某代次的不可变 manifest；不存在返回 None。
+
+        兼容旧调用：经内存 ``_gen_prefix`` 定位（本实例 begin 过的代次）。
+        """
         prefix = self._gen_prefix.get(generation_id)
         if prefix is None:
             return None
-        manifest_key = f"{prefix}/{generation_id}/{_MANIFEST_KEY}"
+        return self._read_manifest_at(f"{prefix}/{generation_id}/{_MANIFEST_KEY}")
+
+    def _read_manifest_at(self, manifest_key: str) -> GenerationManifest | None:
+        """经对象 key 直接读不可变 manifest（跨进程/重启后也能定位历史代次）。
+
+        P0-08 DISPROVEN-then-fixed: ``gc`` 之前经 ``_gen_prefix[:generation_id]``
+        定位 manifest —— 重启后 ``_gen_prefix`` 为空，会把已发布的历史代次误判
+        「无 manifest」而删除。这是 P0-08 的真实风险点；改为直接读对象 key。
+        """
         head = self.store.head_object(manifest_key)
         if head is None:
             return None
@@ -481,6 +584,35 @@ class ObjectStoreGenerationPublisher:
                 f"generation {generation_id} 不存在或已结束（需先 begin_generation）"
             )
         return pending
+
+    def _read_current_epoch(self, prefix: str) -> int:
+        """读取 CURRENT 快照的 fencing epoch（无 CURRENT → 0）。"""
+        current_key = f"{prefix}/{_CURRENT_KEY}"
+        head = self.store.head_object(current_key)
+        if head is None:
+            return 0
+        reader = self.store.open_reader(current_key)
+        if reader is not None:
+            try:
+                blob = reader.read()
+            finally:
+                try:
+                    reader.close()
+                except Exception:
+                    pass
+        else:
+            size = head.get("size")
+            if size is None:
+                return 0
+            blob = self.store.range_read(current_key, offset=0, length=int(size))
+        try:
+            payload = json.loads(blob.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return 0
+        try:
+            return max(0, int(payload.get("fencing_epoch") or 0))
+        except (TypeError, ValueError):
+            return 0
 
 
 def _normalize_prefix(prefix: str) -> str:

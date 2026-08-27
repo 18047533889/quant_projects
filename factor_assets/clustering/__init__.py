@@ -29,10 +29,22 @@ except ImportError:
     LeidenClustering = None
 
 from factor_assets.clustering.lineage import (
-   
+
         LineageDetector,
     ParentChildRelation,
     FamilyLineage,
+)
+
+from factor_assets.clustering.incremental import (
+    IncrementalPolicy,
+    IncrementalCandidate,
+    IncrementalAssignResult,
+    IncrementalLineageEdge,
+    incremental_assign,
+    build_incremental_cluster_version,
+    build_incremental_lineage_edges,
+    UNKNOWN_AFFINITY_FLOOR,
+    DEFAULT_MAX_CANDIDATES,
 )
 
 __all__ = [
@@ -46,5 +58,15 @@ __all__ = [
     "LineageDetector",
     "ParentChildRelation",
     "FamilyLineage",
+    # QRP-P6-INC6 incremental cluster assignment (copy-on-write overlay)
+    "IncrementalPolicy",
+    "IncrementalCandidate",
+    "IncrementalAssignResult",
+    "IncrementalLineageEdge",
+    "incremental_assign",
+    "build_incremental_cluster_version",
+    "build_incremental_lineage_edges",
+    "UNKNOWN_AFFINITY_FLOOR",
+    "DEFAULT_MAX_CANDIDATES",
     "HIERARCHICAL_AVAILABLE",
 ]

@@ -379,7 +379,7 @@ def _data_source_kind(ctx: Any) -> str:
         name = type(ds).__name__.lower()
         if "clickhouse" in name:
             return "clickhouse"
-        if "duckdb" in name or "dataaccess" in name or "parquet" in name:
+        if "duckdb" in name or "data_access" in name or "parquet" in name:
             return "duckdb"
         ds = getattr(ds, "inner", None) or getattr(ds, "_inner", None)
     return "memory"

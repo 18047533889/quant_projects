@@ -39,7 +39,127 @@ from factor_engine.runtime.auto_memory_budget import (  # noqa: E402
     compute_auto_memory_budget,
 )
 
+#: production 模式下缺失 ResourceBroker 的显式故障类型。任何生产执行路径（EDA
+#: / scheduler admission / cohort / RemoteFactorBlockWriter …）在 ``broker=None``
+#: 时都必须 raise，不再静默降级（degrade silently 是 production 反模式）；仅
+#: research/dev 允许降级且须在结果中显式标记。
+class MissingResourceBroker(RuntimeError):
+    """生产执行缺少 ResourceBroker（单资源权威）时抛出。"""
+
+
 _logger = logging.getLogger(__name__)
+
+#: 允许"无 broker 降级"的运行模式集合。其余模式（含 production）一律 fail-closed。
+_DEGRADE_ALLOWED_MODES = ("research", "dev", "develop", "test")
+#: 显式故障覆盖：``FE_STRICT_RESOURCE_BROKER=0`` 允许 research/dev 之外的模式
+#: 也降级，但仍必须显式标记（审计可观测）。
+_ENV_FORCE_ALLOW_DEGRADE = "FE_STRICT_RESOURCE_BROKER"
+
+
+def is_production_mode(run_mode: str | None = None) -> bool:
+    """判断是否为生产执行模式。
+
+    P0-15：与 ``runtime.production_policy.resolve_run_mode`` 单权威一致——
+    识别 ``FACTOR_ENGINE_RUN_MODE=production`` / ``QUANT_PRODUCTION_MODE=1``，
+    默认（无信号）视为非生产（research）。显式 ``run_mode`` 优先。
+
+    无 run_mode 时按 production_policy：给 ``run_mode=production`` → True；
+    空/默认 → False。该函数只回答「是否生产」，实际是否允许降级由
+    :func:`broker_degrade_allowed` / :func:`require_broker` 统一决定。
+    """
+    from factor_engine.runtime.production_policy import is_production_mode as _ppi
+
+    return _ppi(run_mode)
+
+
+def broker_degrade_allowed(run_mode: str | None = None) -> tuple[bool, bool]:
+    """判断：生产缺失 broker 时是否允许降级、（若允许）是否显式标记。
+
+    Returns:
+        ``(allowed, must_mark)`` ——\n
+        * 生产模式（``is_production_mode``）：按 ``FE_STRICT_RESOURCE_BROKER``
+          决定：``=0`` 时允许但必须显式标记；否则不允许（raise）。\n
+        * 非生产模式：默认允许；``=0`` 时要求显式标记。
+    """
+    strict_env = os.environ.get(_ENV_FORCE_ALLOW_DEGRADE, "").strip()
+    force_allow = strict_env == "0"
+    if is_production_mode(run_mode):
+        # 生产 + 显式覆盖才允许降级，且必须标记。
+        if force_allow:
+            return True, True
+        return False, False
+    # 非生产：默认宽松；=0 时要求显式标记。
+    if force_allow:
+        return True, True
+    return True, False
+
+
+def require_broker(
+    broker: Any,
+    *,
+    run_mode: str | None = None,
+    raise_on_missing: bool = False,
+    return_fallback: bool = True,
+) -> Any:
+    """单权威 gate：broker 缺失时按模式 fail-closed / 显式降级。
+
+    这是新增的**统一入口**：未来所有消费 broker 的模块（host coordinator、
+    scheduler、cohort、writer、CSE region …）都应经本函数获取 broker，
+    避免各自的 ``broker or ResourceBroker()`` 在 production 下静默新建第二套。
+
+    - ``broker`` 已提供 → 原样返回（同一对象，不新建）。
+    - ``broker is None``：
+      * ``raise_on_missing=True``（生产默认调法）且生产定义缺失 → 抛
+        :class:`MissingResourceBroker`（fail-closed）。
+      * 生产定义缺失但 ``raise_on_missing=False`` → 按 ``enable_degradation``
+        返回 ``ResourceBroker()`` 全新实例（research/dev 兼容），并把降级标记
+        写入 ``degraded_run``（由调用方显式上报）。
+      * 返回 ``fallback``（默认全新 ``ResourceBroker()``）。
+    """
+    if broker is not None:
+        return broker
+    # P0-15: production 判定走 production_policy 单权威（与各 backend 一致），
+    # 识别 QUANT_PRODUCTION_MODE / FACTOR_ENGINE_RUN_MODE=production 两种信号。
+    if raise_on_missing and _runtime_is_production(run_mode):
+        raise MissingResourceBroker(
+            "production 执行缺失 ResourceBroker（单资源权威）。请通过 "
+            "AdaptiveBatchScheduler / HostResourceCoordinator / service queue "
+            "注入共享 broker，或设置 FACTOR_ENGINE_RUN_MODE 显式声明非生产。"
+        )
+    allowed, must_mark = broker_degrade_allowed(run_mode=run_mode)
+    if not allowed:
+        # fail-closed 但调用方选择不 raise：on-lead 观察由调用方显式标记，
+        # 返回 None（调用方不应继续超预算分配）。
+        _degraded[0] = _degraded[0] + 1
+        _degraded[1].append("denied_no_raise")
+        return None
+    # 非生产或显式覆盖：降级（新建实例），并在 module 级 observable 标记。
+    _degraded[0] = _degraded[0] + 1
+    verdict = "forced_mark" if must_mark else "degraded"
+    _degraded[1].append(verdict)
+    if return_fallback:
+        return ResourceBroker()
+    return None
+
+
+#: P0-15: production 模式判定 —— 与 production_policy.resolve_run_mode 单权威。
+def _runtime_is_production(run_mode: str | None = None) -> bool:
+    from factor_engine.runtime.production_policy import is_production_mode
+
+    return is_production_mode(run_mode)
+
+
+#: 进程级 observable 降级标记（audit / evidence 可读）：``[count, [verdict,...]]``。
+_degraded: list[Any] = [0, []]
+
+def broker_degraded_observable() -> dict[str, Any]:
+    """进程级 broker 降级统计（evidence/观测）：已发生次数 + 最近判定。"""
+    return {"count": _degraded[0], "verdicts": list(_degraded[1])[-20:]}
+
+
+def descriptor_from_broker(broker: Any) -> str:
+    """broker 的来源描述（观测/evidence），非 broker → "none"。"""
+    return str(type(broker).__name__) if broker is not None else "none"
 
 #: 采样节流（R27-033：500ms~2s，默认 1s）。不要每 operator cell 采样。
 DEFAULT_SAMPLE_INTERVAL_SECONDS = 1.0

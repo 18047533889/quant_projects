@@ -336,6 +336,21 @@ _REGISTRY_STATE: str = _REGISTRY_STATE_BUILDING
 _METRIC_CATALOG: Dict[str, MetricSpec] = {}
 _METRIC_CATALOG_VIEW: Mapping[str, MetricSpec] = MappingProxyType(_METRIC_CATALOG)
 
+# QE-P0-R-C2: SINGLE populated metric authority.
+#
+# ``_REGISTRY`` is the ONE populated ``MetricRegistry`` instance in the whole
+# package.  It is the canonical backing store for every metric spec.  The
+# module-level functional API below (``register_metric`` / ``get_metric`` /
+# ``list_metrics`` / ``list_metrics_by_status`` / ``list_metrics_by_tier`` /
+# ``catalog_snapshot``) is a thin read-only facade over this single instance,
+# and ``metrics.catalog`` is a read-only view over the SAME instance.  There
+# is exactly ONE populated metric catalog at runtime — no dual authority.
+#
+# The 10-domain catalog specs (previously populated into a separate
+# ``metrics.catalog._REGISTRY``) are merged here so the registry is the single
+# source of truth for BOTH the runtime metric set and the 10-domain catalog.
+_REGISTRY: MetricRegistry = MetricRegistry()
+
 
 def registry_state() -> str:
     """Return the current registry lifecycle state: "building" or "sealed"."""
@@ -345,24 +360,21 @@ def registry_state() -> str:
 def seal_metric_registry() -> str:
     """Seal the metric registry against further mutation.
 
-    Replaces the backing dict with an immutable plain-dict snapshot (so the
-    registry remains picklable — a ``MappingProxyType`` is not) and flips the
-    state to ``"sealed"``.  After sealing, ``register_metric`` raises
-    ``RuntimeError``.
+    Seals the SINGLE ``_REGISTRY`` instance (QE-P0-R-C2).  After sealing,
+    ``register_metric`` raises ``RuntimeError``.
 
     Returns:
         The new registry state (``"sealed"``).
     """
-    global _REGISTRY_STATE, _METRIC_CATALOG, _METRIC_CATALOG_VIEW
-    _METRIC_CATALOG = dict(_METRIC_CATALOG)
-    _METRIC_CATALOG_VIEW = MappingProxyType(_METRIC_CATALOG)
+    global _REGISTRY_STATE
+    _REGISTRY.seal()
     _REGISTRY_STATE = _REGISTRY_STATE_SEALED
     return _REGISTRY_STATE
 
 
 def register_metric(spec: MetricSpec) -> None:
     """
-    Register a metric specification.
+    Register a metric specification into the SINGLE registry authority.
 
     Args:
         spec: MetricSpec to register
@@ -384,14 +396,12 @@ def register_metric(spec: MetricSpec) -> None:
             "sealed (QE-P0-07). Registry changes must be added before "
             "seal_metric_registry() is called."
         )
-    if spec.name in _METRIC_CATALOG:
-        raise ValueError(f"Metric '{spec.name}' already registered")
-    _METRIC_CATALOG[spec.name] = spec
+    _REGISTRY.register(spec)
 
 
 def get_metric(name: str) -> MetricSpec:
     """
-    Retrieve metric specification by name.
+    Retrieve metric specification by name from the SINGLE registry authority.
 
     Args:
         name: Metric identifier
@@ -402,19 +412,23 @@ def get_metric(name: str) -> MetricSpec:
     Raises:
         KeyError: If metric not found
     """
-    if name not in _METRIC_CATALOG_VIEW:
-        raise KeyError(f"Metric '{name}' not found in registry")
-    return _METRIC_CATALOG_VIEW[name]
+    try:
+        return _REGISTRY.get(name)
+    except Exception as exc:
+        # Preserve the historical KeyError contract for unknown metrics.
+        if isinstance(exc, KeyError):
+            raise
+        raise KeyError(f"Metric '{name}' not found in registry") from exc
 
 
 def list_metrics() -> List[str]:
     """
-    List all registered metric names.
+    List all registered metric names from the SINGLE registry authority.
 
     Returns:
         Sorted list of metric names
     """
-    return sorted(_METRIC_CATALOG_VIEW.keys())
+    return _REGISTRY.list_all_metric_ids()
 
 
 def list_metrics_by_status(status: MetricStatus) -> List[str]:
@@ -428,7 +442,7 @@ def list_metrics_by_status(status: MetricStatus) -> List[str]:
         Sorted list of metric names
     """
     return sorted(
-        name for name, spec in _METRIC_CATALOG_VIEW.items()
+        name for name, spec in _REGISTRY.to_dict().items()
         if spec.status == status
     )
 
@@ -444,7 +458,7 @@ def list_metrics_by_tier(tier: MetricTier) -> List[str]:
         Sorted list of metric names
     """
     return sorted(
-        name for name, spec in _METRIC_CATALOG_VIEW.items()
+        name for name, spec in _REGISTRY.to_dict().items()
         if spec.tier == tier
     )
 
@@ -452,11 +466,14 @@ def list_metrics_by_tier(tier: MetricTier) -> List[str]:
 def catalog_snapshot() -> Mapping[str, MetricSpec]:
     """Return the current catalog as an immutable mapping.
 
-    Always a fresh read-only snapshot: pre-seal it is a live view of the
-    backing dict, post-seal it is a copy of the sealed dict.  Either way the
-    caller receives a read-only mapping that cannot mutate the registry.
+    A read-only snapshot of the SINGLE registry authority.  Pre-seal it is a
+    live ``MappingProxyType`` view of the backing dict; post-seal it is the
+    sealed immutable view.  Either way the caller receives a read-only mapping
+    that cannot mutate the registry.
     """
-    return _METRIC_CATALOG_VIEW
+    if _REGISTRY.sealed:
+        return _REGISTRY._catalog  # type: ignore[return-value]
+    return MappingProxyType(_REGISTRY._catalog)  # type: ignore[arg-type]
 
 
 def resolve_alias(metric_id: str) -> str:
@@ -524,8 +541,8 @@ def _reconstruct_read_only_aliases(state: Dict[str, str]) -> MappingProxyType:
 copyreg.pickle(MappingProxyType, _pickle_aliases)
 
 
-# Register core metrics
-register_metric(MetricSpec(
+# Register core metrics into the SINGLE registry authority (QE-P0-R-C2).
+_REGISTRY.register(MetricSpec(
     name="rank_ic",
     display_name="Mean Rank IC",
     description=(
@@ -539,9 +556,19 @@ register_metric(MetricSpec(
     requires=["factor_batch", "label_bundle"],
     min_periods=None,
     ic_method="spearman",
+    # QE-P0-R-C2: rank_ic is also a 10-domain catalog metric (Domain.IC).
+    domain=Domain.IC,
+    metric_id="rank_ic",
+    required_inputs={"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.ic.compute_daily_ic",
+    metric_version="1.0.0",
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="drop_pair",
+    numeric_policy="finite",
 ))
 
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="ic_std",
     display_name="IC Standard Deviation",
     description=(
@@ -557,7 +584,7 @@ register_metric(MetricSpec(
     ic_method="spearman",
 ))
 
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="ic_ir",
     display_name="IC Information Ratio",
     description=(
@@ -573,7 +600,7 @@ register_metric(MetricSpec(
     ic_method="spearman",
 ))
 
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="mean_ic",
     display_name="Mean IC",
     description=(
@@ -595,7 +622,7 @@ register_metric(MetricSpec(
     metric_version="1",
 ))
 
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="coverage",
     display_name="Coverage Rate",
     description=(
@@ -610,7 +637,7 @@ register_metric(MetricSpec(
     min_periods=None,
 ))
 
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="pearson_ic",
     display_name="Mean Pearson IC",
     description=(
@@ -626,9 +653,19 @@ register_metric(MetricSpec(
     requires=["factor_batch", "label_bundle"],
     min_periods=None,
     ic_method="pearson",
+    # QE-P0-R-C2: pearson_ic is also a 10-domain catalog metric (Domain.IC).
+    domain=Domain.IC,
+    metric_id="pearson_ic",
+    required_inputs={"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.ic.compute_daily_ic",
+    metric_version="1.0.0",
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="drop_pair",
+    numeric_policy="finite",
 ))
 
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="pearson_ic_series",
     display_name="Daily Pearson IC Series",
     description=(
@@ -643,7 +680,7 @@ register_metric(MetricSpec(
     ic_method="pearson",
 ))
 
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="pearson_ic_std",
     display_name="Pearson IC Standard Deviation",
     description=(
@@ -659,7 +696,7 @@ register_metric(MetricSpec(
     ic_method="pearson",
 ))
 
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="pearson_ic_ir",
     display_name="Pearson IC Information Ratio",
     description=(
@@ -675,7 +712,7 @@ register_metric(MetricSpec(
     ic_method="pearson",
 ))
 
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="rank_ic_series",
     display_name="Daily Rank IC Series",
     description=(
@@ -690,7 +727,7 @@ register_metric(MetricSpec(
     ic_method="spearman",
 ))
 
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="ic_median",
     display_name="Median IC",
     description=(
@@ -705,7 +742,7 @@ register_metric(MetricSpec(
     ic_method="spearman",
 ))
 
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="hac_pvalue",
     display_name="HAC p-value",
     description=(
@@ -720,7 +757,7 @@ register_metric(MetricSpec(
     ic_method="spearman",
 ))
 
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="turnover",
     display_name="Portfolio Turnover",
     description="Average turnover rate for factor-based portfolios",
@@ -731,7 +768,7 @@ register_metric(MetricSpec(
     min_periods=2,
 ))
 
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="quantile_spread",
     display_name="Top-Bottom Quantile Spread",
     description="Return spread between top and bottom quantiles",
@@ -740,10 +777,21 @@ register_metric(MetricSpec(
     compute_fn=compute_quantile_spread_value,
     requires=["factor_batch", "label_bundle"],
     min_periods=20,
+    # QE-P0-R-C2: quantile_spread is also a 10-domain catalog metric
+    # (Domain.QUANTILE).
+    domain=Domain.QUANTILE,
+    metric_id="quantile_spread",
+    required_inputs={"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.quantile.compute_top_bottom_spread",
+    metric_version="1.0.0",
+    units="return",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
 ))
 
 # Extended metrics
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="hac_tstat",
     display_name="HAC t-statistic",
     description="Heteroskedasticity and autocorrelation consistent t-statistic for IC",
@@ -755,7 +803,7 @@ register_metric(MetricSpec(
     ic_method="spearman",
 ))
 
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="subsample_stability",
     display_name="Subsample IC Stability",
     description="Standard deviation of mean IC across bootstrap subsamples",
@@ -766,7 +814,7 @@ register_metric(MetricSpec(
     min_periods=40,
 ))
 
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="ic_autocorr_lag1",
     display_name="IC Autocorrelation (Lag 1)",
     description="First-order autocorrelation of IC series",
@@ -777,7 +825,7 @@ register_metric(MetricSpec(
     min_periods=30,
 ))
 
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="rank_stability",
     display_name="Rank Stability",
     description="Spearman correlation of factor ranks across time",
@@ -788,7 +836,7 @@ register_metric(MetricSpec(
     min_periods=20,
 ))
 
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="half_life",
     display_name="IC Half-Life",
     description="Estimated half-life of IC decay via AR(1)",
@@ -800,7 +848,7 @@ register_metric(MetricSpec(
 ))
 
 # Research metrics
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="block_bootstrap_ci",
     display_name="Block Bootstrap Confidence Interval",
     description="95% confidence interval half-width for mean IC via block bootstrap",
@@ -811,7 +859,7 @@ register_metric(MetricSpec(
     min_periods=60,
 ))
 
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="factor_turnover_rate",
     display_name="Factor Turnover Rate",
     description="Turnover rate of top/bottom quantile membership",
@@ -822,7 +870,7 @@ register_metric(MetricSpec(
     min_periods=30,
 ))
 
-register_metric(MetricSpec(
+_REGISTRY.register(MetricSpec(
     name="quantile_returns_full",
     display_name="Full Quantile Returns",
     description=(
@@ -836,4 +884,518 @@ register_metric(MetricSpec(
     compute_fn=compute_quantile_returns_full_value,
     requires=["factor_batch", "label_bundle"],
     min_periods=20,
+))
+
+
+# ---------------------------------------------------------------------------
+# QE-P0-R-C2: 10-domain catalog specs merged into the SINGLE registry.
+#
+# These were previously populated into a SEPARATE ``metrics.catalog._REGISTRY``
+# (a second populated catalog — the dual-authority smell).  They are now
+# registered into the one ``_REGISTRY`` here so the registry is the single
+# source of truth for BOTH the runtime metric set and the 10-domain catalog.
+# ``metrics.catalog`` is a read-only view over this same instance.
+#
+# The three ids that already exist above (pearson_ic, rank_ic, quantile_spread)
+# are intentionally NOT re-registered here — the registry forbids duplicates.
+# ---------------------------------------------------------------------------
+
+# ---- Domain IC ----
+_REGISTRY.register(MetricSpec(
+    name="spearman_ic",
+    display_name="spearman_ic",
+    description="Spearman rank correlation between factor values and forward returns",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.IC,
+    metric_id="spearman_ic",
+    required_inputs={"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.ic.compute_daily_ic",
+    metric_version="1.0.0",
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="drop_pair",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="ic_summary",
+    display_name="ic_summary",
+    description="Summary statistics (mean, std, skew, kurtosis) of IC time series",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.IC,
+    metric_id="ic_summary",
+    required_inputs={"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.ic_summary.compute_rolling_ic_stats",
+    metric_version="1.0.0",
+    artifact_kind="distribution",
+    required_axes=("time",),
+    units="correlation",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+
+# ---- Domain RANK_IC ----
+_REGISTRY.register(MetricSpec(
+    name="rank_ic_time_series",
+    display_name="rank_ic_time_series",
+    description="Rank IC computed per time slice, returned as a time series",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.RANK_IC,
+    metric_id="rank_ic_time_series",
+    required_inputs={"factor", "forward_returns"},
+    output_type="timeseries",
+    implementation_id="quant_evaluator.metrics.ic.compute_daily_ic",
+    metric_version="1.0.0",
+    required_axes=("time",),
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="drop_pair",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="rank_ic_cross_section",
+    display_name="rank_ic_cross_section",
+    description="Rank IC computed cross-sectionally for each date",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.RANK_IC,
+    metric_id="rank_ic_cross_section",
+    required_inputs={"factor", "forward_returns"},
+    output_type="series",
+    implementation_id="quant_evaluator.metrics.ic.compute_daily_ic",
+    metric_version="1.0.0",
+    required_axes=("time",),
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="drop_pair",
+    numeric_policy="finite",
+))
+
+# ---- Domain QUANTILE ----
+_REGISTRY.register(MetricSpec(
+    name="quantile_returns",
+    display_name="quantile_returns",
+    description="Average forward return per quantile bucket",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.QUANTILE,
+    metric_id="quantile_returns",
+    required_inputs={"factor", "forward_returns"},
+    output_type="series",
+    implementation_id="quant_evaluator.metrics.quantile.compute_quantile_returns",
+    metric_version="1.0.0",
+    required_axes=("quantile",),
+    units="return",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="quantile_stability",
+    display_name="quantile_stability",
+    description="Stability of quantile return rankings across time",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.QUANTILE,
+    metric_id="quantile_stability",
+    required_inputs={"factor", "forward_returns"},
+    output_type="timeseries",
+    implementation_id="quant_evaluator.metrics.ic_summary.compute_ic_stability",
+    metric_version="1.0.0",
+    required_axes=("time",),
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+
+# ---- Domain DRAWDOWN ----
+_REGISTRY.register(MetricSpec(
+    name="max_drawdown",
+    display_name="max_drawdown",
+    description="Maximum drawdown of the cumulative IC series",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.DRAWDOWN,
+    metric_id="max_drawdown",
+    required_inputs={"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.portfolio_stats.compute_maximum_drawdown",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="drawdown_duration",
+    display_name="drawdown_duration",
+    description="Duration (in periods) of the longest drawdown",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.DRAWDOWN,
+    metric_id="drawdown_duration",
+    required_inputs={"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.risk.drawdown_analysis.compute_drawdown_duration",
+    metric_version="1.0.0",
+    units="periods",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="calmar_ratio",
+    display_name="calmar_ratio",
+    description="Calmar ratio: annualized return / max drawdown",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.DRAWDOWN,
+    metric_id="calmar_ratio",
+    required_inputs={"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.portfolio_stats.compute_calmar_ratio",
+    metric_version="1.0.0",
+    units="ratio",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+
+# ---- Domain TURNOVER ----
+_REGISTRY.register(MetricSpec(
+    name="turnover_rate",
+    display_name="turnover_rate",
+    description="Average rate of change in factor ranking between periods",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.TURNOVER,
+    metric_id="turnover_rate",
+    required_inputs={"factor"},
+    implementation_id="quant_evaluator.metrics.turnover.compute_turnover",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="turnover_cost",
+    display_name="turnover_cost",
+    description="Estimated transaction cost from factor rebalancing",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.TURNOVER,
+    metric_id="turnover_cost",
+    required_inputs={"factor", "transaction_costs"},
+    implementation_id="quant_evaluator.metrics.turnover.compute_weighted_turnover",
+    metric_version="1.0.0",
+    units="bps",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="turnover_adjusted_ic",
+    display_name="turnover_adjusted_ic",
+    description="IC adjusted for turnover-induced transaction costs",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.TURNOVER,
+    metric_id="turnover_adjusted_ic",
+    required_inputs={"factor", "forward_returns", "transaction_costs"},
+    implementation_id="quant_evaluator.metrics.turnover.compute_turnover_contribution",
+    metric_version="1.0.0",
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+
+# ---- Domain TAIL_RISK ----
+_REGISTRY.register(MetricSpec(
+    name="var_95",
+    display_name="var_95",
+    description="Value at Risk at 95% confidence level",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.TAIL_RISK,
+    metric_id="var_95",
+    required_inputs={"forward_returns"},
+    implementation_id="quant_evaluator.metrics.risk.var_cvar.compute_var",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="var_99",
+    display_name="var_99",
+    description="Value at Risk at 99% confidence level",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.TAIL_RISK,
+    metric_id="var_99",
+    required_inputs={"forward_returns"},
+    implementation_id="quant_evaluator.metrics.risk.var_cvar.compute_var",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="cvar_95",
+    display_name="cvar_95",
+    description="Conditional Value at Risk (Expected Shortfall) at 95%",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.TAIL_RISK,
+    metric_id="cvar_95",
+    required_inputs={"forward_returns"},
+    implementation_id="quant_evaluator.metrics.risk.var_cvar.compute_cvar",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="cvar_99",
+    display_name="cvar_99",
+    description="Conditional Value at Risk (Expected Shortfall) at 99%",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.TAIL_RISK,
+    metric_id="cvar_99",
+    required_inputs={"forward_returns"},
+    implementation_id="quant_evaluator.metrics.risk.var_cvar.compute_cvar",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="skewness",
+    display_name="skewness",
+    description="Skewness of the return distribution",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.TAIL_RISK,
+    metric_id="skewness",
+    required_inputs={"forward_returns"},
+    implementation_id="quant_evaluator.metrics.distribution.compute_skewness",
+    metric_version="1.0.0",
+    units="dimensionless",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="kurtosis",
+    display_name="kurtosis",
+    description="Excess kurtosis of the return distribution",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.TAIL_RISK,
+    metric_id="kurtosis",
+    required_inputs={"forward_returns"},
+    implementation_id="quant_evaluator.metrics.distribution.compute_kurtosis",
+    metric_version="1.0.0",
+    units="dimensionless",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+
+# ---- Domain COVERAGE ----
+_REGISTRY.register(MetricSpec(
+    name="factor_coverage",
+    display_name="factor_coverage",
+    description="Fraction of universe with non-null factor values",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.COVERAGE,
+    metric_id="factor_coverage",
+    required_inputs={"factor"},
+    implementation_id="quant_evaluator.metrics.quality.compute_coverage",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="return_coverage",
+    display_name="return_coverage",
+    description="Fraction of universe with non-null forward returns",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.COVERAGE,
+    metric_id="return_coverage",
+    required_inputs={"forward_returns"},
+    implementation_id="quant_evaluator.metrics.quality.compute_coverage",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="joint_coverage",
+    display_name="joint_coverage",
+    description="Fraction of universe with both factor and return available",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.COVERAGE,
+    metric_id="joint_coverage",
+    required_inputs={"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.quality.compute_coverage_per_factor",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+
+# ---- Domain HHI ----
+_REGISTRY.register(MetricSpec(
+    name="hhi_concentration",
+    display_name="hhi_concentration",
+    description="Herfindahl-Hirschman Index of factor value concentration",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.HHI,
+    metric_id="hhi_concentration",
+    required_inputs={"factor"},
+    implementation_id="quant_evaluator.metrics.exposure.compute_concentration_hhi",
+    metric_version="1.0.0",
+    units="dimensionless",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="hhi_effective_n",
+    display_name="hhi_effective_n",
+    description="Effective number of groups (1/HHI) for factor concentration",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.HHI,
+    metric_id="hhi_effective_n",
+    required_inputs={"factor"},
+    implementation_id="quant_evaluator.metrics.exposure.compute_concentration_hhi",
+    metric_version="1.0.0",
+    units="count",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+
+# ---- Domain STABILITY ----
+_REGISTRY.register(MetricSpec(
+    name="ic_stability",
+    display_name="ic_stability",
+    description="Rolling correlation of IC values across sub-periods",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.STABILITY,
+    metric_id="ic_stability",
+    required_inputs={"factor", "forward_returns"},
+    implementation_id="quant_evaluator.metrics.ic_summary.compute_ic_stability",
+    metric_version="1.0.0",
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="turnover_stability",
+    display_name="turnover_stability",
+    description="Variance of turnover rate across periods",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.STABILITY,
+    metric_id="turnover_stability",
+    required_inputs={"factor"},
+    implementation_id="quant_evaluator.metrics.turnover.compute_turnover",
+    metric_version="1.0.0",
+    units="variance",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="coverage_stability",
+    display_name="coverage_stability",
+    description="Variance of factor coverage across periods",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.STABILITY,
+    metric_id="coverage_stability",
+    required_inputs={"factor"},
+    implementation_id="quant_evaluator.metrics.quality.compute_per_time_coverage",
+    metric_version="1.0.0",
+    units="variance",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+
+# ---- Domain TEMPORAL ----
+_REGISTRY.register(MetricSpec(
+    name="rolling_ic",
+    display_name="rolling_ic",
+    description="Rolling window IC values over time",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.TEMPORAL,
+    metric_id="rolling_ic",
+    required_inputs={"factor", "forward_returns"},
+    output_type="timeseries",
+    implementation_id="quant_evaluator.metrics.ic_summary.compute_rolling_ic_stats",
+    metric_version="1.0.0",
+    required_axes=("time",),
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="ic_decay",
+    display_name="ic_decay",
+    description="IC decay: correlation at increasing forward horizons",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.TEMPORAL,
+    metric_id="ic_decay",
+    required_inputs={"factor", "forward_returns"},
+    output_type="timeseries",
+    implementation_id="quant_evaluator.metrics.ic_summary.compute_ic_decay",
+    metric_version="1.0.0",
+    required_axes=("horizon",),
+    units="correlation",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="autocorrelation_ic",
+    display_name="autocorrelation_ic",
+    description="Autocorrelation of IC values at specified lags",
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    domain=Domain.TEMPORAL,
+    metric_id="autocorrelation_ic",
+    required_inputs={"factor", "forward_returns"},
+    output_type="timeseries",
+    implementation_id="quant_evaluator.metrics.temporal.compute_ic_autocorrelation",
+    metric_version="1.0.0",
+    required_axes=("lag",),
+    units="correlation",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
 ))

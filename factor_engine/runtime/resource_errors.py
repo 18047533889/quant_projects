@@ -177,7 +177,7 @@ try:
         for name, cls in vars(_da_exc).items()
         if isinstance(cls, type) and issubclass(cls, _da_exc.DataAccessError)
     )
-except Exception:  # pragma: no cover - dataaccess 未安装时保持空
+except Exception:  # pragma: no cover - data_access 未安装时保持空
     _DA_GOVERNANCE_EXCEPTIONS = ()
 
 

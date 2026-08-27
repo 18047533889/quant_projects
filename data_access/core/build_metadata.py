@@ -10,6 +10,69 @@ _SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 _VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[.-][0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 _UNKNOWN = {"", "unknown", "none", "null", "dev", "local", "untagged"}
 
+#: Fallback marker read from the generated module when a dev fallback is
+#: checked in (see data_access/_build_info.py ``BUILT_AT_RUNTIME_FALLBACK``).
+_FALLBACK_MARKER = "BUILT_AT_RUNTIME_FALLBACK"
+
+#: Repository root used ONLY by the development/production gate that compares
+#: the runtime build_sha with the live git HEAD.  Never consulted in an
+#: installed artifact without a checkout (the env variable allows setting it
+#: explicitly in deployment).
+_DEV_REPO_ROOT = os.environ.get("QUANT_REPO_ROOT", "").strip() or (
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if os.path.exists(
+        os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            ".git",
+        )
+    )
+    else ""
+)
+
+
+def _validate_production_revision_matches(info: BuildInfo) -> None:
+    """P0-04 production gate: build_sha must match the build's git HEAD.
+
+    Only enforced when a git checkout is discoverable (dev checkout or the
+    explicitly-configured deployment repo root).  A checked-in fallback module
+    is always rejected in production (an unknown-A build must never run).
+    """
+    try:
+        from data_access import _build_info as _gen
+    except ImportError:
+        _gen = None
+    if _gen is not None and getattr(_gen, _FALLBACK_MARKER, False):
+        raise ValidationError(
+            "production build rejected: data_access build metadata is a checked-in "
+            f"{_FALLBACK_MARKER} (BUILT_AT_RUNTIME_FALLBACK=True); regenerate "
+            "via scripts/regenerate_build_info.py before production packaging"
+        )
+    repo_root = _DEV_REPO_ROOT
+    if not repo_root:
+        # No checkout discoverable: the generated file is the authority; the
+        # build-time generator guarantees build_sha matches build-time HEAD, so
+        # equality cannot be evaluated here.
+        return
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short=12", "HEAD"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except OSError:
+        return
+    if result.returncode != 0:
+        return
+    head = result.stdout.strip()
+    if head and info.build_sha != head:
+        raise ValidationError(
+            "production build metadata does not match git HEAD: "
+            f"build_sha={info.build_sha!r} head={head!r}"
+        )
+
 def validate_revision(value: str, *, field: str = "build_sha") -> str:
     if not isinstance(value, str) or not _SHA_RE.fullmatch(value.strip()):
         raise ValidationError(f"{field} must be a full 40-character hexadecimal revision")
@@ -81,6 +144,11 @@ def load_build_info(*, production: bool | None = None) -> BuildInfo:
     # have either a matching distribution database or a checkout beside it.
     if production:
         info.validate_production_ready()
+        # P0-04: a production build must carry the exact revision it was built
+        # from.  A checked-in fallback (BUILT_AT_RUNTIME_FALLBACK) or a
+        # build_sha that does not equal the build-time HEAD is a hard failure
+        # (never silently degrade to unknown-A metadata).
+        _validate_production_revision_matches(info)
     return info
 
 class ScmVersionResolver:

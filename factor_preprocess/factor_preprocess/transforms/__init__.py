@@ -42,6 +42,10 @@ from factor_preprocess.transforms.freshness import (
     freshness_score,
     stale_data_indicator,
 )
+from factor_preprocess.transforms.treatment_variants import (
+    freshness_aware_fill,
+)
+from factor_preprocess.transforms.event_decay import event_decay
 
 __all__ = [
     "cs_rank",
@@ -75,4 +79,6 @@ __all__ = [
     "observation_age",
     "freshness_score",
     "stale_data_indicator",
+    "event_decay",
+    "freshness_aware_fill",
 ]

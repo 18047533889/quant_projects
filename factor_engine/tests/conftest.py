@@ -1,4 +1,14 @@
-"""pytest 全局：确保 factor_engine 与 quant_projects 根目录在 import 路径中。"""
+"""pytest 全局：确保 factor_engine 与 quant_projects 根目录在 import 路径中。
+
+P0-14: 测试生命周期不再以任何方式解冻生产 singleton。
+
+- 移除 R63-P0 的 meta-path thaw finder（``pytest_configure`` 不再安装）。
+- 移除 ``_test_session_reopen_if_needed`` 的会话级调用（pytest_sessionstart /
+  pytest_collection_modifyitems 不再解冻）。
+- 16 个「测试模块作用域导入 + 注册」的算子模块提前在 *legal building window*
+  （首个 load_all() 之前）预热进注册表 —— 之后 load_all() freeze 时它们已在
+  surface 中，测试期再次模块作用域导入走幂等 no-op，永远不需要 thaw。
+"""
 from __future__ import annotations
 
 import os
@@ -10,33 +20,10 @@ import pytest
 _FE_ROOT = Path(__file__).resolve().parents[1]
 _QUANT_ROOT = _FE_ROOT.parent
 
-# ``data_access`` is installed as an editable package in the project venv.
-# Do not add its source directory directly: that shadows the factor_engine
-# ``tests`` package when the monorepo is collected from its root.
 for _path in (str(_FE_ROOT), str(_QUANT_ROOT)):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
-# Import-path mismatch guard: the ROOT repo ALSO defines a ``tests/`` package
-# (``tests/__init__.py``), so a combined pytest run that collects BOTH
-# ``tests/`` and ``factor_engine/tests/`` hits
-# ``ImportPathMismatchError('tests.conftest', ...)``.  That clash is inherent
-# to the monorepo layout (two distinct ``tests`` packages); it does NOT affect
-# runs of either tree alone.  The residency gate is deliberately import-free
-# (no ``import tests`` / no root FE import at module scope), so it can be
-# collected under EITHER tree.  When pytest starts from the repo ROOT it loads
-# the ROOT ``tests/conftest.py``; when it starts inside ``factor_engine/`` it
-# loads this submodule conftest.  A run that names BOTH trees in one command
-# triggers the mismatch and must be split into two commands (see
-# factor_engine/docs/R21_SOURCE_RESIDENCY_AUDIT.md §5).
-
-# The editable-install finder (``__editable__.factor_engine-0.3.1``) maps the
-# top-level ``mining`` package to ``<repo>/factor_engine/mining``.  When the
-# monorepo root is on sys.path *before* the editable finder is consulted, an
-# untracked ``<repo>/mining`` directory wins the mapping and the campaign
-# module resolves to the wrong copy.  Re-import the editable ``mining`` first
-# so ``tests/r42/test_r21_campaign_snapshot_pin.py`` always exercises the
-# factor_engine copy being edited, then restore the root path.
 _QUANT_ROOT_STR = str(_QUANT_ROOT)
 if _QUANT_ROOT_STR in sys.path:
     _root_pos = sys.path.index(_QUANT_ROOT_STR)
@@ -46,68 +33,167 @@ if _QUANT_ROOT_STR in sys.path:
     finally:
         sys.path.insert(_root_pos, _QUANT_ROOT_STR)
 
+# ---------------------------------------------------------------------------
+# P0-14: test-registry staging (registry lifecycle isolation).
+#
+# The registry is PRODUCTION's — the suite legitimately bootstraps it once
+# (module-scope load_all() in test files) and the result is frozen.  The 16
+# modules below register operators at import time and are referenced at module
+# scope by tests; they must be registered DURING the building window (before any
+# load_all freezes) so later module-scope imports are idempotent no-ops.
+#
+# NO meta-path thaw finder, NO thaw_for_bootstrap on the production class, NO
+# _test_session_reopen_if_needed.  Only a NON-mutating lifecycle watcher that
+# records whether the production registry was ever observed leaving `building`
+# after any finalize/freeze (acceptance #3 assertion data).
+# ---------------------------------------------------------------------------
 
-def pytest_configure(config):
-    """R63-P0: make operator-module imports during collection order-independent.
+_LATE_SURFACE_MODULES: tuple[str, ...] = (
+    "factor_engine.cleaned_operators.panel_batch1",
+    "factor_engine.cleaned_operators.time_semantic_gap",
+    "factor_engine.cleaned_operators.fundamental.fiscal_logit_score_op",
+    "factor_engine.cleaned_operators.common.fiscal_operators",
+    "factor_engine.cleaned_operators.common.polars_ts_basic",
+    "factor_engine.cleaned_operators.cross_section.panel_batch1",
+    "factor_engine.cleaned_operators.intraday.state_space",
+    "factor_engine.cleaned_operators.intraday.intra_state_space",
+    "factor_engine.cleaned_operators.intraday.smart_money",
+    "factor_engine.cleaned_operators.intraday.topology_manifold",
+    "factor_engine.cleaned_operators.intraday.true_gap_batch3",
+    "factor_engine.cleaned_operators.polars_native.ts_advanced_batch1",
+    "factor_engine.cleaned_operators.technical.adaptive_filters",
+    "factor_engine.cleaned_operators.fundamental.fiscal_batch2",
+    "factor_engine.cleaned_operators.fundamental.fiscal_batch3",
+    "factor_engine.cleaned_operators.time_semantic",
+)
 
-    A test module that calls ``load_all()`` at module scope freezes the registry
-    (R40 read-only contract).  A LATER test module that imports an operator
-    module (which calls ``register_operator`` at import time) then fails with
-    ``operator registry is not writable: frozen``.  That is an import-order
-    dependency: the same tree collects cleanly or errors depending on module
-    order.
-
-    Fix: install a meta-path finder that thaws the registry right before ANY
-    ``factor_engine.cleaned_operators`` submodule is imported.  Every operator
-    module import then starts with a writable registry, so collection order never
-    matters.  The finder is a no-op for non-operator imports and never touches
-    production runtime paths (it only acts when the registry is already
-    frozen/finalized, which only happens after a test-session ``load_all()``).
-    """
-    import importlib.abc
-    import sys as _sys
-
-    from factor_engine.cleaned_operators.registry import (
-        OperatorRegistry,
-        _BOOTSTRAP_TOKEN,
-    )
-
-    class _ThawBeforeOperatorImport(importlib.abc.MetaPathFinder):
-        def find_spec(self, fullname, path=None, target=None):
-            if fullname.startswith("factor_engine.cleaned_operators"):
-                if OperatorRegistry.lifecycle() in ("frozen", "finalized"):
-                    OperatorRegistry.thaw_for_bootstrap(_BOOTSTRAP_TOKEN)
-            return None
-
-    _sys.meta_path.insert(0, _ThawBeforeOperatorImport())
+_STAGED_MODULES: list[str] = []
 
 
 def pytest_sessionstart(session):
-    """pytest hook：收集开始前重新开放 registry（若已 freeze）。
+    """Stage late-surface modules into the building registry BEFORE any freeze.
 
-    各算子测试模块在 import 期注册算子，因此会话级 hook 必须在首个模块
-    导入前把 registry 从 frozen/finalized 拉回 BUILDING。若尚未 load（lifecycle
-    仍为 building），保持原状。
+    If load_all() has already frozen (a test module imported earlier during this
+    session — the session hook runs before collection, so normally not), skip
+    staging and leave the registry frozen.  We never thaw it.
     """
-    # 延迟导入，避免在 conftest 导入时触发副作用
-    from factor_engine.cleaned_operators import _test_session_reopen_if_needed
-
-    _test_session_reopen_if_needed()
+    _install_lifecycle_watcher()
+    _stage_late_modules_if_building()
 
 
 def pytest_collection_modifyitems(session, config, items):
-    """pytest hook：收集结束后、执行前解冻 registry。
+    """Keep the collection-complete hook a no-op (staging already happened at
+    sessionstart; the old session-thaw hook is gone)."""
+    return None
 
-    收集期约 135 个测试模块在模块作用域直接调用 ``ensure_cleaned_loaded()``
-    或 ``load_all()``，其中任何一个都会把 registry freeze（R40 只读契约）。
-    收集完成后统一解冻一次，保证执行期需要注册的算子模块（如不在 load_all
-    清单内的 fiscal_logit_score_op / time_semantic_ops / same_clock_lag /
-    panel_batch1）可以正常注册。production 语义只约束 load_all 收尾；测试
-    会话的注册开放不触碰生产运行时路径。
+
+def _install_lifecycle_watcher() -> None:
+    """Non-mutating watcher on the PRODUCTION registry lifecycle.
+
+    Records a consistent observation that the production class ever left
+    ``building`` (finalized/frozen), any explicit thaw call on it, and a
+    stacked traceback.  The watcher NEVER changes lifecycle; it only observes.
     """
-    from factor_engine.cleaned_operators import _test_session_reopen_if_needed
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
-    _test_session_reopen_if_needed()
+    if getattr(OperatorRegistry, "_p014_watcher_installed", False):
+        return
+
+    _orig_lifecycle = OperatorRegistry.lifecycle
+    _orig_thaw = OperatorRegistry.thaw_for_bootstrap
+    _orig_freeze = OperatorRegistry.freeze
+
+    OperatorRegistry._p014_production_finalized_once = False
+    OperatorRegistry._p014_thaw_calls: list[str] = []
+
+    def _watched_lifecycle(cls):
+        res = _orig_lifecycle.__func__(cls)
+        if res in ("frozen", "finalized") and not cls.__dict__.get("_p014_production_finalized_once"):
+            cls._p014_production_finalized_once = True
+        return res
+
+    def _watched_thaw(cls, token):
+        cls._p014_thaw_calls = (cls.__dict__.get("_p014_thaw_calls") or [])
+        import traceback
+        cls._p014_thaw_calls.append("".join(traceback.format_stack()) | "".join(traceback.format_stack(limit=6)))
+        return _orig_thaw.__func__(cls, token)
+
+    def _watched_freeze(cls):
+        res = _orig_freeze.__func__(cls)
+        cls._p014_production_finalized_once = True
+        return res
+
+    OperatorRegistry.lifecycle = classmethod(_watched_lifecycle)
+    OperatorRegistry.thaw_for_bootstrap = classmethod(_watched_thaw)
+    OperatorRegistry.freeze = classmethod(_watched_freeze)
+    OperatorRegistry._p014_watcher_installed = True
+
+
+def _stage_late_modules_if_building() -> None:
+    global _STAGED_MODULES
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    # The first explicit load_all in test modules will finalize+freeze.  Stage
+    # NOW — while the registry is still building — so their module-scope imports
+    # later are no-ops.
+    if OperatorRegistry.lifecycle() != "building":
+        return
+    import importlib
+    for mod in _LATE_SURFACE_MODULES:
+        try:
+            importlib.import_module(mod)
+            _STAGED_MODULES.append(mod)
+        except Exception as exc:  # noqa: BLE001 - a staging failure must not break the session
+            import warnings
+            warnings.warn(
+                f"P0-14: late-surface module {mod} failed to stage: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Acceptance #3: the global (production) registry lifecycle is never observed
+# thawed after finalize during a *normal* test session.
+# ---------------------------------------------------------------------------
+
+_ACCEPTANCE_EXCLUDED_TRACK = (
+    "test_factorengine_hardening",
+    "test_r10_registry_identity",
+    "test_layer_governance",
+    "test_mining_admission",
+    "test_r40_registry_governance_208_212",
+    "test_r40_bootstrap",
+    "r40/conftest",
+)
+
+
+@pytest.fixture(autouse=True)
+def _p014_registry_lifecycle_not_thawed(request):
+    """Assert the production registry was never observed thawed after finalize.
+
+    The production registry is only ever thawed by the few EXPLICIT governance
+    tests that exercise the token contract on purpose (they are recorded in
+    ``_ACCEPTANCE_EXCLUDED_TRACK``).  Every other test must see the registry
+    never leave the frozen/finalized state.
+    """
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    fil = os.path.basename(request.node.fspath)
+    is_explicit_governance = any(ex in fil for ex in _ACCEPTANCE_EXCLUDED_TRACK)
+
+    thawed_before = list(OperatorRegistry.__dict__.get("_p014_thaw_calls") or [])
+    try:
+        yield
+    finally:
+        thawed_after = list(OperatorRegistry.__dict__.get("_p014_thaw_calls") or [])
+        if not is_explicit_governance:
+            new = thawed_after[len(thawed_before):]
+            assert not new, (
+                f"P0-14: production registry was thawed during {request.node.nodeid} "
+                f"({len(new)} thaw call(s)); the global singleton must never be "
+                "thawed after finalize in a normal test session.  Stacks: "
+                + "\n".join(new[:2])
+            )
 
 
 @pytest.fixture(autouse=True)

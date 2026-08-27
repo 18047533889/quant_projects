@@ -1,6 +1,14 @@
 [build-system]
+# P0-04: build-time generation of data_access/_build_info.py.  A private
+# backend under this directory delegates to setuptools and runs
+# ``scripts/regenerate_build_info.py`` before the wheel is assembled, so an
+# installed data_access wheel always carries build facts matching the exact
+# revision it was built from (build_sha == the SHA at build time, dirty=False
+# for a clean production build).  ``backend-path`` is ``["."]`` so the private
+# backend module resolves from THIS directory.
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
+build-backend = "_fe_build_backend"
+backend-path = ["."]
 
 # Canonical DataAccess packaging config (R46).
 #
@@ -35,6 +43,13 @@ dependencies = [
     "pydantic>=2.0",
     "PyYAML>=6.0",
     "typing-extensions>=4.5",
+    # COS/S3 multipart remote plane (R44-P0/R45): data_access.read.object_store
+    # real-multipart (CreateMultipartUpload -> UploadPart -> CompleteMultipartUpload)
+    # and transparent-credential refresh both import boto3 + botocore at runtime.
+    # P0-05: pinned production floors 1.43.81 (boto3/botocore exactly paired in
+    # requirements-production.lock; jmespath + s3transfer arrive transitively).
+    "boto3>=1.43.81",
+    "botocore>=1.43.81",
 ]
 
 [project.optional-dependencies]

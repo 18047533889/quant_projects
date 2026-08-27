@@ -8,6 +8,7 @@ from factor_assets.similarity.exact import (
     SimilarityMethod,
     SimilarityMeasure,
     SimilarityResult,
+    SimilarityMeasurementStatus,
     CorrelationSimilarity,
     QEPairwiseSimilarity,
 )
@@ -37,6 +38,7 @@ __all__ = [
     "SimilarityMethod",
     "SimilarityMeasure",
     "SimilarityResult",
+    "SimilarityMeasurementStatus",
     "CorrelationSimilarity",
     "QEPairwiseSimilarity",
     "ANNBackend",

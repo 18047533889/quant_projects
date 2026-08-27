@@ -151,10 +151,7 @@ class BoundedResultQueue:
         with self._lock:
             if self._closed:
                 return False
-            while (
-                self._items
-                and self._current_bytes + item.bytes > self.max_bytes
-            ):
+            while self._current_bytes + item.bytes > self.max_bytes:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     return False
