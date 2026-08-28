@@ -7,34 +7,31 @@ BRANCH="$2"
 
 # Only sync when pushing to origin main
 if [ "$REMOTE" = "origin" ] && [ "$BRANCH" = "refs/heads/main" ]; then
-    echo "=== Pushing to quant_projects ==="
-    
-    # Push to origin first
-    git push origin main
-    
     echo "=== Syncing factor_engine to HKUST repo ==="
     
     # Create temp directory
     TEMP=$(mktemp -d)
     HKUST_TOKEN="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"
+    SOURCE="/home/sunhaiwei/quant_projects/factor_engine"
     
-    # Clone HKUST repo using HTTPS + token
+    # Clone HKUST repo (will have .git inside)
     git clone "https://${HKUST_TOKEN}@github.com/HKUST-QUANT-SOCIETY/factor_engine.git" "$TEMP"
     
-    # Pull latest from origin
-    cd "$TEMP"
-    git pull "https://${HKUST_TOKEN}@github.com/HKUST-QUANT-SOCIETY/factor_engine.git" main
+    # Remove all files except .git
+    rm -rf "$TEMP"/*
     
-    # Copy factor_engine from local repo (overwriting)
-    rsync -av --delete /home/sunhaiwei/quant_projects/factor_engine/ "$TEMP/"
+    # Copy factor_engine from local repo (excluding .git)
+    rsync -av --exclude='.git' "$SOURCE/" "$TEMP/"
     
     # Commit and push
-    git add -A
-    git commit -m "Sync from quant_projects: $(date '+%Y-%m-%d %H:%M:%S')" 2>/dev/null || echo "No changes to sync"
-    git push "https://${HKUST_TOKEN}@github.com/HKUST-QUANT-SOCIETY/factor_engine.git" main
+    (
+        cd "$TEMP"
+        git add -A
+        git commit -m "Sync from quant_projects: $(date '+%Y-%m-%d %H:%M:%S')" 2>/dev/null || echo "No changes to sync"
+        git push "https://${HKUST_TOKEN}@github.com/HKUST-QUANT-SOCIETY/factor_engine.git" main
+    )
     
     # Cleanup
-    cd /
     rm -rf "$TEMP"
     
     echo "=== HKUST sync complete ==="
