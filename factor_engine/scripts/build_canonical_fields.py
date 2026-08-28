@@ -36,19 +36,21 @@ US_PV_CANONICAL: dict[str, dict[str, str]] = {
 }
 
 ASHARE_PV_CANONICAL: dict[str, dict[str, str]] = {
-    "StockDailyBar": {
-        "Open": "open",
-        "High": "high",
-        "Low": "low",
-        "Close": "close",
-        "PreClose": "pre_close",
+    # ADJ_FIELD_MIGRATION（2026-08-28）：A 股行情权威口径 = 后复权表
+    # StockDailyBarAdj（Adj* 字段集）。未复权表列仅保留 Volume/Factor（raw 概念）。
+    "StockDailyBarAdj": {
+        "AdjOpen": "open",
+        "AdjHigh": "high",
+        "AdjLow": "low",
+        "AdjClose": "close",
+        "AdjPreClose": "pre_close",
         "Volume": "volume",
-        "Amount": "amount",
-        "HighLimit": "high_limit",
-        "LowLimit": "low_limit",
+        "AdjAmount": "amount",
+        "AdjHighLimit": "high_limit",
+        "AdjLowLimit": "low_limit",
         "Return": "ret",
         "Factor": "factor",
-        "Vwap": "vwap",
+        "AdjVwap": "vwap",
         "IsSuspend": "is_suspend",
     },
     "StockCapitalDaily": {
@@ -62,6 +64,24 @@ ASHARE_PV_CANONICAL: dict[str, dict[str, str]] = {
         "MarketCap": "market_cap",
         "CirculatingMarketCap": "circulating_market_cap",
         "TurnoverRatio": "turnover_ratio",
+    },
+}
+# 未复权原始列（Factor/Volume 用途）
+ASHARE_PV_CANONICAL_RAW: dict[str, dict[str, str]] = {
+    "StockDailyBar": {
+        "Open": "raw_open",
+        "High": "raw_high",
+        "Low": "raw_low",
+        "Close": "raw_close",
+        "PreClose": "raw_pre_close",
+        "Volume": "volume",
+        "Amount": "raw_amount",
+        "HighLimit": "raw_high_limit",
+        "LowLimit": "raw_low_limit",
+        "Return": "ret",
+        "Factor": "factor",
+        "Vwap": "raw_vwap",
+        "IsSuspend": "is_suspend",
     },
 }
 

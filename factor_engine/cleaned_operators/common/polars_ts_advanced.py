@@ -4,6 +4,24 @@
 Implements AR models, polynomial regression, ridge regression, Huber regression,
 quantile regression, and multi-variable regression operators using pure Polars expressions.
 All operators are causal (use only past data) and vectorized across columns.
+
+P0-B1-FINALIZE governance note (2026-08-28):
+
+* This module is the authoritative native-Polars implementation tier for the 30
+  ts_ar_* / ts_poly2_* / ts_ridge_* / ts_huber_* / ts_multi_* /
+  ts_quantile_* canonicals that the DAILY_FACTOR_MIGRATED surface declares but
+  that no previously-loaded bootstrap module registered (they were only
+  reachable via the research-only ts_model.dynamic_regression / ts_model.ar_…
+  modules, which ``load_all(include_research=False)`` intentionally skips).  It
+  is therefore part of the production load surface so the layer-governance
+  static-partition gate (R40 #154 / layer_governance.finalize_layer_governance)
+  sees every daily-surface canonical actually registered.
+* Registration order matters: it must be imported AFTER the pandas reference
+  modules (regression_models / common.time_series / ts_model.dynamic_regression
+  / ts_model.ar_meanrev) that establish the pandas_numpy first-backend so the
+  ``_backfill_logical_contract`` canonical authority stays pandas-owned.  The
+  loader appends this module after those (see
+  ``factor_engine.cleaned_operators.__init__``).
 """
 from __future__ import annotations
 
@@ -51,21 +69,23 @@ class TSARCoefficientNative(SeriesOperator):
         name="ts_ar_coefficient",
         category="time_series",
         description="AR(p) 系数估计",
-        param_names=["x", "window", "lag", "coef_index"],
+        param_names=["x", "window", "lag", "min_periods", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
             "lag": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
-            "coef_index": ParamSpec(dtype=int, min=0, default=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
     def _calculate_series(
-        self, x: pl.DataFrame, window: int = 20, lag: int = 1, coef_index: int = 0, **kwargs
+        self, x: pl.DataFrame, window: int = 20, lag: int = 1,
+        min_periods: int = 1, warmup_policy: str = "exact", **kwargs
     ) -> pl.DataFrame:
         w = strict_integer(window, "window", minimum=3)
         p = strict_integer(lag, "lag", minimum=1)
+        coef_index = int(kwargs.get("coef_index", 0) or 0)
         idx = strict_integer(coef_index, "coef_index", minimum=0)
 
         if idx >= p:
@@ -111,18 +131,20 @@ class TSARFittedValueNative(SeriesOperator):
         name="ts_ar_fitted_value",
         category="time_series",
         description="AR(p) 拟合值",
-        param_names=["x", "window", "lag"],
+        param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "lag": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, lag: int = 1, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, order: int = 1,
+                          warmup_policy: str = "exact", **kwargs) -> pl.DataFrame:
         w = strict_integer(window, "window", minimum=3)
-        p = strict_integer(lag, "lag", minimum=1)
+        p = strict_integer(order, "order", minimum=1)
+        lag = p
         cols = _numeric_cols(x)
 
         def _ar_fitted(vals):
@@ -163,19 +185,21 @@ class TSARForecastNative(SeriesOperator):
         name="ts_ar_forecast",
         category="time_series",
         description="AR(p) 预测值",
-        param_names=["x", "window", "lag"],
+        param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "lag": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, lag: int = 1, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, order: int = 1,
+                          warmup_policy: str = "exact", **kwargs) -> pl.DataFrame:
         # Forecast at t uses data up to t-1, predicts t
         w = strict_integer(window, "window", minimum=3)
-        p = strict_integer(lag, "lag", minimum=1)
+        p = strict_integer(order, "order", minimum=1)
+        lag = p
         cols = _numeric_cols(x)
 
         def _ar_forecast(vals):
@@ -216,18 +240,20 @@ class TSARInnovationNative(SeriesOperator):
         name="ts_ar_innovation",
         category="time_series",
         description="AR(p) 创新项",
-        param_names=["x", "window", "lag"],
+        param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "lag": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, lag: int = 1, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, order: int = 1,
+                          warmup_policy: str = "exact", **kwargs) -> pl.DataFrame:
         w = strict_integer(window, "window", minimum=3)
-        p = strict_integer(lag, "lag", minimum=1)
+        p = strict_integer(order, "order", minimum=1)
+        lag = p
         cols = _numeric_cols(x)
 
         def _ar_innov(vals):
@@ -275,18 +301,20 @@ class TSARInnovationZNative(SeriesOperator):
         name="ts_ar_innovation_z",
         category="time_series",
         description="AR(p) 标准化创新项",
-        param_names=["x", "window", "lag"],
+        param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "lag": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, lag: int = 1, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, order: int = 1,
+                          warmup_policy: str = "exact", **kwargs) -> pl.DataFrame:
         w = strict_integer(window, "window", minimum=3)
-        p = strict_integer(lag, "lag", minimum=1)
+        p = strict_integer(order, "order", minimum=1)
+        lag = p
         cols = _numeric_cols(x)
 
         def _ar_innov_z(vals):
@@ -340,18 +368,19 @@ class TSARInSampleResidNative(SeriesOperator):
         name="ts_ar_in_sample_resid",
         category="time_series",
         description="AR(p) 样本内残差标准差",
-        param_names=["x", "window", "lag"],
+        param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "lag": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, lag: int = 1, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, order: int = 1, warmup_policy: str = "expanding", **kwargs) -> pl.DataFrame:
+        # R4-100 parity: canonical (x, window, order, warmup_policy); lag is the legacy alias.
         w = strict_integer(window, "window", minimum=3)
-        p = strict_integer(lag, "lag", minimum=1)
+        p = strict_integer(kwargs.get("lag", order), "order", minimum=1)
         cols = _numeric_cols(x)
 
         def _ar_resid(vals):
@@ -393,13 +422,12 @@ class TSARCoeffStabilityNative(SeriesOperator):
         name="ts_ar_coeff_stability",
         category="time_series",
         description="AR 系数稳定性",
-        param_names=["x", "window", "lag", "coef_index"],
+        param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=10, default=60, searchable=True, param_role=ParamRole.HORIZON),
-            "lag": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
-            "coef_index": ParamSpec(dtype=int, min=0, default=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
@@ -476,22 +504,21 @@ class TSARPriorCoeffNative(SeriesOperator):
         name="ts_ar_prior_coeff",
         category="time_series",
         description="AR 历史系数",
-        param_names=["x", "window", "lag", "coef_index"],
+        param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "lag": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
-            "coef_index": ParamSpec(dtype=int, min=0, default=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
     def _calculate_series(
-        self, x: pl.DataFrame, window: int = 20, lag: int = 1, coef_index: int = 0, **kwargs
+        self, x: pl.DataFrame, window: int = 20, order: int = 1, **kwargs
     ) -> pl.DataFrame:
         w = strict_integer(window, "window", minimum=3)
-        p = strict_integer(lag, "lag", minimum=1)
-        idx = strict_integer(coef_index, "coef_index", minimum=0)
+        p = strict_integer(order, "order", minimum=1)
+        idx = 0
 
         if idx >= p:
             from factor_engine.backend.operator_errors import OperatorParameterError
@@ -536,18 +563,20 @@ class TSARPriorForecastNative(SeriesOperator):
         name="ts_ar_prior_forecast",
         category="time_series",
         description="AR 历史预测",
-        param_names=["x", "window", "lag"],
+        param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "lag": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, lag: int = 1, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, order: int = 1,
+                          warmup_policy: str = "exact", **kwargs) -> pl.DataFrame:
         w = strict_integer(window, "window", minimum=3)
-        p = strict_integer(lag, "lag", minimum=1)
+        p = strict_integer(order, "order", minimum=1)
+        lag = p
         cols = _numeric_cols(x)
 
         def _ar_forecast(vals):
@@ -588,18 +617,20 @@ class TSARPriorInnovationNative(SeriesOperator):
         name="ts_ar_prior_innovation",
         category="time_series",
         description="AR 历史创新项",
-        param_names=["x", "window", "lag"],
+        param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "lag": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, lag: int = 1, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, order: int = 1,
+                          warmup_policy: str = "exact", **kwargs) -> pl.DataFrame:
         w = strict_integer(window, "window", minimum=3)
-        p = strict_integer(lag, "lag", minimum=1)
+        p = strict_integer(order, "order", minimum=1)
+        lag = p
         cols = _numeric_cols(x)
 
         def _ar_innov(vals):
@@ -647,18 +678,19 @@ class TSARPriorInnovationZNative(SeriesOperator):
         name="ts_ar_prior_innovation_z",
         category="time_series",
         description="AR 历史标准化创新项",
-        param_names=["x", "window", "lag"],
+        param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "lag": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, lag: int = 1, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, order: int = 1, warmup_policy: str = "expanding", **kwargs) -> pl.DataFrame:
+        # R4-100 parity: canonical (x, window, order, warmup_policy); lag is legacy.
         w = strict_integer(window, "window", minimum=3)
-        p = strict_integer(lag, "lag", minimum=1)
+        p = strict_integer(kwargs.get("lag", order), "order", minimum=1)
         cols = _numeric_cols(x)
 
         def _ar_innov_z(vals):
@@ -1420,22 +1452,22 @@ class TSHuberRegressionCoeffNative(SeriesOperator):
         name="ts_huber_regression_coeff",
         category="time_series",
         description="Huber 鲁棒回归系数",
-        param_names=["x", "window", "delta", "coef_index"],
+        param_names=["x", "window", "delta", "order", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
             "delta": ParamSpec(dtype=float, min=0.0, default=1.35, searchable=True, param_role=ParamRole.THRESHOLD),
-            "coef_index": ParamSpec(dtype=int, min=0, default=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
     def _calculate_series(
-        self, x: pl.DataFrame, window: int = 20, delta: float = 1.35, coef_index: int = 0, **kwargs
+        self, x: pl.DataFrame, window: int = 20, delta: float = 1.35, order: int = 1, warmup_policy: str = "exact", **kwargs
     ) -> pl.DataFrame:
         w = strict_integer(window, "window", minimum=3)
         d = strict_finite_scalar(delta, "delta", minimum=0.0)
-        idx = strict_integer(coef_index, "coef_index", minimum=0)
+        idx = 0
 
         cols = _numeric_cols(x)
 
@@ -1488,22 +1520,22 @@ class TSHuberRegressionCoeffPriorNative(SeriesOperator):
         name="ts_huber_regression_coeff_prior",
         category="time_series",
         description="Huber 鲁棒回归历史系数",
-        param_names=["x", "window", "delta", "coef_index"],
+        param_names=["x", "window", "delta", "order", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
             "delta": ParamSpec(dtype=float, min=0.0, default=1.35, searchable=True, param_role=ParamRole.THRESHOLD),
-            "coef_index": ParamSpec(dtype=int, min=0, default=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
     def _calculate_series(
-        self, x: pl.DataFrame, window: int = 20, delta: float = 1.35, coef_index: int = 0, **kwargs
+        self, x: pl.DataFrame, window: int = 20, delta: float = 1.35, order: int = 1, warmup_policy: str = "exact", **kwargs
     ) -> pl.DataFrame:
         w = strict_integer(window, "window", minimum=3)
         d = strict_finite_scalar(delta, "delta", minimum=0.0)
-        idx = strict_integer(coef_index, "coef_index", minimum=0)
+        idx = 0
 
         cols = _numeric_cols(x)
 

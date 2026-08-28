@@ -29,8 +29,14 @@ class LogicalTableContract:
 ASHARE_LOGICAL_TABLES: dict[str, LogicalTableContract] = {
     "DailyBar": LogicalTableContract(None, "anchor"),
     "StockDailyBar": LogicalTableContract(None, "anchor"),
+    # ADJ_FIELD_MIGRATION（2026-08-28）：A 股行情权威口径 = 后复权表。
+    # StockDailyBarAdj / StockMinuteBarAdj 映射到 adj 数据集（field()/col() 指向
+    # Adj* 字段时走 adj 读路径）；未复权 StockDailyBar 仅保留 Factor/Volume 用途。
+    "StockDailyBarAdj": LogicalTableContract("ashare_stock_daily_adj", "exact"),
     "StockMinuteBar": LogicalTableContract("ashare_stock_minute", "minute_session"),
+    "StockMinuteBarAdj": LogicalTableContract("ashare_stock_minute_adj", "minute_session"),
     "MinuteBar": LogicalTableContract("ashare_stock_minute", "minute_session"),
+    "MinuteBarAdj": LogicalTableContract("ashare_stock_minute_adj", "minute_session"),
     "StockValuationDaily": LogicalTableContract("ashare_stock_valuation_daily", "exact"),
     # Historical alias retained for old formulas.
     "SizeDaily": LogicalTableContract("ashare_stock_valuation_daily", "exact"),

@@ -14,6 +14,7 @@ from factor_engine.cleaned_operators.base_polars import (
     register_operator,
     PANEL_SKIP_COLUMNS,
 )
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 
 
 def _apply_to_panel(df: pl.DataFrame, expr_fn) -> pl.DataFrame:
@@ -105,8 +106,15 @@ class FisherTransform(SeriesOperator):
         name="FisherTransform",
         category="technical_indicator",
         description="Fisher Transform for turning price into Gaussian distribution",
-        param_names=["close", "period"],
-        param_types={"close": pl.DataFrame, "period": int},
+        param_names=["high", "low", "window", "smooth", "signal_smooth", "output"],
+        param_aliases={"close": "high", "period": "window"},
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "window": int},
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=9),
+            "smooth": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.33),
+            "signal_smooth": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5),
+            "output": ParamSpec(dtype=str, choices=("value", "signal", "trigger"), default="value"),
+        },
     )
 
     def _calculate_series(self, close: pl.DataFrame, period: int = 10, **kwargs) -> pl.DataFrame:
@@ -245,30 +253,48 @@ class QQE(SeriesOperator):
         name="QQE",
         category="technical_indicator",
         description="QQE indicator based on smoothed RSI",
-        param_names=["close", "rsi_period", "smoothing"],
-        param_types={"close": pl.DataFrame, "rsi_period": int, "smoothing": int},
+        # R4-100 parity: polars backend must not shrink below the pandas
+        # reference (x, length, smooth, factor, output).  ``close`` is the
+        # panel alias of the reference's ``x``; ``rsi_period``/``smoothing``
+        # are legacy spellings of ``length``/``smooth``.  ``factor`` and
+        # ``output`` extend the trailing scalar contract.
+        param_names=["close", "length", "smooth", "factor", "output"],
+        param_aliases={"x": "close", "rsi_period": "length", "smoothing": "smooth"},
+        param_types={"close": pl.DataFrame, "length": int, "smooth": int,
+                     "factor": float, "output": str},
     )
 
     def _calculate_series(
-        self, close: pl.DataFrame, rsi_period: int = 14, smoothing: int = 5, **kwargs
+        self, close: pl.DataFrame, length: int = 14, smooth: int = 5,
+        factor: float = 4.236, output: str = "line", **kwargs
     ) -> pl.DataFrame:
+        # Positional/legacy alias binding: a call written against the pandas
+        # reference (or the old polars spelling) must bind the same scalars.
+        if "rsi_period" in kwargs:
+            length = int(kwargs.pop("rsi_period"))
+        if "smoothing" in kwargs:
+            smooth = int(kwargs.pop("smoothing"))
+        length = max(2, int(length))
+        smooth = max(1, int(smooth))
+        factor = float(factor)
+
         def qqe_expr(col_name):
             c = pl.col(col_name)
             # Calculate RSI
             delta = c.diff()
             gain = delta.clip(lower_bound=0)
             loss = (-delta).clip(lower_bound=0)
-            avg_gain = _wilder_ema_expr(gain, rsi_period)
-            avg_loss = _wilder_ema_expr(loss, rsi_period)
+            avg_gain = _wilder_ema_expr(gain, length)
+            avg_loss = _wilder_ema_expr(loss, length)
             rs = avg_gain / avg_loss
             rsi = 100 - 100 / (1 + rs)
             # Smooth RSI
-            rsi_smooth = _ema_expr(rsi, smoothing)
+            rsi_smooth = _ema_expr(rsi, smooth)
             # Calculate ATR of RSI
             rsi_delta = rsi_smooth.diff().abs()
-            atr_rsi = _wilder_ema_expr(rsi_delta, 2 * rsi_period - 1)
+            atr_rsi = _wilder_ema_expr(rsi_delta, 2 * length - 1)
             # QQE line
-            qqe = _ema_expr(rsi_smooth, smoothing)
+            qqe = _ema_expr(rsi_smooth, smooth)
             return qqe.alias(col_name)
 
         return _apply_to_panel(close, lambda c: qqe_expr(c.meta.output_name()))
@@ -288,8 +314,10 @@ class RSX(SeriesOperator):
         name="RSX",
         category="technical_indicator",
         description="RSX - smoother version of RSI with reduced noise",
-        param_names=["close", "period"],
-        param_types={"close": pl.DataFrame, "period": int},
+        param_names=["x", "length"],
+        param_aliases={"close": "x", "period": "length"},
+        param_types={"x": pl.DataFrame, "length": int},
+        param_specs={"length": ParamSpec(dtype=int, min=2, default=14)},
     )
 
     def _calculate_series(self, close: pl.DataFrame, period: int = 14, **kwargs) -> pl.DataFrame:

@@ -292,6 +292,9 @@ def apply_operator_deduplication() -> None:
     global _DEDUPE_APPLIED
     if _DEDUPE_APPLIED:
         return
+    # P0-B1: flush deferred in-window alias edges (e.g. polars_statistics ->
+    # ts_mean_abs_deviation) before dedupe validates every alias target.
+    OperatorRegistry.publish_pending_aliases()
     for old, new in CANONICAL_RENAMES.items():
         OperatorRegistry.rename_canonical(old, new)
 

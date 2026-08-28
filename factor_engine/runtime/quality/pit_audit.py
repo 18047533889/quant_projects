@@ -64,8 +64,8 @@ _POSITIVE_LAG_PARAMS = {
 }
 _FINANCIAL_TABLES = frozenset({"StockIncome", "StockCashFlow", "StockBalance", "StockIndicator"})
 _EXACT_DAILY_TABLES = frozenset({
-    "DailyBar", "StockDailyBar", "StockValuationDaily", "SizeDaily",
-    "StockCapitalDaily", "IndexConstituent", "BenchmarkIndexDailyBar",
+    "DailyBar", "StockDailyBar", "StockDailyBarAdj", "StockValuationDaily",
+    "SizeDaily", "StockCapitalDaily", "IndexConstituent", "BenchmarkIndexDailyBar",
     "IndexDailyBar", "EtfDailyBar", "ETFDailyBar", "Calendar",
 })
 _ASOF_DAILY_TABLES = frozenset({
@@ -73,7 +73,7 @@ _ASOF_DAILY_TABLES = frozenset({
 })
 _RELATION_TABLES = frozenset({"StockTopTenShareholder", "StockTopTenFloatShareholder"})
 _EFFECTIVE_TABLES = frozenset({"StockDividend"})
-_MINUTE_TABLES = frozenset({"StockMinuteBar", "MinuteBar"})
+_MINUTE_TABLES = frozenset({"StockMinuteBar", "MinuteBar", "StockMinuteBarAdj", "MinuteBarAdj"})
 _PROFILE_FEATURES = frozenset({
     "profile_zscore",
     "profile_deviation",

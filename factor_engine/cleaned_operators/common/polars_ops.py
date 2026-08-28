@@ -458,7 +458,8 @@ class TSQuantilePolars(SeriesOperator):
         # pandas rolling().quantile() 跳过 NaN；polars rolling_quantile 会把 NaN
         # 当作最大参与排序。先 fill_nan(None) 对齐 pandas 缺失语义。
         return x.with_columns([
-            pl.col(c).fill_nan(None).rolling_quantile(
+            pl.when(pl.col(c).is_nan() | pl.col(c).is_infinite()).then(None).otherwise(pl.col(c))
+            .rolling_quantile(
                 quantile=quantile,
                 interpolation="linear",
                 window_size=w,

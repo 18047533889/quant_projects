@@ -726,7 +726,7 @@ class TSArgmaxAgePolarsNative(SeriesOperator):
         name="ts_argmax_age",
         category="time_series",
         description="Periods since maximum value in rolling window",
-        param_names=['feature', 'window'],
+        param_names=['feature', 'window', 'min_periods'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
@@ -756,7 +756,7 @@ class TSArgminAgePolarsNative(SeriesOperator):
         name="ts_argmin_age",
         category="time_series",
         description="Periods since minimum value in rolling window",
-        param_names=['feature', 'window'],
+        param_names=['feature', 'window', 'min_periods'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
@@ -3469,16 +3469,18 @@ class TSTailMeanPolarsNative(SeriesOperator):
         name="ts_tail_mean",
         category="time_series",
         description="Mean of extreme tail (beyond threshold quantile)",
-        param_names=['feature', 'window', 'threshold'],
+        param_names=['x', 'window', 'q', 'side', 'min_periods'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
-        "threshold": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.95, param_role=ParamRole.NUMERICAL),
+        "q": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.95, param_role=ParamRole.NUMERICAL),
     }
 
-    def _calculate_series(self, feature, window, threshold=0.95, **kwargs):
+    def _calculate_series(self, x, window, q=0.95, side="both", min_periods=1, **kwargs):
+        feature = x
+        threshold = q
         def compute_tail_mean(s):
             if len(s) == 0:
                 return None

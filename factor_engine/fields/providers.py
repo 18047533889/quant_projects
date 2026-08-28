@@ -180,6 +180,19 @@ def _mul_two(field_a: str, field_b: str):
     return _apply
 
 
+def _div_two(field_num: str, field_den: str):
+    """Derived transform ``field_num / field_den`` (LQTP adjusted volume)."""
+
+    def _apply(fields: dict[str, Any]) -> Any:
+        if field_num not in fields or field_den not in fields:
+            raise KeyError(
+                f"derived provider needs physical fields {field_num!r} and {field_den!r}; got {sorted(fields)}"
+            )
+        return fields[field_num] / fields[field_den]
+
+    return _apply
+
+
 # ---------------------------------------------------------------------------
 # Structured filter requirement (P1-14): ``required_filters`` was a tuple of
 # strings ("IndustrySource", "currency=USD", "timeframe") that could not be
@@ -889,6 +902,21 @@ for _raw, _phys in (("raw_volume_shares", "Volume"),):
         transform=_identity, temporal_model="exact_daily", available_at="local_close",
         source_certified=True,
     )
+
+# --- continuous (backward-adjusted) volume: Volume / Factor (LQTP functions.yaml) ---
+_b(
+    "continuous_volume_shares", "ashare", "ashare_lqtp_volume",
+    dataset="ashare_stock_daily",
+    physical=("StockDailyBar.Volume", "StockDailyBar.Factor"),
+    quality=_DERIVED, coverage=_FULL,
+    source_unit=SHARES, canonical_unit=SHARES,
+    transform=_div_two("StockDailyBar.Volume", "StockDailyBar.Factor"),
+    transform_description="Volume / Factor (LQTP functions.yaml adjusted volume)",
+    temporal_model="exact_daily", available_at="local_close",
+    source_certified=True,
+    derived_expression="StockDailyBar.Volume / StockDailyBar.Factor",
+    notes="LQTP platform functions.yaml defines volume = Volume / Factor; this is the LQTP adjusted volume.",
+)
 
 # --- amount_local -----------------------------------------------------------
 _b(

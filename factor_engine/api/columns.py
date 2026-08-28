@@ -124,9 +124,11 @@ def field(
     resolved = resolve_market_field(name, ASHARE_CONTEXT, table=table, strict=False)
     spec = resolved.spec if resolved is not None else None
     if spec is None and table is None:
-        # Anchor preference: bare ambiguous OHLCV-family names keep the daily
-        # panel binding so legacy recipes stay catalog-bound.
-        resolved = resolve_market_field(name, ASHARE_CONTEXT, table="StockDailyBar", strict=False)
+        # ADJ_FIELD_MIGRATION（2026-08-28）：bare 行情名的 anchor 偏好改为后复权
+        # 权威表 StockDailyBarAdj（Adj* 字段），使 close/open/high/low/vwap/ret 等
+        # 解析到复权口径；未复权 StockDailyBar 仅保留 Factor/Volume 用途（显式
+        # table="StockDailyBar" 或用 raw_* 概念）。
+        resolved = resolve_market_field(name, ASHARE_CONTEXT, table="StockDailyBarAdj", strict=False)
         spec = resolved.spec if resolved is not None else None
     if spec is None:
         if strict:
@@ -134,7 +136,7 @@ def field(
             raise KeyError(f"unknown field {name!r}{qualifier}")
         return col(name)
     check_mining_gate(spec, for_mining=for_mining, field_name=name)
-    if table is None and spec.table == "StockDailyBar":
+    if table is None and spec.table in {"StockDailyBarAdj", "StockDailyBar"}:
         transport = spec.name
     else:
         from factor_engine.api.source_ref import source_col

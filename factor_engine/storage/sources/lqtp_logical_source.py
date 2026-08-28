@@ -92,8 +92,8 @@ class LQTPLogicalDataSource(DataSource):
         right = series.rename("value").reset_index(); right.columns = ["timestamp", "instrument", "value"]
         left["timestamp"] = pd.to_datetime(left["timestamp"])
         right["timestamp"] = pd.to_datetime(right["timestamp"])
-        merged = pd.merge_asof(left.sort_values(["timestamp","instrument"]),
-                               right.sort_values(["timestamp","instrument"]),
+        merged = pd.merge_asof(left.sort_values(["timestamp","instrument"], kind="stable"),
+                               right.sort_values(["timestamp","instrument"], kind="stable"),
                                on="timestamp", by="instrument", direction="backward",
                                allow_exact_matches=True).sort_values("_row")
         return pd.Series(merged["value"].to_numpy(), index=anchor, name=series.name)

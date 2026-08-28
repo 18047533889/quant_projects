@@ -127,7 +127,8 @@ def _register_polars_backends() -> None:
             # ``_canon`` is bound per-iteration via the default arg (loop-var
             # closure over ``canonical`` would resolve every op to the last one).
             metadata = PolarsMetadata(
-                name=_canon, category="geometry_math_polars", param_names=[],
+                name=_canon, category="geometry_math_polars",
+                param_names=list(getattr(_ref_meta, "param_names", None) or ()),
                 available_at=_ref_available_at,
                 same_session_usable=_ref_same_session,
             )

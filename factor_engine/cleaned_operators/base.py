@@ -43,7 +43,77 @@ class _MissingDefaultType:
 MISSING = _MissingDefaultType()
 
 
-class ParamRole(str, enum.Enum):
+class _ParamRoleMeta(enum.EnumType):
+    """QR-P0-B1: forbid ad-hoc attribute extension on the ``ParamRole`` enum.
+
+    A ``(str, enum.Enum)`` mixin keeps a per-class ``__dict__`` (the built-in
+    ``str`` type carries one), so ``__slots__`` alone cannot stop
+    ``ParamRole.EXTRA = ...``.  This metaclass rejects every *runtime* attribute
+    write whose name is not already bound and every member reassignment; class
+    construction is unaffected (the class dict is assembled before the metaclass
+    sees it).  Provenance/rule metadata (``role_source``) belongs on the
+    backfill *record*, never on the enum value — singular identity is the
+    contract.
+    """
+
+    def __setattr__(cls, name: str, value: Any) -> None:
+        # Member binding during class construction: ``EnumType`` finalizes the
+        # class by binding each member into it via ``setattr`` (canonical names
+        # land in ``_member_names_``; alias names bind the canonical member
+        # object — ``isinstance(value, cls)``), then binds the auto-derived
+        # ``__repr__``/``__str__``/``__format__``/``__new__`` helpers (dunder
+        # names).  A runtime write is any ``setattr`` outside that window.
+        # Detect construction exactly: the name is one of the member bindings
+        # already recorded in ``_member_names_`` / ``_member_map_`` (canonical +
+        # alias), OR the bound value is a member instance (alias path), OR the
+        # name is dunder.  Any runtime ``ParamRole.X = ...`` — new name, member
+        # reassignment, or private-attr smuggling (``ParamRole._d = 1``) —
+        # never satisfies those construction markers and fails closed below
+        # (QR-P0-B1).
+        if name in getattr(cls, "_member_names_", ()):
+            super().__setattr__(name, value)
+            return
+        if isinstance(value, cls):
+            super().__setattr__(name, value)
+            return
+        if name.startswith("__"):
+            super().__setattr__(name, value)
+            return
+        if name in cls._member_map_:
+            raise AttributeError(
+                f"cannot reassign ParamRole member {name!r} (QR-P0-B1 — "
+                "ParamRole is an immutable role taxonomy)"
+            )
+        if not hasattr(cls, name):
+            raise AttributeError(
+                f"cannot add new attribute {name!r} to ParamRole (QR-P0-B1 — "
+                "the role taxonomy is immutable; provenance metadata belongs "
+                "on the backfill record, never on the enum)"
+            )
+        super().__setattr__(name, value)
+
+    def __delattr__(cls, name: str) -> None:
+        # ``enum.EnumMeta.__set_name__`` runs ``delattr(enum_class, member)``
+        # for every member while building the enum — that is CONSTRUCTION, and
+        # forbidding it would make the class un-buildable.  A runtime ``del``
+        # on the finished enum is only meaningfully preventable for bound
+        # member names; EnumMeta already forbids ``delattr(Cls, member)`` at
+        # runtime via ``_member_map_`` checks.  We therefore keep ``__delattr__``
+        # permissive (delegating to EnumMeta) — immutability is enforced by
+        # ``__setattr__`` (no new attributes, no member reassignment), which is
+        # the only reachable mutation path in practice.
+        #
+        # NOTE: any ``constructing`` gate here must treat the ``__set_name__``
+        # deletion pass as construction.  During that pass the enum is fully
+        # materialised (``_member_names_`` is already the finished tuple and
+        # ``__bases__ == (str, Enum)``), so a check like
+        # ``name in cls._member_names_`` is the ONLY reliable construction
+        # marker — a member name is always in ``_member_names_`` then, and a
+        # runtime ``del`` of a bound member is already rejected by EnumMeta.
+        super().__delattr__(name)
+
+
+class ParamRole(str, enum.Enum, metaclass=_ParamRoleMeta):
     """Machine-readable ROLE of a scalar parameter (P2-35).
 
     The audit finding: kernels mix genuine economic dimensions (lag, horizon,
@@ -72,12 +142,18 @@ class ParamRole(str, enum.Enum):
     # when it interacts with an estimator (review §二 round-3: thresholds are
     # searched, but never at the resolution of estimator epsilon).
     STATE_THRESHOLD = "state_threshold"
-    # NEW-037: alias for STATE_THRESHOLD.  Multiple batch-native operator
-    # modules (polars_group_advanced / polars_ts_stats / polars_fin_advanced /
-    # polars_candle_patterns / polars_ts_advanced / polars_cs_basic) already
-    # declare thresholds as ``ParamRole.THRESHOLD``; the alias keeps the
-    # ParamRole contract complete so those modules import and register.
-    THRESHOLD = STATE_THRESHOLD
+    # NEW-037: ``THRESHOLD`` is a DSL/batch-native SPELLING alias of the
+    # canonical role ``STATE_THRESHOLD`` (see ``validate_parameter_roles`` /
+    # ``ParamRole.aliases`` below).  The batch-native operator modules
+    # (polars_group_advanced / polars_ts_stats / polars_fin_advanced /
+    # polars_candle_patterns / polars_ts_advanced / polars_cs_basic) declare
+    # thresholds as ``ParamRole.THRESHOLD`` in their ParamSpec role
+    # declarations and arithmetic must NOT create a second enum member.
+    # Recall that the ``_ParamRoleMeta`` (QR-P0-B1) forbids setting a NEW
+    # attribute once the enum is built — so a member alias must be declared as
+    # part of the enum's OWN class body (before EnumMeta finalises it), and
+    # ``ParamRole.THRESHOLD`` then equals ``ParamRole.STATE_THRESHOLD``.
+    THRESHOLD = "state_threshold"
     # Regularizer strength (ridge/lasso/elastic-net alpha, eta, shrinkage…):
     # an estimator tuning knob — searched only on small reviewed grids.
     REGULARIZATION = "regularization"

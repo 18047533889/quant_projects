@@ -309,8 +309,12 @@ def _certified_parameter_domain(canonical: str) -> dict:
 
 def _sync_case_registry_check() -> tuple[bool, str]:
     proc = subprocess.run(
-        [sys.executable, str(FE_ROOT / "scripts" / "sync_primitive_evidence.py"), "--check"],
-        cwd=str(FE_ROOT), env=_env(), capture_output=True, text=True,
+        # Run `python -m scripts.sync_primitive_evidence --check` from the monorepo
+        # ROOT (not FE_ROOT): the script imports `tests.backend_parity.…`, which in
+        # the monorepo lives under `factor_engine/tests/`.  A bare-path script run
+        # picks up the script's own dir and cannot resolve the `tests` package.
+        [sys.executable, "-m", "scripts.sync_primitive_evidence", "--check"],
+        cwd=str(FE_ROOT.parent), env=_env(), capture_output=True, text=True,
     )
     out = (proc.stdout or "") + (proc.stderr or "")
     return proc.returncode == 0, out.strip()

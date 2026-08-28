@@ -28,9 +28,11 @@ from factor_engine.planner.field_request_coalescer import (
 )
 
 # 20 个 dataset × 少量概念：10000 个因子共享少数字段。
+# ADJ_FIELD_MIGRATION（2026-08-28）：A 股行情权威口径 = 后复权表，trace 数据集
+# 同步指向 ashare_stock_daily_adj（Adj* 概念）。
 DATASETS = {
-    "ashare_stock_daily": ("price.close", "price.open", "price.high", "price.low",
-                           "price.vwap", "volume", "amount"),
+    "ashare_stock_daily_adj": ("price.close", "price.open", "price.high", "price.low",
+                               "price.vwap", "volume", "amount"),
     "ashare_stock_income": ("financial.revenue", "financial.net_income.attributable"),
     "ashare_stock_balance": ("financial.total_assets", "financial.total_liabilities"),
     "ashare_stock_valuation": ("valuation.market_cap", "valuation.pe", "valuation.pb"),

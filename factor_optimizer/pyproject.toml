@@ -19,6 +19,9 @@ dev = ["pytest>=8.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["factor_optimizer"]
+# 见 `因子建库口径`：FO/FP 为「嵌套因子包」布局，wheel 必须携带
+# 顶层 `factor_optimizer.contracts.library_snapshot_ref`，否则契约 import 断裂。
+force-include = { "factor_optimizer" = "factor_optimizer/factor_optimizer" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

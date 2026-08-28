@@ -12,7 +12,7 @@ Total operators: 919
 实际执行由 backend/polars_registry_bridge.py 的 fallback 机制处理。
 """
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 
 # 批量注册算子为 polars backend
 # 实际计算委托给 polars_registry_bridge.compile_registry_op
@@ -373,12 +373,23 @@ class FishertransformPolars(SeriesOperator):
     """Auto-generated Polars bridge for FisherTransform.
 
     Execution delegated to polars_registry_bridge (long-table map_groups).
+    R4-100: this backend must carry the pandas reference arity (high, low,
+    window, smooth, signal_smooth, output) or a positional reference call would
+    re-parse as (high, low) and break; the registration-audit arity gate flags
+    the 2-param surface (auto-generated bridge) as a mismatch.
     """
     metadata = OperatorMetadata(
         name="FisherTransform",
         category="general",
         description="Auto-generated Polars bridge",
+        param_names=["high", "low", "window", "smooth", "signal_smooth", "output"],
         tags=["auto_generated", "polars", "registry_bridge"],
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=9),
+            "smooth": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.33),
+            "signal_smooth": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5),
+            "output": ParamSpec(dtype=str, choices=("value", "signal", "trigger"), default="value"),
+        },
     )
 
 @register_operator(
@@ -6088,6 +6099,7 @@ class IntraStatePairSameSlotCorrPolars(SeriesOperator):
         name="intra_state_pair_same_slot_corr",
         category="general",
         description="Auto-generated Polars bridge",
+        param_names=["state_a", "target_a", "state_b", "target_b", "window_days", "min_slots"],
         tags=["auto_generated", "polars", "registry_bridge"],
     )
 

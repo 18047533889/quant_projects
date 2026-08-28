@@ -12,6 +12,12 @@ ASHARE_COS_CONTRACTS = {
     # 后复权价 = Close × Factor（旧「前复权=Close/Factor」已废止）；与美股
     # AdjFactor 同为乘法后复权但基期/事件覆盖不同，禁止当同一列混用。
     "ashare_stock_daily": _c("ashare_stock_daily", "ashare", "D1", "equi", "Symbol", return_column="Return", return_scale=1 / 10000, adjustment_column="Factor", adjustment_convention="backward_vendor_factor", storage_layout=D),
+    # ADJ_FIELD_MIGRATION（2026-08-28）：A 股行情权威口径 = 后复权生成表
+    # StockDailyBarAdj / StockMinuteBarAdj（realizations.md §5.6）。物理列
+    # AdjX = X × Factor；Return 原样（bp）；Factor 后复权乘数。未复权
+    # ashare_stock_daily 仅保留 Factor/Volume 用途。
+    "ashare_stock_daily_adj": _c("ashare_stock_daily_adj", "ashare", "D1", "equi", "Symbol", return_column="Return", return_scale=1 / 10000, adjustment_column="Factor", adjustment_convention="backward_vendor_factor", storage_layout=D, note="generated back-adjusted daily table (realizations.md §5.6); AdjX = X * Factor; Volume raw; TargetVwapReturnH01/H05/H10/H20 labels"),
+    "ashare_stock_minute_adj": _c("ashare_stock_minute_adj", "ashare", "MINUTE", "equi", "Symbol", storage_layout=D, note="generated back-adjusted minute table (realizations.md §5.6); AdjX = X * Factor(Symbol) from same-day StockDailyBar; Volume raw"),
     "ashare_stock_minute": _c("ashare_stock_minute", "ashare", "MINUTE", "equi", "Symbol", storage_layout=D),
     # 字典：StockList/Status/Industry/TopTen/ETFList/IndexList/IndexConstituent
     # 含周末自然日文件；行情/估值才主要是交易日。→ calendar_domain="calendar_day"。

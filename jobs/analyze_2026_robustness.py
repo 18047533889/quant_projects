@@ -146,16 +146,21 @@ def analyze_factor(page, st):
     # 排名, 再归一化到 (0,1)。注意与上游因子矩阵的列(股票)对齐。
     r = np.full(fac.shape, np.nan, dtype="float32")
     v = ~np.isnan(fac)
+    sel26 = (idx >= Y26_START) & (idx <= Y26_END)
     for t in range(fac.shape[0]):
-        # 对当前行非 NaN 的位置排序
-        idx_nz = np.flatnonzero(v[t])
-        if idx_nz.size:
-            rk = np.empty(idx_nz.size, dtype="float32")
-            order_t = np.argsort(fac[t][idx_nz], kind="stable")
-            rk[order_t] = np.arange(idx_nz.size, dtype="float32")
-            r[t][idx_nz] = rk / max(idx_nz.size - 1, 1)
-
+        nz = np.flatnonzero(v[t])
+        if nz.size:
+            rk = np.empty(nz.size, dtype="float32")
+            o = np.argsort(fac[t][nz], kind="stable")
+            rk[o] = np.arange(nz.size, dtype="float32")
+            r[t][nz] = rk / max(nz.size - 1, 1)
     out = {"page": page, "panel": fac.shape[1], "ndays_full": int(m_full.sum())}
+    out["r26"] = r[sel26]
+    try:
+        os.makedirs(os.path.join(OUT_PAGE_DIR, "r26_cache"), exist_ok=True)
+        np.save(os.path.join(OUT_PAGE_DIR, "r26_cache", f"{page}.npy"), out["r26"].astype("float32"))
+    except Exception:
+        pass
 
     # --- RankIC 三段 -- 全期用逐日 IC; 2026/2026Q2 用同期日 IC
     ic_full = _rank_ic_series(r, ret.to_numpy(), v)[m_full]
@@ -171,7 +176,6 @@ def analyze_factor(page, st):
     out["rankIC_2026_Q2"] = s_26q2
 
     # --- 2026 多空净值 (G10-G1, 2026 段内分层; 收益=vwap-to-vwap 后复权)
-    sel26 = (idx >= Y26_START) & (idx <= Y26_END)
     r26 = r[sel26]; ret26 = ret.to_numpy()[sel26]
     top, bot = _window_quantiles(r26, DECILE_WINDOW, 0.10, 0.90)
     ls = np.zeros(top.shape[0])
@@ -321,18 +325,26 @@ def figure1_top20_nav(ranked_st, rob):
     plt = _plt_init()
     fig, ax = plt.subplots(figsize=(11, 6.5))
     d26 = _GV["idx"][( _GV["idx"] >= "2026-01-01") & (_GV["idx"] <= "2026-08-24")]
+    ret26 = _GV["ret"].to_numpy()[(_GV["idx"] >= "2026-01-01") & (_GV["idx"] <= "2026-08-24")]
+    _labelled = 0
     for r in ranked_st:
         page = r["page"]
-        r26 = r["r26"]  # normalized rank 2026
+        r26 = _load_r26_cache(page)
+        if r26 is None:
+            if "r26" in r:
+                r26 = r["r26"]
+            else:
+                continue  # report-only 无缓存/无内嵌, 跳过
         top, bot = _window_quantiles(r26, DECILE_WINDOW, 0.10, 0.90)
-        ret26 = _GV["ret"].to_numpy()[(_GV["idx"] >= "2026-01-01") & (_GV["idx"] <= "2026-08-24")]
         ls = np.zeros(top.shape[0])
         for d in range(top.shape[0]):
             tt = np.nan_to_num(ret26[d][top[d]], nan=0.0); bb = np.nan_to_num(ret26[d][bot[d]], nan=0.0)
             if len(tt) and len(bb):
                 ls[d] = np.nanmean(tt) - np.nanmean(bb)
-        (1 + ls).cumprod() and None
         ax.plot(d26, (1 + ls).cumprod(), lw=1.2, label=page[:26])
+        _labelled += 1
+        if _labelled >= 20:
+            break
     ax.axhline(1, color="#94a3b8", lw=0.8, ls="--")
     ax.set_title("2026 稳定 Top20 多空净值 (G10-G1, vwap 后复权收益)")
     ax.set_ylabel("累计净值"); ax.legend(fontsize=7, ncol=2, loc="upper left")
@@ -401,6 +413,17 @@ def figure4_logic_stacked(rob):
     return "data:image/png;base64," + base64.b64encode(buf.read()).decode()
 
 # ----------------------------------------------------------------------------- 报告渲染
+def _load_r26_cache(page):
+    """读取缓存的 2026 排名矩阵 (factor_matrix cache), 供 figure1 复用。
+    无缓存时返回 None (figure1 将自动跳过该因子)."""
+    try:
+        f = os.path.join(OUT_PAGE_DIR, "r26_cache", f"{page}.npy")
+        if os.path.exists(f):
+            return np.load(f)
+    except Exception:
+        pass
+    return None
+
 def b64png_fig(fig_name, plt):
     import io, base64
     buf = io.BytesIO()
@@ -531,9 +554,8 @@ def inject_index(rob, img1):
     if not os.path.exists(INDEX):
         plog("index.html 不存在，跳过注入")
         return
-    if "robustness-2026" in open(INDEX, encoding="utf-8").read():
-        plog("首页已有 robustness-2026 区块，跳过")
-        return
+    # 幂等: 首页已有 robustness-2026 区块, 则整体替换为最新结果(而非仅跳过)
+    re_block = re.compile(r'<section id="robustness-2026">.*?</section>\s*(?=\n</main>)', re.S)
     n_st = sum(1 for r in rob if r.get("status") == "stable")
     n_dec = sum(1 for r in rob if r.get("status") == "decay")
     n_fa = sum(1 for r in rob if r.get("status") == "failed")
@@ -563,12 +585,16 @@ def inject_index(rob, img1):
 """
     with open(INDEX, encoding="utf-8") as f:
         html = f.read()
-    mark = "</main>"
-    assert html.count(mark) == 1, f"index 缺少唯一 </main>，当前 {html.count(mark)}"
-    html = html.replace(mark, section + "\n" + mark)
+    if re_block.search(html):
+        html = re_block.sub(section, html, count=1)
+        plog("[inject] 首页已替换 robustness-2026 区块(最新结果)")
+    else:
+        mark = "</main>"
+        assert html.count(mark) == 1, f"index 缺少唯一 </main>，当前 {html.count(mark)}"
+        html = html.replace(mark, section + "\n" + mark)
+        plog("[inject] 首页已注入 robustness-2026 区块")
     with open(INDEX, "w", encoding="utf-8") as f:
         f.write(html)
-    plog("[inject] 首页已注入 robustness-2026 区块")
 
 # ----------------------------------------------------------------------------- 详情页注入
 def inject_detail_pages(rob):
@@ -724,7 +750,8 @@ def main():
             inject_detail_pages(rob_list)
 
     # 写 JSON
-    json.dump(rob_list, open(OUT_JSON, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    json.dump([{k: v for k, v in r.items() if k != "r26"} for r in rob_list],
+              open(OUT_JSON, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     plog(f"[main] JSON 已写 {OUT_JSON}  总计 {(time.time()-t_start)/60:.1f}min")
 
     # 汇总打印

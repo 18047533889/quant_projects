@@ -158,8 +158,13 @@ class TSLogReturnNative(SeriesOperator):
         exprs = []
         for c in cols:
             prev = pl.col(c).shift(n)
+            # WINDOW-SEMANTICS PARITY (pandas reference): ±Inf is not a valid
+            # price (NEW-200) — pandas ts_log_return censors Inf inputs to NaN.
             exprs.append(
-                pl.when((pl.col(c) > 0) & (prev > 0))
+                pl.when(
+                    pl.col(c).is_finite() & (pl.col(c) > 0)
+                    & prev.is_finite() & (prev > 0)
+                )
                 .then(pl.col(c).log() - prev.log())
                 .otherwise(None)
                 .alias(c)
@@ -210,14 +215,15 @@ class TSRankNative(SeriesOperator):
         cols = _numeric_cols(x)
         return x.with_columns(
             [
+                # WINDOW-SEMANTICS PARITY (pandas reference): pandas rolling.rank
+                # treats NaN AND ±Inf as missing (finite-only).  A rank of the
+                # window of valid values / count of valid values -> 1.0 on a
+                # single valid obs (pandas pct rank true), NaN where no finite
+                # sample.
                 (
-                    pl.col(c)
-                    .fill_nan(None)
-                    .rolling_rank(
-                        window_size=w, method="average", min_samples=mp
-                    )
-                    / pl.col(c)
-                    .fill_nan(None)
+                    pl.when(pl.col(c).is_nan() | pl.col(c).is_infinite()).then(None).otherwise(pl.col(c))
+                    .rolling_rank(window_size=w, method="average", min_samples=mp)
+                    / pl.when(pl.col(c).is_nan() | pl.col(c).is_infinite()).then(None).otherwise(pl.col(c))
                     .is_not_null()
                     .cast(pl.Float64)
                     .rolling_sum(window_size=w, min_samples=mp)
@@ -270,8 +276,11 @@ class TSSharpeNative(SeriesOperator):
         cols = _numeric_cols(x)
         exprs = []
         for c in cols:
-            mean = pl.col(c).rolling_mean(window_size=w, min_samples=mp)
-            std = pl.col(c).rolling_std(window_size=w, min_samples=mp)
+            # WINDOW-SEMANTICS PARITY (pandas reference): pandas ts_sharpe
+            # rolling mean/std drop ±Inf inside the window; explicit finite mask.
+            cc = pl.when(pl.col(c).is_nan() | pl.col(c).is_infinite()).then(None).otherwise(pl.col(c))
+            mean = cc.rolling_mean(window_size=w, min_samples=mp)
+            std = cc.rolling_std(window_size=w, min_samples=mp)
             exprs.append(
                 pl.when(std.is_null() | (std == 0))
                 .then(None)

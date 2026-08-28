@@ -284,6 +284,15 @@ _c("raw_volume_shares", "price_volume", "volume", SHARES,
   aliases=("volume",), cross_market_comparable=False,
   description="Trade volume in shares. NEVER divided by any adjustment factor.")
 
+# The platform LQTP manual (functions.yaml) defines ``volume = Volume / Factor``.
+# For FactorEngine the LQTP surface (dialect='lqtp') must therefore evaluate
+# ``volume`` on the ADJUSTED share series, not the raw vendor series.  The
+# ``raw`` alias is remapped here so the LQTP allowlist keeps ``volume`` on the
+# adjusted series while ``raw_volume_shares`` remains the explicit raw series.
+_c("continuous_volume_shares", "price_volume", "volume", SHARES,
+  aliases=("raw_volume_shares",), cross_market_comparable=False,
+  description="Backward-adjusted trade volume in shares = Volume / Factor (LQTP functions.yaml).")
+
 _c("amount_local", "price_volume", "amount", LOCAL_MONEY, aliases=("amount", "turnover_value"),
   market_local_only=True, cross_market_comparable=False,
   description="Turnover amount in local currency (CNY/USD). NOT cross-market comparable as a raw number.")

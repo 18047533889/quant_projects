@@ -78,9 +78,10 @@ def test_update_time_role_is_ingestion_time_not_knowledge():
 
 
 def test_price_fields_adjustment_status_declared():
-    """R17-010: Factor direction is verified (backward multiplier); raw OHLC/VWAP
-    declare RAW price basis; pre_close declares the official-reference basis —
-    the stale ``adjustment_status == "unverified"`` metadata is gone."""
+    """R17-010 + ADJ_FIELD_MIGRATION（2026-08-28）：Factor 方向 verified
+    （backward multiplier）；复权表 StockDailyBarAdj 的 OHLCV/limit 声明
+    ADJUSTED price basis（权威口径）；未复权 StockDailyBar 仍声明 RAW。pre_close
+    在复权表声明 ADJUSTED / 未复权表声明 official-reference。"""
     for logical, expected_status, expected_basis in (
         ("open", "raw", "RAW"),
         ("high", "raw", "RAW"),
@@ -90,9 +91,7 @@ def test_price_fields_adjustment_status_declared():
         ("pre_close", "official_reference_pre_close", "OFFICIAL_REFERENCE_PRE_CLOSE"),
         ("volume", "raw", None),
     ):
-        # Open/High/Low/Close/Vwap are physical columns shared by the daily,
-        # minute, index and ETF bar tables; the low-level registry requires a
-        # table qualifier.  Formula resolution defaults to StockDailyBar.
+        # 未复权行情的 RAW 声明仍保留（Factor/Volume/上游 LQTP 用途）。
         spec = FIELD_REGISTRY.get(logical, table="StockDailyBar")
         assert spec is not None, logical
         assert spec.adjustment is None, logical
@@ -101,6 +100,20 @@ def test_price_fields_adjustment_status_declared():
             assert spec.price_basis is None or spec.price_basis == "RAW", logical
         else:
             assert spec.price_basis == expected_basis, logical
+    # 复权权威口径：StockDailyBarAdj 同 logical 名声明 ADJUSTED。
+    for logical, source in (
+        ("open", "AdjOpen"),
+        ("high", "AdjHigh"),
+        ("low", "AdjLow"),
+        ("close", "AdjClose"),
+        ("vwap", "AdjVwap"),
+        ("pre_close", "AdjPreClose"),
+    ):
+        spec = FIELD_REGISTRY.get(logical, table="StockDailyBarAdj")
+        assert spec is not None, logical
+        assert spec.source_name == source, (logical, spec.source_name)
+        assert spec.price_basis == "ADJUSTED", logical
+        assert spec.metadata.get("adjustment_status") == "adjusted", logical
 
 
 def test_factor_direction_is_verified_backward_multiplier():

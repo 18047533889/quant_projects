@@ -2139,6 +2139,33 @@ class DataAccessSource(DataSource):
         unit = self.timestamp_unit or options.get("timestamp_unit")
         return ds, normalize, unit
 
+    def _maybe_lqtp_factor_for(self, names: Iterable[str]) -> str | None:
+        """LQTP anchor ``volume`` requests need the Factor column in the same read.
+
+        Platform functions.yaml: ``volume = Volume / Factor``.  When a bare
+        ``volume`` is requested on the StockDailyBar anchor, add the physical
+        ``Factor`` column to the read so ``_normalize_contract_columns`` can
+        apply the division.  Returns the physical factor column name, or None
+        when not applicable (already cached / different dataset / SourceRef).
+        """
+        if not self.dataset or str(self.dataset) not in {
+            "ashare_stock_daily", "ashare_stock_daily_adj",
+        }:
+            return None
+        if "volume" not in (list(names) or []):
+            return None
+        # Only when volume is not already cached (avoid re-reading Factor for
+        # cache hits) — and only on the anchor path (this method is called from
+        # load_columns with anchor logical names).
+        if "volume" in self._column_cache:
+            return None
+        # The explicit alias map may remap volume elsewhere; require the
+        # physical source to be Volume so the division is correct.
+        physical = self.fields.get("volume", "Volume")
+        if physical != "Volume":
+            return None
+        return "Factor"
+
     def load_columns(self, names: list[str]) -> dict[str, Any]:
         self.refresh_snapshot()
         needed = [name for name in names if name not in self._column_cache]
@@ -2147,7 +2174,16 @@ class DataAccessSource(DataSource):
                 self._column_cache.move_to_end(name)
             return {name: self._column_cache[name] for name in names}
 
+        # LQTP 平台口径：StockDailyBar 裸 ``volume`` = Volume / Factor（后复权量）。
+        # ``_normalize_contract_columns`` 需要同一批读到 Factor 列才能做除法；若不
+        # 在 _resolve_columns 里追加 physical Factor，DataAccess 只拉 Volume、（除不
+        # 到）normalization 直接跳过 —— 复权量始终不生效。这里让 anchor 请求
+        # ``volume`` 时同批读 Factor（输出仍只暴露 volume 逻辑列，Factor 由
+        # normalization 消费后不进 ``_column_cache``）。
+        lqtp_extra_factor = self._maybe_lqtp_factor_for(names)
         physical, output_names = self._resolve_columns(needed)
+        if lqtp_extra_factor and lqtp_extra_factor not in physical:
+            physical = list(physical) + [lqtp_extra_factor]
         store = _get_store()
         ds, normalize, unit = self._adapter_options(store)
         logger.info(
@@ -2244,6 +2280,11 @@ class DataAccessSource(DataSource):
         lazy 路径是 raw 单位、eager 是 decimal，parity bug）。FE FIELD_REGISTRY 覆盖的
         字段（``source == "registry"``）按 plan.scale 归一化（长尾兼容）。
 
+        LQTP platform surface（functions.yaml）：``volume = Volume / Factor``，
+        ``close/open/high/low/pre_close/vwap = raw * Factor``，``amount``、``ret``、
+        ``factor`` 原样。当前 FE 的 StockDailyBar anchor 全字段是 RAW 口径，bare
+        ``volume`` 必须先应用 /Factor 复权量，delta/rolling 系列才与平台一致。
+
         Production is fail-closed: a unit/scale failure raises instead of
         silently caching the raw vendor value (which would contaminate every
         downstream operator with a 10000× or 100× error).
@@ -2287,6 +2328,22 @@ class DataAccessSource(DataSource):
                 ) from exc
             logger.warning("field normalization skipped for %s: %s", self.dataset, exc)
 
+        # LQTP 平台口径（functions.yaml）：StockDailyBar 裸 ``volume`` = Volume / Factor
+        # （后复权量）。Factor 物理列由 ``load_columns`` 的同批读取带进来（fetched 里
+        # 键为物理 ``Factor``）。这里只在 anchor ``ashare_stock_daily`` / 复权
+        # ``ashare_stock_daily_adj``（复权表 Volume 保持原始值，后复权量 = Volume/Factor）
+        # 且 fetched 同时含 volume + Factor 时做除法，避免污染 registry/catalog 已调整路径。
+        if self.dataset in {"ashare_stock_daily", "ashare_stock_daily_adj"} and "volume" in fetched and "Factor" in fetched:
+            fvol = fetched["volume"]
+            ffac = fetched["Factor"]
+            if isinstance(fvol, pd.Series) and isinstance(ffac, pd.Series):
+                if not fvol.index.equals(ffac.index):
+                    ffac = ffac.reindex(fvol.index)
+                fetched["volume"] = fvol / ffac.replace(0.0, float("nan"))
+                normalized.add("volume")
+
+        # 兼容外部 DataAccess 契约：A 股 Return 已按 COS 收缩归一化，这里避免二次
+        # 处理（上方 ``normalized`` 已覆盖 catalog 的字段直接跳过）。
         # Compatibility for external DataAccess contracts that are not represented
         # in FactorEngine's field registry yet.
         try:

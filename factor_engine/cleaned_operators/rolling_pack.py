@@ -237,7 +237,19 @@ def register_polars_udf(canonical: str) -> None:
 
         def _calculate_series(self, *frames, **params):
             from factor_engine.cleaned_operators.registry import OperatorRegistry as _Reg
+            from factor_engine.cleaned_operators.common._polars_bridge import _is_panel_like
 
+            # PARITY-B: a keyword-bound panel call (e.g. ``calculate(x=pl_wide)``)
+            # lands the panel in ``params`` (the shared validator keeps it a kwarg),
+            # not in ``frames``.  Normalize so the pandas delegate receives panels
+            # positionally in declaration order.
+            frames = list(frames)
+            frames.extend(params.pop(k) for k in list(params) if _is_panel_like(params[k]))
+            if not frames:
+                raise RuntimeError(
+                    f"{canonical}: polars UDF delegate received no panel input "
+                    "(expected positional or keyword panel)"
+                )
             pandas_op = _Reg.get(canonical, "pandas_numpy")
             if pandas_op is None:
                 raise RuntimeError(f"pandas_numpy reference missing for {canonical}")

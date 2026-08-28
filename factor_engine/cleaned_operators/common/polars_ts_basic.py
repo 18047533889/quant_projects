@@ -62,7 +62,8 @@ class TSMeanNative(SeriesOperator):
 
         w = strict_integer(d, "d", minimum=1)
         cols = _numeric_cols(x)
-        return x.lazy().with_columns([pl.col(c).rolling_mean(window_size=w).alias(c) for c in cols]).collect()
+        # ROLLING-EDGE: min_samples=1 == pandas rolling(window, min_periods=1).
+        return x.lazy().with_columns([pl.col(c).rolling_mean(window_size=w, min_samples=1).alias(c) for c in cols]).collect()
 
 
 @register_operator(
@@ -99,7 +100,13 @@ class TSStdNative(SeriesOperator):
         w = strict_integer(d, "d", minimum=2)
         delta_dof = strict_integer(ddof, "ddof", minimum=0, maximum=1)
         cols = _numeric_cols(x)
-        return x.lazy().with_columns([pl.col(c).rolling_std(window_size=w, ddof=delta_dof).alias(c) for c in cols]).collect()
+        # ROLLING-EDGE: min_samples=1 reproduces the pandas reference
+        # ``rolling(window, min_periods=1)`` warmup — NaN only while fewer than
+        # one observation has been seen, so a full window is not required to
+        # start emitting (pandas semantics).  The polars default (full window)
+        # emitted NaN for every window not yet full, diverging from pandas on
+        # plain/NaN-gap/short inputs.
+        return x.lazy().with_columns([pl.col(c).rolling_std(window_size=w, ddof=delta_dof, min_samples=1).alias(c) for c in cols]).collect()
 
 
 @register_operator(
@@ -130,7 +137,9 @@ class TSSumNative(SeriesOperator):
 
         w = strict_integer(d, "d", minimum=1)
         cols = _numeric_cols(x)
-        return x.lazy().with_columns([pl.col(c).rolling_sum(window_size=w).alias(c) for c in cols]).collect()
+        # ROLLING-EDGE: min_samples=1 == pandas rolling(window, min_periods=1)
+        # warmup (emit from the first observation; NaN only before any data).
+        return x.lazy().with_columns([pl.col(c).rolling_sum(window_size=w, min_samples=1).alias(c) for c in cols]).collect()
 
 
 @register_operator(
@@ -161,7 +170,8 @@ class TSMaxNative(SeriesOperator):
 
         w = strict_integer(d, "d", minimum=1)
         cols = _numeric_cols(x)
-        return x.lazy().with_columns([pl.col(c).rolling_max(window_size=w).alias(c) for c in cols]).collect()
+        # ROLLING-EDGE: min_samples=1 == pandas rolling(window, min_periods=1).
+        return x.lazy().with_columns([pl.col(c).rolling_max(window_size=w, min_samples=1).alias(c) for c in cols]).collect()
 
 
 @register_operator(
@@ -192,7 +202,8 @@ class TSMinNative(SeriesOperator):
 
         w = strict_integer(d, "d", minimum=1)
         cols = _numeric_cols(x)
-        return x.lazy().with_columns([pl.col(c).rolling_min(window_size=w).alias(c) for c in cols]).collect()
+        # ROLLING-EDGE: min_samples=1 == pandas rolling(window, min_periods=1).
+        return x.lazy().with_columns([pl.col(c).rolling_min(window_size=w, min_samples=1).alias(c) for c in cols]).collect()
 
 
 @register_operator(
@@ -223,7 +234,8 @@ class TSMedianNative(SeriesOperator):
 
         w = strict_integer(d, "d", minimum=1)
         cols = _numeric_cols(x)
-        return x.lazy().with_columns([pl.col(c).rolling_median(window_size=w).alias(c) for c in cols]).collect()
+        # ROLLING-EDGE: min_samples=1 == pandas rolling(window, min_periods=1).
+        return x.lazy().with_columns([pl.col(c).rolling_median(window_size=w, min_samples=1).alias(c) for c in cols]).collect()
 
 
 @register_operator(
@@ -256,7 +268,8 @@ class TSQuantileNative(SeriesOperator):
         w = strict_integer(d, "d", minimum=1)
         quantile = strict_finite_scalar(q, "q", minimum=0.0, maximum=1.0)
         cols = _numeric_cols(x)
-        return x.lazy().with_columns([pl.col(c).rolling_quantile(quantile=quantile, window_size=w).alias(c) for c in cols]).collect()
+        # ROLLING-EDGE: pandas rolling.quantile uses min_periods=1 -> min_samples=1.
+        return x.lazy().with_columns([pl.col(c).rolling_quantile(quantile=quantile, window_size=w, min_samples=1).alias(c) for c in cols]).collect()
 
 
 @_register_basic_operator(
@@ -467,20 +480,36 @@ class TSArgmaxNative(SeriesOperator):
         name="ts_argmax",
         category="time_series",
         description="滚动窗口最大值索引",
-        param_names=["x", "d"],
+        param_names=["x", "window"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_aliases={"d": "window"},
         param_specs={
-            "d": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        w = strict_integer(d, "d", minimum=1)
+        w = strict_integer(window, "window", minimum=1)
         cols = _numeric_cols(x)
-        return x.lazy().with_columns([pl.col(c).rolling_map(lambda s: s.arg_max(), window_size=w).alias(c) for c in cols]).collect()
+        # ROLLING-EDGE: canonical ts_argmax = AGE of the max (0 = current bar,
+        # tie = newest), matching pandas rolling_days_since_extreme.  The old
+        # ``window-1 - arg_max`` produced the opposite offset and, combined with
+        # rolling_map's full-window default, NaN for every non-full window.
+        def _age_max(s: pl.Series) -> float:
+            import numpy as _np
+
+            v = _np.asarray(s.to_numpy(), dtype=float)
+            finite = v[_np.isfinite(v)]
+            if finite.size == 0:
+                return _np.nan
+            value = float(_np.max(finite))
+            hits = _np.flatnonzero(_np.isfinite(v) & (v == value))
+            return float(v.size - 1 - int(hits[-1]))
+
+        return x.lazy().with_columns([pl.col(c).rolling_map(_age_max, window_size=w, min_samples=1).alias(c) for c in cols]).collect()
 
 
 @register_operator(
@@ -498,20 +527,34 @@ class TSArgminNative(SeriesOperator):
         name="ts_argmin",
         category="time_series",
         description="滚动窗口最小值索引",
-        param_names=["x", "d"],
+        param_names=["x", "window"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_aliases={"d": "window"},
         param_specs={
-            "d": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        w = strict_integer(d, "d", minimum=1)
+        w = strict_integer(window, "window", minimum=1)
         cols = _numeric_cols(x)
-        return x.lazy().with_columns([pl.col(c).rolling_map(lambda s: s.arg_min(), window_size=w).alias(c) for c in cols]).collect()
+        # ROLLING-EDGE: canonical ts_argmin = AGE of the min (0 = current bar,
+        # tie = newest), matching pandas rolling_days_since_extreme.
+        def _age_min(s: pl.Series) -> float:
+            import numpy as _np
+
+            v = _np.asarray(s.to_numpy(), dtype=float)
+            finite = v[_np.isfinite(v)]
+            if finite.size == 0:
+                return _np.nan
+            value = float(_np.min(finite))
+            hits = _np.flatnonzero(_np.isfinite(v) & (v == value))
+            return float(v.size - 1 - int(hits[-1]))
+
+        return x.lazy().with_columns([pl.col(c).rolling_map(_age_min, window_size=w, min_samples=1).alias(c) for c in cols]).collect()
 
 
 @register_operator(
@@ -529,22 +572,24 @@ class TSArgmaxAgeNative(SeriesOperator):
         name="ts_argmax_age",
         category="time_series",
         description="距离最大值天数",
-        param_names=["x", "d"],
+        param_names=["x", "window", "min_periods"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_aliases={"d": "window"},
         param_specs={
-            "d": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, min_periods: int = 1, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        w = strict_integer(d, "d", minimum=1)
+        w = strict_integer(window, "window", minimum=1)
+        mp = strict_integer(min_periods, "min_periods", minimum=1)
         cols = _numeric_cols(x)
         exprs = []
         for c in cols:
-            argmax_idx = pl.col(c).rolling_map(lambda s: s.arg_max(), window_size=w)
+            argmax_idx = pl.col(c).rolling_map(lambda s: s.arg_max(), window_size=w, min_samples=mp)
             exprs.append((pl.lit(w - 1) - argmax_idx).alias(c))
         return x.lazy().with_columns(exprs).collect()
 
@@ -564,22 +609,24 @@ class TSArgminAgeNative(SeriesOperator):
         name="ts_argmin_age",
         category="time_series",
         description="距离最小值天数",
-        param_names=["x", "d"],
+        param_names=["x", "window", "min_periods"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_aliases={"d": "window"},
         param_specs={
-            "d": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, min_periods: int = 1, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        w = strict_integer(d, "d", minimum=1)
+        w = strict_integer(window, "window", minimum=1)
+        mp = strict_integer(min_periods, "min_periods", minimum=1)
         cols = _numeric_cols(x)
         exprs = []
         for c in cols:
-            argmin_idx = pl.col(c).rolling_map(lambda s: s.arg_min(), window_size=w)
+            argmin_idx = pl.col(c).rolling_map(lambda s: s.arg_min(), window_size=w, min_samples=mp)
             exprs.append((pl.lit(w - 1) - argmin_idx).alias(c))
         return x.lazy().with_columns(exprs).collect()
 
@@ -688,18 +735,21 @@ class TSRankIfNative(SeriesOperator):
         name="ts_rank_if",
         category="time_series",
         description="条件滚动排名",
-        param_names=["x", "cond", "d"],
+        param_names=["x", "condition", "window", "min_periods"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_aliases={"cond": "condition", "d": "window"},
         param_specs={
-            "d": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, cond: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, condition: pl.DataFrame, window: int = 20,
+                          min_periods: int = 1, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        w = strict_integer(d, "d", minimum=1)
+        w = strict_integer(window, "window", minimum=1)
+        cond = condition
         cols = _numeric_cols(x)
         exprs = []
         for c in cols:
@@ -731,20 +781,30 @@ class TSCountIfNative(SeriesOperator):
         name="ts_count_if",
         category="time_series",
         description="条件计数",
-        param_names=["cond", "d"],
+        # P0-B1: the canonical ts_count_if contract is ``["condition",
+        # "window", "min_periods"]`` (daily_panel / overhaul).  This legacy
+        # native kernel keeps the exact canonical names so the R6-157 registry
+        # invariant (keys(param_specs) ⊆ param_names) holds when the canonical
+        # logical contract is inherited by the overhaul layer.  ``d`` is the old
+        # alpha-language alias of ``window`` and is exposed via param_aliases,
+        # never as a declared parameter / ParamSpec key.
+        param_names=["condition", "window", "min_periods"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_aliases={"d": "window", "cond": "condition"},
         param_specs={
-            "d": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, cond: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, condition: pl.DataFrame, window: int = 20, min_periods: int = 1, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        w = strict_integer(d, "d", minimum=1)
-        cols = _numeric_cols(cond)
-        return cond.with_columns([cond[c].cast(pl.Float64).rolling_sum(window_size=w).alias(c) for c in cols])
+        w = strict_integer(window, "window", minimum=1)
+        mp = strict_integer(min_periods, "min_periods", minimum=1)
+        return condition.select(
+            [pl.col(c).cast(pl.Float64).rolling_sum(window_size=w, min_samples=mp).alias(c) for c in condition.columns]
+        )
 
 
 @register_operator(
@@ -838,25 +898,26 @@ class TSMeanIfNative(SeriesOperator):
         name="ts_mean_if",
         category="time_series",
         description="条件均值",
-        param_names=["x", "cond", "d"],
+        param_names=["x", "condition", "window"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_aliases={"cond": "condition", "d": "window"},
         param_specs={
-            "d": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, cond: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, condition: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        w = strict_integer(d, "d", minimum=1)
+        w = strict_integer(window, "window", minimum=1)
         cols = _numeric_cols(x)
         exprs = []
         for c in cols:
-            if c not in cond.columns:
+            if c not in condition.columns:
                 exprs.append(pl.lit(None).alias(c))
                 continue
-            masked = pl.when(cond[c]).then(pl.col(c)).otherwise(None)
+            masked = pl.when(condition[c]).then(pl.col(c)).otherwise(None)
             exprs.append(masked.rolling_mean(window_size=w).alias(c))
         return x.lazy().with_columns(exprs).collect()
 
@@ -876,26 +937,27 @@ class TSStdIfNative(SeriesOperator):
         name="ts_std_if",
         category="time_series",
         description="条件标准差",
-        param_names=["x", "cond", "d"],
+        param_names=["x", "condition", "window", "ddof"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_aliases={"cond": "condition", "d": "window"},
         param_specs={
-            "d": ParamSpec(dtype=int, min=2, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=2, default=20, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, cond: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, condition: pl.DataFrame, window: int = 20, ddof: int = 1, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        w = strict_integer(d, "d", minimum=2)
+        w = strict_integer(window, "window", minimum=2)
         cols = _numeric_cols(x)
         exprs = []
         for c in cols:
-            if c not in cond.columns:
+            if c not in condition.columns:
                 exprs.append(pl.lit(None).alias(c))
                 continue
-            masked = pl.when(cond[c]).then(pl.col(c)).otherwise(None)
-            exprs.append(masked.rolling_std(window_size=w).alias(c))
+            masked = pl.when(condition[c]).then(pl.col(c)).otherwise(None)
+            exprs.append(masked.rolling_std(window_size=w, ddof=ddof).alias(c))
         return x.lazy().with_columns(exprs).collect()
 
 
@@ -914,25 +976,26 @@ class TSSumIfNative(SeriesOperator):
         name="ts_sum_if",
         category="time_series",
         description="条件求和",
-        param_names=["x", "cond", "d"],
+        param_names=["x", "condition", "window"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_aliases={"d": "window", "cond": "condition"},
         param_specs={
-            "d": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, cond: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, condition: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        w = strict_integer(d, "d", minimum=1)
+        w = strict_integer(window, "window", minimum=1)
         cols = _numeric_cols(x)
         exprs = []
         for c in cols:
-            if c not in cond.columns:
+            if c not in condition.columns:
                 exprs.append(pl.lit(None).alias(c))
                 continue
-            masked = pl.when(cond[c]).then(pl.col(c)).otherwise(None)
+            masked = pl.when(condition[c]).then(pl.col(c)).otherwise(None)
             exprs.append(masked.rolling_sum(window_size=w).alias(c))
         return x.lazy().with_columns(exprs).collect()
 
@@ -1153,23 +1216,24 @@ class TSDaysSinceNative(SeriesOperator):
         name="ts_days_since",
         category="time_series",
         description="距上次条件为真天数",
-        param_names=["cond"],
+        param_names=["condition", "max_lookback"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_aliases={"cond": "condition"},
     )
 
-    def _calculate_series(self, cond: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(cond)
+    def _calculate_series(self, condition: pl.DataFrame, max_lookback: int = 252, **kwargs) -> pl.DataFrame:
+        cols = _numeric_cols(condition)
         exprs = []
         for c in cols:
             # Use cumsum to track position, then diff to find days since
-            event_idx = pl.when(cond[c]).then(pl.lit(1)).otherwise(pl.lit(0)).cum_sum()
+            event_idx = pl.when(condition[c]).then(pl.lit(1)).otherwise(pl.lit(0)).cum_sum()
             exprs.append(
                 (pl.int_range(0, pl.len()).over(event_idx) - 1)
                 .cast(pl.Float64)
                 .alias(c)
             )
-        return cond.with_columns(exprs)
+        return condition.with_columns(exprs)
 
 
 @register_operator(
@@ -1274,19 +1338,20 @@ class TSTopkMeanNative(SeriesOperator):
         name="ts_topk_mean",
         category="time_series",
         description="滚动topk均值",
-        param_names=["x", "d", "k"],
+        param_names=["x", "window", "k"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_aliases={"d": "window"},
         param_specs={
-            "d": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
             "k": ParamSpec(dtype=int, min=1, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, d: int = 20, k: int = 5, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, k: int = 5, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        w = strict_integer(d, "d", minimum=1)
+        w = strict_integer(window, "window", minimum=1)
         topk = strict_integer(k, "k", minimum=1)
         cols = _numeric_cols(x)
         return x.lazy().with_columns([
@@ -1310,19 +1375,20 @@ class TSTopkStdNative(SeriesOperator):
         name="ts_topk_std",
         category="time_series",
         description="滚动topk标准差",
-        param_names=["x", "d", "k"],
+        param_names=["x", "window", "k"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_aliases={"d": "window"},
         param_specs={
-            "d": ParamSpec(dtype=int, min=2, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=2, default=20, searchable=True, param_role=ParamRole.HORIZON),
             "k": ParamSpec(dtype=int, min=2, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, d: int = 20, k: int = 5, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, k: int = 5, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        w = strict_integer(d, "d", minimum=2)
+        w = strict_integer(window, "window", minimum=2)
         topk = strict_integer(k, "k", minimum=2)
         cols = _numeric_cols(x)
         return x.lazy().with_columns([
@@ -1346,19 +1412,20 @@ class TSTopkSumNative(SeriesOperator):
         name="ts_topk_sum",
         category="time_series",
         description="滚动topk求和",
-        param_names=["x", "d", "k"],
+        param_names=["x", "window", "k"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_aliases={"d": "window"},
         param_specs={
-            "d": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
             "k": ParamSpec(dtype=int, min=1, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, d: int = 20, k: int = 5, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, k: int = 5, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        w = strict_integer(d, "d", minimum=1)
+        w = strict_integer(window, "window", minimum=1)
         topk = strict_integer(k, "k", minimum=1)
         cols = _numeric_cols(x)
         return x.lazy().with_columns([
@@ -1382,19 +1449,20 @@ class TSBottomkMeanNative(SeriesOperator):
         name="ts_bottomk_mean",
         category="time_series",
         description="滚动bottomk均值",
-        param_names=["x", "d", "k"],
+        param_names=["x", "window", "k"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_aliases={"d": "window"},
         param_specs={
-            "d": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
             "k": ParamSpec(dtype=int, min=1, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, d: int = 20, k: int = 5, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, k: int = 5, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        w = strict_integer(d, "d", minimum=1)
+        w = strict_integer(window, "window", minimum=1)
         bottomk = strict_integer(k, "k", minimum=1)
         cols = _numeric_cols(x)
         return x.lazy().with_columns([
@@ -1418,19 +1486,20 @@ class TSBottomkStdNative(SeriesOperator):
         name="ts_bottomk_std",
         category="time_series",
         description="滚动bottomk标准差",
-        param_names=["x", "d", "k"],
+        param_names=["x", "window", "k"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_aliases={"d": "window"},
         param_specs={
-            "d": ParamSpec(dtype=int, min=2, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=2, default=20, searchable=True, param_role=ParamRole.HORIZON),
             "k": ParamSpec(dtype=int, min=2, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, d: int = 20, k: int = 5, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, k: int = 5, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        w = strict_integer(d, "d", minimum=2)
+        w = strict_integer(window, "window", minimum=2)
         bottomk = strict_integer(k, "k", minimum=2)
         cols = _numeric_cols(x)
         return x.lazy().with_columns([
@@ -1454,19 +1523,20 @@ class TSBottomkSumNative(SeriesOperator):
         name="ts_bottomk_sum",
         category="time_series",
         description="滚动bottomk求和",
-        param_names=["x", "d", "k"],
+        param_names=["x", "window", "k"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_aliases={"d": "window"},
         param_specs={
-            "d": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
             "k": ParamSpec(dtype=int, min=1, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, d: int = 20, k: int = 5, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, k: int = 5, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        w = strict_integer(d, "d", minimum=1)
+        w = strict_integer(window, "window", minimum=1)
         bottomk = strict_integer(k, "k", minimum=1)
         cols = _numeric_cols(x)
         return x.lazy().with_columns([

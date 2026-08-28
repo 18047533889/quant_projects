@@ -1034,6 +1034,11 @@ class OperatorRegistry:
     # Intentional same-backend overwrites (replace=True): canonical/backend,
     # old/new source, old/new impl hash, reason (P0-31 audit trail).
     _overwrite_log: List[dict] = []
+    # P0-B1: deferred alias edges registered inside the building window whose
+    # canonical target had not yet registered when the alias module loaded
+    # (e.g. ``polars_statistics`` before ``statistics``).  Published by the
+    # next canonical registration of that target / by ``publish_pending_aliases``.
+    _pending_aliases: List[tuple] = []
     # Per-(canonical, backend) ordered override chain for the current load.
     # Round-7 P0: a declared override that continues an existing chain must pin
     # the exact source it replaces, so the final implementation no longer
@@ -1460,6 +1465,20 @@ class OperatorRegistry:
             else:
                 raise ValueError(f"canonical already declared as alias: {canonical!r}")
         existing_ops = cls._operators.setdefault(canonical, {})
+        # P0-B1: once this canonical (or catalog) is registered, publish any
+        # deferred aliases that pointed at it (polars_statistics's
+        # ts_mean_abs_deviation edge, etc).  Idempotent; missing targets stay
+        # pending and are flushed by the dedupe pass at the end of load.
+        if cls._pending_aliases:
+            _pending, cls._pending_aliases = cls._pending_aliases, []
+            for _alias, _target in _pending:
+                if _target in cls._operators or _target in cls._catalog:
+                    try:
+                        cls.register_alias(_alias, _target)
+                    except Exception:
+                        cls._pending_aliases.append((_alias, _target))
+                else:
+                    cls._pending_aliases.append((_alias, _target))
         # R7-234: capture the FIRST registration identity once and never
         # overwrite it — even when this canonical was never previously
         # registered with an operator, but only catalog-only or unregistered.
@@ -1766,6 +1785,27 @@ class OperatorRegistry:
         return cls._operators, cls._aliases, cls._catalog
 
     @classmethod
+    def publish_pending_aliases(cls) -> None:
+        """P0-B1: flush deferred alias edges once the canonical target is registered.
+
+        Runs automatically at the end of each canonical ``register`` while
+        building; load_all's dedupe pass also flushes.  Pending edges whose
+        target is still absent stay pending (fail-closed — alias is never
+        silently registered against a missing canonical).
+        """
+        if not cls._pending_aliases:
+            return
+        _pending, cls._pending_aliases = cls._pending_aliases, []
+        for _alias, _target in _pending:
+            if _target in cls._operators or _target in cls._catalog:
+                try:
+                    cls.register_alias(_alias, _target)
+                except Exception:
+                    cls._pending_aliases.append((_alias, _target))
+            else:
+                cls._pending_aliases.append((_alias, _target))
+
+    @classmethod
     def resolve_canonical(cls, name: str, *, max_depth: int = 8) -> str:
         """Resolve aliases transitively and reject cycles or missing targets."""
         from factor_engine.cleaned_operators.tombstones import assert_callable
@@ -1824,6 +1864,21 @@ class OperatorRegistry:
         if existing is not None and existing == canonical:
             return
         if canonical not in cls._operators and canonical not in cls._catalog:
+            if cls.lifecycle() == cls.Lifecycle.BUILDING:
+                # P0-B1: inside the building window (bootstrap / pytest late-surface
+                # staging) an alias may legitimately be declared by a module (e.g.
+                # polars_statistics -> ts_mean_abs_deviation) BEFORE the canonical
+                # operator module of the same package family has finished
+                # registering (statistics.py).  Defer: park the pending edge so a
+                # later pass (statistics registration / _dedupe) can publish it;
+                # never hard-fail the whole load over an ordering detail that a
+                # settled alias graph does not contain.
+                _pend = cls._pending_aliases
+                if _pend is None or not isinstance(_pend, list):
+                    _pend = list(_pend or ())
+                    cls._pending_aliases = _pend
+                _pend.append((alias, canonical))
+                return
             raise KeyError(f"alias target is not registered: {canonical!r}")
         probe = dict(cls._aliases)
         probe[alias] = canonical

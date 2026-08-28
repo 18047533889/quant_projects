@@ -56,6 +56,28 @@ def _flag(cond: pl.Expr) -> pl.Expr:
     return pl.when(cond.is_not_null() & cond).then(1.0).otherwise(0.0)
 
 
+def _cdl_valid_mask(o: pl.Expr, h: pl.Expr, l: pl.Expr, c: pl.Expr) -> pl.Expr:
+    """R26 validity mask mirror of ``technical_extensions._cdl_valid``.
+
+    True only when every OHLC field is finite, strictly positive, and the
+    geometry is valid (``High >= max(Open, Close) >= min(Open, Close) >= Low``).
+    An invalid bar emits NaN — never a confirmed no-pattern 0.  Without this the
+    polars cdl kernels wrote 0/1 even on invalid (NaN / non-positive / broken
+    geometry) bars, diverging from the pandas tri-state reference.
+    """
+    o, h, l, c = (e.cast(pl.Float64, strict=False) for e in (o, h, l, c))
+    pos = (o > 0.0) & (h > 0.0) & (l > 0.0) & (c > 0.0)
+    finite = o.is_not_null() & h.is_not_null() & l.is_not_null() & c.is_not_null()
+    geom = (h >= pl.max_horizontal(o, c)) & (l <= pl.min_horizontal(o, c)) & (h >= l)
+    return pos & finite & geom
+
+
+def _cdl_out_value(expr: pl.Expr, valid: pl.Expr, direction: pl.Expr) -> pl.Expr:
+    """Tri-state signed cdl output: NaN on invalid bar, +-direction when flag,
+    0 otherwise — mirrors ``_cdl_signed``."""
+    return pl.when(~valid).then(None).otherwise(pl.when(expr).then(direction).otherwise(0.0))
+
+
 def _signed_flag(sign: pl.Expr, cond: pl.Expr) -> pl.Expr:
     # pandas: sign * flag.astype(float)；sign 为 NaN(输入缺失) 时 NaN*0 = NaN 保留。
     return sign * _flag(cond)
@@ -320,7 +342,8 @@ def cdl_doji(open_, high, low, close):
     for c in _cols(open_, high, low, close):
         frame = _frame(open_, high, low, close, c)
         _, body, rng, _, _ = _parts(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
-        values[c] = _one(frame, c, _flag(body <= 0.10 * rng))
+        valid = _cdl_valid_mask(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
+        values[c] = _one(frame, c, _cdl_out_value(body <= 0.10 * rng, valid, pl.lit(1.0)))
     return _result(close, values)
 
 
@@ -329,11 +352,12 @@ def _cdl_hammer_like(open_, high, low, close, *, inverted: bool) -> pl.DataFrame
     for c in _cols(open_, high, low, close):
         frame = _frame(open_, high, low, close, c)
         _, body, rng, upper, lower = _parts(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
+        valid = _cdl_valid_mask(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
         if inverted:
             flag = (body <= 0.35 * rng) & (upper >= 2.0 * body) & (lower <= 0.35 * _max_pair(body, pl.lit(_EPS)))
         else:
             flag = (body <= 0.35 * rng) & (lower >= 2.0 * body) & (upper <= 0.35 * _max_pair(body, pl.lit(_EPS)))
-        values[c] = _one(frame, c, _flag(flag))
+        values[c] = _one(frame, c, _cdl_out_value(flag, valid, pl.lit(1.0)))
     return _result(close, values)
 
 
@@ -367,10 +391,12 @@ def cdl_hammer(open_, high, low, close):
         downtrend = _prior_trend_expr(cl, up=False)
         pattern = flag & downtrend.fill_null(False)
         out = _flag(pattern)
-        # 与 pandas ``out.where(downtrend.notna())``：基线不可得 → NaN。
-        # round-3 audit item 15: 结构非法 / 非正价格 bar 也不判定为 pattern。
-        valid = _validate_ohlc(o, h, l, cl)
-        values[c] = _one(frame, c, pl.when(downtrend.is_not_null() & valid).then(out).otherwise(None))
+        # PARITY-B: pandas ``_cdl_hammer`` maps an invalid bar to NaN via
+        # ``_cdl_signed(..., valid)``; the prior-trend gate only suppresses the
+        # pattern when the trend baseline is missing.  A structurally-valid bar
+        # with no downtrend is 0 (no pattern), never NaN.
+        valid = _cdl_valid_mask(o, h, l, cl)
+        values[c] = _one(frame, c, _cdl_out_value(pattern, valid, pl.lit(1.0)))
     return _result(close, values)
 
 
@@ -415,7 +441,10 @@ def cdl_engulfing(open_, high, low, close):
         prev_o, prev_c = o.shift(1), cl.shift(1)
         bull = (cl > o) & (prev_c < prev_o) & (o <= prev_c) & (cl >= prev_o)
         bear = (cl < o) & (prev_c > prev_o) & (o >= prev_c) & (cl <= prev_o)
-        values[c] = _one(frame, c, _flag(bull) - _flag(bear))
+        # PARITY-B two-day pattern: valid requires BOTH days' OHLC valid.
+        valid = _cdl_valid_mask(o, h, l, cl) & _cdl_valid_mask(prev_o, h.shift(1), l.shift(1), prev_c)
+        direction = pl.when(bull).then(1.0).when(bear).then(-1.0).otherwise(0.0)
+        values[c] = _one(frame, c, _cdl_out_value(bull | bear, valid, direction))
     return _result(close, values)
 
 
@@ -423,9 +452,10 @@ def cdl_inside_bar(open_, high, low, close):
     values = {}
     for c in _cols(open_, high, low, close):
         frame = _frame(open_, high, low, close, c)
-        h, l = pl.col("high"), pl.col("low")
+        o, h, l, cl = pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close")
         flag = (h < h.shift(1)) & (l > l.shift(1))
-        values[c] = _one(frame, c, _flag(flag))
+        valid = _cdl_valid_mask(o, h, l, cl) & _cdl_valid_mask(o.shift(1), h.shift(1), l.shift(1), cl.shift(1))
+        values[c] = _one(frame, c, _cdl_out_value(flag, valid, pl.lit(1.0)))
     return _result(close, values)
 
 
@@ -433,9 +463,12 @@ def cdl_outside_bar(open_, high, low, close):
     values = {}
     for c in _cols(open_, high, low, close):
         frame = _frame(open_, high, low, close, c)
-        h, l, o, cl = pl.col("high"), pl.col("low"), pl.col("open"), pl.col("close")
+        o, h, l, cl = pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close")
         flag = (h > h.shift(1)) & (l < l.shift(1))
-        values[c] = _one(frame, c, _signed_flag((cl - o).sign(), flag))
+        # PARITY-B: R26 outside-bar direction NaN on neutral (open==close).
+        direction = pl.when((cl - o) > 0).then(1.0).when((cl - o) < 0).then(-1.0).otherwise(None)
+        valid = _cdl_valid_mask(o, h, l, cl) & _cdl_valid_mask(o.shift(1), h.shift(1), l.shift(1), cl.shift(1))
+        values[c] = _one(frame, c, pl.when(~valid).then(None).otherwise(pl.when(flag).then(direction).otherwise(0.0)))
     return _result(close, values)
 
 

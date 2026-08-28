@@ -51,9 +51,13 @@ class TSVarPolars(SeriesOperator):
         ddof_val = int(ddof)
         min_samples = int(min_periods)
 
+        # WINDOW-SEMANTICS PARITY (pandas reference): pandas rolling.var drops
+        # ±Inf inside the window.  Explicit finite mask keeps Inf out.
+        # WINDOW-SEMANTICS PARITY (pandas reference): treat NaN/±Inf as missing.
         return _rolling_window(
             x, w,
-            lambda c, n: c.rolling_var(window_size=n, min_samples=min_samples, ddof=ddof_val)
+            lambda c, n: pl.when(c.is_nan() | c.is_infinite()).then(None).otherwise(c)
+            .rolling_var(window_size=n, min_samples=min_samples, ddof=ddof_val)
         )
 
 
@@ -63,13 +67,17 @@ class TSMedianPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="m_median", category="time_series", description="滚动中位数",
         param_names=["x", "window"], return_type="series", tags=["time_series", "polars"],
+        # d is the legacy parser alias for the canonical window parameter.
+        param_aliases={"d": "window"},
     )
 
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         w = int(kwargs.get("d", window))
         # pandas rolling().median() 跳过 NaN；polars rolling_median 会把 NaN
         # 当作最大参与排序。先 fill_nan(None) 对齐 pandas 缺失语义。
-        return _rolling_window(x, w, lambda c, n: c.fill_nan(None).rolling_median(window_size=n, min_samples=1))
+        return _rolling_window(x, w, lambda c, n: 
+            pl.when(c.is_nan() | c.is_infinite()).then(None).otherwise(c)
+            .rolling_median(window_size=n, min_samples=1))
 
 
 @register_operator(name="m_mad", category="time_series", business_category="time_series", canonical="ts_mad", source="factor_dsl_polars")

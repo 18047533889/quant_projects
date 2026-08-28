@@ -393,7 +393,7 @@ class WMA(SeriesOperator):
         examples=["WMA(close, 10)"],
         param_names=["x", "window"],
         return_type="series",
-        tags=["time_series", "wma", "weighted"]
+        tags=["time_series", "wma", "weighted"],
     )
 
     # R40 #195: the partial-warmup policy digest is part of the operator
@@ -2226,9 +2226,15 @@ class TSKurtosisPolars(SeriesOperator):
     )
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.base_polars import panel_pandas_bridge
+        from factor_engine.cleaned_operators.common.stable_high_moments_v2 import StableTsKurt
 
+        # WINDOW-SEMANTICS PARITY (pandas reference): the ACTIVE pandas_numpy
+        # ts_kurt is StableTsKurt — prefix-stable unbiased Fisher excess kurtosis
+        # on FULL finite windows (min_periods == window, dropna), NOT pandas
+        # rolling.kurt(min_periods=1).  Delegate to the same kernel so polars
+        # cannot diverge on warmup rows / partial windows / NaN / Inf.
         w = int(kwargs.get("d", window))
-        return panel_pandas_bridge(x, lambda pdf: pdf.rolling(window=w, min_periods=1).kurt())
+        return panel_pandas_bridge(x, lambda pdf: StableTsKurt()._calculate_series(pdf, w))
 
 # aliases: TS_KURT
 
@@ -2248,8 +2254,11 @@ class TSMaxPolars(SeriesOperator):
     )
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         cols = [c for c in x.columns if c not in ['date', 'stock_code']]
+        # WINDOW-SEMANTICS PARITY (pandas reference): pandas rolling.max drops
+        # ±Inf inside the window; explicit finite mask.
         return x.with_columns([
-            pl.col(c).rolling_max(window_size=window, min_samples=1).alias(c) for c in cols
+            pl.when(pl.col(c).is_nan() | pl.col(c).is_infinite()).then(None).otherwise(pl.col(c))
+            .rolling_max(window_size=window, min_samples=1).alias(c) for c in cols
         ])
 
 # aliases: Max, TS_MAX, m_max, max
@@ -2288,8 +2297,11 @@ class TSMeanPolars(SeriesOperator):
     )
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         cols = [c for c in x.columns if c not in ['date', 'stock_code']]
+        # WINDOW-SEMANTICS PARITY (pandas reference): pandas rolling.mean drops
+        # ±Inf inside the window; explicit finite mask.
         return x.with_columns([
-            pl.col(c).rolling_mean(window_size=window, min_samples=1).alias(c) for c in cols
+            pl.when(pl.col(c).is_nan() | pl.col(c).is_infinite()).then(None).otherwise(pl.col(c))
+            .rolling_mean(window_size=window, min_samples=1).alias(c) for c in cols
         ])
 
 # aliases: Mean, TS_MEAN, m_avg, mean
@@ -2310,8 +2322,11 @@ class TSMinPolars(SeriesOperator):
     )
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         cols = [c for c in x.columns if c not in ['date', 'stock_code']]
+        # WINDOW-SEMANTICS PARITY (pandas reference): pandas rolling.min drops
+        # ±Inf inside the window; explicit finite mask.
         return x.with_columns([
-            pl.col(c).rolling_min(window_size=window, min_samples=1).alias(c) for c in cols
+            pl.when(pl.col(c).is_nan() | pl.col(c).is_infinite()).then(None).otherwise(pl.col(c))
+            .rolling_min(window_size=window, min_samples=1).alias(c) for c in cols
         ])
 
 # aliases: Min, TS_MIN, m_min, min
@@ -2403,8 +2418,12 @@ class TSSkewnessPolars(SeriesOperator):
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         w = int(kwargs.get("d", window))
         cols = [c for c in x.columns if c not in ['date', 'stock_code']]
+        # WINDOW-SEMANTICS PARITY (pandas reference): pandas rolling.skew drops
+        # ±Inf inside the window (finite-only) and requires >= 3 samples.
+        # fill_nan is NOT enough for Inf; explicit finite mask keeps Inf out.
         return x.with_columns([
-            pl.col(c).rolling_skew(window_size=w, bias=False, min_samples=1).alias(c)
+            pl.when(pl.col(c).is_nan() | pl.col(c).is_infinite()).then(None).otherwise(pl.col(c))
+            .rolling_skew(window_size=w, bias=False, min_samples=3).alias(c)
             for c in cols
         ])
 
@@ -2422,12 +2441,18 @@ class TSStdDev(SeriesOperator):
         description="滚动标准差 (与m_std相同)",
         examples=["ts_std_dev(returns, 20)"],
         param_names=["x", "window"], return_type="series",
-        tags=["time_series", "ts_", "std"]
+        tags=["time_series", "ts_", "std"],
+        # d is the legacy parser alias for the canonical window parameter.
+        param_aliases={"d": "window"},
     )
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         cols = [c for c in x.columns if c not in ['date', 'stock_code']]
+        # WINDOW-SEMANTICS PARITY (pandas reference): pandas rolling.std treats
+        # NaN AND ±Inf as missing (finite-only).  Polars rolling_std counts Inf
+        # as a real number -> converts window to nan.  Convert both to null.
         return x.with_columns([
-            pl.col(c).rolling_std(window_size=window, min_samples=1).alias(c) for c in cols
+            pl.when(pl.col(c).is_nan() | pl.col(c).is_infinite()).then(None).otherwise(pl.col(c))
+            .rolling_std(window_size=window, min_samples=1).alias(c) for c in cols
         ])
 
 @register_operator(name="ts_std", category="time_series", business_category="time_series", canonical="ts_std", source="factor_dsl_np")
@@ -2478,8 +2503,11 @@ class TSSumPolars(SeriesOperator):
     )
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         cols = [c for c in x.columns if c not in ['date', 'stock_code']]
+        # WINDOW-SEMANTICS PARITY (pandas reference): pandas rolling.sum drops
+        # ±Inf inside the window; explicit finite mask.
         return x.with_columns([
-            pl.col(c).rolling_sum(window_size=window, min_samples=1).alias(c) for c in cols
+            pl.when(pl.col(c).is_nan() | pl.col(c).is_infinite()).then(None).otherwise(pl.col(c))
+            .rolling_sum(window_size=window, min_samples=1).alias(c) for c in cols
         ])
 
 # aliases: TS_SUM, m_sum
@@ -2692,8 +2720,8 @@ class TSAutocorrPolars(SeriesOperator):
         return x.with_columns(
             [
                 pl.rolling_corr(
-                    pl.col(c),
-                    pl.col(c).shift(k),
+                    pl.when(pl.col(c).is_nan() | pl.col(c).is_infinite()).then(None).otherwise(pl.col(c)),
+                    pl.when(pl.col(c).is_nan() | pl.col(c).is_infinite()).then(None).otherwise(pl.col(c)).shift(k),
                     window_size=w,
                     min_samples=mp,
                 ).alias(c)

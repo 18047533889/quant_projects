@@ -163,6 +163,11 @@ class HMA(SeriesOperator):
     def _calculate_series(
         self, x: pd.DataFrame, window: int = 16, rounding: str = "floor", **_: Any
     ) -> pd.DataFrame:
+        # PARITY-B: a polars-delegating call may feed a ``pl.DataFrame`` wide
+        # panel.  Normalize to pandas before touching ``.index`` so the shared
+        # HMA reference stays usable in the grid harness.
+        if not isinstance(x, pd.DataFrame):
+            x = x.to_pandas()
         out = pd.DataFrame(np.nan, index=x.index, columns=x.columns, dtype=float)
         for col in x.columns:
             out[col] = _hma_series(x[col], int(window), str(rounding))
@@ -422,6 +427,9 @@ class ALMA(SeriesOperator):
     def _calculate_series(
         self, x: pd.DataFrame, window: int = 10, offset: float = 0.85, sigma: float = 6.0, **_: Any
     ) -> pd.DataFrame:
+        # PARITY-B: same polars-pl.DataFrame normalization as HMA.
+        if not isinstance(x, pd.DataFrame):
+            x = x.to_pandas()
         out = pd.DataFrame(np.nan, index=x.index, columns=x.columns, dtype=float)
         for col in x.columns:
             out[col] = _alma_series(x[col], int(window), float(offset), float(sigma))

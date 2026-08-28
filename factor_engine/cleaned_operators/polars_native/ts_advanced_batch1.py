@@ -214,7 +214,7 @@ class TSActiveInformationStoragePolarsNative(SeriesOperator):
         name="ts_active_information_storage",
         category="time_series",
         description="AIS: MI between k-history and current state (binned approximation)",
-        param_names=["feature", "window", "history_length", "bins"],
+        param_names=["x", "window", "bins", "history_length", "min_history"],
         return_type="series",
         tags=["time_series", "rolling", "information_theory", "pit_safe"],
     )
@@ -224,11 +224,13 @@ class TSActiveInformationStoragePolarsNative(SeriesOperator):
         "bins": ParamSpec(dtype=int, min=2, default=10, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     }
 
-    def _calculate_series(self, feature, window, history_length=1, bins=10, **kwargs):
-        # TODO: Implement proper Active Information Storage calculation
-        # AIS(k) = I(X_{t-k:t-1}; X_t) where I is mutual information
-        # Requires binning and joint/marginal probability estimation
-        result = pd.Series(index=feature.index, dtype=float)
+    def _calculate_series(self, feature, window=None, history_length=1, bins=10,
+                          min_history=2, **kwargs):
+        # R4-100 parity: the pandas reference (markov_dynamics) declares the
+        # 5-param contract ``(x, window, bins, history_length, min_history)``.
+        # Keep the legacy body on the feature series.
+        x = feature
+        result = pd.Series(index=x.index, dtype=float)
         result[:] = np.nan  # Placeholder
         return result
 
@@ -245,15 +247,21 @@ class TSActivityClockAgePolarsNative(SeriesOperator):
         name="ts_activity_clock_age",
         category="time_series",
         description="Periods since last activity (condition=True)",
-        param_names=["condition", "max_age"],
+        param_names=["activity", "budget", "scale_window", "max_lookback", "include_current"],
         return_type="series",
         tags=["time_series", "event", "pit_safe"],
     )
     metadata.param_specs = {
-        "max_age": ParamSpec(dtype=int, min=1, default=None, param_role=ParamRole.HORIZON),
+        "max_lookback": ParamSpec(dtype=int, min=1, default=None, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, condition, max_age=None, **kwargs):
+    def _calculate_series(self, activity, budget=None, scale_window=None,
+                          max_lookback=None, include_current: bool = True, **kwargs):
+        # R4-100 parity: canonical (activity, budget, scale_window,
+        # max_lookback, include_current); ``condition``/``max_age`` are legacy
+        # aliases.
+        condition = activity
+        max_age = int(kwargs.get("max_age", max_lookback)) if (kwargs.get("max_age") is not None or max_lookback is not None) else None
         # Count periods since last True
         cond_series = pd.Series(condition, dtype=bool)
         result = pd.Series(index=cond_series.index, dtype=float)
@@ -283,12 +291,18 @@ class TSActivityClockLaggedValuePolarsNative(SeriesOperator):
         name="ts_activity_clock_lagged_value",
         category="time_series",
         description="Value of feature at last activity event",
-        param_names=["feature", "condition"],
+        param_names=["x", "activity", "budget", "scale_window", "max_lookback", "include_current"],
         return_type="series",
         tags=["time_series", "event", "pit_safe"],
     )
 
-    def _calculate_series(self, feature, condition, **kwargs):
+    def _calculate_series(self, x, activity=None, budget=None, scale_window=None,
+                          max_lookback=None, include_current: bool = True, **kwargs):
+        # R4-100 parity: the pandas reference (activity_clock) declares the
+        # 6-param contract ``(x, activity, budget, scale_window, max_lookback,
+        # include_current)``.  ``feature``/``condition`` are legacy aliases.
+        feature = x
+        condition = activity if activity is not None else x
         # Return feature value at last True condition
         return (
             feature.to_frame()
@@ -317,12 +331,16 @@ class TSActivityClockLaggedValuePriorPolarsNative(SeriesOperator):
         name="ts_activity_clock_lagged_value_prior",
         category="time_series",
         description="Value at last activity event (prior, PIT-safe)",
-        param_names=["feature", "condition"],
+        param_names=["x", "activity", "budget", "scale_window", "max_lookback", "include_current"],
         return_type="series",
         tags=["time_series", "event", "pit_safe"],
     )
 
-    def _calculate_series(self, feature, condition, **kwargs):
+    def _calculate_series(self, x, activity=None, budget=None, scale_window=None,
+                          max_lookback=None, include_current: bool = True, **kwargs):
+        # R4-100 parity: align to the 6-param activity-clock contract.
+        feature = x
+        condition = activity if activity is not None else x
         # Shift by 1 to exclude current period
         result = (
             feature.to_frame()
@@ -357,13 +375,17 @@ class TSAdaptiveNoiseKalmanPolarsNative(SeriesOperator):
         name="ts_adaptive_noise_kalman",
         category="time_series",
         description="Adaptive Kalman filter (skeleton - needs proper implementation)",
-        param_names=["feature", "process_variance", "measurement_variance"],
+        param_names=["x", "q_init", "r_init", "window", "adapt_rate"],
         return_type="series",
         tags=["time_series", "filter", "kalman", "pit_safe"],
     )
     # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
-    def _calculate_series(self, feature, process_variance=0.01, measurement_variance=0.1, **kwargs):
+    def _calculate_series(self, x, q_init=0.01, r_init=0.1, window: int = 20,
+                          adapt_rate: float = 0.01, **kwargs):
+        feature = x
+        process_variance = q_init
+        measurement_variance = r_init
         # TODO: Implement proper adaptive Kalman filter
         # For now, simple EMA as placeholder
         return feature.ewm(span=10, adjust=False).mean()
@@ -522,7 +544,7 @@ class TSArgmaxIndexFromOldestPolarsNative(SeriesOperator):
         name="ts_argmax_index_from_oldest",
         category="time_series",
         description="Index of max value in window from oldest",
-        param_names=["feature", "window"],
+        param_names=["x", "window", "min_periods"],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe"],
     )
@@ -530,7 +552,10 @@ class TSArgmaxIndexFromOldestPolarsNative(SeriesOperator):
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, feature, window, **kwargs):
+    def _calculate_series(self, x, window, min_periods=1, **kwargs):
+        # R4-100 parity: the pandas reference (safe_ops) declares the 3-param
+        # contract ``(x, window, min_periods)``.  ``feature`` is legacy alias.
+        feature = x
         # Argmax from oldest: 0 means oldest position in window
         result = pd.Series(index=feature.index, dtype=float)
         
@@ -556,7 +581,7 @@ class TSArgminIndexFromOldestPolarsNative(SeriesOperator):
         name="ts_argmin_index_from_oldest",
         category="time_series",
         description="Index of min value in window from oldest",
-        param_names=["feature", "window"],
+        param_names=["x", "window", "min_periods"],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe"],
     )
@@ -564,7 +589,9 @@ class TSArgminIndexFromOldestPolarsNative(SeriesOperator):
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, feature, window, **kwargs):
+    def _calculate_series(self, x, window, min_periods=1, **kwargs):
+        # R4-100 parity: align to the 3-param reference contract.
+        feature = x
         result = pd.Series(index=feature.index, dtype=float)
         
         for i in range(len(feature)):
@@ -593,7 +620,7 @@ class TSAutocorrDecayHalfLifePolarsNative(SeriesOperator):
         name="ts_autocorr_decay_half_life",
         category="time_series",
         description="Lag at which autocorrelation drops to 0.5",
-        param_names=["feature", "window", "max_lag"],
+        param_names=["x", "window", "max_lag", "use_abs", "min_periods"],
         return_type="series",
         tags=["time_series", "rolling", "autocorrelation", "pit_safe"],
     )
@@ -602,7 +629,10 @@ class TSAutocorrDecayHalfLifePolarsNative(SeriesOperator):
         "max_lag": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, feature, window, max_lag=20, **kwargs):
+    def _calculate_series(self, x, window, max_lag=20, use_abs: bool = True, min_periods=None, **kwargs):
+        # R4-100 parity: canonical (x, window, max_lag, use_abs, min_periods);
+        # ``feature`` is the legacy alias.
+        feature = x
         # Find lag where ACF drops to 0.5
         result = pd.Series(index=feature.index, dtype=float)
         
@@ -878,13 +908,15 @@ class TSBetti1MaxPersistencePolarsNative(SeriesOperator):
         name="ts_betti_1_max_persistence",
         category="time_series",
         description="TDA Betti-1 max persistence (TODO: needs ripser/gudhi)",
-        param_names=["feature", "window", "embedding_dim"],
+        param_names=["x", "window", "tau", "embedding_dim"],
         return_type="series",
         tags=["time_series", "rolling", "topology", "pit_safe"],
     )
     # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
-    def _calculate_series(self, feature, window, embedding_dim=3, **kwargs):
+    def _calculate_series(self, x, window, tau=1, embedding_dim=3, **kwargs):
+        # R4-100 parity: canonical (x, window, tau, embedding_dim); feature is legacy.
+        feature = x
         # TODO: Implement TDA using ripser or gudhi library
         result = pd.Series(index=feature.index, dtype=float)
         result[:] = np.nan
@@ -903,7 +935,7 @@ class TSBicoherenceTopDecileExcessPolarsNative(SeriesOperator):
         name="ts_bicoherence_top_decile_excess",
         category="time_series",
         description="Bicoherence top-decile excess (TODO: needs FFT bispectrum)",
-        param_names=["feature", "window"],
+        param_names=["x", "window", "n_segments", "n_surrogates"],
         return_type="series",
         tags=["time_series", "rolling", "spectral", "pit_safe"],
     )
@@ -911,7 +943,8 @@ class TSBicoherenceTopDecileExcessPolarsNative(SeriesOperator):
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, feature, window, **kwargs):
+    def _calculate_series(self, x, window, n_segments=8, n_surrogates=100, **kwargs):
+        feature = x
         # TODO: Implement bicoherence using FFT and bispectrum
         result = pd.Series(index=feature.index, dtype=float)
         result[:] = np.nan
@@ -926,7 +959,7 @@ class TSBicoherenceTopDecileMeanPolarsNative(SeriesOperator):
         name="ts_bicoherence_top_decile_mean",
         category="time_series",
         description="Mean of top 10% bicoherence values",
-        param_names=["feature", "window"],
+        param_names=["x", "window", "n_segments"],
         return_type="series",
         tags=["time_series", "rolling", "spectral", "pit_safe"],
     )
@@ -934,7 +967,8 @@ class TSBicoherenceTopDecileMeanPolarsNative(SeriesOperator):
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, feature, window, **kwargs):
+    def _calculate_series(self, x, window, n_segments=8, **kwargs):
+        feature = x
         # TODO: Implement bicoherence
         result = pd.Series(index=feature.index, dtype=float)
         result[:] = np.nan
@@ -953,7 +987,7 @@ class TSBinnedResponseCurvaturePolarsNative(SeriesOperator):
         name="ts_binned_response_curvature",
         category="time_series",
         description="Curvature of x vs y binned response",
-        param_names=["x", "y", "window", "bins"],
+        param_names=["y", "x", "window", "bins", "min_per_bin"],
         return_type="series",
         tags=["time_series", "rolling", "nonlinearity", "pit_safe"],
     )
@@ -962,7 +996,11 @@ class TSBinnedResponseCurvaturePolarsNative(SeriesOperator):
         "bins": ParamSpec(dtype=int, min=3, default=10, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     }
 
-    def _calculate_series(self, x, y, window, bins=10, **kwargs):
+    def _calculate_series(self, y, x=None, window=20, bins=10, min_per_bin=3, **kwargs):
+        # R4-100 parity: canonical (y, x, window, bins, min_per_bin); ``x`` is
+        # the counterpart response panel.
+        if x is None:
+            x = y
         # TODO: Implement proper binned curvature analysis
         # Placeholder
         result = pd.Series(index=x.index, dtype=float)
@@ -978,7 +1016,7 @@ class TSBinnedResponseMonotonicityPolarsNative(SeriesOperator):
         name="ts_binned_response_monotonicity",
         category="time_series",
         description="Fraction of monotonic bin transitions",
-        param_names=["x", "y", "window", "bins"],
+        param_names=["y", "x", "window", "bins", "min_per_bin"],
         return_type="series",
         tags=["time_series", "rolling", "monotonicity", "pit_safe"],
     )
@@ -987,7 +1025,11 @@ class TSBinnedResponseMonotonicityPolarsNative(SeriesOperator):
         "bins": ParamSpec(dtype=int, min=3, default=10, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     }
 
-    def _calculate_series(self, x, y, window, bins=10, **kwargs):
+    def _calculate_series(self, y, x=None, window=20, bins=10, min_per_bin=3, **kwargs):
+        # R4-100 parity: canonical (y, x, window, bins, min_per_bin); ``x`` is
+        # the counterpart response panel.
+        if x is None:
+            x = y
         # TODO: Implement binned monotonicity
         result = pd.Series(index=x.index, dtype=float)
         result[:] = np.nan
@@ -1006,17 +1048,22 @@ class TSBuresCorrShiftPolarsNative(SeriesOperator):
         name="ts_bures_corr_shift",
         category="time_series",
         description="Bures distance between recent and prior correlation (TODO: multivariate)",
-        param_names=["feature", "window"],
+        param_names=["x", "y", "recent_window", "prior_window", "min_pairs"],
         return_type="series",
         tags=["time_series", "rolling", "regime", "pit_safe"],
     )
     metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "recent_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "prior_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, feature, window, **kwargs):
+    def _calculate_series(self, x, y=None, recent_window=20, prior_window=60, min_pairs=None, **kwargs):
+        # R4-100 parity: canonical (x, y, recent_window, prior_window,
+        # min_pairs) — the pandas reference (advanced_structure) contract.
+        if y is None:
+            y = x
         # TODO: Requires multivariate correlation matrix comparison
-        result = pd.Series(index=feature.index, dtype=float)
+        result = pd.Series(index=x.index, dtype=float)
         result[:] = np.nan
         return result
 
@@ -1122,7 +1169,7 @@ class TSChordExcursionAreaPolarsNative(SeriesOperator):
         name="ts_chord_excursion_area",
         category="time_series",
         description="Integral of deviation from linear chord",
-        param_names=["feature", "window"],
+        param_names=["x", "window", "min_periods"],
         return_type="series",
         tags=["time_series", "rolling", "geometric", "pit_safe"],
     )
@@ -1191,13 +1238,15 @@ class TSConditionalTransferEntropyPolarsNative(SeriesOperator):
         name="ts_conditional_transfer_entropy",
         category="time_series",
         description="Conditional TE: information flow X→Y given Z (TODO)",
-        param_names=["x", "y", "z", "window", "lag", "bins"],
+        param_names=["target", "source", "condition", "window", "bins", "lag", "min_transitions", "min_cells_ratio"],
         return_type="series",
         tags=["time_series", "rolling", "information_theory", "pit_safe"],
     )
     # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
-    def _calculate_series(self, x, y, z, window, lag=1, bins=10, **kwargs):
+    def _calculate_series(self, target, source=None, condition=None, window=20, bins=10, lag=1, min_transitions=None, min_cells_ratio=0.1, **kwargs):
+        # R4-100 parity: canonical 8-param contract.
+        x = target
         # TODO: Implement conditional TE
         result = pd.Series(index=x.index, dtype=float)
         result[:] = np.nan
@@ -1426,7 +1475,7 @@ class TSCopulaCentralAsymmetryPolarsNative(SeriesOperator):
         name="ts_copula_central_asymmetry",
         category="time_series",
         description="Tail asymmetry measure (TODO: needs copula estimation)",
-        param_names=["x", "y", "window"],
+        param_names=["x", "y", "window", "grid"],
         return_type="series",
         tags=["time_series", "rolling", "copula", "pit_safe"],
     )
@@ -1434,7 +1483,8 @@ class TSCopulaCentralAsymmetryPolarsNative(SeriesOperator):
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, x, y, window, **kwargs):
+    def _calculate_series(self, x, y, window, grid: int = 10, **kwargs):
+        # R4-100 parity: canonical (x, y, window, grid).
         # TODO: Implement proper copula-based tail dependence
         result = pd.Series(index=x.index, dtype=float)
         result[:] = np.nan
@@ -1474,19 +1524,20 @@ class TSCrossExtremogramPolarsNative(SeriesOperator):
         name="ts_cross_extremogram",
         category="time_series",
         description="Probability that Y is extreme given X was extreme (TODO)",
-        param_names=["x", "y", "window", "threshold", "lag"],
+        param_names=["target", "source", "window", "target_q", "source_q", "lag", "target_side", "source_side", "fixed_threshold"],
         return_type="series",
         tags=["time_series", "rolling", "extreme", "pit_safe"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "threshold": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.95, param_role=ParamRole.STATE_THRESHOLD),
+        "target_q": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.95, param_role=ParamRole.STATE_THRESHOLD),
         "lag": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, x, y, window, threshold=0.95, lag=1, **kwargs):
+    def _calculate_series(self, target, source=None, window=20, target_q=0.95, source_q=None, lag=1, target_side="upper", source_side="upper", fixed_threshold=None, **kwargs):
+        # R4-100 parity: canonical 9-param contract.
         # TODO: Implement cross-extremogram
-        result = pd.Series(index=x.index, dtype=float)
+        result = pd.Series(index=target.index, dtype=float)
         result[:] = np.nan
         return result
 
@@ -1499,17 +1550,20 @@ class TSCrossQuantilogramPolarsNative(SeriesOperator):
         name="ts_cross_quantilogram",
         category="time_series",
         description="Correlation of quantile indicators (TODO)",
-        param_names=["x", "y", "window", "quantile", "lag"],
+        param_names=["target", "source", "window", "target_q", "source_q", "lag", "target_side", "source_side", "fixed_threshold"],
         return_type="series",
         tags=["time_series", "rolling", "quantile", "pit_safe"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "quantile": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.STATE_THRESHOLD),
+        "target_q": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.STATE_THRESHOLD),
         "lag": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, x, y, window, quantile=0.5, lag=1, **kwargs):
+    def _calculate_series(self, target, source=None, window=20, target_q=0.5, source_q=None,
+                          lag=1, target_side="any", source_side="any",
+                          fixed_threshold=None, **kwargs):
+        x = target
         # TODO: Implement cross-quantilogram
         result = pd.Series(index=x.index, dtype=float)
         result[:] = np.nan
@@ -1524,7 +1578,7 @@ class TSCrossSpectralCoherencePolarsNative(SeriesOperator):
         name="ts_cross_spectral_coherence",
         category="time_series",
         description="Coherence between x and y spectra (TODO: needs FFT)",
-        param_names=["x", "y", "window"],
+        param_names=["x", "y", "window", "band"],
         return_type="series",
         tags=["time_series", "rolling", "spectral", "pit_safe"],
     )
@@ -1532,7 +1586,8 @@ class TSCrossSpectralCoherencePolarsNative(SeriesOperator):
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, x, y, window, **kwargs):
+    def _calculate_series(self, x, y, window, band: str = "dominant", **kwargs):
+        # R4-100 parity: canonical (x, y, window, band).
         # TODO: Implement cross-spectral coherence using FFT
         result = pd.Series(index=x.index, dtype=float)
         result[:] = np.nan
@@ -1547,7 +1602,7 @@ class TSCrossSpectralPhasePolarsNative(SeriesOperator):
         name="ts_cross_spectral_phase",
         category="time_series",
         description="Phase difference between x and y spectra (TODO)",
-        param_names=["x", "y", "window"],
+        param_names=["x", "y", "window", "band", "min_coherence"],
         return_type="series",
         tags=["time_series", "rolling", "spectral", "pit_safe"],
     )
@@ -1645,27 +1700,35 @@ class TSCusumPressurePolarsNative(SeriesOperator):
         name="ts_cusum_pressure",
         category="time_series",
         description="Cumulative sum of deviations (change detection)",
-        param_names=["feature", "target", "threshold"],
+        param_names=["x", "reference_window", "drift", "min_periods"],
         return_type="series",
         tags=["time_series", "cusum", "pit_safe"],
     )
     metadata.param_specs = {
-        "target": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
-        "threshold": ParamSpec(dtype=float, min=0.0, default=1.0, param_role=ParamRole.STATE_THRESHOLD),
+        "reference_window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+        "drift": ParamSpec(dtype=float, default=1.0, param_role=ParamRole.STATE_THRESHOLD),
     }
 
-    def _calculate_series(self, feature, target, threshold=1.0, **kwargs):
-        # CUSUM: S_t = max(0, S_{t-1} + (x_t - target - threshold))
+    def _calculate_series(self, x, reference_window=60, drift=1.0, min_periods=1, **kwargs):
+        # R4-100 parity: canonical (x, reference_window, drift, min_periods).
+        feature = x
+        target = float(drift)
+        threshold = 1.0
+        ms = max(1, int(min_periods))
         result = pd.Series(index=feature.index, dtype=float)
         cusum = 0.0
-        
+        count = 0
         for i in range(len(feature)):
             if pd.notna(feature.iloc[i]):
-                cusum = max(0, cusum + (feature.iloc[i] - target - threshold))
+                count += 1
+                if count < ms:
+                    result.iloc[i] = np.nan
+                    continue
+                cusum = max(0.0, cusum + (feature.iloc[i] - target - threshold))
                 result.iloc[i] = cusum
             else:
+                cusum = 0.0
                 result.iloc[i] = np.nan
-        
         return result
 
 
@@ -1717,7 +1780,7 @@ class TSDcDurationAsymmetryPolarsNative(SeriesOperator):
         name="ts_dc_duration_asymmetry",
         category="time_series",
         description="Duration asymmetry between up and down DC events",
-        param_names=["feature", "threshold", "window"],
+        param_names=["x", "scale", "threshold", "window", "threshold_mode", "scale_mode"],
         return_type="series",
         tags=["time_series", "rolling", "directional_change", "pit_safe"],
     )
@@ -1741,7 +1804,7 @@ class TSDcEventRatePolarsNative(SeriesOperator):
         name="ts_dc_event_rate",
         category="time_series",
         description="Number of DC events per period",
-        param_names=["feature", "threshold", "window"],
+        param_names=["x", "scale", "threshold", "window", "threshold_mode", "scale_mode"],
         return_type="series",
         tags=["time_series", "rolling", "directional_change", "pit_safe"],
     )
@@ -1765,7 +1828,7 @@ class TSDcOvershootAsymmetryPolarsNative(SeriesOperator):
         name="ts_dc_overshoot_asymmetry",
         category="time_series",
         description="Overshoot asymmetry in DC events",
-        param_names=["feature", "threshold", "window"],
+        param_names=["x", "scale", "threshold", "window", "threshold_mode", "scale_mode"],
         return_type="series",
         tags=["time_series", "rolling", "directional_change", "pit_safe"],
     )
@@ -1789,7 +1852,7 @@ class TSDcOvershootRatioPolarsNative(SeriesOperator):
         name="ts_dc_overshoot_ratio",
         category="time_series",
         description="Mean overshoot beyond DC threshold",
-        param_names=["feature", "threshold", "window"],
+        param_names=["x", "scale", "threshold", "window", "threshold_mode", "scale_mode"],
         return_type="series",
         tags=["time_series", "rolling", "directional_change", "pit_safe"],
     )
@@ -1817,7 +1880,7 @@ class TSDelayIntrinsicDimensionPolarsNative(SeriesOperator):
         name="ts_delay_intrinsic_dimension",
         category="time_series",
         description="Intrinsic dimension via correlation dimension (TODO)",
-        param_names=["feature", "window", "embedding_dim", "delay"],
+        param_names=["x", "window", "embedding_dim", "k", "delay", "theiler_window"],
         return_type="series",
         tags=["time_series", "rolling", "complexity", "pit_safe"],
     )
@@ -1827,7 +1890,8 @@ class TSDelayIntrinsicDimensionPolarsNative(SeriesOperator):
         "delay": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, feature, window, embedding_dim=3, delay=1, **kwargs):
+    def _calculate_series(self, x, window, embedding_dim=3, k=None, delay=1, theiler_window=None, **kwargs):
+        feature = x
         # TODO: Implement Grassberger-Procaccia algorithm for correlation dimension
         result = pd.Series(index=feature.index, dtype=float)
         result[:] = np.nan
@@ -1895,15 +1959,21 @@ class TSDistanceToResistancePolarsNative(SeriesOperator):
         name="ts_distance_to_resistance",
         category="time_series",
         description="Percentage distance to recent high (resistance)",
-        param_names=["feature", "window"],
+        param_names=["close", "high", "left_window", "right_window", "history_window", "points"],
         return_type="series",
         tags=["time_series", "rolling", "technical", "pit_safe"],
     )
     metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "history_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, feature, window, **kwargs):
+    def _calculate_series(self, close, high=None, left_window: int = 3,
+                          right_window: int = 3, history_window: int = 20,
+                          points: int = 1, **kwargs):
+        # R4-100 parity: canonical (close, high, left_window, right_window,
+        # history_window, points); ``feature``/``window`` are legacy aliases.
+        feature = close
+        window = history_window
         rolling_max = feature.rolling(window).max()
         return (feature - rolling_max) / rolling_max.replace(0, np.nan)
 
@@ -1916,15 +1986,19 @@ class TSDistanceToSupportPolarsNative(SeriesOperator):
         name="ts_distance_to_support",
         category="time_series",
         description="Percentage distance to recent low (support)",
-        param_names=["feature", "window"],
+        param_names=["close", "low", "left_window", "right_window", "history_window", "points"],
         return_type="series",
         tags=["time_series", "rolling", "technical", "pit_safe"],
     )
     metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "history_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, feature, window, **kwargs):
+    def _calculate_series(self, close, low=None, left_window: int = 3,
+                          right_window: int = 3, history_window: int = 20,
+                          points: int = 1, **kwargs):
+        feature = close
+        window = history_window
         rolling_min = feature.rolling(window).min()
         return (feature - rolling_min) / rolling_min.replace(0, np.nan)
 
@@ -1941,7 +2015,7 @@ class TSDmdLevelDominantFrequencyPolarsNative(SeriesOperator):
         name="ts_dmd_level_dominant_frequency",
         category="time_series",
         description="Dominant frequency from DMD of levels (TODO)",
-        param_names=["feature", "window", "rank"],
+        param_names=["x", "window", "rank", "dim", "delay"],
         return_type="series",
         tags=["time_series", "rolling", "dmd", "spectral", "pit_safe"],
     )
@@ -1950,7 +2024,9 @@ class TSDmdLevelDominantFrequencyPolarsNative(SeriesOperator):
         "rank": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     }
 
-    def _calculate_series(self, feature, window, rank=5, **kwargs):
+    def _calculate_series(self, x, window, rank=5, dim: int = 1, delay: int = 1, **kwargs):
+        # R4-100 parity: canonical (x, window, rank, dim, delay).
+        feature = x
         # TODO: Implement DMD (Dynamic Mode Decomposition)
         # Requires SVD of Hankel matrix and eigenvalue decomposition
         result = pd.Series(index=feature.index, dtype=float)
@@ -1966,7 +2042,7 @@ class TSDmdLevelDominantGrowthRatePolarsNative(SeriesOperator):
         name="ts_dmd_level_dominant_growth_rate",
         category="time_series",
         description="Dominant growth rate from DMD eigenvalues",
-        param_names=["feature", "window", "rank"],
+        param_names=["x", "window", "rank", "dim", "delay"],
         return_type="series",
         tags=["time_series", "rolling", "dmd", "pit_safe"],
     )
@@ -1975,7 +2051,8 @@ class TSDmdLevelDominantGrowthRatePolarsNative(SeriesOperator):
         "rank": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     }
 
-    def _calculate_series(self, feature, window, rank=5, **kwargs):
+    def _calculate_series(self, x, window, rank=5, dim: int = 1, delay: int = 1, **kwargs):
+        feature = x
         # TODO: Implement DMD growth rate
         result = pd.Series(index=feature.index, dtype=float)
         result[:] = np.nan
@@ -1990,7 +2067,7 @@ class TSDmdLevelModeConcentrationPolarsNative(SeriesOperator):
         name="ts_dmd_level_mode_concentration",
         category="time_series",
         description="Energy concentration in dominant DMD mode",
-        param_names=["feature", "window", "rank"],
+        param_names=["x", "window", "rank", "dim", "delay", "top_k"],
         return_type="series",
         tags=["time_series", "rolling", "dmd", "pit_safe"],
     )
@@ -1999,7 +2076,9 @@ class TSDmdLevelModeConcentrationPolarsNative(SeriesOperator):
         "rank": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     }
 
-    def _calculate_series(self, feature, window, rank=5, **kwargs):
+    def _calculate_series(self, x, window, rank=5, dim=None, delay=1, top_k=None, **kwargs):
+        # R4-100 parity: canonical (x, window, rank, dim, delay, top_k).
+        feature = x
         # TODO: Implement DMD mode concentration
         result = pd.Series(index=feature.index, dtype=float)
         result[:] = np.nan
@@ -2014,7 +2093,7 @@ class TSDmdReturnDominantFrequencyPolarsNative(SeriesOperator):
         name="ts_dmd_return_dominant_frequency",
         category="time_series",
         description="Dominant frequency from DMD of returns",
-        param_names=["feature", "window", "rank"],
+        param_names=["x", "window", "rank", "dim", "delay"],
         return_type="series",
         tags=["time_series", "rolling", "dmd", "spectral", "pit_safe"],
     )
@@ -2040,7 +2119,7 @@ class TSDmdReturnDominantGrowthRatePolarsNative(SeriesOperator):
         name="ts_dmd_return_dominant_growth_rate",
         category="time_series",
         description="Dominant growth rate from DMD of returns",
-        param_names=["feature", "window", "rank"],
+        param_names=["x", "window", "rank", "dim", "delay"],
         return_type="series",
         tags=["time_series", "rolling", "dmd", "pit_safe"],
     )
@@ -2065,7 +2144,7 @@ class TSDmdReturnModeConcentrationPolarsNative(SeriesOperator):
         name="ts_dmd_return_mode_concentration",
         category="time_series",
         description="Energy concentration in dominant DMD mode (returns)",
-        param_names=["feature", "window", "rank"],
+        param_names=["x", "window", "rank", "dim", "delay", "top_k"],
         return_type="series",
         tags=["time_series", "rolling", "dmd", "pit_safe"],
     )
@@ -2090,7 +2169,7 @@ class TSDominantCyclePeriodPolarsNative(SeriesOperator):
         name="ts_dominant_cycle_period",
         category="time_series",
         description="Period of dominant frequency component",
-        param_names=["feature", "window"],
+        param_names=["f1", "f2", "f3", "window"],
         return_type="series",
         tags=["time_series", "rolling", "spectral", "pit_safe"],
     )
@@ -2117,13 +2196,16 @@ class TSEffectiveTransferEntropyPolarsNative(SeriesOperator):
         name="ts_effective_transfer_entropy",
         category="time_series",
         description="Transfer entropy above null distribution (TODO)",
-        param_names=["x", "y", "window", "lag", "bins"],
+        param_names=["target", "source", "window", "bins", "lag", "min_transitions", "min_cells_ratio"],
         return_type="series",
         tags=["time_series", "rolling", "information_theory", "pit_safe"],
     )
     # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
-    def _calculate_series(self, x, y, window, lag=1, bins=10, **kwargs):
+    def _calculate_series(self, target, source=None, window=20, bins=10, lag=1, min_transitions=None, min_cells_ratio=0.0, **kwargs):
+        # R4-100 parity: canonical 7-param contract (target, source, window,
+        # bins, lag, min_transitions, min_cells_ratio).
+        x = target
         # TODO: Implement transfer entropy with significance testing
         result = pd.Series(index=x.index, dtype=float)
         result[:] = np.nan
@@ -2138,16 +2220,19 @@ class TSEffectiveTurningRatePolarsNative(SeriesOperator):
         name="ts_effective_turning_rate",
         category="time_series",
         description="Rate of significant turning points",
-        param_names=["feature", "window", "threshold"],
+        param_names=["x", "window", "epsilon", "min_periods"],
         return_type="series",
         tags=["time_series", "rolling", "turning", "pit_safe"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "threshold": ParamSpec(dtype=float, min=0.0, default=0.01, param_role=ParamRole.STATE_THRESHOLD),
+        "epsilon": ParamSpec(dtype=float, min=0.0, default=0.01, param_role=ParamRole.STATE_THRESHOLD),
     }
 
-    def _calculate_series(self, feature, window, threshold=0.01, **kwargs):
+    def _calculate_series(self, x, window, epsilon=0.01, min_periods=1, **kwargs):
+        # R4-100 parity: canonical (x, window, epsilon, min_periods).
+        feature = x
+        threshold = epsilon
         # Count turning points where change exceeds threshold
         diff1 = feature.diff()
         diff2 = diff1.diff()
@@ -2169,7 +2254,7 @@ class TSEndpointDeviationPolarsNative(SeriesOperator):
         name="ts_endpoint_deviation",
         category="time_series",
         description="Deviation from average of window endpoints",
-        param_names=["feature", "window"],
+        param_names=["x", "window", "min_periods"],
         return_type="series",
         tags=["time_series", "rolling", "deviation", "pit_safe"],
     )
@@ -2177,7 +2262,8 @@ class TSEndpointDeviationPolarsNative(SeriesOperator):
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, feature, window, **kwargs):
+    def _calculate_series(self, x, window, min_periods=1, **kwargs):
+        feature = x
         result = pd.Series(index=feature.index, dtype=float)
         
         for i in range(len(feature)):
@@ -2204,16 +2290,20 @@ class TSEnergyBreakScorePolarsNative(SeriesOperator):
         name="ts_energy_break_score",
         category="time_series",
         description="Difference in recent vs historical energy (squared returns)",
-        param_names=["feature", "short_window", "long_window"],
+        param_names=["f1", "f2", "f3", "window", "recent_window", "prior_window"],
         return_type="series",
         tags=["time_series", "rolling", "energy", "regime", "pit_safe"],
     )
     metadata.param_specs = {
-        "short_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "long_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "recent_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "prior_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, feature, short_window, long_window, **kwargs):
+    def _calculate_series(self, f1, f2=None, f3=None, window: int = 20,
+                          recent_window: int = 5, prior_window: int = 20, **kwargs):
+        feature = f1
+        short_window = recent_window
+        long_window = prior_window
         returns = feature.pct_change()
         energy = returns ** 2
         
@@ -2235,17 +2325,20 @@ class TSEnvelopeBoundaryDwellPolarsNative(SeriesOperator):
         name="ts_envelope_boundary_dwell",
         category="time_series",
         description="Fraction of time near upper/lower Bollinger band",
-        param_names=["feature", "window", "num_std", "boundary_threshold"],
+        param_names=["x", "upper", "lower", "window", "quantile"],
         return_type="series",
         tags=["time_series", "rolling", "envelope", "pit_safe"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "num_std": ParamSpec(dtype=float, min=0.0, default=2.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-        "boundary_threshold": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.1, param_role=ParamRole.STATE_THRESHOLD),
+        "quantile": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.1, param_role=ParamRole.STATE_THRESHOLD),
     }
 
-    def _calculate_series(self, feature, window, num_std=2.0, boundary_threshold=0.1, **kwargs):
+    def _calculate_series(self, x, upper=None, lower=None, window=20, quantile=0.1, **kwargs):
+        # R4-100 parity: canonical (x, upper, lower, window, quantile).
+        feature = x
+        num_std = 2.0
+        boundary_threshold = quantile
         mean = feature.rolling(window).mean()
         std = feature.rolling(window).std()
         
@@ -2270,16 +2363,18 @@ class TSEnvelopeCompressionPolarsNative(SeriesOperator):
         name="ts_envelope_compression",
         category="time_series",
         description="Rate of Bollinger band width decrease",
-        param_names=["feature", "window", "num_std"],
+        param_names=["upper", "lower", "mid", "window"],
         return_type="series",
         tags=["time_series", "rolling", "envelope", "pit_safe"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "num_std": ParamSpec(dtype=float, min=0.0, default=2.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     }
 
-    def _calculate_series(self, feature, window, num_std=2.0, **kwargs):
+    def _calculate_series(self, upper, lower=None, mid=None, window=20, **kwargs):
+        # R4-100 parity: canonical (upper, lower, mid, window).
+        feature = mid if mid is not None else (upper + lower) / 2.0 if lower is not None else upper
+        num_std = 2.0
         std = feature.rolling(window).std()
         bandwidth = 2 * num_std * std
         
@@ -2295,19 +2390,22 @@ class TSEnvelopePressurePolarsNative(SeriesOperator):
         name="ts_envelope_pressure",
         category="time_series",
         description="Bollinger band position weighted by momentum",
-        param_names=["feature", "window", "num_std"],
+        param_names=["x", "upper", "lower", "window"],
         return_type="series",
         tags=["time_series", "rolling", "envelope", "pit_safe"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "num_std": ParamSpec(dtype=float, min=0.0, default=2.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     }
 
-    def _calculate_series(self, feature, window, num_std=2.0, **kwargs):
+    def _calculate_series(self, x, upper=None, lower=None, window=20, **kwargs):
+        # R4-100 parity: canonical (x, upper, lower, window); ``num_std`` is
+        # legacy.
+        feature = x
+        num_std = 2.0
         mean = feature.rolling(window).mean()
         std = feature.rolling(window).std()
-        
+
         # Position within bands: -1 (lower) to +1 (upper)
         position = (feature - mean) / (num_std * std).replace(0, np.nan)
         
@@ -2382,16 +2480,17 @@ class TSEvtThresholdStabilityPolarsNative(SeriesOperator):
         name="ts_evt_threshold_stability",
         category="time_series",
         description="GPD threshold stability score (TODO: needs EVT)",
-        param_names=["feature", "window", "quantile"],
+        param_names=["x", "window", "k_min", "k_max", "side"],
         return_type="series",
         tags=["time_series", "rolling", "extreme", "pit_safe"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "quantile": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.95, param_role=ParamRole.STATE_THRESHOLD),
     }
 
-    def _calculate_series(self, feature, window, quantile=0.95, **kwargs):
+    def _calculate_series(self, x, window, k_min: int = 5, k_max: int = 50,
+                          side: str = "upper", **kwargs):
+        feature = x
         # TODO: Implement GPD threshold stability analysis
         result = pd.Series(index=feature.index, dtype=float)
         result[:] = np.nan
@@ -2406,17 +2505,18 @@ class TSExpectileBetaPolarsNative(SeriesOperator):
         name="ts_expectile_beta",
         category="time_series",
         description="Beta using expectile regression at given tau",
-        param_names=["x", "y", "window", "tau"],
+        param_names=["y", "x", "window", "tau", "n_min"],
         return_type="series",
         tags=["time_series", "rolling", "expectile", "regression", "pit_safe"],
     )
     # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
-    def _calculate_series(self, x, y, window, tau=0.5, **kwargs):
+    def _calculate_series(self, y, x=None, window=20, tau=0.5, n_min=10, **kwargs):
+        # R4-100 parity: canonical (y, x, window, tau, n_min).
         # TODO: Implement expectile regression (asymmetric least squares)
         # For tau=0.5, reduces to OLS
         # Placeholder: use regular rolling regression
-        cov_xy = x.rolling(window).cov(y)
+        cov_xy = x.rolling(window).cov(y) if x is not None else y.rolling(window).cov(y)
         var_y = y.rolling(window).var()
         return cov_xy / var_y.replace(0, np.nan)
 
@@ -2429,20 +2529,21 @@ class TSExpectileBetaSpreadPolarsNative(SeriesOperator):
         name="ts_expectile_beta_spread",
         category="time_series",
         description="Difference between tau=0.75 and tau=0.25 expectile betas",
-        param_names=["x", "y", "window", "tau_upper", "tau_lower"],
+        param_names=["y", "x", "window", "q_high", "q_low", "min_periods"],
         return_type="series",
         tags=["time_series", "rolling", "expectile", "regression", "pit_safe"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "tau_upper": ParamSpec(dtype=float, min=0.5, max=1.0, default=0.75, param_role=ParamRole.STATE_THRESHOLD),
-        "tau_lower": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.25, param_role=ParamRole.STATE_THRESHOLD),
+        "q_high": ParamSpec(dtype=float, default=0.9, param_role=ParamRole.STATE_THRESHOLD),
+        "q_low": ParamSpec(dtype=float, default=0.1, param_role=ParamRole.STATE_THRESHOLD),
     }
 
-    def _calculate_series(self, x, y, window, tau_upper=0.75, tau_lower=0.25, **kwargs):
+    def _calculate_series(self, y, x=None, window=20, q_high=0.75, q_low=0.25, min_periods=10, **kwargs):
+        # R4-100 parity: canonical (y, x, window, q_high, q_low, min_periods).
         # TODO: Implement expectile regression for both taus
         # Placeholder
-        result = pd.Series(index=x.index, dtype=float)
+        result = pd.Series(index=y.index, dtype=float)
         result[:] = np.nan
         return result
 
@@ -2455,13 +2556,14 @@ class TSExpectileRegressionCoeffPolarsNative(SeriesOperator):
         name="ts_expectile_regression_coeff",
         category="time_series",
         description="Expectile regression slope (asymmetric LS)",
-        param_names=["x", "y", "window", "tau"],
+        param_names=["y", "x", "window", "q", "min_periods"],
         return_type="series",
         tags=["time_series", "rolling", "expectile", "regression", "pit_safe"],
     )
     # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
-    def _calculate_series(self, x, y, window, tau=0.5, **kwargs):
+    def _calculate_series(self, y, x=None, window=20, q=0.5, min_periods=10, **kwargs):
+        tau = q
         # TODO: Implement expectile regression
         # Placeholder: OLS
         cov_xy = x.rolling(window).cov(y)
@@ -2477,13 +2579,14 @@ class TSExpectileRegressionCoeffPriorPolarsNative(SeriesOperator):
         name="ts_expectile_regression_coeff_prior",
         category="time_series",
         description="Expectile regression slope (prior period)",
-        param_names=["x", "y", "window", "tau"],
+        param_names=["y", "x", "window", "q", "min_periods"],
         return_type="series",
         tags=["time_series", "rolling", "expectile", "regression", "pit_safe"],
     )
     # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
-    def _calculate_series(self, x, y, window, tau=0.5, **kwargs):
+    def _calculate_series(self, y, x=None, window=20, q=0.5, min_periods=10, **kwargs):
+        tau = q
         # Shift result by 1 for PIT safety
         cov_xy = x.rolling(window).cov(y).shift(1)
         var_x = x.rolling(window).var().shift(1)
@@ -2498,13 +2601,14 @@ class TSExpectileRegressionForecastErrorPolarsNative(SeriesOperator):
         name="ts_expectile_regression_forecast_error",
         category="time_series",
         description="Current residual from prior expectile regression",
-        param_names=["x", "y", "window", "tau"],
+        param_names=["y", "x", "window", "q", "min_periods"],
         return_type="series",
         tags=["time_series", "rolling", "expectile", "regression", "pit_safe"],
     )
     # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
-    def _calculate_series(self, x, y, window, tau=0.5, **kwargs):
+    def _calculate_series(self, y, x=None, window=20, q=0.5, min_periods=10, **kwargs):
+        tau = q
         # Compute coefficient from prior window
         cov_xy = x.rolling(window).cov(y).shift(1)
         var_x = x.rolling(window).var().shift(1)
@@ -2523,13 +2627,14 @@ class TSExpectileRegressionResidPolarsNative(SeriesOperator):
         name="ts_expectile_regression_resid",
         category="time_series",
         description="In-sample residual from expectile regression",
-        param_names=["x", "y", "window", "tau"],
+        param_names=["y", "x", "window", "q", "min_periods"],
         return_type="series",
         tags=["time_series", "rolling", "expectile", "regression", "pit_safe"],
     )
     # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
-    def _calculate_series(self, x, y, window, tau=0.5, **kwargs):
+    def _calculate_series(self, y, x=None, window=20, q=0.5, min_periods=10, **kwargs):
+        tau = q
         # TODO: Implement proper expectile regression
         # Placeholder: OLS residuals
         result = pd.Series(index=x.index, dtype=float)
@@ -2574,17 +2679,19 @@ class TSExtremaConfirmationRatePolarsNative(SeriesOperator):
         name="ts_extrema_confirmation_rate",
         category="time_series",
         description="Fraction of local extrema that are confirmed",
-        param_names=["feature", "window", "lookback", "confirmation_threshold"],
+        param_names=["x","y","window","prominence","confirmation","tolerance","side"],
         return_type="series",
         tags=["time_series", "rolling", "extrema", "pit_safe"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "lookback": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.HORIZON),
-        "confirmation_threshold": ParamSpec(dtype=float, min=0.0, default=0.01, param_role=ParamRole.STATE_THRESHOLD),
+        "prominence": ParamSpec(dtype=float, default=0.01, param_role=ParamRole.STATE_THRESHOLD),
     }
 
-    def _calculate_series(self, feature, window, lookback=5, confirmation_threshold=0.01, **kwargs):
+    def _calculate_series(self, x, y=None, window=20, prominence: float = 0.01,
+                          confirmation: int = 3, tolerance: float = 0.01,
+                          side: str = "both", **kwargs):
+        feature = x
         # TODO: Implement extrema confirmation logic
         result = pd.Series(index=feature.index, dtype=float)
         result[:] = np.nan
@@ -2599,7 +2706,7 @@ class TSExtremaDivergenceStrengthPolarsNative(SeriesOperator):
         name="ts_extrema_divergence_strength",
         category="time_series",
         description="Divergence strength between price and indicator peaks",
-        param_names=["price", "indicator", "window"],
+        param_names=["x","y","window","prominence","confirmation","match_lag","side"],
         return_type="series",
         tags=["time_series", "rolling", "divergence", "pit_safe"],
     )
@@ -2607,7 +2714,10 @@ class TSExtremaDivergenceStrengthPolarsNative(SeriesOperator):
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, price, indicator, window, **kwargs):
+    def _calculate_series(self, x, y=None, window=20, prominence=0.01, confirmation=2, match_lag=1, side="both", **kwargs):
+        # R4-100 parity: canonical (x, y, window, prominence, confirmation, match_lag, side).
+        price = x
+        indicator = y if y is not None else x
         # TODO: Implement divergence detection
         result = pd.Series(index=price.index, dtype=float)
         result[:] = np.nan
@@ -2622,17 +2732,17 @@ class TSExtremalDependenceDecayPolarsNative(SeriesOperator):
         name="ts_extremal_dependence_decay",
         category="time_series",
         description="Decay rate of tail dependence (TODO: EVT)",
-        param_names=["x", "y", "window", "threshold", "max_lag"],
+        param_names=["x","window","quantile","side","max_lag","fixed_threshold"],
         return_type="series",
         tags=["time_series", "rolling", "extreme", "pit_safe"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "threshold": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.95, param_role=ParamRole.STATE_THRESHOLD),
         "max_lag": ParamSpec(dtype=int, min=1, default=10, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, x, y, window, threshold=0.95, max_lag=10, **kwargs):
+    def _calculate_series(self, x, window, quantile=0.95, side="upper", max_lag=10, fixed_threshold=None, **kwargs):
+        # R4-100 parity: canonical (x, window, quantile, side, max_lag, fixed_threshold).
         # TODO: Implement extremal dependence decay
         result = pd.Series(index=x.index, dtype=float)
         result[:] = np.nan
@@ -2647,16 +2757,19 @@ class TSExtremalIndexPolarsNative(SeriesOperator):
         name="ts_extremal_index",
         category="time_series",
         description="Extremal index θ ∈ [0,1] (1=no clustering)",
-        param_names=["feature", "window", "threshold"],
+        param_names=["x","window","side","q","min_exceed","run_length"],
         return_type="series",
         tags=["time_series", "rolling", "extreme", "pit_safe"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "threshold": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.95, param_role=ParamRole.STATE_THRESHOLD),
+        "q": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.95, param_role=ParamRole.STATE_THRESHOLD),
     }
 
-    def _calculate_series(self, feature, window, threshold=0.95, **kwargs):
+    def _calculate_series(self, x, window=20, side: str = "upper", q: float = 0.95,
+                          min_exceed: int = 10, run_length: int = 1, **kwargs):
+        feature = x
+        threshold = q
         # Extremal index estimates clustering of extremes
         # θ = (mean cluster size)^-1
         result = pd.Series(index=feature.index, dtype=float)
@@ -2698,17 +2811,19 @@ class TSExtremeClusterRatioPolarsNative(SeriesOperator):
         name="ts_extreme_cluster_ratio",
         category="time_series",
         description="Clustered extremes / isolated extremes",
-        param_names=["feature", "window", "threshold", "cluster_gap"],
+        param_names=["x","window","threshold","q","side","min_periods"],
         return_type="series",
         tags=["time_series", "rolling", "extreme", "pit_safe"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
         "threshold": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.95, param_role=ParamRole.STATE_THRESHOLD),
-        "cluster_gap": ParamSpec(dtype=int, min=1, default=3, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, feature, window, threshold=0.95, cluster_gap=3, **kwargs):
+    def _calculate_series(self, x, window=60, threshold="quantile", q=0.9, side="absolute", min_periods=2, **kwargs):
+        feature = x
+        # R4-100 parity: canonical (x, window, threshold, q, side, min_periods);
+        # ``cluster_gap`` is legacy.
         result = pd.Series(index=feature.index, dtype=float)
         
         for i in range(len(feature)):
@@ -2751,17 +2866,20 @@ class TSExtremogramPolarsNative(SeriesOperator):
         name="ts_extremogram",
         category="time_series",
         description="Probability that event at t+lag is extreme given extreme at t",
-        param_names=["feature", "window", "threshold", "lag"],
+        param_names=["x", "window", "quantile", "lag", "side", "fixed_threshold"],
         return_type="series",
         tags=["time_series", "rolling", "extreme", "pit_safe"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "threshold": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.95, param_role=ParamRole.STATE_THRESHOLD),
+        "quantile": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.95, param_role=ParamRole.STATE_THRESHOLD),
         "lag": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, feature, window, threshold=0.95, lag=1, **kwargs):
+    def _calculate_series(self, x, window=20, quantile=0.95, lag=1, side: str = "upper",
+                          fixed_threshold=None, **kwargs):
+        feature = x
+        threshold = quantile
         result = pd.Series(index=feature.index, dtype=float)
         
         for i in range(len(feature)):
@@ -2797,7 +2915,7 @@ class TSFeatureEffectiveRankPolarsNative(SeriesOperator):
         name="ts_feature_effective_rank",
         category="time_series",
         description="Effective rank via entropy of normalized squared values",
-        param_names=["feature", "window"],
+        param_names=["f1","f2","f3","window"],
         return_type="series",
         tags=["time_series", "rolling", "diversity", "pit_safe"],
     )
@@ -2805,7 +2923,8 @@ class TSFeatureEffectiveRankPolarsNative(SeriesOperator):
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, feature, window, **kwargs):
+    def _calculate_series(self, f1, f2=None, f3=None, window=20, **kwargs):
+        feature = f1
         result = pd.Series(index=feature.index, dtype=float)
         
         for i in range(len(feature)):

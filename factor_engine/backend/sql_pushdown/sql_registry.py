@@ -198,6 +198,7 @@ def _resolve_capability_path(plan: PlanNode, *, dialect: str) -> bool:
     except Exception:
         return False
     import polars as pl  # noqa: F401
+    import pandas as pd  # noqa: F401
 
     from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
@@ -215,6 +216,26 @@ def _resolve_capability_path(plan: PlanNode, *, dialect: str) -> bool:
         query = compiled.query.replace("{{test_panel}}", "test_panel")
         con = duckdb.connect()
         try:
+            # Seed the ``test_panel`` relation the probe's compiled query
+            # references — the probe creates its OWN connection, so the fixture's
+            # ``con.register("test_panel", ...)`` is not in scope here.  Without
+            # this seed every probe fails at execution with "table not found",
+            # making the capability probe vacuously False for ALL operators.
+            con.register(
+                "test_panel",
+                pd.DataFrame(
+                    [
+                        {"ts": pd.Timestamp("2024-01-02"), "inst": "A", "close": 1.0},
+                        {"ts": pd.Timestamp("2024-01-03"), "inst": "A", "close": 2.0},
+                        {"ts": pd.Timestamp("2024-01-04"), "inst": "A", "close": 3.0},
+                        {"ts": pd.Timestamp("2024-01-05"), "inst": "A", "close": 4.0},
+                        {"ts": pd.Timestamp("2024-01-02"), "inst": "B", "close": 5.0},
+                        {"ts": pd.Timestamp("2024-01-03"), "inst": "B", "close": 6.0},
+                        {"ts": pd.Timestamp("2024-01-04"), "inst": "B", "close": 7.0},
+                        {"ts": pd.Timestamp("2024-01-05"), "inst": "B", "close": 8.0},
+                    ]
+                ),
+            )
             arrow_raw = con.execute(query).arrow()
             arrow = arrow_raw.read_all() if hasattr(arrow_raw, "read_all") else arrow_raw
             lf = pl.from_arrow(arrow)

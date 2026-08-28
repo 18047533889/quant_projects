@@ -19,9 +19,15 @@ _ratio_field: &ratio_field
 
 # ---- 行情（价格/量，无单位归一化） ----
 
+# ADJ_FIELD_MIGRATION（2026-08-28）：A 股行情权威口径 = 只读后复权表
+# StockDailyBarAdj（Adj* 字段集），据 realizations.md §5.6。未复权表仅保留
+# Factor / Volume 用途。bare close/open/high/low/vwap/amount/pre_close/
+# high_limit/low_limit/return 一律解析到 ashare_stock_daily_adj.Adj*。
+# 未复权物理列仍可用（raw_ 前缀概念 / 显式 dataset.column）。
+
 close:
-  dataset: ashare_stock_daily
-  physical_name: Close
+  dataset: ashare_stock_daily_adj
+  physical_name: AdjClose
   dtype: double
   frequency: daily
   grain: instrument
@@ -34,8 +40,8 @@ close:
   mining_allowed: true
 
 open:
-  dataset: ashare_stock_daily
-  physical_name: Open
+  dataset: ashare_stock_daily_adj
+  physical_name: AdjOpen
   dtype: double
   frequency: daily
   grain: instrument
@@ -48,8 +54,8 @@ open:
   mining_allowed: true
 
 high:
-  dataset: ashare_stock_daily
-  physical_name: High
+  dataset: ashare_stock_daily_adj
+  physical_name: AdjHigh
   dtype: double
   frequency: daily
   grain: instrument
@@ -62,8 +68,8 @@ high:
   mining_allowed: true
 
 low:
-  dataset: ashare_stock_daily
-  physical_name: Low
+  dataset: ashare_stock_daily_adj
+  physical_name: AdjLow
   dtype: double
   frequency: daily
   grain: instrument
@@ -76,7 +82,7 @@ low:
   mining_allowed: true
 
 volume:
-  dataset: ashare_stock_daily
+  dataset: ashare_stock_daily_adj
   physical_name: Volume
   dtype: int
   frequency: daily
@@ -88,10 +94,17 @@ volume:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  # LQTP 平台 functions.yaml：volume = Volume / Factor（后复权量）。生成的
+  # StockDailyBarAdj 表保持 Volume 原始值，Factor 列同表存在；derived_expression
+  # 使 bare ``volume`` 解析为 Volume / Factor（业界 LQTP/adjusted-volume 口径）。
+  derived_expression: Volume / Factor
+  derived_from:
+    - ashare_stock_daily.Volume
+    - ashare_stock_daily.Factor
 
 amount:
-  dataset: ashare_stock_daily
-  physical_name: Amount
+  dataset: ashare_stock_daily_adj
+  physical_name: AdjAmount
   dtype: double
   frequency: daily
   grain: instrument
@@ -104,8 +117,8 @@ amount:
   mining_allowed: true
 
 vwap:
-  dataset: ashare_stock_daily
-  physical_name: Vwap
+  dataset: ashare_stock_daily_adj
+  physical_name: AdjVwap
   dtype: double
   frequency: daily
   grain: instrument
@@ -117,10 +130,25 @@ vwap:
   join_policy: exact
   mining_allowed: true
 
+pre_close:
+  market: ashare
+  dataset: ashare_stock_daily_adj
+  physical_name: AdjPreClose
+  dtype: double
+  frequency: daily
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+  aliases: [prev_close]
+
 # 收益率 bp → decimal（A股专属；alias 'ret' 在美股上下文解析到美股小数 ret）
 return_bp:
   market: ashare
-  dataset: ashare_stock_daily
+  dataset: ashare_stock_daily_adj
   physical_name: Return
   dtype: double
   frequency: daily
@@ -390,8 +418,8 @@ index_weight:
 
 high_limit:
   market: ashare
-  dataset: ashare_stock_daily
-  physical_name: HighLimit
+  dataset: ashare_stock_daily_adj
+  physical_name: AdjHighLimit
   dtype: double
   frequency: daily
   grain: instrument
@@ -404,8 +432,8 @@ high_limit:
 
 low_limit:
   market: ashare
-  dataset: ashare_stock_daily
-  physical_name: LowLimit
+  dataset: ashare_stock_daily_adj
+  physical_name: AdjLowLimit
   dtype: double
   frequency: daily
   grain: instrument
@@ -415,6 +443,115 @@ low_limit:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+
+# ---- 分钟复权（StockMinuteBarAdj；realizations.md §5.6） ----
+# A 股分钟权威口径 = 后复权分钟表 StockMinuteBarAdj（Adj* 字段集）。bare
+# minute_vwap / minute_open/high/low/close/amount 解析到 Adj*；Volume 原始值。
+
+minute_open:
+  market: ashare
+  dataset: ashare_stock_minute_adj
+  physical_name: AdjOpen
+  dtype: double
+  frequency: minute
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+  aliases: [m_open]
+
+minute_high:
+  market: ashare
+  dataset: ashare_stock_minute_adj
+  physical_name: AdjHigh
+  dtype: double
+  frequency: minute
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+  aliases: [m_high]
+
+minute_low:
+  market: ashare
+  dataset: ashare_stock_minute_adj
+  physical_name: AdjLow
+  dtype: double
+  frequency: minute
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+  aliases: [m_low]
+
+minute_close:
+  market: ashare
+  dataset: ashare_stock_minute_adj
+  physical_name: AdjClose
+  dtype: double
+  frequency: minute
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+  aliases: [m_close]
+
+minute_volume:
+  market: ashare
+  dataset: ashare_stock_minute_adj
+  physical_name: Volume
+  dtype: int
+  frequency: minute
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+  aliases: [m_volume]
+
+minute_amount:
+  market: ashare
+  dataset: ashare_stock_minute_adj
+  physical_name: AdjAmount
+  dtype: double
+  frequency: minute
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+  aliases: [m_amount]
+
+minute_vwap:
+  market: ashare
+  dataset: ashare_stock_minute_adj
+  physical_name: AdjVwap
+  dtype: double
+  frequency: minute
+  grain: instrument
+  availability: same_day
+  cross_market_comparable: false
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+  aliases: [m_vwap]
 
 # ---- 行业分类（多分类系统，必须指定 IndustrySource） ----
 # #R50 P0-35 hard contract：同一股票同一天可有多个行业分类（SW/CITIC/CSRC…），

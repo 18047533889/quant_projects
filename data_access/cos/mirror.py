@@ -123,6 +123,11 @@ def _build_mirror_registry() -> dict[str, MirrorSpec]:
         _spec("ashare_stock_capital_daily", cos_prefix=ap, local_root=ar, table="StockCapitalDaily"),
         _spec("ashare_stock_cashflow", cos_prefix=ap, local_root=ar, table="StockCashFlow"),
         _spec("ashare_stock_daily", cos_prefix=ap, local_root=ar, table="StockDailyBar"),
+        # ADJ_FIELD_MIGRATION（2026-08-28）：后复权生成表镜像（本地由
+        # process_adjust.py 生成，不从源 COS 拉取）。cos_mirror 保持本地读取支持；
+        # 拉取侧 pull_data.py 白名单排除源 COS 拉取（realizations.md §3.1）。
+        _spec("ashare_stock_daily_adj", cos_prefix=ap, local_root=ar, table="StockDailyBarAdj"),
+        _spec("ashare_stock_minute_adj", cos_prefix=ap, local_root=ar, table="StockMinuteBarAdj"),
         _spec("ashare_stock_dividend", cos_prefix=ap, local_root=ar, table="StockDividend"),
         _spec("ashare_stock_income", cos_prefix=ap, local_root=ar, table="StockIncome"),
         _spec("ashare_stock_indicator", cos_prefix=ap, local_root=ar, table="StockIndicator"),

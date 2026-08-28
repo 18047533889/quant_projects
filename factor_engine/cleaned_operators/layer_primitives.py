@@ -199,10 +199,24 @@ def pd_true_range(high, low, close, **_):
 def pl_true_range(high, low, close, **_):
     cols = [c for c in pl_cols(close) if c in high.columns and c in low.columns]
     return close.with_columns([
-        pl.max_horizontal(
-            high[c] - low[c],
-            (high[c] - close[c].shift(1)).abs(),
-            (low[c] - close[c].shift(1)).abs(),
+        # PARITY-B: pandas reference (pd_true_range) uses a row-wise maximum that
+        # SKIPS NaN in any of the three terms (np.maximum.reduce ignores NaN
+        # unless all are NaN).  ``pl.max_horizontal`` PROPAGATES NaN instead, so a
+        # NaN in high/low/prev_close blanked the whole cell.  Use the NaN-skipping
+        # row-wise maximum on the three finite-masked terms to match the oracle.
+        pl.when(
+            pl.max_horizontal(
+                high[c].fill_null(float("-inf")),
+                (high[c] - close[c].shift(1)).abs().fill_null(float("-inf")),
+                (low[c] - close[c].shift(1)).abs().fill_null(float("-inf")),
+            ) == float("-inf")
+        ).then(None)
+        .otherwise(
+            pl.max_horizontal(
+                high[c].fill_null(float("-inf")),
+                (high[c] - close[c].shift(1)).abs().fill_null(float("-inf")),
+                (low[c] - close[c].shift(1)).abs().fill_null(float("-inf")),
+            )
         ).alias(c)
         for c in cols
     ])
@@ -224,9 +238,26 @@ def pd_cs_fill_mean(x, **_):
 
 
 def pl_cs_fill_mean(x, **_):
+    # PARITY-A（pandas 为参考）: pandas cs_fill_mean = 行有限值均值(mean(axis=1, skipna=True))
+    # 填充 NaN 单元格。此前 mean_horizontal 把 float NaN 当数值参与 → 行含任意 NaN 时
+    # 均值为 NaN 且 is_null() 对 float NaN 不触发 → NaN 单元格从未被填充。
+    # 修复：均值只取有限值；float-NaN 与 null 单元格均被有限均值填充（全 NaN 行保持 NaN）。
     cols = pl_cols(x)
-    mean = pl.mean_horizontal([pl.col(c) for c in cols])
-    return x.with_columns([pl.when(pl.col(c).is_null()).then(mean).otherwise(pl.col(c)).alias(c) for c in cols])
+    finite_exprs = [
+        pl.when(pl.col(c).is_nan()).then(None).otherwise(pl.col(c)).cast(pl.Float64)
+        for c in cols
+    ]
+    mean = pl.mean_horizontal(finite_exprs)
+    return x.with_columns(
+        [
+            pl.when(pl.col(c).is_nan() | pl.col(c).is_null())
+            .then(pl.when(mean.is_not_null()).then(mean).otherwise(pl.col(c)))
+            .otherwise(pl.col(c))
+            .cast(pl.Float64)
+            .alias(c)
+            for c in cols
+        ]
+    )
 
 
 def pd_cs_fill_median(x, **_):
@@ -235,9 +266,27 @@ def pd_cs_fill_median(x, **_):
 
 
 def pl_cs_fill_median(x, **_):
+    # PARITY-A（pandas 为参考）: pandas cs_fill_median = 行有限值中位数填充 NaN 单元格。
+    # 此前 concat_list 把 float NaN 当数值参与中位数（NaN 不是 null，drop_nulls 不去除），
+    # 且 is_null() 对 float NaN 不触发 → 中位数为 NaN 且从未填充。
+    # 修复：先把 float-NaN 归一为 null 再 drop_nulls 取中位数；float-NaN 与 null 单元格
+    # 均被有限中位数填充（全 NaN 行保持 NaN）。
     cols = pl_cols(x)
-    median = pl.concat_list([pl.col(c) for c in cols]).list.drop_nulls().list.median()
-    return x.with_columns([pl.when(pl.col(c).is_null()).then(median).otherwise(pl.col(c)).alias(c) for c in cols])
+    clean_lists = [
+        pl.when(pl.col(c).is_nan()).then(None).otherwise(pl.col(c)).cast(pl.Float64)
+        for c in cols
+    ]
+    median = pl.concat_list(clean_lists).list.drop_nulls().list.median()
+    return x.with_columns(
+        [
+            pl.when(pl.col(c).is_nan() | pl.col(c).is_null())
+            .then(pl.when(median.is_not_null()).then(median).otherwise(pl.col(c)))
+            .otherwise(pl.col(c))
+            .cast(pl.Float64)
+            .alias(c)
+            for c in cols
+        ]
+    )
 
 
 def _rank_gaussian_array(values: np.ndarray, method: str) -> np.ndarray:

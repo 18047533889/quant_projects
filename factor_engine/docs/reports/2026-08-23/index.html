@@ -66,18 +66,22 @@ h2 { font-size:1.05rem; color:var(--primary); margin:24px 0 10px; border-bottom:
 </table>
 
 
+
+
+
+
 <section id="robustness-2026">
 <h2>📉 2026 因子失效稳健性分析</h2>
 <p>收益口径：Vwap 后复权 · vwap-to-vwap（勾稽：<span class="tag tag-flip">2026年4月后</span>）。2026-05-01~07-31 为重点回看窗。</p>
 <div class="cards" style="grid-template-columns:repeat(5,minmax(0,1fr))">
-  <div class="metric"><b>0</b><span>稳定</span></div>
-  <div class="metric"><b>5</b><span>轻度衰减</span></div>
-  <div class="metric"><b>0</b><span>失效</span></div>
-  <div class="metric"><b>5</b><span>因子总数</span></div>
-  <div class="metric"><b>0%</b><span>稳定占比</span></div>
+  <div class="metric"><b>115</b><span>稳定</span></div>
+  <div class="metric"><b>62</b><span>轻度衰减</span></div>
+  <div class="metric"><b>279</b><span>失效</span></div>
+  <div class="metric"><b>456</b><span>因子总数</span></div>
+  <div class="metric"><b>25%</b><span>稳定占比</span></div>
 </div>
-<p><strong>稳定 Top15</strong></p><ul></ul>
-<p><strong>失效名单（Terrible）Top15</strong></p><ul></ul>
+<p><strong>稳定 Top15</strong></p><ul><li><code>dollar_pressure_range_zscore</code> 累计 77% · 回撤 -10%</li><li><code>drawdown_recovery_roughness</code> 累计 65% · 回撤 -18%</li><li><code>volratio_resvol_trend_gated</code> 累计 62% · 回撤 -17%</li><li><code>pressure_compression_simplified_v3</code> 累计 54% · 回撤 -20%</li><li><code>volume_weighted_pressure_mut1</code> 累计 44% · 回撤 -22%</li><li><code>shadow_volume_confirmed</code> 累计 29% · 回撤 -4%</li><li><code>adaptive_volume_smoothness</code> 累计 26% · 回撤 -3%</li><li><code>volume_confirmed_dir_mut_v4</code> 累计 22% · 回撤 -6%</li><li><code>overnight_repricing_phase_leadership</code> 累计 22% · 回撤 -17%</li><li><code>rank_tanh_volume_shape_crossover</code> 累计 21% · 回撤 -10%</li><li><code>mut_vol_weighted_shape_dir</code> 累计 20% · 回撤 -10%</li><li><code>mutation_dir_vol_shape_zscore</code> 累计 19% · 回撤 -11%</li><li><code>stability_atr</code> 累计 19% · 回撤 -11%</li><li><code>vol_regime_volume</code> 累计 18% · 回撤 -15%</li><li><code>overnight_repricing_ewm_stability</code> 累计 18% · 回撤 -14%</li></ul>
+<p><strong>失效名单（Terrible）Top15</strong></p><ul><li><code>volume_reversal_direct</code> 累计 -39%</li><li><code>intraday_reversal_zscore_volume_short</code> 累计 -38%</li><li><code>crash_vol_body_asym</code> 累计 -31%</li><li><code>pressure_ema_mutation</code> 累计 -23%</li><li><code>volatility_adjusted_dollar_pressure</code> 累计 -23%</li><li><code>simplified_fear_pressure</code> 累计 -23%</li><li><code>volume_adjusted_lag_consensus_v2</code> 累计 -22%</li><li><code>volume_adjusted_lag_simple</code> 累计 -22%</li><li><code>drawdown_depth_atr_gated</code> 累计 -20%</li><li><code>drawdown_depth_atr_pure</code> 累计 -20%</li><li><code>breakdown_compression</code> 累计 -19%</li><li><code>bounded_directional_price_impact_per_volume</code> 累计 -19%</li><li><code>reversal_volume_volregime</code> 累计 -19%</li><li><code>lag_volume_ratio_regime_adaptive</code> 累计 -19%</li><li><code>breakdown_compression_smoothed</code> 累计 -19%</li></ul>
 <p><a href="robustness_2026/robustness_2026.html">打开完整分析页 →</a></p>
 </section>
 

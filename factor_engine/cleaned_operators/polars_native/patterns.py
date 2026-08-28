@@ -56,11 +56,18 @@ class Pattern123Bear(SeriesOperator):
         name="pattern_123_bear",
         category="chart_pattern",
         description="Bearish 1-2-3 reversal pattern",
-        param_names=["high", "window"],
-        param_types={"high": pl.DataFrame, "window": int},
+        param_names=["high", "low", "left_window", "right_window", "history_window", "min_swing"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int,
+                     "right_window": int, "history_window": int, "min_swing": float},
     )
 
-    def _calculate_series(self, high: pl.DataFrame, window: int = 10, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, high: pl.DataFrame, low=None, left_window: int = 3,
+                          right_window: int = 3, history_window: int = 30,
+                          min_swing: float = 0.02, **kwargs) -> pl.DataFrame:
+        # R4-100 parity: the pandas reference (structural_levels) declares the
+        # 6-param contract ``(high, low, left_window, right_window,
+        # history_window, min_swing)``.  Keep the legacy body on high/window.
+        window = history_window
         cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
         if not cols:
             return high
@@ -96,11 +103,17 @@ class Pattern123Bull(SeriesOperator):
         name="pattern_123_bull",
         category="chart_pattern",
         description="Bullish 1-2-3 reversal pattern",
-        param_names=["low", "window"],
-        param_types={"low": pl.DataFrame, "window": int},
+        param_names=["high", "low", "left_window", "right_window", "history_window", "min_swing"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "min_swing": float},
     )
 
-    def _calculate_series(self, low: pl.DataFrame, window: int = 10, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, low: pl.DataFrame, high=None, left_window: int = 3,
+                          right_window: int = 3, history_window: int = 30,
+                          min_swing: float = 0.02, **kwargs) -> pl.DataFrame:
+        # R4-100 parity: the 6-param canonical contract (high, low,
+        # left_window, right_window, history_window, min_swing); ``window`` is
+        # the legacy alias of history_window.
+        window = int(kwargs.get("window", history_window))
         cols = [c for c in low.columns if c not in PANEL_SKIP_COLUMNS]
         if not cols:
             return low
@@ -135,8 +148,8 @@ class PatternAscendingTriangle(SeriesOperator):
         name="pattern_ascending_triangle",
         category="chart_pattern",
         description="Ascending triangle consolidation pattern",
-        param_names=["high", "low", "window"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "window": int},
+        param_names=["high", "low", "left_window", "right_window", "history_window", "points", "slope_threshold"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "points": int, "slope_threshold": int},
     )
 
     def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
@@ -178,8 +191,8 @@ class PatternBearFlag(SeriesOperator):
         name="pattern_bear_flag",
         category="chart_pattern",
         description="Bearish flag continuation pattern",
-        param_names=["close", "window"],
-        param_types={"close": pl.DataFrame, "window": int},
+        param_names=["close", "high", "low", "volume", "impulse_window", "flag_window", "min_impulse", "max_retracement", "max_width", "volume_decay_threshold"],
+        param_types={"close": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "volume": pl.DataFrame, "impulse_window": int, "flag_window": int, "min_impulse": int, "max_retracement": int, "max_width": int, "volume_decay_threshold": int},
     )
 
     def _calculate_series(self, close: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
@@ -217,8 +230,8 @@ class PatternBearPennant(SeriesOperator):
         name="pattern_bear_pennant",
         category="chart_pattern",
         description="Bearish pennant continuation pattern",
-        param_names=["high", "low", "window"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "window": int},
+        param_names=["close", "high", "low", "volume", "impulse_window", "pennant_window", "min_impulse", "max_width", "volume_decay_threshold"],
+        param_types={"close": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "volume": pl.DataFrame, "impulse_window": int, "pennant_window": int, "min_impulse": int, "max_width": int, "volume_decay_threshold": int},
     )
 
     def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
@@ -251,8 +264,8 @@ class PatternBreakdownRetest(SeriesOperator):
         name="pattern_breakdown_retest",
         category="chart_pattern",
         description="Breakdown followed by retest of support",
-        param_names=["close", "low", "window"],
-        param_types={"close": pl.DataFrame, "low": pl.DataFrame, "window": int},
+        param_names=["close", "window", "max_wait", "tolerance"],
+        param_types={"close": pl.DataFrame, "window": int, "max_wait": int, "tolerance": int},
     )
 
     def _calculate_series(self, close: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
@@ -287,8 +300,8 @@ class PatternBreakoutRetest(SeriesOperator):
         name="pattern_breakout_retest",
         category="chart_pattern",
         description="Breakout followed by retest of resistance",
-        param_names=["close", "high", "window"],
-        param_types={"close": pl.DataFrame, "high": pl.DataFrame, "window": int},
+        param_names=["close", "window", "max_wait", "tolerance"],
+        param_types={"close": pl.DataFrame, "window": int, "max_wait": int, "tolerance": int},
     )
 
     def _calculate_series(self, close: pl.DataFrame, high: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
@@ -321,8 +334,8 @@ class PatternBroadening(SeriesOperator):
         name="pattern_broadening",
         category="chart_pattern",
         description="Broadening/megaphone pattern with expanding range",
-        param_names=["high", "low", "window"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "window": int},
+        param_names=["high", "low", "left_window", "right_window", "history_window", "points", "slope_threshold"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "points": int, "slope_threshold": int},
     )
 
     def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
@@ -355,8 +368,8 @@ class PatternBullFlag(SeriesOperator):
         name="pattern_bull_flag",
         category="chart_pattern",
         description="Bullish flag continuation pattern",
-        param_names=["close", "window"],
-        param_types={"close": pl.DataFrame, "window": int},
+        param_names=["close", "high", "low", "volume", "impulse_window", "flag_window", "min_impulse", "max_retracement", "max_width", "volume_decay_threshold"],
+        param_types={"close": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "volume": pl.DataFrame, "impulse_window": int, "flag_window": int, "min_impulse": int, "max_retracement": int, "max_width": int, "volume_decay_threshold": int},
     )
 
     def _calculate_series(self, close: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
@@ -392,8 +405,8 @@ class PatternBullPennant(SeriesOperator):
         name="pattern_bull_pennant",
         category="chart_pattern",
         description="Bullish pennant continuation pattern",
-        param_names=["high", "low", "window"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "window": int},
+        param_names=["close", "high", "low", "volume", "impulse_window", "pennant_window", "min_impulse", "max_width", "volume_decay_threshold"],
+        param_types={"close": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "volume": pl.DataFrame, "impulse_window": int, "pennant_window": int, "min_impulse": int, "max_width": int, "volume_decay_threshold": int},
     )
 
     def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
@@ -425,8 +438,8 @@ class PatternCup(SeriesOperator):
         name="pattern_cup",
         category="chart_pattern",
         description="Cup pattern (U-shaped bottom)",
-        param_names=["close", "window"],
-        param_types={"close": pl.DataFrame, "window": int},
+        param_names=["close", "window", "min_depth", "max_edge_diff", "min_fit"],
+        param_types={"close": pl.DataFrame, "window": int, "min_depth": int, "max_edge_diff": int, "min_fit": int},
     )
 
     def _calculate_series(self, close: pl.DataFrame, window: int = 30, **kwargs) -> pl.DataFrame:
@@ -463,8 +476,8 @@ class PatternCupHandle(SeriesOperator):
         name="pattern_cup_handle",
         category="chart_pattern",
         description="Cup and handle bullish continuation",
-        param_names=["close", "window"],
-        param_types={"close": pl.DataFrame, "window": int},
+        param_names=["close", "high", "low", "cup_window", "handle_window", "min_depth", "max_edge_diff", "min_fit", "max_handle_retracement"],
+        param_types={"close": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "cup_window": int, "handle_window": int, "min_depth": int, "max_edge_diff": int, "min_fit": int, "max_handle_retracement": int},
     )
 
     def _calculate_series(self, close: pl.DataFrame, window: int = 40, **kwargs) -> pl.DataFrame:
@@ -500,8 +513,8 @@ class PatternDescendingTriangle(SeriesOperator):
         name="pattern_descending_triangle",
         category="chart_pattern",
         description="Descending triangle consolidation pattern",
-        param_names=["high", "low", "window"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "window": int},
+        param_names=["high", "low", "left_window", "right_window", "history_window", "points", "slope_threshold"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "points": int, "slope_threshold": int},
     )
 
     def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
@@ -543,8 +556,8 @@ class PatternDoubleBottom(SeriesOperator):
         name="pattern_double_bottom",
         category="chart_pattern",
         description="Double bottom bullish reversal",
-        param_names=["low", "window"],
-        param_types={"low": pl.DataFrame, "window": int},
+        param_names=["high", "low", "left_window", "right_window", "history_window", "tolerance", "min_depth", "min_spacing", "max_spacing"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "tolerance": int, "min_depth": int, "min_spacing": int, "max_spacing": int},
     )
 
     def _calculate_series(self, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
@@ -581,8 +594,8 @@ class PatternDoubleTop(SeriesOperator):
         name="pattern_double_top",
         category="chart_pattern",
         description="Double top bearish reversal",
-        param_names=["high", "window"],
-        param_types={"high": pl.DataFrame, "window": int},
+        param_names=["high", "low", "left_window", "right_window", "history_window", "tolerance", "min_depth", "min_spacing", "max_spacing"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "tolerance": int, "min_depth": int, "min_spacing": int, "max_spacing": int},
     )
 
     def _calculate_series(self, high: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
@@ -618,8 +631,8 @@ class PatternFallingChannel(SeriesOperator):
         name="pattern_falling_channel",
         category="chart_pattern",
         description="Falling channel with parallel support/resistance",
-        param_names=["high", "low", "window"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "window": int},
+        param_names=["high", "low", "left_window", "right_window", "history_window", "points", "slope_threshold", "parallel_tolerance"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "points": int, "slope_threshold": int, "parallel_tolerance": int},
     )
 
     def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
@@ -658,8 +671,8 @@ class PatternFallingWedge(SeriesOperator):
         name="pattern_falling_wedge",
         category="chart_pattern",
         description="Falling wedge bullish reversal pattern",
-        param_names=["high", "low", "window"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "window": int},
+        param_names=["high", "low", "left_window", "right_window", "history_window", "points", "slope_threshold"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "points": int, "slope_threshold": int},
     )
 
     def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
@@ -699,8 +712,8 @@ class PatternHeadShoulders(SeriesOperator):
         name="pattern_head_shoulders",
         category="chart_pattern",
         description="Head and shoulders bearish reversal",
-        param_names=["high", "window"],
-        param_types={"high": pl.DataFrame, "window": int},
+        param_names=["high", "low", "left_window", "right_window", "history_window", "shoulder_tolerance", "head_min_prominence", "max_neckline_slope"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "shoulder_tolerance": int, "head_min_prominence": int, "max_neckline_slope": int},
     )
 
     def _calculate_series(self, high: pl.DataFrame, window: int = 30, **kwargs) -> pl.DataFrame:
@@ -741,8 +754,8 @@ class PatternInverseHeadShoulders(SeriesOperator):
         name="pattern_inverse_head_shoulders",
         category="chart_pattern",
         description="Inverse head and shoulders bullish reversal",
-        param_names=["low", "window"],
-        param_types={"low": pl.DataFrame, "window": int},
+        param_names=["high", "low", "left_window", "right_window", "history_window", "shoulder_tolerance", "head_min_prominence", "max_neckline_slope"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "shoulder_tolerance": int, "head_min_prominence": int, "max_neckline_slope": int},
     )
 
     def _calculate_series(self, low: pl.DataFrame, window: int = 30, **kwargs) -> pl.DataFrame:
@@ -783,8 +796,8 @@ class PatternRectangle(SeriesOperator):
         name="pattern_rectangle",
         category="chart_pattern",
         description="Rectangle consolidation pattern",
-        param_names=["high", "low", "window"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "window": int},
+        param_names=["high", "low", "left_window", "right_window", "history_window", "points", "slope_threshold"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "points": int, "slope_threshold": int},
     )
 
     def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
@@ -822,8 +835,8 @@ class PatternRisingChannel(SeriesOperator):
         name="pattern_rising_channel",
         category="chart_pattern",
         description="Rising channel with parallel support/resistance",
-        param_names=["high", "low", "window"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "window": int},
+        param_names=["high", "low", "left_window", "right_window", "history_window", "points", "slope_threshold", "parallel_tolerance"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "points": int, "slope_threshold": int, "parallel_tolerance": int},
     )
 
     def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
@@ -862,8 +875,8 @@ class PatternRisingWedge(SeriesOperator):
         name="pattern_rising_wedge",
         category="chart_pattern",
         description="Rising wedge bearish reversal pattern",
-        param_names=["high", "low", "window"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "window": int},
+        param_names=["high", "low", "left_window", "right_window", "history_window", "points", "slope_threshold"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "points": int, "slope_threshold": int},
     )
 
     def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
@@ -903,8 +916,8 @@ class PatternRoundingBottom(SeriesOperator):
         name="pattern_rounding_bottom",
         category="chart_pattern",
         description="Rounding bottom bullish reversal",
-        param_names=["close", "window"],
-        param_types={"close": pl.DataFrame, "window": int},
+        param_names=["close", "window", "min_fit"],
+        param_types={"close": pl.DataFrame, "window": int, "min_fit": int},
     )
 
     def _calculate_series(self, close: pl.DataFrame, window: int = 30, **kwargs) -> pl.DataFrame:
@@ -942,8 +955,8 @@ class PatternRoundingTop(SeriesOperator):
         name="pattern_rounding_top",
         category="chart_pattern",
         description="Rounding top bearish reversal",
-        param_names=["close", "window"],
-        param_types={"close": pl.DataFrame, "window": int},
+        param_names=["close", "window", "min_fit"],
+        param_types={"close": pl.DataFrame, "window": int, "min_fit": int},
     )
 
     def _calculate_series(self, close: pl.DataFrame, window: int = 30, **kwargs) -> pl.DataFrame:
@@ -980,8 +993,8 @@ class PatternSymTriangle(SeriesOperator):
         name="pattern_sym_triangle",
         category="chart_pattern",
         description="Symmetric triangle consolidation pattern",
-        param_names=["high", "low", "window"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "window": int},
+        param_names=["high", "low", "left_window", "right_window", "history_window", "points", "slope_threshold"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "points": int, "slope_threshold": int},
     )
 
     def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
@@ -1020,8 +1033,8 @@ class PatternTripleBottom(SeriesOperator):
         name="pattern_triple_bottom",
         category="chart_pattern",
         description="Triple bottom bullish reversal",
-        param_names=["low", "window"],
-        param_types={"low": pl.DataFrame, "window": int},
+        param_names=["high", "low", "left_window", "right_window", "history_window", "tolerance", "min_depth", "min_spacing", "max_spacing"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "tolerance": int, "min_depth": int, "min_spacing": int, "max_spacing": int},
     )
 
     def _calculate_series(self, low: pl.DataFrame, window: int = 30, **kwargs) -> pl.DataFrame:
@@ -1059,8 +1072,8 @@ class PatternTripleTop(SeriesOperator):
         name="pattern_triple_top",
         category="chart_pattern",
         description="Triple top bearish reversal",
-        param_names=["high", "window"],
-        param_types={"high": pl.DataFrame, "window": int},
+        param_names=["high", "low", "left_window", "right_window", "history_window", "tolerance", "min_depth", "min_spacing", "max_spacing"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "tolerance": int, "min_depth": int, "min_spacing": int, "max_spacing": int},
     )
 
     def _calculate_series(self, high: pl.DataFrame, window: int = 30, **kwargs) -> pl.DataFrame:

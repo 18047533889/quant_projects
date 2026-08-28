@@ -1,0 +1,87 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "factor-engine"
+version = "0.3.1"
+description = "Factor engine: DSL parser, IR, planner, runtime, modeling, and service"
+requires-python = ">=3.10"
+dependencies = [
+    "PyYAML>=6.0",
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "packaging>=23.0",
+    "pyarrow>=14.0",
+    "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+service = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "pydantic>=2.0"]
+pandas = ["pandas>=2.0", "pyarrow>=14.0", "scipy>=1.10"]
+accel = ["bottleneck>=1.3", "numba>=0.58"]
+polars = ["polars>=0.20"]
+validation = ["pydantic>=2.0"]
+dev = ["pytest>=8.0", "pydantic>=2.0", "fastapi>=0.110", "build>=1.2"]
+
+[tool.setuptools]
+py-modules = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+    # P0-03: SINGLE module identity. `factor_engine` and `factor_engine.*` are
+    # the ONLY importable identities this distribution ships.  Unqualified
+    # top-level packages (api, backend, cache, cleaned_operators, planner,
+    # runtime, ir, expr, fields, market, mining, modeling-consolidated, ...)
+    # are deliberately NOT listed: exposing them under two sys.modules names
+    # would create two OperatorRegistry singletons and defeat the R40
+    # immutable registry contract.  Any legacy `import cleaned_operators` etc.
+    # resolves through the state-free deprecated shims under factor_engine/
+    # (see factor_engine/deprecated_shims.py), never as a second package copy.
+    "factor_engine",
+    "factor_engine.api*",
+    "factor_engine.backend*",
+    "factor_engine.cache*",
+    "factor_engine.cleaned_operators*",
+    "factor_engine.docs*",
+    "factor_engine.export*",
+    "factor_engine.expr*",
+    "factor_engine.factor_recipes*",
+    "factor_engine.fields*",
+    "factor_engine.ir*",
+    "factor_engine.market*",
+    "factor_engine.mining*",
+    "factor_engine.planner*",
+    "factor_engine.planning*",
+    "factor_engine.research_operators*",
+    "factor_engine.research_tools*",
+    "factor_engine.runtime*",
+    "factor_engine.security*",
+    "factor_engine.semantic*",
+    "factor_engine.service*",
+    "factor_engine.storage*",
+    "factor_engine.util*",
+    "factor_engine.validation*",
+    "factor_engine.telemetry*",
+    "factor_engine.audit*",
+    "factor_engine.execution*",
+    "factor_engine.operator_contracts*",
+]
+
+[tool.setuptools.package-dir]
+"" = "."
+
+[tool.setuptools.package-data]
+"factor_engine.cleaned_operators" = ["docs/*"]
+"factor_engine.docs" = ["*.json", "*.yaml", "*.md", "*.txt"]
+
+[tool.setuptools.exclude-package-data]
+"*" = [
+    "tests", "tests.*",
+    "benchmarks", "benchmarks.*",
+    "audit", "audit.*",
+    "scripts", "scripts.*",
+    "*.pyc", "__pycache__",
+    "test_*.py", "*_test.py",
+]

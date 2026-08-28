@@ -618,6 +618,14 @@ def register() -> None:
         name: spec
         for name, spec in _specs.items()
         if _Reg.get(name, "pandas_numpy", mode="any") is None
+        # ``same_clock_lag`` is a FIRST-PARTY daily-surface canonical owned by
+        # ``cleaned_operators.same_clock_lag`` (minute-level clock-aligned lag,
+        # ``(x, lag, clock_unit)`` — loaded in ``_LOAD_MODULES``).  This module's
+        # clock-ORDINAL kernel (``(value, clock, lag)``) is a different
+        # semantic; keep it callable via ``pd_same_clock_lag`` directly (its
+        # tests do), but never let a session-start staging import clobber the
+        # minute-level canonical under the same name.
+        and name != "same_clock_lag"
     }
     if _to_register:
         register_specs(_to_register)

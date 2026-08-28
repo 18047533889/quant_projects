@@ -28,6 +28,19 @@ def _register_bridge(
         return
     op_name = name or canonical
     params = param_names or ["x"]
+    # R4-100 arity parity: a generic ``["x"]`` bridge SHRINKS the positional
+    # contract whenever the pandas reference canonical takes more parameters
+    # (e.g. ``ACF(x, window, lag)``, ``slope(x, window)``).  The pandas_numpy
+    # reference registers EARLIER in the bootstrap (statistics common module),
+    # so inherit its declared ``param_names`` for the polars bridge when the
+    # caller did not narrow them — the bridge kernel accepts the extra args via
+    # ``**kwargs`` (bridge_registry forwards them to the reference).
+    if param_names is None:
+        existing_pandas = OperatorRegistry.get(canonical, "pandas_numpy", mode="any")
+        if existing_pandas is not None:
+            _ref = getattr(getattr(existing_pandas, "metadata", None), "param_names", None)
+            if _ref:
+                params = list(_ref)
 
     class _BridgeOp(SeriesOperator):
         metadata = OperatorMetadata(

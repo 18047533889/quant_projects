@@ -109,7 +109,7 @@ def generate_scm_manifest(
     或 ``commit_sha``（direct 工件）。.git 不可用 → 抛 RuntimeError（构建期必须有
     确定性来源，绝不生成半成品 manifest）。
     """
-    repo_root = Path(repo_root) if repo_root is not None else FE_ROOT.parent
+    repo_root = Path(repo_root) if repo_root is not None else FE_ROOT
     evidence_path = Path(evidence_path) if evidence_path is not None else (
         FE_ROOT / "evidence" / "factor_operator_verified.json"
     )

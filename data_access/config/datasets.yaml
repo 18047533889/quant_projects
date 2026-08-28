@@ -67,6 +67,35 @@ ashare_stock_daily:
     IsSuspend: bool
     UpdateTime: timestamptz   # #P1-final closure 11: 实际 parquet 为 timestamp[ms, tz=UTC]（aware）
 
+ashare_stock_daily_adj:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/StockDailyBarAdj
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  # 工程生成的后复权表: AdjX = 原始X × Factor; Volume 原始值; 带目标收益 TargetVwapReturnH01/H05/H10/H20
+  schema:
+    TradeDate: date
+    Symbol: string
+    AdjOpen: double
+    AdjHigh: double
+    AdjLow: double
+    AdjClose: double
+    AdjPreClose: double
+    Volume: int
+    AdjAmount: double
+    AdjHighLimit: double
+    AdjLowLimit: double
+    Return: double
+    Factor: double
+    AdjVwap: double
+    IsSuspend: bool
+    UpdateTime: timestamptz
+    TargetVwapReturnH01: double
+    TargetVwapReturnH05: double
+    TargetVwapReturnH10: double
+    TargetVwapReturnH20: double
+
 ashare_stock_minute:
   <<: *ashare_lqtp_defaults
   root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/StockMinuteBar
@@ -93,6 +122,27 @@ ashare_stock_minute:
     Volume: int
     Amount: double
     Vwap: double
+
+ashare_stock_minute_adj:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/StockMinuteBarAdj
+  glob: "**/*.parquet"
+  time_column: QuoteTime
+  instrument_column: Symbol
+  # 工程生成的后复权分钟表（realizations.md §5.6）：AdjX = 原始X × Factor(Symbol)
+  # （Factor 取同日 StockDailyBar 的 Symbol 映射）；Volume 原始值不复权。
+  schema:
+    TradeDate: date
+    QuoteTime: timestamp
+    Symbol: string
+    AdjOpen: double
+    AdjHigh: double
+    AdjLow: double
+    AdjClose: double
+    Volume: int64
+    AdjAmount: double
+    AdjVwap: double
+    UpdateTime: timestamptz
 
 ashare_stock_valuation_daily:
   <<: *ashare_lqtp_defaults

@@ -691,7 +691,9 @@ def ts_poly2_coeff(x, d):
         t_idx = np.arange(d_i, dtype=float)
         for t in range(d_i - 1, rows):
             y = arr[t - d_i + 1 : t + 1]
-            valid = ~np.isnan(y)
+            # WINDOW-SEMANTICS PARITY (pandas reference): exclude ±Inf too
+            # (finite-only statistical contract).
+            valid = np.isfinite(y)
             if valid.sum() < 3:
                 continue
             coeffs = np.polyfit(t_idx[valid], y[valid], 2)
@@ -709,12 +711,13 @@ def ts_poly2_resid(y, x, d):
         for t in range(d_i - 1, rows):
             yw = yv[t - d_i + 1 : t + 1]
             xw = xv[t - d_i + 1 : t + 1]
-            valid = ~(np.isnan(yw) | np.isnan(xw))
+            # WINDOW-SEMANTICS PARITY (pandas reference): finite-only pairs.
+            valid = np.isfinite(yw) & np.isfinite(xw)
             if valid.sum() < 3:
                 continue
             coeffs = np.polyfit(xw[valid], yw[valid], 2)
             a, b, c = coeffs
-            fitted = a + b * xw + c * xw ** 2
+            fitted = a + b * xw[valid] + c * xw[valid] ** 2
             out[t, i] = float(yw[-1] - fitted[-1])
     return _make(y, cols, out)
 

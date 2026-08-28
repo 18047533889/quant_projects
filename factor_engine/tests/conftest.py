@@ -115,7 +115,7 @@ def _install_lifecycle_watcher() -> None:
     def _watched_thaw(cls, token):
         cls._p014_thaw_calls = (cls.__dict__.get("_p014_thaw_calls") or [])
         import traceback
-        cls._p014_thaw_calls.append("".join(traceback.format_stack()) | "".join(traceback.format_stack(limit=6)))
+        cls._p014_thaw_calls.append("".join(traceback.format_stack()) + "".join(traceback.format_stack(limit=6)))
         return _orig_thaw.__func__(cls, token)
 
     def _watched_freeze(cls):

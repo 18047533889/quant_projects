@@ -1419,16 +1419,20 @@ class TSForbiddenOrdinalPatternExcessPolarsNative(SeriesOperator):
         name="ts_forbidden_ordinal_pattern_excess",
         category="time_series",
         description="Excess occurrences of theoretically rare ordinal patterns",
-        param_names=["x", "window", "pattern_length"],
+        # R4-100 parity: the pandas reference (complexity_ext) declares the
+        # 5-param contract ``(x, window, order, delay, min_embeddings)``.
+        param_names=["x", "window", "order", "delay", "min_embeddings"],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "ordinal"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-        "pattern_length": ParamSpec(dtype=int, min=3, max=7, default=3),
+        "order": ParamSpec(dtype=int, min=3, max=7, default=3),
     }
 
-    def _calculate_series(self, x, window, pattern_length=3, **kwargs):
+    def _calculate_series(self, x, window, order=3, delay=1, min_embeddings=10, **kwargs):
+        # R4-100 parity: canonical (x, window, order, delay, min_embeddings);
+        # ``pattern_length`` is legacy.
         # TODO: Detect forbidden ordinal patterns
         return pl.Series([None] * len(x), dtype=pl.Float64)
 

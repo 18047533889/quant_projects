@@ -653,11 +653,16 @@ class AroonPolars(SeriesOperator):
     """Polars Aroon Up - Down"""
     metadata = OperatorMetadata(
         name="AROON", category="financial", description="Aroon Up - Down",
-        param_names=["close", "window"], return_type="series", tags=["financial", "polars"],
+        param_names=["high", "low", "window"], return_type="series", tags=["financial", "polars"],
     )
 
-    def _calculate_series(self, close: pl.DataFrame, window: int = 25, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, high, low=None, window: int = 25, **kwargs) -> pl.DataFrame:
         w = int(kwargs.get("d", window))
+        # R4-100 parity: the canonical AROON reference (price_volume.
+        # technical_extensions) declares ``(high, low, window)`` — Aroon Up from
+        # rolling highs minus Aroon Down from rolling lows.  The legacy
+        # 1-input ``close`` formula is emulated when ``low`` is omitted.
+        close = high if low is None else (high + low) / 2.0
         up = AroonUpPolars()._calculate_series(close, window=w, **kwargs)
         down = AroonDownPolars()._calculate_series(close, window=w, **kwargs)
         cols = _numeric_cols(close)

@@ -7517,13 +7517,17 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         # Skewness requires minimum 3 data points.
         # pandas rolling.skew() silently skips ±Inf values (optimized implementation).
         # DuckDB throws on Inf, so filter Inf→NULL before window function.
-        min_periods = _int_attr(node, "min_periods", default=w)
+        # WINDOW-SEMANTICS PARITY (pandas reference): pandas rolling.skew
+        # min_periods=1 (any window with >=3 finite samples yields a value),
+        # NaN AND ±Inf are missing.  Same finite mask as _inst_window.
+        min_periods = _int_attr(node, "min_periods", default=1)
         min_periods_val = f"GREATEST({min_periods}, 3)"
         return _Layer(
             f"SELECT ts, inst, "
             f"CASE WHEN COUNT(_v) OVER ({over}) < {min_periods_val} THEN NULL "
             f"ELSE SKEWNESS(_v) OVER ({over}) END AS _v "
-            f"FROM (SELECT ts, inst, CASE WHEN isinf(_v) THEN NULL ELSE _v END AS _v "
+            f"FROM (SELECT ts, inst, "
+            f"CASE WHEN _v IS NOT NULL AND NOT isnan(_v) AND NOT isinf(_v) THEN _v END AS _v "
             f"FROM ({inner.sql}) t) filtered",
             has_inst_window=True,
         )
@@ -8346,6 +8350,9 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         # Cold start mirrors the pandas ``_rolling_apply`` (NaN for the first
         # d-1 rows regardless of NaN content): gate on raw row count, not the
         # cleaned count, so NaN rows still occupy window slots.
+        # WINDOW-SEMANTICS PARITY: count of finite samples (cnt) is the rolling
+        # denominator; pandas min_periods=1 -> a single finite sample yields a
+        # zero central moment (any finite row satisfies the row-support).
         return _Layer(
             f"SELECT ts, inst, "
             f"CASE WHEN nrows < {d} OR cnt = 0 THEN NULL ELSE {moment} END AS _v "
@@ -9431,15 +9438,17 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if dialect != SqlDialect.DUCKDB:
             return None
         over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
-        # Kurtosis requires minimum 4 data points.
-        # pandas rolling.kurt() silently skips ±Inf values (optimized implementation).
-        # DuckDB throws on Inf, so filter Inf→NULL before window function.
-        min_periods_val = max(spec.min_periods, 4)
+        # WINDOW-SEMANTICS PARITY (pandas reference): the ACTIVE pandas ts_kurt
+        # is StableTsKurt — prefix-stable unbiased Fisher excess kurtosis on
+        # FULL finite windows (min_periods == window).  Require W finite rows;
+        # NaN AND ±Inf are missing (shared finite mask).
+        min_periods_val = spec.size
         return _Layer(
             f"SELECT ts, inst, "
             f"CASE WHEN COUNT(_v) OVER ({over}) < {min_periods_val} THEN NULL "
             f"ELSE KURTOSIS(_v) OVER ({over}) END AS _v "
-            f"FROM (SELECT ts, inst, CASE WHEN isinf(_v) THEN NULL ELSE _v END AS _v "
+            f"FROM (SELECT ts, inst, "
+            f"CASE WHEN _v IS NOT NULL AND NOT isnan(_v) AND NOT isinf(_v) THEN _v END AS _v "
             f"FROM ({inner.sql}) t) filtered",
             has_inst_window=True,
         )

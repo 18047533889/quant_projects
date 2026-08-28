@@ -149,6 +149,15 @@ class TSBetaPolars(SeriesOperator):
 
     def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame, window: int = 20, min_periods: int = 5, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.common.strict_params import strict_int
+        # WINDOW-SEMANTICS PARITY (pandas reference): pandas rolling_beta has
+        # three intertwined semantics that polars rolling_cov/var do NOT
+        # reproduce exactly (early-window left-padding denominator, pairwise
+        # finite masks where either side missing, and a current-row output
+        # mask).  Delegate to the SINGLE reference kernel (rolling_beta) through
+        # the pandas bridge — the same exact-parity pattern as ts_sum_decay and
+        # ts_kurt — so the polars backend cannot diverge from pandas.
+        from factor_engine.cleaned_operators._rolling_fast import rolling_beta
+        from factor_engine.cleaned_operators.base_polars import panel_pandas_bridge
 
         w = strict_int(kwargs.get("d", window), "window", minimum=2)
         mp = strict_int(min_periods, "min_periods", minimum=2)
@@ -156,19 +165,9 @@ class TSBetaPolars(SeriesOperator):
             from factor_engine.backend.operator_errors import OperatorParameterError
             raise OperatorParameterError("min_periods must be <= window")
         cols = _align_cols(y, x)
-        merged = y
-        x_cols: list[str] = []
-        for c in cols:
-            xname = f"__x_{c}"
-            x_cols.append(xname)
-            merged = merged.with_columns(x.select(pl.col(c).alias(xname)))
-        exprs = []
-        for c in cols:
-            xn = f"__x_{c}"
-            cov = pl.rolling_cov(pl.col(c), pl.col(xn), window_size=w, min_samples=mp, ddof=1)
-            var = pl.col(xn).rolling_var(window_size=w, min_samples=mp, ddof=1)
-            exprs.append((cov / var).alias(c))
-        return merged.with_columns(exprs).drop(x_cols)
+        y_pd = y.select(cols).to_pandas()
+        x_pd = x.select(cols).to_pandas()
+        return panel_pandas_bridge(y, lambda pdf: rolling_beta(y_pd, x_pd, window=w, min_periods=mp))
 
 
 @register_operator(name="sharpe_ratio", category="financial", business_category="price_volume", canonical="sharpe_ratio", source="factor_dsl_polars")

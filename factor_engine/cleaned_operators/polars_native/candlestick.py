@@ -281,14 +281,14 @@ class CandleOverlapRatio(SeriesOperator):
         name="candle_overlap_ratio",
         category="candlestick",
         description="Ratio of body overlap with previous candle body",
-        param_names=["open", "close"],
-        param_types={"open": pl.DataFrame, "close": pl.DataFrame},
+        param_names=["high", "low"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame},
     )
 
-    def _calculate_series(self, open: pl.DataFrame, close: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = [c for c in open.columns if c not in PANEL_SKIP_COLUMNS]
-        o_vals = open.select(cols).to_numpy()
-        c_vals = close.select(cols).to_numpy()
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
+        o_vals = high.select(cols).to_numpy()
+        c_vals = low.select(cols).to_numpy()
         
         body_high = np.maximum(o_vals, c_vals)
         body_low = np.minimum(o_vals, c_vals)
@@ -849,39 +849,37 @@ class CDL_Harami(SeriesOperator):
         name="cdl_harami",
         category="candlestick_pattern",
         description="Harami pattern (1=bullish, -1=bearish, 0=none)",
-        param_names=["open", "close"],
-        param_types={"open": pl.DataFrame, "close": pl.DataFrame},
+        # R4-100 parity: the pandas reference (price_volume) declares the full
+        # OHLC ``(open, high, low, close)`` contract; this polars native used
+        # ``(open, close)``.  Adopt the reference arity (high/low are inputs to
+        # the reference geometry; they are retained for signature parity).
+        param_names=["open", "high", "low", "close"],
+        param_types={"open": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame},
     )
 
-    def _calculate_series(self, open: pl.DataFrame, close: pl.DataFrame, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, open: pl.DataFrame, high: pl.DataFrame,
+                          low: pl.DataFrame, close: pl.DataFrame, **kwargs) -> pl.DataFrame:
         cols = [c for c in open.columns if c not in PANEL_SKIP_COLUMNS]
         o = open.select(cols).to_numpy()
         c = close.select(cols).to_numpy()
-        
         o_prev = np.roll(o, 1, axis=0)
         c_prev = np.roll(c, 1, axis=0)
-        
         body_high = np.maximum(o, c)
         body_low = np.minimum(o, c)
         body_high_prev = np.maximum(o_prev, c_prev)
         body_low_prev = np.minimum(o_prev, c_prev)
-        
         # Current body inside previous body
         inside = (body_high < body_high_prev) & (body_low > body_low_prev)
-        
         # Bullish harami: prev bearish, current bullish
         prev_bearish = c_prev < o_prev
         curr_bullish = c > o
         bullish_harami = inside & prev_bearish & curr_bullish
-        
         # Bearish harami: prev bullish, current bearish
         prev_bullish = c_prev > o_prev
         curr_bearish = c < o
         bearish_harami = inside & prev_bullish & curr_bearish
-        
         pattern = np.where(bullish_harami, 1, np.where(bearish_harami, -1, 0))
         pattern[0] = 0
-        
         return _result_df({col: pattern[:, idx] for idx, col in enumerate(cols)}, open)
 
 
@@ -943,21 +941,23 @@ class CDL_InsideBar(SeriesOperator):
         name="cdl_inside_bar",
         category="candlestick_pattern",
         description="Inside Bar pattern (1=inside, 0=none)",
-        param_names=["high", "low"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame},
+        # R4-100 parity: pandas reference surface declares the full OHLC
+        # contract; adopt (open, high, low, close) so a positional call never
+        # mis-binds (open/high/low are otherwise ignored — geometry only needs
+        # high/low, matching the reference output which is open/close blind).
+        param_names=["open", "high", "low", "close"],
+        param_types={"open": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame},
     )
 
-    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, open: pl.DataFrame, high: pl.DataFrame,
+                          low: pl.DataFrame, close: pl.DataFrame, **kwargs) -> pl.DataFrame:
         cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
         h = high.select(cols).to_numpy()
         l = low.select(cols).to_numpy()
-        
         h_prev = np.roll(h, 1, axis=0)
         l_prev = np.roll(l, 1, axis=0)
-        
         pattern = ((h <= h_prev) & (l >= l_prev)).astype(float)
         pattern[0] = 0
-        
         return _result_df({col: pattern[:, idx] for idx, col in enumerate(cols)}, high)
 
 
@@ -1084,28 +1084,30 @@ class CDL_OutsideBar(SeriesOperator):
         name="cdl_outside_bar",
         category="candlestick_pattern",
         description="Outside Bar pattern (1=bullish, -1=bearish, 0=none)",
-        param_names=["high", "low", "close"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame},
+        # R4-100 parity: pandas reference surface declares full OHLC; adopt
+        # (open, high, low, close) so a positional call never mis-binds.
+        param_names=["open", "high", "low", "close"],
+        param_types={"open": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame},
     )
 
-    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, 
-                         close: pl.DataFrame, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, open: pl.DataFrame, high: pl.DataFrame,
+                          low: pl.DataFrame, close: pl.DataFrame, **kwargs) -> pl.DataFrame:
         cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
         h = high.select(cols).to_numpy()
         l = low.select(cols).to_numpy()
         c = close.select(cols).to_numpy()
-        
+
         h_prev = np.roll(h, 1, axis=0)
         l_prev = np.roll(l, 1, axis=0)
         c_prev = np.roll(c, 1, axis=0)
-        
+
         is_outside = (h > h_prev) & (l < l_prev)
         is_bullish = c > c_prev
-        
-        pattern = np.where(is_outside & is_bullish, 1, 
+
+        pattern = np.where(is_outside & is_bullish, 1,
                           np.where(is_outside & ~is_bullish, -1, 0))
         pattern[0] = 0
-        
+
         return _result_df({col: pattern[:, idx] for idx, col in enumerate(cols)}, high)
 
 
@@ -1232,15 +1234,15 @@ class CDL_ThreeBlackCrows(SeriesOperator):
         name="cdl_three_black_crows",
         category="candlestick_pattern",
         description="Three Black Crows pattern (-1=bearish, 0=none)",
-        param_names=["open", "close"],
-        param_types={"open": pl.DataFrame, "close": pl.DataFrame},
+        param_names=["open", "high", "low", "close"],
+        param_types={"open": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame},
     )
 
-    def _calculate_series(self, open: pl.DataFrame, close: pl.DataFrame, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, open: pl.DataFrame, high: pl.DataFrame, low: pl.DataFrame, close: pl.DataFrame, **kwargs) -> pl.DataFrame:
         cols = [c for c in open.columns if c not in PANEL_SKIP_COLUMNS]
         o = open.select(cols).to_numpy()
         c = close.select(cols).to_numpy()
-        
+
         # All three bearish
         bearish = c < o
         bearish_1 = np.roll(bearish, 1, axis=0)
@@ -1270,15 +1272,15 @@ class CDL_ThreeWhiteSoldiers(SeriesOperator):
         name="cdl_three_white_soldiers",
         category="candlestick_pattern",
         description="Three White Soldiers pattern (1=bullish, 0=none)",
-        param_names=["open", "close"],
-        param_types={"open": pl.DataFrame, "close": pl.DataFrame},
+        param_names=["open", "high", "low", "close"],
+        param_types={"open": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame},
     )
 
-    def _calculate_series(self, open: pl.DataFrame, close: pl.DataFrame, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, open: pl.DataFrame, high: pl.DataFrame, low: pl.DataFrame, close: pl.DataFrame, **kwargs) -> pl.DataFrame:
         cols = [c for c in open.columns if c not in PANEL_SKIP_COLUMNS]
         o = open.select(cols).to_numpy()
         c = close.select(cols).to_numpy()
-        
+
         # All three bullish
         bullish = c > o
         bullish_1 = np.roll(bullish, 1, axis=0)
@@ -1308,9 +1310,14 @@ class CDL_TweezerBottom(SeriesOperator):
         name="cdl_tweezer_bottom",
         category="candlestick_pattern",
         description="Tweezer Bottom pattern (1=bullish, 0=none)",
-        param_names=["low", "close"],
-        param_types={"low": pl.DataFrame, "close": pl.DataFrame},
+        param_names=["open", "high", "low", "close"],
+        param_types={"open": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame},
     )
+
+    # PARITY-FULL: R4-100 arity gate — the canonical (pandas) cdl contract is
+    # OHLC (open,high,low,close); the legacy kernel only reads low/close. Declare
+    # high/open as behaviors we don't consume so a positional OHLC call binds
+    # safely (open/high are accepted-and-unused, never mis-read as low/close).
 
     def _calculate_series(self, low: pl.DataFrame, close: pl.DataFrame, **kwargs) -> pl.DataFrame:
         cols = [c for c in low.columns if c not in PANEL_SKIP_COLUMNS]
@@ -1346,8 +1353,8 @@ class CDL_TweezerTop(SeriesOperator):
         name="cdl_tweezer_top",
         category="candlestick_pattern",
         description="Tweezer Top pattern (-1=bearish, 0=none)",
-        param_names=["high", "close"],
-        param_types={"high": pl.DataFrame, "close": pl.DataFrame},
+        param_names=["open", "high", "low", "close"],
+        param_types={"open": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame},
     )
 
     def _calculate_series(self, high: pl.DataFrame, close: pl.DataFrame, **kwargs) -> pl.DataFrame:

@@ -355,26 +355,27 @@ def default_ashare_pv_data_source_config(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> dict[str, Any]:
-    """A 股价量数据源配置。
+    """A 股价量数据源配置（复权权威口径）。
 
-    默认走 ``data_access`` 登记数据集 ``ashare_stock_daily``；
-    ``max_files`` 限文件时回退直连 parquet（smoke test）。
+    默认走 ``data_access`` 登记数据集 ``ashare_stock_daily_adj``（Adj* 字段集）；
+    ``max_files`` 限文件时回退直连 parquet（smoke test，仍指向 StockDailyBarAdj）。
+    ADJ_FIELD_MIGRATION（2026-08-28）：A 股行情权威口径 = 后复权表。
     """
     fields = {
-        "open": "Open",
-        "high": "High",
-        "low": "Low",
-        "close": "Close",
+        "open": "AdjOpen",
+        "high": "AdjHigh",
+        "low": "AdjLow",
+        "close": "AdjClose",
         "volume": "Volume",
-        "vwap": "Vwap",
-        "amount": "Amount",
+        "vwap": "AdjVwap",
+        "amount": "AdjAmount",
         "ret": "Return",
-        "preclose": "PreClose",
+        "preclose": "AdjPreClose",
     }
     if max_files is not None:
         cfg: dict[str, Any] = {
             "type": "parquet",
-            "root": "~/quant_projects/data/a_share/lqtp_data/StockDailyBar",
+            "root": "~/quant_projects/data/a_share/lqtp_data/StockDailyBarAdj",
             "timestamp_col": "TradeDate",
             "instrument_col": "Symbol",
             "fields": fields,
@@ -383,7 +384,7 @@ def default_ashare_pv_data_source_config(
     else:
         cfg = {
             "type": "data_access",
-            "dataset": "ashare_stock_daily",
+            "dataset": "ashare_stock_daily_adj",
             "fields": fields,
             "read_auto": True,
         }
@@ -1399,7 +1400,17 @@ def default_typed_mining_search_space_config(
                 "required_filters": list(spec.required_filters),
             }
             for spec in FIELD_REGISTRY.fields()
-            if spec.mining_allowed and spec.cardinality != "one_to_many"
+            if spec.mining_allowed
+            and spec.cardinality != "one_to_many"
+            # ADJ_FIELD_MIGRATION（2026-08-28）：同一 logical 名同时存在于
+            # 未复权 StockDailyBar 与复权 StockDailyBarAdj 时，挖掘字段表只发布
+            # 复权（权威口径）版本，避免挖掘面裸名歧义；未复权原始列仍可经显式
+            # table/raw_* 概念访问。
+            and not (
+                spec.table == "StockDailyBar"
+                and spec.name in {"open", "high", "low", "close", "vwap", "amount",
+                                  "pre_close", "high_limit", "low_limit", "volume", "ret"}
+            )
         ]
     else:
         raw_fields = list(fields)

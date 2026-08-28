@@ -69,10 +69,14 @@ class TSSumDecayNativePolars(SeriesOperator):
 
         def decay_sum(s):
             # 与 pandas 参考一致：加权平均（除以权重和），非原始加权和。
-            if len(s) == 0:
+            # WINDOW-SEMANTICS PARITY (pandas reference): the pandas age-weighted
+            # kernel skips NaN AND ±Inf (np.isfinite) and reweights; propagate that.
+            arr = np.asarray(s, dtype=float)
+            finite = np.isfinite(arr)
+            if len(arr) == 0 or not finite.any():
                 return None
-            w = weights[:len(s)]
-            return float((np.asarray(s, dtype=float) * w).sum() / sum(w))
+            use_w = np.asarray(weights[:len(arr)])[finite] if len(arr) <= len(weights) else np.ones(finite.astype(int).sum())
+            return float((arr[finite] * use_w).sum() / use_w.sum())
 
         return x.with_columns([
             pl.col(c).rolling_map(
@@ -97,9 +101,15 @@ class TSMomentNativePolars(SeriesOperator):
         k = _positive(k, "k")
 
         def moment_fn(values: pl.Series) -> float:
+            # WINDOW-SEMANTICS PARITY (pandas reference): pandas ts_moment
+            # cold-start: first d-1 rows are NaN (rolling start), then any
+            # window with a finite sample computes.  values is the padded
+            # trailing window of LENGTH d (or fewer at warmup).
+            if len(values) < d:
+                return math.nan
             valid = np.asarray(values.to_numpy(), dtype=float)
             valid = valid[np.isfinite(valid)]
-            if valid.size < d:
+            if valid.size == 0:
                 return math.nan
             # Use a compensated direct-window mean so large offsets do not
             # change the central moment through avoidable summation error.

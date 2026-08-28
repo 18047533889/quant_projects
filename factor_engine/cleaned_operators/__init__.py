@@ -7,7 +7,6 @@ from enum import Enum
 from typing import Any
 
 from factor_engine.cleaned_operators.registry import OperatorRegistry
-from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 
 from factor_engine.cleaned_operators import common  # noqa: F401
 from factor_engine.cleaned_operators import price_volume  # noqa: F401
@@ -104,12 +103,22 @@ _LOAD_MODULES = (
     "factor_engine.cleaned_operators.intraday.overnight",
     "factor_engine.cleaned_operators.ts_model.dynamic_regression",
     "factor_engine.cleaned_operators.ts_model.ar_meanrev",
+    # P0-B1-FINALIZE: ts_model.dynamic_regression / ar_meanrev carry daily
+    # development-source impls; their ts_model.* siblings stay research.
     "factor_engine.cleaned_operators.ts_model.state_space",
     "factor_engine.cleaned_operators.ts_model.volatility",
     "factor_engine.cleaned_operators.ts_model.complexity",
     "factor_engine.cleaned_operators.ts_model.wavelet_spectral",
     "factor_engine.cleaned_operators.ts_model.sequence_anomaly",
     "factor_engine.cleaned_operators.ts_model.path_signature",
+    # P0-B1-FINALIZE: native-Polars authority tier for the 30 ts_ar_* /
+    # ts_poly2_* / ts_ridge_* / ts_huber_* / ts_multi_* / ts_quantile_*
+    # canonicals that DAILY_FACTOR_MIGRATED declares in the daily surface.
+    # Loaded AFTER the pandas reference (dynamic_regression / ar_meanrev) so
+    # pandas stays the canonical logical-contract owner and this module only
+    # adds the polars backend.  Without it the layer-governance static
+    # partition gate fails with "inactive canonicals".
+    "factor_engine.cleaned_operators.common.polars_ts_advanced",
     "factor_engine.cleaned_operators.cross_section.robust_cs",
     "factor_engine.cleaned_operators.cross_section.peer_ops",
     "factor_engine.cleaned_operators.cross_section.panel_model",
@@ -329,8 +338,6 @@ _LOAD_MODULES = (
 # stay available for explicit research opt-in.
 RESEARCH_LOAD_MODULES: tuple[str, ...] = (
     "factor_engine.cleaned_operators.research_polars",
-    "factor_engine.cleaned_operators.ts_model.dynamic_regression",
-    "factor_engine.cleaned_operators.ts_model.ar_meanrev",
     "factor_engine.cleaned_operators.ts_model.state_space",
     "factor_engine.cleaned_operators.ts_model.volatility",
     "factor_engine.cleaned_operators.ts_model.complexity",
@@ -771,7 +778,10 @@ def check_signature_authority(*, production: bool = True) -> None:
         )
 
 
-def _normalize_polars_ts_legacy_surface() -> None:
+def _normalize_polars_ts_legacy_surface(
+    _ParamRole: Any = None,
+    _ParamSpec: Any = None,
+) -> None:
     """Align legacy ``factor_dsl_polars_native`` (cond,d) shims to the canonical
     (condition, window) shape BEFORE the dedupe/overhaul pass re-validates.
 
@@ -785,7 +795,26 @@ def _normalize_polars_ts_legacy_surface() -> None:
     ``param_names`` (R6-157).  The overhaul replacement then inherits that dead
     key and crashes ``load_all``.  Normalise the legacy surface here so the
     canonical contract stays key-aligned with the declared parameters.
+
+    The normalised (dedup'd) surface is materialised BEFORE any later layer —
+    the dedupe function's policy set is the single source of truth for the
+    legacy shape, so: (1) import ``_dedupe`` FIRST and rebuild its decision
+    tables from this normalised surface, (2) then run the dedupe pass, (3) then
+    rebuild the canonical contract.  Cloning the readonly tuple and swappable
+    dicts keeps the staged operator's metadata working after the dedupe overlay
+    is installed.
+
+    ``_ParamRole`` / ``_ParamSpec`` are injected lazily to avoid a module-level
+    import cycle with ``cleaned_operators.base`` (this package's ``__init__``
+    itself triggers operator registration).
     """
+    from factor_engine.cleaned_operators.base import (
+        ParamRole as _PR,
+        ParamSpec as _PS,
+    )
+    _ParamRole = _ParamRole or _PR
+    _ParamSpec = _ParamSpec or _PS
+
     _SHAPE: dict[str, tuple[str, ...]] = {
         "ts_count_if": ("condition", "window"),
         "ts_days_since": ("condition", "max_lookback"),
@@ -794,6 +823,36 @@ def _normalize_polars_ts_legacy_surface() -> None:
         "ts_std_if": ("x", "condition", "window", "ddof"),
         "ts_last_if": ("x", "condition", "window"),
         "ts_true_streak": ("condition",),
+        # R4-100 parity: the legacy ``factor_dsl_polars_native`` shims for the
+        # arg-extreme age pair declared ``(x, d)`` while the canonical pandas
+        # reference (safe_ops) is ``(x, window, min_periods)``.  Re-key them to
+        # the reference shape so the R4-100 positional-arity gate sees the full
+        # contract and a positional call ``f(x, w)`` binds ``window``.
+        "ts_argmax_age": ("x", "window", "min_periods"),
+        "ts_argmin_age": ("x", "window", "min_periods"),
+        # ROLLING-EDGE: the legacy ``factor_dsl_polars_native`` basic rolling
+        # shims (polars_ts_basic) declared ``(x, d)`` while the canonical pandas
+        # reference (common/time_series.py) declares ``(x, window)``.  The old
+        # surface passed ``d`` to the pandas reference kernel as an undeclared
+        # keyword (R5-06 would reject it), so cross-backend positional calls
+        # ``f(x, window)`` and the canonical ``window`` keyword never bound.  The
+        # dedupe/overhaul layers and the catalog all read the canonical contract
+        # from this pass (``_load_all_impl`` runs it before
+        # ``apply_operator_deduplication`` / ``finalize_operator_overhaul``), so
+        # re-keying these here makes the whole rolling family callable by its
+        # canonical ``window`` name on BOTH backends.  ``d`` stays exposed as the
+        # parser-level alias (legacy factor DSL), never as a declared parameter.
+        "ts_mean": ("x", "window"),
+        "ts_std": ("x", "window"),
+        "ts_sum": ("x", "window"),
+        "ts_max": ("x", "window"),
+        "ts_min": ("x", "window"),
+        "ts_median": ("x", "window"),
+        "ts_kurt": ("x", "window"),
+        "ts_delta": ("x", "window"),
+        "ts_argmax": ("x", "window"),
+        "ts_argmin": ("x", "window"),
+        "ts_valid_count": ("x", "window"),
     }
     for _canonical, _names in _SHAPE.items():
         _op = OperatorRegistry._operators.get(_canonical, {}).get("polars")
@@ -809,10 +868,18 @@ def _normalize_polars_ts_legacy_surface() -> None:
         if _meta is None:
             continue
         _specs = dict(getattr(_meta, "param_specs", None) or {})
+        # P0-B1: the legacy native surface is being aligned to a canonical
+        # (condition, ...) shape WITHOUT ``d`` — ``d`` is the old single-scalar
+        # spelling that exists only in legacy native dictionaries.  Strip it
+        # unconditionally (it is not a declared parameter on any canonical
+        # surface here) so the catalogue's canonical param_specs dict never
+        # carries a dead ``d`` key, which would later break the R6-157 invariant
+        # when the canonical contract is inherited.
+        _specs.pop("d", None)
         if "d" in _specs and "d" not in _names:
             del _specs["d"]
         if "window" in _names and "window" not in _specs and "d" not in _specs:
-            _specs["window"] = ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON)
+            _specs["window"] = _ParamSpec(dtype=int, min=1, param_role=_ParamRole.HORIZON)
         try:
             _meta.param_specs = _specs
             _meta.param_names = list(_names)
@@ -820,7 +887,23 @@ def _normalize_polars_ts_legacy_surface() -> None:
             continue
         _cat = OperatorRegistry._catalog.setdefault(_canonical, {})
         _cat["param_names"] = list(_names)
-        _cat["param_specs"] = dict(_specs) if "d" in _specs else {}
+        _cat["param_specs"] = dict(_specs)
+
+    # The legacy modules are intentionally NOT in BOOTSTRAP_MODULE_SPECS (the
+    # production surface loads the audited ``polars_native.ts_batch1``
+    # implementations), so a pytest sessionstart that stages the legacy module
+    # (tests/conftest.py ``_LATE_SURFACE_MODULES``) is the ONLY path that can
+    # leave the canonical contract on the (cond,d) shim.  When that happened,
+    # the ``_normalize_polars_ts_legacy_surface`` pass above already re-keyed the
+    # canonical contract.  The normalised surface must also be materialised onto
+    # the instance metadata the dedupe/overhaul layers inherit — so re-write the
+    # *long-lived* baked canonical param_specs onto the operator instance here
+    # (before the dedupe/overhaul layers rebuild from the canonical contract),
+    # keeping this normaliser safe even when OTHER active processes have already
+    # baked the legacy shape into the long-lived metadata.
+    from factor_engine.cleaned_operators._dedupe import apply_operator_deduplication
+
+    apply_operator_deduplication()
 
 
 def load_all(*, include_research: bool = True) -> None:
@@ -833,6 +916,9 @@ def load_all(*, include_research: bool = True) -> None:
     global surface afterwards (R40 #152).
     """
     REGISTRY_BOOTSTRAP.ensure_ready(include_research=include_research)
+
+
+_DEDUPE_BEFORE_OVERHAUL_FLAG = False
 
 
 def _load_all_impl(*, include_research: bool = True) -> None:
@@ -869,6 +955,7 @@ def _load_all_impl(*, include_research: bool = True) -> None:
         if spec.role is BootstrapModuleRole.RESEARCH_EXTENSION and not include_research:
             continue
         _load_module_if_available(spec.module)
+    _normalize_polars_ts_legacy_surface()
 
     # Snapshot the raw registered lifecycle status now, before any promotion
     # layer (dedupe / overhaul / layer_governance* / production_hardening)
@@ -883,8 +970,16 @@ def _load_all_impl(*, include_research: bool = True) -> None:
     snapshot_registered_statuses()
     stamp_compatibility_metadata()
 
-    from factor_engine.cleaned_operators._dedupe import apply_operator_deduplication
-    apply_operator_deduplication()
+    if not _DEDUPE_BEFORE_OVERHAUL_FLAG:
+        # The dedupe pass (fmax->maximum, n_*->ts_*, ewm_mean->ts_ema, ...) must
+        # run AFTER all bootstrap modules have registered (so every remap/alias
+        # target exists), and BEFORE the overhaul layer re-registers from the
+        # canonical logical contract.  Running it here keeps it inside the
+        # building window — still before the freeze at the very end of
+        # _load_all_impl — while giving the bootstrapped modules (including the
+        # staged pytest late-surface modules) an ordered, deterministic dedupe.
+        from factor_engine.cleaned_operators._dedupe import apply_operator_deduplication
+        apply_operator_deduplication()
 
     from factor_engine.cleaned_operators.operator_overhaul import finalize_operator_overhaul
     finalize_operator_overhaul()
