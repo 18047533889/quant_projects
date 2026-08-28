@@ -338,7 +338,7 @@ jobs:
       - name: Run ASHARE_REAL_DATA_SHADOW
         run: |
           set +e
-          python3 -m pytest integration_tests/test_real_ashare_shadow.py -q -p no:cacheprovider 2>&1 | tee /tmp/ashare_shadow.log
+          python3 -m pytest tests/integration/test_real_ashare_shadow.py -q -p no:cacheprovider 2>&1 | tee /tmp/ashare_shadow.log
           rc=${PIPESTATUS[0]}
           passed=$(grep -oE '[0-9]+ passed' /tmp/ashare_shadow.log | grep -oE '[0-9]+' | tail -1)
           passed=${passed:-0}

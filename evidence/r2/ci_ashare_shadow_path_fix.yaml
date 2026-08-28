@@ -1,0 +1,23 @@
+scm:
+  repo: github.com/18047533889/quant_projects
+  branch: main
+  path: .github/workflows/ci.yml
+rule:
+  id: CI-ASHARE-SHADOW-PATH-FIX
+  severity: HIGH
+  defect: >-
+    ASHARE_REAL_DATA_SHADOW job ran `python -m pytest integration_tests/test_real_ashare_shadow.py`,
+    but that file has been nowhere in the tracked tree since R48
+    (908fd72c renamed `integration_tests/` -> `tests/integration/`).  In any
+    event where the ASHARE_DATA_AVAILABLE repo variable is toggled to 'true',
+    the job would reach that run step, see no tests, and its own fail-closed
+    wrapper would exit 1 with an honest-unconfigured CI failure.
+checked:
+  - "R48 (908fd72c) renamed integration_tests/test_real_ashare_shadow.py R100 -> tests/integration/test_real_ashare_shadow.py"
+  - "R50 (80c17e57) and R54 (4cc2b679) ci.yml both kept the pre-rename path"
+  - "integration_tests/ has no tracked files in HEAD"
+fix:
+  - "ci.yml step path corrected to tests/integration/test_real_ashare_shadow.py"
+  - "verified locally: pytest tests/integration/test_real_ashare_shadow.py -> 4 skipped (honest skip, mirror absent)"
+  - "strict YAML re-parse of ci.yml OK; needs-graph OK; both gate scripts self-check PASS locally"
+verifier: P0-A agent 15 (api-cleanup-20260828)
